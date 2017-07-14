@@ -9,13 +9,19 @@ typedef enum {
 
 typedef struct {
     sg_id id;
+    sg_label label;
     _sg_slot_state state;
 } _sg_slot;
 
 static void _sg_init_slot(_sg_slot* slot) {
     SOKOL_ASSERT(slot);
     slot->id = SG_INVALID_ID;
+    slot->label = SG_INVALID_LABEL;
     slot->state = _SG_SLOT_STATE_FREE;
+}
+
+static int _sg_slot_index(sg_id id) {
+    return id & SG_CONST_SLOT_MASK;
 }
 
 #ifdef SOKOL_GFX_USE_GL
@@ -61,13 +67,20 @@ static sg_id _sg_pool_alloc_id(_sg_pool* pool) {
     SOKOL_ASSERT(pool->cur > 0);
     SOKOL_ASSERT(pool->free_queue);
     int slot_index = pool->free_queue[--pool->cur];
-    return ((pool->unique_counter++)<<SOKOL_GFX_ID_SHIFT) | (slot_index&SOKOL_GFX_ID_MASK);
+    return ((pool->unique_counter++)<<SG_CONST_SLOT_SHIFT)|slot_index;
 }
 
 static void _sg_pool_free_id(_sg_pool* pool, sg_id id) {
+    SOKOL_ASSERT(id != SG_INVALID_ID);
     SOKOL_ASSERT(pool);
     SOKOL_ASSERT(pool->free_queue);
     SOKOL_ASSERT(pool->cur < pool->num);
+    #if _DEBUG
+    int slot_index = _sg_slot_index(id);
+    for (int i = 0; i < pool->cur; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
     pool->free_queue[pool->cur++] = id;
 }
 
@@ -106,11 +119,11 @@ void sg_setup(sg_setup_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->width > 0) && (desc->height > 0));
     SOKOL_ASSERT(desc->sample_count >= 1);
-    SOKOL_ASSERT((desc->buffer_pool_size > 0) && (desc->buffer_pool_size < SOKOL_GFX_MAX_POOL_SIZE));
-    SOKOL_ASSERT((desc->image_pool_size > 0) && (desc->image_pool_size < SOKOL_GFX_MAX_POOL_SIZE));
-    SOKOL_ASSERT((desc->shader_pool_size > 0) && (desc->shader_pool_size < SOKOL_GFX_MAX_POOL_SIZE));
-    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < SOKOL_GFX_MAX_POOL_SIZE));
-    SOKOL_ASSERT((desc->pass_pool_size > 0) && (desc->pass_pool_size < SOKOL_GFX_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->buffer_pool_size > 0) && (desc->buffer_pool_size < SG_CONST_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->image_pool_size > 0) && (desc->image_pool_size < SG_CONST_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->shader_pool_size > 0) && (desc->shader_pool_size < SG_CONST_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < SG_CONST_MAX_POOL_SIZE));
+    SOKOL_ASSERT((desc->pass_pool_size > 0) && (desc->pass_pool_size < SG_CONST_MAX_POOL_SIZE));
     SOKOL_ASSERT(desc->label_stack_size > 0);
 
     _sg = SOKOL_MALLOC(sizeof(_sg_state));
@@ -143,7 +156,6 @@ void sg_setup(sg_setup_desc* desc) {
 
 void sg_discard() {
     SOKOL_ASSERT(_sg);
-
     SOKOL_FREE(_sg->passes);    _sg->passes = 0;
     SOKOL_FREE(_sg->pipelines); _sg->pipelines = 0;
     SOKOL_FREE(_sg->shaders);   _sg->shaders = 0;
@@ -155,3 +167,21 @@ void sg_discard() {
     _sg_destroy_pool(&_sg->image_pool);
     _sg_destroy_pool(&_sg->buffer_pool);
 }
+
+sg_label sg_gen_label() {
+    SOKOL_ASSERT(_sg);
+    // FIXME
+    return SG_INVALID_LABEL;
+}
+
+void sg_push_label(sg_label label) {
+    SOKOL_ASSERT(_sg);
+    // FIXME
+}
+
+sg_label sg_pop_label() {
+    SOKOL_ASSERT(_sg);
+    return SG_INVALID_LABEL;
+}
+
+

@@ -17,12 +17,13 @@
 
 typedef uint32_t sg_label;
 typedef uint32_t sg_id;
+static const sg_id SG_INVALID_LABEL = 0xFFFFFFFF;
 static const sg_id SG_INVALID_ID = 0xFFFFFFFF;
 
 enum {
-    SOKOL_GFX_ID_SHIFT = 16,
-    SOKOL_GFX_ID_MASK = (1<<SOKOL_GFX_ID_SHIFT)-1,
-    SOKOL_GFX_MAX_POOL_SIZE = (1<<SOKOL_GFX_ID_SHIFT),
+    SG_CONST_SLOT_SHIFT = 16,
+    SG_CONST_SLOT_MASK = (1<<SG_CONST_SLOT_SHIFT)-1,
+    SG_CONST_MAX_POOL_SIZE = (1<<SG_CONST_SLOT_SHIFT),
 };
 
 typedef struct {
@@ -282,12 +283,12 @@ extern void sg_update_image(sg_id img_id, void* data, sg_update_image_desc* desc
 
 /* rendering */
 extern void sg_begin_pass(sg_id pass_id, sg_pass_action* pass_action);
-extern void sg_end_pass();
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(sg_draw_state* ds);
 extern void sg_apply_uniform_block(sg_stage stage, int slot, void* data, int num_bytes);
 extern void sg_draw(int base_element, int num_elements, int num_instances);
+extern void sg_end_pass();
 extern void sg_commit();
 extern void sg_reset_state_cache();
 
