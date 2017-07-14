@@ -2,26 +2,44 @@
 /*
     FIXME
 */
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef SOKOL_ASSERT
+#include <assert.h>
+#define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_MALLOC
+#define SOKOL_MALLOC(s) malloc(s)
+#define SOKOL_FREE(p) free(p)
+#endif
+
 typedef uint32_t sg_label;
 typedef uint32_t sg_id;
+static const sg_id SG_INVALID_ID = 0xFFFFFFFF;
 
-struct sg_pass_action {
-    /* FIXME! */
+enum {
+    SOKOL_GFX_ID_SHIFT = 16,
+    SOKOL_GFX_ID_MASK = (1<<SOKOL_GFX_ID_SHIFT)-1,
+    SOKOL_GFX_MAX_POOL_SIZE = (1<<SOKOL_GFX_ID_SHIFT),
 };
+
+typedef struct {
+    /* FIXME! */
+} sg_pass_action;
 
 typedef struct {
     int width;
     int height;
     int sample_count;
-    sg_pass_action default_pass_action;
     int buffer_pool_size;
     int image_pool_size;
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
+    int label_stack_size;
+    sg_pass_action default_pass_action;
 } sg_setup_desc;
 
 typedef enum {
@@ -237,54 +255,49 @@ typedef struct {
     /* FIXME */
 } sg_update_image_desc;
 
+/* setup */
+extern void sg_init_setup_desc(sg_setup_desc* desc);
 extern void sg_setup(sg_setup_desc* desc);
 extern void sg_discard();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 
+/* resource management */
 extern sg_label sg_gen_label();
 extern void sg_push_label(sg_label);
 extern sg_label sg_pop_label();
-
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_init_pass_desc(sg_pass_desc* desc);
-extern void sg_init_pass_action(sg_pass_action* pass_action);
-
 extern sg_id sg_make_buffer(sg_buffer_desc* desc, void* opt_data, int opt_bytes);
 extern sg_id sg_make_image(sg_image_desc* desc, void* opt_data, int opt_bytes);
-extern sg_id sg_make_pipeline(sg_pipeline_desc* desc);
 extern sg_id sg_make_shader(sg_shader_desc* desc);
+extern sg_id sg_make_pipeline(sg_pipeline_desc* desc);
 extern sg_id sg_make_pass(sg_pass_desc* desc);
 extern void sg_destroy(sg_label label);
+extern void sg_update_buffer(sg_id buf_id, void* data, int num_bytes);
+extern void sg_update_image(sg_id img_id, void* data, sg_update_image_desc* desc);
 
+/* rendering */
 extern void sg_begin_pass(sg_id pass_id, sg_pass_action* pass_action);
 extern void sg_end_pass();
-
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(sg_draw_state* ds);
 extern void sg_apply_uniform_block(sg_stage stage, int slot, void* data, int num_bytes);
-
-extern void sg_update_buffer(sg_id buf_id, void* data, int num_bytes);
-extern void sg_update_image(sg_id img_id, void* data, sg_update_image_desc* desc);
-
 extern void sg_draw(int base_element, int num_elements, int num_instances);
-
 extern void sg_commit();
 extern void sg_reset_state_cache();
 
+/* async resource setup */
 extern sg_id sg_alloc_buffer();
 extern sg_id sg_alloc_image();
 extern void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc);
 extern void sg_init_image(sg_id img_id, sg_image_desc* desc);
 
 #ifdef SOKOL_IMPLEMENTATION
-#ifdef SOKOL_GFX_USE_GL
-#include "_sokol_gfx_gl.inl"
-#endif
 #include "_sokol_gfx.inl"
 #endif
 
