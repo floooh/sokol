@@ -1,6 +1,16 @@
 #pragma once
 /*
-    FIXME
+    Configuration defines:
+
+    SOKOL_IMPL      - define this exactly once to include implementation files
+    SOKOL_ASSERT    - your own assert macro (default: assert())
+    SOKOL_MALLOC    - your own malloc func (default: void* malloc(size))
+    SOKOL_FREE      - your own free func (default: void free(void* p))
+    SOKOL_USE_GL    - use the desktop GL3.3 backend
+    SOKOL_USE_GLES2 - use the GLES2 backend
+    SOKOL_USE_GLES3 - use the GLES3 backend (with soft fallback to GLES2)
+    SOKOL_USE_D3D11 - use the D3D11 backend
+    SOKOL_USE_METAL - use the Metal backend
 */
 #include <stdlib.h>
 #include <stdint.h>
@@ -15,33 +25,87 @@
 #define SOKOL_FREE(p) free(p)
 #endif
 
-typedef uint32_t sg_label;
 typedef uint32_t sg_id;
-static const sg_id SG_INVALID_LABEL = 0xFFFFFFFF;
-static const sg_id SG_INVALID_ID = 0xFFFFFFFF;
-
 enum {
-    SG_CONST_SLOT_SHIFT = 16,
-    SG_CONST_SLOT_MASK = (1<<SG_CONST_SLOT_SHIFT)-1,
-    SG_CONST_MAX_POOL_SIZE = (1<<SG_CONST_SLOT_SHIFT),
+    SG_INVALID_ID = 0,
+    SG_DEFAULT_PASS = SG_INVALID_ID,
+    SG_MAX_COLOR_ATTACHMENTS = 4,
 };
 
+typedef enum {
+    SG_BUFFER = 0,
+    SG_IMAGE,
+    SG_SHADER,
+    SG_PIPELINE,
+    SG_PASS,
+
+    SG_NUM_RESOURCE_TYPES
+} sg_resource_type;
+
+typedef enum {
+    /* unset bit means "don't care" */
+    SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
+    SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
+    SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
+    SG_PASSACTION_CLEAR_COLOR3  = (1<<3),
+    SG_PASSACTION_CLEAR_COLOR   = (1<<0)|(1<<1)|(1<<2)|(1<<3),
+    SG_PASSACTION_CLEAR_DEPTH   = (1<<4),
+    SG_PASSACTION_CLEAR_STENCIL = (1<<5),
+    SG_PASSACTION_CLEAR_DEPTH_STENCIL = (1<<4)|(1<<5),
+    SG_PASSACTION_CLEAR_ALL     = SG_PASSACTION_CLEAR_COLOR|SG_PASSACTION_CLEAR_DEPTH_STENCIL,
+    SG_PASSACTION_LOAD_COLOR0   = (1<<6),
+    SG_PASSACTION_LOAD_COLOR1   = (1<<7),
+    SG_PASSACTION_LOAD_COLOR2   = (1<<8),
+    SG_PASSACTION_LOAD_COLOR3   = (1<<9),
+    SG_PASSACTION_LOAD_COLOR    = (1<<6)|(1<<7)|(1<<8)|(1<<9),
+    SG_PASSACTION_LOAD_DEPTH    = (1<<10),
+    SG_PASSACTION_LOAD_STENCIL  = (1<<11),
+    SG_PASSACTION_LOAD_DEPTH_STENCIL = (1<<10)|(1<<11),
+    SG_PASSACTION_LOAD_ALL = SG_PASSACTION_LOAD_COLOR|SG_PASSACTION_LOAD_DEPTH_STENCIL,
+} sg_pass_action_bits;
+
 typedef struct {
-    /* FIXME! */
+    float color[SG_MAX_COLOR_ATTACHMENTS][4];
+    float depth;
+    uint8_t stencil;
+    sg_pass_action_bits actions;
 } sg_pass_action;
+
+extern void sg_init_pass_action(sg_pass_action* pa);
+#ifdef SOKOL_IMPL
+void sg_init_pass_action(sg_pass_action* pa) {
+    SOKOL_ASSERT(pa);
+    for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+        for (int c = 0; c < 3; c++) {
+            pa->color[att_index][c] = 0.5f;
+        }
+        pa->color[att_index][3] = 1.0f;
+    }
+    pa->depth = 1.0f;
+    pa->stencil = 0;
+    pa->actions = SG_PASSACTION_CLEAR_ALL;
+}
+#endif
 
 typedef struct {
     int width;
     int height;
     int sample_count;
-    int buffer_pool_size;
-    int image_pool_size;
-    int shader_pool_size;
-    int pipeline_pool_size;
-    int pass_pool_size;
-    int label_stack_size;
-    sg_pass_action default_pass_action;
+    int resource_pool_size[SG_NUM_RESOURCE_TYPES];
 } sg_setup_desc;
+
+extern void sg_init_setup_desc(sg_setup_desc* desc);
+#ifdef SOKOL_IMPL
+void sg_init_setup_desc(sg_setup_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->width = 640;
+    desc->height = 400;
+    desc->sample_count = 1;
+    for (int i = 0; i < SG_NUM_RESOURCE_TYPES; i++) {
+        desc->resource_pool_size[i] = 128;
+    }
+}
+#endif
 
 typedef enum {
     SG_UINT16,
@@ -125,9 +189,9 @@ typedef enum {
 } sg_wrap;
 
 typedef enum {
-    SG_IMMUTABLE,
-    SG_DYNAMIC,
-    SG_STREAM,
+    SG_USAGE_IMMUTABLE,
+    SG_USAGE_DYNAMIC,
+    SG_USAGE_STREAM,
 } sg_usage;
 
 typedef enum {
@@ -178,49 +242,49 @@ typedef enum {
 } sg_face;
 
 typedef enum {
-    SG_CMP_NEVER,
-    SG_CMP_LESS,
-    SG_CMP_EQUAL,
-    SG_CMP_LESS_EQUAL,
-    SG_CMP_GREATER,
-    SG_CMP_NOT_EQUAL,
-    SG_CMP_GREATER_EQUAL,
-    SG_CMP_ALWAYS,
+    SG_NEVER,
+    SG_LESS,
+    SG_EQUAL,
+    SG_LESS_EQUAL,
+    SG_GREATER,
+    SG_NOT_EQUAL,
+    SG_GREATER_EQUAL,
+    SG_ALWAYS,
 } sg_compare_func;
 
 typedef enum {
-    SG_STENCIL_KEEP,
-    SG_STENCIL_ZERO,
-    SG_STENCIL_REPLACE,
-    SG_STENCIL_INCR_CLAMP,
-    SG_STENCIL_DECR_CLAMP,
-    SG_STENCIL_INVERT,
-    SG_STENCIL_INCR_WRAP,
-    SG_STENCIL_DECR_WRAP,
+    SG_STENCILOP_KEEP,
+    SG_STENCILOP_ZERO,
+    SG_STENCILOP_REPLACE,
+    SG_STENCILOP_INCR_CLAMP,
+    SG_STENCILOP_DECR_CLAMP,
+    SG_STENCILOP_INVERT,
+    SG_STENCILOP_INCR_WRAP,
+    SG_STENCILOP_DECR_WRAP,
 } sg_stencil_op;
 
 typedef enum {
-    SG_BLEND_FACTOR_ZERO,
-    SG_BLEND_FACTOR_ONE,
-    SG_BLEND_FACTOR_SRC_COLOR,
-    SG_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
-    SG_BLEND_FACTOR_SRC_ALPHA,
-    SG_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-    SG_BLEND_FACTOR_DST_COLOR,
-    SG_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
-    SG_BLEND_FACTOR_DST_ALPHA,
-    SG_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
-    SG_BLEND_FACTOR_SRC_ALPHA_SATURATED,
-    SG_BLEND_FACTOR_BLEND_COLOR,
-    SG_BLEND_FACTOR_ONE_MINUS_BLEND_COLOR,
-    SG_BLEND_FACTOR_BLEND_ALPHA,
-    SG_BLEND_FACTOR_ONE_MINUS_BLEND_ALPHA,
+    SG_BLENDFACTOR_ZERO,
+    SG_BLENDFACTOR_ONE,
+    SG_BLENDFACTOR_SRC_COLOR,
+    SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR,
+    SG_BLENDFACTOR_SRC_ALPHA,
+    SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+    SG_BLENDFACTOR_DST_COLOR,
+    SG_BLENDFACTOR_ONE_MINUS_DST_COLOR,
+    SG_BLENDFACTOR_DST_ALPHA,
+    SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA,
+    SG_BLENDFACTOR_SRC_ALPHA_SATURATED,
+    SG_BLENDFACTOR_BLEND_COLOR,
+    SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR,
+    SG_BLENDFACTOR_BLEND_ALPHA,
+    SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA,
 } sg_blend_factor;
 
 typedef enum {
-    SG_BLEND_OP_ADD,
-    SG_BLEND_OP_SUBTRACT,
-    SG_BLEND_OP_REVERSE_SUBTRACT,
+    SG_BLENDOP_ADD,
+    SG_BLENDOP_SUBTRACT,
+    SG_BLENDOP_REVERSE_SUBTRACT,
 } sg_blend_op;
 
 typedef enum {
@@ -228,9 +292,28 @@ typedef enum {
     SG_STEP_PER_INSTANCE,
 } sg_step_func;
 
+typedef enum {
+    SG_COLORMASK_R = (1<<0),
+    SG_COLORMASK_G = (1<<1),
+    SG_COLORMASK_B = (1<<2),
+    SG_COLORMASK_A = (1<<3),
+    SG_COLORMASK_RGBA = 0xF,
+} sg_colormask;
+
+//------------------------------------------------------------------------------
 typedef struct {
-    /* FIXME */
+    int size;
+    sg_usage usage;
 } sg_buffer_desc;
+
+extern void sg_init_buffer_desc(sg_buffer_desc* desc);
+#ifdef SOKOL_IMPL
+void sg_init_buffer_desc(sg_buffer_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->size = 0;
+    desc->usage = SG_USAGE_IMMUTABLE; 
+}
+#endif
 
 typedef struct {
     /* FIXME */
@@ -257,32 +340,27 @@ typedef struct {
 } sg_update_image_desc;
 
 /* setup */
-extern void sg_init_setup_desc(sg_setup_desc* desc);
 extern void sg_setup(sg_setup_desc* desc);
 extern void sg_discard();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 
-/* resource management */
-extern sg_label sg_gen_label();
-extern void sg_push_label(sg_label);
-extern sg_label sg_pop_label();
-extern void sg_init_buffer_desc(sg_buffer_desc* desc);
-extern void sg_init_image_desc(sg_image_desc* desc);
-extern void sg_init_shader_desc(sg_shader_desc* desc);
-extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
-extern void sg_init_pass_desc(sg_pass_desc* desc);
+/* resources */
 extern sg_id sg_make_buffer(sg_buffer_desc* desc, void* opt_data, int opt_bytes);
+extern void sg_destroy_buffer(sg_id buf);
 extern sg_id sg_make_image(sg_image_desc* desc, void* opt_data, int opt_bytes);
+extern void sg_destroy_image(sg_id img);
 extern sg_id sg_make_shader(sg_shader_desc* desc);
+extern void sg_destroy_shader(sg_id shd);
 extern sg_id sg_make_pipeline(sg_pipeline_desc* desc);
+extern void sg_destroy_pipeline(sg_id pip);
 extern sg_id sg_make_pass(sg_pass_desc* desc);
-extern void sg_destroy(sg_label label);
-extern void sg_update_buffer(sg_id buf_id, void* data, int num_bytes);
-extern void sg_update_image(sg_id img_id, void* data, sg_update_image_desc* desc);
+extern void sg_destroy_pass(sg_id pass);
+extern void sg_update_buffer(sg_id buf, void* data, int num_bytes);
+extern void sg_update_image(sg_id img, void* data, sg_update_image_desc* desc);
 
 /* rendering */
-extern void sg_begin_pass(sg_id pass_id, sg_pass_action* pass_action);
+extern void sg_begin_pass(sg_id pass, sg_pass_action* pass_action, int width, int height);
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(sg_draw_state* ds);
@@ -298,7 +376,7 @@ extern sg_id sg_alloc_image();
 extern void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc);
 extern void sg_init_image(sg_id img_id, sg_image_desc* desc);
 
-#ifdef SOKOL_IMPLEMENTATION
-#include "_sokol_gfx.inl"
+#ifdef SOKOL_IMPL
+#include "_sokol_gfx.impl.h"
 #endif
 
