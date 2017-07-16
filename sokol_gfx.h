@@ -385,7 +385,7 @@ typedef struct {
 typedef struct {
     const char* name;
     sg_vertex_format format;
-} sg_vertex_attr;
+} sg_vertex_attr_desc;
 
 /*-- description structures for resource creation ----------------------------*/
 typedef struct {
@@ -472,7 +472,7 @@ typedef struct {
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
     int num_attrs;
-    sg_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_shader_desc;
 
 extern void sg_init_shader_desc(sg_shader_desc* desc);
@@ -484,7 +484,7 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
     _sg_init_shader_stage_desc(&desc->fs);
     desc->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        sg_vertex_attr* attr = &desc->attrs[i];
+        sg_vertex_attr_desc* attr = &desc->attrs[i];
         attr->name = 0;
         attr->format = SG_VERTEXFORMAT_INVALID;
     }
@@ -492,7 +492,7 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
 void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format) {
     SOKOL_ASSERT(desc && name && format != SG_VERTEXFORMAT_INVALID);
     SOKOL_ASSERT(desc->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_attr* attr = &desc->attrs[desc->num_attrs++];
+    sg_vertex_attr_desc* attr = &desc->attrs[desc->num_attrs++];
     attr->name = name;
     attr->format = format;
 }
@@ -500,14 +500,14 @@ void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_forma
 
 typedef struct {
     int num_attrs;
-    sg_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_step_func step_func;
     int step_rate;
-} sg_vertex_layout;
+} sg_vertex_layout_desc;
 
 typedef struct {
     sg_id shader;
-    sg_vertex_layout layouts[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_vertex_layout_desc layouts[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
     sg_rasterizer_state rast;
@@ -516,14 +516,14 @@ typedef struct {
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
 #ifdef SOKOL_IMPL
-static void _sg_init_vertex_layout(sg_vertex_layout* l) {
-    SOKOL_ASSERT(l);
-    l->step_func = SG_STEPFUNC_PER_VERTEX;
-    l->step_rate = 1;
-    l->num_attrs = 0;
+static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
+    SOKOL_ASSERT(layout);
+    layout->step_func = SG_STEPFUNC_PER_VERTEX;
+    layout->step_rate = 1;
+    layout->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        l->attrs[i].name = 0;
-        l->attrs[i].format = SG_VERTEXFORMAT_INVALID;
+        layout->attrs[i].name = 0;
+        layout->attrs[i].format = SG_VERTEXFORMAT_INVALID;
     }
 }
 static void _sg_init_stencil_state(sg_stencil_state* s) {
@@ -570,7 +570,7 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->shader = SG_INVALID_ID;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        _sg_init_vertex_layout(&desc->layouts[i]);
+        _sg_init_vertex_layout_desc(&desc->layouts[i]);
     }
     _sg_init_depth_stencil_state(&desc->depth_stencil);
     _sg_init_blend_state(&desc->blend);
@@ -582,8 +582,8 @@ void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, s
     SOKOL_ASSERT(name);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
     SOKOL_ASSERT(desc->layouts[slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout* l = &desc->layouts[slot];
-    sg_vertex_attr* attr = &l->attrs[l->num_attrs++];
+    sg_vertex_layout_desc* layout = &desc->layouts[slot];
+    sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = name;
     attr->format = format;
 }

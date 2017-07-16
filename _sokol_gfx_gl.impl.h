@@ -390,7 +390,7 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_
     // FIXME: hmmmmm use glGetAttribLocation here?
     pip->num_attrs = 0;
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
-        sg_vertex_layout* layout = &desc->layouts[slot];
+        sg_vertex_layout_desc* layout = &desc->layouts[slot];
         int layout_byte_size = _sg_vertexlayout_byte_size(layout);
         for (int i = 0; i < layout->num_attrs; i++) {
             SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);

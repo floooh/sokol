@@ -28,7 +28,7 @@ static int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
 }
 
 /* return byte size of a vertex layout */
-static int _sg_vertexlayout_byte_size(sg_vertex_layout* layout) {
+static int _sg_vertexlayout_byte_size(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
     int byte_size = 0;
     for (int i = 0; i < layout->num_attrs; i++) {
@@ -38,7 +38,7 @@ static int _sg_vertexlayout_byte_size(sg_vertex_layout* layout) {
 }
 
 /* return the byte offset of a vertex layout attribute */
-static int _sg_vertexlayout_attr_offset(sg_vertex_layout* layout, int index) {
+static int _sg_vertexlayout_attr_offset(sg_vertex_layout_desc* layout, int index) {
     SOKOL_ASSERT(layout && (index < layout->num_attrs));
     int byte_offset = 0;
     for (int i = 0; i < index; i++) {
