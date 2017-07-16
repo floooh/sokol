@@ -6,6 +6,10 @@ enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
 };
 
+#ifdef SOKOL_USE_GLES2
+#define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
+#endif
+
 #define _SG_GL_CHECK_ERROR() { /*FIXME*/ } 
 
 /*-- type translation --------------------------------------------------------*/
