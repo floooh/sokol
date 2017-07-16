@@ -7,6 +7,46 @@ enum {
     _SG_CONST_MAX_POOL_SIZE = (1<<_SG_CONST_SLOT_SHIFT),
 };
 
+/* return byte size of a vertex format */
+static int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return 4;
+        case SG_VERTEXFORMAT_FLOAT2:    return 8;
+        case SG_VERTEXFORMAT_FLOAT3:    return 12;
+        case SG_VERTEXFORMAT_FLOAT4:    return 16;
+        case SG_VERTEXFORMAT_BYTE4:     return 4;
+        case SG_VERTEXFORMAT_BYTE4N:    return 4;
+        case SG_VERTEXFORMAT_UBYTE4:    return 4;
+        case SG_VERTEXFORMAT_UBYTE4N:   return 4;
+        case SG_VERTEXFORMAT_SHORT2:    return 4;
+        case SG_VERTEXFORMAT_SHORT2N:   return 4;
+        case SG_VERTEXFORMAT_SHORT4:    return 8;
+        case SG_VERTEXFORMAT_SHORT4N:   return 8;
+        case SG_VERTEXFORMAT_UINT10_N2: return 4;
+        case SG_VERTEXFORMAT_INVALID:   return 0;
+    }
+}
+
+/* return byte size of a vertex layout */
+static int _sg_vertexlayout_byte_size(sg_vertex_layout* layout) {
+    SOKOL_ASSERT(layout);
+    int byte_size = 0;
+    for (int i = 0; i < layout->num_attrs; i++) {
+        byte_size += _sg_vertexformat_bytesize(layout->attrs[i].format);
+    }
+    return byte_size;
+}
+
+/* return the byte offset of a vertex layout attribute */
+static int _sg_vertexlayout_attr_offset(sg_vertex_layout* layout, int index) {
+    SOKOL_ASSERT(layout && (index < layout->num_attrs));
+    int byte_offset = 0;
+    for (int i = 0; i < index; i++) {
+        byte_offset += _sg_vertexformat_bytesize(layout->attrs[i].format);
+    }
+    return byte_offset;
+}
+
 //------------------------------------------------------------------------------
 typedef struct {
     sg_id id;
@@ -104,7 +144,7 @@ sg_id sg_alloc_pipeline() {
     SOKOL_ASSERT(_sg);
     sg_id pip_id = _sg_pool_alloc_id(&_sg->pools.pool[SG_RESOURCETYPE_PIPELINE]);
     if (pip_id != SG_INVALID_ID) {
-        _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id);
+        _sg_pipeline* pip = _sg_pipeline_at(&_sg->pools, pip_id);
         SOKOL_ASSERT(pip && (pip->slot.state == SG_RESOURCESTATE_INITIAL) && (pip->slot.id == SG_INVALID_ID));
         pip->slot.id = pip_id;
         pip->slot.state = SG_RESOURCESTATE_ALLOC;
@@ -116,7 +156,7 @@ sg_id sg_alloc_pass() {
     SOKOL_ASSERT(_sg);
     sg_id pass_id = _sg_pool_alloc_id(&_sg->pools.pool[SG_RESOURCETYPE_PASS]);
     if (pass_id != SG_INVALID_ID) {
-        _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);
+        _sg_pass* pass = _sg_pass_at(&_sg->pools, pass_id);
         SOKOL_ASSERT(pass && (pass->slot.state == SG_RESOURCESTATE_INITIAL) && (pass->slot.id == SG_INVALID_ID));
         pass->slot.id = pass_id;
         pass->slot.state = SG_RESOURCESTATE_ALLOC;
@@ -156,7 +196,16 @@ void _sg_validate_shader_desc(sg_shader_desc* desc) {
 }
 
 void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(_sg && desc);
+    SOKOL_ASSERT(desc->shader != SG_INVALID_ID);
+    SOKOL_ASSERT(desc->layouts[0].num_attrs > 0);
+    #ifdef _DEBUG
+    int num_attrs = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+        num_attrs += desc->layouts[i].num_attrs;
+    }
+    SOKOL_ASSERT(num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    #endif
 }
 
 void _sg_validate_pass_desc(sg_pass_desc* desc) {
@@ -196,7 +245,9 @@ void sg_init_pipeline(sg_id pip_id, sg_pipeline_desc* desc) {
     _sg_validate_pipeline_desc(desc);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_pipeline(pip, desc);
+    _sg_shader* shd = _sg_lookup_shader(&_sg->pools, desc->shader);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
+    _sg_create_pipeline(pip, shd, desc);
     SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
@@ -271,6 +322,15 @@ void sg_destroy_shader(sg_id shd_id) {
     if (shd) {
         _sg_destroy_shader(shd);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_SHADER], shd_id);
+    }
+}
+
+void sg_destroy_pipeline(sg_id pip_id) {
+    SOKOL_ASSERT(_sg);
+    _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id);
+    if (pip) {
+        _sg_destroy_pipeline(pip);
+        _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_PIPELINE], pip_id);
     }
 }
 

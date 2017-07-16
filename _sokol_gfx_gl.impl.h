@@ -31,6 +31,63 @@ static GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     }
 }
 
+static GLint _sg_gl_vertexformat_size(fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return 1;
+        case SG_VERTEXFORMAT_FLOAT2:    return 2;
+        case SG_VERTEXFORMAT_FLOAT3:    return 3;
+        case SG_VERTEXFORMAT_FLOAT4:    return 4;
+        case SG_VERTEXFORMAT_BYTE4:     return 4;
+        case SG_VERTEXFORMAT_BYTE4N:    return 4;
+        case SG_VERTEXFORMAT_UBYTE4:    return 4;
+        case SG_VERTEXFORMAT_UBYTE4N:   return 4;
+        case SG_VERTEXFORMAT_SHORT2:    return 2;
+        case SG_VERTEXFORMAT_SHORT2N:   return 2;
+        case SG_VERTEXFORMAT_SHORT4:    return 4;
+        case SG_VERTEXFORMAT_SHORT4N:   return 4;
+        case SG_VERTEXFORMAT_UINT10_N2: return 4;
+        default:    return 0;
+    }
+}
+
+static GLenum _sg_gl_vertexformat_type(fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:
+        case SG_VERTEXFORMAT_FLOAT2:
+        case SG_VERTEXFORMAT_FLOAT3:
+        case SG_VERTEXFORMAT_FLOAT4:
+            return GL_FLOAT;
+        case SG_VERTEXFORMAT_BYTE4:
+        case SG_VERTEXFORMAT_BYTE4N:
+            return GL_BYTE;
+        case SG_VERTEXFORMAT_UBYTE4:
+        case SG_VERTEXFORMAT_UBYTE4N:
+            return GL_UNSIGNED_BYTE;
+        case SG_VERTEXFORMAT_SHORT2:
+        case SG_VERTEXFORMAT_SHORT2N:
+        case SG_VERTEXFORMAT_SHORT4:
+        case SG_VERTEXFORMAT_SHORT4N:
+            return GL_SHORT;
+        case SG_VERTEXFORMAT_UINT10_N2:
+            return GL_UNSIGNED_INT_2_10_10_10_REV;
+        default:
+            return 0;
+    }
+}
+
+static GLboolean _sg_gl_vertexformat_normalized(fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_BYTE4N:
+        case SG_VERTEXFORMAT_UBYTE4N:
+        case SG_VERTEXFORMAT_SHORT2N:
+        case SG_VERTEXFORMAT_SHORT4N:
+        case SG_VERTEXFORMAT_UINT10_N2:
+            return GL_TRUE;
+        default:
+            return GL_FALSE;
+    }
+}
+
 /*-- GL backend resource declarations ----------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -76,12 +133,48 @@ static void _sg_init_shader(_sg_shader* shd) {
 }
 
 typedef struct {
+    uint8_t index;
+    uint8_t enabled;
+    uint8_t vb_index;
+    uint8_t divisor;
+    uint8_t stride;
+    uint8_t size;
+    uint8_t normalized;
+    uint32_t offset;
+    GLenum type;
+} _sg_gl_attr;
+
+typedef struct {
     _sg_slot slot;
+    _sg_shader* shader;
+    int num_attrs;
+    _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_id shader_id;
+    sg_depth_stencil_state depth_stencil;
+    sg_blend_state blend;
+    sg_rasterizer_state rast;
 } _sg_pipeline;
 
 static void _sg_init_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     _sg_init_slot(&pip->slot);
+    pip->shader = 0;
+    pip->shader_id = SG_INVALID_ID;
+    pip->num_attrs = 0;
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        _sg_gl_attr* attr = &pip->gl_attrs[i];
+        attr->index = 0;
+        attr->enabled = 0;
+        attr->vb_index = 0;
+        attr->divisor = 0;
+        attr->stride = 0;
+        attr->normalized = 0;
+        attr->offset = 0;
+        attr->type = 0;
+    }
+    _sg_init_depth_stencil_state(&pip->depth_stencil);
+    _sg_init_blend_state(&pip->blend);
+    _sg_init_rasterizer_state(&pip->rast);
 }
 
 typedef struct {
@@ -102,21 +195,9 @@ typedef struct {
 
 static void _sg_init_state_cache(_sg_state_cache* state) {
     SOKOL_ASSERT(state);
+
     /* depth-stencil state */
-    state->ds.stencil_front.fail_op         = SG_STENCILOP_KEEP;
-    state->ds.stencil_front.depth_fail_op   = SG_STENCILOP_KEEP;
-    state->ds.stencil_front.pass_op         = SG_STENCILOP_KEEP;
-    state->ds.stencil_front.compare_func    = SG_COMPAREFUNC_ALWAYS;
-    state->ds.stencil_back.fail_op          = SG_STENCILOP_KEEP;
-    state->ds.stencil_back.depth_fail_op    = SG_STENCILOP_KEEP;
-    state->ds.stencil_back.pass_op          = SG_STENCILOP_KEEP;
-    state->ds.stencil_back.compare_func     = SG_COMPAREFUNC_ALWAYS;
-    state->ds.depth_compare_func    = SG_COMPAREFUNC_ALWAYS;
-    state->ds.depth_write_enabled   = false;
-    state->ds.stencil_enabled       = false;
-    state->ds.stencil_read_mask     = 0xFF;
-    state->ds.stencil_write_mask    = 0xFF;
-    state->ds.stencil_ref           = 0;
+    _sg_init_depth_stencil_state(&state->ds);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_FALSE);
@@ -126,17 +207,7 @@ static void _sg_init_state_cache(_sg_state_cache* state) {
     glStencilMask(0xFFFFFFFF);
 
     /* blend state */
-    state->blend.enabled = false;
-    state->blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
-    state->blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
-    state->blend.op_rgb = SG_BLENDOP_ADD;
-    state->blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-    state->blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
-    state->blend.op_alpha = SG_BLENDOP_ADD;
-    state->blend.color_write_mask = SG_COLORMASK_RGBA;
-    for (int i = 0; i < 4; i++) {
-        state->blend.blend_color[i] = 1.0f;
-    }
+    _sg_init_blend_state(&state->blend);
     glDisable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -144,11 +215,7 @@ static void _sg_init_state_cache(_sg_state_cache* state) {
     glBlendColor(1.0f, 1.0f, 1.0f, 1.0f);
 
     /* rasterizer state */
-    state->rast.cull_face_enabled = false;
-    state->rast.scissor_test_enabled = false;
-    state->rast.dither_enabled = true;
-    state->rast.alpha_to_coverage_enabled = false;
-    state->rast.cull_face = SG_FACE_BACK;
+    _sg_init_rasterizer_state(&state->rast);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
@@ -308,10 +375,49 @@ static void _sg_destroy_shader(_sg_shader* shd) {
     _sg_init_shader(shd);
 }
 
-static void _sg_create_pipeline(_sg_pipeline* pip, sg_pipeline_desc* desc) {
+static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
-    // FIXME
-    pip->slot.state = SG_RESOURCESTATE_FAILED;
+    SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
+    SOKOL_ASSERT(pip->num_attrs == 0);
+    SOKOL_ASSERT(desc->shader == shd->slot.id);
+
+    pip->shader = shd;
+    pip->shader_id = desc->shader;
+    pip->depth_stencil = desc->depth_stencil;
+    pip->blend = desc->blend;
+    pip->rast = desc->rast;
+    
+    // FIXME: hmmmmm use glGetAttribLocation here?
+    pip->num_attrs = 0;
+    for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
+        sg_vertex_layout* layout = &desc->layouts[slot];
+        int layout_byte_size = _sg_vertexlayout_byte_size(layout);
+        for (int i = 0; i < layout->num_attrs; i++) {
+            SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+            _sg_gl_attr* gl_attr = &pip->gl_attrs[pip->num_attrs];
+            sg_vertex_format fmt = layout->attrs[i].format;
+            gl_attr->index = pip->num_attrs++;
+            gl_attr->enabled = GL_TRUE;
+            gl_attr->vb_index = slot;
+            if (layout->step_func == SG_STEPFUNC_PER_VERTEX) {
+                gl_attr->divisor = 0;
+            }
+            else {
+                gl_attr->divisor = layout->step_rate;
+            }
+            gl_attr->stride = layout_byte_size;
+            gl_attr->offset = _sg_vertexlayout_attr_offset(layout, i);
+            gl_attr->size = _sg_gl_vertexformat_size(fmt);
+            gl_attr->type = _sg_gl_vertexformat_type(fmt);
+            gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
+        }
+    }
+    pip->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+static void _sg_destroy_pipeline(_sg_pipeline* pip) {
+    SOKOL_ASSERT(pip);
+    _sg_init_pipeline(pip);
 }
 
 static void _sg_create_pass(_sg_pass* pass, sg_pass_desc* desc) {

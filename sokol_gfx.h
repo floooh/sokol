@@ -33,6 +33,7 @@ enum {
     SG_INVALID_ID = 0,
     SG_DEFAULT_PASS = SG_INVALID_ID,
     SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_SHADERSTAGE_BUFFERS = 4,
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UNIFORMS = 16,
@@ -243,29 +244,8 @@ typedef enum {
     SG_USAGE_STREAM,
 } sg_usage;
 
-/*
 typedef enum {
-    SG_VERTEXATTR_POSITION,
-    SG_VERTEXATTR_NORMAL,
-    SG_VERTEXATTR_TEXCOORD_0,
-    SG_VERTEXATTR_TEXCOORD_1,
-    SG_VERTEXATTR_TEXCOORD_2,
-    SG_VERTEXATTR_TEXCOORD_3,
-    SG_VERTEXATTR_TANGENT,
-    SG_VERTEXATTR_BINORMAL,
-    SG_VERTEXATTR_WEIGHTS,
-    SG_VERTEXATTR_INDICES,
-    SG_VERTEXATTR_COLOR_0,
-    SG_VERTEXATTR_COLOR_1,
-    SG_VERTEXATTR_INSTANCE_0,
-    SG_VERTEXATTR_INSTANCE_1,
-    SG_VERTEXATTR_INSTANCE_2,
-    SG_VERTEXATTR_INSTANCE_3,
-} sg_vertex_attr;
-*/
-
-typedef enum {
-    SG_VERTEXFORMAT_INVALID,
+    SG_VERTEXFORMAT_INVALID = 0,
     SG_VERTEXFORMAT_FLOAT,
     SG_VERTEXFORMAT_FLOAT2,
     SG_VERTEXFORMAT_FLOAT3,
@@ -273,6 +253,7 @@ typedef enum {
     SG_VERTEXFORMAT_BYTE4,
     SG_VERTEXFORMAT_BYTE4N,
     SG_VERTEXFORMAT_UBYTE4,
+    SG_VERTEXFORMAT_UBYTE4N,
     SG_VERTEXFORMAT_SHORT2,
     SG_VERTEXFORMAT_SHORT2N,
     SG_VERTEXFORMAT_SHORT4,
@@ -400,6 +381,12 @@ typedef struct {
     sg_face cull_face;
 } sg_rasterizer_state;
 
+/* describe a vertex attribute */
+typedef struct {
+    const char* name;
+    sg_vertex_format format;
+} sg_vertex_attr;
+
 /*-- description structures for resource creation ----------------------------*/
 typedef struct {
     int size;
@@ -424,12 +411,6 @@ void sg_init_buffer_desc(sg_buffer_desc* desc) {
 typedef struct {
     /* FIXME */
 } sg_image_desc;
-
-/* describe a vertex attribute in a shader desc */
-typedef struct {
-    const char* name;
-    sg_vertex_format format;
-} sg_shader_vertex_attr;
 
 /* describe a uniform in a uniform block */
 typedef struct {
@@ -491,7 +472,7 @@ typedef struct {
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
     int num_attrs;
-    sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_shader_desc;
 
 extern void sg_init_shader_desc(sg_shader_desc* desc);
@@ -503,7 +484,7 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
     _sg_init_shader_stage_desc(&desc->fs);
     desc->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        sg_shader_vertex_attr* attr = &desc->attrs[i];
+        sg_vertex_attr* attr = &desc->attrs[i];
         attr->name = 0;
         attr->format = SG_VERTEXFORMAT_INVALID;
     }
@@ -511,15 +492,102 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
 void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format) {
     SOKOL_ASSERT(desc && name && format != SG_VERTEXFORMAT_INVALID);
     SOKOL_ASSERT(desc->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_shader_vertex_attr* attr = &desc->attrs[desc->num_attrs++];
+    sg_vertex_attr* attr = &desc->attrs[desc->num_attrs++];
     attr->name = name;
     attr->format = format;
 }
 #endif
 
 typedef struct {
-    /* FIXME */
+    int num_attrs;
+    sg_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_step_func step_func;
+    int step_rate;
+} sg_vertex_layout;
+
+typedef struct {
+    sg_id shader;
+    sg_vertex_layout layouts[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_depth_stencil_state depth_stencil;
+    sg_blend_state blend;
+    sg_rasterizer_state rast;
 } sg_pipeline_desc;
+
+extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
+extern void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
+#ifdef SOKOL_IMPL
+static void _sg_init_vertex_layout(sg_vertex_layout* l) {
+    SOKOL_ASSERT(l);
+    l->step_func = SG_STEPFUNC_PER_VERTEX;
+    l->step_rate = 1;
+    l->num_attrs = 0;
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        l->attrs[i].name = 0;
+        l->attrs[i].format = SG_VERTEXFORMAT_INVALID;
+    }
+}
+static void _sg_init_stencil_state(sg_stencil_state* s) {
+    SOKOL_ASSERT(s);
+    s->fail_op = SG_STENCILOP_KEEP;
+    s->depth_fail_op = SG_STENCILOP_KEEP;
+    s->pass_op = SG_STENCILOP_KEEP;
+    s->compare_func = SG_COMPAREFUNC_ALWAYS;
+}
+static void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
+    SOKOL_ASSERT(s);
+    _sg_init_stencil_state(&s->stencil_front);
+    _sg_init_stencil_state(&s->stencil_back);
+    s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+    s->depth_write_enabled = false;
+    s->stencil_enabled = false;
+    s->stencil_read_mask = 0xFF;
+    s->stencil_write_mask = 0xFF;
+    s->stencil_ref = 0;
+}
+static void _sg_init_blend_state(sg_blend_state* s) {
+    SOKOL_ASSERT(s);
+    s->enabled = false;
+    s->src_factor_rgb = SG_BLENDFACTOR_ONE;
+    s->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+    s->op_rgb = SG_BLENDOP_ADD;
+    s->src_factor_alpha = SG_BLENDFACTOR_ONE;
+    s->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+    s->op_alpha = SG_BLENDOP_ADD;
+    s->color_write_mask = SG_COLORMASK_RGBA;
+    for (int i = 0; i < 4; i++) {
+        s->blend_color[i] = 1.0f;
+    }
+}
+static void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
+    SOKOL_ASSERT(s);
+    s->cull_face_enabled = false;
+    s->scissor_test_enabled = false;
+    s->dither_enabled = true;
+    s->alpha_to_coverage_enabled = false;
+    s->cull_face = SG_FACE_BACK;
+}
+void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->shader = SG_INVALID_ID;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+        _sg_init_vertex_layout(&desc->layouts[i]);
+    }
+    _sg_init_depth_stencil_state(&desc->depth_stencil);
+    _sg_init_blend_state(&desc->blend);
+    _sg_init_rasterizer_state(&desc->rast);
+}
+void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
+    SOKOL_ASSERT(name);
+    SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
+    SOKOL_ASSERT(desc->layouts[slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    sg_vertex_layout* l = &desc->layouts[slot];
+    sg_vertex_attr* attr = &l->attrs[l->num_attrs++];
+    attr->name = name;
+    attr->format = format;
+}
+#endif
 
 typedef struct {
     /* FIXME */
