@@ -147,9 +147,9 @@ typedef struct {
 typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
+    sg_id shader_id;
     int num_attrs;
     _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_id shader_id;
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
     sg_rasterizer_state rast;
