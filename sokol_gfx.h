@@ -33,14 +33,40 @@ enum {
 };
 
 typedef enum {
-    SG_BUFFER = 0,
-    SG_IMAGE,
-    SG_SHADER,
-    SG_PIPELINE,
-    SG_PASS,
+    SG_RESOURCETYPE_BUFFER = 0,
+    SG_RESOURCETYPE_IMAGE,
+    SG_RESOURCETYPE_SHADER,
+    SG_RESOURCETYPE_PIPELINE,
+    SG_RESOURCETYPE_PASS,
 
-    SG_NUM_RESOURCE_TYPES
+    SG_NUM_RESOURCETYPES
 } sg_resource_type;
+
+/*
+    sg_resource_state
+
+    The current state of a resource in one of the resource pools.
+    Resources start in the INITIAL state, which means the 
+    pool slot is unoccupied and can be allocated. When a resource is
+    created, first an id is allocated, and the resource pool slot
+    is set to state ALLOC. After allocation, the resource is
+    initialized, which may result in the VALID or FAILED state. The
+    reason why allocation and initialization are separate is because
+    some resource types (e.g. buffers and images) might be asynchronously
+    initialized by the user application. If a resource which is not
+    in the VALID state is attempted to be used for rendering, rendering
+    operations will silently be dropped.
+*/
+typedef enum {
+    /* resource is in its initial 'unallocated' state */
+    SG_RESOURCESTATE_INITIAL,
+    /* resource id has been allocated, waiting to be initialized */
+    SG_RESOURCESTATE_ALLOC,
+    /* resource has been initialized and is valid */
+    SG_RESOURCESTATE_VALID,
+    /* resource initialization was attempted but failed */
+    SG_RESOURCESTATE_FAILED,
+} sg_resource_state;
 
 typedef enum {
     /* unset bit means "don't care" */
@@ -91,25 +117,37 @@ typedef struct {
     int width;
     int height;
     int sample_count;
-    int resource_pool_size[SG_NUM_RESOURCE_TYPES];
-} sg_setup_desc;
+    int resource_pool_size[SG_NUM_RESOURCETYPES];
+} sg_desc;
 
-extern void sg_init_setup_desc(sg_setup_desc* desc);
+extern void sg_init_desc(sg_desc* desc);
 #ifdef SOKOL_IMPL
-void sg_init_setup_desc(sg_setup_desc* desc) {
+void sg_init_desc(sg_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->width = 640;
     desc->height = 400;
     desc->sample_count = 1;
-    for (int i = 0; i < SG_NUM_RESOURCE_TYPES; i++) {
+    for (int i = 0; i < SG_NUM_RESOURCETYPES; i++) {
         desc->resource_pool_size[i] = 128;
     }
 }
 #endif
 
 typedef enum {
-    SG_UINT16,
-    SG_UINT32,
+    SG_BUFFERTYPE_VERTEX_BUFFER,
+    SG_BUFFERTYPE_INDEX_BUFFER
+} sg_buffer_type;
+
+typedef enum {
+    SG_IMAGETYPE_2D,
+    SG_IMAGETYPE_CUBE,
+    SG_IMAGETYPE_3D,
+    SG_IMAGETYPE_ARRAY,
+} sg_image_type;
+
+typedef enum {
+    SG_INDEXTYPE_UINT16,
+    SG_INDEXTYPE_UINT32,
 } sg_index_type;
 
 typedef enum {
@@ -135,52 +173,45 @@ typedef enum {
 } sg_stage;
 
 typedef enum {
-    SG_RGBA8,
-    SG_RGB8,
-    SG_RGBA4,
-    SG_R5G6B5,
-    SG_R5G5B5A1,
-    SG_R10G10B10A2,
-    SG_RGBA32F,
-    SG_RGBA16F,
-    SG_R32F,
-    SG_R16F,
-    SG_L8,
-    SG_DXT1,
-    SG_DXT3,
-    SG_DXT5,
-    SG_DEPTH,
-    SG_DEPTHSTENCIL,
-    SG_PVRTC2_RGB,
-    SG_PVRTC4_RGB,
-    SG_PVRTC2_RGBA,
-    SG_ETC2_RGB8,
-    SG_ETC2_SRGB8,
+    SG_PIXELFORMAT_RGBA8,
+    SG_PIXELFORMAT_RGB8,
+    SG_PIXELFORMAT_RGBA4,
+    SG_PIXELFORMAT_R5G6B5,
+    SG_PIXELFORMAT_R5G5B5A1,
+    SG_PIXELFORMAT_R10G10B10A2,
+    SG_PIXELFORMAT_RGBA32F,
+    SG_PIXELFORMAT_RGBA16F,
+    SG_PIXELFORMAT_R32F,
+    SG_PIXELFORMAT_R16F,
+    SG_PIXELFORMAT_L8,
+    SG_PIXELFORMAT_DXT1,
+    SG_PIXELFORMAT_DXT3,
+    SG_PIXELFORMAT_DXT5,
+    SG_PIXELFORMAT_DEPTH,
+    SG_PIXELFORMAT_DEPTHSTENCIL,
+    SG_PIXELFORMAT_PVRTC2_RGB,
+    SG_PIXELFORMAT_PVRTC4_RGB,
+    SG_PIXELFORMAT_PVRTC2_RGBA,
+    SG_PIXELFORMAT_ETC2_RGB8,
+    SG_PIXELFORMAT_ETC2_SRGB8,
 } sg_pixel_format;
 
 typedef enum {
-    SG_POINTS,
-    SG_LINES,
-    SG_LINE_STRIP,
-    SG_TRIANGLES,
-    SG_TRIANLE_STRIP,
+    SG_PRIMITIVETYPE_POINTS,
+    SG_PRIMITIVETYPE_LINES,
+    SG_PRIMITIVETYPE_LINE_STRIP,
+    SG_PRIMITIVETYPE_TRIANGLES,
+    SG_PRIMITIVETYPE_TRIANLE_STRIP,
 } sg_primitive_type;
 
 typedef enum {
-    SG_NEAREST,
-    SG_LINEAR,
-    SG_NEAREST_MIPMAP_NEAREST,
-    SG_NEAREST_MIPMAP_LINEAR,
-    SG_LINEAR_MIPMAP_NEAREST,
-    SG_LINEAR_MIPMAP_LINEAR,
+    SG_FILTER_NEAREST,
+    SG_FILTER_LINEAR,
+    SG_FILTER_NEAREST_MIPMAP_NEAREST,
+    SG_FILTER_NEAREST_MIPMAP_LINEAR,
+    SG_FILTER_LINEAR_MIPMAP_NEAREST,
+    SG_FILTER_LINEAR_MIPMAP_LINEAR,
 } sg_filter;
-
-typedef enum {
-    SG_IMAGE_2D,
-    SG_IMAGE_CUBE,
-    SG_IMAGE_3D,
-    SG_IMAGE_ARRAY,
-} sg_image_type;
 
 typedef enum {
     SG_CLAMP_TO_EDGE,
@@ -195,44 +226,44 @@ typedef enum {
 } sg_usage;
 
 typedef enum {
-    SG_POSITION,
-    SG_NORMAL,
-    SG_TEXCOORD_0,
-    SG_TEXCOORD_1,
-    SG_EXCOORD_2,
-    SG_TEXCOORD_3,
-    SG_TANGENT,
-    SG_BINORMAL,
-    SG_WEIGHTS,
-    SG_INDICES,
-    SG_COLOR_0,
-    SG_COLOR_1,
-    SG_INSTANCE_0,
-    SG_INSTANCE_1,
-    SG_INSTANCE_2,
-    SG_INSTANCE_3,
+    SG_VERTEXATTR_POSITION,
+    SG_VERTEXATTR_NORMAL,
+    SG_VERTEXATTR_TEXCOORD_0,
+    SG_VERTEXATTR_TEXCOORD_1,
+    SG_VERTEXATTR_TEXCOORD_2,
+    SG_VERTEXATTR_TEXCOORD_3,
+    SG_VERTEXATTR_TANGENT,
+    SG_VERTEXATTR_BINORMAL,
+    SG_VERTEXATTR_WEIGHTS,
+    SG_VERTEXATTR_INDICES,
+    SG_VERTEXATTR_COLOR_0,
+    SG_VERTEXATTR_COLOR_1,
+    SG_VERTEXATTR_INSTANCE_0,
+    SG_VERTEXATTR_INSTANCE_1,
+    SG_VERTEXATTR_INSTANCE_2,
+    SG_VERTEXATTR_INSTANCE_3,
 } sg_vertex_attr;
 
 typedef enum {
-    SG_FLOAT,
-    SG_FLOAT2,
-    SG_FLOAT3,
-    SG_BYTE4,
-    SG_BYTE4N,
-    SG_UBYTE4,
-    SG_SHORT2,
-    SG_SHORT2N,
-    SG_SHORT4,
-    SG_SHORT4N,
-    SG_UINT10_N2,
+    SG_VERTEXFORMAT_FLOAT,
+    SG_VERTEXFORMAT_FLOAT2,
+    SG_VERTEXFORMAT_FLOAT3,
+    SG_VERTEXFORMAT_BYTE4,
+    SG_VERTEXFORMAT_BYTE4N,
+    SG_VERTEXFORMAT_UBYTE4,
+    SG_VERTEXFORMAT_SHORT2,
+    SG_VERTEXFORMAT_SHORT2N,
+    SG_VERTEXFORMAT_SHORT4,
+    SG_VERTEXFORMAT_SHORT4N,
+    SG_VERTEXFORMAT_UINT10_N2,
 } sg_vertex_format;
 
 typedef enum {
-    SG_GLSL100,
-    SG_GLSL330,
-    SG_GLSLES3,
-    SG_HLSL5,
-    SG_METAL,
+    SG_SHADERLANG_GLSL100,
+    SG_SHADERLANG_GLSL330,
+    SG_SHADERLANG_GLSLES3,
+    SG_SHADERLANG_HLSL5,
+    SG_SHADERLANG_METAL,
 } sg_shader_lang;
 
 typedef enum {
@@ -242,14 +273,14 @@ typedef enum {
 } sg_face;
 
 typedef enum {
-    SG_NEVER,
-    SG_LESS,
-    SG_EQUAL,
-    SG_LESS_EQUAL,
-    SG_GREATER,
-    SG_NOT_EQUAL,
-    SG_GREATER_EQUAL,
-    SG_ALWAYS,
+    SG_COMPAREFUNC_NEVER,
+    SG_COMPAREFUNC_LESS,
+    SG_COMPAREFUNC_EQUAL,
+    SG_COMPAREFUNC_LESS_EQUAL,
+    SG_COMPAREFUNC_GREATER,
+    SG_COMPAREFUNC_NOT_EQUAL,
+    SG_COMPAREFUNC_GREATER_EQUAL,
+    SG_COMPAREFUNC_ALWAYS,
 } sg_compare_func;
 
 typedef enum {
@@ -288,8 +319,8 @@ typedef enum {
 } sg_blend_op;
 
 typedef enum {
-    SG_STEP_PER_VERTEX,
-    SG_STEP_PER_INSTANCE,
+    SG_STEPFUNC_PER_VERTEX,
+    SG_STEPFUNC_PER_INSTANCE,
 } sg_step_func;
 
 typedef enum {
@@ -298,12 +329,53 @@ typedef enum {
     SG_COLORMASK_B = (1<<2),
     SG_COLORMASK_A = (1<<3),
     SG_COLORMASK_RGBA = 0xF,
-} sg_colormask;
+} sg_color_mask;
+
+typedef struct {
+    sg_stencil_op fail_op;
+    sg_stencil_op depth_fail_op;
+    sg_stencil_op pass_op;
+    sg_compare_func compare_func;
+} sg_stencil_state;
+
+typedef struct {
+    sg_stencil_state stencil_front;
+    sg_stencil_state stencil_back;
+    sg_compare_func depth_compare_func;
+    bool depth_write_enabled;
+    bool stencil_enabled;
+    uint8_t stencil_read_mask;
+    uint8_t stencil_write_mask;
+    uint8_t stencil_ref;
+} sg_depth_stencil_state;
+
+typedef struct {
+    bool enabled;
+    sg_blend_factor src_factor_rgb;
+    sg_blend_factor dst_factor_rgb;
+    sg_blend_op op_rgb;
+    sg_blend_factor src_factor_alpha;
+    sg_blend_factor dst_factor_alpha;
+    sg_blend_op op_alpha;
+    uint8_t color_write_mask;
+    float blend_color[4];
+} sg_blend_state;
+
+typedef struct {
+    bool cull_face_enabled;
+    bool scissor_test_enabled;
+    bool dither_enabled;
+    bool alpha_to_coverage_enabled;
+    sg_face cull_face;
+} sg_rasterizer_state;
 
 //------------------------------------------------------------------------------
 typedef struct {
     int size;
+    sg_buffer_type type;
     sg_usage usage;
+    void* data_ptr;
+    int data_size;
 } sg_buffer_desc;
 
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
@@ -311,7 +383,10 @@ extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 void sg_init_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->size = 0;
+    desc->type = SG_BUFFERTYPE_VERTEX_BUFFER;
     desc->usage = SG_USAGE_IMMUTABLE; 
+    desc->data_ptr = 0;
+    desc->data_size = 0;
 }
 #endif
 
@@ -340,15 +415,15 @@ typedef struct {
 } sg_update_image_desc;
 
 /* setup */
-extern void sg_setup(sg_setup_desc* desc);
+extern void sg_setup(sg_desc* desc);
 extern void sg_discard();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 
 /* resources */
-extern sg_id sg_make_buffer(sg_buffer_desc* desc, void* opt_data, int opt_bytes);
+extern sg_id sg_make_buffer(sg_buffer_desc* desc);
 extern void sg_destroy_buffer(sg_id buf);
-extern sg_id sg_make_image(sg_image_desc* desc, void* opt_data, int opt_bytes);
+extern sg_id sg_make_image(sg_image_desc* desc);
 extern void sg_destroy_image(sg_id img);
 extern sg_id sg_make_shader(sg_shader_desc* desc);
 extern void sg_destroy_shader(sg_id shd);
@@ -370,11 +445,17 @@ extern void sg_end_pass();
 extern void sg_commit();
 extern void sg_reset_state_cache();
 
-/* async resource setup */
+/* separate resource allocation and initialization (for async setup) */ 
 extern sg_id sg_alloc_buffer();
 extern sg_id sg_alloc_image();
+extern sg_id sg_alloc_shader();
+extern sg_id sg_alloc_pipeline();
+extern sg_id sg_alloc_pass();
 extern void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc);
 extern void sg_init_image(sg_id img_id, sg_image_desc* desc);
+extern void sg_init_shader(sg_id shd_id, sg_shader_desc* desc);
+extern void sg_init_pipeline(sg_id pip_id, sg_pipeline_desc* desc);
+extern void sg_init_pass(sg_id pass_id, sg_pass_desc* desc);
 
 #ifdef SOKOL_IMPL
 #include "_sokol_gfx.impl.h"

@@ -14,13 +14,15 @@ Minimalistic header-only platform abstraction libs in C:
 These are the internal parts of the Oryol C++ framework 
 rewritten in pure C as standalone header-only libs.
 
+Sample code is in a separate repo: https://github.com/floooh/sokol-samples
+
 ### Why C:
 
 - easier integration with other languages
-- easier integration into existing projects
+- easier integration into other projects
 - allows even smaller program binaries than Oryol
 
-Sokol will be less convenient to use than Oryol, but that's ok since
+Sokol will be a bit less convenient to use than Oryol, but that's ok since
 the Sokol headers are intended to be low-level building blocks.
 
 Eventually Oryol will just be a thin C++ layer over Sokol.
