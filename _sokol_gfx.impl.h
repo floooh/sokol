@@ -143,7 +143,16 @@ void _sg_validate_image_desc(sg_image_desc* desc) {
 }
 
 void _sg_validate_shader_desc(sg_shader_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(_sg && desc);
+    #if defined(SOKOL_USE_GL) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
+    SOKOL_ASSERT(desc->vs.source);
+    SOKOL_ASSERT(desc->fs.source);
+    #endif
+    SOKOL_ASSERT(desc->num_attrs <= SG_MAX_VERTEX_ATTRIBUTES);
+    for (int i = 0; i < desc->num_attrs; i++) {
+        SOKOL_ASSERT(desc->attrs[i].name);
+        SOKOL_ASSERT(desc->attrs[i].format != SG_VERTEXFORMAT_INVALID);
+    }
 }
 
 void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
@@ -253,6 +262,15 @@ void sg_destroy_buffer(sg_id buf_id) {
     if (buf) {
         _sg_destroy_buffer(buf);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_BUFFER], buf_id);
+    }
+}
+
+void sg_destroy_shader(sg_id shd_id) {
+    SOKOL_ASSERT(_sg);
+    _sg_shader* shd = _sg_lookup_shader(&_sg->pools, shd_id);
+    if (shd) {
+        _sg_destroy_shader(shd);
+        _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_SHADER], shd_id);
     }
 }
 

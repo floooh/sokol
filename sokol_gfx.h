@@ -15,6 +15,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#ifdef SOKOL_IMPL
+#include <string.h>
+#endif
 
 #ifndef SOKOL_ASSERT
 #include <assert.h>
@@ -30,8 +33,22 @@ enum {
     SG_INVALID_ID = 0,
     SG_DEFAULT_PASS = SG_INVALID_ID,
     SG_MAX_COLOR_ATTACHMENTS = 4,
+    SG_MAX_SHADERSTAGE_IMAGES = 12,
+    SG_MAX_SHADERSTAGE_UBS = 4,
+    SG_MAX_UNIFORMS = 16,
+    SG_MAX_VERTEX_ATTRIBUTES = 16,
 };
 
+/*
+    sg_resource_type
+
+    sokol gfx has 5 resource types:
+    - buffer:   vertex and index buffers
+    - image:    textures and render targets
+    - shaders:  vertex and fragment shaders, uniform blocks
+    - pipeline: encapsulates shader, render states and vertex layouts
+    - pass:     encapsulates render pass operations (clear, msaa resolve, etc)
+*/
 typedef enum {
     SG_RESOURCETYPE_BUFFER = 0,
     SG_RESOURCETYPE_IMAGE,
@@ -139,6 +156,7 @@ typedef enum {
 } sg_buffer_type;
 
 typedef enum {
+    SG_IMAGETYPE_INVALID,
     SG_IMAGETYPE_2D,
     SG_IMAGETYPE_CUBE,
     SG_IMAGETYPE_3D,
@@ -168,9 +186,9 @@ typedef enum {
 } sg_feature;
 
 typedef enum {
-    SG_STAGE_VS,
-    SG_STAGE_FS,
-} sg_stage;
+    SG_SHADERSTAGE_VS,
+    SG_SHADERSTAGE_FS,
+} sg_shader_stage;
 
 typedef enum {
     SG_PIXELFORMAT_RGBA8,
@@ -225,6 +243,7 @@ typedef enum {
     SG_USAGE_STREAM,
 } sg_usage;
 
+/*
 typedef enum {
     SG_VERTEXATTR_POSITION,
     SG_VERTEXATTR_NORMAL,
@@ -243,11 +262,14 @@ typedef enum {
     SG_VERTEXATTR_INSTANCE_2,
     SG_VERTEXATTR_INSTANCE_3,
 } sg_vertex_attr;
+*/
 
 typedef enum {
+    SG_VERTEXFORMAT_INVALID,
     SG_VERTEXFORMAT_FLOAT,
     SG_VERTEXFORMAT_FLOAT2,
     SG_VERTEXFORMAT_FLOAT3,
+    SG_VERTEXFORMAT_FLOAT4,
     SG_VERTEXFORMAT_BYTE4,
     SG_VERTEXFORMAT_BYTE4N,
     SG_VERTEXFORMAT_UBYTE4,
@@ -265,6 +287,15 @@ typedef enum {
     SG_SHADERLANG_HLSL5,
     SG_SHADERLANG_METAL,
 } sg_shader_lang;
+
+typedef enum {
+    SG_UNIFORMTYPE_INVALID,
+    SG_UNIFORMTYPE_FLOAT,
+    SG_UNIFORMTYPE_FLOAT2,
+    SG_UNIFORMTYPE_FLOAT3,
+    SG_UNIFORMTYPE_FLOAT4,
+    SG_UNIFORMTYPE_MAT4,
+} sg_uniform_type;
 
 typedef enum {
     SG_FACE_FRONT,
@@ -369,7 +400,7 @@ typedef struct {
     sg_face cull_face;
 } sg_rasterizer_state;
 
-//------------------------------------------------------------------------------
+/*-- description structures for resource creation ----------------------------*/
 typedef struct {
     int size;
     sg_buffer_type type;
@@ -394,9 +425,97 @@ typedef struct {
     /* FIXME */
 } sg_image_desc;
 
+/* describe a vertex attribute in a shader desc */
 typedef struct {
-    /* FIXME */
+    const char* name;
+    sg_vertex_format format;
+} sg_shader_vertex_attr;
+
+/* describe a uniform in a uniform block */
+typedef struct {
+    const char* name;
+    sg_uniform_type type;
+    int offset;
+    int array_size; 
+} sg_shader_uniform_desc;
+
+typedef struct {
+    int num_uniforms;
+    sg_shader_uniform_desc uniforms[SG_MAX_UNIFORMS];
+} sg_shader_uniform_block_desc;
+
+typedef struct {
+    const char* name;
+    sg_image_type type;
+} sg_shader_image_desc;
+
+typedef struct {
+    /* source code (only used in GL backends) */
+    const char* source;
+    /* number of uniform blocks on the shader stage */
+    int num_uniform_blocks;
+    /* number of textures on the shader stage */
+    int num_textures;
+    /* uniform block descriptions */
+    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    /* image descriptions */
+    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
+} sg_shader_stage_desc;
+
+#ifdef SOKOL_IMPL
+static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->source = 0;
+    desc->num_uniform_blocks = 0;
+    desc->num_textures = 0;
+    for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+        sg_shader_uniform_block_desc* ub_desc = &desc->uniform_blocks[ub_index];
+        ub_desc->num_uniforms = 0;
+        for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
+            sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
+            u_desc->name = 0;
+            u_desc->type = SG_UNIFORMTYPE_INVALID;
+            u_desc->offset = 0;
+            u_desc->array_size = 1;
+        }
+    }
+    for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+        sg_shader_image_desc* img_desc = &desc->images[img_index];
+        img_desc->name = 0;
+        img_desc->type = SG_IMAGETYPE_INVALID;
+    }
+}
+#endif
+
+typedef struct {
+    sg_shader_stage_desc vs;
+    sg_shader_stage_desc fs;
+    int num_attrs;
+    sg_shader_vertex_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_shader_desc;
+
+extern void sg_init_shader_desc(sg_shader_desc* desc);
+extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format);
+#ifdef SOKOL_IMPL
+void sg_init_shader_desc(sg_shader_desc* desc) {
+    SOKOL_ASSERT(desc);
+    _sg_init_shader_stage_desc(&desc->vs);
+    _sg_init_shader_stage_desc(&desc->fs);
+    desc->num_attrs = 0;
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        sg_shader_vertex_attr* attr = &desc->attrs[i];
+        attr->name = 0;
+        attr->format = SG_VERTEXFORMAT_INVALID;
+    }
+}
+void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format) {
+    SOKOL_ASSERT(desc && name && format != SG_VERTEXFORMAT_INVALID);
+    SOKOL_ASSERT(desc->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    sg_shader_vertex_attr* attr = &desc->attrs[desc->num_attrs++];
+    attr->name = name;
+    attr->format = format;
+}
+#endif
 
 typedef struct {
     /* FIXME */
@@ -439,7 +558,7 @@ extern void sg_begin_pass(sg_id pass, sg_pass_action* pass_action, int width, in
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(sg_draw_state* ds);
-extern void sg_apply_uniform_block(sg_stage stage, int slot, void* data, int num_bytes);
+extern void sg_apply_uniform_block(sg_shader_stage stage, int slot, void* data, int num_bytes);
 extern void sg_draw(int base_element, int num_elements, int num_instances);
 extern void sg_end_pass();
 extern void sg_commit();

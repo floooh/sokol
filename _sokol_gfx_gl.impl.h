@@ -9,18 +9,25 @@ enum {
 #define _SG_GL_CHECK_ERROR() { /*FIXME*/ } 
 
 /*-- type translation --------------------------------------------------------*/
-static GLenum _sg_as_buffer_target(sg_buffer_type t) {
+static GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEX_BUFFER: return GL_ARRAY_BUFFER;
         default: return GL_ELEMENT_ARRAY_BUFFER;
     }
 }
 
-static GLenum _sg_as_usage(sg_usage u) {
+static GLenum _sg_gl_usage(sg_usage u) {
     switch (u) {
         case SG_USAGE_IMMUTABLE:    return GL_STATIC_DRAW;
         case SG_USAGE_DYNAMIC:      return GL_DYNAMIC_DRAW;
         default:                    return GL_STREAM_DRAW;
+    }
+}
+
+static GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
+    switch (stage) {
+        case SG_SHADERSTAGE_VS:     return GL_VERTEX_SHADER;
+        default:                    return GL_FRAGMENT_SHADER;
     }
 }
 
@@ -59,11 +66,13 @@ static void _sg_init_image(_sg_image* img) {
 
 typedef struct {
     _sg_slot slot;
+    GLuint gl_prog;
 } _sg_shader;
 
 static void _sg_init_shader(_sg_shader* shd) {
     SOKOL_ASSERT(shd);
     _sg_init_slot(&shd->slot);
+    shd->gl_prog = 0;
 }
 
 typedef struct {
@@ -203,8 +212,8 @@ static void _sg_create_buffer(_sg_buffer* buf, sg_buffer_desc* desc) {
         buf->num_slots = _SG_GL_NUM_UPDATE_SLOTS;
     }
     buf->active_slot = 0;
-    GLenum gl_target = _sg_as_buffer_target(buf->type);
-    GLenum gl_usage  = _sg_as_usage(buf->usage);
+    GLenum gl_target = _sg_gl_buffer_target(buf->type);
+    GLenum gl_usage  = _sg_gl_usage(buf->usage);
     for (int slot = 0; slot < buf->num_slots; slot++) {
         GLuint gl_buf;
         glGenBuffers(1, &gl_buf);
@@ -235,10 +244,68 @@ static void _sg_create_image(_sg_image* img, sg_image_desc* desc) {
     img->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
+static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
+    SOKOL_ASSERT(src);
+    _SG_GL_CHECK_ERROR();
+    GLuint gl_shd = glCreateShader(_sg_gl_shader_stage(stage));
+    int src_len = strlen(src);
+    glShaderSource(gl_shd, 1, &src, &src_len);
+    glCompileShader(gl_shd);
+    GLint compile_status = 0;
+    glGetShaderiv(gl_shd, GL_COMPILE_STATUS, &compile_status);
+    // FIXME: error logging
+    if (!compile_status) {
+        /* compilation failed */
+        glDeleteShader(gl_shd);
+        gl_shd = 0;
+    }
+    _SG_GL_CHECK_ERROR();
+    return gl_shd;
+}
+
 static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    // FIXME
-    shd->slot.state = SG_RESOURCESTATE_FAILED;
+    SOKOL_ASSERT(!shd->gl_prog);
+    _SG_GL_CHECK_ERROR();
+    GLuint gl_vs = _sg_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
+    GLuint gl_fs = _sg_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
+    if (!(gl_vs && gl_vs)) {
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    GLuint gl_prog = glCreateProgram();
+    glAttachShader(gl_prog, gl_vs);
+    glAttachShader(gl_prog, gl_fs);
+    for (int attr_index = 0; attr_index < desc->num_attrs; attr_index++) {
+        glBindAttribLocation(gl_prog, attr_index, desc->attrs[attr_index].name);
+    }
+    glLinkProgram(gl_prog);
+    glDeleteShader(gl_vs);
+    glDeleteShader(gl_fs);
+    _SG_GL_CHECK_ERROR();
+
+    GLint link_status;
+    glGetProgramiv(gl_prog, GL_LINK_STATUS, &link_status);
+    if (!link_status) {
+        // FIXME: error logging
+        glDeleteProgram(gl_prog);
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    shd->gl_prog = gl_prog;
+
+    // FIXME: resolve uniform and texture locations
+    // FIXME: use GetAttribLocation (if config-defined)
+
+    shd->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+static void _sg_destroy_shader(_sg_shader* shd) {
+    SOKOL_ASSERT(shd);
+    if (shd->gl_prog) {
+        glDeleteShader(shd->gl_prog);
+    }
+    _sg_init_shader(shd);
 }
 
 static void _sg_create_pipeline(_sg_pipeline* pip, sg_pipeline_desc* desc) {
