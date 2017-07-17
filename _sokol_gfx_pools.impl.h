@@ -12,12 +12,14 @@ typedef struct {
 
 static void _sg_init_pool(_sg_pool* pool, int num) {
     SOKOL_ASSERT(pool && (num > 0));
-    pool->size = num;
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
     pool->queue_top = 0;
     pool->unique_counter = 0;
+    /* it's not a bug to only reserve 'num' here */
     pool->free_queue = SOKOL_MALLOC(sizeof(int)*num);
     /* never allocate the zero-th pool item since the invalid id is 0 */
-    for (int i = num-1; i >= 1; i--) {
+    for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
     }
 }
@@ -57,6 +59,7 @@ static void _sg_pool_free_id(_sg_pool* pool, sg_id id) {
     }
     #endif
     pool->free_queue[pool->queue_top++] = id;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
 typedef struct {
@@ -76,6 +79,7 @@ static void _sg_setup_pools(_sg_pools* p, sg_desc* desc) {
         SOKOL_ASSERT(desc->resource_pool_size[res_type] < _SG_CONST_MAX_POOL_SIZE);
         _sg_init_pool(&p->pool[res_type], desc->resource_pool_size[res_type]);
     }
+    /* note: the pools here will have an additional item, since slot 0 is reserved */
     p->buffers = SOKOL_MALLOC(sizeof(_sg_buffer) * p->pool[SG_RESOURCETYPE_BUFFER].size);
     for (int i = 0; i < p->pool[SG_RESOURCETYPE_BUFFER].size; i++) {
         _sg_init_buffer(&p->buffers[i]);
