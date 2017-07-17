@@ -165,7 +165,7 @@ sg_id sg_alloc_pass() {
 }
 
 /*-- validate description structs --------------------------------------------*/
-void _sg_validate_buffer_desc(sg_buffer_desc* desc) {
+static void _sg_validate_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     SOKOL_ASSERT(desc->size > 0);
     SOKOL_ASSERT((desc->type==SG_BUFFERTYPE_VERTEX_BUFFER)||(desc->type==SG_BUFFERTYPE_INDEX_BUFFER));
@@ -178,24 +178,19 @@ void _sg_validate_buffer_desc(sg_buffer_desc* desc) {
     #endif
 }
 
-void _sg_validate_image_desc(sg_image_desc* desc) {
+static void _sg_validate_image_desc(sg_image_desc* desc) {
     // FIXME
 }
 
-void _sg_validate_shader_desc(sg_shader_desc* desc) {
+static void _sg_validate_shader_desc(sg_shader_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     #if defined(SOKOL_USE_GL) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
     SOKOL_ASSERT(desc->vs.source);
     SOKOL_ASSERT(desc->fs.source);
     #endif
-    SOKOL_ASSERT(desc->num_attrs <= SG_MAX_VERTEX_ATTRIBUTES);
-    for (int i = 0; i < desc->num_attrs; i++) {
-        SOKOL_ASSERT(desc->attrs[i].name);
-        SOKOL_ASSERT(desc->attrs[i].format != SG_VERTEXFORMAT_INVALID);
-    }
 }
 
-void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
+static void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     SOKOL_ASSERT(desc->shader != SG_INVALID_ID);
     SOKOL_ASSERT(desc->layouts[0].num_attrs > 0);
@@ -208,8 +203,83 @@ void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
     #endif
 }
 
-void _sg_validate_pass_desc(sg_pass_desc* desc) {
+static void _sg_validate_pass_desc(sg_pass_desc* desc) {
     // FIXME
+}
+
+static void _sg_validate_draw_state(sg_draw_state* ds) {
+    SOKOL_ASSERT(_sg && ds);
+    SOKOL_ASSERT(ds->pipeline);
+    SOKOL_ASSERT(ds->vertex_buffers[0]);    
+}
+
+static bool _sg_validate_draw(_sg_pipeline* pip, 
+    _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
+    _sg_image** vs_imgs, int num_vs_imgs,
+    _sg_image** fs_imgs, int num_fs_imgs) 
+{
+    if (!pip) {
+        /* pipeline no longer exists */
+        return false;
+    }
+    if (pip->slot.state != SG_RESOURCESTATE_VALID) {
+        /* pipeline hasn't been setup */
+        return false;
+    }
+    if (pip->shader->slot.id != pip->shader_id) {
+        /* shader no longer exists */
+        return false;
+    }
+    if (pip->shader->slot.state != SG_RESOURCESTATE_VALID) {
+        /* shader hasn't been setup (e.g. compile error) */
+        return false;
+    }
+    if ((pip->index_type != SG_INDEXTYPE_NONE) && !ib) {
+        /* indexed rendering requested, but no index buffer */
+        return false;
+    }
+    if (ib && (ib->slot.state != SG_RESOURCESTATE_VALID)) {
+        /* index buffer provided, but not in valid state */
+        return false;
+    }
+    /* check vertex buffers */
+    for (int i = 0; i < num_vbs; i++) {
+        _sg_buffer* vb = vbs[i];
+        if (!vb) {
+            /* vertex buffer no longer exists */
+            return false;
+        }
+        if (vb->slot.state != SG_RESOURCESTATE_VALID) {
+            /* vertex buffer exists, but not valid for rendering */
+            return false;
+        }
+    }
+    /* check vertex shader textures */
+    for (int i = 0; i < num_vs_imgs; i++) {
+        _sg_image* img = vs_imgs[i];
+        if (!img) {
+            /* image no longer exists */
+            return false;
+        }
+        if (img->slot.state != SG_RESOURCESTATE_VALID) {
+            /* image exists, but not valid for rendering */
+            return false;
+        }
+    }
+    /* check fragment shader textures */
+    for (int i = 0; i < num_fs_imgs; i++) {
+        _sg_image* img = fs_imgs[i];
+        if (!img) {
+            /* image no longer exists */
+            return false;
+        }
+        if (img->slot.state != SG_RESOURCESTATE_VALID) {
+            /* image exists, but not valid for for rendering */
+            return false;
+        }
+    }
+    /* all ok for rendering! */
+    return true;
 }
 
 /*-- initialize an allocated resource ----------------------------------------*/
@@ -340,10 +410,59 @@ void sg_begin_pass(sg_id pass_id, sg_pass_action* pass_action, int width, int he
     _sg_begin_pass(&_sg->backend, pass, pass_action, width, height);
 }
 
+void sg_apply_draw_state(sg_draw_state* ds) {
+    SOKOL_ASSERT(_sg && ds);
+    _sg_validate_draw_state(ds);
+    /* lookup resource pointers (lookups might yield 0, but this must be handled in backend) */
+    _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, ds->pipeline);
+    _sg_buffer* vbs[SG_MAX_SHADERSTAGE_BUFFERS] = { 0 };
+    int num_vbs = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++, num_vbs++) {
+        if (ds->vertex_buffers[i]) {
+            vbs[i] = _sg_lookup_buffer(&_sg->pools, ds->vertex_buffers[i]);
+        }
+        else {
+            break;
+        }
+    }
+    _sg_buffer* ib = _sg_lookup_buffer(&_sg->pools, ds->index_buffer);
+    _sg_image* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
+    int num_vs_imgs = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_vs_imgs++) {
+        if (ds->vs_images[i]) {
+            vs_imgs[i] = _sg_lookup_image(&_sg->pools, ds->vs_images[i]);
+        }
+        else {
+            break;
+        }
+    }
+    _sg_image* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
+    int num_fs_imgs = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_fs_imgs++) {
+        if (ds->fs_images[i]) {
+            fs_imgs[i] = _sg_lookup_image(&_sg->pools, ds->fs_images[i]);
+        }
+        else {
+            break;
+        }
+    }
+    _sg->backend.next_draw_valid = _sg_validate_draw(pip, vbs, num_vbs, ib, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    if (_sg->backend.next_draw_valid) {
+        _sg_apply_draw_state(&_sg->backend, pip, vbs, num_vbs, ib, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    }
+}
+
+void sg_draw(int base_element, int num_elements, int num_instances) {
+    SOKOL_ASSERT(_sg);
+    _sg_draw(&_sg->backend, base_element, num_elements, num_instances);
+}
+
 void sg_end_pass() {
+    SOKOL_ASSERT(_sg);
     _sg_end_pass(&_sg->backend);
 }
 
 void sg_commit() {
+    SOKOL_ASSERT(_sg);
     _sg_commit(&_sg->backend);
 } 

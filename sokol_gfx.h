@@ -165,6 +165,7 @@ typedef enum {
 } sg_image_type;
 
 typedef enum {
+    SG_INDEXTYPE_NONE,
     SG_INDEXTYPE_UINT16,
     SG_INDEXTYPE_UINT32,
 } sg_index_type;
@@ -471,8 +472,6 @@ static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
 typedef struct {
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
-    int num_attrs;
-    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_shader_desc;
 
 extern void sg_init_shader_desc(sg_shader_desc* desc);
@@ -482,19 +481,6 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
     _sg_init_shader_stage_desc(&desc->vs);
     _sg_init_shader_stage_desc(&desc->fs);
-    desc->num_attrs = 0;
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        sg_vertex_attr_desc* attr = &desc->attrs[i];
-        attr->name = 0;
-        attr->format = SG_VERTEXFORMAT_INVALID;
-    }
-}
-void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format) {
-    SOKOL_ASSERT(desc && name && format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_attr_desc* attr = &desc->attrs[desc->num_attrs++];
-    attr->name = name;
-    attr->format = format;
 }
 #endif
 
@@ -507,6 +493,8 @@ typedef struct {
 
 typedef struct {
     sg_id shader;
+    sg_primitive_type primitive_type;
+    sg_index_type index_type;
     sg_vertex_layout_desc layouts[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
@@ -514,7 +502,7 @@ typedef struct {
 } sg_pipeline_desc;
 
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
-extern void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
+extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
 #ifdef SOKOL_IMPL
 static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
@@ -569,6 +557,8 @@ static void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
 void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->shader = SG_INVALID_ID;
+    desc->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    desc->index_type = SG_INDEXTYPE_NONE;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         _sg_init_vertex_layout_desc(&desc->layouts[i]);
     }
@@ -576,7 +566,7 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     _sg_init_blend_state(&desc->blend);
     _sg_init_rasterizer_state(&desc->rast);
 }
-void sg_pipeline_desc_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
+void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(name);
@@ -594,8 +584,29 @@ typedef struct {
 } sg_pass_desc;
 
 typedef struct {
-    /* FIXME */
+    sg_id pipeline;
+    sg_id vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_id index_buffer;
+    sg_id vs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_id fs_images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_draw_state;
+
+extern void sg_init_draw_state(sg_draw_state* ds);
+#ifdef SOKOL_IMPL
+void sg_init_draw_state(sg_draw_state* ds) {
+    SOKOL_ASSERT(ds);
+    ds->pipeline = SG_INVALID_ID;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+        ds->vertex_buffers[i] = SG_INVALID_ID;
+    }
+    ds->index_buffer = SG_INVALID_ID;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        ds->vs_images[i] = SG_INVALID_ID;
+        ds->fs_images[i] = SG_INVALID_ID;
+    }
+}
+#endif
+
 
 typedef struct {
     /* FIXME */

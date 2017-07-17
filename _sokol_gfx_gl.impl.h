@@ -35,7 +35,7 @@ static GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     }
 }
 
-static GLint _sg_gl_vertexformat_size(fmt) {
+static GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_FLOAT:     return 1;
         case SG_VERTEXFORMAT_FLOAT2:    return 2;
@@ -54,7 +54,7 @@ static GLint _sg_gl_vertexformat_size(fmt) {
     }
 }
 
-static GLenum _sg_gl_vertexformat_type(fmt) {
+static GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_FLOAT:
         case SG_VERTEXFORMAT_FLOAT2:
@@ -79,7 +79,7 @@ static GLenum _sg_gl_vertexformat_type(fmt) {
     }
 }
 
-static GLboolean _sg_gl_vertexformat_normalized(fmt) {
+static GLboolean _sg_gl_vertexformat_normalized(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_BYTE4N:
         case SG_VERTEXFORMAT_UBYTE4N:
@@ -89,6 +89,24 @@ static GLboolean _sg_gl_vertexformat_normalized(fmt) {
             return GL_TRUE;
         default:
             return GL_FALSE;
+    }
+}
+
+static GLenum _sg_gl_primitive_type(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:           return GL_POINTS;
+        case SG_PRIMITIVETYPE_LINES:            return GL_LINES;
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return GL_LINE_STRIP;
+        case SG_PRIMITIVETYPE_TRIANLE_STRIP:    return GL_TRIANGLE_STRIP;
+        default:                                return GL_TRIANGLES;
+    }
+}
+
+static GLenum _sg_gl_index_type(sg_index_type t) {
+    switch (t) {
+        case SG_INDEXTYPE_UINT16:   return GL_UNSIGNED_SHORT;
+        case SG_INDEXTYPE_UINT32:   return GL_UNSIGNED_INT;
+        default:                    return 0;
     }
 }
 
@@ -137,7 +155,7 @@ static void _sg_init_shader(_sg_shader* shd) {
 }
 
 typedef struct {
-    uint8_t index;
+    int8_t index;
     uint8_t enabled;
     uint8_t vb_index;
     uint8_t divisor;
@@ -152,6 +170,8 @@ typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
     sg_id shader_id;
+    sg_primitive_type primitive_type;
+    sg_index_type index_type;
     int num_attrs;
     _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_depth_stencil_state depth_stencil;
@@ -235,9 +255,10 @@ static void _sg_init_state_cache(_sg_state_cache* state) {
 typedef struct {
     bool valid;
     bool in_pass;
+    bool next_draw_valid;
     uint32_t frame_index;
-    _sg_pass* cur_pass;
-    _sg_pipeline* cur_pipeline;
+    GLenum cur_primitive_type;
+    GLenum cur_index_type; 
     _sg_state_cache cache;
     #if !defined(SOKOL_USE_GLES2)
     GLuint vao; 
@@ -251,8 +272,10 @@ static void _sg_setup_backend(_sg_backend* state) {
     glBindVertexArray(state->vao);
     #endif
     state->in_pass = false;
+    state->next_draw_valid = false;
     state->frame_index = 0;
-    state->cur_pass = 0;
+    state->cur_primitive_type = GL_TRIANGLES;
+    state->cur_index_type = 0;
     state->valid = true;
     _sg_init_state_cache(&state->cache);
 }
@@ -264,7 +287,6 @@ static void _sg_discard_backend(_sg_backend* state) {
     glDeleteVertexArrays(1, &state->vao);
     state->vao = 0;
     #endif
-    state->cur_pass = 0;
     state->valid = false;
 }
 
@@ -347,9 +369,6 @@ static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
     GLuint gl_prog = glCreateProgram();
     glAttachShader(gl_prog, gl_vs);
     glAttachShader(gl_prog, gl_fs);
-    for (int attr_index = 0; attr_index < desc->num_attrs; attr_index++) {
-        glBindAttribLocation(gl_prog, attr_index, desc->attrs[attr_index].name);
-    }
     glLinkProgram(gl_prog);
     glDeleteShader(gl_vs);
     glDeleteShader(gl_fs);
@@ -366,7 +385,6 @@ static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
     shd->gl_prog = gl_prog;
 
     // FIXME: resolve uniform and texture locations
-    // FIXME: use GetAttribLocation (if config-defined)
 
     shd->slot.state = SG_RESOURCESTATE_VALID;
 }
@@ -384,36 +402,48 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_
     SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
     SOKOL_ASSERT(pip->num_attrs == 0);
     SOKOL_ASSERT(desc->shader == shd->slot.id);
+    SOKOL_ASSERT(shd->gl_prog);
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
+    pip->primitive_type = desc->primitive_type;
+    pip->index_type = desc->index_type;
     pip->depth_stencil = desc->depth_stencil;
     pip->blend = desc->blend;
     pip->rast = desc->rast;
     
-    // FIXME: hmmmmm use glGetAttribLocation here?
+    /* resolve vertex attributes */
     pip->num_attrs = 0;
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
         sg_vertex_layout_desc* layout = &desc->layouts[slot];
         int layout_byte_size = _sg_vertexlayout_byte_size(layout);
-        for (int i = 0; i < layout->num_attrs; i++) {
+        for (int i = 0; i < layout->num_attrs; i++, pip->num_attrs++) {
             SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+            SOKOL_ASSERT(layout->attrs[i].name);
             _sg_gl_attr* gl_attr = &pip->gl_attrs[pip->num_attrs];
-            sg_vertex_format fmt = layout->attrs[i].format;
-            gl_attr->index = pip->num_attrs++;
-            gl_attr->enabled = GL_TRUE;
-            gl_attr->vb_index = slot;
-            if (layout->step_func == SG_STEPFUNC_PER_VERTEX) {
-                gl_attr->divisor = 0;
+            GLint attr_loc = glGetAttribLocation(pip->shader->gl_prog, layout->attrs[i].name);
+            if (attr_loc != -1) {
+                gl_attr->index = attr_loc;
+                gl_attr->enabled = GL_TRUE;
+                gl_attr->vb_index = slot;
+                if (layout->step_func == SG_STEPFUNC_PER_VERTEX) {
+                    gl_attr->divisor = 0;
+                }
+                else {
+                    gl_attr->divisor = layout->step_rate;
+                }
+                gl_attr->stride = layout_byte_size;
+                gl_attr->offset = _sg_vertexlayout_attr_offset(layout, i);
+                sg_vertex_format fmt = layout->attrs[i].format;
+                gl_attr->size = _sg_gl_vertexformat_size(fmt);
+                gl_attr->type = _sg_gl_vertexformat_type(fmt);
+                gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
             }
             else {
-                gl_attr->divisor = layout->step_rate;
+                /* shader doesn't know this attribute */
+                gl_attr->index = -1;
+                gl_attr->enabled = GL_FALSE;
             }
-            gl_attr->stride = layout_byte_size;
-            gl_attr->offset = _sg_vertexlayout_attr_offset(layout, i);
-            gl_attr->size = _sg_gl_vertexformat_size(fmt);
-            gl_attr->type = _sg_gl_vertexformat_type(fmt);
-            gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
         }
     }
     pip->slot.state = SG_RESOURCESTATE_VALID;
@@ -436,7 +466,6 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, sg_pass_action* a
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!state->in_pass);
     state->in_pass = true;
-    state->cur_pass = pass;
     if (pass) {
 
     }
@@ -490,7 +519,100 @@ static void _sg_end_pass(_sg_backend* state) {
     // FIXME: bind default framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     state->in_pass = false;
-    state->cur_pass = 0;
+}
+
+static void _sg_apply_draw_state(_sg_backend* state, 
+    _sg_pipeline* pip, 
+    _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
+    _sg_image** vs_imgs, int num_vs_imgs,
+    _sg_image** fs_imgs, int num_fs_imgs)
+{
+    SOKOL_ASSERT(state);
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(pip->shader);
+    state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
+    state->cur_index_type = _sg_gl_index_type(pip->index_type);
+
+    /* FIXME: update depth-stencil state */
+    /* FIXME: update blend state */
+    /* FIXME: update rasterizer state */
+
+    /* bind shader program */
+    glUseProgram(pip->shader->gl_prog);
+
+    /* FIXME: bind textures */
+
+    /* bind index buffer (can be 0) */
+    if (ib) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->gl_buf[ib->active_slot]);
+    }
+    else {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+    /* bind vertex attributes */
+    /* FIXME: caching! */ 
+    GLuint gl_vb = 0;
+    int attr_index = 0;
+    SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    for (attr_index = 0; attr_index < pip->num_attrs; attr_index++) {
+        _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
+        if (attr->enabled) {
+            SOKOL_ASSERT(attr->index >= 0);
+            SOKOL_ASSERT(attr->vb_index < num_vbs);
+            _sg_buffer* vb = vbs[attr->vb_index];
+            SOKOL_ASSERT(vb);
+            if (gl_vb != vb->gl_buf[vb->active_slot]) {
+                gl_vb = vb->gl_buf[vb->active_slot];
+                glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
+            }
+            glVertexAttribPointer(attr->index, attr->size, attr->type, 
+                attr->normalized, attr->stride, 
+                (const GLvoid*)(GLintptr)attr->offset);
+            glEnableVertexAttribArray(attr->index);
+        }
+        else {
+            // FIXME: caching!
+            glDisableVertexAttribArray(attr->index);
+        }
+        // FIXME: caching!
+        // FIXME: GL Extensions!
+        #ifndef SOKOL_USE_GLES2
+        glVertexAttribDivisor(attr->index, attr->divisor);
+        #endif
+    }
+    /* FIXME: caching! */
+    for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        glDisableVertexAttribArray(attr_index);
+    }
+}
+
+static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {
+    SOKOL_ASSERT(state);
+    if (!state->next_draw_valid) {
+        return;
+    }
+    const GLenum i_type = state->cur_index_type;
+    const GLenum p_type = state->cur_primitive_type;
+    if (0 != i_type) {
+        /* indexed rendering */
+        const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
+        const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size);
+        if (num_instances == 1) {
+            glDrawElements(p_type, num_elements, i_type, indices);
+        }
+        else {
+            glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+        }
+    }
+    else {
+        /* non-indexed rendering */
+        if (num_instances == 1) {
+            glDrawArrays(p_type, base_element, num_elements);
+        }
+        else {
+            glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+        }
+    }
 }
 
 static void _sg_commit(_sg_backend* state) {
