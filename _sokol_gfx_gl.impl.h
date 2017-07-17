@@ -362,7 +362,7 @@ static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
     _SG_GL_CHECK_ERROR();
     GLuint gl_vs = _sg_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
     GLuint gl_fs = _sg_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
-    if (!(gl_vs && gl_vs)) {
+    if (!(gl_vs && gl_fs)) {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
@@ -601,7 +601,10 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
+            #ifndef SOKOL_USE_GLES2
+            /* FIXME! */
             glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
+            #endif
         }
     }
     else {
@@ -610,7 +613,10 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
+            #ifndef SOKOL_USE_GLES2
+            /* FIXME! */
             glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
+            #endif
         }
     }
 }
