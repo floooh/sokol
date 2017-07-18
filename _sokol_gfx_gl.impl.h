@@ -15,8 +15,8 @@ enum {
 /*-- type translation --------------------------------------------------------*/
 static GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
-        case SG_BUFFERTYPE_VERTEX_BUFFER: return GL_ARRAY_BUFFER;
-        default: return GL_ELEMENT_ARRAY_BUFFER;
+        case SG_BUFFERTYPE_VERTEX_BUFFER:   return GL_ARRAY_BUFFER;
+        case SG_BUFFERTYPE_INDEX_BUFFER:    return GL_ELEMENT_ARRAY_BUFFER;
     }
 }
 
@@ -24,14 +24,14 @@ static GLenum _sg_gl_usage(sg_usage u) {
     switch (u) {
         case SG_USAGE_IMMUTABLE:    return GL_STATIC_DRAW;
         case SG_USAGE_DYNAMIC:      return GL_DYNAMIC_DRAW;
-        default:                    return GL_STREAM_DRAW;
+        case SG_USAGE_STREAM:       return GL_STREAM_DRAW;
     }
 }
 
 static GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     switch (stage) {
         case SG_SHADERSTAGE_VS:     return GL_VERTEX_SHADER;
-        default:                    return GL_FRAGMENT_SHADER;
+        case SG_SHADERSTAGE_FS:     return GL_FRAGMENT_SHADER;
     }
 }
 
@@ -97,16 +97,42 @@ static GLenum _sg_gl_primitive_type(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_POINTS:           return GL_POINTS;
         case SG_PRIMITIVETYPE_LINES:            return GL_LINES;
         case SG_PRIMITIVETYPE_LINE_STRIP:       return GL_LINE_STRIP;
+        case SG_PRIMITIVETYPE_TRIANGLES:        return GL_TRIANGLES;
         case SG_PRIMITIVETYPE_TRIANLE_STRIP:    return GL_TRIANGLE_STRIP;
-        default:                                return GL_TRIANGLES;
     }
 }
 
 static GLenum _sg_gl_index_type(sg_index_type t) {
     switch (t) {
+        case SG_INDEXTYPE_NONE:     return 0;
         case SG_INDEXTYPE_UINT16:   return GL_UNSIGNED_SHORT;
         case SG_INDEXTYPE_UINT32:   return GL_UNSIGNED_INT;
-        default:                    return 0;
+    }
+}
+
+static GLenum _sg_gl_compare_func(sg_compare_func cmp) {
+    switch (cmp) {
+        case SG_COMPAREFUNC_NEVER:          return GL_NEVER;
+        case SG_COMPAREFUNC_LESS:           return GL_LESS;
+        case SG_COMPAREFUNC_EQUAL:          return GL_EQUAL;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return GL_LEQUAL;
+        case SG_COMPAREFUNC_GREATER:        return GL_GREATER;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return GL_NOTEQUAL;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return GL_GEQUAL;
+        case SG_COMPAREFUNC_ALWAYS:         return GL_ALWAYS;
+    }
+}
+
+static GLenum _sg_gl_stencil_op(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return GL_KEEP;
+        case SG_STENCILOP_ZERO:         return GL_ZERO;
+        case SG_STENCILOP_REPLACE:      return GL_REPLACE;
+        case SG_STENCILOP_INCR_CLAMP:   return GL_INCR;
+        case SG_STENCILOP_DECR_CLAMP:   return GL_DECR;
+        case SG_STENCILOP_INVERT:       return GL_INVERT;
+        case SG_STENCILOP_INCR_WRAP:    return GL_INCR_WRAP;
+        case SG_STENCILOP_DECR_WRAP:    return GL_DECR_WRAP;
     }
 }
 
@@ -533,7 +559,56 @@ static void _sg_apply_draw_state(_sg_backend* state,
     state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
     state->cur_index_type = _sg_gl_index_type(pip->index_type);
 
-    /* FIXME: update depth-stencil state */
+    /* update depth-stencil state */
+    const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
+    sg_depth_stencil_state* cache_ds = &state->cache.ds;
+    if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
+        cache_ds->depth_compare_func = new_ds->depth_compare_func;
+        glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
+    }
+    if (new_ds->depth_write_enabled != cache_ds->depth_write_enabled) {
+        cache_ds->depth_write_enabled = new_ds->depth_write_enabled;
+        glDepthMask(new_ds->depth_write_enabled);
+    }
+    if (new_ds->stencil_enabled != cache_ds->stencil_enabled) {
+        cache_ds->stencil_enabled = new_ds->stencil_enabled;
+        if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST); 
+        else glDisable(GL_STENCIL_TEST);
+    }
+    if (new_ds->stencil_write_mask != cache_ds->stencil_write_mask) {
+        cache_ds->stencil_write_mask = new_ds->stencil_write_mask;
+        glStencilMask(new_ds->stencil_write_mask);
+    }
+    for (int i = 0; i < 2; i++) {
+        const sg_stencil_state* new_ss = (i==0)? &new_ds->stencil_front : &new_ds->stencil_back;
+        sg_stencil_state* cache_ss = (i==0)? &cache_ds->stencil_front : &cache_ds->stencil_back;
+        GLenum gl_face = (i==0)? GL_FRONT : GL_BACK;
+        if ((new_ss->compare_func != cache_ss->compare_func) ||
+            (new_ds->stencil_read_mask != cache_ds->stencil_read_mask) ||
+            (new_ds->stencil_ref != cache_ds->stencil_ref))
+        {
+            cache_ss->compare_func = new_ss->compare_func;
+            cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
+            cache_ds->stencil_ref = new_ds->stencil_ref;
+            glStencilFuncSeparate(gl_face, 
+                _sg_gl_compare_func(new_ss->compare_func), 
+                new_ds->stencil_ref, 
+                new_ds->stencil_read_mask);
+        }
+        if ((new_ss->fail_op != cache_ss->fail_op) ||
+            (new_ss->depth_fail_op != cache_ss->depth_fail_op) ||
+            (new_ss->pass_op != cache_ss->pass_op))
+        {
+            cache_ss->fail_op = new_ss->fail_op;
+            cache_ss->depth_fail_op = new_ss->depth_fail_op;
+            cache_ss->pass_op = new_ss->pass_op;
+            glStencilOpSeparate(gl_face,
+                _sg_gl_stencil_op(new_ss->fail_op),
+                _sg_gl_stencil_op(new_ss->depth_fail_op),
+                _sg_gl_stencil_op(new_ss->pass_op));
+        }
+    }
+
     /* FIXME: update blend state */
     /* FIXME: update rasterizer state */
 
