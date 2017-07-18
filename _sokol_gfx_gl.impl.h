@@ -136,6 +136,34 @@ static GLenum _sg_gl_stencil_op(sg_stencil_op op) {
     }
 }
 
+static GLenum _sg_gl_blend_factor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return GL_ZERO;
+        case SG_BLENDFACTOR_ONE:                    return GL_ONE;
+        case SG_BLENDFACTOR_SRC_COLOR:              return GL_SRC_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return GL_ONE_MINUS_SRC_COLOR;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return GL_SRC_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return GL_ONE_MINUS_SRC_ALPHA;
+        case SG_BLENDFACTOR_DST_COLOR:              return GL_DST_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return GL_ONE_MINUS_DST_COLOR;
+        case SG_BLENDFACTOR_DST_ALPHA:              return GL_DST_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return GL_ONE_MINUS_DST_ALPHA;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return GL_SRC_ALPHA_SATURATE;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return GL_CONSTANT_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return GL_CONSTANT_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return GL_ONE_MINUS_CONSTANT_ALPHA;
+    }
+}
+
+static GLenum _sg_gl_blend_op(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return GL_FUNC_ADD;
+        case SG_BLENDOP_SUBTRACT:           return GL_FUNC_SUBTRACT;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return GL_FUNC_REVERSE_SUBTRACT;
+    }
+}
+
 /*-- GL backend resource declarations ----------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -556,6 +584,8 @@ static void _sg_apply_draw_state(_sg_backend* state,
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
+    _SG_GL_CHECK_ERROR();
+
     state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
     state->cur_index_type = _sg_gl_index_type(pip->index_type);
 
@@ -609,7 +639,53 @@ static void _sg_apply_draw_state(_sg_backend* state,
         }
     }
 
-    /* FIXME: update blend state */
+    /* update blend state */
+    const sg_blend_state* new_b = &pip->blend;
+    sg_blend_state* cache_b = &state->cache.blend;
+    if (new_b->enabled != cache_b->enabled) {
+        cache_b->enabled = new_b->enabled;
+        if (new_b->enabled) glEnable(GL_BLEND);
+        else glDisable(GL_BLEND);
+    }
+    if ((new_b->src_factor_rgb != cache_b->src_factor_rgb) ||
+        (new_b->dst_factor_rgb != cache_b->dst_factor_rgb) ||
+        (new_b->src_factor_alpha != cache_b->src_factor_alpha) ||
+        (new_b->dst_factor_alpha != cache_b->dst_factor_alpha))
+    {
+        cache_b->src_factor_rgb = new_b->src_factor_rgb;
+        cache_b->dst_factor_rgb = new_b->dst_factor_rgb;
+        cache_b->src_factor_alpha = new_b->src_factor_alpha;
+        cache_b->dst_factor_alpha = new_b->dst_factor_alpha;
+        glBlendFuncSeparate(_sg_gl_blend_factor(new_b->src_factor_rgb),
+            _sg_gl_blend_factor(new_b->dst_factor_rgb),
+            _sg_gl_blend_factor(new_b->src_factor_alpha),
+            _sg_gl_blend_factor(new_b->dst_factor_alpha));
+    }
+    if ((new_b->op_rgb != cache_b->op_rgb) || (new_b->op_alpha != cache_b->op_alpha)) {
+        cache_b->op_rgb = new_b->op_rgb;
+        cache_b->op_alpha = new_b->op_alpha;
+        glBlendEquationSeparate(_sg_gl_blend_op(new_b->op_rgb), _sg_gl_blend_op(new_b->op_alpha));
+    }
+    if (new_b->color_write_mask != cache_b->color_write_mask) {
+        cache_b->color_write_mask = new_b->color_write_mask;
+        glColorMask((new_b->color_write_mask & SG_COLORMASK_R) != 0,
+                    (new_b->color_write_mask & SG_COLORMASK_G) != 0,
+                    (new_b->color_write_mask & SG_COLORMASK_B) != 0,
+                    (new_b->color_write_mask & SG_COLORMASK_A) != 0);
+    }
+    /* FIXME: fuzzy compare? */
+    if ((new_b->blend_color[0] != cache_b->blend_color[0]) ||
+        (new_b->blend_color[1] != cache_b->blend_color[1]) ||
+        (new_b->blend_color[2] != cache_b->blend_color[2]) ||
+        (new_b->blend_color[3] != cache_b->blend_color[3]))
+    {
+        const float* bc = new_b->blend_color;
+        for (int i=0; i<4; i++) {
+            cache_b->blend_color[i] = bc[i];
+        }
+        glBlendColor(bc[0], bc[1], bc[2], bc[3]);
+    }
+
     /* FIXME: update rasterizer state */
 
     /* bind shader program */
