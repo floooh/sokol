@@ -157,8 +157,8 @@ void sg_init_desc(sg_desc* desc) {
 #endif
 
 typedef enum {
-    SG_BUFFERTYPE_VERTEX_BUFFER,
-    SG_BUFFERTYPE_INDEX_BUFFER
+    SG_BUFFERTYPE_VERTEXBUFFER,
+    SG_BUFFERTYPE_INDEXBUFFER
 } sg_buffer_type;
 
 typedef enum {
@@ -410,7 +410,7 @@ void sg_init_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->_init_guard = _SG_INIT_GUARD;
     desc->size = 0;
-    desc->type = SG_BUFFERTYPE_VERTEX_BUFFER;
+    desc->type = SG_BUFFERTYPE_VERTEXBUFFER;
     desc->usage = SG_USAGE_IMMUTABLE; 
     desc->data_ptr = 0;
     desc->data_size = 0;

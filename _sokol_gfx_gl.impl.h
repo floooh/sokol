@@ -15,8 +15,8 @@ enum {
 /*-- type translation --------------------------------------------------------*/
 static GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
-        case SG_BUFFERTYPE_VERTEX_BUFFER:   return GL_ARRAY_BUFFER;
-        case SG_BUFFERTYPE_INDEX_BUFFER:    return GL_ELEMENT_ARRAY_BUFFER;
+        case SG_BUFFERTYPE_VERTEXBUFFER:    return GL_ARRAY_BUFFER;
+        case SG_BUFFERTYPE_INDEXBUFFER:     return GL_ELEMENT_ARRAY_BUFFER;
     }
 }
 
@@ -187,7 +187,7 @@ static void _sg_init_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
     _sg_init_slot(&buf->slot);
     buf->size = 0;
-    buf->type = SG_BUFFERTYPE_VERTEX_BUFFER;
+    buf->type = SG_BUFFERTYPE_VERTEXBUFFER;
     buf->usage = SG_USAGE_IMMUTABLE;
     buf->num_slots = 0;
     buf->active_slot = 0;

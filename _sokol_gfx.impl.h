@@ -169,7 +169,7 @@ sg_id sg_alloc_pass() {
 static void _sg_validate_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     SOKOL_ASSERT(desc->size > 0);
-    SOKOL_ASSERT((desc->type==SG_BUFFERTYPE_VERTEX_BUFFER)||(desc->type==SG_BUFFERTYPE_INDEX_BUFFER));
+    SOKOL_ASSERT((desc->type==SG_BUFFERTYPE_VERTEXBUFFER)||(desc->type==SG_BUFFERTYPE_INDEXBUFFER));
     SOKOL_ASSERT((desc->usage==SG_USAGE_IMMUTABLE)||(desc->usage==SG_USAGE_DYNAMIC)||(desc->usage==SG_USAGE_STREAM));
     SOKOL_ASSERT(desc->data_size <= desc->size);
     #ifdef _DEBUG
