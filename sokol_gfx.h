@@ -38,6 +38,7 @@ enum {
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UNIFORMS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
+    _SG_INIT_GUARD = 0xC07FEFE,
 };
 
 /*
@@ -109,6 +110,7 @@ typedef enum {
 } sg_pass_action_bits;
 
 typedef struct {
+    uint32_t _init_guard;
     float color[SG_MAX_COLOR_ATTACHMENTS][4];
     float depth;
     uint8_t stencil;
@@ -119,6 +121,7 @@ extern void sg_init_pass_action(sg_pass_action* pa);
 #ifdef SOKOL_IMPL
 void sg_init_pass_action(sg_pass_action* pa) {
     SOKOL_ASSERT(pa);
+    pa->_init_guard = _SG_INIT_GUARD;
     for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
         for (int c = 0; c < 3; c++) {
             pa->color[att_index][c] = 0.5f;
@@ -132,6 +135,7 @@ void sg_init_pass_action(sg_pass_action* pa) {
 #endif
 
 typedef struct {
+    uint32_t _init_guard;
     int width;
     int height;
     int sample_count;
@@ -142,6 +146,7 @@ extern void sg_init_desc(sg_desc* desc);
 #ifdef SOKOL_IMPL
 void sg_init_desc(sg_desc* desc) {
     SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
     desc->width = 640;
     desc->height = 400;
     desc->sample_count = 1;
@@ -390,6 +395,7 @@ typedef struct {
 
 /*-- description structures for resource creation ----------------------------*/
 typedef struct {
+    uint32_t _init_guard;
     int size;
     sg_buffer_type type;
     sg_usage usage;
@@ -401,6 +407,7 @@ extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 #ifdef SOKOL_IMPL
 void sg_init_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
     desc->size = 0;
     desc->type = SG_BUFFERTYPE_VERTEX_BUFFER;
     desc->usage = SG_USAGE_IMMUTABLE; 
@@ -410,6 +417,7 @@ void sg_init_buffer_desc(sg_buffer_desc* desc) {
 #endif
 
 typedef struct {
+    uint32_t _init_guard;
     /* FIXME */
 } sg_image_desc;
 
@@ -470,6 +478,7 @@ static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
 #endif
 
 typedef struct {
+    uint32_t _init_guard;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
 } sg_shader_desc;
@@ -479,6 +488,7 @@ extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_verte
 #ifdef SOKOL_IMPL
 void sg_init_shader_desc(sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
     _sg_init_shader_stage_desc(&desc->vs);
     _sg_init_shader_stage_desc(&desc->fs);
 }
@@ -492,6 +502,7 @@ typedef struct {
 } sg_vertex_layout_desc;
 
 typedef struct {
+    uint32_t _init_guard;
     sg_id shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
@@ -556,6 +567,7 @@ static void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
 }
 void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
     desc->shader = SG_INVALID_ID;
     desc->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     desc->index_type = SG_INDEXTYPE_NONE;
@@ -568,6 +580,7 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
 }
 void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(name);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
@@ -580,10 +593,12 @@ void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* n
 #endif
 
 typedef struct {
+    uint32_t _init_guard;
     /* FIXME */
 } sg_pass_desc;
 
 typedef struct {
+    uint32_t _init_guard;
     sg_id pipeline;
     sg_id vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_id index_buffer;
@@ -595,6 +610,7 @@ extern void sg_init_draw_state(sg_draw_state* ds);
 #ifdef SOKOL_IMPL
 void sg_init_draw_state(sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
+    ds->_init_guard = _SG_INIT_GUARD;
     ds->pipeline = SG_INVALID_ID;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         ds->vertex_buffers[i] = SG_INVALID_ID;
@@ -609,6 +625,7 @@ void sg_init_draw_state(sg_draw_state* ds) {
 
 
 typedef struct {
+    uint32_t _init_guard;
     /* FIXME */
 } sg_update_image_desc;
 

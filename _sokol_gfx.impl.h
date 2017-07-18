@@ -84,6 +84,7 @@ _sg_state* _sg = 0;
 void sg_setup(sg_desc* desc) {
     SOKOL_ASSERT(!_sg);
     SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     SOKOL_ASSERT((desc->width > 0) && (desc->height > 0));
     SOKOL_ASSERT(desc->sample_count >= 1);
     _sg = SOKOL_MALLOC(sizeof(_sg_state));
@@ -285,6 +286,7 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
 /*-- initialize an allocated resource ----------------------------------------*/
 void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc) {
     SOKOL_ASSERT(_sg && buf_id != SG_INVALID_ID && desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     _sg_validate_buffer_desc(desc);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg->pools, buf_id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -294,6 +296,7 @@ void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc) {
 
 void sg_init_image(sg_id img_id, sg_image_desc* desc) {
     SOKOL_ASSERT(_sg && img_id != SG_INVALID_ID && desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     _sg_validate_image_desc(desc);
     _sg_image* img = _sg_lookup_image(&_sg->pools, img_id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -303,6 +306,7 @@ void sg_init_image(sg_id img_id, sg_image_desc* desc) {
 
 void sg_init_shader(sg_id shd_id, sg_shader_desc* desc) {
     SOKOL_ASSERT(_sg && shd_id != SG_INVALID_ID && desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     _sg_validate_shader_desc(desc);
     _sg_shader* shd = _sg_lookup_shader(&_sg->pools, shd_id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -312,6 +316,7 @@ void sg_init_shader(sg_id shd_id, sg_shader_desc* desc) {
 
 void sg_init_pipeline(sg_id pip_id, sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_sg && pip_id != SG_INVALID_ID && desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     _sg_validate_pipeline_desc(desc);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -323,6 +328,7 @@ void sg_init_pipeline(sg_id pip_id, sg_pipeline_desc* desc) {
 
 void sg_init_pass(sg_id pass_id, sg_pass_desc* desc) {
     SOKOL_ASSERT(_sg && pass_id != SG_INVALID_ID && desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     _sg_validate_pass_desc(desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -405,13 +411,15 @@ void sg_destroy_pipeline(sg_id pip_id) {
 }
 
 void sg_begin_pass(sg_id pass_id, sg_pass_action* pass_action, int width, int height) {
-    SOKOL_ASSERT(_sg);
+    SOKOL_ASSERT(_sg && pass_action);
+    SOKOL_ASSERT(pass_action->_init_guard == _SG_INIT_GUARD);
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);  // can be 0
     _sg_begin_pass(&_sg->backend, pass, pass_action, width, height);
 }
 
 void sg_apply_draw_state(sg_draw_state* ds) {
     SOKOL_ASSERT(_sg && ds);
+    SOKOL_ASSERT(ds->_init_guard == _SG_INIT_GUARD);
     _sg_validate_draw_state(ds);
     /* lookup resource pointers (lookups might yield 0, but this must be handled in backend) */
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, ds->pipeline);
