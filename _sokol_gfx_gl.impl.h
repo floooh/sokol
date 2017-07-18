@@ -164,6 +164,14 @@ static GLenum _sg_gl_blend_op(sg_blend_op op) {
     }
 }
 
+static GLenum _sg_gl_cull_face(sg_face f) {
+    switch (f) {
+        case SG_FACE_FRONT: return GL_FRONT;
+        case SG_FACE_BACK:  return GL_BACK;
+        case SG_FACE_BOTH:  return GL_FRONT_AND_BACK;
+    }
+}
+
 /*-- GL backend resource declarations ----------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -686,7 +694,35 @@ static void _sg_apply_draw_state(_sg_backend* state,
         glBlendColor(bc[0], bc[1], bc[2], bc[3]);
     }
 
-    /* FIXME: update rasterizer state */
+    /* update rasterizer state */
+    const sg_rasterizer_state* new_r = &pip->rast;
+    sg_rasterizer_state* cache_r = &state->cache.rast;
+    if (new_r->cull_face_enabled != cache_r->cull_face_enabled) {
+        cache_r->cull_face_enabled = new_r->cull_face_enabled;
+        if (new_r->cull_face_enabled) glEnable(GL_CULL_FACE);
+        else glDisable(GL_CULL_FACE);
+    }
+    if (new_r->cull_face != cache_r->cull_face) {
+        cache_r->cull_face = new_r->cull_face;
+        glCullFace(_sg_gl_cull_face(new_r->cull_face));
+    }
+    if (new_r->scissor_test_enabled != cache_r->scissor_test_enabled) {
+        cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
+        if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
+        else glDisable(GL_SCISSOR_TEST);
+    }
+    if (new_r->dither_enabled != cache_r->dither_enabled) {
+        cache_r->dither_enabled = new_r->dither_enabled;
+        if (new_r->dither_enabled) glEnable(GL_DITHER);
+        else glDisable(GL_DITHER);
+    }
+    #ifdef SOKOL_USE_GL
+    if (new_r->sample_count != cache_r->sample_count) {
+        cache_r->sample_count = new_r->sample_count;
+        if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
+        else glDisable(GL_MULTISAMPLE);
+    }
+    #endif
 
     /* bind shader program */
     glUseProgram(pip->shader->gl_prog);

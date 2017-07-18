@@ -385,6 +385,7 @@ typedef struct {
     bool dither_enabled;
     bool alpha_to_coverage_enabled;
     sg_face cull_face;
+    int sample_count;
 } sg_rasterizer_state;
 
 /* describe a vertex attribute */
@@ -564,6 +565,7 @@ static void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
     s->dither_enabled = true;
     s->alpha_to_coverage_enabled = false;
     s->cull_face = SG_FACE_BACK;
+    s->sample_count = 1;
 }
 void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
