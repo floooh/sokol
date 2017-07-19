@@ -15,9 +15,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
-#ifdef SOKOL_IMPL
-#include <string.h>
-#endif
 
 #ifndef SOKOL_ASSERT
 #include <assert.h>
@@ -28,7 +25,15 @@
 #define SOKOL_FREE(p) free(p)
 #endif
 
+/* 
+    sg_id
+
+    Instead of pointers, resource creation functions return a 32-bit
+    number which uniquely identifies the resource object.
+*/
 typedef uint32_t sg_id;
+
+/* various constants */
 enum {
     SG_INVALID_ID = 0,
     SG_DEFAULT_PASS = SG_INVALID_ID,
@@ -38,7 +43,6 @@ enum {
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UNIFORMS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
-    _SG_INIT_GUARD = 0xC07FEFE,
 };
 
 /*
@@ -77,84 +81,11 @@ typedef enum {
     operations will silently be dropped.
 */
 typedef enum {
-    /* resource is in its initial 'unallocated' state */
     SG_RESOURCESTATE_INITIAL,
-    /* resource id has been allocated, waiting to be initialized */
     SG_RESOURCESTATE_ALLOC,
-    /* resource has been initialized and is valid */
     SG_RESOURCESTATE_VALID,
-    /* resource initialization was attempted but failed */
     SG_RESOURCESTATE_FAILED,
 } sg_resource_state;
-
-typedef enum {
-    /* unset bit means "don't care" */
-    SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
-    SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
-    SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
-    SG_PASSACTION_CLEAR_COLOR3  = (1<<3),
-    SG_PASSACTION_CLEAR_COLOR   = (1<<0)|(1<<1)|(1<<2)|(1<<3),
-    SG_PASSACTION_CLEAR_DEPTH   = (1<<4),
-    SG_PASSACTION_CLEAR_STENCIL = (1<<5),
-    SG_PASSACTION_CLEAR_DEPTH_STENCIL = (1<<4)|(1<<5),
-    SG_PASSACTION_CLEAR_ALL     = SG_PASSACTION_CLEAR_COLOR|SG_PASSACTION_CLEAR_DEPTH_STENCIL,
-    SG_PASSACTION_LOAD_COLOR0   = (1<<6),
-    SG_PASSACTION_LOAD_COLOR1   = (1<<7),
-    SG_PASSACTION_LOAD_COLOR2   = (1<<8),
-    SG_PASSACTION_LOAD_COLOR3   = (1<<9),
-    SG_PASSACTION_LOAD_COLOR    = (1<<6)|(1<<7)|(1<<8)|(1<<9),
-    SG_PASSACTION_LOAD_DEPTH    = (1<<10),
-    SG_PASSACTION_LOAD_STENCIL  = (1<<11),
-    SG_PASSACTION_LOAD_DEPTH_STENCIL = (1<<10)|(1<<11),
-    SG_PASSACTION_LOAD_ALL = SG_PASSACTION_LOAD_COLOR|SG_PASSACTION_LOAD_DEPTH_STENCIL,
-} sg_pass_action_bits;
-
-typedef struct {
-    uint32_t _init_guard;
-    float color[SG_MAX_COLOR_ATTACHMENTS][4];
-    float depth;
-    uint8_t stencil;
-    sg_pass_action_bits actions;
-} sg_pass_action;
-
-extern void sg_init_pass_action(sg_pass_action* pa);
-#ifdef SOKOL_IMPL
-void sg_init_pass_action(sg_pass_action* pa) {
-    SOKOL_ASSERT(pa);
-    pa->_init_guard = _SG_INIT_GUARD;
-    for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-        for (int c = 0; c < 3; c++) {
-            pa->color[att_index][c] = 0.5f;
-        }
-        pa->color[att_index][3] = 1.0f;
-    }
-    pa->depth = 1.0f;
-    pa->stencil = 0;
-    pa->actions = SG_PASSACTION_CLEAR_ALL;
-}
-#endif
-
-typedef struct {
-    uint32_t _init_guard;
-    int width;
-    int height;
-    int sample_count;
-    int resource_pool_size[SG_NUM_RESOURCETYPES];
-} sg_desc;
-
-extern void sg_init_desc(sg_desc* desc);
-#ifdef SOKOL_IMPL
-void sg_init_desc(sg_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
-    desc->width = 640;
-    desc->height = 400;
-    desc->sample_count = 1;
-    for (int i = 0; i < SG_NUM_RESOURCETYPES; i++) {
-        desc->resource_pool_size[i] = 128;
-    }
-}
-#endif
 
 typedef enum {
     SG_BUFFERTYPE_VERTEXBUFFER,
@@ -268,14 +199,6 @@ typedef enum {
 } sg_vertex_format;
 
 typedef enum {
-    SG_SHADERLANG_GLSL100,
-    SG_SHADERLANG_GLSL330,
-    SG_SHADERLANG_GLSLES3,
-    SG_SHADERLANG_HLSL5,
-    SG_SHADERLANG_METAL,
-} sg_shader_lang;
-
-typedef enum {
     SG_UNIFORMTYPE_INVALID,
     SG_UNIFORMTYPE_FLOAT,
     SG_UNIFORMTYPE_FLOAT2,
@@ -349,6 +272,44 @@ typedef enum {
     SG_COLORMASK_RGBA = 0xF,
 } sg_color_mask;
 
+/*
+    sg_pass_action_bits
+
+    Describes the actions that should be performed at the start of
+    a rendering pass, this includes clearing the color, depth and 
+    stencil buffers, or loading the previous content of those
+    buffers. If no pass actions bits are set, the associated
+    buffer content will be discarded.
+*/
+typedef enum {
+    SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
+    SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
+    SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
+    SG_PASSACTION_CLEAR_COLOR3  = (1<<3),
+    SG_PASSACTION_CLEAR_COLOR   = (1<<0)|(1<<1)|(1<<2)|(1<<3),
+    SG_PASSACTION_CLEAR_DEPTH   = (1<<4),
+    SG_PASSACTION_CLEAR_STENCIL = (1<<5),
+    SG_PASSACTION_CLEAR_DEPTH_STENCIL = (1<<4)|(1<<5),
+    SG_PASSACTION_CLEAR_ALL     = SG_PASSACTION_CLEAR_COLOR|SG_PASSACTION_CLEAR_DEPTH_STENCIL,
+    SG_PASSACTION_LOAD_COLOR0   = (1<<6),
+    SG_PASSACTION_LOAD_COLOR1   = (1<<7),
+    SG_PASSACTION_LOAD_COLOR2   = (1<<8),
+    SG_PASSACTION_LOAD_COLOR3   = (1<<9),
+    SG_PASSACTION_LOAD_COLOR    = (1<<6)|(1<<7)|(1<<8)|(1<<9),
+    SG_PASSACTION_LOAD_DEPTH    = (1<<10),
+    SG_PASSACTION_LOAD_STENCIL  = (1<<11),
+    SG_PASSACTION_LOAD_DEPTH_STENCIL = (1<<10)|(1<<11),
+    SG_PASSACTION_LOAD_ALL = SG_PASSACTION_LOAD_COLOR|SG_PASSACTION_LOAD_DEPTH_STENCIL,
+} sg_pass_action_bits;
+
+typedef struct {
+    uint32_t _init_guard;
+    float color[SG_MAX_COLOR_ATTACHMENTS][4];
+    float depth;
+    uint8_t stencil;
+    sg_pass_action_bits actions;
+} sg_pass_action;
+
 typedef struct {
     sg_stencil_op fail_op;
     sg_stencil_op depth_fail_op;
@@ -394,7 +355,29 @@ typedef struct {
     sg_vertex_format format;
 } sg_vertex_attr_desc;
 
-/*-- description structures for resource creation ----------------------------*/
+/*-- setup descriptor structs ------------------------------------------------*/
+/*
+    sg_desc
+
+    This describes initialization attributes for the entire sokol_gfx
+    library. First initialize the structure with sg_init_desc(),
+    then modify struct members to your needs and finally call
+    sg_setup():
+
+    sg_desc desc;
+    sg_init_desc(&desc);
+    desc.width = WIDTH;
+    ...
+    sg_setup(&desc);
+*/
+typedef struct {
+    uint32_t _init_guard;
+    int width;
+    int height;
+    int sample_count;
+    int resource_pool_size[SG_NUM_RESOURCETYPES];
+} sg_desc;
+
 typedef struct {
     uint32_t _init_guard;
     int size;
@@ -403,19 +386,6 @@ typedef struct {
     void* data_ptr;
     int data_size;
 } sg_buffer_desc;
-
-extern void sg_init_buffer_desc(sg_buffer_desc* desc);
-#ifdef SOKOL_IMPL
-void sg_init_buffer_desc(sg_buffer_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
-    desc->size = 0;
-    desc->type = SG_BUFFERTYPE_VERTEXBUFFER;
-    desc->usage = SG_USAGE_IMMUTABLE; 
-    desc->data_ptr = 0;
-    desc->data_size = 0;
-}
-#endif
 
 typedef struct {
     uint32_t _init_guard;
@@ -453,47 +423,11 @@ typedef struct {
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
-#ifdef SOKOL_IMPL
-static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->source = 0;
-    desc->num_uniform_blocks = 0;
-    desc->num_textures = 0;
-    for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-        sg_shader_uniform_block_desc* ub_desc = &desc->uniform_blocks[ub_index];
-        ub_desc->num_uniforms = 0;
-        for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
-            sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
-            u_desc->name = 0;
-            u_desc->type = SG_UNIFORMTYPE_INVALID;
-            u_desc->offset = 0;
-            u_desc->array_size = 1;
-        }
-    }
-    for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-        sg_shader_image_desc* img_desc = &desc->images[img_index];
-        img_desc->name = 0;
-        img_desc->type = SG_IMAGETYPE_INVALID;
-    }
-}
-#endif
-
 typedef struct {
     uint32_t _init_guard;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
 } sg_shader_desc;
-
-extern void sg_init_shader_desc(sg_shader_desc* desc);
-extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format);
-#ifdef SOKOL_IMPL
-void sg_init_shader_desc(sg_shader_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
-    _sg_init_shader_stage_desc(&desc->vs);
-    _sg_init_shader_stage_desc(&desc->fs);
-}
-#endif
 
 typedef struct {
     int num_attrs;
@@ -513,87 +447,6 @@ typedef struct {
     sg_rasterizer_state rast;
 } sg_pipeline_desc;
 
-extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
-extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
-#ifdef SOKOL_IMPL
-static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
-    SOKOL_ASSERT(layout);
-    layout->step_func = SG_STEPFUNC_PER_VERTEX;
-    layout->step_rate = 1;
-    layout->num_attrs = 0;
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        layout->attrs[i].name = 0;
-        layout->attrs[i].format = SG_VERTEXFORMAT_INVALID;
-    }
-}
-static void _sg_init_stencil_state(sg_stencil_state* s) {
-    SOKOL_ASSERT(s);
-    s->fail_op = SG_STENCILOP_KEEP;
-    s->depth_fail_op = SG_STENCILOP_KEEP;
-    s->pass_op = SG_STENCILOP_KEEP;
-    s->compare_func = SG_COMPAREFUNC_ALWAYS;
-}
-static void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
-    SOKOL_ASSERT(s);
-    _sg_init_stencil_state(&s->stencil_front);
-    _sg_init_stencil_state(&s->stencil_back);
-    s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
-    s->depth_write_enabled = false;
-    s->stencil_enabled = false;
-    s->stencil_read_mask = 0xFF;
-    s->stencil_write_mask = 0xFF;
-    s->stencil_ref = 0;
-}
-static void _sg_init_blend_state(sg_blend_state* s) {
-    SOKOL_ASSERT(s);
-    s->enabled = false;
-    s->src_factor_rgb = SG_BLENDFACTOR_ONE;
-    s->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
-    s->op_rgb = SG_BLENDOP_ADD;
-    s->src_factor_alpha = SG_BLENDFACTOR_ONE;
-    s->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
-    s->op_alpha = SG_BLENDOP_ADD;
-    s->color_write_mask = SG_COLORMASK_RGBA;
-    for (int i = 0; i < 4; i++) {
-        s->blend_color[i] = 1.0f;
-    }
-}
-static void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
-    SOKOL_ASSERT(s);
-    s->cull_face_enabled = false;
-    s->scissor_test_enabled = false;
-    s->dither_enabled = true;
-    s->alpha_to_coverage_enabled = false;
-    s->cull_face = SG_FACE_BACK;
-    s->sample_count = 1;
-}
-void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
-    desc->shader = SG_INVALID_ID;
-    desc->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    desc->index_type = SG_INDEXTYPE_NONE;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        _sg_init_vertex_layout_desc(&desc->layouts[i]);
-    }
-    _sg_init_depth_stencil_state(&desc->depth_stencil);
-    _sg_init_blend_state(&desc->blend);
-    _sg_init_rasterizer_state(&desc->rast);
-}
-void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
-    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
-    SOKOL_ASSERT(name);
-    SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->layouts[slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout_desc* layout = &desc->layouts[slot];
-    sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
-    attr->name = name;
-    attr->format = format;
-}
-#endif
-
 typedef struct {
     uint32_t _init_guard;
     /* FIXME */
@@ -608,28 +461,20 @@ typedef struct {
     sg_id fs_images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_draw_state;
 
-extern void sg_init_draw_state(sg_draw_state* ds);
-#ifdef SOKOL_IMPL
-void sg_init_draw_state(sg_draw_state* ds) {
-    SOKOL_ASSERT(ds);
-    ds->_init_guard = _SG_INIT_GUARD;
-    ds->pipeline = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        ds->vertex_buffers[i] = SG_INVALID_ID;
-    }
-    ds->index_buffer = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        ds->vs_images[i] = SG_INVALID_ID;
-        ds->fs_images[i] = SG_INVALID_ID;
-    }
-}
-#endif
-
-
 typedef struct {
     uint32_t _init_guard;
     /* FIXME */
 } sg_update_image_desc;
+
+/* struct initializers */
+extern void sg_init_desc(sg_desc* desc);
+extern void sg_init_pass_action(sg_pass_action* pa);
+extern void sg_init_buffer_desc(sg_buffer_desc* desc);
+extern void sg_init_shader_desc(sg_shader_desc* desc);
+extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format);
+extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
+extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
+extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */
 extern void sg_setup(sg_desc* desc);
