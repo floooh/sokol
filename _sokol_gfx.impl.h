@@ -72,7 +72,10 @@ static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     layout->step_rate = 1;
     layout->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        /* vertex attributes can be either defined by name
+           or by bind slot index (on GLES2 only by name) */
         layout->attrs[i].name = 0;
+        layout->attrs[i].index = -1;
         layout->attrs[i].format = SG_VERTEXFORMAT_INVALID;
     }
 }
@@ -140,6 +143,21 @@ void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* n
     sg_vertex_layout_desc* layout = &desc->layouts[slot];
     sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = name;
+    attr->index = -1;
+    attr->format = format;
+}
+
+void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_index, sg_vertex_format format) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
+    SOKOL_ASSERT((attr_index >= 0) && (attr_index < SG_MAX_VERTEX_ATTRIBUTES));
+    SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
+    SOKOL_ASSERT(desc->layouts[slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    sg_vertex_layout_desc* layout = &desc->layouts[slot];
+    sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
+    attr->name = 0;
+    attr->index = attr_index;
     attr->format = format;
 }
 

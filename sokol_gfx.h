@@ -364,12 +364,6 @@ typedef struct {
     int sample_count;
 } sg_rasterizer_state;
 
-/* describe a vertex attribute */
-typedef struct {
-    const char* name;
-    sg_vertex_format format;
-} sg_vertex_attr_desc;
-
 /*-- setup descriptor structs ------------------------------------------------*/
 /*
     sg_desc
@@ -444,6 +438,19 @@ typedef struct {
     sg_shader_stage_desc fs;
 } sg_shader_desc;
 
+/*
+    sg_vertex_attr_desc
+
+    A vertex attribute can be either bound by name or by bind location,
+    with the restriction that on GLES2, only binding by attribute
+    name is allowed.
+*/
+typedef struct {
+    const char* name;
+    int index;
+    sg_vertex_format format;
+} sg_vertex_attr_desc;
+
 typedef struct {
     int num_attrs;
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
@@ -489,6 +496,7 @@ extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
+extern void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_index, sg_vertex_format format);
 extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */

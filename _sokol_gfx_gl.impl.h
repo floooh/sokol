@@ -491,26 +491,35 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_
     /* resolve vertex attributes */
     pip->num_attrs = 0;
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
-        sg_vertex_layout_desc* layout = &desc->layouts[slot];
-        int layout_byte_size = _sg_vertexlayout_byte_size(layout);
-        for (int i = 0; i < layout->num_attrs; i++, pip->num_attrs++) {
+        sg_vertex_layout_desc* layout_desc = &desc->layouts[slot];
+        int layout_byte_size = _sg_vertexlayout_byte_size(layout_desc);
+        for (int i = 0; i < layout_desc->num_attrs; i++, pip->num_attrs++) {
             SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-            SOKOL_ASSERT(layout->attrs[i].name);
+            sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
             _sg_gl_attr* gl_attr = &pip->gl_attrs[pip->num_attrs];
-            GLint attr_loc = glGetAttribLocation(pip->shader->gl_prog, layout->attrs[i].name);
+            #ifdef SOKOL_USE_GLES2
+            /* on GLES2, attribute vertices must be bound by name */
+            SOKOL_ASSERT(attr_desc->name);
+            #else
+            SOKOL_ASSERT(attr_desc->name || (attr_desc->index >= 0));
+            #endif
+            GLint attr_loc = attr_desc->index;
+            if (attr_desc->name) {
+                attr_loc = glGetAttribLocation(pip->shader->gl_prog, attr_desc->name);
+            }
             if (attr_loc != -1) {
                 gl_attr->index = attr_loc;
                 gl_attr->enabled = GL_TRUE;
                 gl_attr->vb_index = slot;
-                if (layout->step_func == SG_STEPFUNC_PER_VERTEX) {
+                if (layout_desc->step_func == SG_STEPFUNC_PER_VERTEX) {
                     gl_attr->divisor = 0;
                 }
                 else {
-                    gl_attr->divisor = layout->step_rate;
+                    gl_attr->divisor = layout_desc->step_rate;
                 }
                 gl_attr->stride = layout_byte_size;
-                gl_attr->offset = _sg_vertexlayout_attr_offset(layout, i);
-                sg_vertex_format fmt = layout->attrs[i].format;
+                gl_attr->offset = _sg_vertexlayout_attr_offset(layout_desc, i);
+                sg_vertex_format fmt = attr_desc->format;
                 gl_attr->size = _sg_gl_vertexformat_size(fmt);
                 gl_attr->type = _sg_gl_vertexformat_type(fmt);
                 gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
