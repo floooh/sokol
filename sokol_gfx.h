@@ -6,23 +6,38 @@
     SOKOL_ASSERT    - your own assert macro (default: assert())
     SOKOL_MALLOC    - your own malloc func (default: void* malloc(size))
     SOKOL_FREE      - your own free func (default: void free(void* p))
+    SOKOL_LOG       - your own logging function (default if _DEBUG: puts(const char* s))
+    SOKOL_DEBUG     - define if debug build (default: same as _DEBUG)
     SOKOL_USE_GL    - use the desktop GL3.3 backend
     SOKOL_USE_GLES2 - use the GLES2 backend
     SOKOL_USE_GLES3 - use the GLES3 backend (with soft fallback to GLES2)
     SOKOL_USE_D3D11 - use the D3D11 backend
     SOKOL_USE_METAL - use the Metal backend
 */
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef SOKOL_DEBUG
+    #ifdef _DEBUG
+        #define SOKOL_DEBUG (1)
+    #endif
+#endif
 #ifndef SOKOL_ASSERT
-#include <assert.h>
-#define SOKOL_ASSERT(c) assert(c)
+    #include <assert.h>
+    #define SOKOL_ASSERT(c) assert(c)
 #endif
 #ifndef SOKOL_MALLOC
-#define SOKOL_MALLOC(s) malloc(s)
-#define SOKOL_FREE(p) free(p)
+    #include <stdlib.h>
+    #define SOKOL_MALLOC(s) malloc(s)
+    #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef SOKOL_LOG
+    #ifdef SOKOL_DEBUG 
+        #include <stdio.h>
+        #define SOKOL_LOG(s) puts(s)
+    #else
+        #define SOKOL_LOG(s)
+    #endif
 #endif
 
 /* 

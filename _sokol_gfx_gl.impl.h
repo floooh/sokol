@@ -6,11 +6,11 @@ enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
 };
 
-#ifdef SOKOL_USE_GLES2
+#ifndef GL_UNSIGNED_INT_2_10_10_10_REV
 #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
 #endif
 
-#define _SG_GL_CHECK_ERROR() { /*FIXME*/ } 
+#define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); } 
 
 /*-- type translation --------------------------------------------------------*/
 static GLenum _sg_gl_buffer_target(sg_buffer_type t) {
@@ -408,9 +408,16 @@ static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
     glCompileShader(gl_shd);
     GLint compile_status = 0;
     glGetShaderiv(gl_shd, GL_COMPILE_STATUS, &compile_status);
-    // FIXME: error logging
     if (!compile_status) {
-        /* compilation failed */
+        /* compilation failed, log error and delete shader */
+        GLint log_len = 0;
+        glGetShaderiv(gl_shd, GL_INFO_LOG_LENGTH, &log_len);
+        if (log_len > 0) {
+            GLchar* log_buf = SOKOL_MALLOC(log_len);
+            glGetShaderInfoLog(gl_shd, log_len, &log_len, log_buf);
+            SOKOL_LOG(log_buf);
+            SOKOL_FREE(log_buf);
+        }
         glDeleteShader(gl_shd);
         gl_shd = 0;
     }
@@ -439,7 +446,14 @@ static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
     GLint link_status;
     glGetProgramiv(gl_prog, GL_LINK_STATUS, &link_status);
     if (!link_status) {
-        // FIXME: error logging
+        GLint log_len = 0;
+        glGetProgramiv(gl_prog, GL_INFO_LOG_LENGTH, &log_len);
+        if (log_len > 0) {
+            GLchar* log_buf = SOKOL_MALLOC(log_len);
+            glGetProgramInfoLog(gl_prog, log_len, &log_len, log_buf);
+            SOKOL_LOG(log_buf);
+            SOKOL_FREE(log_buf);
+        }
         glDeleteProgram(gl_prog);
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;

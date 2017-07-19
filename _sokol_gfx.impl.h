@@ -289,7 +289,7 @@ static void _sg_pool_free_id(_sg_pool* pool, sg_id id) {
     SOKOL_ASSERT(pool);
     SOKOL_ASSERT(pool->free_queue);
     SOKOL_ASSERT(pool->queue_top < pool->size);
-    #if _DEBUG
+    #ifdef SOKOL_DEBUG
     /* debug check against double-free */
     int slot_index = _sg_slot_index(id);
     for (int i = 0; i < pool->queue_top; i++) {
@@ -540,7 +540,7 @@ static void _sg_validate_buffer_desc(sg_buffer_desc* desc) {
     SOKOL_ASSERT((desc->type==SG_BUFFERTYPE_VERTEXBUFFER)||(desc->type==SG_BUFFERTYPE_INDEXBUFFER));
     SOKOL_ASSERT((desc->usage==SG_USAGE_IMMUTABLE)||(desc->usage==SG_USAGE_DYNAMIC)||(desc->usage==SG_USAGE_STREAM));
     SOKOL_ASSERT(desc->data_size <= desc->size);
-    #ifdef _DEBUG
+    #ifdef SOKOL_DEBUG 
     if (desc->usage == SG_USAGE_IMMUTABLE) {
         SOKOL_ASSERT(desc->data_ptr);
     }
@@ -563,7 +563,7 @@ static void _sg_validate_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     SOKOL_ASSERT(desc->shader != SG_INVALID_ID);
     SOKOL_ASSERT(desc->layouts[0].num_attrs > 0);
-    #ifdef _DEBUG
+    #ifdef SOKOL_DEBUG
     int num_attrs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         num_attrs += desc->layouts[i].num_attrs;
