@@ -493,7 +493,6 @@ extern void sg_init_desc(sg_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
-extern void sg_shader_desc_attr(sg_shader_desc* desc, const char* name, sg_vertex_format format);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
 extern void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_index, sg_vertex_format format);
