@@ -206,14 +206,50 @@ static void _sg_init_image(_sg_image* img) {
 }
 
 typedef struct {
+    GLint gl_loc;
+    sg_uniform_type type;
+    int offset;
+    int count;
+} _sg_uniform;
+
+typedef struct {
+    int size;
+    int num_uniforms;
+    _sg_uniform uniforms[SG_MAX_UNIFORMS];
+} _sg_uniform_block;
+
+typedef struct {
+    int num_uniform_blocks;
+    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    /* FIXME: shader image */
+} _sg_shader_stage;
+
+typedef struct {
     _sg_slot slot;
     GLuint gl_prog;
+    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
 } _sg_shader;
 
 static void _sg_init_shader(_sg_shader* shd) {
     SOKOL_ASSERT(shd);
     _sg_init_slot(&shd->slot);
     shd->gl_prog = 0;
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        _sg_shader_stage* stage = &shd->stage[stage_index];
+        stage->num_uniform_blocks = 0;
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
+            ub->size = 0;
+            ub->num_uniforms = 0;
+            for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
+                _sg_uniform* u = &ub->uniforms[u_index];
+                u->gl_loc = 0;
+                u->type = SG_UNIFORMTYPE_INVALID;
+                u->offset = 0;
+                u->count = 0;
+            }
+        }
+    }
 }
 
 typedef struct {
@@ -320,7 +356,9 @@ typedef struct {
     bool next_draw_valid;
     uint32_t frame_index;
     GLenum cur_primitive_type;
-    GLenum cur_index_type; 
+    GLenum cur_index_type;
+    _sg_pipeline* cur_pipeline;
+    sg_id cur_pipeline_id; 
     _sg_state_cache cache;
     #if !defined(SOKOL_USE_GLES2)
     GLuint vao; 
@@ -338,6 +376,8 @@ static void _sg_setup_backend(_sg_backend* state) {
     state->frame_index = 0;
     state->cur_primitive_type = GL_TRIANGLES;
     state->cur_index_type = 0;
+    state->cur_pipeline = 0;
+    state->cur_pipeline_id = SG_INVALID_ID;
     state->valid = true;
     _sg_init_state_cache(&state->cache);
 }
@@ -395,7 +435,7 @@ static void _sg_destroy_buffer(_sg_buffer* buf) {
 
 static void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    // FIXME
+    /* FIXME */
     img->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
@@ -460,7 +500,39 @@ static void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     }
     shd->gl_prog = gl_prog;
 
-    // FIXME: resolve uniform and texture locations
+    /* resolve uniforms */
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
+        _sg_shader_stage* stage = &shd->stage[stage_index];
+        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->ub[ub_index];
+            if (ub_desc->size == 0) {
+                break;
+            }
+            _sg_uniform_block* ub = &stage->uniform_blocks[stage->num_uniform_blocks++];
+            ub->size = ub_desc->size;
+            SOKOL_ASSERT(ub->num_uniforms == 0);
+            for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
+                const sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
+                if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
+                    break;
+                }
+                _sg_uniform* u = &ub->uniforms[ub->num_uniforms++];
+                u->type = u_desc->type;
+                u->offset = u_desc->offset;
+                u->count = u_desc->count;
+                if (u_desc->name) {
+                    u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
+                }
+                else {
+                    u->gl_loc = u_index;
+                }
+            }
+        }
+    }
+
+    /* FIXME: resolve image locations */
 
     shd->slot.state = SG_RESOURCESTATE_VALID;
 }
@@ -541,7 +613,7 @@ static void _sg_destroy_pipeline(_sg_pipeline* pip) {
 
 static void _sg_create_pass(_sg_pass* pass, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
-    // FIXME
+    /* FIXME */
     pass->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
@@ -576,7 +648,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         state->cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
     }
-    // FIXME: multiple-render-target!
+    /* FIXME: multiple-render-target! */
     GLbitfield clear_mask = 0;
     if (action->actions & SG_PASSACTION_CLEAR_COLOR0) {
         clear_mask |= GL_COLOR_BUFFER_BIT;
@@ -584,7 +656,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         glClearColor(c[0], c[1], c[2], c[3]);
     }
     if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
-        // FIXME: hmm separate depth/stencil clear?
+        /* FIXME: hmm separate depth/stencil clear? */
         clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
         #ifdef SOKOL_USE_GL
         glClearDepth(action->depth);
@@ -601,7 +673,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
 static void _sg_end_pass(_sg_backend* state) {
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(state->in_pass);
-    // FIXME: bind default framebuffer
+    /* FIXME: bind default framebuffer */
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     state->in_pass = false;
 }
@@ -619,6 +691,8 @@ static void _sg_apply_draw_state(_sg_backend* state,
 
     state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
     state->cur_index_type = _sg_gl_index_type(pip->index_type);
+    state->cur_pipeline = pip;
+    state->cur_pipeline_id = pip->slot.id;
 
     /* update depth-stencil state */
     const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
@@ -781,11 +855,11 @@ static void _sg_apply_draw_state(_sg_backend* state,
             glEnableVertexAttribArray(attr->index);
         }
         else {
-            // FIXME: caching!
+            /* FIXME: caching! */
             glDisableVertexAttribArray(attr->index);
         }
-        // FIXME: caching!
-        // FIXME: GL Extensions!
+        /* FIXME: caching! */
+        /* FIXME: GL Extensions! */
         #ifndef SOKOL_USE_GLES2
         glVertexAttribDivisor(attr->index, attr->divisor);
         #endif
@@ -796,8 +870,53 @@ static void _sg_apply_draw_state(_sg_backend* state,
     }
 }
 
-static void _sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
-    // FIXME
+static void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    SOKOL_ASSERT(state);
+    SOKOL_ASSERT(data && (num_bytes > 0));
+    SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
+    if (!state->next_draw_valid) {
+        return;
+    }
+    if (state->cur_pipeline->slot.id != state->cur_pipeline_id) {
+        /* pipeline object was destroyed */
+        return;
+    }
+    if (state->cur_pipeline->shader->slot.id != state->cur_pipeline->shader_id) {
+        /* shader object was destroyed */
+    }
+    _sg_shader_stage* stage = &state->cur_pipeline->shader->stage[stage_index];
+    SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
+    _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
+    SOKOL_ASSERT(ub->size == num_bytes);
+    for (int u_index = 0; u_index < ub->num_uniforms; u_index++) {
+        _sg_uniform* u = &ub->uniforms[u_index];
+        SOKOL_ASSERT(u->type != SG_UNIFORMTYPE_INVALID);
+        if (u->gl_loc == -1) {
+            continue;
+        }
+        GLfloat* ptr = (GLfloat*) (((uint8_t*)data) + u->offset);
+        switch (u->type) {
+            case SG_UNIFORMTYPE_INVALID:
+                break;
+            case SG_UNIFORMTYPE_FLOAT:
+                glUniform1fv(u->gl_loc, u->count, ptr);
+                break;
+            case SG_UNIFORMTYPE_FLOAT2:
+                glUniform2fv(u->gl_loc, u->count, ptr);
+                break;
+            case SG_UNIFORMTYPE_FLOAT3:
+                glUniform3fv(u->gl_loc, u->count, ptr);
+                break;
+            case SG_UNIFORMTYPE_FLOAT4:
+                glUniform4fv(u->gl_loc, u->count, ptr);
+                break;
+            case SG_UNIFORMTYPE_MAT4:
+                glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, ptr);
+                break;
+        }
+    }
+
+    /* FIXME: apply images */
 }
 
 static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {

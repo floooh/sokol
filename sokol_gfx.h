@@ -52,6 +52,7 @@ typedef uint32_t sg_id;
 enum {
     SG_INVALID_ID = 0,
     SG_DEFAULT_PASS = SG_INVALID_ID,
+    SG_NUM_SHADER_STAGES = 2,
     SG_MAX_COLOR_ATTACHMENTS = 4,
     SG_MAX_SHADERSTAGE_BUFFERS = 4,
     SG_MAX_SHADERSTAGE_IMAGES = 12,
@@ -403,11 +404,10 @@ typedef struct {
     const char* name;
     int offset;
     sg_uniform_type type;   /* SG_UNIFORMTYPE_INVALID if not used */
-    int array_size; 
+    int count; 
 } sg_shader_uniform_desc;
 
 typedef struct {
-    const char* name; 
     int size;
     sg_shader_uniform_desc u[SG_MAX_UNIFORMS];
 } sg_shader_uniform_block_desc;
@@ -488,7 +488,7 @@ extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_shader_desc_named_uniform_block(sg_shader_desc* desc, const char* name, int size);
-extern void sg_shader_desc_named_uniform(sg_shader_desc* desc, const char* name, int offset, sg_uniform_type type, int array_size);
+extern void sg_shader_desc_named_uniform(sg_shader_desc* desc, const char* name, int offset, sg_uniform_type type, int count);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
 extern void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_index, sg_vertex_format format);

@@ -38,14 +38,13 @@ static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
     desc->source = 0;
     for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
         sg_shader_uniform_block_desc* ub_desc = &desc->ub[ub_index];
-        ub_desc->name = 0;
         ub_desc->size = 0;
         for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
             sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
             u_desc->name = 0;
             u_desc->offset = 0;
             u_desc->type = SG_UNIFORMTYPE_INVALID;
-            u_desc->array_size = 1;
+            u_desc->count = 1;
         }
     }
     for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
@@ -62,24 +61,22 @@ void sg_init_shader_desc(sg_shader_desc* desc) {
     _sg_init_shader_stage_desc(&desc->fs);
 }
 
-void sg_init_uniform_block(sg_shader_uniform_block_desc* desc, const char* name, int ub_size) {
+void sg_init_uniform_block(sg_shader_uniform_block_desc* desc, int ub_size) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(name);
     SOKOL_ASSERT(ub_size > 0);
-    desc->name = name;
     desc->size = ub_size;
 }
 
-void sg_init_uniform(sg_shader_uniform_desc* desc, const char* name, int offset, sg_uniform_type type, int array_size) {
+void sg_init_uniform(sg_shader_uniform_desc* desc, const char* name, int offset, sg_uniform_type type, int count) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(name);
     SOKOL_ASSERT(offset >= 0);
     SOKOL_ASSERT(type != SG_UNIFORMTYPE_INVALID);
-    SOKOL_ASSERT(array_size >= 1);
+    SOKOL_ASSERT(count >= 1);
     desc->name = name;
     desc->offset = offset;
     desc->type = type;
-    desc->array_size = array_size;
+    desc->count = count;
 }
 
 static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
@@ -248,14 +245,14 @@ static int _sg_vertexlayout_attr_offset(const sg_vertex_layout_desc* layout, int
 }
 
 /* return the byte size of a shader uniform */
-static int _sg_uniform_size(sg_uniform_type type, int array_size) {
+static int _sg_uniform_size(sg_uniform_type type, int count) {
     switch (type) {
         case SG_UNIFORMTYPE_INVALID:    return 0;
-        case SG_UNIFORMTYPE_FLOAT:      return 4 * array_size;
-        case SG_UNIFORMTYPE_FLOAT2:     return 8 * array_size;
-        case SG_UNIFORMTYPE_FLOAT3:     return 12 * array_size; /* FIXME: std140??? */
-        case SG_UNIFORMTYPE_FLOAT4:     return 16 * array_size;
-        case SG_UNIFORMTYPE_MAT4:       return 64 * array_size;
+        case SG_UNIFORMTYPE_FLOAT:      return 4 * count;
+        case SG_UNIFORMTYPE_FLOAT2:     return 8 * count;
+        case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
+        case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
+        case SG_UNIFORMTYPE_MAT4:       return 64 * count;
     }
 }
 
@@ -603,7 +600,7 @@ static void _sg_validate_shader_desc(const sg_shader_desc* desc) {
     #endif
     #ifdef SOKOL_DEBUG
     bool ub_range_valid = true;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
         const sg_shader_stage_desc* stage_desc = (i == 0)? &desc->vs : &desc->fs;
         for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
             const sg_shader_uniform_block_desc* ub_desc = &stage_desc->ub[ub_index];
@@ -617,9 +614,9 @@ static void _sg_validate_shader_desc(const sg_shader_desc* desc) {
                         #ifdef SOKOL_USE_GLES2
                         SOKOL_ASSERT(u_desc->name);
                         #endif
-                        SOKOL_ASSERT(u_desc->array_size >= 1);
+                        SOKOL_ASSERT(u_desc->count >= 1);
                         SOKOL_ASSERT(u_desc->offset >= 0);
-                        SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, u_desc->array_size)) <= ub_desc->size);
+                        SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, u_desc->count)) <= ub_desc->size);
                     }
                     else {
                         /* uniforms must use consecutive slots */
@@ -910,7 +907,7 @@ void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* dat
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data);
     SOKOL_ASSERT(num_bytes > 0);
-    _sg_apply_uniform_block(stage, ub_index, data, num_bytes);
+    _sg_apply_uniform_block(&_sg->backend, stage, ub_index, data, num_bytes);
 }
 
 void sg_draw(int base_element, int num_elements, int num_instances) {
