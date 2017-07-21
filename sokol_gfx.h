@@ -381,9 +381,6 @@ typedef struct {
 */
 typedef struct {
     uint32_t _init_guard;
-    int width;
-    int height;
-    int sample_count;
     int resource_pool_size[SG_NUM_RESOURCETYPES];
 } sg_desc;
 
@@ -404,30 +401,27 @@ typedef struct {
 /* describe a uniform in a uniform block */
 typedef struct {
     const char* name;
-    sg_uniform_type type;
     int offset;
+    sg_uniform_type type;   /* SG_UNIFORMTYPE_INVALID if not used */
     int array_size; 
 } sg_shader_uniform_desc;
 
 typedef struct {
-    int num_uniforms;
-    sg_shader_uniform_desc uniforms[SG_MAX_UNIFORMS];
+    const char* name; 
+    int size;
+    sg_shader_uniform_desc u[SG_MAX_UNIFORMS];
 } sg_shader_uniform_block_desc;
 
 typedef struct {
     const char* name;
-    sg_image_type type;
+    sg_image_type type;     /* SG_IMAGETYPE_INVALID if not used */
 } sg_shader_image_desc;
 
 typedef struct {
     /* source code (only used in GL backends) */
     const char* source;
-    /* number of uniform blocks on the shader stage */
-    int num_uniform_blocks;
-    /* number of textures on the shader stage */
-    int num_textures;
     /* uniform block descriptions */
-    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    sg_shader_uniform_block_desc ub[SG_MAX_SHADERSTAGE_UBS];
     /* image descriptions */
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
@@ -493,37 +487,39 @@ extern void sg_init_desc(sg_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
+extern void sg_shader_desc_named_uniform_block(sg_shader_desc* desc, const char* name, int size);
+extern void sg_shader_desc_named_uniform(sg_shader_desc* desc, const char* name, int offset, sg_uniform_type type, int array_size);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format);
 extern void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_index, sg_vertex_format format);
 extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */
-extern void sg_setup(sg_desc* desc);
-extern void sg_discard();
+extern void sg_setup(const sg_desc* desc);
+extern void sg_shutdown();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 
 /* resources */
-extern sg_id sg_make_buffer(sg_buffer_desc* desc);
+extern sg_id sg_make_buffer(const sg_buffer_desc* desc);
 extern void sg_destroy_buffer(sg_id buf);
-extern sg_id sg_make_image(sg_image_desc* desc);
+extern sg_id sg_make_image(const sg_image_desc* desc);
 extern void sg_destroy_image(sg_id img);
-extern sg_id sg_make_shader(sg_shader_desc* desc);
+extern sg_id sg_make_shader(const sg_shader_desc* desc);
 extern void sg_destroy_shader(sg_id shd);
-extern sg_id sg_make_pipeline(sg_pipeline_desc* desc);
+extern sg_id sg_make_pipeline(const sg_pipeline_desc* desc);
 extern void sg_destroy_pipeline(sg_id pip);
-extern sg_id sg_make_pass(sg_pass_desc* desc);
+extern sg_id sg_make_pass(const sg_pass_desc* desc);
 extern void sg_destroy_pass(sg_id pass);
-extern void sg_update_buffer(sg_id buf, void* data, int num_bytes);
-extern void sg_update_image(sg_id img, void* data, sg_update_image_desc* desc);
+extern void sg_update_buffer(sg_id buf, const void* data, int num_bytes);
+extern void sg_update_image(sg_id img, const void* data, const sg_update_image_desc* desc);
 
 /* rendering */
-extern void sg_begin_pass(sg_id pass, sg_pass_action* pass_action, int width, int height);
+extern void sg_begin_pass(sg_id pass, const sg_pass_action* pass_action, int width, int height);
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
-extern void sg_apply_draw_state(sg_draw_state* ds);
-extern void sg_apply_uniform_block(sg_shader_stage stage, int slot, void* data, int num_bytes);
+extern void sg_apply_draw_state(const sg_draw_state* ds);
+extern void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
 extern void sg_draw(int base_element, int num_elements, int num_instances);
 extern void sg_end_pass();
 extern void sg_commit();
@@ -535,11 +531,11 @@ extern sg_id sg_alloc_image();
 extern sg_id sg_alloc_shader();
 extern sg_id sg_alloc_pipeline();
 extern sg_id sg_alloc_pass();
-extern void sg_init_buffer(sg_id buf_id, sg_buffer_desc* desc);
-extern void sg_init_image(sg_id img_id, sg_image_desc* desc);
-extern void sg_init_shader(sg_id shd_id, sg_shader_desc* desc);
-extern void sg_init_pipeline(sg_id pip_id, sg_pipeline_desc* desc);
-extern void sg_init_pass(sg_id pass_id, sg_pass_desc* desc);
+extern void sg_init_buffer(sg_id buf_id, const sg_buffer_desc* desc);
+extern void sg_init_image(sg_id img_id, const sg_image_desc* desc);
+extern void sg_init_shader(sg_id shd_id, const sg_shader_desc* desc);
+extern void sg_init_pipeline(sg_id pip_id, const sg_pipeline_desc* desc);
+extern void sg_init_pass(sg_id pass_id, const sg_pass_desc* desc);
 
 #ifdef SOKOL_IMPL
 #include "_sokol_gfx.impl.h"

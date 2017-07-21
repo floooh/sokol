@@ -353,7 +353,7 @@ static void _sg_discard_backend(_sg_backend* state) {
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-static void _sg_create_buffer(_sg_buffer* buf, sg_buffer_desc* desc) {
+static void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
@@ -393,7 +393,7 @@ static void _sg_destroy_buffer(_sg_buffer* buf) {
     _sg_init_buffer(buf);
 }
 
-static void _sg_create_image(_sg_image* img, sg_image_desc* desc) {
+static void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     // FIXME
     img->slot.state = SG_RESOURCESTATE_FAILED;
@@ -425,7 +425,7 @@ static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
     return gl_shd;
 }
 
-static void _sg_create_shader(_sg_shader* shd, sg_shader_desc* desc) {
+static void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
@@ -473,7 +473,7 @@ static void _sg_destroy_shader(_sg_shader* shd) {
     _sg_init_shader(shd);
 }
 
-static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_desc* desc) {
+static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
     SOKOL_ASSERT(pip->num_attrs == 0);
@@ -491,11 +491,11 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, sg_pipeline_
     /* resolve vertex attributes */
     pip->num_attrs = 0;
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
-        sg_vertex_layout_desc* layout_desc = &desc->layouts[slot];
+        const sg_vertex_layout_desc* layout_desc = &desc->layouts[slot];
         int layout_byte_size = _sg_vertexlayout_byte_size(layout_desc);
         for (int i = 0; i < layout_desc->num_attrs; i++, pip->num_attrs++) {
             SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-            sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
+            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
             _sg_gl_attr* gl_attr = &pip->gl_attrs[pip->num_attrs];
             #ifdef SOKOL_USE_GLES2
             /* on GLES2, attribute vertices must be bound by name */
@@ -539,14 +539,14 @@ static void _sg_destroy_pipeline(_sg_pipeline* pip) {
     _sg_init_pipeline(pip);
 }
 
-static void _sg_create_pass(_sg_pass* pass, sg_pass_desc* desc) {
+static void _sg_create_pass(_sg_pass* pass, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     // FIXME
     pass->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 /*-- GL backend rendering functions ------------------------------------------*/
-static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, sg_pass_action* action, int w, int h) {
+static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!state->in_pass);
@@ -580,7 +580,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, sg_pass_action* a
     GLbitfield clear_mask = 0;
     if (action->actions & SG_PASSACTION_CLEAR_COLOR0) {
         clear_mask |= GL_COLOR_BUFFER_BIT;
-        float* c = action->color[0];
+        const float* c = action->color[0];
         glClearColor(c[0], c[1], c[2], c[3]);
     }
     if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
@@ -794,6 +794,10 @@ static void _sg_apply_draw_state(_sg_backend* state,
     for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         glDisableVertexAttribArray(attr_index);
     }
+}
+
+static void _sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
+    // FIXME
 }
 
 static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {
