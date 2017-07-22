@@ -67,16 +67,16 @@ void sg_init_uniform_block(sg_shader_uniform_block_desc* desc, int ub_size) {
     desc->size = ub_size;
 }
 
-void sg_init_uniform(sg_shader_uniform_desc* desc, const char* name, int offset, sg_uniform_type type, int count) {
+void sg_init_named_uniform(sg_shader_uniform_desc* desc, const char* name, int ub_offset, sg_uniform_type type, int array_count) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(name);
-    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(ub_offset >= 0);
     SOKOL_ASSERT(type != SG_UNIFORMTYPE_INVALID);
-    SOKOL_ASSERT(count >= 1);
+    SOKOL_ASSERT(array_count >= 1);
     desc->name = name;
-    desc->offset = offset;
+    desc->offset = ub_offset;
     desc->type = type;
-    desc->count = count;
+    desc->count = array_count;
 }
 
 static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
