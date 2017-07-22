@@ -681,9 +681,12 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
         /* indexed rendering requested, but no index buffer */
         return false;
     }
-    if (ib && (ib->slot.state != SG_RESOURCESTATE_VALID)) {
-        /* index buffer provided, but not in valid state */
-        return false;
+    if (ib) {
+        SOKOL_ASSERT(ib->type == SG_BUFFERTYPE_INDEXBUFFER);
+        if (ib->slot.state != SG_RESOURCESTATE_VALID) {
+            /* index buffer exists, but not valid for rendering */
+            return false;
+        }
     }
     /* check vertex buffers */
     for (int i = 0; i < num_vbs; i++) {
@@ -692,6 +695,7 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
             /* vertex buffer no longer exists */
             return false;
         }
+        SOKOL_ASSERT(vb->type == SG_BUFFERTYPE_VERTEXBUFFER);
         if (vb->slot.state != SG_RESOURCESTATE_VALID) {
             /* vertex buffer exists, but not valid for rendering */
             return false;
