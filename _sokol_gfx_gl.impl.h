@@ -448,6 +448,7 @@ static bool _sg_query_feature(_sg_backend* state, sg_feature f) {
 static void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(desc->data_size <= desc->size);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
     buf->type = desc->type;
@@ -1017,11 +1018,12 @@ static void _sg_commit(_sg_backend* state) {
     state->frame_index++;
 }
 
-static void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* data, int num_bytes) {
-    SOKOL_ASSERT(state && buf && data && num_bytes > 0);
+static void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* data_ptr, int data_size) {
+    SOKOL_ASSERT(state && buf && data_ptr && data_size > 0);
     /* only one update per buffer per frame allowed */
     SOKOL_ASSERT(buf->upd_frame_index != state->frame_index);
     SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
+    SOKOL_ASSERT(data_size <= buf->size);
     buf->upd_frame_index = state->frame_index;
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
@@ -1032,6 +1034,6 @@ static void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* d
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     glBindBuffer(gl_tgt, gl_buf);
-    glBufferSubData(gl_tgt, 0, num_bytes, data);
+    glBufferSubData(gl_tgt, 0, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
 }

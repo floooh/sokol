@@ -39,6 +39,30 @@ enum {
 };
 
 /*
+    sg_feature
+
+    These are optional features, use the function
+    sg_query_feature() to check whether the feature is supported.
+*/
+typedef enum {
+    SG_FEATURE_INSTANCED_ARRAYS = 0,
+    SG_FEATURE_TEXTURE_COMPRESSION_DXT,
+    SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
+    SG_FEATURE_TEXTURE_COMPRESSION_ATC,
+    SG_FEATURE_TEXTURE_COMPRESSION_ETC2,
+    SG_FEATURE_TEXTURE_FLOAT,
+    SG_FEATURE_TEXTURE_HALF_FLOAT,
+    SG_FEATURE_ORIGIN_BOTTOM_LEFT,
+    SG_FEATURE_ORIGIN_TOP_LEFT,
+    SG_FEATURE_MSAA_RENDER_TARGETS,
+    SG_FEATURE_PACKED_VERTEX_FORMAT_10_2,
+    SG_FEATURE_MULTIPLE_RENDER_TARGET,
+    SG_FEATURE_TEXTURE_3D,
+    SG_FEATURE_TEXTURE_ARRAY,
+    SG_NUM_FEATURES
+} sg_feature;
+
+/*
     sg_resource_type
 
     sokol gfx has 5 resource types:
@@ -80,6 +104,11 @@ typedef enum {
     SG_RESOURCESTATE_FAILED,
 } sg_resource_state;
 
+/*
+    sg_buffer_type
+
+    Buffers come in 2 flavours, vertex- and index-buffers.
+*/
 typedef enum {
     SG_BUFFERTYPE_VERTEXBUFFER,
     SG_BUFFERTYPE_INDEXBUFFER
@@ -100,29 +129,12 @@ typedef enum {
 } sg_index_type;
 
 typedef enum {
-    SG_FEATURE_INSTANCED_ARRAYS = 0,
-    SG_FEATURE_TEXTURE_COMPRESSION_DXT,
-    SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
-    SG_FEATURE_TEXTURE_COMPRESSION_ATC,
-    SG_FEATURE_TEXTURE_COMPRESSION_ETC2,
-    SG_FEATURE_TEXTURE_FLOAT,
-    SG_FEATURE_TEXTURE_HALF_FLOAT,
-    SG_FEATURE_ORIGIN_BOTTOM_LEFT,
-    SG_FEATURE_ORIGIN_TOP_LEFT,
-    SG_FEATURE_MSAA_RENDER_TARGETS,
-    SG_FEATURE_PACKED_VERTEX_FORMAT_10_2,
-    SG_FEATURE_MULTIPLE_RENDER_TARGET,
-    SG_FEATURE_TEXTURE_3D,
-    SG_FEATURE_TEXTURE_ARRAY,
-    SG_NUM_FEATURES
-} sg_feature;
-
-typedef enum {
     SG_SHADERSTAGE_VS,
     SG_SHADERSTAGE_FS,
 } sg_shader_stage;
 
 typedef enum {
+    SG_PIXELFORMAT_NONE = 0,
     SG_PIXELFORMAT_RGBA8,
     SG_PIXELFORMAT_RGB8,
     SG_PIXELFORMAT_RGBA4,
@@ -374,7 +386,22 @@ typedef struct {
 
 typedef struct {
     uint32_t _init_guard;
-    /* FIXME */
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    union {
+        int depth;
+        int layers;
+    };
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;   /* render targets only */
+    int sample_count;               /* render targets only */
+    int num_data_items;
+    const void** data_ptrs;
+    const int* data_sizes;
 } sg_image_desc;
 
 /* describe a uniform in a uniform block */
@@ -455,15 +482,11 @@ typedef struct {
     sg_id fs_images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_draw_state;
 
-typedef struct {
-    uint32_t _init_guard;
-    /* FIXME */
-} sg_update_image_desc;
-
 /* struct initializers */
 extern void sg_init_desc(sg_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
+extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_init_uniform_block(sg_shader_uniform_block_desc* desc, int ub_size); 
 extern void sg_init_named_uniform(sg_shader_uniform_desc* desc, const char* name, int ub_offset, sg_uniform_type type, int array_count);
@@ -481,17 +504,17 @@ extern bool sg_query_feature(sg_feature feature);
 
 /* resources */
 extern sg_id sg_make_buffer(const sg_buffer_desc* desc);
-extern void sg_destroy_buffer(sg_id buf);
 extern sg_id sg_make_image(const sg_image_desc* desc);
-extern void sg_destroy_image(sg_id img);
 extern sg_id sg_make_shader(const sg_shader_desc* desc);
-extern void sg_destroy_shader(sg_id shd);
 extern sg_id sg_make_pipeline(const sg_pipeline_desc* desc);
-extern void sg_destroy_pipeline(sg_id pip);
 extern sg_id sg_make_pass(const sg_pass_desc* desc);
+extern void sg_destroy_buffer(sg_id buf);
+extern void sg_destroy_image(sg_id img);
+extern void sg_destroy_shader(sg_id shd);
+extern void sg_destroy_pipeline(sg_id pip);
 extern void sg_destroy_pass(sg_id pass);
-extern void sg_update_buffer(sg_id buf, const void* data, int num_bytes);
-extern void sg_update_image(sg_id img, const void* data, const sg_update_image_desc* desc);
+extern void sg_update_buffer(sg_id buf, const void* data_ptr, int data_size);
+extern void sg_update_image(sg_id img, int num_data_items, const void** data_ptrs, int* data_sizes); 
 
 /* rendering */
 extern void sg_begin_pass(sg_id pass, const sg_pass_action* pass_action, int width, int height);

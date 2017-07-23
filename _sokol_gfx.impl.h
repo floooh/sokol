@@ -59,6 +59,24 @@ void sg_init_buffer_desc(sg_buffer_desc* desc) {
     desc->data_size = 0;
 }
 
+void sg_init_image_desc(sg_image_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
+    desc->type = SG_IMAGETYPE_2D;
+    desc->render_target = false;
+    desc->width = 0;
+    desc->height = 0;
+    desc->depth = 1;
+    desc->num_mipmaps = 1;
+    desc->usage = SG_USAGE_IMMUTABLE;
+    desc->color_format = SG_PIXELFORMAT_RGBA8;
+    desc->depth_format = SG_PIXELFORMAT_NONE;
+    desc->sample_count = 1;
+    desc->num_data_items = 0;
+    desc->data_ptrs = 0;
+    desc->data_sizes = 0;
+}
+
 static void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->source = 0;
