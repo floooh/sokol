@@ -2,17 +2,17 @@
 /*
     Configuration defines:
 
-    SOKOL_IMPL      - define this exactly once to include implementation files
-    SOKOL_ASSERT    - your own assert macro (default: assert())
-    SOKOL_MALLOC    - your own malloc func (default: void* malloc(size))
-    SOKOL_FREE      - your own free func (default: void free(void* p))
-    SOKOL_LOG       - your own logging function (default if _DEBUG: puts(const char* s))
-    SOKOL_DEBUG     - define if debug build (default: same as _DEBUG)
-    SOKOL_USE_GL    - use the desktop GL3.3 backend
-    SOKOL_USE_GLES2 - use the GLES2 backend
-    SOKOL_USE_GLES3 - use the GLES3 backend (with soft fallback to GLES2)
-    SOKOL_USE_D3D11 - use the D3D11 backend
-    SOKOL_USE_METAL - use the Metal backend
+    SOKOL_IMPL          - define this exactly once to include implementation files
+    SOKOL_ASSERT        - your own assert macro (default: assert())
+    SOKOL_MALLOC        - your own malloc func (default: void* malloc(size))
+    SOKOL_FREE          - your own free func (default: void free(void* p))
+    SOKOL_LOG           - your own logging function (default if _DEBUG: puts(const char* s))
+    SOKOL_DEBUG         - define if debug build (default: same as _DEBUG)
+    SOKOL_USE_GLCORE33  - use the desktop GL 3.3 Core Profile backend
+    SOKOL_USE_GLES2     - use the GLES2 backend
+    SOKOL_USE_GLES3     - use the GLES3 backend (with soft fallback to GLES2)
+    SOKOL_USE_D3D11     - use the D3D11 backend
+    SOKOL_USE_METAL     - use the Metal backend
 */
 #include <stdint.h>
 #include <stdbool.h>
@@ -100,6 +100,7 @@ typedef enum {
 } sg_index_type;
 
 typedef enum {
+    SG_FEATURE_INSTANCED_ARRAYS = 0,
     SG_FEATURE_TEXTURE_COMPRESSION_DXT,
     SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
     SG_FEATURE_TEXTURE_COMPRESSION_ATC,
@@ -113,7 +114,7 @@ typedef enum {
     SG_FEATURE_MULTIPLE_RENDER_TARGET,
     SG_FEATURE_TEXTURE_3D,
     SG_FEATURE_TEXTURE_ARRAY,
-    SG_FEATURE_NATIVE_TEXTURE,
+    SG_NUM_FEATURES
 } sg_feature;
 
 typedef enum {

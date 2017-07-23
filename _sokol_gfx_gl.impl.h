@@ -353,7 +353,7 @@ static void _sg_init_state_cache(_sg_state_cache* state) {
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DITHER);
-    #if defined(SOKOL_USE_GL)
+    #if defined(SOKOL_USE_GLCORE33)
         glEnable(GL_MULTISAMPLE);
     #endif
 }
@@ -369,6 +369,7 @@ typedef struct {
     _sg_pipeline* cur_pipeline;
     sg_id cur_pipeline_id; 
     _sg_state_cache cache;
+    bool features[SG_NUM_FEATURES];
     #if !defined(SOKOL_USE_GLES2)
     GLuint vao; 
     #endif
@@ -389,6 +390,43 @@ static void _sg_setup_backend(_sg_backend* state) {
     state->cur_pipeline_id = SG_INVALID_ID;
     state->valid = true;
     _sg_init_state_cache(&state->cache);
+    
+    /* initialize feature flags */
+    for (int i = 0; i < SG_NUM_FEATURES; i++) {
+        state->features[i] = false;
+    }
+    state->features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
+    #if !defined(SOKOL_USE_GLCORE33)
+        const char* ext = (const char*) glGetString(GL_EXTENSIONS);
+        state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+            strstr(ext, "_texture_compression_s3tc") ||
+            strstr(ext, "_compressed_texture_s3tc") ||
+            strstr(ext, "texture_compression_dxt1");
+        state->features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+            strstr(ext, "_texture_compression_pvrtc") ||
+            strstr(ext, "_compressed_texture_pvrtc");
+        state->features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] = strstr(ext, "_compressed_texture_atc");
+        state->features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
+        state->features[SG_FEATURE_INSTANCED_ARRAYS] = strstr(ext, "_instanced_arrays");
+        #if defined(SOKOL_USE_GLES2)
+            state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+        #else
+            state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = state->features[SG_FEATURE_TEXTURE_FLOAT];
+        #endif
+    #endif
+    #if defined(SOKOL_USE_GLCORE33) || defined(SOKOL_USE_GLES3)
+        #if defined(SOKOL_USE_GLCORE33)
+        state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
+        #endif
+        state->features[SG_FEATURE_INSTANCED_ARRAYS] = true;
+        state->features[SG_FEATURE_TEXTURE_FLOAT] = true;
+        state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+        state->features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+        state->features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+        state->features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        state->features[SG_FEATURE_TEXTURE_3D] = true;
+        state->features[SG_FEATURE_TEXTURE_ARRAY] = true;
+    #endif
 }
 
 static void _sg_discard_backend(_sg_backend* state) {
@@ -399,6 +437,11 @@ static void _sg_discard_backend(_sg_backend* state) {
     state->vao = 0;
     #endif
     state->valid = false;
+}
+
+static bool _sg_query_feature(_sg_backend* state, sg_feature f) {
+    SOKOL_ASSERT(state && (f>=0) && (f<SG_NUM_FEATURES));
+    return state->features[f];
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
@@ -663,7 +706,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
     if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
         /* FIXME: hmm separate depth/stencil clear? */
         clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
-        #ifdef SOKOL_USE_GL
+        #ifdef SOKOL_USE_GLCORE33
         glClearDepth(action->depth);
         #else
         glClearDepthf(action->depth);
@@ -818,7 +861,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
         if (new_r->dither_enabled) glEnable(GL_DITHER);
         else glDisable(GL_DITHER);
     }
-    #ifdef SOKOL_USE_GL
+    #ifdef SOKOL_USE_GLCORE33
     if (new_r->sample_count != cache_r->sample_count) {
         cache_r->sample_count = new_r->sample_count;
         if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
@@ -858,12 +901,15 @@ static void _sg_apply_draw_state(_sg_backend* state,
             if (cache_attr->vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
             }
-            /* FIXME: GL Extensions! */
-            #ifndef SOKOL_USE_GLES2
             if (cache_attr->divisor != attr->divisor) {
+                #ifdef SOKOL_USE_GLES2
+                if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+                    glVertexAttribDivisorEXT(attr_index, attr->divisor);
+                }
+                #else
                 glVertexAttribDivisor(attr_index, attr->divisor);
+                #endif
             }
-            #endif
         }
         else {
             /* attribute is disabled */
@@ -939,8 +985,11 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            #ifndef SOKOL_USE_GLES2
-            /* FIXME! */
+            #ifdef SOKOL_USE_GLES2
+            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+                glDrawElementsInstancedEXT(p_type, num_elements, i_type, indices, num_instances);
+            }
+            #else
             glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             #endif
         }
@@ -951,8 +1000,11 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            #ifndef SOKOL_USE_GLES2
-            /* FIXME! */
+            #ifdef SOKOL_USE_GLES2
+            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+                glDrawArraysInstancedEXT(p_type, base_element, num_elements, num_instances);
+            }
+            #else
             glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             #endif
         }

@@ -27,8 +27,8 @@
         #define SOKOL_LOG(s)
     #endif
 #endif
-#if !(defined(SOKOL_USE_GL)||defined(SOKOL_USE_GLES2)||defined(SOKOL_USE_GLES3)||defined(SOKOL_USE_D3D11)||defined(SOKOL_USE_METAL))
-#error "Please select a backend with SOKOL_USE_GL, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
+#if !(defined(SOKOL_USE_GLCORE33)||defined(SOKOL_USE_GLES2)||defined(SOKOL_USE_GLES3)||defined(SOKOL_USE_D3D11)||defined(SOKOL_USE_METAL))
+#error "Please select a backend with SOKOL_USE_GLCORE33, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
 #endif
 
 #include <string.h>
@@ -309,7 +309,7 @@ static int _sg_slot_index(sg_id id) {
 }
 
 //-- include the selected rendering backend ----------------------------------*/
-#if defined(SOKOL_USE_GL) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
+#if defined(SOKOL_USE_GLCORE33) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
 #include "_sokol_gfx_gl.impl.h"
 #elif defined(SOKOL_USE_D3D11)
 #include "_sokol_gfx_d3d11.impl.h"
@@ -549,6 +549,11 @@ bool sg_isvalid() {
     return _sg != 0;
 }
 
+bool sg_query_feature(sg_feature f) {
+    SOKOL_ASSERT(_sg);
+    return _sg_query_feature(&_sg->backend, f);
+}
+
 /*-- allocate resource id ----------------------------------------------------*/
 sg_id sg_alloc_buffer() {
     SOKOL_ASSERT(_sg);
@@ -630,7 +635,7 @@ static void _sg_validate_image_desc(const sg_image_desc* desc) {
 
 static void _sg_validate_shader_desc(const sg_shader_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
-    #if defined(SOKOL_USE_GL) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
+    #if defined(SOKOL_USE_GLCORE33) || defined(SOKOL_USE_GLES2) || defined(SOKOL_USE_GLES3)
     SOKOL_ASSERT(desc->vs.source);
     SOKOL_ASSERT(desc->fs.source);
     #endif
