@@ -258,16 +258,24 @@ static void _sg_init_shader(_sg_shader* shd) {
 }
 
 typedef struct {
-    int8_t index;
-    uint8_t enabled;
-    uint8_t vb_index;
-    uint8_t divisor;
+    int8_t vb_index;        /* -1 if attr is not enabled */
+    int8_t divisor;         /* -1 if not initialized */
     uint8_t stride;
     uint8_t size;
     uint8_t normalized;
-    uint32_t offset;
+    uint8_t offset;
     GLenum type;
 } _sg_gl_attr;
+
+static void _sg_init_gl_attr(_sg_gl_attr* attr) {
+    attr->vb_index = -1;
+    attr->divisor = -1;
+    attr->stride = 0;
+    attr->size = 0;
+    attr->normalized = 0;
+    attr->offset = 0;
+    attr->type = 0;
+}
 
 typedef struct {
     _sg_slot slot;
@@ -275,7 +283,6 @@ typedef struct {
     sg_id shader_id;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
-    int num_attrs;
     _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
@@ -287,17 +294,8 @@ static void _sg_init_pipeline(_sg_pipeline* pip) {
     _sg_init_slot(&pip->slot);
     pip->shader = 0;
     pip->shader_id = SG_INVALID_ID;
-    pip->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_gl_attr* attr = &pip->gl_attrs[i];
-        attr->index = 0;
-        attr->enabled = 0;
-        attr->vb_index = 0;
-        attr->divisor = 0;
-        attr->stride = 0;
-        attr->normalized = 0;
-        attr->offset = 0;
-        attr->type = 0;
+        _sg_init_gl_attr(&pip->gl_attrs[i]);
     }
     _sg_init_depth_stencil_state(&pip->depth_stencil);
     _sg_init_blend_state(&pip->blend);
@@ -318,10 +316,16 @@ typedef struct {
     sg_depth_stencil_state ds;
     sg_blend_state blend;
     sg_rasterizer_state rast;
+    _sg_gl_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } _sg_state_cache;
 
 static void _sg_init_state_cache(_sg_state_cache* state) {
     SOKOL_ASSERT(state);
+    
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        _sg_init_gl_attr(&state->attrs[i]);
+        glDisableVertexAttribArray(i);
+    }
 
     /* depth-stencil state */
     _sg_init_depth_stencil_state(&state->ds);
@@ -553,9 +557,13 @@ static void _sg_destroy_shader(_sg_shader* shd) {
 static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
-    SOKOL_ASSERT(pip->num_attrs == 0);
     SOKOL_ASSERT(desc->shader == shd->slot.id);
     SOKOL_ASSERT(shd->gl_prog);
+    #ifdef SOKOL_DEBUG
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        SOKOL_ASSERT(pip->gl_attrs[i].vb_index == -1);
+    }
+    #endif
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
@@ -566,14 +574,11 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pip
     pip->rast = desc->rast;
     
     /* resolve vertex attributes */
-    pip->num_attrs = 0;
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
         const sg_vertex_layout_desc* layout_desc = &desc->layouts[slot];
         int layout_byte_size = _sg_vertexlayout_byte_size(layout_desc);
-        for (int i = 0; i < layout_desc->num_attrs; i++, pip->num_attrs++) {
-            SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+        for (int i = 0; i < layout_desc->num_attrs; i++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
-            _sg_gl_attr* gl_attr = &pip->gl_attrs[pip->num_attrs];
             #ifdef SOKOL_USE_GLES2
             /* on GLES2, attribute vertices must be bound by name */
             SOKOL_ASSERT(attr_desc->name);
@@ -584,9 +589,9 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pip
             if (attr_desc->name) {
                 attr_loc = glGetAttribLocation(pip->shader->gl_prog, attr_desc->name);
             }
+            SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
             if (attr_loc != -1) {
-                gl_attr->index = attr_loc;
-                gl_attr->enabled = GL_TRUE;
+                _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
                 gl_attr->vb_index = slot;
                 if (layout_desc->step_func == SG_STEPFUNC_PER_VERTEX) {
                     gl_attr->divisor = 0;
@@ -600,11 +605,6 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pip
                 gl_attr->size = _sg_gl_vertexformat_size(fmt);
                 gl_attr->type = _sg_gl_vertexformat_type(fmt);
                 gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
-            }
-            else {
-                /* shader doesn't know this attribute */
-                gl_attr->index = -1;
-                gl_attr->enabled = GL_FALSE;
             }
         }
     }
@@ -831,22 +831,20 @@ static void _sg_apply_draw_state(_sg_backend* state,
 
     /* FIXME: bind textures */
 
-    /* bind index buffer (can be 0) */
+    /* index buffer (can be 0) */
     if (ib) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->gl_buf[ib->active_slot]);
     }
     else {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
-    /* bind vertex attributes */
-    /* FIXME: caching! */ 
+    /* vertex attributes */
     GLuint gl_vb = 0;
-    int attr_index = 0;
-    SOKOL_ASSERT(pip->num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    for (attr_index = 0; attr_index < pip->num_attrs; attr_index++) {
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
-        if (attr->enabled) {
-            SOKOL_ASSERT(attr->index >= 0);
+        _sg_gl_attr* cache_attr = &state->cache.attrs[attr_index];
+        if (attr->vb_index >= 0) {
+            /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer* vb = vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
@@ -854,24 +852,26 @@ static void _sg_apply_draw_state(_sg_backend* state,
                 gl_vb = vb->gl_buf[vb->active_slot];
                 glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
             }
-            glVertexAttribPointer(attr->index, attr->size, attr->type, 
+            glVertexAttribPointer(attr_index, attr->size, attr->type, 
                 attr->normalized, attr->stride, 
                 (const GLvoid*)(GLintptr)attr->offset);
-            glEnableVertexAttribArray(attr->index);
+            if (cache_attr->vb_index == -1) {
+                glEnableVertexAttribArray(attr_index);
+            }
+            /* FIXME: GL Extensions! */
+            #ifndef SOKOL_USE_GLES2
+            if (cache_attr->divisor != attr->divisor) {
+                glVertexAttribDivisor(attr_index, attr->divisor);
+            }
+            #endif
         }
         else {
-            /* FIXME: caching! */
-            glDisableVertexAttribArray(attr->index);
+            /* attribute is disabled */
+            if (cache_attr->vb_index != -1) {
+                glDisableVertexAttribArray(attr_index);
+            }
         }
-        /* FIXME: caching! */
-        /* FIXME: GL Extensions! */
-        #ifndef SOKOL_USE_GLES2
-        glVertexAttribDivisor(attr->index, attr->divisor);
-        #endif
-    }
-    /* FIXME: caching! */
-    for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        glDisableVertexAttribArray(attr_index);
+        *cache_attr = *attr;
     }
 }
 

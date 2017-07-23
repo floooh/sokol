@@ -5,32 +5,30 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
-#ifdef SOKOL_IMPL
-    #ifndef SOKOL_DEBUG
-        #ifdef _DEBUG
-            #define SOKOL_DEBUG (1)
-        #endif
+#ifndef SOKOL_DEBUG
+    #ifdef _DEBUG
+        #define SOKOL_DEBUG (1)
     #endif
-    #ifndef SOKOL_ASSERT
-        #include <assert.h>
-        #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_ASSERT
+    #include <assert.h>
+    #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_MALLOC
+    #include <stdlib.h>
+    #define SOKOL_MALLOC(s) malloc(s)
+    #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef SOKOL_LOG
+    #ifdef SOKOL_DEBUG 
+        #include <stdio.h>
+        #define SOKOL_LOG(s) puts(s)
+    #else
+        #define SOKOL_LOG(s)
     #endif
-    #ifndef SOKOL_MALLOC
-        #include <stdlib.h>
-        #define SOKOL_MALLOC(s) malloc(s)
-        #define SOKOL_FREE(p) free(p)
-    #endif
-    #ifndef SOKOL_LOG
-        #ifdef SOKOL_DEBUG 
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #else
-            #define SOKOL_LOG(s)
-        #endif
-    #endif
-    #if !(defined(SOKOL_USE_GL)||defined(SOKOL_USE_GLES2)||defined(SOKOL_USE_GLES3)||defined(SOKOL_USE_D3D11)||defined(SOKOL_USE_METAL))
-    #error "Please select a backend with SOKOL_USE_GL, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
-    #endif
+#endif
+#if !(defined(SOKOL_USE_GL)||defined(SOKOL_USE_GLES2)||defined(SOKOL_USE_GLES3)||defined(SOKOL_USE_D3D11)||defined(SOKOL_USE_METAL))
+#error "Please select a backend with SOKOL_USE_GL, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
 #endif
 
 #include <string.h>
