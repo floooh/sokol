@@ -618,7 +618,7 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pip
     
     /* resolve vertex attributes */
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->layouts[slot];
+        const sg_vertex_layout_desc* layout_desc = &desc->input_layouts[slot];
         int layout_byte_size = _sg_vertexlayout_byte_size(layout_desc);
         for (int i = 0; i < layout_desc->num_attrs; i++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
