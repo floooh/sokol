@@ -1,8 +1,36 @@
 /*
     Sokol Gfx generic implementation code
 */
-#ifndef SOKOL_IMPL
-#error "Implementation file included"
+#ifndef SOKOL_IMPL_GUARD
+#error "Please do not include *.impl.h files directly"
+#endif
+
+#ifdef SOKOL_IMPL
+    #ifndef SOKOL_DEBUG
+        #ifdef _DEBUG
+            #define SOKOL_DEBUG (1)
+        #endif
+    #endif
+    #ifndef SOKOL_ASSERT
+        #include <assert.h>
+        #define SOKOL_ASSERT(c) assert(c)
+    #endif
+    #ifndef SOKOL_MALLOC
+        #include <stdlib.h>
+        #define SOKOL_MALLOC(s) malloc(s)
+        #define SOKOL_FREE(p) free(p)
+    #endif
+    #ifndef SOKOL_LOG
+        #ifdef SOKOL_DEBUG 
+            #include <stdio.h>
+            #define SOKOL_LOG(s) puts(s)
+        #else
+            #define SOKOL_LOG(s)
+        #endif
+    #endif
+    #if !(defined(SOKOL_USE_GL)||defined(SOKOL_USE_GLES2)||defined(SOKOL_USE_GLES3)||defined(SOKOL_USE_D3D11)||defined(SOKOL_USE_METAL))
+    #error "Please select a backend with SOKOL_USE_GL, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
+    #endif
 #endif
 
 #include <string.h>
@@ -146,6 +174,7 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     _sg_init_blend_state(&desc->blend);
     _sg_init_rasterizer_state(&desc->rast);
 }
+
 void sg_pipeline_desc_named_attr(sg_pipeline_desc* desc, int slot, const char* name, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
@@ -172,6 +201,15 @@ void sg_pipeline_desc_indexed_attr(sg_pipeline_desc* desc, int slot, int attr_in
     attr->name = 0;
     attr->index = attr_index;
     attr->format = format;
+}
+
+void sg_pipeline_desc_enable_instancing(sg_pipeline_desc* desc, int slot) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((slot >= 0) && (slot < SG_MAX_SHADERSTAGE_BUFFERS));
+    sg_vertex_layout_desc* layout = &desc->layouts[slot];
+    layout->step_func = SG_STEPFUNC_PER_INSTANCE;
+    layout->step_rate = 1;
 }
 
 void sg_init_pass_action(sg_pass_action* pa) {
@@ -280,7 +318,7 @@ static int _sg_slot_index(sg_id id) {
 #elif defined(SOKOL_USE_METAL)
 #include "_sokol_gfx_metal.impl.h"
 #else
-#error "No rendering backend configured (SOKOL_USE_GL, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_GFX_USE_METAL"
+#error "No rendering backend selected"
 #endif
 
 /*-- resource pools ----------------------------------------------------------*/
@@ -928,3 +966,13 @@ void sg_commit() {
     SOKOL_ASSERT(_sg);
     _sg_commit(&_sg->backend);
 } 
+
+void sg_update_buffer(sg_id buf_id, const void* data, int num_bytes) {
+    SOKOL_ASSERT(_sg && data);
+    if (num_bytes > 0) {
+        _sg_buffer* buf = _sg_lookup_buffer(&_sg->pools, buf_id);
+        if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_update_buffer(&_sg->backend, buf, data, num_bytes);
+        }
+    }
+}

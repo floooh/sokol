@@ -17,29 +17,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_DEBUG
-    #ifdef _DEBUG
-        #define SOKOL_DEBUG (1)
-    #endif
-#endif
-#ifndef SOKOL_ASSERT
-    #include <assert.h>
-    #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
-#endif
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG 
-        #include <stdio.h>
-        #define SOKOL_LOG(s) puts(s)
-    #else
-        #define SOKOL_LOG(s)
-    #endif
-#endif
-
 /* 
     sg_id
 
@@ -390,7 +367,7 @@ typedef struct {
     int size;
     sg_buffer_type type;
     sg_usage usage;
-    void* data_ptr;
+    const void* data_ptr;
     int data_size;
 } sg_buffer_desc;
 
@@ -538,6 +515,8 @@ extern void sg_init_pipeline(sg_id pip_id, const sg_pipeline_desc* desc);
 extern void sg_init_pass(sg_id pass_id, const sg_pass_desc* desc);
 
 #ifdef SOKOL_IMPL
+#define SOKOL_IMPL_GUARD
 #include "_sokol_gfx.impl.h"
+#undef SOKOL_IMPL_GUARD
 #endif
 

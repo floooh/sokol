@@ -1,6 +1,9 @@
 /*
     Sokol Gfx GL rendering backend
 */
+#ifndef SOKOL_IMPL_GUARD
+#error "Please do not include *.impl.h files directly"
+#endif
 
 enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
@@ -178,6 +181,7 @@ typedef struct {
     int size;
     sg_buffer_type type;
     sg_usage usage;
+    uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
     GLuint gl_buf[_SG_GL_NUM_UPDATE_SLOTS];
@@ -189,6 +193,7 @@ static void _sg_init_buffer(_sg_buffer* buf) {
     buf->size = 0;
     buf->type = SG_BUFFERTYPE_VERTEXBUFFER;
     buf->usage = SG_USAGE_IMMUTABLE;
+    buf->upd_frame_index = 0;
     buf->num_slots = 0;
     buf->active_slot = 0;
     for (int i = 0; i < _SG_GL_NUM_UPDATE_SLOTS; i++) {
@@ -373,7 +378,7 @@ static void _sg_setup_backend(_sg_backend* state) {
     #endif
     state->in_pass = false;
     state->next_draw_valid = false;
-    state->frame_index = 0;
+    state->frame_index = 1;
     state->cur_primitive_type = GL_TRIANGLES;
     state->cur_index_type = 0;
     state->cur_pipeline = 0;
@@ -958,4 +963,23 @@ static void _sg_commit(_sg_backend* state) {
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(!state->in_pass);
     state->frame_index++;
+}
+
+static void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* data, int num_bytes) {
+    SOKOL_ASSERT(state && buf && data && num_bytes > 0);
+    /* only one update per buffer per frame allowed */
+    SOKOL_ASSERT(buf->upd_frame_index != state->frame_index);
+    SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
+    buf->upd_frame_index = state->frame_index;
+    if (++buf->active_slot >= buf->num_slots) {
+        buf->active_slot = 0;
+    }
+    GLenum gl_tgt = _sg_gl_buffer_target(buf->type);
+    SOKOL_ASSERT(buf->active_slot < _SG_GL_NUM_UPDATE_SLOTS);
+    GLuint gl_buf = buf->gl_buf[buf->active_slot];
+    SOKOL_ASSERT(gl_buf);
+    _SG_GL_CHECK_ERROR();
+    glBindBuffer(gl_tgt, gl_buf);
+    glBufferSubData(gl_tgt, 0, num_bytes, data);
+    _SG_GL_CHECK_ERROR();
 }
