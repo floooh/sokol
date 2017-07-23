@@ -36,6 +36,7 @@ enum {
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UNIFORMS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
+    SG_MAX_MIPMAPS = 16,
 };
 
 /*

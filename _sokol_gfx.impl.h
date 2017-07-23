@@ -648,7 +648,23 @@ static void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
 }
 
 static void _sg_validate_image_desc(const sg_image_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(_sg && desc);
+    SOKOL_ASSERT((desc->type==SG_IMAGETYPE_2D)||(desc->type==SG_IMAGETYPE_CUBE)||(desc->type==SG_IMAGETYPE_3D)||(desc->type==SG_IMAGETYPE_ARRAY));
+    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0) && (desc->depth > 0));
+    SOKOL_ASSERT((desc->num_mipmaps > 0) && (desc->num_mipmaps <= SG_MAX_MIPMAPS));
+    SOKOL_ASSERT((desc->usage==SG_USAGE_IMMUTABLE)||(desc->usage==SG_USAGE_STREAM)||(desc->usage==SG_USAGE_DYNAMIC));
+    SOKOL_ASSERT((desc->color_format != SG_PIXELFORMAT_NONE));
+    SOKOL_ASSERT(desc->sample_count >= 1);
+    #if SOKOL_DEBUG
+    if (desc->render_target) {
+        SOKOL_ASSERT(desc->usage == SG_USAGE_IMMUTABLE);
+        SOKOL_ASSERT((0 == desc->num_data_items) && (0 == desc->data_ptrs) && (0 == desc->data_sizes));
+    }
+    if (desc->num_data_items > 0) {
+        SOKOL_ASSERT(desc->data_ptrs);
+        SOKOL_ASSERT(desc->data_sizes);
+    }
+    #endif
 }
 
 static void _sg_validate_shader_desc(const sg_shader_desc* desc) {
