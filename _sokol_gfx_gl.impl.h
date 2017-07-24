@@ -568,12 +568,37 @@ static void _sg_init_pipeline(_sg_pipeline* pip) {
 }
 
 typedef struct {
+    _sg_image* image;
+    sg_id image_id;
+    int mip_level;
+    int slice;
+    GLuint gl_msaa_resolve_buffer;
+} _sg_attachment;
+
+static void _sg_init_attachment(_sg_attachment* att) {
+    SOKOL_ASSERT(att);
+    att->image = 0;
+    att->image_id = SG_INVALID_ID;
+    att->mip_level = 0;
+    att->slice = 0;
+    att->gl_msaa_resolve_buffer = 0;
+}
+
+typedef struct {
     _sg_slot slot;
+    GLuint gl_fb;
+    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment ds_att;
 } _sg_pass;
 
 static void _sg_init_pass(_sg_pass* pass) {
     SOKOL_ASSERT(pass);
     _sg_init_slot(&pass->slot);
+    pass->gl_fb = 0;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        _sg_init_attachment(&pass->color_atts[i]);
+    }
+    _sg_init_attachment(&pass->ds_att);
 }
 
 /*-- state cache implementation ----------------------------------------------*/
@@ -711,7 +736,7 @@ static bool _sg_query_feature(_sg_backend* state, sg_feature f) {
 
 /*-- GL backend resource creation and destruction ----------------------------*/
 static void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const sg_buffer_desc* desc) {
-    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(state && buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->data_size <= desc->size);
     _SG_GL_CHECK_ERROR();
@@ -737,7 +762,7 @@ static void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const sg_buff
 }
 
 static void _sg_destroy_buffer(_sg_backend* state, _sg_buffer* buf) {
-    SOKOL_ASSERT(buf);
+    SOKOL_ASSERT(state && buf);
     _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < buf->num_slots; slot++) {
         if (buf->gl_buf[slot]) {
@@ -769,8 +794,7 @@ static bool _sg_gl_valid_texture_format(_sg_backend* state, sg_pixel_format fmt)
 }
 
 static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_desc* desc) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(state && img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     img->type = desc->type;
@@ -939,7 +963,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
 }
 
 static void _sg_destroy_image(_sg_backend* state, _sg_image* img) {
-    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(state && img);
     _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < img->num_slots; slot++) {
         if (img->gl_tex[slot]) {
@@ -982,7 +1006,7 @@ static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
 }
 
 static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shader_desc* desc) {
-    SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(state && shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
@@ -1055,7 +1079,7 @@ static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shad
 }
 
 static void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
-    SOKOL_ASSERT(shd);
+    SOKOL_ASSERT(state && shd);
     _SG_GL_CHECK_ERROR();
     if (shd->gl_prog) {
         glDeleteShader(shd->gl_prog);
@@ -1127,11 +1151,135 @@ static void _sg_destroy_pipeline(_sg_backend* state, _sg_pipeline* pip) {
     _sg_init_pipeline(pip);
 }
 
-static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(pass && desc);
+/*
+    _sg_create_pass
+
+    att_imgs must point to a _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS+1] array,
+    first entries are the color attachment images (or nullptr), last entry
+    is the depth-stencil image (or nullptr).
+*/
+static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+    SOKOL_ASSERT(pass && att_images && desc);
     SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    /* FIXME */
-    pass->slot.state = SG_RESOURCESTATE_FAILED;
+    SOKOL_ASSERT(att_images && att_images[0]);
+    _SG_GL_CHECK_ERROR();
+
+    /* copy image pointers and desc attributes */
+    const sg_attachment_desc* att_desc;
+    _sg_attachment* att;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        SOKOL_ASSERT(0 == pass->color_atts[i].image);
+        att_desc = &desc->color_attachments[i];
+        if (att_desc->image != SG_INVALID_ID) {
+            SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image));
+            att = &pass->color_atts[i];
+            SOKOL_ASSERT((att->image == 0) && (att->image_id == SG_INVALID_ID));
+            att->image = att_images[i];
+            att->image_id = att_desc->image;
+            att->mip_level = att_desc->mip_level;
+            att->slice = att_desc->slice;
+        }
+    }
+    SOKOL_ASSERT(0 == pass->ds_att.image);
+    att_desc = &desc->depth_stencil_attachment;
+    const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
+    if (att_desc->image != SG_INVALID_ID) {
+        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image));
+        att = &pass->ds_att;
+        SOKOL_ASSERT((att->image == 0) && (att->image_id == SG_INVALID_ID));
+        att->image = att_images[ds_img_index];
+        att->image_id = att_desc->image;
+        att->mip_level = att_desc->mip_level;
+        att->slice = att_desc->slice;
+    }
+
+    /* store current framebuffer binding (restored at end of function) */
+    GLint gl_orig_fb;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &gl_orig_fb);
+
+    /* create a framebuffer object */
+    glGenFramebuffers(1, &pass->gl_fb);
+    glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
+
+    /* attach msaa render buffer or textures */
+    const bool is_msaa = (0 != att_images[0]->gl_msaa_render_buffer);
+    if (is_msaa) {
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            const _sg_image* att_img = pass->color_atts[i].image;
+            if (att_img) {
+                const GLuint gl_render_buffer = att_img->gl_msaa_render_buffer;
+                SOKOL_ASSERT(gl_render_buffer);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0+i, GL_RENDERBUFFER, gl_render_buffer);
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            const _sg_image* att_img = pass->color_atts[i].image;
+            const int mip_level = pass->color_atts[i].mip_level;
+            const int slice = pass->color_atts[i].slice;
+            if (att_img) {
+                const GLuint gl_tex = att_img->gl_tex[0];
+                SOKOL_ASSERT(gl_tex);
+                const GLenum gl_att = GL_COLOR_ATTACHMENT0 + i;
+                switch (att_img->type) {
+                    case SG_IMAGETYPE_2D:
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att, GL_TEXTURE_2D, gl_tex, mip_level);
+                        break;
+                    case SG_IMAGETYPE_CUBE:
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
+                        break;
+                    default:
+                        /* 3D- or array-texture */
+                        #if !defined(ORYOL_USE_GLES2)
+                        glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
+                        #endif
+                        break;
+                }
+            }
+        }
+    }
+    /* attach depth-stencil buffer to framebuffer */
+    if (pass->ds_att.image) {
+        const GLuint gl_render_buffer = pass->ds_att.image->gl_depth_render_buffer;
+        SOKOL_ASSERT(gl_render_buffer);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+        if (_sg_is_depth_stencil_format(pass->ds_att.image->depth_format)) {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+        }
+    }
+
+    /* check if framebuffer is complete */
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        SOKOL_LOG("Framebuffer completeness check failed!\n");
+        pass->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    
+    /* FIXME: MSAA resolve buffers */
+
+    /* restore original framebuffer binding */
+    glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
+    _SG_GL_CHECK_ERROR();
+    pass->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+static void _sg_destroy_pass(_sg_backend* state, _sg_pass* pass) {
+    SOKOL_ASSERT(state && pass);
+    _SG_GL_CHECK_ERROR();
+    if (0 != pass->gl_fb) {
+        glDeleteFramebuffers(1, &pass->gl_fb);
+    }
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (pass->color_atts[i].gl_msaa_resolve_buffer) {
+            glDeleteFramebuffers(1, &pass->color_atts[i].gl_msaa_resolve_buffer);
+        }
+    }
+    if (pass->ds_att.gl_msaa_resolve_buffer) {
+        glDeleteFramebuffers(1, &pass->ds_att.gl_msaa_resolve_buffer);
+    }
+    _SG_GL_CHECK_ERROR();
+    _sg_init_pass(pass);
 }
 
 /*-- GL backend rendering functions ------------------------------------------*/

@@ -233,6 +233,21 @@ void sg_init_vertex_step(sg_pipeline_desc* desc, int input_layout, sg_step_func 
     layout->step_rate = step_rate;
 }
 
+void sg_init_pass_desc(sg_pass_desc* desc) {
+    SOKOL_ASSERT(desc);
+    desc->_init_guard = _SG_INIT_GUARD;
+    sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
+    att_desc->image = SG_INVALID_ID;
+    att_desc->mip_level = 0;
+    att_desc->slice = 0;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        att_desc = &desc->color_attachments[i];
+        att_desc->image = SG_INVALID_ID;
+        att_desc->mip_level = 0;
+        att_desc->slice = 0;
+    }
+}
+
 void sg_init_pass_action(sg_pass_action* pa) {
     SOKOL_ASSERT(pa);
     pa->_init_guard = _SG_INIT_GUARD;
@@ -355,6 +370,12 @@ static bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) {
         default:
             return false;
     }
+}
+
+/* return true if pixel format is a depth-stencil format */
+static bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
+    /* FIXME: more depth stencil formats? */
+    return (SG_PIXELFORMAT_DEPTHSTENCIL == fmt);
 }
 
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
@@ -776,7 +797,7 @@ static void _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
 }
 
 static void _sg_validate_pass_desc(const sg_pass_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(desc->color_attachments[0].image != SG_INVALID_ID);
 }
 
 static void _sg_validate_draw_state(const sg_draw_state* ds) {
@@ -907,7 +928,26 @@ void sg_init_pass(sg_id pass_id, const sg_pass_desc* desc) {
     _sg_validate_pass_desc(desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_pass(&_sg->backend, pass, desc);
+    /* lookup pass attachment image pointers */
+    _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (desc->color_attachments[i].image) {
+            att_imgs[i] = _sg_lookup_image(&_sg->pools, desc->color_attachments[i].image);
+            SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
+        }
+        else {
+            att_imgs[i] = 0;
+        }
+    }
+    const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
+    if (desc->depth_stencil_attachment.image) {
+        att_imgs[ds_att_index] = _sg_lookup_image(&_sg->pools, desc->depth_stencil_attachment.image);
+        SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
+    }
+    else {
+        att_imgs[ds_att_index] = 0;
+    }
+    _sg_create_pass(&_sg->backend, pass, att_imgs, desc);
     SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
@@ -991,6 +1031,15 @@ void sg_destroy_pipeline(sg_id pip_id) {
     if (pip) {
         _sg_destroy_pipeline(&_sg->backend, pip);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_PIPELINE], pip_id);
+    }
+}
+
+void sg_destroy_pass(sg_id pass_id) {
+    SOKOL_ASSERT(_sg);
+    _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);
+    if (pass) {
+        _sg_destroy_pass(&_sg->backend, pass);
+        _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_PASS], pass_id);
     }
 }
 

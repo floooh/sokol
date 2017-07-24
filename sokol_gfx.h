@@ -476,8 +476,15 @@ typedef struct {
 } sg_pipeline_desc;
 
 typedef struct {
+    sg_id image;
+    uint16_t mip_level;
+    uint16_t slice;
+} sg_attachment_desc;
+
+typedef struct {
     uint32_t _init_guard;
-    /* FIXME */
+    sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
+    sg_attachment_desc depth_stencil_attachment;
 } sg_pass_desc;
 
 typedef struct {
@@ -491,7 +498,6 @@ typedef struct {
 
 /* struct initializers */
 extern void sg_init_desc(sg_desc* desc);
-extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
@@ -501,6 +507,8 @@ extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, sg_vertex_format format);
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, sg_vertex_format format);
 extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_layout, sg_step_func step_func, int step_rate);
+extern void sg_init_pass_desc(sg_pass_desc* desc);
+extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */
