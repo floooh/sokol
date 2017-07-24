@@ -72,6 +72,11 @@ void sg_init_image_desc(sg_image_desc* desc) {
     desc->color_format = SG_PIXELFORMAT_RGBA8;
     desc->depth_format = SG_PIXELFORMAT_NONE;
     desc->sample_count = 1;
+    desc->min_filter = SG_FILTER_NEAREST;
+    desc->mag_filter = SG_FILTER_NEAREST;
+    desc->wrap_u = SG_WRAP_REPEAT;
+    desc->wrap_v = SG_WRAP_REPEAT;
+    desc->wrap_w = SG_WRAP_REPEAT;
     desc->num_data_items = 0;
     desc->data_ptrs = 0;
     desc->data_sizes = 0;
@@ -307,6 +312,48 @@ static int _sg_uniform_size(sg_uniform_type type, int count) {
         case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
         case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
         case SG_UNIFORMTYPE_MAT4:       return 64 * count;
+    }
+}
+
+/* return true if pixel format is a compressed format */
+static bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_DXT5:
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* return true if pixel format is a valid render target format */
+static bool _sg_is_valid_rendertarget_color_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_R10G10B10A2:
+        case SG_PIXELFORMAT_RGBA32F:
+        case SG_PIXELFORMAT_RGBA16F:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* return true if pixel format is a valid depth format */
+static bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -658,7 +705,14 @@ static void _sg_validate_image_desc(const sg_image_desc* desc) {
     #if SOKOL_DEBUG
     if (desc->render_target) {
         SOKOL_ASSERT(desc->usage == SG_USAGE_IMMUTABLE);
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(desc->color_format));
+        if (desc->depth_format != SG_PIXELFORMAT_NONE) {
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(desc->depth_format));
+        }
         SOKOL_ASSERT((0 == desc->num_data_items) && (0 == desc->data_ptrs) && (0 == desc->data_sizes));
+    }
+    else {
+        SOKOL_ASSERT(desc->depth_format == SG_PIXELFORMAT_NONE);
     }
     if (desc->num_data_items > 0) {
         SOKOL_ASSERT(desc->data_ptrs);
@@ -811,7 +865,7 @@ void sg_init_buffer(sg_id buf_id, const sg_buffer_desc* desc) {
     _sg_validate_buffer_desc(desc);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg->pools, buf_id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_buffer(buf, desc);
+    _sg_create_buffer(&_sg->backend, buf, desc);
     SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
@@ -821,7 +875,7 @@ void sg_init_image(sg_id img_id, const sg_image_desc* desc) {
     _sg_validate_image_desc(desc);
     _sg_image* img = _sg_lookup_image(&_sg->pools, img_id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_image(img, desc);
+    _sg_create_image(&_sg->backend, img, desc);
     SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
@@ -831,7 +885,7 @@ void sg_init_shader(sg_id shd_id, const sg_shader_desc* desc) {
     _sg_validate_shader_desc(desc);
     _sg_shader* shd = _sg_lookup_shader(&_sg->pools, shd_id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_shader(shd, desc);
+    _sg_create_shader(&_sg->backend, shd, desc);
     SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
@@ -843,7 +897,7 @@ void sg_init_pipeline(sg_id pip_id, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
     _sg_shader* shd = _sg_lookup_shader(&_sg->pools, desc->shader);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
-    _sg_create_pipeline(pip, shd, desc);
+    _sg_create_pipeline(&_sg->backend, pip, shd, desc);
     SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
@@ -853,7 +907,7 @@ void sg_init_pass(sg_id pass_id, const sg_pass_desc* desc) {
     _sg_validate_pass_desc(desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_pass(pass, desc);
+    _sg_create_pass(&_sg->backend, pass, desc);
     SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
@@ -908,8 +962,17 @@ void sg_destroy_buffer(sg_id buf_id) {
     SOKOL_ASSERT(_sg);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg->pools, buf_id);
     if (buf) {
-        _sg_destroy_buffer(buf);
+        _sg_destroy_buffer(&_sg->backend, buf);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_BUFFER], buf_id);
+    }
+}
+
+void sg_destroy_image(sg_id img_id) {
+    SOKOL_ASSERT(_sg);
+    _sg_image* img = _sg_lookup_image(&_sg->pools, img_id);
+    if (img) {
+        _sg_destroy_image(&_sg->backend, img);
+        _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_IMAGE], img_id);
     }
 }
 
@@ -917,7 +980,7 @@ void sg_destroy_shader(sg_id shd_id) {
     SOKOL_ASSERT(_sg);
     _sg_shader* shd = _sg_lookup_shader(&_sg->pools, shd_id);
     if (shd) {
-        _sg_destroy_shader(shd);
+        _sg_destroy_shader(&_sg->backend, shd);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_SHADER], shd_id);
     }
 }
@@ -926,7 +989,7 @@ void sg_destroy_pipeline(sg_id pip_id) {
     SOKOL_ASSERT(_sg);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id);
     if (pip) {
-        _sg_destroy_pipeline(pip);
+        _sg_destroy_pipeline(&_sg->backend, pip);
         _sg_pool_free_id(&_sg->pools.pool[SG_RESOURCETYPE_PIPELINE], pip_id);
     }
 }

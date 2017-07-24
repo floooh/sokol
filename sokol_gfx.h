@@ -155,6 +155,7 @@ typedef enum {
     SG_PIXELFORMAT_PVRTC2_RGB,
     SG_PIXELFORMAT_PVRTC4_RGB,
     SG_PIXELFORMAT_PVRTC2_RGBA,
+    SG_PIXELFORMAT_PVRTC4_RGBA,
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
 } sg_pixel_format;
@@ -177,9 +178,9 @@ typedef enum {
 } sg_filter;
 
 typedef enum {
-    SG_CLAMP_TO_EDGE,
-    SG_REPEAT,
-    SG_MIRRORED_REPEAT,
+    SG_WRAP_CLAMP_TO_EDGE,
+    SG_WRAP_REPEAT,
+    SG_WRAP_MIRRORED_REPEAT,
 } sg_wrap;
 
 typedef enum {
@@ -389,17 +390,22 @@ typedef struct {
     uint32_t _init_guard;
     sg_image_type type;
     bool render_target;
-    int width;
-    int height;
+    uint16_t width;
+    uint16_t height;
     union {
-        int depth;
-        int layers;
+        uint16_t depth;
+        uint16_t layers;
     };
-    int num_mipmaps;
+    uint16_t num_mipmaps;
     sg_usage usage;
     sg_pixel_format color_format;
     sg_pixel_format depth_format;   /* render targets only */
     int sample_count;               /* render targets only */
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
     int num_data_items;
     const void** data_ptrs;
     const int* data_sizes;

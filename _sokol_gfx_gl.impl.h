@@ -12,6 +12,33 @@ enum {
 #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
 #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
 #endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#endif
+#ifndef GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
+#define GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG 0x8C01
+#endif
+#ifndef GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG
+#define GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG 0x8C00
+#endif
+#ifndef GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
+#define GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG 0x8C03
+#endif
+#ifndef GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
+#define GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG 0x8C02
+#endif
+#ifndef GL_COMPRESSED_RGB8_ETC2
+#define GL_COMPRESSED_RGB8_ETC2 0x9274
+#endif
+#ifndef GL_COMPRESSED_SRGB8_ETC2
+#define GL_COMPRESSED_SRGB8_ETC2 0x9275
+#endif
 
 #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); } 
 
@@ -20,6 +47,18 @@ static GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:    return GL_ARRAY_BUFFER;
         case SG_BUFFERTYPE_INDEXBUFFER:     return GL_ELEMENT_ARRAY_BUFFER;
+    }
+}
+
+static GLenum _sg_gl_texture_target(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
+        case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
+        #if !defined(SOKOL_USE_GLES2)
+        case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
+        case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
+        #endif
+        default: return 0;
     }
 }
 
@@ -175,6 +214,184 @@ static GLenum _sg_gl_cull_face(sg_face f) {
     }
 }
 
+static GLenum _sg_gl_filter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:                 return GL_NEAREST;
+        case SG_FILTER_LINEAR:                  return GL_LINEAR;
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:  return GL_NEAREST_MIPMAP_NEAREST;
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return GL_NEAREST_MIPMAP_LINEAR;
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return GL_LINEAR_MIPMAP_NEAREST;
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return GL_LINEAR_MIPMAP_LINEAR;
+    }
+}
+
+static GLenum _sg_gl_wrap(sg_wrap w) {
+    switch (w) {
+        case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
+        case SG_WRAP_REPEAT:            return GL_REPEAT;
+        case SG_WRAP_MIRRORED_REPEAT:   return GL_MIRRORED_REPEAT;
+    }
+}
+
+static GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA32F:
+        case SG_PIXELFORMAT_R32F:
+            return GL_FLOAT;
+        case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_R16F:
+            return GL_HALF_FLOAT;
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_RGB8:
+        case SG_PIXELFORMAT_L8:
+            return GL_UNSIGNED_BYTE;
+        case SG_PIXELFORMAT_R10G10B10A2:
+            return GL_UNSIGNED_INT_2_10_10_10_REV;
+        case SG_PIXELFORMAT_R5G5B5A1:
+            return GL_UNSIGNED_SHORT_5_5_5_1;
+        case SG_PIXELFORMAT_R5G6B5:
+            return GL_UNSIGNED_SHORT_5_6_5;
+        case SG_PIXELFORMAT_RGBA4:
+            return GL_UNSIGNED_SHORT_4_4_4_4;
+        case SG_PIXELFORMAT_DEPTH:
+            /* FIXME */
+            return GL_UNSIGNED_SHORT;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            /* FIXME */
+            return GL_UNSIGNED_INT_24_8;
+        default:
+            SOKOL_LOG("_sg_gl_teximage_type(): invalid pixel format!\n");
+            return 0;
+    }
+}
+
+static GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_NONE:
+            return 0;
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_R5G5B5A1:
+        case SG_PIXELFORMAT_RGBA4:
+        case SG_PIXELFORMAT_RGBA32F:
+        case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_R10G10B10A2:
+            return GL_RGBA;
+        case SG_PIXELFORMAT_RGB8:
+        case SG_PIXELFORMAT_R5G6B5:
+            return GL_RGB;
+        case SG_PIXELFORMAT_L8:
+        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_R16F:
+            #if defined(SOKOL_USE_GLES2)
+            return GL_LUMINANCE;
+            #else
+            return GL_RED;
+            #endif
+        case SG_PIXELFORMAT_DEPTH:
+            return GL_DEPTH_COMPONENT;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            return GL_DEPTH_STENCIL;
+        case SG_PIXELFORMAT_DXT1:
+            return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case SG_PIXELFORMAT_DXT3:
+            return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case SG_PIXELFORMAT_DXT5:
+            return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+            return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+            return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
+        case SG_PIXELFORMAT_ETC2_RGB8:
+            return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            return GL_COMPRESSED_SRGB8_ETC2;
+    }
+}
+
+static GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
+    #if defined(SOKOL_USE_GLES2)
+    return _sg_gl_teximage_format(fmt);
+    #else
+    switch (fmt) {
+        case SG_PIXELFORMAT_NONE:
+            return 0;
+        case SG_PIXELFORMAT_RGBA8:
+            return GL_RGBA8;
+        case SG_PIXELFORMAT_RGB8:
+            return GL_RGB8;
+        case SG_PIXELFORMAT_RGBA4:
+            return GL_RGBA4;
+        case SG_PIXELFORMAT_R5G6B5:
+            #if defined(SOKOL_USE_GLES3)
+                return GL_RGB565;
+            #else
+                return GL_RGB5;
+            #endif
+        case SG_PIXELFORMAT_R5G5B5A1:
+            return GL_RGB5_A1;
+        case SG_PIXELFORMAT_R10G10B10A2:
+            return GL_RGB10_A2;
+        case SG_PIXELFORMAT_RGBA32F:
+            return GL_RGBA32F;
+        case SG_PIXELFORMAT_RGBA16F:
+            return GL_RGBA16F;
+        case SG_PIXELFORMAT_R32F:
+            return GL_R32F;
+        case SG_PIXELFORMAT_R16F:
+            return GL_R16F;
+        case SG_PIXELFORMAT_L8:
+            return GL_R8;
+        case SG_PIXELFORMAT_DEPTH:
+            /* FIXME */
+            return GL_DEPTH_COMPONENT16;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            /* FIXME */
+            return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_DXT1:
+            return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case SG_PIXELFORMAT_DXT3:
+            return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case SG_PIXELFORMAT_DXT5:
+            return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+            return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+            return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
+        case SG_PIXELFORMAT_ETC2_RGB8:
+            return GL_COMPRESSED_RGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            return GL_COMPRESSED_SRGB8_ETC2;
+    }
+    #endif
+}
+
+static GLenum _sg_gl_cubeface_target(int face_index) {
+    switch (face_index) {
+        case 0: return GL_TEXTURE_CUBE_MAP_POSITIVE_X;
+        case 1: return GL_TEXTURE_CUBE_MAP_NEGATIVE_X;
+        case 2: return GL_TEXTURE_CUBE_MAP_POSITIVE_Y;
+        case 3: return GL_TEXTURE_CUBE_MAP_NEGATIVE_Y;
+        case 4: return GL_TEXTURE_CUBE_MAP_POSITIVE_Z;
+        default: return GL_TEXTURE_CUBE_MAP_NEGATIVE_Z;
+    }
+}
+
+static GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16; /* FIXME */
+        case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;  /* FIXME */
+        default:    return 0;
+    }
+}
+
 /*-- GL backend resource declarations ----------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -203,11 +420,57 @@ static void _sg_init_buffer(_sg_buffer* buf) {
 
 typedef struct {
     _sg_slot slot;
+    sg_image_type type;
+    bool render_target;
+    uint16_t width;
+    uint16_t height;
+    uint16_t depth;
+    uint16_t num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    GLenum gl_target;
+    GLuint gl_depth_render_buffer;
+    GLuint gl_msaa_render_buffer;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+    GLuint gl_tex[_SG_GL_NUM_UPDATE_SLOTS];
 } _sg_image;
 
 static void _sg_init_image(_sg_image* img) {
     SOKOL_ASSERT(img);
     _sg_init_slot(&img->slot);
+    img->type = SG_IMAGETYPE_INVALID;
+    img->render_target = false;
+    img->width = 0;
+    img->height = 0;
+    img->depth = 0;
+    img->num_mipmaps = 0;
+    img->usage = SG_USAGE_IMMUTABLE;
+    img->color_format = SG_PIXELFORMAT_NONE;
+    img->depth_format = SG_PIXELFORMAT_NONE;
+    img->sample_count = 0;
+    img->min_filter = SG_FILTER_NEAREST;
+    img->mag_filter = SG_FILTER_NEAREST;
+    img->wrap_u = SG_WRAP_REPEAT;
+    img->wrap_v = SG_WRAP_REPEAT;
+    img->wrap_w = SG_WRAP_REPEAT;
+    img->gl_target = 0;
+    img->gl_depth_render_buffer = 0;
+    img->gl_msaa_render_buffer = 0;
+    img->upd_frame_index = 0;
+    img->num_slots = 0;
+    img->active_slot = 0;
+    for (int i = 0; i < _SG_GL_NUM_UPDATE_SLOTS; i++) {
+        img->gl_tex[i] = 0;
+    }
 }
 
 typedef struct {
@@ -447,7 +710,7 @@ static bool _sg_query_feature(_sg_backend* state, sg_feature f) {
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-static void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+static void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->data_size <= desc->size);
@@ -455,12 +718,7 @@ static void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     buf->size = desc->size;
     buf->type = desc->type;
     buf->usage = desc->usage;
-    if (desc->usage == SG_USAGE_IMMUTABLE) {
-        buf->num_slots = 1;
-    }
-    else {
-        buf->num_slots = _SG_GL_NUM_UPDATE_SLOTS;
-    }
+    buf->num_slots = desc->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
     buf->active_slot = 0;
     GLenum gl_target = _sg_gl_buffer_target(buf->type);
     GLenum gl_usage  = _sg_gl_usage(buf->usage);
@@ -478,20 +736,224 @@ static void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-static void _sg_destroy_buffer(_sg_buffer* buf) {
+static void _sg_destroy_buffer(_sg_backend* state, _sg_buffer* buf) {
     SOKOL_ASSERT(buf);
+    _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < buf->num_slots; slot++) {
         if (buf->gl_buf[slot]) {
             glDeleteBuffers(1, &buf->gl_buf[slot]);
         }
     }
+    _SG_GL_CHECK_ERROR();
     _sg_init_buffer(buf);
 }
 
-static void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
+static bool _sg_gl_valid_texture_format(_sg_backend* state, sg_pixel_format fmt) {
+    SOKOL_ASSERT(state);
+    switch (fmt) {
+        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_DXT5:
+            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
+        default:
+            return true;
+    }
+}
+
+static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(state);
     SOKOL_ASSERT(img && desc);
-    /* FIXME */
-    img->slot.state = SG_RESOURCESTATE_FAILED;
+    SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
+    _SG_GL_CHECK_ERROR();
+    img->type = desc->type;
+    img->render_target = desc->render_target;
+    img->width = desc->width;
+    img->height = desc->height;
+    img->depth = desc->depth;
+    img->num_mipmaps = desc->num_mipmaps;
+    img->usage = desc->usage;
+    img->color_format = desc->color_format;
+    img->depth_format = desc->depth_format;
+    img->sample_count = desc->sample_count;
+    img->min_filter = desc->min_filter;
+    img->mag_filter = desc->mag_filter;
+    img->wrap_u = desc->wrap_u;
+    img->wrap_v = desc->wrap_v;
+    img->wrap_w = desc->wrap_w;
+
+    /* check if texture format is support */
+    if (!_sg_gl_valid_texture_format(state, img->color_format)) {
+        SOKOL_LOG("compressed texture format not supported by GL context\n");
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    /* check for optional texture types */
+    if ((img->type == SG_IMAGETYPE_3D) && !state->features[SG_FEATURE_TEXTURE_3D]) {
+        SOKOL_LOG("3D textures not supported by GL context\n");
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    if ((img->type == SG_IMAGETYPE_ARRAY) && !state->features[SG_FEATURE_TEXTURE_ARRAY]) {
+        SOKOL_LOG("array textures not supported by GL context\n");
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    if ((img->depth_format != SG_PIXELFORMAT_NONE) && !_sg_is_valid_rendertarget_depth_format(img->depth_format)) {
+        SOKOL_LOG("depth_format is not a valid render target depth format!\n");
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+
+    /* create 1 or 2 GL textures, depending on requested update strategy */
+    img->num_slots = img->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
+    img->active_slot = 0;
+
+    /* create the GL color texture(s) */
+    const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->color_format);
+    const GLenum gl_target = _sg_gl_texture_target(img->type);
+    const GLenum gl_format = _sg_gl_teximage_format(img->color_format);
+    const bool is_compressed = _sg_is_compressed_pixel_format(img->color_format);
+    for (int slot = 0; slot < img->num_slots; slot++) {
+        glGenTextures(1, &img->gl_tex[slot]);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(gl_target, img->gl_tex[slot]);
+        GLenum gl_min_filter = _sg_gl_filter(desc->min_filter);
+        GLenum gl_mag_filter = _sg_gl_filter(desc->mag_filter);
+        if (1 == img->num_mipmaps) {
+            if ((gl_min_filter==GL_NEAREST_MIPMAP_NEAREST)||(gl_min_filter==GL_NEAREST_MIPMAP_LINEAR)) {
+                gl_min_filter = GL_NEAREST;
+            }
+            else if ((gl_min_filter==GL_LINEAR_MIPMAP_NEAREST)||(gl_min_filter==GL_LINEAR_MIPMAP_LINEAR)) {
+                gl_min_filter = GL_LINEAR;
+            }
+            glTexParameteri(gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
+            glTexParameteri(gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+            if (img->type == SG_IMAGETYPE_CUBE) {
+                glTexParameteri(gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            }
+            else {
+                glTexParameteri(gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
+                glTexParameteri(gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
+                #if !defined(SOKOL_USE_GLES2)
+                if (img->type == SG_IMAGETYPE_3D) {
+                    glTexParameteri(gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
+                }
+                #endif
+            }
+        }
+        const uint16_t num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
+        int data_index = 0;
+        for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
+            for (uint16_t face_index = 0; face_index < num_faces; face_index++, data_index++) {
+                GLenum gl_img_target = gl_target;
+                if (SG_IMAGETYPE_CUBE == img->type) {
+                    gl_img_target = _sg_gl_cubeface_target(face_index);
+                }
+                const GLvoid* data_ptr = 0;
+                int data_size = 0;
+                if (data_index < desc->num_data_items) {
+                    SOKOL_ASSERT(desc->data_ptrs && desc->data_ptrs[data_index]);
+                    SOKOL_ASSERT(desc->data_sizes && (desc->data_sizes[data_index] > 0));
+                    data_ptr = desc->data_ptrs[data_index];
+                    data_size = desc->data_sizes[data_index];
+                }
+                uint16_t mip_width = img->width >> mip_index;
+                if (mip_width == 0) {
+                    mip_width = 1;
+                }
+                uint16_t mip_height = img->height >> mip_index;
+                if (mip_height == 0) {
+                    mip_height = 1;
+                }
+                if ((SG_IMAGETYPE_2D == img->type) || (SG_IMAGETYPE_CUBE == img->type)) {
+                    if (is_compressed) {
+                        glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
+                            mip_width, mip_height, 0, data_size, data_ptr);
+                    }
+                    else {
+                        const GLenum gl_type = _sg_gl_teximage_type(img->color_format);
+                        glTexImage2D(gl_img_target, mip_index, gl_internal_format,
+                            mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
+                    }
+                }
+                #if !defined(SOKOL_USE_GLES2)
+                else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
+                    uint16_t mip_depth = img->depth >> mip_index;
+                    if (mip_depth == 0) {
+                        mip_depth = 1;
+                    }
+                    if (is_compressed) {
+                        glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
+                            mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
+                    }
+                    else {
+                        const GLenum gl_type = _sg_gl_teximage_type(img->color_format);
+                        glTexImage3D(gl_img_target, mip_index, gl_internal_format,
+                            mip_width, mip_height, mip_depth, 0, gl_format, gl_type, data_ptr);
+                    }
+                }
+                #endif
+            }
+        }
+    }
+
+    /* additional render target stuff */
+    if (img->render_target) {
+        /* MSAA render buffer */
+        #if !defined(SOKOL_USE_GLES2)
+        const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+        if (msaa) {
+            glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
+        }
+        #endif
+
+        /* depth buffer */
+        if (img->depth_format != SG_PIXELFORMAT_NONE) {
+            glGenRenderbuffers(1, &img->gl_depth_render_buffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
+            GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->depth_format);
+            #if !defined(SOKOL_US_GLES2)
+            if (msaa) {
+                glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
+            }
+            else
+            #endif
+            {
+                glRenderbufferStorage(GL_RENDERBUFFER, gl_depth_format, img->width, img->height);
+            }
+        }
+    }
+    _SG_GL_CHECK_ERROR();
+    img->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+static void _sg_destroy_image(_sg_backend* state, _sg_image* img) {
+    SOKOL_ASSERT(img);
+    _SG_GL_CHECK_ERROR();
+    for (int slot = 0; slot < img->num_slots; slot++) {
+        if (img->gl_tex[slot]) {
+            glDeleteTextures(1, &img->gl_tex[slot]);
+        }
+    }
+    if (img->gl_depth_render_buffer) {
+        glDeleteRenderbuffers(1, &img->gl_depth_render_buffer);
+    }
+    if (img->gl_msaa_render_buffer) {
+        glDeleteRenderbuffers(1, &img->gl_msaa_render_buffer);
+    }
+    _SG_GL_CHECK_ERROR();
+    _sg_init_image(img);
 }
 
 static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
@@ -519,8 +981,9 @@ static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
     return gl_shd;
 }
 
-static void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
+static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
     GLuint gl_vs = _sg_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
@@ -591,16 +1054,19 @@ static void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     shd->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-static void _sg_destroy_shader(_sg_shader* shd) {
+static void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
     SOKOL_ASSERT(shd);
+    _SG_GL_CHECK_ERROR();
     if (shd->gl_prog) {
         glDeleteShader(shd->gl_prog);
     }
+    _SG_GL_CHECK_ERROR();
     _sg_init_shader(shd);
 }
 
-static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+static void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
+    SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader == shd->slot.id);
     SOKOL_ASSERT(shd->gl_prog);
@@ -656,13 +1122,14 @@ static void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pip
     pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-static void _sg_destroy_pipeline(_sg_pipeline* pip) {
+static void _sg_destroy_pipeline(_sg_backend* state, _sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     _sg_init_pipeline(pip);
 }
 
-static void _sg_create_pass(_sg_pass* pass, const sg_pass_desc* desc) {
+static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
+    SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
     /* FIXME */
     pass->slot.state = SG_RESOURCESTATE_FAILED;
 }
