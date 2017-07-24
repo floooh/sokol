@@ -294,6 +294,8 @@ static void _sg_init_pipeline(_sg_pipeline* pip) {
     _sg_init_slot(&pip->slot);
     pip->shader = 0;
     pip->shader_id = SG_INVALID_ID;
+    pip->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    pip->index_type = SG_INDEXTYPE_NONE;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_init_gl_attr(&pip->gl_attrs[i]);
     }
@@ -496,8 +498,7 @@ static GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
     SOKOL_ASSERT(src);
     _SG_GL_CHECK_ERROR();
     GLuint gl_shd = glCreateShader(_sg_gl_shader_stage(stage));
-    int src_len = strlen(src);
-    glShaderSource(gl_shd, 1, &src, &src_len);
+    glShaderSource(gl_shd, 1, &src, 0);
     glCompileShader(gl_shd);
     GLint compile_status = 0;
     glGetShaderiv(gl_shd, GL_COMPILE_STATUS, &compile_status);
