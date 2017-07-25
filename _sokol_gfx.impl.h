@@ -47,6 +47,8 @@ void sg_init_desc(sg_desc* desc) {
     for (int i = 0; i < SG_NUM_RESOURCETYPES; i++) {
         desc->resource_pool_size[i] = 128;
     }
+    /* shaders are the biggest object type, but usually don't need that many */
+    desc->resource_pool_size[SG_RESOURCETYPE_SHADER] = 32;
 }
 
 void sg_init_buffer_desc(sg_buffer_desc* desc) {

@@ -476,18 +476,18 @@ static void _sg_init_image(_sg_image* img) {
 typedef struct {
     GLint gl_loc;
     sg_uniform_type type;
-    int offset;
-    int count;
+    uint8_t count;
+    uint16_t offset;
 } _sg_uniform;
 
 typedef struct {
-    int size;
-    int num_uniforms;
+    uint16_t size;
+    uint16_t num_uniforms;
     _sg_uniform uniforms[SG_MAX_UNIFORMS];
 } _sg_uniform_block;
 
 typedef struct {
-    int num_uniform_blocks;
+    uint16_t num_uniform_blocks;
     _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     /* FIXME: shader image */
 } _sg_shader_stage;
@@ -933,8 +933,8 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
     /* additional render target stuff */
     if (img->render_target) {
         /* MSAA render buffer */
-        #if !defined(SOKOL_USE_GLES2)
         const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+        #if !defined(SOKOL_USE_GLES2)
         if (msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
@@ -1519,13 +1519,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
                 glEnableVertexAttribArray(attr_index);
             }
             if (cache_attr->divisor != attr->divisor) {
-                #ifdef SOKOL_USE_GLES2
-                if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
-                    glVertexAttribDivisorEXT(attr_index, attr->divisor);
-                }
-                #else
                 glVertexAttribDivisor(attr_index, attr->divisor);
-                #endif
             }
         }
         else {
@@ -1602,13 +1596,9 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            #ifdef SOKOL_USE_GLES2
             if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
-                glDrawElementsInstancedEXT(p_type, num_elements, i_type, indices, num_instances);
+                glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
-            #else
-            glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
-            #endif
         }
     }
     else {
@@ -1617,13 +1607,9 @@ static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            #ifdef SOKOL_USE_GLES2
             if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
-                glDrawArraysInstancedEXT(p_type, base_element, num_elements, num_instances);
+                glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
-            #else
-            glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
-            #endif
         }
     }
 }
