@@ -143,6 +143,19 @@ void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const ch
     u_desc->array_count = array_count;
 }
 
+void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
+    SOKOL_ASSERT(name);
+    SOKOL_ASSERT(type != SG_IMAGETYPE_INVALID);
+    sg_shader_stage_desc* s = (stage == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
+    SOKOL_ASSERT(s->num_images < SG_MAX_SHADERSTAGE_IMAGES);
+    SOKOL_ASSERT(s->image[s->num_images].type == SG_IMAGETYPE_INVALID);
+    sg_shader_image_desc* img_desc = &s->image[s->num_images++];
+    img_desc->name = name;
+    img_desc->type = type;
+}
+
 static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
     layout->step_func = SG_STEPFUNC_PER_VERTEX;
@@ -903,6 +916,8 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
         }
     }
     /* check vertex shader textures */
+    /* number and type of images must match what shader expects */
+    SOKOL_ASSERT(num_vs_imgs == pip->shader->stage[SG_SHADERSTAGE_VS].num_images);
     for (int i = 0; i < num_vs_imgs; i++) {
         const _sg_image* img = vs_imgs[i];
         if (!img) {
@@ -913,8 +928,11 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
             /* image exists, but not valid for rendering */
             return false;
         }
+        SOKOL_ASSERT(img->type == pip->shader->stage[SG_SHADERSTAGE_VS].images[i].type);
     }
     /* check fragment shader textures */
+    /* number and type of images must match what shader expects */
+    SOKOL_ASSERT(num_fs_imgs == pip->shader->stage[SG_SHADERSTAGE_FS].num_images);
     for (int i = 0; i < num_fs_imgs; i++) {
         const _sg_image* img = fs_imgs[i];
         if (!img) {
@@ -925,6 +943,7 @@ static bool _sg_validate_draw(_sg_pipeline* pip,
             /* image exists, but not valid for for rendering */
             return false;
         }
+        SOKOL_ASSERT(img->type == pip->shader->stage[SG_SHADERSTAGE_FS].images[i].type);
     }
     /* all ok for rendering! */
     return true;

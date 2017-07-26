@@ -487,9 +487,16 @@ typedef struct {
 } _sg_uniform_block;
 
 typedef struct {
+    sg_image_type type;
+    GLint gl_loc;
+    int gl_tex_slot;
+} _sg_shader_image;
+
+typedef struct {
     uint16_t num_uniform_blocks;
+    uint16_t num_images;
     _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    /* FIXME: shader image */
+    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_shader_stage;
 
 typedef struct {
@@ -505,6 +512,7 @@ static void _sg_init_shader(_sg_shader* shd) {
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage* stage = &shd->stage[stage_index];
         stage->num_uniform_blocks = 0;
+        stage->num_images = 0;
         for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
             _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = 0;
@@ -516,6 +524,12 @@ static void _sg_init_shader(_sg_shader* shd) {
                 u->offset = 0;
                 u->count = 0;
             }
+        }
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            _sg_shader_image* img = &stage->images[img_index];
+            img->type = SG_IMAGETYPE_INVALID;
+            img->gl_loc = -1;
+            img->gl_tex_slot = -1;
         }
     }
 }
@@ -845,14 +859,14 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
     img->active_slot = 0;
 
     /* create the GL color texture(s) */
+    img->gl_target = _sg_gl_texture_target(img->type);
     const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->color_format);
-    const GLenum gl_target = _sg_gl_texture_target(img->type);
     const GLenum gl_format = _sg_gl_teximage_format(img->color_format);
     const bool is_compressed = _sg_is_compressed_pixel_format(img->color_format);
     for (int slot = 0; slot < img->num_slots; slot++) {
         glGenTextures(1, &img->gl_tex[slot]);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(gl_target, img->gl_tex[slot]);
+        glBindTexture(img->gl_target, img->gl_tex[slot]);
         GLenum gl_min_filter = _sg_gl_filter(desc->min_filter);
         GLenum gl_mag_filter = _sg_gl_filter(desc->mag_filter);
         if (1 == img->num_mipmaps) {
@@ -862,18 +876,18 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
             else if ((gl_min_filter==GL_LINEAR_MIPMAP_NEAREST)||(gl_min_filter==GL_LINEAR_MIPMAP_LINEAR)) {
                 gl_min_filter = GL_LINEAR;
             }
-            glTexParameteri(gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
-            glTexParameteri(gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+            glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
+            glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
             if (img->type == SG_IMAGETYPE_CUBE) {
-                glTexParameteri(gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             }
             else {
-                glTexParameteri(gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
-                glTexParameteri(gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
                 #if !defined(SOKOL_USE_GLES2)
                 if (img->type == SG_IMAGETYPE_3D) {
-                    glTexParameteri(gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
+                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                 }
                 #endif
             }
@@ -882,7 +896,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
         int data_index = 0;
         for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
             for (uint16_t face_index = 0; face_index < num_faces; face_index++, data_index++) {
-                GLenum gl_img_target = gl_target;
+                GLenum gl_img_target = img->gl_target;
                 if (SG_IMAGETYPE_CUBE == img->type) {
                     gl_img_target = _sg_gl_cubeface_target(face_index);
                 }
@@ -1046,6 +1060,7 @@ static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shad
     shd->gl_prog = gl_prog;
 
     /* resolve uniforms */
+    _SG_GL_CHECK_ERROR();
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_shader_stage* stage = &shd->stage[stage_index];
@@ -1073,8 +1088,32 @@ static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shad
         }
     }
 
-    /* FIXME: resolve image locations */
-
+    _SG_GL_CHECK_ERROR();
+    /* resolve image locations */
+    int gl_tex_slot = 0;
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
+        _sg_shader_stage* stage = &shd->stage[stage_index];
+        SOKOL_ASSERT(stage->num_images == 0);
+        stage->num_images = stage_desc->num_images;
+        for (int img_index = 0; img_index < stage_desc->num_images; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->image[img_index];
+            _sg_shader_image* img = &stage->images[img_index];
+            SOKOL_ASSERT(img->type == SG_IMAGETYPE_INVALID);
+            img->type = img_desc->type;
+            img->gl_loc = img_index;
+            if (img_desc->name) {
+                img->gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
+            }
+            if (img->gl_loc != -1) {
+                img->gl_tex_slot = gl_tex_slot++;
+            }
+            else {
+                img->gl_tex_slot = -1;
+            }
+        }
+    }
+    _SG_GL_CHECK_ERROR();
     shd->slot.state = SG_RESOURCESTATE_VALID;
 }
 
@@ -1284,6 +1323,8 @@ static void _sg_destroy_pass(_sg_backend* state, _sg_pass* pass) {
 
 /*-- GL backend rendering functions ------------------------------------------*/
 static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_action* action, int w, int h) {
+    /* FIXME: what if a texture used as render target is still bound, should we
+       unbind all currently bound textures in begin pass? */
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!state->in_pass);
@@ -1536,7 +1577,27 @@ static void _sg_apply_draw_state(_sg_backend* state,
     /* bind shader program */
     glUseProgram(pip->shader->gl_prog);
 
-    /* FIXME: bind textures */
+    /* bind textures */
+    _SG_GL_CHECK_ERROR();
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
+        _sg_image** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
+        int num_imgs = (stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs;
+        SOKOL_ASSERT(num_imgs == stage->num_images);
+        for (int img_index = 0; img_index < stage->num_images; img_index++) {
+            const _sg_shader_image* shd_img = &stage->images[img_index];
+            if (shd_img->gl_loc != -1) {
+                _sg_image* img = imgs[img_index];
+                const GLuint gl_tex = img->gl_tex[img->active_slot];
+                SOKOL_ASSERT(img && img->gl_target);
+                SOKOL_ASSERT((shd_img->gl_tex_slot != -1) && gl_tex);
+                glUniform1i(shd_img->gl_loc, shd_img->gl_tex_slot);
+                glActiveTexture(GL_TEXTURE0+shd_img->gl_tex_slot);
+                glBindTexture(img->gl_target, gl_tex);
+            }
+        }
+    }
+    _SG_GL_CHECK_ERROR();
 
     /* index buffer (can be 0) */
     if (ib) {
@@ -1577,6 +1638,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
         }
         *cache_attr = *attr;
     }
+    _SG_GL_CHECK_ERROR();
 }
 
 static void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
