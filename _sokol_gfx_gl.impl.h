@@ -1088,8 +1088,8 @@ static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shad
         }
     }
 
-    _SG_GL_CHECK_ERROR();
     /* resolve image locations */
+    _SG_GL_CHECK_ERROR();
     int gl_tex_slot = 0;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
@@ -1686,8 +1686,6 @@ static void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage stage_in
                 break;
         }
     }
-
-    /* FIXME: apply images */
 }
 
 static void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {
