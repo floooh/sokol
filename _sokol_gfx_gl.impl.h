@@ -656,6 +656,8 @@ typedef struct {
     uint32_t frame_index;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
+    int cur_pass_width;
+    int cur_pass_height;
     _sg_pipeline* cur_pipeline;
     sg_id cur_pipeline_id; 
     _sg_state_cache cache;
@@ -676,6 +678,8 @@ static void _sg_setup_backend(_sg_backend* state) {
     state->frame_index = 1;
     state->cur_primitive_type = GL_TRIANGLES;
     state->cur_index_type = 0;
+    state->cur_pass_width = 0;
+    state->cur_pass_height = 0;
     state->cur_pipeline = 0;
     state->cur_pipeline_id = SG_INVALID_ID;
     state->valid = true;
@@ -1046,23 +1050,19 @@ static void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shad
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_shader_stage* stage = &shd->stage[stage_index];
         SOKOL_ASSERT(stage->num_uniform_blocks == 0);
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+        stage->num_uniform_blocks = stage_desc->num_ubs;
+        for (int ub_index = 0; ub_index < stage_desc->num_ubs; ub_index++) {
             const sg_shader_uniform_block_desc* ub_desc = &stage_desc->ub[ub_index];
-            if (ub_desc->size == 0) {
-                break;
-            }
-            _sg_uniform_block* ub = &stage->uniform_blocks[stage->num_uniform_blocks++];
+            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = ub_desc->size;
             SOKOL_ASSERT(ub->num_uniforms == 0);
-            for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
+            ub->num_uniforms = ub_desc->num_uniforms;
+            for (int u_index = 0; u_index < ub_desc->num_uniforms; u_index++) {
                 const sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
-                if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
-                    break;
-                }
-                _sg_uniform* u = &ub->uniforms[ub->num_uniforms++];
+                _sg_uniform* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
                 u->offset = u_desc->offset;
-                u->count = u_desc->count;
+                u->count = u_desc->array_count;
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -1287,9 +1287,32 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!state->in_pass);
+    _SG_GL_CHECK_ERROR();
     state->in_pass = true;
+    state->cur_pass_width = w;
+    state->cur_pass_height = h;
     if (pass) {
-
+        /* offscreen pass */
+        SOKOL_ASSERT(pass->gl_fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
+        #if !defined(SOKOL_USE_GLES2)
+        GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+            GL_COLOR_ATTACHMENT0,
+            GL_COLOR_ATTACHMENT1,
+            GL_COLOR_ATTACHMENT2,
+            GL_COLOR_ATTACHMENT3
+        };
+        int num_attrs = 0;
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (pass->color_atts[num_attrs].image) {
+                num_attrs++;
+            }
+            else {
+                break;
+            }
+        }
+        glDrawBuffers(num_attrs, att);
+        #endif
     }
     else {
         /* default pass */
@@ -1313,26 +1336,50 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         state->cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
     }
-    /* FIXME: multiple-render-target! */
-    GLbitfield clear_mask = 0;
-    if (action->actions & SG_PASSACTION_CLEAR_COLOR0) {
-        clear_mask |= GL_COLOR_BUFFER_BIT;
-        const float* c = action->color[0];
-        glClearColor(c[0], c[1], c[2], c[3]);
+    bool use_mrt_clear = (0 != pass);
+    #if defined(SOKOL_USE_GLES2)
+    use_mrt_clear = false;
+    #endif
+    if (!use_mrt_clear) {
+        GLbitfield clear_mask = 0;
+        if (action->actions & SG_PASSACTION_CLEAR_COLOR0) {
+            clear_mask |= GL_COLOR_BUFFER_BIT;
+            const float* c = action->color[0];
+            glClearColor(c[0], c[1], c[2], c[3]);
+        }
+        if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
+            /* FIXME: hmm separate depth/stencil clear? */
+            clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
+            #ifdef SOKOL_USE_GLCORE33
+            glClearDepth(action->depth);
+            #else
+            glClearDepthf(action->depth);
+            #endif
+            glClearStencil(action->stencil);
+        }
+        if (0 != clear_mask) {
+            glClear(clear_mask);
+        }
     }
-    if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
-        /* FIXME: hmm separate depth/stencil clear? */
-        clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
-        #ifdef SOKOL_USE_GLCORE33
-        glClearDepth(action->depth);
-        #else
-        glClearDepthf(action->depth);
-        #endif
-        glClearStencil(action->stencil);
+    #if !defined SOKOL_USE_GLES2
+    else {
+        SOKOL_ASSERT(pass);
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (pass->color_atts[i].image) {
+                if (action->actions & (SG_PASSACTION_CLEAR_COLOR0<<i)) {
+                    glClearBufferfv(GL_COLOR, i, action->color[i]);
+                }
+            }
+            else {
+                break;
+            }
+        }
+        if (pass->ds_att.image && (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL)) {
+            glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth, action->stencil);
+        }
     }
-    if (0 != clear_mask) {
-        glClear(clear_mask);
-    }
+    #endif
+    _SG_GL_CHECK_ERROR();
 }
 
 static void _sg_end_pass(_sg_backend* state) {

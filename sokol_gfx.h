@@ -416,11 +416,12 @@ typedef struct {
     const char* name;
     int offset;
     sg_uniform_type type;   /* SG_UNIFORMTYPE_INVALID if not used */
-    int count; 
+    int array_count; 
 } sg_shader_uniform_desc;
 
 typedef struct {
     int size;
+    int num_uniforms;
     sg_shader_uniform_desc u[SG_MAX_UNIFORMS];
 } sg_shader_uniform_block_desc;
 
@@ -433,9 +434,11 @@ typedef struct {
     /* source code (only used in GL backends) */
     const char* source;
     /* uniform block descriptions */
+    int num_ubs;
     sg_shader_uniform_block_desc ub[SG_MAX_SHADERSTAGE_UBS];
     /* image descriptions */
-    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
+    int num_images;
+    sg_shader_image_desc image[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
 typedef struct {
@@ -501,8 +504,9 @@ extern void sg_init_desc(sg_desc* desc);
 extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
-extern void sg_init_uniform_block(sg_shader_uniform_block_desc* desc, int ub_size); 
-extern void sg_init_named_uniform(sg_shader_uniform_desc* desc, const char* name, int ub_offset, sg_uniform_type type, int array_count);
+extern void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, int ub_size); 
+extern void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const char* name, int ub_offset, sg_uniform_type type, int array_count);
+extern void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, sg_vertex_format format);
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, sg_vertex_format format);
@@ -532,7 +536,8 @@ extern void sg_update_buffer(sg_id buf, const void* data_ptr, int data_size);
 extern void sg_update_image(sg_id img, int num_data_items, const void** data_ptrs, int* data_sizes); 
 
 /* rendering */
-extern void sg_begin_pass(sg_id pass, const sg_pass_action* pass_action, int width, int height);
+extern void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
+extern void sg_begin_pass(sg_id pass, const sg_pass_action* pass_action);
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(const sg_draw_state* ds);
