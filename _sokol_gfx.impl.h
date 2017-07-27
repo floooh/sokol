@@ -166,6 +166,7 @@ static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
            or by bind slot index (on GLES2 only by name) */
         layout->attrs[i].name = 0;
         layout->attrs[i].index = -1;
+        layout->attrs[i].offset = 0;
         layout->attrs[i].format = SG_VERTEXFORMAT_INVALID;
     }
 }
@@ -224,31 +225,35 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     _sg_init_rasterizer_state(&desc->rast);
 }
 
-void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, sg_vertex_format format) {
+void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, int offset, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     SOKOL_ASSERT((input_layout >= 0) && (input_layout < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(name);
+    SOKOL_ASSERT(offset >= 0);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
     SOKOL_ASSERT(desc->input_layouts[input_layout].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
     sg_vertex_layout_desc* layout = &desc->input_layouts[input_layout];
     sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = name;
     attr->index = -1;
+    attr->offset = offset;
     attr->format = format;
 }
 
-void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, sg_vertex_format format) {
+void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, int offset, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     SOKOL_ASSERT((input_layout >= 0) && (input_layout < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT((attr_index >= 0) && (attr_index < SG_MAX_VERTEX_ATTRIBUTES));
+    SOKOL_ASSERT(offset >= 0);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
     SOKOL_ASSERT(desc->input_layouts[input_layout].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
     sg_vertex_layout_desc* layout = &desc->input_layouts[input_layout];
     sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = 0;
     attr->index = attr_index;
+    attr->offset = offset;
     attr->format = format;
 }
 
@@ -334,16 +339,6 @@ static int _sg_vertexlayout_byte_size(const sg_vertex_layout_desc* layout) {
         byte_size += _sg_vertexformat_bytesize(layout->attrs[i].format);
     }
     return byte_size;
-}
-
-/* return the byte offset of a vertex layout attribute */
-static int _sg_vertexlayout_attr_offset(const sg_vertex_layout_desc* layout, int index) {
-    SOKOL_ASSERT(layout && (index < layout->num_attrs));
-    int byte_offset = 0;
-    for (int i = 0; i < index; i++) {
-        byte_offset += _sg_vertexformat_bytesize(layout->attrs[i].format);
-    }
-    return byte_offset;
 }
 
 /* return the byte size of a shader uniform */

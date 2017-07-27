@@ -457,6 +457,7 @@ typedef struct {
 typedef struct {
     const char* name;
     int index;
+    int offset;
     sg_vertex_format format;
 } sg_vertex_attr_desc;
 
@@ -508,8 +509,8 @@ extern void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, i
 extern void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const char* name, int ub_offset, sg_uniform_type type, int array_count);
 extern void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
-extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, sg_vertex_format format);
-extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, sg_vertex_format format);
+extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, int offset, sg_vertex_format format);
+extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, int offset, sg_vertex_format format);
 extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_layout, sg_step_func step_func, int step_rate);
 extern void sg_init_pass_desc(sg_pass_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);

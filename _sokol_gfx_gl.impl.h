@@ -1153,6 +1153,8 @@ static void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shade
         int layout_byte_size = _sg_vertexlayout_byte_size(layout_desc);
         for (int i = 0; i < layout_desc->num_attrs; i++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
+            /* FIXME: this check is useless if vertex layout has several input buffers */
+            SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_byte_size);
             #ifdef SOKOL_USE_GLES2
             /* on GLES2, attribute vertices must be bound by name */
             SOKOL_ASSERT(attr_desc->name);
@@ -1174,7 +1176,7 @@ static void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shade
                     gl_attr->divisor = layout_desc->step_rate;
                 }
                 gl_attr->stride = layout_byte_size;
-                gl_attr->offset = _sg_vertexlayout_attr_offset(layout_desc, i);
+                gl_attr->offset = attr_desc->offset;
                 sg_vertex_format fmt = attr_desc->format;
                 gl_attr->size = _sg_gl_vertexformat_size(fmt);
                 gl_attr->type = _sg_gl_vertexformat_type(fmt);
