@@ -158,6 +158,7 @@ void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char
 
 static void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
+    layout->stride = 0;
     layout->step_func = SG_STEPFUNC_PER_VERTEX;
     layout->step_rate = 1;
     layout->num_attrs = 0;
@@ -225,15 +226,33 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     _sg_init_rasterizer_state(&desc->rast);
 }
 
-void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const char* name, int offset, sg_vertex_format format) {
+void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
-    SOKOL_ASSERT((input_layout >= 0) && (input_layout < SG_MAX_SHADERSTAGE_BUFFERS));
+    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
+    SOKOL_ASSERT(stride > 0);
+    SOKOL_ASSERT((stride & 3) == 0);    /* must be multiple of 4 */
+    desc->input_layouts[input_slot].stride = stride;
+}
+
+void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_step_func step_func, int step_rate) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
+    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
+    layout->step_func = step_func;
+    layout->step_rate = step_rate;
+}
+
+void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(name);
     SOKOL_ASSERT(offset >= 0);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->input_layouts[input_layout].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_layout];
+    SOKOL_ASSERT(desc->input_layouts[input_slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
     sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = name;
     attr->index = -1;
@@ -241,29 +260,20 @@ void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_layout, const c
     attr->format = format;
 }
 
-void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_layout, int attr_index, int offset, sg_vertex_format format) {
+void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
-    SOKOL_ASSERT((input_layout >= 0) && (input_layout < SG_MAX_SHADERSTAGE_BUFFERS));
+    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT((attr_index >= 0) && (attr_index < SG_MAX_VERTEX_ATTRIBUTES));
     SOKOL_ASSERT(offset >= 0);
     SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->input_layouts[input_layout].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_layout];
+    SOKOL_ASSERT(desc->input_layouts[input_slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
     sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
     attr->name = 0;
     attr->index = attr_index;
     attr->offset = offset;
     attr->format = format;
-}
-
-void sg_init_vertex_step(sg_pipeline_desc* desc, int input_layout, sg_step_func step_func, int step_rate) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
-    SOKOL_ASSERT((input_layout >= 0) && (input_layout < SG_MAX_SHADERSTAGE_BUFFERS));
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_layout];
-    layout->step_func = step_func;
-    layout->step_rate = step_rate;
 }
 
 void sg_init_pass_desc(sg_pass_desc* desc) {
@@ -329,16 +339,6 @@ static int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_INVALID:   return 0;
     }
-}
-
-/* return byte size of a vertex layout */
-static int _sg_vertexlayout_byte_size(const sg_vertex_layout_desc* layout) {
-    SOKOL_ASSERT(layout);
-    int byte_size = 0;
-    for (int i = 0; i < layout->num_attrs; i++) {
-        byte_size += _sg_vertexformat_bytesize(layout->attrs[i].format);
-    }
-    return byte_size;
 }
 
 /* return the byte size of a shader uniform */
@@ -801,7 +801,12 @@ static void _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
     #ifdef SOKOL_DEBUG
     int num_attrs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        num_attrs += desc->input_layouts[i].num_attrs;
+        const sg_vertex_layout_desc* layout_desc = &desc->input_layouts[i];
+        num_attrs += layout_desc->num_attrs;
+        if (layout_desc->num_attrs > 0) {
+            SOKOL_ASSERT(layout_desc->stride > 0);
+            SOKOL_ASSERT((layout_desc->stride & 3) == 0);
+        }
     }
     SOKOL_ASSERT(num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
     #endif
