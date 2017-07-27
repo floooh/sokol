@@ -1121,7 +1121,7 @@ static void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
     SOKOL_ASSERT(state && shd);
     _SG_GL_CHECK_ERROR();
     if (shd->gl_prog) {
-        glDeleteShader(shd->gl_prog);
+        glDeleteProgram(shd->gl_prog);
     }
     _SG_GL_CHECK_ERROR();
     _sg_init_shader(shd);
