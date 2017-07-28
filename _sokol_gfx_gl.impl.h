@@ -1277,7 +1277,7 @@ static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_
                         break;
                     default:
                         /* 3D- or array-texture */
-                        #if !defined(ORYOL_USE_GLES2)
+                        #if !defined(SOKOL_USE_GLES2)
                         glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         #endif
                         break;
@@ -1669,8 +1669,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
         _sg_image** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
-        int num_imgs = (stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs;
-        SOKOL_ASSERT(num_imgs == stage->num_images);
+        SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_shader_image* shd_img = &stage->images[img_index];
             if (shd_img->gl_loc != -1) {
