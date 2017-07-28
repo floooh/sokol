@@ -14,6 +14,9 @@
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
+#endif
 #ifndef SOKOL_MALLOC
     #include <stdlib.h>
     #define SOKOL_MALLOC(s) malloc(s)
@@ -338,6 +341,9 @@ static int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_INVALID:   return 0;
+        default:
+            SOKOL_UNREACHABLE;
+            return -1;
     }
 }
 
@@ -350,6 +356,9 @@ static int _sg_uniform_size(sg_uniform_type type, int count) {
         case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
         case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
         case SG_UNIFORMTYPE_MAT4:       return 64 * count;
+        default:
+            SOKOL_UNREACHABLE;
+            return -1;
     }
 }
 
