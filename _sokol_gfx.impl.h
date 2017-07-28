@@ -34,8 +34,6 @@
 #error "Please select a backend with SOKOL_USE_GLCORE33, SOKOL_USE_GLES2, SOKOL_USE_GLES3, SOKOL_USE_D3D11 or SOKOL_USE_METAL"
 #endif
 
-#include <string.h>
-
 enum {
     _SG_INIT_GUARD = 0xC07FEFE,
     _SG_CONST_SLOT_SHIFT = 16,

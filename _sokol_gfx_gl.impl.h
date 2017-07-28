@@ -5,6 +5,9 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
+/* strstr() */
+#include <string.h>
+
 enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
 };
@@ -714,6 +717,8 @@ typedef struct {
     GLenum cur_index_type;
     int cur_pass_width;
     int cur_pass_height;
+    _sg_pass* cur_pass;
+    sg_id cur_pass_id;
     _sg_pipeline* cur_pipeline;
     sg_id cur_pipeline_id; 
     _sg_state_cache cache;
@@ -736,6 +741,8 @@ static void _sg_setup_backend(_sg_backend* state) {
     state->cur_index_type = 0;
     state->cur_pass_width = 0;
     state->cur_pass_height = 0;
+    state->cur_pass = 0;
+    state->cur_pass_id = SG_INVALID_ID;
     state->cur_pipeline = 0;
     state->cur_pipeline_id = SG_INVALID_ID;
     state->valid = true;
@@ -993,8 +1000,8 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
     /* additional render target stuff */
     if (img->render_target) {
         /* MSAA render buffer */
-        const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
         #if !defined(SOKOL_USE_GLES2)
+        const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
         if (msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
@@ -1007,7 +1014,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
             glGenRenderbuffers(1, &img->gl_depth_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
             GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->depth_format);
-            #if !defined(SOKOL_US_GLES2)
+            #if !defined(SOKOL_USE_GLES2)
             if (msaa) {
                 glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
             }
@@ -1312,7 +1319,7 @@ static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_
                         break;
                     default:
                         /* 3D- or array-texture */
-                        #if !defined(ORYOL_USE_GLES2)
+                        #if !defined(SOKOL_USE_GLES2)
                         glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         #endif
                         break;
@@ -1337,7 +1344,41 @@ static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_
         return;
     }
     
-    /* FIXME: MSAA resolve buffers */
+    /* create MSAA resolve framebuffers if necessary */
+    if (is_msaa) {
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            _sg_attachment* att = &pass->color_atts[i];
+            if (att->image) {
+                SOKOL_ASSERT(0 == att->gl_msaa_resolve_buffer);
+                glGenFramebuffers(1, &att->gl_msaa_resolve_buffer);
+                glBindFramebuffer(GL_FRAMEBUFFER, att->gl_msaa_resolve_buffer);
+                const GLuint gl_tex = att->image->gl_tex[0];
+                SOKOL_ASSERT(gl_tex);
+                switch (att->image->type) {
+                    case SG_IMAGETYPE_2D:
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                            GL_TEXTURE_2D, gl_tex, att->mip_level);
+                        break;
+                    case SG_IMAGETYPE_CUBE:
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                            _sg_gl_cubeface_target(att->slice), gl_tex, att->mip_level);
+                        break;
+                    default:
+                        #if !defined(SOKOL_USE_GLES2)
+                        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                            gl_tex, att->mip_level, att->slice);
+                        #endif
+                        break;
+                }
+                /* check if framebuffer is complete */
+                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                    SOKOL_LOG("Framebuffer completeness check failed (msaa resolve buffer)!\n");
+                    pass->slot.state = SG_RESOURCESTATE_FAILED;
+                    return;
+                }
+            }
+        }
+    }
 
     /* restore original framebuffer binding */
     glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
@@ -1372,6 +1413,13 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
     SOKOL_ASSERT(!state->in_pass);
     _SG_GL_CHECK_ERROR();
     state->in_pass = true;
+    state->cur_pass = pass; /* can be 0 */
+    if (pass) {
+        state->cur_pass_id = pass->slot.id;
+    }
+    else {
+        state->cur_pass_id = SG_INVALID_ID;
+    }
     state->cur_pass_width = w;
     state->cur_pass_height = h;
     if (pass) {
@@ -1468,9 +1516,48 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
 static void _sg_end_pass(_sg_backend* state) {
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(state->in_pass);
+    _SG_GL_CHECK_ERROR();
+
+    /* if this was an offscreen pass, and MSAA rendering was used, need 
+       to resolve into the pass images */
+    #if !defined(SOKOL_USE_GLES2)
+    if (state->cur_pass) {
+        /* check if the pass object is still valid */
+        const _sg_pass* pass = state->cur_pass;
+        SOKOL_ASSERT(pass->slot.id == state->cur_pass_id);
+        bool is_msaa = (0 != state->cur_pass->color_atts[0].gl_msaa_resolve_buffer);
+        if (is_msaa) {
+            SOKOL_ASSERT(pass->gl_fb);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl_fb);
+            SOKOL_ASSERT(pass->color_atts[0].image);
+            const int w = pass->color_atts[0].image->width;
+            const int h = pass->color_atts[0].image->height;
+            for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+                const _sg_attachment* att = &pass->color_atts[att_index];
+                if (att->image) {
+                    SOKOL_ASSERT(att->gl_msaa_resolve_buffer);
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, att->gl_msaa_resolve_buffer);
+                    glReadBuffer(GL_COLOR_ATTACHMENT0 + att_index);
+                    const GLenum gl_att = GL_COLOR_ATTACHMENT0;
+                    glDrawBuffers(1, &gl_att);
+                    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
+    #endif
+    state->cur_pass = 0;
+    state->cur_pass_id = SG_INVALID_ID;
+    state->cur_pass_width = 0;
+    state->cur_pass_height = 0;
+
     /* FIXME: bind default framebuffer */
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     state->in_pass = false;
+    _SG_GL_CHECK_ERROR();
 }
 
 static void _sg_apply_draw_state(_sg_backend* state, 
@@ -1624,8 +1711,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
         _sg_image** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
-        int num_imgs = (stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs;
-        SOKOL_ASSERT(num_imgs == stage->num_images);
+        SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_shader_image* shd_img = &stage->images[img_index];
             if (shd_img->gl_loc != -1) {

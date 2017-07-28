@@ -16,6 +16,8 @@ rewritten in pure C as standalone header-only libs.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
+asm.js/wasm live demos: https://floooh.github.io/sokol-html5/index.html
+
 ### Why C:
 
 - easier integration with other languages
