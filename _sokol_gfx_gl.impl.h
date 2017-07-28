@@ -5,6 +5,9 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
+/* strstr() */
+#include <string.h>
+
 enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
 };
