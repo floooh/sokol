@@ -29,6 +29,8 @@ the Sokol headers are intended to be low-level building blocks.
 
 Eventually Oryol will just be a thin C++ layer over Sokol.
 
+A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
+
 ### sokol_gfx.h:
 
 - wrapper around GLES2/WebGL, GL3.3, D3D11 and Metal with a 
