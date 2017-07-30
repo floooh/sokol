@@ -39,6 +39,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* 
     Resource id typedefs:
 
@@ -604,6 +608,10 @@ extern void sg_init_image(sg_image img_id, const sg_image_desc* desc);
 extern void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
 extern void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
 extern void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #ifdef SOKOL_IMPL
 #define SOKOL_IMPL_GUARD

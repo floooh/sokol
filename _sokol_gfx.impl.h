@@ -34,6 +34,10 @@
 #error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum {
     _SG_INIT_GUARD = 0xC07FEFE,
     _SG_CONST_SLOT_SHIFT = 16,
@@ -425,6 +429,9 @@ static int _sg_slot_index(uint32_t id) {
 }
 
 //-- include the selected rendering backend ----------------------------------*/
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 #include "_sokol_gfx_gl.impl.h"
 #elif defined(SOKOL_D3D11)
@@ -433,6 +440,9 @@ static int _sg_slot_index(uint32_t id) {
 #include "_sokol_gfx_metal.impl.h"
 #else
 #error "No rendering backend selected"
+#endif
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /*-- resource pools ----------------------------------------------------------*/
@@ -1212,3 +1222,7 @@ void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
         }
     }
 }
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif

@@ -8,6 +8,10 @@
 /* strstr() */
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum {
     _SG_GL_NUM_UPDATE_SLOTS = 2,
 };
@@ -1874,3 +1878,7 @@ static void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* d
     glBufferSubData(gl_tgt, 0, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
 }
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
