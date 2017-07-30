@@ -1,31 +1,74 @@
 #pragma once
 /*
-    Configuration defines:
+    sokol_gfx.h -- simple 3D API wrapper
 
-    SOKOL_IMPL          - define this exactly once to include implementation files
-    SOKOL_ASSERT        - your own assert macro (default: assert())
-    SOKOL_MALLOC        - your own malloc func (default: void* malloc(size))
-    SOKOL_FREE          - your own free func (default: void free(void* p))
-    SOKOL_LOG           - your own logging function (default if _DEBUG: puts(const char* s))
-    SOKOL_DEBUG         - define if debug build (default: same as _DEBUG)
-    SOKOL_USE_GLCORE33  - use the desktop GL 3.3 Core Profile backend
-    SOKOL_USE_GLES2     - use the GLES2 backend
-    SOKOL_USE_GLES3     - use the GLES3 backend (with soft fallback to GLES2)
-    SOKOL_USE_D3D11     - use the D3D11 backend
-    SOKOL_USE_METAL     - use the Metal backend
+    Do this:
+        #define SOKOL_IMPL
+    before you include this file in *one* C or C++ file to create the 
+    implementation.
+
+    In the same place define one of the following to select the rendering
+    backend:
+        #define SOKOL_GLCORE33
+        #define SOKOL_GLES2
+        #define SOKOL_GLES3
+        #define SOKOL_D3D11
+        #define SOKOL_METAL
+
+    I.e. for the GL 3.3 Core Profile it should look like this:
+
+    #include ...
+    #include ...
+    #define SOKOL_IMPL
+    #define SOKOL_GLCORE33
+    #include "sokol_gfx.h"
+
+    Optionally provide the following defines with your own implementations:
+
+    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
+    SOKOL_FREE(p)       - your own free function (default: free(p))
+    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
+    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
+
+    Optionally define the following to force debug checks and validations
+    even in release mode:
+
+    SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 */
 #include <stdint.h>
 #include <stdbool.h>
 
 /* 
-    sg_id
+    Resource id typedefs:
+
+    sg_buffer
+    sg_image
+    sg_shader
+    sg_pipeline
+    sg_pass
 
     Instead of pointers, resource creation functions return a 32-bit
     number which uniquely identifies the resource object.
-*/
-typedef uint32_t sg_id;
 
-/* various constants */
+    The 32-bit resource id is split into a 16-bit pool index in the lower bits, 
+    and a 16-bit 'unique counter' in the upper bits. The index allows fast
+    pool lookups, and combined with the unique-mask it allows to detect
+    'dangling accesses' (trying to use an object which longer exists, and
+    its pool slot has been reused for a new object)
+*/
+typedef uint32_t sg_buffer;
+typedef uint32_t sg_image;
+typedef uint32_t sg_shader;
+typedef uint32_t sg_pipeline;
+typedef uint32_t sg_pass;
+
+/* 
+    various compile-time constants
+
+    FIXME: it may make sense to convert some of those into defines so
+    that the user code can override them.
+*/
 enum {
     SG_INVALID_ID = 0,
     SG_DEFAULT_PASS = SG_INVALID_ID,
@@ -471,7 +514,7 @@ typedef struct {
 
 typedef struct {
     uint32_t _init_guard;
-    sg_id shader;
+    sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
     sg_vertex_layout_desc input_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -481,7 +524,7 @@ typedef struct {
 } sg_pipeline_desc;
 
 typedef struct {
-    sg_id image;
+    sg_image image;
     uint16_t mip_level;
     uint16_t slice;
 } sg_attachment_desc;
@@ -494,11 +537,11 @@ typedef struct {
 
 typedef struct {
     uint32_t _init_guard;
-    sg_id pipeline;
-    sg_id vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
-    sg_id index_buffer;
-    sg_id vs_images[SG_MAX_SHADERSTAGE_IMAGES];
-    sg_id fs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_pipeline pipeline;
+    sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_buffer index_buffer;
+    sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_draw_state;
 
 /* struct initializers */
@@ -525,22 +568,22 @@ extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 
 /* resources */
-extern sg_id sg_make_buffer(const sg_buffer_desc* desc);
-extern sg_id sg_make_image(const sg_image_desc* desc);
-extern sg_id sg_make_shader(const sg_shader_desc* desc);
-extern sg_id sg_make_pipeline(const sg_pipeline_desc* desc);
-extern sg_id sg_make_pass(const sg_pass_desc* desc);
-extern void sg_destroy_buffer(sg_id buf);
-extern void sg_destroy_image(sg_id img);
-extern void sg_destroy_shader(sg_id shd);
-extern void sg_destroy_pipeline(sg_id pip);
-extern void sg_destroy_pass(sg_id pass);
-extern void sg_update_buffer(sg_id buf, const void* data_ptr, int data_size);
-extern void sg_update_image(sg_id img, int num_data_items, const void** data_ptrs, int* data_sizes); 
+extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
+extern sg_image sg_make_image(const sg_image_desc* desc);
+extern sg_shader sg_make_shader(const sg_shader_desc* desc);
+extern sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc);
+extern sg_pass sg_make_pass(const sg_pass_desc* desc);
+extern void sg_destroy_buffer(sg_buffer buf);
+extern void sg_destroy_image(sg_image img);
+extern void sg_destroy_shader(sg_shader shd);
+extern void sg_destroy_pipeline(sg_pipeline pip);
+extern void sg_destroy_pass(sg_pass pass);
+extern void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
+extern void sg_update_image(sg_image img, int num_data_items, const void** data_ptrs, int* data_sizes); 
 
 /* rendering */
 extern void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
-extern void sg_begin_pass(sg_id pass, const sg_pass_action* pass_action);
+extern void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 extern void sg_apply_draw_state(const sg_draw_state* ds);
@@ -551,16 +594,16 @@ extern void sg_commit();
 extern void sg_reset_state_cache();
 
 /* separate resource allocation and initialization (for async setup) */ 
-extern sg_id sg_alloc_buffer();
-extern sg_id sg_alloc_image();
-extern sg_id sg_alloc_shader();
-extern sg_id sg_alloc_pipeline();
-extern sg_id sg_alloc_pass();
-extern void sg_init_buffer(sg_id buf_id, const sg_buffer_desc* desc);
-extern void sg_init_image(sg_id img_id, const sg_image_desc* desc);
-extern void sg_init_shader(sg_id shd_id, const sg_shader_desc* desc);
-extern void sg_init_pipeline(sg_id pip_id, const sg_pipeline_desc* desc);
-extern void sg_init_pass(sg_id pass_id, const sg_pass_desc* desc);
+extern sg_buffer sg_alloc_buffer();
+extern sg_image sg_alloc_image();
+extern sg_shader sg_alloc_shader();
+extern sg_pipeline sg_alloc_pipeline();
+extern sg_pass sg_alloc_pass();
+extern void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc);
+extern void sg_init_image(sg_image img_id, const sg_image_desc* desc);
+extern void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
+extern void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
+extern void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
 
 #ifdef SOKOL_IMPL
 #define SOKOL_IMPL_GUARD

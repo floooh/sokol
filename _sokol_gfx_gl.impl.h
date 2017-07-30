@@ -60,7 +60,7 @@ static GLenum _sg_gl_texture_target(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:   return GL_TEXTURE_2D;
         case SG_IMAGETYPE_CUBE: return GL_TEXTURE_CUBE_MAP;
-        #if !defined(SOKOL_USE_GLES2)
+        #if !defined(SOKOL_GLES2)
         case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
         case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
         #endif
@@ -321,7 +321,7 @@ static GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_L8:
         case SG_PIXELFORMAT_R32F:
         case SG_PIXELFORMAT_R16F:
-            #if defined(SOKOL_USE_GLES2)
+            #if defined(SOKOL_GLES2)
             return GL_LUMINANCE;
             #else
             return GL_RED;
@@ -355,7 +355,7 @@ static GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
 }
 
 static GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
-    #if defined(SOKOL_USE_GLES2)
+    #if defined(SOKOL_GLES2)
     return _sg_gl_teximage_format(fmt);
     #else
     switch (fmt) {
@@ -368,7 +368,7 @@ static GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA4:
             return GL_RGBA4;
         case SG_PIXELFORMAT_R5G6B5:
-            #if defined(SOKOL_USE_GLES3)
+            #if defined(SOKOL_GLES3)
                 return GL_RGB565;
             #else
                 return GL_RGB5;
@@ -602,7 +602,7 @@ static void _sg_init_gl_attr(_sg_gl_attr* attr) {
 typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
-    sg_id shader_id;
+    sg_shader shader_id;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
     _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
@@ -628,7 +628,7 @@ static void _sg_init_pipeline(_sg_pipeline* pip) {
 
 typedef struct {
     _sg_image* image;
-    sg_id image_id;
+    sg_image image_id;
     int mip_level;
     int slice;
     GLuint gl_msaa_resolve_buffer;
@@ -702,7 +702,7 @@ static void _sg_init_state_cache(_sg_state_cache* state) {
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DITHER);
-    #if defined(SOKOL_USE_GLCORE33)
+    #if defined(SOKOL_GLCORE33)
         glEnable(GL_MULTISAMPLE);
     #endif
 }
@@ -718,19 +718,19 @@ typedef struct {
     int cur_pass_width;
     int cur_pass_height;
     _sg_pass* cur_pass;
-    sg_id cur_pass_id;
+    sg_pass cur_pass_id;
     _sg_pipeline* cur_pipeline;
-    sg_id cur_pipeline_id; 
+    sg_pipeline cur_pipeline_id; 
     _sg_state_cache cache;
     bool features[SG_NUM_FEATURES];
-    #if !defined(SOKOL_USE_GLES2)
+    #if !defined(SOKOL_GLES2)
     GLuint vao; 
     #endif
 } _sg_backend;
 
 static void _sg_setup_backend(_sg_backend* state) {
     SOKOL_ASSERT(state);
-    #if !defined(SOKOL_USE_GLES2)
+    #if !defined(SOKOL_GLES2)
     glGenVertexArrays(1, &state->vao);
     glBindVertexArray(state->vao);
     #endif
@@ -753,7 +753,7 @@ static void _sg_setup_backend(_sg_backend* state) {
         state->features[i] = false;
     }
     state->features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
-    #if !defined(SOKOL_USE_GLCORE33)
+    #if !defined(SOKOL_GLCORE33)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
         state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
             strstr(ext, "_texture_compression_s3tc") ||
@@ -765,14 +765,14 @@ static void _sg_setup_backend(_sg_backend* state) {
         state->features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] = strstr(ext, "_compressed_texture_atc");
         state->features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
         state->features[SG_FEATURE_INSTANCED_ARRAYS] = strstr(ext, "_instanced_arrays");
-        #if defined(SOKOL_USE_GLES2)
+        #if defined(SOKOL_GLES2)
             state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
         #else
             state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = state->features[SG_FEATURE_TEXTURE_FLOAT];
         #endif
     #endif
-    #if defined(SOKOL_USE_GLCORE33) || defined(SOKOL_USE_GLES3)
-        #if defined(SOKOL_USE_GLCORE33)
+    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+        #if defined(SOKOL_GLCORE33)
         state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
         #endif
         state->features[SG_FEATURE_INSTANCED_ARRAYS] = true;
@@ -789,7 +789,7 @@ static void _sg_setup_backend(_sg_backend* state) {
 static void _sg_discard_backend(_sg_backend* state) {
     SOKOL_ASSERT(state);
     SOKOL_ASSERT(state->valid);
-    #if !defined(SOKOL_USE_GLES2)
+    #if !defined(SOKOL_GLES2)
     glDeleteVertexArrays(1, &state->vao);
     state->vao = 0;
     #endif
@@ -934,7 +934,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
             else {
                 glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
                 glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
-                #if !defined(SOKOL_USE_GLES2)
+                #if !defined(SOKOL_GLES2)
                 if (img->type == SG_IMAGETYPE_3D) {
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                 }
@@ -976,7 +976,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
                             mip_width, mip_height, 0, gl_format, gl_type, data_ptr);
                     }
                 }
-                #if !defined(SOKOL_USE_GLES2)
+                #if !defined(SOKOL_GLES2)
                 else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
                     uint16_t mip_depth = img->depth >> mip_index;
                     if (mip_depth == 0) {
@@ -1000,7 +1000,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
     /* additional render target stuff */
     if (img->render_target) {
         /* MSAA render buffer */
-        #if !defined(SOKOL_USE_GLES2)
+        #if !defined(SOKOL_GLES2)
         const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
         if (msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
@@ -1014,7 +1014,7 @@ static void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_
             glGenRenderbuffers(1, &img->gl_depth_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
             GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->depth_format);
-            #if !defined(SOKOL_USE_GLES2)
+            #if !defined(SOKOL_GLES2)
             if (msaa) {
                 glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
             }
@@ -1202,7 +1202,7 @@ static void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shade
         for (int i = 0; i < layout_desc->num_attrs; i++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
             SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_desc->stride);
-            #ifdef SOKOL_USE_GLES2
+            #ifdef SOKOL_GLES2
             /* on GLES2, attribute vertices must be bound by name */
             SOKOL_ASSERT(attr_desc->name);
             #else
@@ -1319,7 +1319,7 @@ static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_
                         break;
                     default:
                         /* 3D- or array-texture */
-                        #if !defined(SOKOL_USE_GLES2)
+                        #if !defined(SOKOL_GLES2)
                         glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         #endif
                         break;
@@ -1364,7 +1364,7 @@ static void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_
                             _sg_gl_cubeface_target(att->slice), gl_tex, att->mip_level);
                         break;
                     default:
-                        #if !defined(SOKOL_USE_GLES2)
+                        #if !defined(SOKOL_GLES2)
                         glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
                             gl_tex, att->mip_level, att->slice);
                         #endif
@@ -1426,7 +1426,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         /* offscreen pass */
         SOKOL_ASSERT(pass->gl_fb);
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
-        #if !defined(SOKOL_USE_GLES2)
+        #if !defined(SOKOL_GLES2)
         GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
             GL_COLOR_ATTACHMENT0,
             GL_COLOR_ATTACHMENT1,
@@ -1468,7 +1468,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         glStencilMask(0xFF);
     }
     bool use_mrt_clear = (0 != pass);
-    #if defined(SOKOL_USE_GLES2)
+    #if defined(SOKOL_GLES2)
     use_mrt_clear = false;
     #endif
     if (!use_mrt_clear) {
@@ -1481,7 +1481,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
         if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
             /* FIXME: hmm separate depth/stencil clear? */
             clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
-            #ifdef SOKOL_USE_GLCORE33
+            #ifdef SOKOL_GLCORE33
             glClearDepth(action->depth);
             #else
             glClearDepthf(action->depth);
@@ -1492,7 +1492,7 @@ static void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_act
             glClear(clear_mask);
         }
     }
-    #if !defined SOKOL_USE_GLES2
+    #if !defined SOKOL_GLES2
     else {
         SOKOL_ASSERT(pass);
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -1520,7 +1520,7 @@ static void _sg_end_pass(_sg_backend* state) {
 
     /* if this was an offscreen pass, and MSAA rendering was used, need 
        to resolve into the pass images */
-    #if !defined(SOKOL_USE_GLES2)
+    #if !defined(SOKOL_GLES2)
     if (state->cur_pass) {
         /* check if the pass object is still valid */
         const _sg_pass* pass = state->cur_pass;
@@ -1695,7 +1695,7 @@ static void _sg_apply_draw_state(_sg_backend* state,
         if (new_r->dither_enabled) glEnable(GL_DITHER);
         else glDisable(GL_DITHER);
     }
-    #ifdef SOKOL_USE_GLCORE33
+    #ifdef SOKOL_GLCORE33
     if (new_r->sample_count != cache_r->sample_count) {
         cache_r->sample_count = new_r->sample_count;
         if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
