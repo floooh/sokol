@@ -445,8 +445,7 @@ typedef struct {
     };
     uint16_t num_mipmaps;
     sg_usage usage;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;   /* render targets only */
+    sg_pixel_format pixel_format;
     int sample_count;               /* render targets only */
     sg_filter min_filter;
     sg_filter mag_filter;

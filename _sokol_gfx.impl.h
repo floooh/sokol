@@ -88,8 +88,7 @@ void sg_init_image_desc(sg_image_desc* desc) {
     desc->depth = 1;
     desc->num_mipmaps = 1;
     desc->usage = SG_USAGE_IMMUTABLE;
-    desc->color_format = SG_PIXELFORMAT_RGBA8;
-    desc->depth_format = SG_PIXELFORMAT_NONE;
+    desc->pixel_format = SG_PIXELFORMAT_RGBA8;
     desc->sample_count = 1;
     desc->min_filter = SG_FILTER_NEAREST;
     desc->mag_filter = SG_FILTER_NEAREST;
@@ -778,19 +777,17 @@ _SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
     SOKOL_ASSERT((desc->width > 0) && (desc->height > 0) && (desc->depth > 0));
     SOKOL_ASSERT((desc->num_mipmaps > 0) && (desc->num_mipmaps <= SG_MAX_MIPMAPS));
     SOKOL_ASSERT((desc->usage==SG_USAGE_IMMUTABLE)||(desc->usage==SG_USAGE_STREAM)||(desc->usage==SG_USAGE_DYNAMIC));
-    SOKOL_ASSERT((desc->color_format != SG_PIXELFORMAT_NONE));
+    SOKOL_ASSERT((desc->pixel_format != SG_PIXELFORMAT_NONE));
     SOKOL_ASSERT(desc->sample_count >= 1);
     #if SOKOL_DEBUG
     if (desc->render_target) {
         SOKOL_ASSERT(desc->usage == SG_USAGE_IMMUTABLE);
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(desc->color_format));
-        if (desc->depth_format != SG_PIXELFORMAT_NONE) {
-            SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(desc->depth_format));
-        }
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(desc->pixel_format) || (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)));
         SOKOL_ASSERT((0 == desc->num_data_items) && (0 == desc->data_ptrs) && (0 == desc->data_sizes));
-    }
-    else {
-        SOKOL_ASSERT(desc->depth_format == SG_PIXELFORMAT_NONE);
+        if (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)) {
+            SOKOL_ASSERT(desc->type==SG_IMAGETYPE_2D);
+            SOKOL_ASSERT(desc->num_mipmaps == 1);
+        }
     }
     if (desc->num_data_items > 0) {
         SOKOL_ASSERT(desc->data_ptrs);
@@ -880,9 +877,9 @@ _SOKOL_PRIVATE void _sg_validate_begin_pass(const _sg_pass* pass, const sg_pass_
             SOKOL_ASSERT(att->image->width == img->width);
             SOKOL_ASSERT(att->image->height == img->height);
             /* all images must have same pixel format */
-            SOKOL_ASSERT(att->image->color_format == img->color_format);
+            SOKOL_ASSERT(att->image->pixel_format == img->pixel_format);
             /* must be a valid color render target pixel format */
-            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att->image->color_format));
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att->image->pixel_format));
             /* all images must have same sample count */
             SOKOL_ASSERT(att->image->sample_count == img->sample_count);
         }
@@ -899,7 +896,7 @@ _SOKOL_PRIVATE void _sg_validate_begin_pass(const _sg_pass* pass, const sg_pass_
         SOKOL_ASSERT(ds_att->image->usage == SG_USAGE_IMMUTABLE);
         SOKOL_ASSERT(ds_att->image->width == img->width);
         SOKOL_ASSERT(ds_att->image->height == img->height);
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_att->image->depth_format));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_att->image->pixel_format));
     }
     #endif /* SOKOL_DEBUG */
 }
@@ -978,6 +975,8 @@ _SOKOL_PRIVATE bool _sg_validate_draw(_sg_pipeline* pip,
             return false;
         }
         SOKOL_ASSERT(img->type == pip->shader->stage[SG_SHADERSTAGE_FS].images[i].type);
+        /* cannot use depth-stencil images as texture (FIXME: or can we? GLES2?) */
+        SOKOL_ASSERT(!_sg_is_valid_rendertarget_depth_format(img->pixel_format));
     }
     /* all ok for rendering! */
     return true;
