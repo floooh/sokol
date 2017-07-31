@@ -326,6 +326,16 @@ void sg_init_pass_action(sg_pass_action* pa) {
     pa->actions = SG_PASSACTION_CLEAR_ALL;
 }
 
+void sg_init_clear_color(sg_pass_action* pa, int att_index, float r, float g, float b, float a) {
+    SOKOL_ASSERT(pa);
+    SOKOL_ASSERT(pa->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((att_index >= 0) && (att_index < SG_MAX_COLOR_ATTACHMENTS));
+    pa->color[att_index][0] = r;
+    pa->color[att_index][1] = g;
+    pa->color[att_index][2] = b;
+    pa->color[att_index][3] = a;
+}
+
 void sg_init_draw_state(sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     ds->_init_guard = _SG_INIT_GUARD;

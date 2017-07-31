@@ -215,7 +215,7 @@ typedef enum {
     SG_PRIMITIVETYPE_LINES,
     SG_PRIMITIVETYPE_LINE_STRIP,
     SG_PRIMITIVETYPE_TRIANGLES,
-    SG_PRIMITIVETYPE_TRIANLE_STRIP,
+    SG_PRIMITIVETYPE_TRIANGLE_STRIP,
 } sg_primitive_type;
 
 typedef enum {
@@ -340,6 +340,7 @@ typedef enum {
     buffer content will be discarded.
 */
 typedef enum {
+    SG_PASSACTION_NONE = 0,
     SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
     SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
     SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
@@ -565,6 +566,7 @@ extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, co
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format);
 extern void sg_init_pass_desc(sg_pass_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
+extern void sg_init_clear_color(sg_pass_action* pa, int color_attachment_index, float r, float g, float b, float a);
 extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */

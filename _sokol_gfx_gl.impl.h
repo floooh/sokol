@@ -156,7 +156,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_primitive_type(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_LINES:            return GL_LINES;
         case SG_PRIMITIVETYPE_LINE_STRIP:       return GL_LINE_STRIP;
         case SG_PRIMITIVETYPE_TRIANGLES:        return GL_TRIANGLES;
-        case SG_PRIMITIVETYPE_TRIANLE_STRIP:    return GL_TRIANGLE_STRIP;
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return GL_TRIANGLE_STRIP;
         default:
             SOKOL_UNREACHABLE;
             return -1;
