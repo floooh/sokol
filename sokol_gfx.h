@@ -60,12 +60,15 @@ extern "C" {
     pool lookups, and combined with the unique-mask it allows to detect
     'dangling accesses' (trying to use an object which longer exists, and
     its pool slot has been reused for a new object)
+
+    The resource ids are wrapped into a struct so that the compiler
+    can complains when the wrong resource type is used.
 */
-typedef uint32_t sg_buffer;
-typedef uint32_t sg_image;
-typedef uint32_t sg_shader;
-typedef uint32_t sg_pipeline;
-typedef uint32_t sg_pass;
+typedef struct { uint32_t id; } sg_buffer;
+typedef struct { uint32_t id; } sg_image;
+typedef struct { uint32_t id; } sg_shader;
+typedef struct { uint32_t id; } sg_pipeline;
+typedef struct { uint32_t id; } sg_pass;
 
 /* 
     various compile-time constants

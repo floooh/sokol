@@ -617,7 +617,7 @@ _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     _sg_init_slot(&pip->slot);
     pip->shader = 0;
-    pip->shader_id = SG_INVALID_ID;
+    pip->shader_id.id = SG_INVALID_ID;
     pip->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     pip->index_type = SG_INDEXTYPE_NONE;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -639,7 +639,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_init_attachment(_sg_attachment* att) {
     SOKOL_ASSERT(att);
     att->image = 0;
-    att->image_id = SG_INVALID_ID;
+    att->image_id.id = SG_INVALID_ID;
     att->mip_level = 0;
     att->slice = 0;
     att->gl_msaa_resolve_buffer = 0;
@@ -744,9 +744,9 @@ _SOKOL_PRIVATE void _sg_setup_backend(_sg_backend* state) {
     state->cur_pass_width = 0;
     state->cur_pass_height = 0;
     state->cur_pass = 0;
-    state->cur_pass_id = SG_INVALID_ID;
+    state->cur_pass_id.id = SG_INVALID_ID;
     state->cur_pipeline = 0;
-    state->cur_pipeline_id = SG_INVALID_ID;
+    state->cur_pipeline_id.id = SG_INVALID_ID;
     state->valid = true;
     _sg_init_state_cache(&state->cache);
     
@@ -1179,8 +1179,8 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(!pip->shader && pip->shader_id == SG_INVALID_ID);
-    SOKOL_ASSERT(desc->shader == shd->slot.id);
+    SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
+    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl_prog);
     #ifdef SOKOL_DEBUG
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -1258,10 +1258,10 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         SOKOL_ASSERT(0 == pass->color_atts[i].image);
         att_desc = &desc->color_attachments[i];
-        if (att_desc->image != SG_INVALID_ID) {
-            SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image));
+        if (att_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
             att = &pass->color_atts[i];
-            SOKOL_ASSERT((att->image == 0) && (att->image_id == SG_INVALID_ID));
+            SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
             att->image = att_images[i];
             att->image_id = att_desc->image;
             att->mip_level = att_desc->mip_level;
@@ -1271,10 +1271,10 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
     SOKOL_ASSERT(0 == pass->ds_att.image);
     att_desc = &desc->depth_stencil_attachment;
     const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
-    if (att_desc->image != SG_INVALID_ID) {
-        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image));
+    if (att_desc->image.id != SG_INVALID_ID) {
+        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
         att = &pass->ds_att;
-        SOKOL_ASSERT((att->image == 0) && (att->image_id == SG_INVALID_ID));
+        SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
         att->image = att_images[ds_img_index];
         att->image_id = att_desc->image;
         att->mip_level = att_desc->mip_level;
@@ -1415,10 +1415,10 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
     state->in_pass = true;
     state->cur_pass = pass; /* can be 0 */
     if (pass) {
-        state->cur_pass_id = pass->slot.id;
+        state->cur_pass_id.id = pass->slot.id;
     }
     else {
-        state->cur_pass_id = SG_INVALID_ID;
+        state->cur_pass_id.id = SG_INVALID_ID;
     }
     state->cur_pass_width = w;
     state->cur_pass_height = h;
@@ -1524,7 +1524,7 @@ _SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
     if (state->cur_pass) {
         /* check if the pass object is still valid */
         const _sg_pass* pass = state->cur_pass;
-        SOKOL_ASSERT(pass->slot.id == state->cur_pass_id);
+        SOKOL_ASSERT(pass->slot.id == state->cur_pass_id.id);
         bool is_msaa = (0 != state->cur_pass->color_atts[0].gl_msaa_resolve_buffer);
         if (is_msaa) {
             SOKOL_ASSERT(pass->gl_fb);
@@ -1550,7 +1550,7 @@ _SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
     }
     #endif
     state->cur_pass = 0;
-    state->cur_pass_id = SG_INVALID_ID;
+    state->cur_pass_id.id = SG_INVALID_ID;
     state->cur_pass_width = 0;
     state->cur_pass_height = 0;
 
@@ -1574,7 +1574,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
     state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
     state->cur_index_type = _sg_gl_index_type(pip->index_type);
     state->cur_pipeline = pip;
-    state->cur_pipeline_id = pip->slot.id;
+    state->cur_pipeline_id.id = pip->slot.id;
 
     /* update depth-stencil state */
     const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
@@ -1776,11 +1776,11 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage 
     if (!state->next_draw_valid) {
         return;
     }
-    if (state->cur_pipeline->slot.id != state->cur_pipeline_id) {
+    if (state->cur_pipeline->slot.id != state->cur_pipeline_id.id) {
         /* pipeline object was destroyed */
         return;
     }
-    if (state->cur_pipeline->shader->slot.id != state->cur_pipeline->shader_id) {
+    if (state->cur_pipeline->shader->slot.id != state->cur_pipeline->shader_id.id) {
         /* shader object was destroyed */
     }
     _sg_shader_stage* stage = &state->cur_pipeline->shader->stage[stage_index];
