@@ -175,7 +175,7 @@ void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char
 _SOKOL_PRIVATE void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
     layout->stride = 0;
-    layout->step_func = SG_STEPFUNC_PER_VERTEX;
+    layout->step_func = SG_VERTEXSTEP_PER_VERTEX;
     layout->step_rate = 1;
     layout->num_attrs = 0;
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -225,11 +225,11 @@ _SOKOL_PRIVATE void _sg_init_blend_state(sg_blend_state* s) {
 
 _SOKOL_PRIVATE void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
     SOKOL_ASSERT(s);
-    s->cull_face_enabled = false;
     s->scissor_test_enabled = false;
     s->dither_enabled = true;
     s->alpha_to_coverage_enabled = false;
-    s->cull_face = SG_FACE_BACK;
+    s->cull_mode = SG_CULLMODE_NONE;
+    s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
 }
 
@@ -256,12 +256,12 @@ void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride) {
     desc->input_layouts[input_slot].stride = stride;
 }
 
-void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_step_func step_func, int step_rate) {
+void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
     SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
-    layout->step_func = step_func;
+    layout->step_func = step;
     layout->step_rate = step_rate;
 }
 

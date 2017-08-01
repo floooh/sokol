@@ -46,11 +46,11 @@ extern "C" {
 /* 
     Resource id typedefs:
 
-    sg_buffer
-    sg_image
-    sg_shader
-    sg_pipeline
-    sg_pass
+    sg_buffer:      vertex- and index-buffers
+    sg_image:       textures and render targets
+    sg_shader:      vertex- and fragment-shaders, uniform blocks
+    sg_pipeline:    associated shader and vertex-layouts, and render states
+    sg_pass:        a bundle of render targets and actions on them
 
     Instead of pointers, resource creation functions return a 32-bit
     number which uniquely identifies the resource object.
@@ -69,6 +69,21 @@ typedef struct { uint32_t id; } sg_image;
 typedef struct { uint32_t id; } sg_shader;
 typedef struct { uint32_t id; } sg_pipeline;
 typedef struct { uint32_t id; } sg_pass;
+
+/*
+    sg_resource_type
+
+    The resource types as enum.
+*/
+typedef enum {
+    SG_RESOURCETYPE_BUFFER,
+    SG_RESOURCETYPE_IMAGE,
+    SG_RESOURCETYPE_SHADER,
+    SG_RESOURCETYPE_PIPELINE,
+    SG_RESOURCETYPE_PASS,
+
+    SG_NUM_RESOURCETYPES
+} sg_resource_type;
 
 /* 
     various compile-time constants
@@ -96,7 +111,7 @@ enum {
     sg_query_feature() to check whether the feature is supported.
 */
 typedef enum {
-    SG_FEATURE_INSTANCED_ARRAYS = 0,
+    SG_FEATURE_INSTANCED_ARRAYS,
     SG_FEATURE_TEXTURE_COMPRESSION_DXT,
     SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
     SG_FEATURE_TEXTURE_COMPRESSION_ATC,
@@ -110,28 +125,9 @@ typedef enum {
     SG_FEATURE_MULTIPLE_RENDER_TARGET,
     SG_FEATURE_TEXTURE_3D,
     SG_FEATURE_TEXTURE_ARRAY,
+
     SG_NUM_FEATURES
 } sg_feature;
-
-/*
-    sg_resource_type
-
-    sokol gfx has 5 resource types:
-    - buffer:   vertex and index buffers
-    - image:    textures and render targets
-    - shaders:  vertex and fragment shaders, uniform blocks
-    - pipeline: encapsulates shader, render states and vertex layouts
-    - pass:     encapsulates render pass operations (clear, msaa resolve, etc)
-*/
-typedef enum {
-    SG_RESOURCETYPE_BUFFER = 0,
-    SG_RESOURCETYPE_IMAGE,
-    SG_RESOURCETYPE_SHADER,
-    SG_RESOURCETYPE_PIPELINE,
-    SG_RESOURCETYPE_PASS,
-
-    SG_NUM_RESOURCETYPES
-} sg_resource_type;
 
 /*
     sg_resource_state
@@ -156,36 +152,124 @@ typedef enum {
 } sg_resource_state;
 
 /*
-    sg_buffer_type
+    sg_usage
 
-    Buffers come in 2 flavours, vertex- and index-buffers.
+    A resource usage hint describing the update strategy of
+    buffers and images. This is used in the sg_buffer_desc.usage
+    and sg_image_desc.usage members when creating buffers
+    and images:
+
+    SG_USAGE_IMMUTABLE:     the resource will never be updated with
+                            new data, instead the data content of the
+                            resource must be provided on creation
+    SG_USAGE_DYNAMIC:       the resource will be updated infrequently
+                            with new data (this could range from "once
+                            after creation", to "quite often but not
+                            every frame")
+    SG_USAGE_STREAM:        the resource will be updated each frame
+                            with new content
+
+    The rendering backends use this hint to make prevent
+    lock-stalls when updating buffers or images with new data
+    (meaning that the CPU would need to wait for a resource that's
+    currently in use by the GPU).
+
+    Resource content is updated with the function sg_update_buffer() for
+    buffer objects, and sg_update_image() for image objects. Only
+    one update is allowed per frame and resource object. The
+    application must update all data required for rendering (this
+    means that the update data can be smaller than the resource size
+    if only part of the resource object content is used - for instance
+    when a vertex buffer has been created for a large number of
+    dynamic vertices, but only a small number of vertices must
+    be rendered in a specific frame.
 */
 typedef enum {
+    SG_USAGE_DEFAULT,       /* value 0 reserved for default-init */
+    SG_USAGE_IMMUTABLE,
+    SG_USAGE_DYNAMIC,
+    SG_USAGE_STREAM,
+} sg_usage;
+
+/*
+    sg_buffer_type
+
+    This indicates whether a buffer contains vertex- or index-data,
+    used in the sg_buffer_desc.type member when creating a buffer.
+
+    The default value is SG_BUFFERTYPE_VERTEXBUFFER.
+*/
+typedef enum {
+    SG_BUFFERTYPE_DEFAULT,      /* value 0 reserved for default-init */
     SG_BUFFERTYPE_VERTEXBUFFER,
     SG_BUFFERTYPE_INDEXBUFFER
 } sg_buffer_type;
 
-typedef enum {
-    SG_IMAGETYPE_INVALID,
-    SG_IMAGETYPE_2D,
-    SG_IMAGETYPE_CUBE,
-    SG_IMAGETYPE_3D,
-    SG_IMAGETYPE_ARRAY,
-} sg_image_type;
+/*
+    sg_index_type
 
+    Indicates whether indexed rendering (using an index buffer) is
+    used, and if yes, the index data type (16- or 32-bits).
+    This is used in the sg_pipeline_desc.index_type member when
+    creating a pipeline object.
+
+    The default index type is SG_INDEXTYPE_NONE.
+*/
 typedef enum {
+    SG_INDEXTYPE_DEFAULT,   /* value 0 reserved for default-init */
     SG_INDEXTYPE_NONE,
     SG_INDEXTYPE_UINT16,
     SG_INDEXTYPE_UINT32,
 } sg_index_type;
 
+/*
+    sg_image_type
+
+    Indicates the basic image type (2D-texture, cubemap, 3D-texture
+    or 2D-array-texture). 3D- and array-textures are not supported
+    on the GLES2/WebGL backend. The image type is used in the
+    sg_image_desc.type member when creating an image.
+
+    The default image type when creating an image is SG_IMAGETYPE_2D.
+*/
+typedef enum {
+    SG_IMAGETYPE_DEFAULT,   /* value 0 reserved for default-init */
+    SG_IMAGETYPE_2D,
+    SG_IMAGETYPE_CUBE,
+    SG_IMAGETYPE_3D,
+    SG_IMAGETYPE_ARRAY,
+    SG_IMAGETYPE_INVALID,
+} sg_image_type;
+
+/*
+    sg_shader_stage
+
+    There are 2 shader stages: vertex- and fragment-shader-stage.
+    Each shader has a shader function attached (either provided
+    by source- or byte-code when creating a shader object), and
+    SG_MAX_SHADERSTAGE_UBS slots for uniform blocks, and
+    SG_MAX_SHADERSTAGE_IMAGES for images (textures) used by
+    the shader stage shader.
+*/
 typedef enum {
     SG_SHADERSTAGE_VS,
     SG_SHADERSTAGE_FS,
 } sg_shader_stage;
 
+/*
+    sg_pixel_format
+
+    This is a common subset of useful and widely supported
+    pixel formats. The pixel format enum is mainly used
+    required when creating an image object in the
+    sg_image_desc.pixel_format member.
+
+    The default pixel format when creating an image is
+    SG_PIXELFORMAT_RGBA8.
+*/
 typedef enum {
-    SG_PIXELFORMAT_NONE = 0,
+    SG_PIXELFORMAT_DEFAULT,     /* value 0 reserved for default-init */
+    SG_PIXELFORMAT_NONE,
     SG_PIXELFORMAT_RGBA8,
     SG_PIXELFORMAT_RGB8,
     SG_PIXELFORMAT_RGBA4,
@@ -210,7 +294,19 @@ typedef enum {
     SG_PIXELFORMAT_ETC2_SRGB8,
 } sg_pixel_format;
 
+/*
+    sg_primitive_type
+
+    This is the common subset of 3D primitive types
+    supported across all 3D APIs (not the absence of
+    triangle- and line-fans). This is used in the
+    sg_pipeline_desc.primitive_type member when creating
+    a pipeline object.
+
+    The default primitive type is SG_PRIMITIVETYPE_TRIANGLES.
+*/
 typedef enum {
+    SG_PRIMITIVETYPE_DEFAULT,   /* value 0 reserved for default-init */
     SG_PRIMITIVETYPE_POINTS,
     SG_PRIMITIVETYPE_LINES,
     SG_PRIMITIVETYPE_LINE_STRIP,
@@ -218,7 +314,17 @@ typedef enum {
     SG_PRIMITIVETYPE_TRIANGLE_STRIP,
 } sg_primitive_type;
 
+/*
+    sg_filter
+
+    The filtering mode when sampling a texture image. This is
+    used in the sg_image_desc.min_filter and sg_image_desc.mag_filter
+    members when creating an image object.
+
+    The default filter mode is SG_FILTER_NEAREST.
+*/
 typedef enum {
+    SG_FILTER_DEFAULT,  /* value 0 reserved for default-init */
     SG_FILTER_NEAREST,
     SG_FILTER_LINEAR,
     SG_FILTER_NEAREST_MIPMAP_NEAREST,
@@ -227,18 +333,28 @@ typedef enum {
     SG_FILTER_LINEAR_MIPMAP_LINEAR,
 } sg_filter;
 
+/*
+    sg_wrap
+
+    The texture coordinates wrapping mode when sampling a texture
+    image. This is used in the sg_image_desc.wrap_u, .wrap_v
+    and .wrapW members when creating an image.
+
+    The default wrap mode is SG_WRAP_REPEAT.
+*/
 typedef enum {
-    SG_WRAP_CLAMP_TO_EDGE,
+    SG_WRAP_DEFAULT,    /* value 0 reserved for default-init */
     SG_WRAP_REPEAT,
+    SG_WRAP_CLAMP_TO_EDGE,
     SG_WRAP_MIRRORED_REPEAT,
 } sg_wrap;
 
-typedef enum {
-    SG_USAGE_IMMUTABLE,
-    SG_USAGE_DYNAMIC,
-    SG_USAGE_STREAM,
-} sg_usage;
+/*
+    sg_vertex_format
 
+    The data type of a vertex component. This is used to describe
+    the layout of vertex data when creating a pipeline object.
+*/
 typedef enum {
     SG_VERTEXFORMAT_INVALID = 0,
     SG_VERTEXFORMAT_FLOAT,
@@ -256,6 +372,30 @@ typedef enum {
     SG_VERTEXFORMAT_UINT10_N2,
 } sg_vertex_format;
 
+/*
+    sg_vertex_step
+
+    Defines whether the vertex assembly input pointer of
+    a vertex buffer slot is advanced 'per vertex' or 'per instance'.
+    The default step-func is SG_VERTEXSTEP_PER_VERTEX.
+    SG_VERTEXSTEP_PER_INSTANCE is used with instanced-rendering.
+
+    The vertex-step is part of the vertex-layout definition
+    when creating pipeline objects.
+*/
+typedef enum {
+    SG_VERTEXSTEP_DEFAULT,  /* value 0 reserved for default-init */
+    SG_VERTEXSTEP_PER_VERTEX,
+    SG_VERTEXSTEP_PER_INSTANCE,
+} sg_vertex_step;
+
+/*
+    sg_uniform_type
+
+    The data type of a uniform block member. This is used to 
+    describe the internal layout of uniform blocks when creating
+    a shader object.
+*/
 typedef enum {
     SG_UNIFORMTYPE_INVALID,
     SG_UNIFORMTYPE_FLOAT,
@@ -265,13 +405,51 @@ typedef enum {
     SG_UNIFORMTYPE_MAT4,
 } sg_uniform_type;
 
-typedef enum {
-    SG_FACE_FRONT,
-    SG_FACE_BACK,
-    SG_FACE_BOTH,
-} sg_face;
+/*
+    sg_cull_mode
 
+    The face-culling mode, this is used in the
+    sg_pipeline_desc.rast.cull_mode member when creating a 
+    pipeline object.
+
+    The default cull mode is SG_CULLMODE_NONE
+*/
 typedef enum {
+    SG_CULLMODE_DEFAULT,    /* value 0 reserved for default-init */
+    SG_CULLMODE_NONE,
+    SG_CULLMODE_FRONT,
+    SG_CULLMODE_BACK,
+} sg_cull_mode;
+
+/*
+    sg_face_winding
+
+    The vertex-winding rule that determines a front-facing
+    primitive.
+
+    The default winding mode is SG_FACEWINDING_CW.
+*/
+typedef enum {
+    SG_FACEWINDING_DEFAULT,     /* value 0 reserved for default-init */
+    SG_FACEWINDING_CCW,
+    SG_FACEWINDING_CW,
+} sg_face_winding;
+
+/*
+    sg_compare_func
+
+    The compare-function for for depth- and stencil-ref tests.
+    This is used when creating pipeline objects in the members:
+    
+    sg_pipeline_desc.depth_stencil.depth_compare_func
+    sg_pipeline_desc.stencil_front.compare_func
+    sg_pipeline_desc.stencil_back.compare_func
+
+    The default compare func for depth-tests is
+    SG_COMPAREFUNC_ALWAYS.
+*/
+typedef enum {
+    SG_COMPAREFUNC_DEFAULT,     /* value 0 reserved for default-init */
     SG_COMPAREFUNC_NEVER,
     SG_COMPAREFUNC_LESS,
     SG_COMPAREFUNC_EQUAL,
@@ -282,7 +460,24 @@ typedef enum {
     SG_COMPAREFUNC_ALWAYS,
 } sg_compare_func;
 
+/*
+    sg_stencil_op
+
+    The operation performed on a currently stored stencil-value
+    when a comparison test passes or fails.
+    This is used when creating a pipeline object in the members:
+
+    sg_pipeline_desc.stencil_front.fail_op
+    sg_pipeline_desc.stencil_front.depth_fail_op
+    sg_pipeline_desc.stencil_front.pass_op
+    sg_pipeline_desc.stencil_back.fail_op
+    sg_pipeline_desc.stencil_back.depth_fail_op
+    sg_pipeline_desc.stencil_back.pass_op
+
+    The default value is SG_STENCILOP_KEEP.
+*/
 typedef enum {
+    SG_STENCILOP_DEFAULT,       /* value 0 reserved for default-init */
     SG_STENCILOP_KEEP,
     SG_STENCILOP_ZERO,
     SG_STENCILOP_REPLACE,
@@ -293,7 +488,23 @@ typedef enum {
     SG_STENCILOP_DECR_WRAP,
 } sg_stencil_op;
 
+/*
+    sg_blend_factor
+
+    The source and destination factors in blending operations.
+
+    This is used in the following when creating a pipeline object:
+
+    sg_pipeline_desc.blend.src_factor_rgb
+    sg_pipeline_desc.blend.dst_factor_rgb
+    sg_pipeline_desc.blend.src_factor_alpha
+    sg_pipeline_desc.blend.dst_factor_alpha
+
+    The default value is SG_BLENDFACTOR_ONE for source
+    factors, and SG_BLENDFACTOR_ZERO for destination factors.
+*/
 typedef enum {
+    SG_BLENDFACTOR_DEFAULT,     /* value 0 reserved for default-init */
     SG_BLENDFACTOR_ZERO,
     SG_BLENDFACTOR_ONE,
     SG_BLENDFACTOR_SRC_COLOR,
@@ -311,18 +522,38 @@ typedef enum {
     SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA,
 } sg_blend_factor;
 
+/*
+    sg_blend_op
+
+    Describes how the source and destination values are 
+    combined in the fragment blending operation. It is
+    used in the following members when creating a pipeline
+    object:
+
+    sg_pipeline_desc.blend.op_rgb
+    sg_pipeline_desc.blend.op_alpha
+
+    The default value is SG_BLENDOP_ADD.
+*/
 typedef enum {
+    SG_BLENDOP_DEFAULT,     /* value 0 reserved for default-init */
     SG_BLENDOP_ADD,
     SG_BLENDOP_SUBTRACT,
     SG_BLENDOP_REVERSE_SUBTRACT,
 } sg_blend_op;
 
-typedef enum {
-    SG_STEPFUNC_PER_VERTEX,
-    SG_STEPFUNC_PER_INSTANCE,
-} sg_step_func;
+/*
+    sg_color_mask
 
+    Selects the color channels when writing a fragment color
+    to the framebuffer. This is used in the members
+    sg_pipeline_desc.blend.color_write_mask when creating
+    a pipeline object.
+
+    The default colormask is SG_COLORMASK_RGBA (all colors)
+*/
 typedef enum {
+    SG_COLORMASK_DEFAULT = 0,   /* value 0 reserved for default-init */
     SG_COLORMASK_R = (1<<0),
     SG_COLORMASK_G = (1<<1),
     SG_COLORMASK_B = (1<<2),
@@ -335,12 +566,13 @@ typedef enum {
 
     Describes the actions that should be performed at the start of
     a rendering pass, this includes clearing the color, depth and 
-    stencil buffers, or loading the previous content of those
-    buffers. If no pass actions bits are set, the associated
-    buffer content will be discarded.
+    stencil buffers, loading the previous content of those
+    buffers, or leaving the initial content 'undefined'.
+
+    The default pass actions are SG_PASSACTION_CLEAR_ALL.
 */
 typedef enum {
-    SG_PASSACTION_NONE = 0,
+    SG_PASSACTION_DEFAULT = 0,  /* value 0 reserved for default-init */
     SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
     SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
     SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
@@ -359,6 +591,15 @@ typedef enum {
     SG_PASSACTION_LOAD_STENCIL  = (1<<11),
     SG_PASSACTION_LOAD_DEPTH_STENCIL = (1<<10)|(1<<11),
     SG_PASSACTION_LOAD_ALL = SG_PASSACTION_LOAD_COLOR|SG_PASSACTION_LOAD_DEPTH_STENCIL,
+    SG_PASSACTION_DONTCARE_COLOR0 = (1<<12),
+    SG_PASSACTION_DONTCARE_COLOR1 = (1<<13),
+    SG_PASSACTION_DONTCARE_COLOR2 = (1<<14),
+    SG_PASSACTION_DONTCARE_COLOR3 = (1<<15),
+    SG_PASSACTION_DONTCARE_COLOR  = (1<<12)|(1<<13)|(1<<14)|(1<<15),
+    SG_PASSACTION_DONTCARE_DEPTH  = (1<<16),
+    SG_PASSACTION_DONTCARE_STENCIL = (1<<17),
+    SG_PASSACTION_DONTCARE_DEPTH_STENCIL = (1<<16)|(1<<17),
+    SG_PASSACTION_DONTCARE_ALL = SG_PASSACTION_DONTCARE_COLOR|SG_PASSACTION_DONTCARE_DEPTH_STENCIL,
 } sg_pass_action_bits;
 
 typedef struct {
@@ -400,11 +641,11 @@ typedef struct {
 } sg_blend_state;
 
 typedef struct {
-    bool cull_face_enabled;
     bool scissor_test_enabled;
     bool dither_enabled;
     bool alpha_to_coverage_enabled;
-    sg_face cull_face;
+    sg_cull_mode cull_mode;
+    sg_face_winding face_winding;
     int sample_count;
 } sg_rasterizer_state;
 
@@ -515,7 +756,7 @@ typedef struct {
     int stride;
     int num_attrs;
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_step_func step_func;
+    sg_vertex_step step_func;
     int step_rate;
 } sg_vertex_layout_desc;
 
@@ -561,7 +802,7 @@ extern void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, c
 extern void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride);
-extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_step_func step_func, int step_rate);
+extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate);
 extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format);
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format);
 extern void sg_init_pass_desc(sg_pass_desc* desc);

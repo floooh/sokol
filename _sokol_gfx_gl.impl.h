@@ -240,17 +240,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
     }
 }
 
-_SOKOL_PRIVATE GLenum _sg_gl_cull_face(sg_face f) {
-    switch (f) {
-        case SG_FACE_FRONT: return GL_FRONT;
-        case SG_FACE_BACK:  return GL_BACK;
-        case SG_FACE_BOTH:  return GL_FRONT_AND_BACK;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
-    }
-}
-
 _SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
     switch (f) {
         case SG_FILTER_NEAREST:                 return GL_NEAREST;
@@ -1216,7 +1205,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _
             if (attr_loc != -1) {
                 _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
                 gl_attr->vb_index = slot;
-                if (layout_desc->step_func == SG_STEPFUNC_PER_VERTEX) {
+                if (layout_desc->step_func == SG_VERTEXSTEP_PER_VERTEX) {
                     gl_attr->divisor = 0;
                 }
                 else {
@@ -1676,14 +1665,21 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
     /* update rasterizer state */
     const sg_rasterizer_state* new_r = &pip->rast;
     sg_rasterizer_state* cache_r = &state->cache.rast;
-    if (new_r->cull_face_enabled != cache_r->cull_face_enabled) {
-        cache_r->cull_face_enabled = new_r->cull_face_enabled;
-        if (new_r->cull_face_enabled) glEnable(GL_CULL_FACE);
-        else glDisable(GL_CULL_FACE);
+    if (new_r->cull_mode != cache_r->cull_mode) {
+        cache_r->cull_mode = new_r->cull_mode;
+        if (SG_CULLMODE_NONE == new_r->cull_mode) {
+            glDisable(GL_CULL_FACE);
+        }
+        else {
+            glEnable(GL_CULL_FACE);
+            GLenum gl_mode = (SG_CULLMODE_FRONT == new_r->cull_mode) ? GL_FRONT : GL_BACK;
+            glCullFace(gl_mode);
+        }
     }
-    if (new_r->cull_face != cache_r->cull_face) {
-        cache_r->cull_face = new_r->cull_face;
-        glCullFace(_sg_gl_cull_face(new_r->cull_face));
+    if (new_r->face_winding != cache_r->face_winding) {
+        cache_r->face_winding = new_r->face_winding;
+        GLenum gl_winding = (SG_FACEWINDING_CW == new_r->face_winding) ? GL_CW : GL_CCW;
+        glFrontFace(gl_winding);
     }
     if (new_r->scissor_test_enabled != cache_r->scissor_test_enabled) {
         cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
