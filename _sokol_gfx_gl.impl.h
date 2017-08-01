@@ -799,9 +799,9 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const
     SOKOL_ASSERT(desc->data_size <= desc->size);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
-    buf->type = desc->type;
-    buf->usage = desc->usage;
-    buf->num_slots = desc->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
+    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->num_slots = buf->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
     buf->active_slot = 0;
     GLenum gl_target = _sg_gl_buffer_target(buf->type);
     GLenum gl_usage  = _sg_gl_usage(buf->usage);

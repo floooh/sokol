@@ -70,21 +70,6 @@ typedef struct { uint32_t id; } sg_shader;
 typedef struct { uint32_t id; } sg_pipeline;
 typedef struct { uint32_t id; } sg_pass;
 
-/*
-    sg_resource_type
-
-    The resource types as enum.
-*/
-typedef enum {
-    SG_RESOURCETYPE_BUFFER,
-    SG_RESOURCETYPE_IMAGE,
-    SG_RESOURCETYPE_SHADER,
-    SG_RESOURCETYPE_PIPELINE,
-    SG_RESOURCETYPE_PASS,
-
-    SG_NUM_RESOURCETYPES
-} sg_resource_type;
-
 /* 
     various compile-time constants
 
@@ -183,12 +168,15 @@ typedef enum {
     when a vertex buffer has been created for a large number of
     dynamic vertices, but only a small number of vertices must
     be rendered in a specific frame.
+
+    The default usage is SG_USAGE_IMMUTABLE.
 */
 typedef enum {
-    SG_USAGE_DEFAULT,       /* value 0 reserved for default-init */
+    _SG_USAGE_DEFAULT,      /* value 0 reserved for default-init */
     SG_USAGE_IMMUTABLE,
     SG_USAGE_DYNAMIC,
     SG_USAGE_STREAM,
+    _SG_USAGE_NUM,
 } sg_usage;
 
 /*
@@ -200,9 +188,10 @@ typedef enum {
     The default value is SG_BUFFERTYPE_VERTEXBUFFER.
 */
 typedef enum {
-    SG_BUFFERTYPE_DEFAULT,      /* value 0 reserved for default-init */
+    _SG_BUFFERTYPE_DEFAULT,         /* value 0 reserved for default-init */
     SG_BUFFERTYPE_VERTEXBUFFER,
-    SG_BUFFERTYPE_INDEXBUFFER
+    SG_BUFFERTYPE_INDEXBUFFER,
+    _SG_BUFFERTYPE_NUM,
 } sg_buffer_type;
 
 /*
@@ -216,10 +205,11 @@ typedef enum {
     The default index type is SG_INDEXTYPE_NONE.
 */
 typedef enum {
-    SG_INDEXTYPE_DEFAULT,   /* value 0 reserved for default-init */
+    _SG_INDEXTYPE_DEFAULT,   /* value 0 reserved for default-init */
     SG_INDEXTYPE_NONE,
     SG_INDEXTYPE_UINT16,
     SG_INDEXTYPE_UINT32,
+    _SG_INDEXTYPE_NUM,
 } sg_index_type;
 
 /*
@@ -658,15 +648,18 @@ typedef struct {
     then modify struct members to your needs and finally call
     sg_setup():
 
-    sg_desc desc;
-    sg_init_desc(&desc);
+    sg_desc desc = { };
     desc.width = WIDTH;
     ...
     sg_setup(&desc);
 */
 typedef struct {
     uint32_t _init_guard;
-    int resource_pool_size[SG_NUM_RESOURCETYPES];
+    int buffer_pool_size;
+    int image_pool_size;
+    int shader_pool_size;
+    int pipeline_pool_size;
+    int pass_pool_size;
 } sg_desc;
 
 typedef struct {
@@ -793,8 +786,6 @@ typedef struct {
 } sg_draw_state;
 
 /* struct initializers */
-extern void sg_init_desc(sg_desc* desc);
-extern void sg_init_buffer_desc(sg_buffer_desc* desc);
 extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, int ub_size); 
