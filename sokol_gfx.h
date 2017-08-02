@@ -643,15 +643,8 @@ typedef struct {
 /*
     sg_desc
 
-    This describes initialization attributes for the entire sokol_gfx
-    library. First initialize the structure with sg_init_desc(),
-    then modify struct members to your needs and finally call
-    sg_setup():
-
-    sg_desc desc = { };
-    desc.width = WIDTH;
-    ...
-    sg_setup(&desc);
+    This describes initialization attributes for sokol_gfx used
+    as parameter in the call to sg_setup().
 */
 typedef struct {
     uint32_t _init_guard;
