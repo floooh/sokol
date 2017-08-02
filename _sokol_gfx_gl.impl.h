@@ -1808,6 +1808,9 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage 
             case SG_UNIFORMTYPE_MAT4:
                 glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, ptr);
                 break;
+            default:
+                SOKOL_UNREACHABLE;
+                break;
         }
     }
 }
