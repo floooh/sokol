@@ -597,11 +597,12 @@ typedef enum {
 } sg_pass_action_mask;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     float color[SG_MAX_COLOR_ATTACHMENTS][4];
     float depth;
     uint8_t stencil;
     sg_pass_action_mask actions;
+    uint32_t _end_canary;
 } sg_pass_action;
 
 typedef struct {
@@ -726,9 +727,10 @@ typedef struct {
 } sg_shader_stage_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
+    uint32_t _end_canary;
 } sg_shader_desc;
 
 /*
@@ -754,7 +756,7 @@ typedef struct {
 } sg_vertex_layout_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
@@ -762,6 +764,7 @@ typedef struct {
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
     sg_rasterizer_state rast;
+    uint32_t _end_canary;
 } sg_pipeline_desc;
 
 typedef struct {
@@ -771,9 +774,10 @@ typedef struct {
 } sg_attachment_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc depth_stencil_attachment;
+    uint32_t _end_canary;
 } sg_pass_desc;
 
 typedef struct {

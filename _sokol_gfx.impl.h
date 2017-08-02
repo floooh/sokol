@@ -51,7 +51,6 @@ extern "C" {
 #endif
 
 enum {
-    _SG_INIT_GUARD = 0,
     _SG_SLOT_SHIFT = 16,
     _SG_SLOT_MASK = (1<<_SG_SLOT_SHIFT)-1,
     _SG_MAX_POOL_SIZE = (1<<_SG_SLOT_SHIFT),
@@ -91,7 +90,7 @@ _SOKOL_PRIVATE void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
 
 void sg_init_shader_desc(sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
+    desc->_start_canary = desc->_end_canary = 0;
     _sg_init_shader_stage_desc(&desc->vs);
     _sg_init_shader_stage_desc(&desc->fs);
 }
@@ -200,7 +199,7 @@ _SOKOL_PRIVATE void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
 
 void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
+    desc->_start_canary = desc->_end_canary = 0;
     desc->shader.id = SG_INVALID_ID;
     desc->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     desc->index_type = SG_INDEXTYPE_NONE;
@@ -214,7 +213,7 @@ void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
 
 void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(stride > 0);
     SOKOL_ASSERT((stride & 3) == 0);    /* must be multiple of 4 */
@@ -223,7 +222,7 @@ void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride) {
 
 void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
     layout->step_func = step;
@@ -232,7 +231,7 @@ void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step 
 
 void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT(name);
     SOKOL_ASSERT(offset >= 0);
@@ -248,7 +247,7 @@ void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const cha
 
 void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
     SOKOL_ASSERT((attr_index >= 0) && (attr_index < SG_MAX_VERTEX_ATTRIBUTES));
     SOKOL_ASSERT(offset >= 0);
@@ -264,7 +263,7 @@ void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int att
 
 void sg_init_pass_desc(sg_pass_desc* desc) {
     SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
+    desc->_start_canary = desc->_end_canary = 0;
     sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
     att_desc->image.id = SG_INVALID_ID;
     att_desc->mip_level = 0;
@@ -279,7 +278,7 @@ void sg_init_pass_desc(sg_pass_desc* desc) {
 
 void sg_init_pass_action(sg_pass_action* pa) {
     SOKOL_ASSERT(pa);
-    pa->_init_guard = _SG_INIT_GUARD;
+    pa->_start_canary = pa->_end_canary = 0;
     for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
         for (int c = 0; c < 3; c++) {
             pa->color[att_index][c] = 0.5f;
@@ -293,7 +292,7 @@ void sg_init_pass_action(sg_pass_action* pa) {
 
 void sg_init_clear_color(sg_pass_action* pa, int att_index, float r, float g, float b, float a) {
     SOKOL_ASSERT(pa);
-    SOKOL_ASSERT(pa->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((pa->_start_canary == 0) && (pa->_end_canary == 0));
     SOKOL_ASSERT((att_index >= 0) && (att_index < SG_MAX_COLOR_ATTACHMENTS));
     pa->color[att_index][0] = r;
     pa->color[att_index][1] = g;
@@ -994,7 +993,7 @@ void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
 
 void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     SOKOL_ASSERT(_sg && shd_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg_validate_shader_desc(desc);
     _sg_shader* shd = _sg_lookup_shader(&_sg->pools, shd_id.id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -1004,7 +1003,7 @@ void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
 
 void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_sg && pip_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg_validate_pipeline_desc(desc);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, pip_id.id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -1016,7 +1015,7 @@ void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
 
 void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     SOKOL_ASSERT(_sg && pass_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg_validate_pass_desc(desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -1137,13 +1136,13 @@ void sg_destroy_pass(sg_pass pass_id) {
 
 void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height) {
     SOKOL_ASSERT(_sg && pass_action);
-    SOKOL_ASSERT(pass_action->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg_begin_pass(&_sg->backend, 0, pass_action, width, height);
 }
 
 void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     SOKOL_ASSERT(_sg && pass_action);
-    SOKOL_ASSERT(pass_action->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_VALID);
     _sg_validate_begin_pass(pass, pass_action);
