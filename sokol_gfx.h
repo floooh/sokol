@@ -777,12 +777,13 @@ typedef struct {
 } sg_pass_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     sg_pipeline pipeline;
     sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_buffer index_buffer;
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    uint32_t _end_canary;
 } sg_draw_state;
 
 /* struct initializers */
@@ -798,7 +799,6 @@ extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, 
 extern void sg_init_pass_desc(sg_pass_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_clear_color(sg_pass_action* pa, int color_attachment_index, float r, float g, float b, float a);
-extern void sg_init_draw_state(sg_draw_state* ds);
 
 /* setup */
 extern void sg_setup(const sg_desc* desc);

@@ -301,20 +301,6 @@ void sg_init_clear_color(sg_pass_action* pa, int att_index, float r, float g, fl
     pa->color[att_index][3] = a;
 }
 
-void sg_init_draw_state(sg_draw_state* ds) {
-    SOKOL_ASSERT(ds);
-    ds->_init_guard = _SG_INIT_GUARD;
-    ds->pipeline.id = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        ds->vertex_buffers[i].id = SG_INVALID_ID;
-    }
-    ds->index_buffer.id = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        ds->vs_images[i].id = SG_INVALID_ID;
-        ds->fs_images[i].id = SG_INVALID_ID;
-    }
-}
-
 /*-- helper functions --------------------------------------------------------*/
 
 /* return byte size of a vertex format */
@@ -1168,7 +1154,7 @@ void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
 
 void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(_sg && ds);
-    SOKOL_ASSERT(ds->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
     _sg_validate_draw_state(ds);
     /* lookup resource pointers (lookups might yield 0, but this must be handled in backend) */
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg->pools, ds->pipeline.id);
