@@ -286,8 +286,8 @@ typedef enum {
     sg_primitive_type
 
     This is the common subset of 3D primitive types supported across all 3D
-    APIs (note the absence of triangle- and line-fans). This is used in the
-    sg_pipeline_desc.primitive_type member when creating a pipeline object.
+    APIs. This is used in the sg_pipeline_desc.primitive_type member when
+    creating a pipeline object.
 
     The default primitive type is SG_PRIMITIVETYPE_TRIANGLES.
 */
