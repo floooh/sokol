@@ -800,7 +800,6 @@ extern void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int st
 extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate);
 extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format);
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format);
-extern void sg_init_pass_desc(sg_pass_desc* desc);
 extern void sg_init_pass_action(sg_pass_action* pa);
 extern void sg_init_clear_color(sg_pass_action* pa, int color_attachment_index, float r, float g, float b, float a);
 

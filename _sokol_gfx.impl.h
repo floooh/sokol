@@ -261,21 +261,6 @@ void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int att
     attr->format = format;
 }
 
-void sg_init_pass_desc(sg_pass_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_start_canary = desc->_end_canary = 0;
-    sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
-    att_desc->image.id = SG_INVALID_ID;
-    att_desc->mip_level = 0;
-    att_desc->slice = 0;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        att_desc = &desc->color_attachments[i];
-        att_desc->image.id = SG_INVALID_ID;
-        att_desc->mip_level = 0;
-        att_desc->slice = 0;
-    }
-}
-
 void sg_init_pass_action(sg_pass_action* pa) {
     SOKOL_ASSERT(pa);
     pa->_start_canary = pa->_end_canary = 0;

@@ -1247,6 +1247,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
             att = &pass->color_atts[i];
             SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
             att->image = att_images[i];
@@ -1260,6 +1261,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
     const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
     if (att_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->pixel_format));
         att = &pass->ds_att;
         SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
         att->image = att_images[ds_img_index];
