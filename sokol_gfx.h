@@ -286,7 +286,7 @@ typedef enum {
     sg_primitive_type
 
     This is the common subset of 3D primitive types supported across all 3D
-    APIs (not the absence of triangle- and line-fans). This is used in the
+    APIs (note the absence of triangle- and line-fans). This is used in the
     sg_pipeline_desc.primitive_type member when creating a pipeline object.
 
     The default primitive type is SG_PRIMITIVETYPE_TRIANGLES.
@@ -326,7 +326,7 @@ typedef enum {
 
     The texture coordinates wrapping mode when sampling a texture
     image. This is used in the sg_image_desc.wrap_u, .wrap_v
-    and .wrapW members when creating an image.
+    and .wrap_w members when creating an image.
 
     The default wrap mode is SG_WRAP_REPEAT.
 */
@@ -418,7 +418,7 @@ typedef enum {
 
     The vertex-winding rule that determines a front-facing primitive.
 
-    The default winding mode is SG_FACEWINDING_CW.
+    The default winding is SG_FACEWINDING_CW (clockwise)
 */
 typedef enum {
     _SG_FACEWINDING_DEFAULT,    /* value 0 reserved for default-init */
@@ -437,7 +437,7 @@ typedef enum {
     sg_pipeline_desc.stencil_front.compare_func
     sg_pipeline_desc.stencil_back.compare_func
 
-    The default compare func for depth-tests is
+    The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
 */
 typedef enum {
@@ -544,7 +544,7 @@ typedef enum {
     framebuffer. This is used in the members
     sg_pipeline_desc.blend.color_write_mask when creating a pipeline object.
 
-    The default colormask is SG_COLORMASK_RGBA (all colors)
+    The default colormask is SG_COLORMASK_RGBA (write all colors channels)
 */
 typedef enum {
     _SG_COLORMASK_DEFAULT = 0,      /* value 0 reserved for default-init */
