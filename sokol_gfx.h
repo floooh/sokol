@@ -651,25 +651,27 @@ typedef struct {
     as parameter in the call to sg_setup().
 */
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     int buffer_pool_size;
     int image_pool_size;
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
+    uint32_t _end_canary;
 } sg_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     int size;
     sg_buffer_type type;
     sg_usage usage;
     const void* data_ptr;
     int data_size;
+    uint32_t _end_canary;
 } sg_buffer_desc;
 
 typedef struct {
-    uint32_t _init_guard;
+    uint32_t _start_canary;
     sg_image_type type;
     bool render_target;
     uint16_t width;
@@ -690,6 +692,7 @@ typedef struct {
     int num_data_items;
     const void** data_ptrs;
     const int* data_sizes;
+    uint32_t _end_canary;
 } sg_image_desc;
 
 /* describe a uniform in a uniform block */
@@ -783,7 +786,6 @@ typedef struct {
 } sg_draw_state;
 
 /* struct initializers */
-extern void sg_init_image_desc(sg_image_desc* desc);
 extern void sg_init_shader_desc(sg_shader_desc* desc);
 extern void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, int ub_size); 
 extern void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const char* name, int ub_offset, sg_uniform_type type, int array_count);

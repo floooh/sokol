@@ -65,28 +65,6 @@ enum {
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
 #define _sg_select(val, def) ((val == 0) ? def : val)
 
-void sg_init_image_desc(sg_image_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_init_guard = _SG_INIT_GUARD;
-    desc->type = SG_IMAGETYPE_2D;
-    desc->render_target = false;
-    desc->width = 0;
-    desc->height = 0;
-    desc->depth = 1;
-    desc->num_mipmaps = 1;
-    desc->usage = SG_USAGE_IMMUTABLE;
-    desc->pixel_format = SG_PIXELFORMAT_RGBA8;
-    desc->sample_count = 1;
-    desc->min_filter = SG_FILTER_NEAREST;
-    desc->mag_filter = SG_FILTER_NEAREST;
-    desc->wrap_u = SG_WRAP_REPEAT;
-    desc->wrap_v = SG_WRAP_REPEAT;
-    desc->wrap_w = SG_WRAP_REPEAT;
-    desc->num_data_items = 0;
-    desc->data_ptrs = 0;
-    desc->data_sizes = 0;
-}
-
 _SOKOL_PRIVATE void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
     SOKOL_ASSERT(desc);
     desc->source = 0;
@@ -685,7 +663,7 @@ static _sg_state* _sg = 0;
 void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(!_sg);
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg = SOKOL_MALLOC(sizeof(_sg_state));
     _sg_setup_pools(&_sg->pools, desc);
     _sg_setup_backend(&_sg->backend);
@@ -790,20 +768,28 @@ _SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
-    SOKOL_ASSERT((desc->type==SG_IMAGETYPE_2D)||(desc->type==SG_IMAGETYPE_CUBE)||(desc->type==SG_IMAGETYPE_3D)||(desc->type==SG_IMAGETYPE_ARRAY));
-    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0) && (desc->depth > 0));
-    SOKOL_ASSERT((desc->num_mipmaps > 0) && (desc->num_mipmaps <= SG_MAX_MIPMAPS));
-    SOKOL_ASSERT((desc->usage==SG_USAGE_IMMUTABLE)||(desc->usage==SG_USAGE_STREAM)||(desc->usage==SG_USAGE_DYNAMIC));
-    SOKOL_ASSERT((desc->pixel_format != SG_PIXELFORMAT_NONE));
-    SOKOL_ASSERT(desc->sample_count >= 1);
+    SOKOL_ASSERT((desc->type >= 0) && (desc->type < _SG_IMAGETYPE_NUM));
+    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0) && (desc->depth >= 0));
+    SOKOL_ASSERT((desc->num_mipmaps >= 0) && (desc->num_mipmaps <= SG_MAX_MIPMAPS));
+    SOKOL_ASSERT((desc->usage >= 0) && (desc->usage < _SG_USAGE_NUM));
+    SOKOL_ASSERT((desc->pixel_format >= 0) && (desc->pixel_format < _SG_PIXELFORMAT_NUM));
+    SOKOL_ASSERT(desc->sample_count >= 0);
+    SOKOL_ASSERT((desc->min_filter >= 0) && (desc->min_filter < _SG_FILTER_NUM));
+    SOKOL_ASSERT((desc->mag_filter >= 0) && (desc->mag_filter < _SG_FILTER_NUM));
+    SOKOL_ASSERT((desc->wrap_u >= 0) && (desc->wrap_u < _SG_WRAP_NUM));
+    SOKOL_ASSERT((desc->wrap_v >= 0) && (desc->wrap_v < _SG_WRAP_NUM));
+    SOKOL_ASSERT((desc->wrap_w >= 0) && (desc->wrap_w < _SG_WRAP_NUM));
+    SOKOL_ASSERT(desc->num_data_items >= 0);
     #if SOKOL_DEBUG
     if (desc->render_target) {
-        SOKOL_ASSERT(desc->usage == SG_USAGE_IMMUTABLE);
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(desc->pixel_format) || (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)));
+        SOKOL_ASSERT((desc->usage == _SG_USAGE_DEFAULT) || (desc->usage == SG_USAGE_IMMUTABLE));
+        SOKOL_ASSERT((desc->pixel_format == _SG_PIXELFORMAT_DEFAULT) || 
+                     _sg_is_valid_rendertarget_color_format(desc->pixel_format) || 
+                     _sg_is_valid_rendertarget_depth_format(desc->pixel_format));
         SOKOL_ASSERT((0 == desc->num_data_items) && (0 == desc->data_ptrs) && (0 == desc->data_sizes));
         if (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)) {
-            SOKOL_ASSERT(desc->type==SG_IMAGETYPE_2D);
-            SOKOL_ASSERT(desc->num_mipmaps == 1);
+            SOKOL_ASSERT((desc->type==_SG_IMAGETYPE_DEFAULT)||(desc->type==SG_IMAGETYPE_2D));
+            SOKOL_ASSERT((desc->num_mipmaps==0)||(desc->num_mipmaps==1));
         }
     }
     if (desc->num_data_items > 0) {
@@ -1002,7 +988,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw(_sg_pipeline* pip,
 /*-- initialize an allocated resource ----------------------------------------*/
 void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(_sg && buf_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg_validate_buffer_desc(desc);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg->pools, buf_id.id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -1012,7 +998,7 @@ void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
 
 void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(_sg && img_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT(desc->_init_guard == _SG_INIT_GUARD);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _sg_validate_image_desc(desc);
     _sg_image* img = _sg_lookup_image(&_sg->pools, img_id.id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);

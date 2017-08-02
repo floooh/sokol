@@ -855,20 +855,18 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
     SOKOL_ASSERT(state && img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
-    img->type = desc->type;
+    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
     img->height = desc->height;
-    img->depth = desc->depth;
-    img->num_mipmaps = desc->num_mipmaps;
-    img->usage = desc->usage;
-    img->pixel_format = desc->pixel_format;
-    img->sample_count = desc->sample_count;
-    img->min_filter = desc->min_filter;
-    img->mag_filter = desc->mag_filter;
-    img->wrap_u = desc->wrap_u;
-    img->wrap_v = desc->wrap_v;
-    img->wrap_w = desc->wrap_w;
+    img->depth = _sg_select(desc->depth, 1);
+    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
+    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_select(desc->sample_count, 1);
+    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(state, img->pixel_format)) {
@@ -921,8 +919,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
             glGenTextures(1, &img->gl_tex[slot]);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(img->gl_target, img->gl_tex[slot]);
-            GLenum gl_min_filter = _sg_gl_filter(desc->min_filter);
-            GLenum gl_mag_filter = _sg_gl_filter(desc->mag_filter);
+            GLenum gl_min_filter = _sg_gl_filter(img->min_filter);
+            GLenum gl_mag_filter = _sg_gl_filter(img->mag_filter);
             if (1 == img->num_mipmaps) {
                 if ((gl_min_filter==GL_NEAREST_MIPMAP_NEAREST)||(gl_min_filter==GL_NEAREST_MIPMAP_LINEAR)) {
                     gl_min_filter = GL_NEAREST;
