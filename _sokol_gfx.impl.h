@@ -944,7 +944,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw(_sg_pipeline* pip,
             return false;
         }
         if (img->slot.state != SG_RESOURCESTATE_VALID) {
-            /* image exists, but not valid for for rendering */
+            /* image exists, but not valid for rendering */
             return false;
         }
         SOKOL_ASSERT(img->type == pip->shader->stage[SG_SHADERSTAGE_FS].images[i].type);

@@ -430,7 +430,7 @@ typedef enum {
 /*
     sg_compare_func
 
-    The compare-function for for depth- and stencil-ref tests.
+    The compare-function for depth- and stencil-ref tests.
     This is used when creating pipeline objects in the members:
     
     sg_pipeline_desc.depth_stencil.depth_compare_func
