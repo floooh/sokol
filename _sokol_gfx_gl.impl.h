@@ -484,7 +484,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
     SOKOL_ASSERT(img);
     _sg_init_slot(&img->slot);
-    img->type = SG_IMAGETYPE_INVALID;
+    img->type = _SG_IMAGETYPE_DEFAULT;
     img->render_target = false;
     img->width = 0;
     img->height = 0;
@@ -519,7 +519,7 @@ typedef struct {
 typedef struct {
     uint16_t size;
     uint16_t num_uniforms;
-    _sg_uniform uniforms[SG_MAX_UNIFORMS];
+    _sg_uniform uniforms[SG_MAX_UB_MEMBERS];
 } _sg_uniform_block;
 
 typedef struct {
@@ -553,7 +553,7 @@ _SOKOL_PRIVATE void _sg_init_shader(_sg_shader* shd) {
             _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = 0;
             ub->num_uniforms = 0;
-            for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
+            for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 _sg_uniform* u = &ub->uniforms[u_index];
                 u->gl_loc = 0;
                 u->type = SG_UNIFORMTYPE_INVALID;
@@ -563,7 +563,7 @@ _SOKOL_PRIVATE void _sg_init_shader(_sg_shader* shd) {
         }
         for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
             _sg_shader_image* img = &stage->images[img_index];
-            img->type = SG_IMAGETYPE_INVALID;
+            img->type = _SG_IMAGETYPE_DEFAULT;
             img->gl_loc = -1;
             img->gl_tex_slot = -1;
         }
@@ -1101,26 +1101,32 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_shader_stage* stage = &shd->stage[stage_index];
         SOKOL_ASSERT(stage->num_uniform_blocks == 0);
-        stage->num_uniform_blocks = stage_desc->num_ubs;
-        for (int ub_index = 0; ub_index < stage_desc->num_ubs; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->ub[ub_index];
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
+            if (0 == ub_desc->size) {
+                break;
+            }
             _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = ub_desc->size;
             SOKOL_ASSERT(ub->num_uniforms == 0);
-            ub->num_uniforms = ub_desc->num_uniforms;
-            for (int u_index = 0; u_index < ub_desc->num_uniforms; u_index++) {
-                const sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
+            for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
+                const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
+                if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
+                    break;
+                }
                 _sg_uniform* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
                 u->offset = u_desc->offset;
-                u->count = u_desc->array_count;
+                u->count = _sg_select(u_desc->array_count, 1);
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
                 else {
                     u->gl_loc = u_index;
                 }
+                ub->num_uniforms++;
             }
+            stage->num_uniform_blocks++;
         }
     }
 
@@ -1131,11 +1137,12 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_shader_stage* stage = &shd->stage[stage_index];
         SOKOL_ASSERT(stage->num_images == 0);
-        stage->num_images = stage_desc->num_images;
-        for (int img_index = 0; img_index < stage_desc->num_images; img_index++) {
-            const sg_shader_image_desc* img_desc = &stage_desc->image[img_index];
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
+                break;
+            }
             _sg_shader_image* img = &stage->images[img_index];
-            SOKOL_ASSERT(img->type == SG_IMAGETYPE_INVALID);
             img->type = img_desc->type;
             img->gl_loc = img_index;
             if (img_desc->name) {
@@ -1147,6 +1154,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const
             else {
                 img->gl_tex_slot = -1;
             }
+            stage->num_images++;
         }
     }
     _SG_GL_CHECK_ERROR();

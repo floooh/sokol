@@ -64,78 +64,6 @@ enum {
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
 #define _sg_select(val, def) ((val == 0) ? def : val)
 
-_SOKOL_PRIVATE void _sg_init_shader_stage_desc(sg_shader_stage_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->source = 0;
-    desc->num_ubs = 0;
-    desc->num_images = 0;
-    for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-        sg_shader_uniform_block_desc* ub_desc = &desc->ub[ub_index];
-        ub_desc->size = 0;
-        ub_desc->num_uniforms = 0;
-        for (int u_index = 0; u_index < SG_MAX_UNIFORMS; u_index++) {
-            sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
-            u_desc->name = 0;
-            u_desc->offset = 0;
-            u_desc->type = SG_UNIFORMTYPE_INVALID;
-            u_desc->array_count = 1;
-        }
-    }
-    for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-        sg_shader_image_desc* img_desc = &desc->image[img_index];
-        img_desc->name = 0;
-        img_desc->type = SG_IMAGETYPE_INVALID;
-    }
-}
-
-void sg_init_shader_desc(sg_shader_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_start_canary = desc->_end_canary = 0;
-    _sg_init_shader_stage_desc(&desc->vs);
-    _sg_init_shader_stage_desc(&desc->fs);
-}
-
-void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, int ub_size) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
-    SOKOL_ASSERT(ub_size > 0);
-    sg_shader_stage_desc* s = (stage == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-    SOKOL_ASSERT(s->num_ubs < SG_MAX_SHADERSTAGE_UBS);
-    SOKOL_ASSERT(s->ub[s->num_ubs].size == 0);
-    s->ub[s->num_ubs++].size = ub_size;
-}
-
-void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const char* name, int ub_offset, sg_uniform_type type, int array_count) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
-    SOKOL_ASSERT(name);
-    SOKOL_ASSERT(ub_offset >= 0);
-    SOKOL_ASSERT(type != SG_UNIFORMTYPE_INVALID);
-    SOKOL_ASSERT(array_count >= 1);
-    sg_shader_stage_desc* s = (stage == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-    SOKOL_ASSERT(s->num_ubs >= 1);
-    sg_shader_uniform_block_desc* ub = &(s->ub[s->num_ubs-1]);
-    SOKOL_ASSERT(ub->num_uniforms < SG_MAX_UNIFORMS);
-    sg_shader_uniform_desc* u_desc = &(ub->u[ub->num_uniforms++]);
-    u_desc->name = name;
-    u_desc->offset = ub_offset;
-    u_desc->type = type;
-    u_desc->array_count = array_count;
-}
-
-void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
-    SOKOL_ASSERT(name);
-    SOKOL_ASSERT(type != SG_IMAGETYPE_INVALID);
-    sg_shader_stage_desc* s = (stage == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-    SOKOL_ASSERT(s->num_images < SG_MAX_SHADERSTAGE_IMAGES);
-    SOKOL_ASSERT(s->image[s->num_images].type == SG_IMAGETYPE_INVALID);
-    sg_shader_image_desc* img_desc = &s->image[s->num_images++];
-    img_desc->name = name;
-    img_desc->type = type;
-}
-
 _SOKOL_PRIVATE void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
     SOKOL_ASSERT(layout);
     layout->stride = 0;
@@ -350,7 +278,7 @@ _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
 }
 
 /* resolve pass action defaults into a new pass action struct */
-_SOKOL_PRIVATE void _sg_resolve_pass_action(const sg_pass_action* from, sg_pass_action* to) {
+_SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, sg_pass_action* to) {
     SOKOL_ASSERT(from && to);
     *to = *from;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -777,20 +705,47 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
     #ifdef SOKOL_DEBUG
     for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
         const sg_shader_stage_desc* stage_desc = (i == 0)? &desc->vs : &desc->fs;
-        SOKOL_ASSERT((stage_desc->num_ubs >= 0) && (stage_desc->num_ubs <= SG_MAX_SHADERSTAGE_UBS));
-        for (int ub_index = 0; ub_index < stage_desc->num_ubs; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->ub[ub_index];
-            SOKOL_ASSERT(ub_desc->size > 0);
-            SOKOL_ASSERT((ub_desc->num_uniforms > 0) && (ub_desc->num_uniforms <= SG_MAX_UNIFORMS));
-            for (int u_index = 0; u_index < ub_desc->num_uniforms; u_index++) {
-                const sg_shader_uniform_desc* u_desc = &ub_desc->u[u_index];
-                SOKOL_ASSERT(u_desc->type != SG_UNIFORMTYPE_INVALID);
+        bool uniform_blocks_continuous = true;
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
+            SOKOL_ASSERT(ub_desc->size >= 0);
+            if (ub_desc->size > 0) {
+                SOKOL_ASSERT(uniform_blocks_continuous);
+                bool uniforms_continuous = true;
+                for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
+                    const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
+                    if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
+                        SOKOL_ASSERT(uniforms_continuous);
+                        #ifdef SOKOL_GLES2
+                        SOKOL_ASSERT(u_desc->name);
+                        #endif
+                        int array_count = _sg_select(u_desc->array_count, 1);
+                        SOKOL_ASSERT(array_count >= 1);
+                        SOKOL_ASSERT(u_desc->offset >= 0);
+                        SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, array_count)) <= ub_desc->size);
+                    }
+                    else {
+                        uniforms_continuous = false;
+                    }
+                }
+            }
+            else {
+                uniform_blocks_continuous = false;
+                /* check that invalid uniform block entries have no members */
+                SOKOL_ASSERT(ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID);
+            }
+        }
+        bool images_continuous = true;
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type != _SG_IMAGETYPE_DEFAULT) {
+                SOKOL_ASSERT(images_continuous);
                 #ifdef SOKOL_GLES2
-                SOKOL_ASSERT(u_desc->name);
+                SOKOL_ASSERT(img_desc->name);
                 #endif
-                SOKOL_ASSERT(u_desc->array_count >= 1);
-                SOKOL_ASSERT(u_desc->offset >= 0);
-                SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, u_desc->array_count)) <= ub_desc->size);
+            } 
+            else {
+                images_continuous = false;
             }
         }
     }
@@ -1121,9 +1076,8 @@ void sg_destroy_pass(sg_pass pass_id) {
 void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height) {
     SOKOL_ASSERT(_sg && pass_action);
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
-    /* resolve default pass actions */
     sg_pass_action pa;
-    _sg_resolve_pass_action(pass_action, &pa);
+    _sg_resolve_default_pass_action(pass_action, &pa);
     _sg_begin_pass(&_sg->backend, 0, &pa, width, height);
 }
 
@@ -1132,9 +1086,8 @@ void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_VALID);
-    /* resolve default pass actions */
     sg_pass_action pa;
-    _sg_resolve_pass_action(pass_action, &pa);
+    _sg_resolve_default_pass_action(pass_action, &pa);
     _sg_validate_begin_pass(pass, &pa);
     const int w = pass->color_atts[0].image->width;
     const int h = pass->color_atts[0].image->height;

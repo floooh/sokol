@@ -83,7 +83,7 @@ enum {
     SG_MAX_SHADERSTAGE_BUFFERS = 4,
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
-    SG_MAX_UNIFORMS = 16,
+    SG_MAX_UB_MEMBERS = 16,
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
 };
@@ -243,7 +243,6 @@ typedef enum {
     SG_IMAGETYPE_CUBE,
     SG_IMAGETYPE_3D,
     SG_IMAGETYPE_ARRAY,
-    SG_IMAGETYPE_INVALID,
     _SG_IMAGETYPE_NUM,
 } sg_image_type;
 
@@ -718,30 +717,24 @@ typedef struct {
 typedef struct {
     const char* name;
     int offset;
-    sg_uniform_type type;   /* SG_UNIFORMTYPE_INVALID if not used */
+    sg_uniform_type type;
     int array_count; 
 } sg_shader_uniform_desc;
 
 typedef struct {
     int size;
-    int num_uniforms;
-    sg_shader_uniform_desc u[SG_MAX_UNIFORMS];
+    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
 } sg_shader_uniform_block_desc;
 
 typedef struct {
     const char* name;
-    sg_image_type type;     /* SG_IMAGETYPE_INVALID if not used */
+    sg_image_type type;
 } sg_shader_image_desc;
 
 typedef struct {
-    /* source code (only used in GL backends) */
     const char* source;
-    /* uniform block descriptions */
-    int num_ubs;
-    sg_shader_uniform_block_desc ub[SG_MAX_SHADERSTAGE_UBS];
-    /* image descriptions */
-    int num_images;
-    sg_shader_image_desc image[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
 typedef struct {
@@ -809,10 +802,6 @@ typedef struct {
 } sg_draw_state;
 
 /* struct initializers */
-extern void sg_init_shader_desc(sg_shader_desc* desc);
-extern void sg_init_uniform_block(sg_shader_desc* desc, sg_shader_stage stage, int ub_size); 
-extern void sg_init_named_uniform(sg_shader_desc* desc, sg_shader_stage stage, const char* name, int ub_offset, sg_uniform_type type, int array_count);
-extern void sg_init_named_image(sg_shader_desc* desc, sg_shader_stage stage, const char* name, sg_image_type type);
 extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
 extern void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride);
 extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate);
