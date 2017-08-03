@@ -78,7 +78,6 @@ typedef struct { uint32_t id; } sg_pass;
 */
 enum {
     SG_INVALID_ID = 0,
-    SG_DEFAULT_PASS = SG_INVALID_ID,
     SG_NUM_SHADER_STAGES = 2,
     SG_MAX_COLOR_ATTACHMENTS = 4,
     SG_MAX_SHADERSTAGE_BUFFERS = 4,
@@ -88,6 +87,25 @@ enum {
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
 };
+/* default clear values */
+#ifndef SG_DEFAULT_CLEAR_RED
+#define SG_DEFAULT_CLEAR_RED (0.5f)
+#endif
+#ifndef SG_DEFAULT_CLEAR_GREEN
+#define SG_DEFAULT_CLEAR_GREEN (0.5f)
+#endif
+#ifndef SG_DEFAULT_CLEAR_BLUE
+#define SG_DEFAULT_CLEAR_BLUE (0.5f)
+#endif
+#ifndef SG_DEFAULT_CLEAR_ALPHA
+#define SG_DEFAULT_CLEAR_ALPHA (1.0f)
+#endif
+#ifndef SG_DEFAULT_CLEAR_DEPTH
+#define SG_DEFAULT_CLEAR_DEPTH (1.0f)
+#endif
+#ifndef SG_DEFAULT_CLEAR_STENCIL
+#define SG_DEFAULT_CLEAR_STENCIL (0)
+#endif
 
 /*
     sg_feature
@@ -556,52 +574,52 @@ typedef enum {
 } sg_color_mask;
 
 /*
-    sg_pass_action_mask
+    sg_action
 
-    Describes the actions that should be performed at the start of
-    a rendering pass, this includes clearing the color, depth and 
-    stencil buffers, loading the previous content of those
-    buffers, or leaving the initial content 'undefined'.
+    An enum which defines what action should be performed at the
+    start of a render pass:
 
-    The default pass actions are SG_PASSACTION_CLEAR_ALL.
+    SG_ACTION_CLEAR:    clear the render target image
+    SG_ACTION_LOAD:     load the previous content of the render target image
+    SG_ACTION_DONTCARE: leave the render target image content undefined
+
+    This is used in the sg_pass_action structure. 
+    
+    The default action for all pass attachments is SG_ACTION_CLEAR, with the
+    clear color rgba = {0.0f, 0.0f, 0.0f, 1.0f], depth=1.0 and stencil=0.
+
+    If you want to override the default behaviour, it is important to not
+    only set the clear color, but the 'action' field as well (as long as this
+    is in its _SG_ACTION_DEFAULT, the value fields will be ignored).
 */
 typedef enum {
-    _SG_PASSACTION_DEFAULT = 0,     /* value 0 reserved for default-init */
-    SG_PASSACTION_CLEAR_COLOR0  = (1<<0),
-    SG_PASSACTION_CLEAR_COLOR1  = (1<<1),
-    SG_PASSACTION_CLEAR_COLOR2  = (1<<2),
-    SG_PASSACTION_CLEAR_COLOR3  = (1<<3),
-    SG_PASSACTION_CLEAR_COLOR   = (1<<0)|(1<<1)|(1<<2)|(1<<3),
-    SG_PASSACTION_CLEAR_DEPTH   = (1<<4),
-    SG_PASSACTION_CLEAR_STENCIL = (1<<5),
-    SG_PASSACTION_CLEAR_DEPTH_STENCIL = (1<<4)|(1<<5),
-    SG_PASSACTION_CLEAR_ALL     = SG_PASSACTION_CLEAR_COLOR|SG_PASSACTION_CLEAR_DEPTH_STENCIL,
-    SG_PASSACTION_LOAD_COLOR0   = (1<<6),
-    SG_PASSACTION_LOAD_COLOR1   = (1<<7),
-    SG_PASSACTION_LOAD_COLOR2   = (1<<8),
-    SG_PASSACTION_LOAD_COLOR3   = (1<<9),
-    SG_PASSACTION_LOAD_COLOR    = (1<<6)|(1<<7)|(1<<8)|(1<<9),
-    SG_PASSACTION_LOAD_DEPTH    = (1<<10),
-    SG_PASSACTION_LOAD_STENCIL  = (1<<11),
-    SG_PASSACTION_LOAD_DEPTH_STENCIL = (1<<10)|(1<<11),
-    SG_PASSACTION_LOAD_ALL = SG_PASSACTION_LOAD_COLOR|SG_PASSACTION_LOAD_DEPTH_STENCIL,
-    SG_PASSACTION_DONTCARE_COLOR0 = (1<<12),
-    SG_PASSACTION_DONTCARE_COLOR1 = (1<<13),
-    SG_PASSACTION_DONTCARE_COLOR2 = (1<<14),
-    SG_PASSACTION_DONTCARE_COLOR3 = (1<<15),
-    SG_PASSACTION_DONTCARE_COLOR  = (1<<12)|(1<<13)|(1<<14)|(1<<15),
-    SG_PASSACTION_DONTCARE_DEPTH  = (1<<16),
-    SG_PASSACTION_DONTCARE_STENCIL = (1<<17),
-    SG_PASSACTION_DONTCARE_DEPTH_STENCIL = (1<<16)|(1<<17),
-    SG_PASSACTION_DONTCARE_ALL = SG_PASSACTION_DONTCARE_COLOR|SG_PASSACTION_DONTCARE_DEPTH_STENCIL,
-} sg_pass_action_mask;
+    _SG_ACTION_DEFAULT,
+    SG_ACTION_CLEAR,
+    SG_ACTION_LOAD,
+    SG_ACTION_DONTCARE,
+    _SG_ACTION_NUM
+} sg_action;
+
+typedef struct {
+    sg_action action;
+    float val[4];
+} sg_color_attachment_action;
+
+typedef struct {
+    sg_action action;
+    float val;
+} sg_depth_attachment_action;
+
+typedef struct {
+    sg_action action;
+    uint8_t val;
+} sg_stencil_attachment_action;
 
 typedef struct {
     uint32_t _start_canary;
-    float color[SG_MAX_COLOR_ATTACHMENTS][4];
-    float depth;
-    uint8_t stencil;
-    sg_pass_action_mask actions;
+    sg_color_attachment_action colors[SG_MAX_COLOR_ATTACHMENTS];
+    sg_depth_attachment_action depth;
+    sg_stencil_attachment_action stencil;
     uint32_t _end_canary;
 } sg_pass_action;
 
@@ -800,8 +818,6 @@ extern void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int st
 extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate);
 extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format);
 extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format);
-extern void sg_init_pass_action(sg_pass_action* pa);
-extern void sg_init_clear_color(sg_pass_action* pa, int color_attachment_index, float r, float g, float b, float a);
 
 /* setup */
 extern void sg_setup(const sg_desc* desc);

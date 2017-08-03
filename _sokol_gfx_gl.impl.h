@@ -1462,20 +1462,22 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
     #endif
     if (!use_mrt_clear) {
         GLbitfield clear_mask = 0;
-        if (action->actions & SG_PASSACTION_CLEAR_COLOR0) {
+        if (action->colors[0].action == SG_ACTION_CLEAR) {
             clear_mask |= GL_COLOR_BUFFER_BIT;
-            const float* c = action->color[0];
+            const float* c = action->colors[0].val;
             glClearColor(c[0], c[1], c[2], c[3]);
         }
-        if (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL) {
-            /* FIXME: hmm separate depth/stencil clear? */
-            clear_mask |= GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
+        if (action->depth.action == SG_ACTION_CLEAR) {
+            clear_mask |= GL_DEPTH_BUFFER_BIT;
             #ifdef SOKOL_GLCORE33
-            glClearDepth(action->depth);
+            glClearDepth(action->depth.val);
             #else
-            glClearDepthf(action->depth);
+            glClearDepthf(action->depth.val);
             #endif
-            glClearStencil(action->stencil);
+        }
+        if (action->stencil.action == SG_ACTION_CLEAR) {
+            clear_mask |= GL_STENCIL_BUFFER_BIT;
+            glClearStencil(action->stencil.val);
         }
         if (0 != clear_mask) {
             glClear(clear_mask);
@@ -1486,16 +1488,25 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
         SOKOL_ASSERT(pass);
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             if (pass->color_atts[i].image) {
-                if (action->actions & (SG_PASSACTION_CLEAR_COLOR0<<i)) {
-                    glClearBufferfv(GL_COLOR, i, action->color[i]);
+                if (action->colors[i].action == SG_ACTION_CLEAR) {
+                    glClearBufferfv(GL_COLOR, i, action->colors[i].val);
                 }
             }
             else {
                 break;
             }
         }
-        if (pass->ds_att.image && (action->actions & SG_PASSACTION_CLEAR_DEPTH_STENCIL)) {
-            glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth, action->stencil);
+        if (pass->ds_att.image) {
+            if ((action->depth.action == SG_ACTION_CLEAR) && (action->stencil.action == SG_ACTION_CLEAR)) {
+                glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.val, action->stencil.val);
+            }
+            else if (action->depth.action == SG_ACTION_CLEAR) {
+                glClearBufferfv(GL_DEPTH, 0, &action->depth.val);
+            }
+            else if (action->stencil.action == SG_ACTION_CLEAR) {
+                GLuint val = action->stencil.val;
+                glClearBufferuiv(GL_STENCIL, 0, &val);
+            }
         }
     }
     #endif

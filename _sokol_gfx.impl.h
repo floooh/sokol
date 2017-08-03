@@ -261,30 +261,6 @@ void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int att
     attr->format = format;
 }
 
-void sg_init_pass_action(sg_pass_action* pa) {
-    SOKOL_ASSERT(pa);
-    pa->_start_canary = pa->_end_canary = 0;
-    for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-        for (int c = 0; c < 3; c++) {
-            pa->color[att_index][c] = 0.5f;
-        }
-        pa->color[att_index][3] = 1.0f;
-    }
-    pa->depth = 1.0f;
-    pa->stencil = 0;
-    pa->actions = SG_PASSACTION_CLEAR_ALL;
-}
-
-void sg_init_clear_color(sg_pass_action* pa, int att_index, float r, float g, float b, float a) {
-    SOKOL_ASSERT(pa);
-    SOKOL_ASSERT((pa->_start_canary == 0) && (pa->_end_canary == 0));
-    SOKOL_ASSERT((att_index >= 0) && (att_index < SG_MAX_COLOR_ATTACHMENTS));
-    pa->color[att_index][0] = r;
-    pa->color[att_index][1] = g;
-    pa->color[att_index][2] = b;
-    pa->color[att_index][3] = a;
-}
-
 /*-- helper functions --------------------------------------------------------*/
 
 /* return byte size of a vertex format */
@@ -371,6 +347,29 @@ _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) 
 _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
     /* FIXME: more depth stencil formats? */
     return (SG_PIXELFORMAT_DEPTHSTENCIL == fmt);
+}
+
+/* resolve pass action defaults into a new pass action struct */
+_SOKOL_PRIVATE void _sg_resolve_pass_action(const sg_pass_action* from, sg_pass_action* to) {
+    SOKOL_ASSERT(from && to);
+    *to = *from;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        if (to->colors[i].action  == _SG_ACTION_DEFAULT) {
+            to->colors[i].action = SG_ACTION_CLEAR;
+            to->colors[i].val[0] = SG_DEFAULT_CLEAR_RED;
+            to->colors[i].val[1] = SG_DEFAULT_CLEAR_GREEN;
+            to->colors[i].val[2] = SG_DEFAULT_CLEAR_BLUE;
+            to->colors[i].val[3] = SG_DEFAULT_CLEAR_ALPHA;
+        }
+    }
+    if (to->depth.action == _SG_ACTION_DEFAULT) {
+        to->depth.action = SG_ACTION_CLEAR;
+        to->depth.val = SG_DEFAULT_CLEAR_DEPTH;
+    }
+    if (to->stencil.action == _SG_ACTION_DEFAULT) {
+        to->stencil.action = SG_ACTION_CLEAR;
+        to->stencil.val = SG_DEFAULT_CLEAR_STENCIL;
+    }
 }
 
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
@@ -1122,7 +1121,10 @@ void sg_destroy_pass(sg_pass pass_id) {
 void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height) {
     SOKOL_ASSERT(_sg && pass_action);
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
-    _sg_begin_pass(&_sg->backend, 0, pass_action, width, height);
+    /* resolve default pass actions */
+    sg_pass_action pa;
+    _sg_resolve_pass_action(pass_action, &pa);
+    _sg_begin_pass(&_sg->backend, 0, &pa, width, height);
 }
 
 void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
@@ -1130,10 +1132,13 @@ void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg_pass* pass = _sg_lookup_pass(&_sg->pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_VALID);
-    _sg_validate_begin_pass(pass, pass_action);
+    /* resolve default pass actions */
+    sg_pass_action pa;
+    _sg_resolve_pass_action(pass_action, &pa);
+    _sg_validate_begin_pass(pass, &pa);
     const int w = pass->color_atts[0].image->width;
     const int h = pass->color_atts[0].image->height;
-    _sg_begin_pass(&_sg->backend, pass, pass_action, w, h);
+    _sg_begin_pass(&_sg->backend, pass, &pa, w, h);
 }
 
 void sg_apply_draw_state(const sg_draw_state* ds) {
