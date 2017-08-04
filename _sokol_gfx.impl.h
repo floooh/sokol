@@ -64,22 +64,6 @@ enum {
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
 #define _sg_select(val, def) ((val == 0) ? def : val)
 
-_SOKOL_PRIVATE void _sg_init_vertex_layout_desc(sg_vertex_layout_desc* layout) {
-    SOKOL_ASSERT(layout);
-    layout->stride = 0;
-    layout->step_func = SG_VERTEXSTEP_PER_VERTEX;
-    layout->step_rate = 1;
-    layout->num_attrs = 0;
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        /* vertex attributes can be either defined by name
-           or by bind slot index (on GLES2 only by name) */
-        layout->attrs[i].name = 0;
-        layout->attrs[i].index = -1;
-        layout->attrs[i].offset = 0;
-        layout->attrs[i].format = SG_VERTEXFORMAT_INVALID;
-    }
-}
-
 _SOKOL_PRIVATE void _sg_init_stencil_state(sg_stencil_state* s) {
     SOKOL_ASSERT(s);
     s->fail_op = SG_STENCILOP_KEEP;
@@ -95,8 +79,8 @@ _SOKOL_PRIVATE void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
     s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
     s->depth_write_enabled = false;
     s->stencil_enabled = false;
-    s->stencil_read_mask = 0xFF;
-    s->stencil_write_mask = 0xFF;
+    s->stencil_read_mask = 0;
+    s->stencil_write_mask = 0;
     s->stencil_ref = 0;
 }
 
@@ -111,82 +95,17 @@ _SOKOL_PRIVATE void _sg_init_blend_state(sg_blend_state* s) {
     s->op_alpha = SG_BLENDOP_ADD;
     s->color_write_mask = SG_COLORMASK_RGBA;
     for (int i = 0; i < 4; i++) {
-        s->blend_color[i] = 1.0f;
+        s->blend_color[i] = 0.0f;
     }
 }
 
 _SOKOL_PRIVATE void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
     SOKOL_ASSERT(s);
     s->scissor_test_enabled = false;
-    s->dither_enabled = true;
     s->alpha_to_coverage_enabled = false;
     s->cull_mode = SG_CULLMODE_NONE;
     s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
-}
-
-void sg_init_pipeline_desc(sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc);
-    desc->_start_canary = desc->_end_canary = 0;
-    desc->shader.id = SG_INVALID_ID;
-    desc->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    desc->index_type = SG_INDEXTYPE_NONE;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        _sg_init_vertex_layout_desc(&desc->input_layouts[i]);
-    }
-    _sg_init_depth_stencil_state(&desc->depth_stencil);
-    _sg_init_blend_state(&desc->blend);
-    _sg_init_rasterizer_state(&desc->rast);
-}
-
-void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
-    SOKOL_ASSERT(stride > 0);
-    SOKOL_ASSERT((stride & 3) == 0);    /* must be multiple of 4 */
-    desc->input_layouts[input_slot].stride = stride;
-}
-
-void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
-    layout->step_func = step;
-    layout->step_rate = step_rate;
-}
-
-void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
-    SOKOL_ASSERT(name);
-    SOKOL_ASSERT(offset >= 0);
-    SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->input_layouts[input_slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
-    sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
-    attr->name = name;
-    attr->index = -1;
-    attr->offset = offset;
-    attr->format = format;
-}
-
-void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT((input_slot >= 0) && (input_slot < SG_MAX_SHADERSTAGE_BUFFERS));
-    SOKOL_ASSERT((attr_index >= 0) && (attr_index < SG_MAX_VERTEX_ATTRIBUTES));
-    SOKOL_ASSERT(offset >= 0);
-    SOKOL_ASSERT(format != SG_VERTEXFORMAT_INVALID);
-    SOKOL_ASSERT(desc->input_layouts[input_slot].num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
-    sg_vertex_layout_desc* layout = &desc->input_layouts[input_slot];
-    sg_vertex_attr_desc* attr = &layout->attrs[layout->num_attrs++];
-    attr->name = 0;
-    attr->index = attr_index;
-    attr->offset = offset;
-    attr->format = format;
 }
 
 /*-- helper functions --------------------------------------------------------*/
@@ -305,12 +224,6 @@ typedef struct {
     uint32_t id;
     sg_resource_state state;
 } _sg_slot;
-
-_SOKOL_PRIVATE void _sg_init_slot(_sg_slot* slot) {
-    SOKOL_ASSERT(slot);
-    slot->id = SG_INVALID_ID;
-    slot->state = SG_RESOURCESTATE_INITIAL;
-}
 
 _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
     return id & _SG_SLOT_MASK;
@@ -755,15 +668,33 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
 _SOKOL_PRIVATE void _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_sg && desc);
     SOKOL_ASSERT(desc->shader.id != SG_INVALID_ID);
-    SOKOL_ASSERT(desc->input_layouts[0].num_attrs > 0);
+    SOKOL_ASSERT(desc->vertex_layouts[0].attrs[0].format != SG_VERTEXFORMAT_INVALID);
     #ifdef SOKOL_DEBUG
     int num_attrs = 0;
-    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->input_layouts[i];
-        num_attrs += layout_desc->num_attrs;
-        if (layout_desc->num_attrs > 0) {
-            SOKOL_ASSERT(layout_desc->stride > 0);
-            SOKOL_ASSERT((layout_desc->stride & 3) == 0);
+    bool layouts_continuous = true;
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
+        if (layout_desc->stride == 0) {
+            layouts_continuous = false;
+            continue;
+        }
+        SOKOL_ASSERT((layout_desc->stride & 3) == 0);
+        SOKOL_ASSERT((layout_desc->step_func>=0) && (layout_desc->step_func<_SG_VERTEXSTEP_NUM));
+        SOKOL_ASSERT(layouts_continuous);
+        bool attrs_continuous = true;
+        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
+            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
+                attrs_continuous = false;
+                continue;
+            }
+            SOKOL_ASSERT(attrs_continuous);
+            SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_desc->stride);
+            SOKOL_ASSERT((attr_desc->format > SG_VERTEXFORMAT_INVALID)&&(attr_desc->format<_SG_VERTEXFORMAT_NUM));
+            #ifdef SOKOL_GLES2
+            SOKOL_ASSERT(attr_desc->name);
+            #endif
+            num_attrs++;
         }
     }
     SOKOL_ASSERT(num_attrs < SG_MAX_VERTEX_ATTRIBUTES);

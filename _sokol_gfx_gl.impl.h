@@ -5,7 +5,7 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
-/* strstr() */
+/* strstr(), memset() */
 #include <string.h>
 
 #ifdef __cplusplus
@@ -444,16 +444,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
-    _sg_init_slot(&buf->slot);
-    buf->size = 0;
-    buf->type = SG_BUFFERTYPE_VERTEXBUFFER;
-    buf->usage = SG_USAGE_IMMUTABLE;
-    buf->upd_frame_index = 0;
-    buf->num_slots = 0;
-    buf->active_slot = 0;
-    for (int i = 0; i < _SG_GL_NUM_UPDATE_SLOTS; i++) {
-        buf->gl_buf[i] = 0;
-    }
+    memset(buf, 0, sizeof(_sg_buffer));
 }
 
 typedef struct {
@@ -483,30 +474,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
     SOKOL_ASSERT(img);
-    _sg_init_slot(&img->slot);
-    img->type = _SG_IMAGETYPE_DEFAULT;
-    img->render_target = false;
-    img->width = 0;
-    img->height = 0;
-    img->depth = 0;
-    img->num_mipmaps = 0;
-    img->usage = SG_USAGE_IMMUTABLE;
-    img->pixel_format = SG_PIXELFORMAT_NONE;
-    img->sample_count = 0;
-    img->min_filter = SG_FILTER_NEAREST;
-    img->mag_filter = SG_FILTER_NEAREST;
-    img->wrap_u = SG_WRAP_REPEAT;
-    img->wrap_v = SG_WRAP_REPEAT;
-    img->wrap_w = SG_WRAP_REPEAT;
-    img->gl_target = 0;
-    img->gl_depth_render_buffer = 0;
-    img->gl_msaa_render_buffer = 0;
-    img->upd_frame_index = 0;
-    img->num_slots = 0;
-    img->active_slot = 0;
-    for (int i = 0; i < _SG_GL_NUM_UPDATE_SLOTS; i++) {
-        img->gl_tex[i] = 0;
-    }
+    memset(img, 0, sizeof(_sg_image));
 }
 
 typedef struct {
@@ -543,31 +511,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader* shd) {
     SOKOL_ASSERT(shd);
-    _sg_init_slot(&shd->slot);
-    shd->gl_prog = 0;
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        _sg_shader_stage* stage = &shd->stage[stage_index];
-        stage->num_uniform_blocks = 0;
-        stage->num_images = 0;
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
-            ub->size = 0;
-            ub->num_uniforms = 0;
-            for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
-                _sg_uniform* u = &ub->uniforms[u_index];
-                u->gl_loc = 0;
-                u->type = SG_UNIFORMTYPE_INVALID;
-                u->offset = 0;
-                u->count = 0;
-            }
-        }
-        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-            _sg_shader_image* img = &stage->images[img_index];
-            img->type = _SG_IMAGETYPE_DEFAULT;
-            img->gl_loc = -1;
-            img->gl_tex_slot = -1;
-        }
-    }
+    memset(shd, 0, sizeof(_sg_shader));
 }
 
 typedef struct {
@@ -604,17 +548,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
-    _sg_init_slot(&pip->slot);
-    pip->shader = 0;
-    pip->shader_id.id = SG_INVALID_ID;
-    pip->primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pip->index_type = SG_INDEXTYPE_NONE;
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_init_gl_attr(&pip->gl_attrs[i]);
-    }
-    _sg_init_depth_stencil_state(&pip->depth_stencil);
-    _sg_init_blend_state(&pip->blend);
-    _sg_init_rasterizer_state(&pip->rast);
+    memset(pip, 0, sizeof(_sg_pipeline));
 }
 
 typedef struct {
@@ -625,15 +559,6 @@ typedef struct {
     GLuint gl_msaa_resolve_buffer;
 } _sg_attachment;
 
-_SOKOL_PRIVATE void _sg_init_attachment(_sg_attachment* att) {
-    SOKOL_ASSERT(att);
-    att->image = 0;
-    att->image_id.id = SG_INVALID_ID;
-    att->mip_level = 0;
-    att->slice = 0;
-    att->gl_msaa_resolve_buffer = 0;
-}
-
 typedef struct {
     _sg_slot slot;
     GLuint gl_fb;
@@ -643,12 +568,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     SOKOL_ASSERT(pass);
-    _sg_init_slot(&pass->slot);
-    pass->gl_fb = 0;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        _sg_init_attachment(&pass->color_atts[i]);
-    }
-    _sg_init_attachment(&pass->ds_att);
+    memset(pass, 0, sizeof(_sg_pass));
 }
 
 /*-- state cache implementation ----------------------------------------------*/
@@ -673,9 +593,9 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_FALSE);
     glDisable(GL_STENCIL_TEST);
-    glStencilFunc(GL_ALWAYS, 0, 0xFFFFFFFF);
+    glStencilFunc(GL_ALWAYS, 0, 0);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-    glStencilMask(0xFFFFFFFF);
+    glStencilMask(0);
 
     /* blend state */
     _sg_init_blend_state(&state->blend);
@@ -683,7 +603,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
     glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glBlendColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     /* rasterizer state */
     _sg_init_rasterizer_state(&state->rast);
@@ -864,6 +784,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
     img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
     img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
     img->sample_count = _sg_select(desc->sample_count, 1);
+    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
     img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
     img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
     img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
@@ -1171,38 +1093,82 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
     _sg_init_shader(shd);
 }
 
+_SOKOL_PRIVATE void _sg_load_stencil(const sg_stencil_state* src, sg_stencil_state* dst) {
+    dst->fail_op = _sg_select(src->fail_op, SG_STENCILOP_KEEP);
+    dst->depth_fail_op = _sg_select(src->depth_fail_op, SG_STENCILOP_KEEP);
+    dst->pass_op = _sg_select(src->pass_op, SG_STENCILOP_KEEP);
+    dst->compare_func = _sg_select(src->compare_func, SG_COMPAREFUNC_ALWAYS);
+}
+
+_SOKOL_PRIVATE void _sg_load_depth_stencil(const sg_depth_stencil_state* src, sg_depth_stencil_state* dst) {
+    _sg_load_stencil(&src->stencil_front, &dst->stencil_front);
+    _sg_load_stencil(&src->stencil_back, &dst->stencil_back);
+    dst->depth_compare_func = _sg_select(src->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
+    dst->depth_write_enabled = src->depth_write_enabled;
+    dst->stencil_enabled = src->stencil_enabled;
+    dst->stencil_read_mask = src->stencil_read_mask;
+    dst->stencil_write_mask = src->stencil_write_mask;
+    dst->stencil_ref = src->stencil_ref; 
+}
+
+_SOKOL_PRIVATE void _sg_load_blend(const sg_blend_state* src, sg_blend_state* dst) {
+    dst->enabled = src->enabled;
+    dst->src_factor_rgb = _sg_select(src->src_factor_rgb, SG_BLENDFACTOR_ONE);
+    dst->dst_factor_rgb = _sg_select(src->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+    dst->op_rgb = _sg_select(src->op_rgb, SG_BLENDOP_ADD);
+    dst->src_factor_alpha = _sg_select(src->src_factor_alpha, SG_BLENDFACTOR_ONE);
+    dst->dst_factor_alpha = _sg_select(src->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+    dst->op_alpha = _sg_select(src->op_alpha, SG_BLENDOP_ADD);
+    if (src->color_write_mask == SG_COLORMASK_NONE) {
+        dst->color_write_mask = 0;
+    }
+    else {
+        dst->color_write_mask = _sg_select(src->color_write_mask, SG_COLORMASK_RGBA);
+    }
+    for (int i = 0; i < 4; i++) {
+        dst->blend_color[i] = src->blend_color[i];
+    }
+}
+
+_SOKOL_PRIVATE void _sg_load_rasterizer(const sg_rasterizer_state* src, sg_rasterizer_state* dst) {
+    dst->scissor_test_enabled = src->scissor_test_enabled;
+    dst->alpha_to_coverage_enabled = src->alpha_to_coverage_enabled;
+    dst->cull_mode = _sg_select(src->cull_mode, SG_CULLMODE_NONE);
+    dst->face_winding = _sg_select(src->face_winding, SG_FACEWINDING_CW);
+    dst->sample_count = _sg_select(src->sample_count, 1);
+}
+
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl_prog);
-    #ifdef SOKOL_DEBUG
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        SOKOL_ASSERT(pip->gl_attrs[i].vb_index == -1);
+        SOKOL_ASSERT(pip->gl_attrs[i].vb_index = -1);
     }
-    #endif
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
-    pip->primitive_type = desc->primitive_type;
-    pip->index_type = desc->index_type;
-    pip->depth_stencil = desc->depth_stencil;
-    pip->blend = desc->blend;
-    pip->rast = desc->rast;
-    
+    pip->primitive_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
+    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    _sg_load_depth_stencil(&desc->depth_stencil, &pip->depth_stencil);
+    _sg_load_blend(&desc->blend, &pip->blend);
+    _sg_load_rasterizer(&desc->rasterizer, &pip->rast);
+
     /* resolve vertex attributes */
-    for (int slot = 0; slot < SG_MAX_SHADERSTAGE_BUFFERS; slot++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->input_layouts[slot];
-        for (int i = 0; i < layout_desc->num_attrs; i++) {
-            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[i];
-            SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_desc->stride);
-            #ifdef SOKOL_GLES2
-            /* on GLES2, attribute vertices must be bound by name */
-            SOKOL_ASSERT(attr_desc->name);
-            #else
-            SOKOL_ASSERT(attr_desc->name || (attr_desc->index >= 0));
-            #endif
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
+        if (layout_desc->stride == 0) {
+            break;
+        }
+        const sg_vertex_step step_func = _sg_select(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+        const int step_rate = _sg_select(layout_desc->step_rate, 1);
+        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
+            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
+                break;
+            }
             GLint attr_loc = attr_desc->index;
             if (attr_desc->name) {
                 attr_loc = glGetAttribLocation(pip->shader->gl_prog, attr_desc->name);
@@ -1210,16 +1176,17 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _
             SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
             if (attr_loc != -1) {
                 _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
-                gl_attr->vb_index = slot;
-                if (layout_desc->step_func == SG_VERTEXSTEP_PER_VERTEX) {
+                SOKOL_ASSERT(gl_attr->vb_index == -1);
+                gl_attr->vb_index = layout_index;
+                if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
                     gl_attr->divisor = 0;
                 }
                 else {
-                    gl_attr->divisor = layout_desc->step_rate;
+                    gl_attr->divisor = step_rate;
                 }
                 gl_attr->stride = layout_desc->stride;
                 gl_attr->offset = attr_desc->offset;
-                sg_vertex_format fmt = attr_desc->format;
+                const sg_vertex_format fmt = attr_desc->format;
                 gl_attr->size = _sg_gl_vertexformat_size(fmt);
                 gl_attr->type = _sg_gl_vertexformat_type(fmt);
                 gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
@@ -1704,11 +1671,6 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
         cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
         if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
         else glDisable(GL_SCISSOR_TEST);
-    }
-    if (new_r->dither_enabled != cache_r->dither_enabled) {
-        cache_r->dither_enabled = new_r->dither_enabled;
-        if (new_r->dither_enabled) glEnable(GL_DITHER);
-        else glDisable(GL_DITHER);
     }
     #ifdef SOKOL_GLCORE33
     if (new_r->sample_count != cache_r->sample_count) {

@@ -565,6 +565,7 @@ typedef enum {
 */
 typedef enum {
     _SG_COLORMASK_DEFAULT = 0,      /* value 0 reserved for default-init */
+    SG_COLORMASK_NONE = (0x10),     /* special value for 'all channels disabled */
     SG_COLORMASK_R = (1<<0),
     SG_COLORMASK_G = (1<<1),
     SG_COLORMASK_B = (1<<2),
@@ -654,7 +655,6 @@ typedef struct {
 
 typedef struct {
     bool scissor_test_enabled;
-    bool dither_enabled;
     bool alpha_to_coverage_enabled;
     sg_cull_mode cull_mode;
     sg_face_winding face_winding;
@@ -760,10 +760,9 @@ typedef struct {
 
 typedef struct {
     int stride;
-    int num_attrs;
-    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_vertex_step step_func;
     int step_rate;
+    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_vertex_layout_desc;
 
 typedef struct {
@@ -771,10 +770,10 @@ typedef struct {
     sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
-    sg_vertex_layout_desc input_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_vertex_layout_desc vertex_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
-    sg_rasterizer_state rast;
+    sg_rasterizer_state rasterizer;
     uint32_t _end_canary;
 } sg_pipeline_desc;
 
@@ -801,18 +800,12 @@ typedef struct {
     uint32_t _end_canary;
 } sg_draw_state;
 
-/* struct initializers */
-extern void sg_init_pipeline_desc(sg_pipeline_desc* desc);
-extern void sg_init_vertex_stride(sg_pipeline_desc* desc, int input_slot, int stride);
-extern void sg_init_vertex_step(sg_pipeline_desc* desc, int input_slot, sg_vertex_step step, int step_rate);
-extern void sg_init_named_vertex_attr(sg_pipeline_desc* desc, int input_slot, const char* name, int offset, sg_vertex_format format);
-extern void sg_init_indexed_vertex_attr(sg_pipeline_desc* desc, int input_slot, int attr_index, int offset, sg_vertex_format format);
-
 /* setup */
 extern void sg_setup(const sg_desc* desc);
 extern void sg_shutdown();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
+extern void sg_reset_state_cache();
 
 /* resources */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
@@ -838,7 +831,6 @@ extern void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const vo
 extern void sg_draw(int base_element, int num_elements, int num_instances);
 extern void sg_end_pass();
 extern void sg_commit();
-extern void sg_reset_state_cache();
 
 /* separate resource allocation and initialization (for async setup) */ 
 extern sg_buffer sg_alloc_buffer();
