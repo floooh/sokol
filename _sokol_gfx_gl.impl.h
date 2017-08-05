@@ -1534,6 +1534,13 @@ _SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
     _SG_GL_CHECK_ERROR();
 }
 
+_SOKOL_PRIVATE void _sg_apply_viewport(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(state);
+    SOKOL_ASSERT(state->in_pass);
+    y = origin_top_left ? (state->cur_pass_height - (y+h)) : y;
+    glViewport(x, y, w, h);
+}
+
 _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state, 
     _sg_pipeline* pip, 
     _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,

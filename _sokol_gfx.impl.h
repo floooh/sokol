@@ -1058,6 +1058,11 @@ void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     _sg_begin_pass(&_sg->backend, pass, &pa, w, h);
 }
 
+void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
+    SOKOL_ASSERT(_sg);
+    _sg_apply_viewport(&_sg->backend, x, y, width, height, origin_top_left);
+}
+
 void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(_sg && ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
