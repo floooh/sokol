@@ -463,6 +463,38 @@ _SOKOL_PRIVATE _sg_pass* _sg_lookup_pass(const _sg_pools* p, uint32_t pass_id) {
     return 0;
 }
 
+_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_backend* b, _sg_pools* p) {
+    /*  this is a bit dumb since it loops over all pool slots to
+        find the occupied slots, on the other hand it is only ever
+        executed at shutdown
+    */
+    for (int i = 0; i < p->buffer_pool.size; i++) {
+        if (p->buffers[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_buffer(b, &p->buffers[i]);
+        }
+    }
+    for (int i = 0; i < p->image_pool.size; i++) {
+        if (p->images[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_image(b, &p->images[i]);
+        }
+    }
+    for (int i = 0; i < p->shader_pool.size; i++) {
+        if (p->shaders[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_shader(b, &p->shaders[i]);
+        }
+    }
+    for (int i = 0; i < p->pipeline_pool.size; i++) {
+        if (p->pipelines[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_pipeline(b, &p->pipelines[i]);
+        }
+    }
+    for (int i = 0; i < p->pass_pool.size; i++) {
+        if (p->passes[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_pass(b, &p->passes[i]);
+        }
+    }
+}
+
 /*-- public API functions ----------------------------------------------------*/ 
 typedef struct {
     _sg_pools pools;
@@ -481,6 +513,7 @@ void sg_setup(const sg_desc* desc) {
 
 void sg_shutdown() {
     SOKOL_ASSERT(_sg);
+    _sg_destroy_all_resources(&_sg->backend, &_sg->pools);
     _sg_discard_backend(&_sg->backend);
     _sg_discard_pools(&_sg->pools);
     SOKOL_FREE(_sg);
