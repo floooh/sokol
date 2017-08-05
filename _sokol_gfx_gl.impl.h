@@ -1144,10 +1144,6 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _
     SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->gl_prog);
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        SOKOL_ASSERT(pip->gl_attrs[i].vb_index = -1);
-    }
-
     pip->shader = shd;
     pip->shader_id = desc->shader;
     pip->primitive_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
@@ -1157,6 +1153,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _
     _sg_load_rasterizer(&desc->rasterizer, &pip->rast);
 
     /* resolve vertex attributes */
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        pip->gl_attrs[i].vb_index = -1;
+    }
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
         if (layout_desc->stride == 0) {
