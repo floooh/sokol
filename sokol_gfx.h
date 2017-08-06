@@ -570,6 +570,7 @@ typedef enum {
     SG_COLORMASK_G = (1<<1),
     SG_COLORMASK_B = (1<<2),
     SG_COLORMASK_A = (1<<3),
+    SG_COLORMASK_RGB = 0x7,
     SG_COLORMASK_RGBA = 0xF,
 } sg_color_mask;
 
@@ -843,6 +844,11 @@ extern void sg_init_image(sg_image img_id, const sg_image_desc* desc);
 extern void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
 extern void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
 extern void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
+
+/* struct setup helper methods (useful for C++) */
+extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format);
+extern sg_shader_uniform_desc sg_named_uniform(const char* name, int offset, sg_uniform_type type, int array_count);
+extern sg_shader_image_desc sg_named_image(const char* name, sg_image_type type);
 
 #ifdef __cplusplus
 } /* extern "C" */

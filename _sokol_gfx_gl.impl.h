@@ -969,7 +969,7 @@ _SOKOL_PRIVATE GLuint _sg_compile_shader(sg_shader_stage stage, const char* src)
         GLint log_len = 0;
         glGetShaderiv(gl_shd, GL_INFO_LOG_LENGTH, &log_len);
         if (log_len > 0) {
-            GLchar* log_buf = SOKOL_MALLOC(log_len);
+            GLchar* log_buf = (GLchar*) SOKOL_MALLOC(log_len);
             glGetShaderInfoLog(gl_shd, log_len, &log_len, log_buf);
             SOKOL_LOG(log_buf);
             SOKOL_FREE(log_buf);
@@ -1006,7 +1006,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const
         GLint log_len = 0;
         glGetProgramiv(gl_prog, GL_INFO_LOG_LENGTH, &log_len);
         if (log_len > 0) {
-            GLchar* log_buf = SOKOL_MALLOC(log_len);
+            GLchar* log_buf = (GLchar*) SOKOL_MALLOC(log_len);
             glGetProgramInfoLog(gl_prog, log_len, &log_len, log_buf);
             SOKOL_LOG(log_buf);
             SOKOL_FREE(log_buf);
@@ -1539,6 +1539,13 @@ _SOKOL_PRIVATE void _sg_apply_viewport(_sg_backend* state, int x, int y, int w, 
     SOKOL_ASSERT(state->in_pass);
     y = origin_top_left ? (state->cur_pass_height - (y+h)) : y;
     glViewport(x, y, w, h);
+}
+
+_SOKOL_PRIVATE void _sg_apply_scissor_rect(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(state);
+    SOKOL_ASSERT(state->in_pass);
+    y = origin_top_left ? (state->cur_pass_height - (y+h)) : y;
+    glScissor(x, y, w, h);
 }
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state, 

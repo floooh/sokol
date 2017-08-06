@@ -261,7 +261,7 @@ _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
     pool->queue_top = 0;
     pool->unique_counter = 0;
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = SOKOL_MALLOC(sizeof(int)*num);
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
@@ -325,35 +325,35 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     /* note: the pools here will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->buffer_pool_size >= 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->buffer_pool, _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
-    p->buffers = SOKOL_MALLOC(sizeof(_sg_buffer) * p->buffer_pool.size);
+    p->buffers = (_sg_buffer*) SOKOL_MALLOC(sizeof(_sg_buffer) * p->buffer_pool.size);
     for (int i = 0; i < p->buffer_pool.size; i++) {
         _sg_init_buffer(&p->buffers[i]);
     }
 
     SOKOL_ASSERT((desc->image_pool_size >= 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->image_pool, _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
-    p->images = SOKOL_MALLOC(sizeof(_sg_image) * p->image_pool.size);
+    p->images = (_sg_image*) SOKOL_MALLOC(sizeof(_sg_image) * p->image_pool.size);
     for (int i = 0; i < p->image_pool.size; i++) {
         _sg_init_image(&p->images[i]);
     }
 
     SOKOL_ASSERT((desc->shader_pool_size >= 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->shader_pool, _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
-    p->shaders = SOKOL_MALLOC(sizeof(_sg_shader) * p->shader_pool.size);
+    p->shaders = (_sg_shader*) SOKOL_MALLOC(sizeof(_sg_shader) * p->shader_pool.size);
     for (int i = 0; i < p->shader_pool.size; i++) {
         _sg_init_shader(&p->shaders[i]);
     }
 
     SOKOL_ASSERT((desc->pipeline_pool_size >= 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pipeline_pool, _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
-    p->pipelines = SOKOL_MALLOC(sizeof(_sg_pipeline) * p->pipeline_pool.size);
+    p->pipelines = (_sg_pipeline*) SOKOL_MALLOC(sizeof(_sg_pipeline) * p->pipeline_pool.size);
     for (int i = 0; i < p->pipeline_pool.size; i++) {
         _sg_init_pipeline(&p->pipelines[i]);
     }
 
     SOKOL_ASSERT((desc->pass_pool_size >= 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pass_pool, _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
-    p->passes = SOKOL_MALLOC(sizeof(_sg_pass) * p->pass_pool.size);
+    p->passes = (_sg_pass*) SOKOL_MALLOC(sizeof(_sg_pass) * p->pass_pool.size);
     for (int i = 0; i < p->pass_pool.size; i++) {
         _sg_init_pass(&p->passes[i]);
     }
@@ -506,7 +506,7 @@ void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(!_sg);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg = SOKOL_MALLOC(sizeof(_sg_state));
+    _sg = (_sg_state*) SOKOL_MALLOC(sizeof(_sg_state));
     _sg_setup_pools(&_sg->pools, desc);
     _sg_setup_backend(&_sg->backend);
 }
@@ -1063,6 +1063,11 @@ void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left
     _sg_apply_viewport(&_sg->backend, x, y, width, height, origin_top_left);
 }
 
+void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
+    SOKOL_ASSERT(_sg);
+    _sg_apply_scissor_rect(&_sg->backend, x, y, width, height, origin_top_left);
+}
+
 void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(_sg && ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
@@ -1137,6 +1142,31 @@ void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
             _sg_update_buffer(&_sg->backend, buf, data, num_bytes);
         }
     }
+}
+
+sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format) {
+    sg_vertex_attr_desc desc;
+    desc.name = name;
+    desc.index = 0;
+    desc.offset = offset;
+    desc.format = format;
+    return desc;
+}
+
+sg_shader_uniform_desc sg_named_uniform(const char* name, int offset, sg_uniform_type type, int array_count) {
+    sg_shader_uniform_desc desc;
+    desc.name = name;
+    desc.offset = offset;
+    desc.type = type;
+    desc.array_count = array_count;
+    return desc;
+}
+
+sg_shader_image_desc sg_named_image(const char* name, sg_image_type type) {
+    sg_shader_image_desc desc;
+    desc.name = name;
+    desc.type = type;
+    return desc;
 }
 
 #ifdef __cplusplus
