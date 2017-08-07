@@ -709,8 +709,8 @@ typedef struct {
     sg_wrap wrap_v;
     sg_wrap wrap_w;
     int num_data_items;
-    const void** data_ptrs;
-    const int* data_sizes;
+    const void** data_ptrs;     /* number of subimages can be big (e.g. array/3d textures)... */
+    const int* data_sizes;      /* ...so don't embed fixed-size-arrays here */
     uint32_t _end_canary;
 } sg_image_desc;
 
