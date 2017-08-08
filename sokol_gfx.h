@@ -126,8 +126,8 @@ typedef enum {
     SG_FEATURE_MSAA_RENDER_TARGETS,
     SG_FEATURE_PACKED_VERTEX_FORMAT_10_2,
     SG_FEATURE_MULTIPLE_RENDER_TARGET,
-    SG_FEATURE_TEXTURE_3D,
-    SG_FEATURE_TEXTURE_ARRAY,
+    SG_FEATURE_IMAGETYPE_3D,
+    SG_FEATURE_IMAGETYPE_ARRAY,
 
     SG_NUM_FEATURES
 } sg_feature;
@@ -601,6 +601,25 @@ typedef enum {
     _SG_ACTION_NUM
 } sg_action;
 
+/*
+    sg_pass_action
+
+    The sg_pass_action struct defines the actions to be performed
+    at the start of a rendering pass in the functions sg_begin_pass()
+    and sg_begin_default_pass().
+
+    A separate action and clear values can be defined for each
+    color attachment, and for the depth-stencil attachment.
+
+    The default clear values are defined by the macros:
+
+    - SG_DEFAULT_CLEAR_RED:     0.5f
+    - SG_DEFAULT_CLEAR_GREEN:   0.5f
+    - SG_DEFAULT_CLEAR_BLUE:    0.5f
+    - SG_DEFAULT_CLEAR_ALPHA:   1.0f
+    - SG_DEFAULT_CLEAR_DEPTH:   1.0f
+    - SG_DEFAULT_CLEAR_STENCIL: 0
+*/
 typedef struct {
     sg_action action;
     float val[4];
@@ -623,6 +642,269 @@ typedef struct {
     sg_stencil_attachment_action stencil;
     uint32_t _end_canary;
 } sg_pass_action;
+
+/*
+    sg_draw_state
+
+    The sg_draw_state structure defines the resource binding slots
+    of the sokol_gfx render pipeline, used as argument to the
+    sg_apply_draw_state() function.
+
+    A draw state contains:
+
+    - 1 pipeline object
+    - 1..N vertex buffers
+    - 0..1 index buffers
+    - 0..N vertex shader stage images
+    - 0..N fragment shader stage images
+
+    The max number of vertex buffer and shader stage images
+    are defined by the SG_MAX_SHADERSTAGE_BUFFERS and
+    SG_MAX_SHADERSTAGE_IMAGES configuration constants.
+*/
+typedef struct {
+    uint32_t _start_canary;
+    sg_pipeline pipeline;
+    sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_buffer index_buffer;
+    sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    uint32_t _end_canary;
+} sg_draw_state;
+
+/*
+    sg_desc
+
+    The sg_desc struct contains configuration values for sokol_gfx,
+    it is used as parameter to the sg_setup() call.
+
+    The default configuration is:
+
+    .buffer_pool_size:      128
+    .image_pool_size:       128
+    .shader_pool_size:      32
+    .pipeline_pool_size:    64
+    .pass_pool_size:        16 
+*/
+typedef struct {
+    uint32_t _start_canary;
+    int buffer_pool_size;
+    int image_pool_size;
+    int shader_pool_size;
+    int pipeline_pool_size;
+    int pass_pool_size;
+    uint32_t _end_canary;
+} sg_desc;
+
+/*
+    sg_buffer_desc
+
+    Creation parameters for sg_buffer objects, used in the
+    sg_make_buffer() call.
+
+    The default configuration is:
+
+    .size:      0       (this *must* be set to a valid size in bytes)
+    .type:      SG_BUFFERTYPE_VERTEXBUFFER
+    .usage:     SG_USAGE_IMMUTABLE
+    .data_ptr   0
+    .data_size  0
+
+    Buffers with the SG_USAGE_IMMUTABLE usage *must* fill the buffer
+    with initial data (.data_ptr and .data_size cannot be 0).
+*/
+typedef struct {
+    uint32_t _start_canary;
+    int size;
+    sg_buffer_type type;
+    sg_usage usage;
+    const void* data_ptr;
+    int data_size;
+    uint32_t _end_canary;
+} sg_buffer_desc;
+
+/*
+    sg_image_desc
+
+    Creation parameters for sg_image objects, used in the 
+    sg_make_image() call.
+
+    The default configuration is:
+
+    .type:              SG_IMAGETYPE_2D
+    .render_target:     false
+    .width              0 (must be set to >0)
+    .height             0 (must be set to >0)
+    .depth/.layers:     1
+    .num_mipmaps:       1
+    .usage:             SG_USAGE_IMMUTABLE
+    .pixel_format:      SG_PIXELFORMAT_RGBA8
+    .sample_count:      1 (only used in render_targets)
+    .min_filter:        SG_FILTER_NEAREST
+    .mag_filter:        SG_FILTER_NEAREST
+    .wrap_u:            SG_WRAP_REPEAT
+    .wrap_v:            SG_WRAP_REPEAT
+    .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
+    .num_data_items:    0
+    .data_ptrs:         0
+    .data_sizes:        0
+
+    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
+    WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
+    sg_query_feature(SG_FEATURE_IMAGETYPE_3D) at runtime to check
+    if array- and 3D-textures are supported.
+
+    Images with usage SG_USAGE_IMMUTABLE must be initialized with
+    data using the num_data_items, data_ptrs and data_sizes members.
+
+    The member data_ptrs is a pointer to an array of pointers, one per
+    subimage to be filled with data. Subimages are cubemap-faces, mipmaps,
+    array-layers and depth-slices.
+
+    The member data_sizes is a pointer to an array of ints, with the
+    size in bytes of each data item.
+
+    Finally, num_data_items is the number of elements in each of the
+    pointer- and size-arrays.
+
+    TODO: describe the correct order of data items when initializing
+    cubemaps, array- and 3D-textures and their mipmaps!
+*/
+typedef struct {
+    uint32_t _start_canary;
+    sg_image_type type;
+    bool render_target;
+    uint16_t width;
+    uint16_t height;
+    union {
+        uint16_t depth;
+        uint16_t layers;
+    };
+    uint16_t num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    int num_data_items;
+    const void** data_ptrs;     /* number of subimages can be big (e.g. array/3d textures)... */
+    const int* data_sizes;      /* ...so don't embed fixed-size-arrays here */
+    uint32_t _end_canary;
+} sg_image_desc;
+
+/*
+    sg_shader_desc
+
+    The structure sg_shader_desc describes the shaders, uniform blocks
+    and texture images on the vertex- and fragment-shader stage.
+
+    TODO: source code vs byte code, 3D backend API specifics.
+*/
+typedef struct {
+    const char* name;
+    int offset;
+    sg_uniform_type type;
+    int array_count; 
+} sg_shader_uniform_desc;
+
+typedef struct {
+    int size;
+    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
+} sg_shader_uniform_block_desc;
+
+typedef struct {
+    const char* name;
+    sg_image_type type;
+} sg_shader_image_desc;
+
+typedef struct {
+    const char* source;
+    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
+} sg_shader_stage_desc;
+
+typedef struct {
+    uint32_t _start_canary;
+    sg_shader_stage_desc vs;
+    sg_shader_stage_desc fs;
+    uint32_t _end_canary;
+} sg_shader_desc;
+
+/*
+    sg_pipeline_desc
+
+    The sg_pipeline_desc struct defines all creation parameters
+    for an sg_pipeline object, used as argument to the
+    sg_make_pipeline function:
+
+    - the complete vertex layout for all vertex buffers
+    - a shader object
+    - the 3D primitive type (points, lines, triangles, ...)
+    - the index type (none, 16- or 32-bit)
+    - depth-stencil state
+    - alpha-blending state
+    - rasterizer state
+
+    The default configuration is as follows:
+
+    .vertex_layouts[]:
+        .stride:        0 (must be initialized to > 0)
+        .step_func      SG_VERTEXSTEP_PER_VERTEX
+        .step_rate      1
+        attrs[]:
+            .name       0 (GLES2 requires an attribute name here)
+            .index      0 (optional attribute slot if no name given)
+            .offset     0
+            .format     SG_VERTEXFORMAT_INVALID (must be initialized!)
+    .shader:            0 (must be intilized with a valid sg_shader id!)
+    .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
+    .index_type:        SG_INDEXTYPE_NONE
+    .depth_stencil:
+        .stencil_front, .stencil_back:
+            .fail_op:               SG_STENCILOP_KEEP
+            .depth_fail_op:         SG_STENCILOP_KEEP
+            .pass_op:               SG_STENCILOP_KEEP
+            .compare_func           SG_COMPAREFUNC_ALWAYS
+        .depth_compare_func:    SG_COMPAREFUNC_ALWAYS
+        .depth_write_enabled:   false
+        .stencil_enabled:       false
+        .stencil_read_mask:     0
+        .stencil_write_mask:    0
+        .stencil_ref:           0
+    .blend:
+        .enabled:               false
+        .src_factor_rgb:        SG_BLENDFACTOR_ONE
+        .dst_factor_rgb:        SG_BLENDFACTOR_ZERO
+        .op_rgb:                SG_BLENDOP_ADD
+        .src_factor_alpha:      SG_BLENDFACTOR_ONE
+        .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
+        .op_rgb:                SG_BLENDOP_ADD
+        .color_write_mask:      SG_COLORMASK_RGBA
+        .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
+    .rasterizer:
+        .scissor_test_enabled:          false
+        .alpha_to_coverage_enabled:     false
+        .cull_mode:                     SG_CULLMODE_NONE
+        .face_winding:                  SG_FACEWINDING_CW
+        .sample_count:                  1
+
+*/
+typedef struct {
+    const char* name;
+    int index;
+    int offset;
+    sg_vertex_format format;
+} sg_vertex_attr_desc;
+
+typedef struct {
+    int stride;
+    sg_vertex_step step_func;
+    int step_rate;
+    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
+} sg_vertex_layout_desc;
 
 typedef struct {
     sg_stencil_op fail_op;
@@ -662,126 +944,49 @@ typedef struct {
     int sample_count;
 } sg_rasterizer_state;
 
-/*-- setup descriptor structs ------------------------------------------------*/
-/*
-    sg_desc
-
-    This describes initialization attributes for sokol_gfx used
-    as parameter in the call to sg_setup().
-*/
 typedef struct {
     uint32_t _start_canary;
-    int buffer_pool_size;
-    int image_pool_size;
-    int shader_pool_size;
-    int pipeline_pool_size;
-    int pass_pool_size;
-    uint32_t _end_canary;
-} sg_desc;
-
-typedef struct {
-    uint32_t _start_canary;
-    int size;
-    sg_buffer_type type;
-    sg_usage usage;
-    const void* data_ptr;
-    int data_size;
-    uint32_t _end_canary;
-} sg_buffer_desc;
-
-typedef struct {
-    uint32_t _start_canary;
-    sg_image_type type;
-    bool render_target;
-    uint16_t width;
-    uint16_t height;
-    union {
-        uint16_t depth;
-        uint16_t layers;
-    };
-    uint16_t num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;               /* render targets only */
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    int num_data_items;
-    const void** data_ptrs;     /* number of subimages can be big (e.g. array/3d textures)... */
-    const int* data_sizes;      /* ...so don't embed fixed-size-arrays here */
-    uint32_t _end_canary;
-} sg_image_desc;
-
-/* describe a uniform in a uniform block */
-typedef struct {
-    const char* name;
-    int offset;
-    sg_uniform_type type;
-    int array_count; 
-} sg_shader_uniform_desc;
-
-typedef struct {
-    int size;
-    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
-} sg_shader_uniform_block_desc;
-
-typedef struct {
-    const char* name;
-    sg_image_type type;
-} sg_shader_image_desc;
-
-typedef struct {
-    const char* source;
-    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
-} sg_shader_stage_desc;
-
-typedef struct {
-    uint32_t _start_canary;
-    sg_shader_stage_desc vs;
-    sg_shader_stage_desc fs;
-    uint32_t _end_canary;
-} sg_shader_desc;
-
-/*
-    sg_vertex_attr_desc
-
-    A vertex attribute can be either bound by name or by bind location,
-    with the restriction that on GLES2, only binding by attribute
-    name is allowed.
-*/
-typedef struct {
-    const char* name;
-    int index;
-    int offset;
-    sg_vertex_format format;
-} sg_vertex_attr_desc;
-
-typedef struct {
-    int stride;
-    sg_vertex_step step_func;
-    int step_rate;
-    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-} sg_vertex_layout_desc;
-
-typedef struct {
-    uint32_t _start_canary;
+    sg_vertex_layout_desc vertex_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
-    sg_vertex_layout_desc vertex_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
     sg_rasterizer_state rasterizer;
     uint32_t _end_canary;
 } sg_pipeline_desc;
 
+/*
+    sg_pass_desc
+
+    Creation parameters for an sg_pass object, used as argument
+    to the sg_make_pass() function.
+
+    A pass object contains 1..4 color-attachments and none, or one
+    depth-stencil-attachment. Each attachment consists of
+    an image, and two additional indices which describe into 
+    which subimage the pass will render: one mipmap index, and
+    if the image is a cubemap, array-texture or 3D-texture, the
+    face-index, array-layer or depth-slice.
+
+    Pass images must fullfill the following requirements:
+
+    All images must have:
+    - been created as render target (sg_image_desc.render_target = true)
+    - the same size
+    - the same sample count
+    
+    In addition, all color-attachment images must have the same
+    pixel format.
+*/
 typedef struct {
     sg_image image;
     uint16_t mip_level;
-    uint16_t slice;
+    union {
+        uint16_t face;
+        uint16_t layer;
+        uint16_t slice;
+    };
 } sg_attachment_desc;
 
 typedef struct {
@@ -791,24 +996,14 @@ typedef struct {
     uint32_t _end_canary;
 } sg_pass_desc;
 
-typedef struct {
-    uint32_t _start_canary;
-    sg_pipeline pipeline;
-    sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
-    sg_buffer index_buffer;
-    sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
-    sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
-    uint32_t _end_canary;
-} sg_draw_state;
-
-/* setup */
+/* setup and misc functions */
 extern void sg_setup(const sg_desc* desc);
 extern void sg_shutdown();
 extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 extern void sg_reset_state_cache();
 
-/* resources */
+/* resource creation, destruction and updating */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 extern sg_image sg_make_image(const sg_image_desc* desc);
 extern sg_shader sg_make_shader(const sg_shader_desc* desc);
@@ -822,7 +1017,7 @@ extern void sg_destroy_pass(sg_pass pass);
 extern void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
 extern void sg_update_image(sg_image img, int num_data_items, const void** data_ptrs, int* data_sizes); 
 
-/* rendering */
+/* rendering functions */
 extern void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
 extern void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
 extern void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
