@@ -627,6 +627,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
     glCullFace(GL_BACK);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glEnable(GL_DITHER);
     #if defined(SOKOL_GLCORE33)
         glEnable(GL_MULTISAMPLE);
@@ -1699,6 +1700,11 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
         cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
         if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
         else glDisable(GL_SCISSOR_TEST);
+    }
+    if (new_r->alpha_to_coverage_enabled != cache_r->alpha_to_coverage_enabled) {
+        cache_r->alpha_to_coverage_enabled = new_r->alpha_to_coverage_enabled;
+        if (new_r->alpha_to_coverage_enabled) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        else glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     }
     #ifdef SOKOL_GLCORE33
     if (new_r->sample_count != cache_r->sample_count) {
