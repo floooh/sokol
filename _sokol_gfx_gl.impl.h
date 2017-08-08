@@ -624,6 +624,7 @@ typedef struct {
     bool in_pass;
     bool next_draw_valid;
     uint32_t frame_index;
+    GLuint default_framebuffer;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     int cur_pass_width;
@@ -648,6 +649,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(_sg_backend* state) {
     state->in_pass = false;
     state->next_draw_valid = false;
     state->frame_index = 1;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&state->default_framebuffer);
     state->cur_primitive_type = GL_TRIANGLES;
     state->cur_index_type = 0;
     state->cur_pass_width = 0;
@@ -1245,8 +1247,8 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
     }
 
     /* store current framebuffer binding (restored at end of function) */
-    GLint gl_orig_fb;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &gl_orig_fb);
+    GLuint gl_orig_fb;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&gl_orig_fb);
 
     /* create a framebuffer object */
     glGenFramebuffers(1, &pass->gl_fb);
@@ -1410,8 +1412,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
     }
     else {
         /* default pass */
-        /* FIXME: on some platforms default frame buffer isn't 0! */
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, state->default_framebuffer);
     }
     glViewport(0, 0, w, h);
     if (state->cache.rast.scissor_test_enabled) {
@@ -1528,8 +1529,7 @@ _SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
     state->cur_pass_width = 0;
     state->cur_pass_height = 0;
 
-    /* FIXME: bind default framebuffer */
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, state->default_framebuffer);
     state->in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
