@@ -710,8 +710,8 @@ _SOKOL_PRIVATE void _sg_setup_backend(_sg_backend* state) {
         state->features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
         state->features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
         state->features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
-        state->features[SG_FEATURE_TEXTURE_3D] = true;
-        state->features[SG_FEATURE_TEXTURE_ARRAY] = true;
+        state->features[SG_FEATURE_IMAGETYPE_3D] = true;
+        state->features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
     #endif
 }
 
@@ -815,12 +815,12 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
         return;
     }
     /* check for optional texture types */
-    if ((img->type == SG_IMAGETYPE_3D) && !state->features[SG_FEATURE_TEXTURE_3D]) {
+    if ((img->type == SG_IMAGETYPE_3D) && !state->features[SG_FEATURE_IMAGETYPE_3D]) {
         SOKOL_LOG("3D textures not supported by GL context\n");
         img->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
-    if ((img->type == SG_IMAGETYPE_ARRAY) && !state->features[SG_FEATURE_TEXTURE_ARRAY]) {
+    if ((img->type == SG_IMAGETYPE_ARRAY) && !state->features[SG_FEATURE_IMAGETYPE_ARRAY]) {
         SOKOL_LOG("array textures not supported by GL context\n");
         img->slot.state = SG_RESOURCESTATE_FAILED;
         return;
