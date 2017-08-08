@@ -19,6 +19,9 @@ enum {
 #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
 #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
 #endif
+#ifndef GL_UNSIGNED_INT_24_8
+#define GL_UNSIGNED_INT_24_8 0x84FA
+#endif
 #ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
 #define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
 #endif
@@ -46,7 +49,20 @@ enum {
 #ifndef GL_COMPRESSED_SRGB8_ETC2
 #define GL_COMPRESSED_SRGB8_ETC2 0x9275
 #endif
-
+#ifndef GL_DEPTH24_STENCIL8
+#define GL_DEPTH24_STENCIL8 0x88F0
+#endif
+#ifndef GL_HALF_FLOAT
+#define GL_HALF_FLOAT 0x140B
+#endif
+#ifndef GL_DEPTH_STENCIL
+#define GL_DEPTH_STENCIL 0x84F9
+#endif
+#ifdef SOKOL_GLES2
+#define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+#define glDrawArraysInstanced(mode, first, count, instancecount) glDrawArraysInstancedEXT(mode, first, count, instancecount)
+#define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+#endif
 #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); } 
 
 /*-- type translation --------------------------------------------------------*/
@@ -384,7 +400,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             /* FIXME */
             return GL_DEPTH_COMPONENT16;
         case SG_PIXELFORMAT_DEPTHSTENCIL:
-            /* FIXME */
             return GL_DEPTH24_STENCIL8;
         case SG_PIXELFORMAT_DXT1:
             return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
@@ -424,8 +439,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_cubeface_target(int face_index) {
 
 _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16; /* FIXME */
-        case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;  /* FIXME */
+        case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;
         default:    return 0;
     }
 }
@@ -1744,8 +1759,10 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
             if (cache_attr->vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
             }
-            if (cache_attr->divisor != attr->divisor) {
-                glVertexAttribDivisor(attr_index, attr->divisor);
+            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+                if (cache_attr->divisor != attr->divisor) {
+                    glVertexAttribDivisor(attr_index, attr->divisor);
+                }
             }
         }
         else {
