@@ -1157,7 +1157,7 @@ _SOKOL_PRIVATE void _sg_load_rasterizer(const sg_rasterizer_state* src, sg_raste
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip && desc);
+    SOKOL_ASSERT(state && pip && shd && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
