@@ -87,25 +87,6 @@ enum {
     SG_MAX_VERTEX_ATTRIBUTES = 16,
     SG_MAX_MIPMAPS = 16,
 };
-/* default clear values */
-#ifndef SG_DEFAULT_CLEAR_RED
-#define SG_DEFAULT_CLEAR_RED (0.5f)
-#endif
-#ifndef SG_DEFAULT_CLEAR_GREEN
-#define SG_DEFAULT_CLEAR_GREEN (0.5f)
-#endif
-#ifndef SG_DEFAULT_CLEAR_BLUE
-#define SG_DEFAULT_CLEAR_BLUE (0.5f)
-#endif
-#ifndef SG_DEFAULT_CLEAR_ALPHA
-#define SG_DEFAULT_CLEAR_ALPHA (1.0f)
-#endif
-#ifndef SG_DEFAULT_CLEAR_DEPTH
-#define SG_DEFAULT_CLEAR_DEPTH (1.0f)
-#endif
-#ifndef SG_DEFAULT_CLEAR_STENCIL
-#define SG_DEFAULT_CLEAR_STENCIL (0)
-#endif
 
 /*
     sg_feature
