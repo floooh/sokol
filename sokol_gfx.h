@@ -685,6 +685,7 @@ typedef struct {
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
+    const void* mtl_device;     /* Metal only, use CFBridginRetain() to obtain ptr from id */
     uint32_t _end_canary;
 } sg_desc;
 
