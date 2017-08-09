@@ -58,7 +58,7 @@ extern "C" {
     The 32-bit resource id is split into a 16-bit pool index in the lower bits, 
     and a 16-bit 'unique counter' in the upper bits. The index allows fast
     pool lookups, and combined with the unique-mask it allows to detect
-    'dangling accesses' (trying to use an object which longer exists, and
+    'dangling accesses' (trying to use an object which no longer exists, and
     its pool slot has been reused for a new object)
 
     The resource ids are wrapped into a struct so that the compiler
@@ -418,7 +418,8 @@ typedef enum {
     sg_cull_mode
 
     The face-culling mode, this is used in the
-    sg_pipeline_desc.rast.cull_mode member when creating a pipeline object.
+    sg_pipeline_desc.rasterizer.cull_mode member when creating a 
+    pipeline object.
 
     The default cull mode is SG_CULLMODE_NONE
 */
@@ -433,7 +434,9 @@ typedef enum {
 /*
     sg_face_winding
 
-    The vertex-winding rule that determines a front-facing primitive.
+    The vertex-winding rule that determines a front-facing primitive. This
+    is used in the member sg_pipeline_desc.rasterizer.face_winding
+    when creating a pipeline object.
 
     The default winding is SG_FACEWINDING_CW (clockwise)
 */
@@ -449,10 +452,12 @@ typedef enum {
 
     The compare-function for depth- and stencil-ref tests.
     This is used when creating pipeline objects in the members:
-    
-    sg_pipeline_desc.depth_stencil.depth_compare_func
-    sg_pipeline_desc.stencil_front.compare_func
-    sg_pipeline_desc.stencil_back.compare_func
+   
+    sg_pipeline_desc
+        .depth_stencil
+            .depth_compare_func
+            .stencil_front.compare_func
+            .stencil_back.compare_func
 
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
@@ -477,12 +482,16 @@ typedef enum {
     comparison test passes or fails. This is used when creating a pipeline
     object in the members:
 
-    sg_pipeline_desc.stencil_front.fail_op
-    sg_pipeline_desc.stencil_front.depth_fail_op
-    sg_pipeline_desc.stencil_front.pass_op
-    sg_pipeline_desc.stencil_back.fail_op
-    sg_pipeline_desc.stencil_back.depth_fail_op
-    sg_pipeline_desc.stencil_back.pass_op
+    sg_pipeline_desc
+        .depth_stencil
+            .stencil_front
+                .fail_op
+                .depth_fail_op
+                .pass_op
+            .stencil_back
+                .fail_op
+                .depth_fail_op
+                .pass_op
 
     The default value is SG_STENCILOP_KEEP.
 */
@@ -503,13 +512,14 @@ typedef enum {
     sg_blend_factor
 
     The source and destination factors in blending operations.
-
     This is used in the following members when creating a pipeline object:
 
-    sg_pipeline_desc.blend.src_factor_rgb
-    sg_pipeline_desc.blend.dst_factor_rgb
-    sg_pipeline_desc.blend.src_factor_alpha
-    sg_pipeline_desc.blend.dst_factor_alpha
+    sg_pipeline_desc
+        .blend
+            .src_factor_rgb
+            .dst_factor_rgb
+            .src_factor_alpha
+            .dst_factor_alpha
 
     The default value is SG_BLENDFACTOR_ONE for source
     factors, and SG_BLENDFACTOR_ZERO for destination factors.
@@ -541,8 +551,10 @@ typedef enum {
     fragment blending operation. It is used in the following members when
     creating a pipeline object:
 
-    sg_pipeline_desc.blend.op_rgb
-    sg_pipeline_desc.blend.op_alpha
+    sg_pipeline_desc
+        .blend
+            .op_rgb
+            .op_alpha
 
     The default value is SG_BLENDOP_ADD.
 */
@@ -577,8 +589,7 @@ typedef enum {
 /*
     sg_action
 
-    An enum which defines what action should be performed at the
-    start of a render pass:
+    Defines what action should be performed at the start of a render pass:
 
     SG_ACTION_CLEAR:    clear the render target image
     SG_ACTION_LOAD:     load the previous content of the render target image
@@ -587,7 +598,7 @@ typedef enum {
     This is used in the sg_pass_action structure. 
     
     The default action for all pass attachments is SG_ACTION_CLEAR, with the
-    clear color rgba = {0.0f, 0.0f, 0.0f, 1.0f], depth=1.0 and stencil=0.
+    clear color rgba = {0.5f, 0.5f, 0.5f, 1.0f], depth=1.0 and stencil=0.
 
     If you want to override the default behaviour, it is important to not
     only set the clear color, but the 'action' field as well (as long as this
@@ -838,9 +849,9 @@ typedef struct {
 
     The sg_pipeline_desc struct defines all creation parameters
     for an sg_pipeline object, used as argument to the
-    sg_make_pipeline function:
+    sg_make_pipeline() function:
 
-    - the complete vertex layout for all vertex buffers
+    - the complete vertex layout for all input vertex buffers
     - a shader object
     - the 3D primitive type (points, lines, triangles, ...)
     - the index type (none, 16- or 32-bit)
@@ -854,7 +865,7 @@ typedef struct {
         .stride:        0 (must be initialized to > 0)
         .step_func      SG_VERTEXSTEP_PER_VERTEX
         .step_rate      1
-        attrs[]:
+        .attrs[]:
             .name       0 (GLES2 requires an attribute name here)
             .index      0 (optional attribute slot if no name given)
             .offset     0
@@ -962,9 +973,9 @@ typedef struct {
     Creation parameters for an sg_pass object, used as argument
     to the sg_make_pass() function.
 
-    A pass object contains 1..4 color-attachments and none, or one
+    A pass object contains 1..4 color-attachments and none, or one,
     depth-stencil-attachment. Each attachment consists of
-    an image, and two additional indices which describe into 
+    an image, and two additional indices describing
     which subimage the pass will render: one mipmap index, and
     if the image is a cubemap, array-texture or 3D-texture, the
     face-index, array-layer or depth-slice.
