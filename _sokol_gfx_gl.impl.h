@@ -594,16 +594,16 @@ typedef struct {
     _sg_gl_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } _sg_state_cache;
 
-_SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* cache) {
+    SOKOL_ASSERT(cache);
     
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_init_gl_attr(&state->attrs[i]);
+        _sg_init_gl_attr(&cache->attrs[i]);
         glDisableVertexAttribArray(i);
     }
 
     /* depth-stencil state */
-    _sg_init_depth_stencil_state(&state->ds);
+    _sg_init_depth_stencil_state(&cache->ds);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_FALSE);
@@ -613,7 +613,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
     glStencilMask(0);
 
     /* blend state */
-    _sg_init_blend_state(&state->blend);
+    _sg_init_blend_state(&cache->blend);
     glDisable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -621,7 +621,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
     glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     /* rasterizer state */
-    _sg_init_rasterizer_state(&state->rast);
+    _sg_init_rasterizer_state(&cache->rast);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
@@ -638,7 +638,6 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* state) {
 typedef struct {
     bool valid;
     bool in_pass;
-    bool next_draw_valid;
     uint32_t frame_index;
     GLuint default_framebuffer;
     GLenum cur_primitive_type;
@@ -655,84 +654,83 @@ typedef struct {
     GLuint vao; 
     #endif
 } _sg_backend;
+static _sg_backend _sg_gl;
 
-_SOKOL_PRIVATE void _sg_setup_backend(_sg_backend* state) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_setup_backend() {
+    memset(&_sg_gl, 0, sizeof(_sg_gl));
     #if !defined(SOKOL_GLES2)
-    glGenVertexArrays(1, &state->vao);
-    glBindVertexArray(state->vao);
+    glGenVertexArrays(1, &_sg_gl.vao);
+    glBindVertexArray(_sg_gl.vao);
     #endif
-    state->in_pass = false;
-    state->next_draw_valid = false;
-    state->frame_index = 1;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&state->default_framebuffer);
-    state->cur_primitive_type = GL_TRIANGLES;
-    state->cur_index_type = 0;
-    state->cur_pass_width = 0;
-    state->cur_pass_height = 0;
-    state->cur_pass = 0;
-    state->cur_pass_id.id = SG_INVALID_ID;
-    state->cur_pipeline = 0;
-    state->cur_pipeline_id.id = SG_INVALID_ID;
-    state->valid = true;
-    _sg_init_state_cache(&state->cache);
+    _sg_gl.valid = true;
+    _sg_gl.in_pass = false;
+    _sg_gl.frame_index = 1;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg_gl.default_framebuffer);
+    _sg_gl.cur_primitive_type = GL_TRIANGLES;
+    _sg_gl.cur_index_type = 0;
+    _sg_gl.cur_pass_width = 0;
+    _sg_gl.cur_pass_height = 0;
+    _sg_gl.cur_pass = 0;
+    _sg_gl.cur_pass_id.id = SG_INVALID_ID;
+    _sg_gl.cur_pipeline = 0;
+    _sg_gl.cur_pipeline_id.id = SG_INVALID_ID;
+    _sg_init_state_cache(&_sg_gl.cache);
     
     /* initialize feature flags */
     for (int i = 0; i < SG_NUM_FEATURES; i++) {
-        state->features[i] = false;
+        _sg_gl.features[i] = false;
     }
-    state->features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
+    _sg_gl.features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
     #if !defined(SOKOL_GLCORE33)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
             strstr(ext, "_texture_compression_s3tc") ||
             strstr(ext, "_compressed_texture_s3tc") ||
             strstr(ext, "texture_compression_dxt1");
-        state->features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
             strstr(ext, "_texture_compression_pvrtc") ||
             strstr(ext, "_compressed_texture_pvrtc");
-        state->features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] = strstr(ext, "_compressed_texture_atc");
-        state->features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
-        state->features[SG_FEATURE_INSTANCED_ARRAYS] = strstr(ext, "_instanced_arrays");
+        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] = strstr(ext, "_compressed_texture_atc");
+        _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
+        _sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS] = strstr(ext, "_instanced_arrays");
         #if defined(SOKOL_GLES2)
-            state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
         #else
-            state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = state->features[SG_FEATURE_TEXTURE_FLOAT];
+            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT];
         #endif
     #endif
     #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
         #if defined(SOKOL_GLCORE33)
-        state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
+        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
         #endif
-        state->features[SG_FEATURE_INSTANCED_ARRAYS] = true;
-        state->features[SG_FEATURE_TEXTURE_FLOAT] = true;
-        state->features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
-        state->features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
-        state->features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
-        state->features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
-        state->features[SG_FEATURE_IMAGETYPE_3D] = true;
-        state->features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
+        _sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS] = true;
+        _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
+        _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+        _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+        _sg_gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+        _sg_gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        _sg_gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
+        _sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(_sg_backend* state) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(state->valid);
+_SOKOL_PRIVATE void _sg_discard_backend() {
+    SOKOL_ASSERT(_sg_gl.valid);
     #if !defined(SOKOL_GLES2)
-    glDeleteVertexArrays(1, &state->vao);
-    state->vao = 0;
+    glDeleteVertexArrays(1, &_sg_gl.vao);
+    _sg_gl.vao = 0;
     #endif
-    state->valid = false;
+    _sg_gl.valid = false;
 }
 
-_SOKOL_PRIVATE bool _sg_query_feature(_sg_backend* state, sg_feature f) {
-    SOKOL_ASSERT(state && (f>=0) && (f<SG_NUM_FEATURES));
-    return state->features[f];
+_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
+    SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
+    return _sg_gl.features[f];
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-_SOKOL_PRIVATE void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const sg_buffer_desc* desc) {
-    SOKOL_ASSERT(state && buf && desc);
+_SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->data_size <= desc->size);
     _SG_GL_CHECK_ERROR();
@@ -757,8 +755,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const
     buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_backend* state, _sg_buffer* buf) {
-    SOKOL_ASSERT(state && buf);
+_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
+    SOKOL_ASSERT(buf);
     _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < buf->num_slots; slot++) {
         if (buf->gl_buf[slot]) {
@@ -769,28 +767,27 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_backend* state, _sg_buffer* buf) {
     _sg_init_buffer(buf);
 }
 
-_SOKOL_PRIVATE bool _sg_gl_supported_texture_format(_sg_backend* state, sg_pixel_format fmt) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_DXT1:
         case SG_PIXELFORMAT_DXT3:
         case SG_PIXELFORMAT_DXT5:
-            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
+            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
         case SG_PIXELFORMAT_PVRTC2_RGB:
         case SG_PIXELFORMAT_PVRTC4_RGB:
         case SG_PIXELFORMAT_PVRTC2_RGBA:
         case SG_PIXELFORMAT_PVRTC4_RGBA:
-            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
+            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
         case SG_PIXELFORMAT_ETC2_RGB8:
         case SG_PIXELFORMAT_ETC2_SRGB8:
-            return state->features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
+            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
         default:
             return true;
     }
 }
 
-_SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_desc* desc) {
-    SOKOL_ASSERT(state && img && desc);
+_SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
@@ -809,18 +806,18 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
     img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
 
     /* check if texture format is support */
-    if (!_sg_gl_supported_texture_format(state, img->pixel_format)) {
+    if (!_sg_gl_supported_texture_format(img->pixel_format)) {
         SOKOL_LOG("compressed texture format not supported by GL context\n");
         img->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
     /* check for optional texture types */
-    if ((img->type == SG_IMAGETYPE_3D) && !state->features[SG_FEATURE_IMAGETYPE_3D]) {
+    if ((img->type == SG_IMAGETYPE_3D) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_3D]) {
         SOKOL_LOG("3D textures not supported by GL context\n");
         img->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
-    if ((img->type == SG_IMAGETYPE_ARRAY) && !state->features[SG_FEATURE_IMAGETYPE_ARRAY]) {
+    if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY]) {
         SOKOL_LOG("array textures not supported by GL context\n");
         img->slot.state = SG_RESOURCESTATE_FAILED;
         return;
@@ -832,7 +829,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
 
     /* special case depth-stencil-buffer? */
     #if !defined(SOKOL_GLES2)
-    const bool msaa = (img->sample_count > 1) && (state->features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+    const bool msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
     #endif
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
         SOKOL_ASSERT((img->usage == SG_USAGE_IMMUTABLE) && (img->num_slots == 1));
@@ -956,8 +953,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const s
     img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_backend* state, _sg_image* img) {
-    SOKOL_ASSERT(state && img);
+_SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
+    SOKOL_ASSERT(img);
     _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < img->num_slots; slot++) {
         if (img->gl_tex[slot]) {
@@ -999,8 +996,8 @@ _SOKOL_PRIVATE GLuint _sg_compile_shader(sg_shader_stage stage, const char* src)
     return gl_shd;
 }
 
-_SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shader_desc* desc) {
-    SOKOL_ASSERT(state && shd && desc);
+_SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
@@ -1101,8 +1098,8 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const
     shd->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
-    SOKOL_ASSERT(state && shd);
+_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
+    SOKOL_ASSERT(shd);
     _SG_GL_CHECK_ERROR();
     if (shd->gl_prog) {
         glDeleteProgram(shd->gl_prog);
@@ -1156,8 +1153,8 @@ _SOKOL_PRIVATE void _sg_load_rasterizer(const sg_rasterizer_state* src, sg_raste
     dst->sample_count = _sg_select(src->sample_count, 1);
 }
 
-_SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(state && pip && shd && desc);
+_SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
@@ -1213,7 +1210,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _
     pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_backend* state, _sg_pipeline* pip) {
+_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     _sg_init_pipeline(pip);
 }
@@ -1225,7 +1222,7 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_backend* state, _sg_pipeline* pip) 
     first entries are the color attachment images (or nullptr), last entry
     is the depth-stencil image (or nullptr).
 */
-_SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && att_images && desc);
     SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(att_images && att_images[0]);
@@ -1367,8 +1364,8 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_imag
     pass->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_backend* state, _sg_pass* pass) {
-    SOKOL_ASSERT(state && pass);
+_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
+    SOKOL_ASSERT(pass);
     _SG_GL_CHECK_ERROR();
     if (0 != pass->gl_fb) {
         glDeleteFramebuffers(1, &pass->gl_fb);
@@ -1386,23 +1383,22 @@ _SOKOL_PRIVATE void _sg_destroy_pass(_sg_backend* state, _sg_pass* pass) {
 }
 
 /*-- GL backend rendering functions ------------------------------------------*/
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action, int w, int h) {
     /* FIXME: what if a texture used as render target is still bound, should we
        unbind all currently bound textures in begin pass? */
-    SOKOL_ASSERT(state);
     SOKOL_ASSERT(action);
-    SOKOL_ASSERT(!state->in_pass);
+    SOKOL_ASSERT(!_sg_gl.in_pass);
     _SG_GL_CHECK_ERROR();
-    state->in_pass = true;
-    state->cur_pass = pass; /* can be 0 */
+    _sg_gl.in_pass = true;
+    _sg_gl.cur_pass = pass; /* can be 0 */
     if (pass) {
-        state->cur_pass_id.id = pass->slot.id;
+        _sg_gl.cur_pass_id.id = pass->slot.id;
     }
     else {
-        state->cur_pass_id.id = SG_INVALID_ID;
+        _sg_gl.cur_pass_id.id = SG_INVALID_ID;
     }
-    state->cur_pass_width = w;
-    state->cur_pass_height = h;
+    _sg_gl.cur_pass_width = w;
+    _sg_gl.cur_pass_height = h;
     if (pass) {
         /* offscreen pass */
         SOKOL_ASSERT(pass->gl_fb);
@@ -1428,23 +1424,23 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
     }
     else {
         /* default pass */
-        glBindFramebuffer(GL_FRAMEBUFFER, state->default_framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
     }
     glViewport(0, 0, w, h);
-    if (state->cache.rast.scissor_test_enabled) {
-        state->cache.rast.scissor_test_enabled = false;
+    if (_sg_gl.cache.rast.scissor_test_enabled) {
+        _sg_gl.cache.rast.scissor_test_enabled = false;
         glDisable(GL_SCISSOR_TEST);
     }
-    if (state->cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
-        state->cache.blend.color_write_mask = SG_COLORMASK_RGBA;
+    if (_sg_gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
+        _sg_gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     }
-    if (!state->cache.ds.depth_write_enabled) {
-        state->cache.ds.depth_write_enabled = true;
+    if (!_sg_gl.cache.ds.depth_write_enabled) {
+        _sg_gl.cache.ds.depth_write_enabled = true;
         glDepthMask(GL_TRUE);
     }
-    if (state->cache.ds.stencil_write_mask != 0xFF) {
-        state->cache.ds.stencil_write_mask = 0xFF;
+    if (_sg_gl.cache.ds.stencil_write_mask != 0xFF) {
+        _sg_gl.cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
     }
     bool use_mrt_clear = (0 != pass);
@@ -1504,19 +1500,18 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(state->in_pass);
+_SOKOL_PRIVATE void _sg_end_pass() {
+    SOKOL_ASSERT(_sg_gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
     /* if this was an offscreen pass, and MSAA rendering was used, need 
        to resolve into the pass images */
     #if !defined(SOKOL_GLES2)
-    if (state->cur_pass) {
+    if (_sg_gl.cur_pass) {
         /* check if the pass object is still valid */
-        const _sg_pass* pass = state->cur_pass;
-        SOKOL_ASSERT(pass->slot.id == state->cur_pass_id.id);
-        bool is_msaa = (0 != state->cur_pass->color_atts[0].gl_msaa_resolve_buffer);
+        const _sg_pass* pass = _sg_gl.cur_pass;
+        SOKOL_ASSERT(pass->slot.id == _sg_gl.cur_pass_id.id);
+        bool is_msaa = (0 != _sg_gl.cur_pass->color_atts[0].gl_msaa_resolve_buffer);
         if (is_msaa) {
             SOKOL_ASSERT(pass->gl_fb);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl_fb);
@@ -1540,49 +1535,46 @@ _SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
         }
     }
     #endif
-    state->cur_pass = 0;
-    state->cur_pass_id.id = SG_INVALID_ID;
-    state->cur_pass_width = 0;
-    state->cur_pass_height = 0;
+    _sg_gl.cur_pass = 0;
+    _sg_gl.cur_pass_id.id = SG_INVALID_ID;
+    _sg_gl.cur_pass_width = 0;
+    _sg_gl.cur_pass_height = 0;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, state->default_framebuffer);
-    state->in_pass = false;
+    glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
+    _sg_gl.in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(state->in_pass);
-    y = origin_top_left ? (state->cur_pass_height - (y+h)) : y;
+_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg_gl.in_pass);
+    y = origin_top_left ? (_sg_gl.cur_pass_height - (y+h)) : y;
     glViewport(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(state->in_pass);
-    y = origin_top_left ? (state->cur_pass_height - (y+h)) : y;
+_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg_gl.in_pass);
+    y = origin_top_left ? (_sg_gl.cur_pass_height - (y+h)) : y;
     glScissor(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state, 
+_SOKOL_PRIVATE void _sg_apply_draw_state( 
     _sg_pipeline* pip, 
     _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
-    SOKOL_ASSERT(state);
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     _SG_GL_CHECK_ERROR();
 
-    state->cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
-    state->cur_index_type = _sg_gl_index_type(pip->index_type);
-    state->cur_pipeline = pip;
-    state->cur_pipeline_id.id = pip->slot.id;
+    _sg_gl.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
+    _sg_gl.cur_index_type = _sg_gl_index_type(pip->index_type);
+    _sg_gl.cur_pipeline = pip;
+    _sg_gl.cur_pipeline_id.id = pip->slot.id;
 
     /* update depth-stencil state */
     const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
-    sg_depth_stencil_state* cache_ds = &state->cache.ds;
+    sg_depth_stencil_state* cache_ds = &_sg_gl.cache.ds;
     if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
         cache_ds->depth_compare_func = new_ds->depth_compare_func;
         glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
@@ -1632,7 +1624,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
 
     /* update blend state */
     const sg_blend_state* new_b = &pip->blend;
-    sg_blend_state* cache_b = &state->cache.blend;
+    sg_blend_state* cache_b = &_sg_gl.cache.blend;
     if (new_b->enabled != cache_b->enabled) {
         cache_b->enabled = new_b->enabled;
         if (new_b->enabled) glEnable(GL_BLEND);
@@ -1679,7 +1671,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
 
     /* update rasterizer state */
     const sg_rasterizer_state* new_r = &pip->rast;
-    sg_rasterizer_state* cache_r = &state->cache.rast;
+    sg_rasterizer_state* cache_r = &_sg_gl.cache.rast;
     if (new_r->cull_mode != cache_r->cull_mode) {
         cache_r->cull_mode = new_r->cull_mode;
         if (SG_CULLMODE_NONE == new_r->cull_mode) {
@@ -1749,7 +1741,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
     GLuint gl_vb = 0;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
-        _sg_gl_attr* cache_attr = &state->cache.attrs[attr_index];
+        _sg_gl_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
         if (attr->vb_index >= 0) {
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
@@ -1765,7 +1757,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
             if (cache_attr->vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
             }
-            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
                 if (cache_attr->divisor != attr->divisor) {
                     glVertexAttribDivisor(attr_index, attr->divisor);
                 }
@@ -1782,21 +1774,17 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
-    if (!state->next_draw_valid) {
-        return;
-    }
-    if (state->cur_pipeline->slot.id != state->cur_pipeline_id.id) {
+    if (_sg_gl.cur_pipeline->slot.id != _sg_gl.cur_pipeline_id.id) {
         /* pipeline object was destroyed */
         return;
     }
-    if (state->cur_pipeline->shader->slot.id != state->cur_pipeline->shader_id.id) {
+    if (_sg_gl.cur_pipeline->shader->slot.id != _sg_gl.cur_pipeline->shader_id.id) {
         /* shader object was destroyed */
     }
-    _sg_shader_stage* stage = &state->cur_pipeline->shader->stage[stage_index];
+    _sg_shader_stage* stage = &_sg_gl.cur_pipeline->shader->stage[stage_index];
     SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
     _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
     SOKOL_ASSERT(ub->size == num_bytes);
@@ -1832,13 +1820,9 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage 
     }
 }
 
-_SOKOL_PRIVATE void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(state);
-    if (!state->next_draw_valid) {
-        return;
-    }
-    const GLenum i_type = state->cur_index_type;
-    const GLenum p_type = state->cur_primitive_type;
+_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
+    const GLenum i_type = _sg_gl.cur_index_type;
+    const GLenum p_type = _sg_gl.cur_primitive_type;
     if (0 != i_type) {
         /* indexed rendering */
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
@@ -1847,7 +1831,7 @@ _SOKOL_PRIVATE void _sg_draw(_sg_backend* state, int base_element, int num_eleme
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
         }
@@ -1858,26 +1842,25 @@ _SOKOL_PRIVATE void _sg_draw(_sg_backend* state, int base_element, int num_eleme
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            if (state->features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
         }
     }
 }
 
-_SOKOL_PRIVATE void _sg_commit(_sg_backend* state) {
-    SOKOL_ASSERT(state);
-    SOKOL_ASSERT(!state->in_pass);
-    state->frame_index++;
+_SOKOL_PRIVATE void _sg_commit() {
+    SOKOL_ASSERT(!_sg_gl.in_pass);
+    _sg_gl.frame_index++;
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* data_ptr, int data_size) {
-    SOKOL_ASSERT(state && buf && data_ptr && data_size > 0);
+_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
+    SOKOL_ASSERT(buf && data_ptr && data_size > 0);
     /* only one update per buffer per frame allowed */
-    SOKOL_ASSERT(buf->upd_frame_index != state->frame_index);
+    SOKOL_ASSERT(buf->upd_frame_index != _sg_gl.frame_index);
     SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
     SOKOL_ASSERT(data_size <= buf->size);
-    buf->upd_frame_index = state->frame_index;
+    buf->upd_frame_index = _sg_gl.frame_index;
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
     }
