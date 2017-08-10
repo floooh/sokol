@@ -100,132 +100,123 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
 }
 
 /*-- main Metal backend state and functions ----------------------------------*/
-typedef struct {
-    bool next_draw_valid;
-} _sg_backend;
-
-_SOKOL_PRIVATE void _sg_setup_backend(_sg_backend* state) {
-    SOKOL_ASSERT(state);
-    state->next_draw_valid = false;
+_SOKOL_PRIVATE void _sg_setup_backend() {
+    // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(_sg_backend* state) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_discard_backend() {
+    // FIXME
 }
 
-_SOKOL_PRIVATE bool _sg_query_feature(_sg_backend* state, sg_feature f) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     // FIXME
     return false;
 }
 
-_SOKOL_PRIVATE void _sg_create_buffer(_sg_backend* state, _sg_buffer* buf, const sg_buffer_desc* desc) {
-    SOKOL_ASSERT(state && buf && desc);
+_SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->data_size <= desc->size);
+    // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_backend* state, _sg_buffer* buf) {
-    SOKOL_ASSERT(state && buf);
+_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
+    SOKOL_ASSERT(buf);
     // FIXME
     _sg_init_buffer(buf);
 }
 
-_SOKOL_PRIVATE void _sg_create_image(_sg_backend* state, _sg_image* img, const sg_image_desc* desc) {
-    SOKOL_ASSERT(state && img && desc);
+_SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
+    // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_backend* state, _sg_image* img) {
-    SOKOL_ASSERT(state && img);
+_SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
+    SOKOL_ASSERT(img);
     // FIXME
     _sg_init_image(img);
 }
 
-_SOKOL_PRIVATE void _sg_create_shader(_sg_backend* state, _sg_shader* shd, const sg_shader_desc* desc) {
-    SOKOL_ASSERT(state && shd && desc);
+_SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_backend* state, _sg_shader* shd) {
-    SOKOL_ASSERT(state && shd);
+_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
+    SOKOL_ASSERT(shd);
     // FIXME
     _sg_init_shader(shd);
 }
 
-_SOKOL_PRIVATE void _sg_create_pipeline(_sg_backend* state, _sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(state && pip && shd && desc);
+_SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_backend* state, _sg_pipeline* pip) {
-    SOKOL_ASSERT(state && pip);
+_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
+    SOKOL_ASSERT(pip);
     // FIXME
     _sg_init_pipeline(pip);
 }
 
-_SOKOL_PRIVATE void _sg_create_pass(_sg_backend* state, _sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(state && pass && desc);
+_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+    SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_backend* state, _sg_pass* pass) {
-    SOKOL_ASSERT(state && pass);
+_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
+    SOKOL_ASSERT(pass);
     // FIXME
     _sg_init_pass(pass);
 }
 
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_backend* state, _sg_pass* pass, const sg_pass_action* action, int w, int h) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(_sg_backend* state) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_end_pass() {
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(_sg_backend* state, int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state(_sg_backend* state,
+_SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
     _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
-    SOKOL_ASSERT(state);
     SOKOL_ASSERT(pip);
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniform_block(_sg_backend* state, sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
-}
-
-_SOKOL_PRIVATE void _sg_draw(_sg_backend* state, int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(state);
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_commit(_sg_backend* state) {
-    SOKOL_ASSERT(state);
+_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
     // FIXME
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_backend* state, _sg_buffer* buf, const void* data, int data_size) {
-    SOKOL_ASSERT(state && buf && data && (data_size > 0));
+_SOKOL_PRIVATE void _sg_commit() {
+    // FIXME
+}
+
+_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int data_size) {
+    SOKOL_ASSERT(buf && data && (data_size > 0));
     // FIXME
 }
 
