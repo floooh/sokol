@@ -54,7 +54,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     const int index_array_size = _sg_mtl_pool_size * sizeof(uint32_t);
     /* an array with frame-indices when resource in this slot is to be released,
        Metal resources will be kept around for a few frames so that it is 
-       guaranteed that the CPU will not use them any longer after the 
+       guaranteed that the GPU will not use them any longer after the 
        application calls sg_destroy_xxx() 
     */
     _sg_mtl_release_frame = SOKOL_MALLOC(index_array_size);
