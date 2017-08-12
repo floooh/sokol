@@ -656,7 +656,7 @@ typedef struct {
 } _sg_backend;
 static _sg_backend _sg_gl;
 
-_SOKOL_PRIVATE void _sg_setup_backend() {
+_SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     memset(&_sg_gl, 0, sizeof(_sg_gl));
     #if !defined(SOKOL_GLES2)
     glGenVertexArrays(1, &_sg_gl.vao);

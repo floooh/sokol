@@ -529,7 +529,7 @@ void sg_setup(const sg_desc* desc) {
     memset(&_sg, 0, sizeof(_sg));
     _sg_setup_pools(&_sg.pools, desc);
     _sg.next_draw_valid = false;
-    _sg_setup_backend();
+    _sg_setup_backend(desc);
     _sg.valid = true;
 }
 
@@ -1180,3 +1180,4 @@ sg_shader_image_desc sg_named_image(const char* name, sg_image_type type) {
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+

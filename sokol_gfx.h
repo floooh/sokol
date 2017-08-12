@@ -677,6 +677,20 @@ typedef struct {
     .shader_pool_size:      32
     .pipeline_pool_size:    64
     .pass_pool_size:        16 
+    
+    Metal specific:
+    .mtl_device     
+        a pointer to the MTLDevice object, obtained with CFBridgingRetain()
+    .mtl_renderpass_descriptor_cb
+        a C callback function to obtain the MTLRenderPassDescriptor for the
+        current frame when rendering to the default framebuffer, will be called 
+        in sg_begin_default_pass(), the pointer must be obtained with
+        CFBridgingRetain()
+    .mtl_drawable_cb
+        a C callback function to obtain a CAMetalDrawable for the current
+        frame when rendering to the default framebuffer, will be called in
+        sg_end_pass() of the default pass. the pointer must be obtained
+        with CFBridgingRetain()
 */
 typedef struct {
     uint32_t _start_canary;
@@ -685,7 +699,11 @@ typedef struct {
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
-    const void* mtl_device;     /* Metal only, use CFBridginRetain() to obtain ptr from id */
+    /* Metal specific */
+    const void* mtl_device;
+    const void* (*mtl_renderpass_descriptor_cb)(void);
+    const void* (*mtl_drawable_cb)(void);
+    int mtl_global_uniform_buffer_size;
     uint32_t _end_canary;
 } sg_desc;
 
