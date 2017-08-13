@@ -615,10 +615,15 @@ _SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc->size > 0);
     SOKOL_ASSERT((desc->type>=_SG_BUFFERTYPE_DEFAULT)&&(desc->type<_SG_BUFFERTYPE_NUM));
     SOKOL_ASSERT((desc->usage>=_SG_USAGE_DEFAULT)&&(desc->usage<_SG_USAGE_NUM));
-    SOKOL_ASSERT(desc->data_size <= desc->size);
-    #ifdef SOKOL_DEBUG 
-    if (desc->usage == SG_USAGE_IMMUTABLE) {
+    #ifdef SOKOL_DEBUG
+    if (_sg_select(desc->usage,SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
+        /* immutable: must provide entire content */
         SOKOL_ASSERT(desc->data_ptr);
+        SOKOL_ASSERT(desc->size == desc->data_size);
+    }
+    else {
+        /* dynamic/streaming: do not provide initial data */
+        SOKOL_ASSERT((0 == desc->data_ptr) && (0 == desc->data_size));
     }
     #endif
 }
