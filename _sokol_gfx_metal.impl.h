@@ -44,6 +44,159 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
     }
 }
 
+_SOKOL_PRIVATE MTLVertexStepFunction _sg_mtl_step_function(sg_vertex_step step) {
+    switch (step) {
+        case SG_VERTEXSTEP_PER_VERTEX:      return MTLVertexStepFunctionPerVertex;
+        case SG_VERTEXSTEP_PER_INSTANCE:    return MTLVertexStepFunctionPerInstance;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return MTLVertexFormatFloat;
+        case SG_VERTEXFORMAT_FLOAT2:    return MTLVertexFormatFloat2;
+        case SG_VERTEXFORMAT_FLOAT3:    return MTLVertexFormatFloat3;
+        case SG_VERTEXFORMAT_FLOAT4:    return MTLVertexFormatFloat4;
+        case SG_VERTEXFORMAT_BYTE4:     return MTLVertexFormatChar4;
+        case SG_VERTEXFORMAT_BYTE4N:    return MTLVertexFormatChar4Normalized;
+        case SG_VERTEXFORMAT_UBYTE4:    return MTLVertexFormatUChar4;
+        case SG_VERTEXFORMAT_UBYTE4N:   return MTLVertexFormatUChar4Normalized;
+        case SG_VERTEXFORMAT_SHORT2:    return MTLVertexFormatShort2;
+        case SG_VERTEXFORMAT_SHORT2N:   return MTLVertexFormatShort2Normalized;
+        case SG_VERTEXFORMAT_SHORT4:    return MTLVertexFormatShort4;
+        case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
+        case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLPrimitiveTopologyClass _sg_mtl_primitive_topology_class(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:
+            return MTLPrimitiveTopologyClassPoint;
+        case SG_PRIMITIVETYPE_LINES:
+        case SG_PRIMITIVETYPE_LINE_STRIP:
+            return MTLPrimitiveTopologyClassLine;
+        case SG_PRIMITIVETYPE_TRIANGLES:
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:
+            return MTLPrimitiveTopologyClassTriangle;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLPixelFormat _sg_mtl_rendertarget_color_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA8:          return MTLPixelFormatBGRA8Unorm;    /* not a bug */
+        case SG_PIXELFORMAT_RGBA32F:        return MTLPixelFormatRGBA32Float;
+        case SG_PIXELFORMAT_RGBA16F:        return MTLPixelFormatRGBA16Float;
+        case SG_PIXELFORMAT_R10G10B10A2:    return MTLPixelFormatRGB10A2Unorm;
+        default:                            return MTLPixelFormatInvalid;
+    }
+}
+
+_SOKOL_PRIVATE MTLPixelFormat _sg_mtl_rendertarget_depth_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:
+            return MTLPixelFormatDepth32Float;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            /* NOTE: Depth24_Stencil8 isn't universally supported! */
+            return MTLPixelFormatDepth32Float_Stencil8;
+        default:
+            return MTLPixelFormatInvalid;
+    }
+}
+
+_SOKOL_PRIVATE MTLPixelFormat _sg_mtl_rendertarget_stencil_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            return MTLPixelFormatDepth32Float_Stencil8;
+        default:
+            return MTLPixelFormatInvalid;
+    }
+}
+
+_SOKOL_PRIVATE MTLColorWriteMask _sg_mtl_color_write_mask(sg_color_mask m) {
+    MTLColorWriteMask mtl_mask = MTLColorWriteMaskNone;
+    if (m & SG_COLORMASK_R) {
+        mtl_mask |= MTLColorWriteMaskRed;
+    }
+    if (m & SG_COLORMASK_G) {
+        mtl_mask |= MTLColorWriteMaskGreen;
+    }
+    if (m & SG_COLORMASK_B) {
+        mtl_mask |= MTLColorWriteMaskBlue;
+    }
+    if (m & SG_COLORMASK_A) {
+        mtl_mask |= MTLColorWriteMaskAlpha;
+    }
+    return mtl_mask;
+}
+
+_SOKOL_PRIVATE MTLBlendOperation _sg_mtl_blend_op(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return MTLBlendOperationAdd;
+        case SG_BLENDOP_SUBTRACT:           return MTLBlendOperationSubtract;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return MTLBlendOperationReverseSubtract;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLBlendFactor _sg_mtl_blend_factor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return MTLBlendFactorZero;
+        case SG_BLENDFACTOR_ONE:                    return MTLBlendFactorOne;
+        case SG_BLENDFACTOR_SRC_COLOR:              return MTLBlendFactorSourceColor;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return MTLBlendFactorOneMinusSourceColor;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return MTLBlendFactorSourceAlpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return MTLBlendFactorOneMinusSourceAlpha;
+        case SG_BLENDFACTOR_DST_COLOR:              return MTLBlendFactorDestinationColor;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return MTLBlendFactorOneMinusDestinationColor;
+        case SG_BLENDFACTOR_DST_ALPHA:              return MTLBlendFactorDestinationAlpha;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return MTLBlendFactorOneMinusDestinationAlpha;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return MTLBlendFactorSourceAlphaSaturated;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return MTLBlendFactorBlendColor;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return MTLBlendFactorOneMinusBlendColor;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return MTLBlendFactorBlendAlpha;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return MTLBlendFactorOneMinusBlendAlpha;
+        default: SOKOL_UNREACHABLE; break;
+    }
+}
+
+_SOKOL_PRIVATE MTLCompareFunction _sg_mtl_compare_func(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return MTLCompareFunctionNever;
+        case SG_COMPAREFUNC_LESS:           return MTLCompareFunctionLess;
+        case SG_COMPAREFUNC_EQUAL:          return MTLCompareFunctionEqual;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return MTLCompareFunctionLessEqual;
+        case SG_COMPAREFUNC_GREATER:        return MTLCompareFunctionGreater;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return MTLCompareFunctionNotEqual;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return MTLCompareFunctionGreater;
+        case SG_COMPAREFUNC_ALWAYS:         return MTLCompareFunctionAlways;
+        default: SOKOL_UNREACHABLE; break;
+    }
+}
+
+_SOKOL_PRIVATE MTLStencilOperation _sg_mtl_stencil_op(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return MTLStencilOperationKeep;
+        case SG_STENCILOP_ZERO:         return MTLStencilOperationZero;
+        case SG_STENCILOP_REPLACE:      return MTLStencilOperationReplace;
+        case SG_STENCILOP_INCR_CLAMP:   return MTLStencilOperationIncrementClamp;
+        case SG_STENCILOP_DECR_CLAMP:   return MTLStencilOperationDecrementClamp;
+        case SG_STENCILOP_INVERT:       return MTLStencilOperationInvert;
+        case SG_STENCILOP_INCR_WRAP:    return MTLStencilOperationIncrementWrap;
+        case SG_STENCILOP_DECR_WRAP:    return MTLStencilOperationDecrementWrap;
+        default: SOKOL_UNREACHABLE; break;
+    }
+}
+
 /*-- a pool for all Metal resource object, with deferred release queue -------*/
 static uint32_t _sg_mtl_pool_size;
 static NSMutableArray* _sg_mtl_pool;
@@ -215,6 +368,8 @@ typedef struct {
     sg_shader shader_id;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
+    uint32_t mtl_rps;
+    uint32_t mtl_dss;
 } _sg_pipeline;
 
 _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline* pip) {
@@ -367,7 +522,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
 }
 
 _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
-    NSError* err = 0;
+    NSError* err = NULL;
     id<MTLLibrary> lib = [_sg_mtl_device
         newLibraryWithSource:[NSString stringWithUTF8String:src]
         options:nil
@@ -441,12 +596,102 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
-    // FIXME
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
+
+    pip->shader = shd;
+    pip->shader_id = desc->shader;
+    pip->primitive_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
+    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+
+    /* create vertex-descriptor */
+    MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
+        if (layout_desc->stride == 0) {
+            break;
+        }
+        vtx_desc.layouts[layout_index].stride = layout_desc->stride;
+        vtx_desc.layouts[layout_index].stepFunction = _sg_mtl_step_function(layout_desc->step_func);
+        vtx_desc.layouts[layout_index].stepRate = layout_desc->step_rate;
+        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
+            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
+                break;
+            }
+            vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
+            vtx_desc.attributes[attr_index].offset = attr_desc->offset;
+            vtx_desc.attributes[attr_index].bufferIndex = layout_index;
+        }
+    }
+
+    /* render-pipeline descriptor */
+    MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
+    rp_desc.vertexDescriptor = vtx_desc;
+    rp_desc.vertexFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
+    rp_desc.fragmentFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
+    rp_desc.sampleCount = _sg_select(desc->rasterizer.sample_count, 1);
+    rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
+    rp_desc.alphaToOneEnabled = NO;
+    rp_desc.rasterizationEnabled = YES;
+    rp_desc.inputPrimitiveTopology = _sg_mtl_primitive_topology_class(pip->primitive_type);
+    rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
+    rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
+    const int mrt_count = _sg_select(desc->blend.mrt_count, 1);
+    for (int i = 0; i < mrt_count; i++) {
+        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_select(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(_sg_select(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+        rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
+        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(_sg_select(desc->blend.op_alpha, SG_BLENDOP_ADD));
+        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(_sg_select(desc->blend.op_rgb, SG_BLENDOP_ADD));
+        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
+        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
+        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
+        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
+    }
+    NSError* err = NULL;
+    id<MTLRenderPipelineState> mtl_rps = [_sg_mtl_device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
+    if (nil == mtl_rps) {
+        SOKOL_ASSERT(err);
+        SOKOL_LOG([err.localizedDescription UTF8String]);
+        pip->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+
+    /* depth-stencil-state */
+    MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
+    ds_desc.depthCompareFunction = _sg_mtl_compare_func(_sg_select(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
+    ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
+    if (desc->depth_stencil.stencil_enabled) {
+        const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
+        ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
+        ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_select(sb->fail_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_select(sb->depth_fail_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_select(sb->pass_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_select(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
+        ds_desc.backFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
+        ds_desc.backFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
+        const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
+        ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
+        ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_select(sf->fail_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_select(sf->depth_fail_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_select(sf->pass_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_select(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
+        ds_desc.frontFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
+        ds_desc.frontFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
+    }
+    id<MTLDepthStencilState> mtl_dss = [_sg_mtl_device newDepthStencilStateWithDescriptor:ds_desc];
+
+    pip->mtl_rps = _sg_mtl_add_resource(mtl_rps);
+    pip->mtl_dss = _sg_mtl_add_resource(mtl_dss);
+    pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
-    // FIXME
+    if (pip->slot.state == SG_RESOURCESTATE_VALID) {
+        _sg_mtl_release_resource(_sg_mtl_frame_index, pip->mtl_rps);
+        _sg_mtl_release_resource(_sg_mtl_frame_index, pip->mtl_dss);
+    }
     _sg_init_pipeline(pip);
 }
 
