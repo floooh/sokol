@@ -30,56 +30,121 @@ _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
     }
 }
 
+_SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
+    // FIXME: managed mode only on MacOS
+    switch (usg) {
+        case SG_USAGE_IMMUTABLE:
+            return MTLResourceStorageModeShared;
+        case SG_USAGE_DYNAMIC:
+        case SG_USAGE_STREAM:
+            return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
 /*-- a pool for all Metal resource object, with deferred release queue -------*/
-static int _sg_mtl_pool_size;
-static NSPointerArray* _sg_mtl_pool;
-static uint32_t* _sg_mtl_release_frame;
-static int _sg_mtl_queue_top;
-static int* _sg_mtl_free_queue;
-static int _sg_mtl_num_release_pending;
-static int* _sg_mtl_release_pending;
+static uint32_t _sg_mtl_pool_size;
+static NSMutableArray* _sg_mtl_pool;
+static uint32_t _sg_mtl_free_queue_top;
+static uint32_t* _sg_mtl_free_queue;
+static uint32_t _sg_mtl_release_queue_front;
+static uint32_t _sg_mtl_release_queue_back;
+typedef struct {
+    uint32_t frame_index;
+    uint32_t pool_index;
+} _sg_mtl_release_item;
+static _sg_mtl_release_item* _sg_mtl_release_queue;
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
-    _sg_mtl_pool_size = 2 *
-        _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
-        _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
-        _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
-        _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
+    _sg_mtl_pool_size =
+        2 * _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
+        3 * _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
+        4 * _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
+        2 * _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
         _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     /* an id array which holds strong references to MTLResource objects */
-    _sg_mtl_pool = [NSPointerArray strongObjectsPointerArray];
-    for (int i = 0; i < _sg_mtl_pool_size; i++) {
-        [_sg_mtl_pool addPointer:nil];
+    _sg_mtl_pool = [NSMutableArray arrayWithCapacity:_sg_mtl_pool_size];
+    NSNull* null = [NSNull null];
+    for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
+        [_sg_mtl_pool addObject:null];
     }
-    const int index_array_size = _sg_mtl_pool_size * sizeof(uint32_t);
-    /* an array with frame-indices when resource in this slot is to be released,
-       Metal resources will be kept around for a few frames so that it is 
-       guaranteed that the GPU will not use them any longer after the 
-       application calls sg_destroy_xxx() 
-    */
-    _sg_mtl_release_frame = SOKOL_MALLOC(index_array_size);
-    for (int i = 0; i < _sg_mtl_pool_size; i++) {
-        _sg_mtl_release_frame[i] = 0;
-    }
-    /* the free-slot-queue for the resource pool */
-    _sg_mtl_queue_top = 0;
-    _sg_mtl_free_queue = SOKOL_MALLOC(index_array_size);
+    SOKOL_ASSERT([_sg_mtl_pool count] == _sg_mtl_pool_size);
+    /* a queue of currently free slot indices */
+    _sg_mtl_free_queue_top = 0;
+    _sg_mtl_free_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(int));
     for (int i = _sg_mtl_pool_size-1; i >= 0; i--) {
-        _sg_mtl_free_queue[_sg_mtl_queue_top++] = i;
+        _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = (uint32_t)i;
     }
-    /* an array of slot indices of resources that are waiting to be release */
-    _sg_mtl_num_release_pending = 0;
-    _sg_mtl_release_pending = SOKOL_MALLOC(index_array_size);
-    for (int i = 0; i < _sg_mtl_pool_size; i++) {
-        _sg_mtl_num_release_pending = -1;
+    /* a circular queue which holds release items (frame index
+       when a resource is to be released, and the resource's
+       pool index
+    */
+    _sg_mtl_release_queue_front = 0;
+    _sg_mtl_release_queue_back = 0;
+    _sg_mtl_release_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(_sg_mtl_release_item));
+    for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
+        _sg_mtl_release_queue[i].frame_index = 0;
+        _sg_mtl_release_queue[i].pool_index = 0xFFFFFFFF;
     }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_pool() {
+    SOKOL_FREE(_sg_mtl_release_queue);  _sg_mtl_release_queue = 0;
+    SOKOL_FREE(_sg_mtl_free_queue);     _sg_mtl_free_queue = 0;
     _sg_mtl_pool = nil;
-    SOKOL_FREE(_sg_mtl_release_frame);      _sg_mtl_release_frame = 0;
-    SOKOL_FREE(_sg_mtl_free_queue);         _sg_mtl_free_queue = 0;
-    SOKOL_FREE(_sg_mtl_release_pending);    _sg_mtl_release_pending = 0;
+}
+
+/* add an MTLResource to the pool, return pool index */
+_SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
+    SOKOL_ASSERT(_sg_mtl_free_queue_top > 0);
+    const uint32_t slot_index = _sg_mtl_free_queue[--_sg_mtl_free_queue_top];
+    SOKOL_ASSERT([NSNull null] == _sg_mtl_pool[slot_index]);
+    _sg_mtl_pool[slot_index] = res;
+    return slot_index;
+}
+
+/* mark an MTLResource for release, this will put the resource into the
+   deferred-release queue, and the resource will then be releases N frames later
+*/
+_SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t pool_index) {
+    SOKOL_ASSERT((pool_index >= 0) && (pool_index < _sg_mtl_pool_size));
+    SOKOL_ASSERT([NSNull null] != _sg_mtl_pool[pool_index]);
+    int slot_index = _sg_mtl_release_queue_front++;
+    if (_sg_mtl_release_queue_front >= _sg_mtl_pool_size) {
+        /* wrap-around */
+        _sg_mtl_release_queue_front = 0;
+    }
+    /* release queue full? */
+    SOKOL_ASSERT(_sg_mtl_release_queue_front != _sg_mtl_release_queue_back);
+    SOKOL_ASSERT(0 == _sg_mtl_release_queue[slot_index].frame_index);
+    _sg_mtl_release_queue[slot_index].frame_index = frame_index;
+    _sg_mtl_release_queue[slot_index].pool_index = pool_index;
+}
+
+/* run garbage-collection pass on all resources in the release-queue */
+_SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
+    const uint32_t safe_release_frame_index = frame_index + _SG_MTL_NUM_INFLIGHT_FRAMES + 1;
+    while (_sg_mtl_release_queue_back != _sg_mtl_release_queue_front) {
+        if (_sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index < safe_release_frame_index) {
+            /* don't need to check further, release-items past this are too young */
+            break;
+        }
+        /* safe to release this resource */
+        const uint32_t pool_index = _sg_mtl_release_queue[_sg_mtl_release_queue_back].pool_index;
+        SOKOL_ASSERT(pool_index < _sg_mtl_pool_size);
+        SOKOL_ASSERT(_sg_mtl_pool[pool_index] != [NSNull null]);
+        _sg_mtl_pool[pool_index] = [NSNull null];
+        /* reset the release queue slot and advance the back index */
+        _sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index = 0;
+        _sg_mtl_release_queue[_sg_mtl_release_queue_back].pool_index = 0xFFFFFFFF;
+        _sg_mtl_release_queue_back++;
+        if (_sg_mtl_release_queue_back >= _sg_mtl_pool_size) {
+            /* wrap-around */
+            _sg_mtl_release_queue_back = 0;
+        }
+    }
 }
 
 /*-- Metal backend resource structs ------------------------------------------*/
@@ -88,6 +153,10 @@ typedef struct {
     int size;
     sg_buffer_type type;
     sg_usage usage;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+    uint32_t mtl_buf[_SG_MTL_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
 } _sg_buffer;
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
@@ -215,10 +284,13 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_discard_backend() {
     SOKOL_ASSERT(_sg_mtl_valid);
+    /* wait for the last frame to finish */
+    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+        dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
+    }
     _sg_mtl_valid = false;
     _sg_mtl_cmd_encoder = nil;
     _sg_mtl_cmd_buffer = nil;
-    _sg_mtl_sem = nil;
     _sg_mtl_cmd_queue = nil;
     for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = nil;
@@ -249,12 +321,32 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->data_size <= desc->size);
-    // FIXME
+    buf->size = desc->size;
+    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->upd_frame_index = 0;
+    buf->num_slots = buf->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
+    buf->active_slot = 0;
+    MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->usage);
+    for (int slot = 0; slot < buf->num_slots; slot++) {
+        id<MTLBuffer> mtl_buf;
+        if (buf->usage == SG_USAGE_IMMUTABLE) {
+            SOKOL_ASSERT(desc->data_ptr && (desc->data_size == buf->size));
+            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->data_ptr length:desc->data_size options:mtl_options];
+        }
+        else {
+            mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
+        }
+        buf->mtl_buf[slot] = _sg_mtl_add_resource(mtl_buf);
+    }
+    buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
-    // FIXME
+    for (int slot = 0; slot < buf->num_slots; slot++) {
+        _sg_mtl_release_resource(_sg_mtl_frame_index, buf->mtl_buf[slot]);
+    }
     _sg_init_buffer(buf);
 }
 
@@ -408,6 +500,9 @@ _SOKOL_PRIVATE void _sg_commit() {
         dispatch_semaphore_signal(sem);
     }];
     [_sg_mtl_cmd_buffer commit];
+
+    /* garbage-collect resources pending for release */
+    _sg_mtl_garbage_collect(_sg_mtl_frame_index);
 
     /* rotate uniform buffer slot */
     if (++_sg_mtl_cur_frame_rotate_index >= _SG_MTL_NUM_INFLIGHT_FRAMES) {
