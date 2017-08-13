@@ -737,6 +737,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->size = desc->size;
     buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->upd_frame_index = 0;
     buf->num_slots = buf->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
     buf->active_slot = 0;
     GLenum gl_target = _sg_gl_buffer_target(buf->type);
@@ -804,6 +805,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
     img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
     img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->upd_frame_index = 0;
 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(img->pixel_format)) {
