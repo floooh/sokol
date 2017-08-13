@@ -833,6 +833,7 @@ typedef struct {
 
 typedef struct {
     const char* source;
+    const char* func;
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
