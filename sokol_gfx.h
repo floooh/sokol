@@ -906,7 +906,6 @@ typedef struct {
 */
 typedef struct {
     const char* name;
-    int index;
     int offset;
     sg_vertex_format format;
 } sg_vertex_attr_desc;
@@ -945,6 +944,9 @@ typedef struct {
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
     uint8_t color_write_mask;
+    int mrt_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;    
     float blend_color[4];
 } sg_blend_state;
 

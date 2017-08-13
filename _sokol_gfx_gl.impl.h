@@ -1185,7 +1185,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
                 break;
             }
-            GLint attr_loc = attr_desc->index;
+            GLint attr_loc = attr_index;
             if (attr_desc->name) {
                 attr_loc = glGetAttribLocation(pip->shader->gl_prog, attr_desc->name);
             }

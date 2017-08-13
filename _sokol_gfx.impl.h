@@ -1160,7 +1160,6 @@ void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
 sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format) {
     sg_vertex_attr_desc desc;
     desc.name = name;
-    desc.index = 0;
     desc.offset = offset;
     desc.format = format;
     return desc;
