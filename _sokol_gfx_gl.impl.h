@@ -586,6 +586,50 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     memset(pass, 0, sizeof(_sg_pass));
 }
 
+_SOKOL_PRIVATE void _sg_init_stencil_state(sg_stencil_state* s) {
+    SOKOL_ASSERT(s);
+    s->fail_op = SG_STENCILOP_KEEP;
+    s->depth_fail_op = SG_STENCILOP_KEEP;
+    s->pass_op = SG_STENCILOP_KEEP;
+    s->compare_func = SG_COMPAREFUNC_ALWAYS;
+}
+
+_SOKOL_PRIVATE void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
+    SOKOL_ASSERT(s);
+    _sg_init_stencil_state(&s->stencil_front);
+    _sg_init_stencil_state(&s->stencil_back);
+    s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+    s->depth_write_enabled = false;
+    s->stencil_enabled = false;
+    s->stencil_read_mask = 0;
+    s->stencil_write_mask = 0;
+    s->stencil_ref = 0;
+}
+
+_SOKOL_PRIVATE void _sg_init_blend_state(sg_blend_state* s) {
+    SOKOL_ASSERT(s);
+    s->enabled = false;
+    s->src_factor_rgb = SG_BLENDFACTOR_ONE;
+    s->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+    s->op_rgb = SG_BLENDOP_ADD;
+    s->src_factor_alpha = SG_BLENDFACTOR_ONE;
+    s->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+    s->op_alpha = SG_BLENDOP_ADD;
+    s->color_write_mask = SG_COLORMASK_RGBA;
+    for (int i = 0; i < 4; i++) {
+        s->blend_color[i] = 0.0f;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
+    SOKOL_ASSERT(s);
+    s->scissor_test_enabled = false;
+    s->alpha_to_coverage_enabled = false;
+    s->cull_mode = SG_CULLMODE_NONE;
+    s->face_winding = SG_FACEWINDING_CW;
+    s->sample_count = 1;
+}
+
 /*-- state cache implementation ----------------------------------------------*/
 typedef struct {
     sg_depth_stencil_state ds;
