@@ -233,6 +233,15 @@ _SOKOL_PRIVATE MTLIndexType _sg_mtl_index_type(sg_index_type t) {
     }
 }
 
+_SOKOL_PRIVATE NSUInteger _sg_mtl_index_size(sg_index_type t) {
+    switch (t) {
+        case SG_INDEXTYPE_NONE:     return 0;
+        case SG_INDEXTYPE_UINT16:   return 2;
+        case SG_INDEXTYPE_UINT32:   return 4;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
 /*-- a pool for all Metal resource object, with deferred release queue -------*/
 static uint32_t _sg_mtl_pool_size;
 static NSMutableArray* _sg_mtl_pool;
@@ -411,8 +420,9 @@ typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
-    sg_index_type index_type;
     MTLPrimitiveType mtl_prim_type;
+    sg_index_type index_type;
+    NSUInteger mtl_index_size;
     MTLIndexType mtl_index_type;
     MTLCullMode mtl_cull_mode;
     MTLWinding mtl_winding;
@@ -667,15 +677,16 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
-    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
     sg_primitive_type prim_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->mtl_prim_type = _sg_mtl_primitive_type(prim_type);
-    pip->mtl_cull_mode = _sg_mtl_cull_mode(_sg_select(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
-    pip->mtl_winding = _sg_mtl_winding(_sg_select(desc->rasterizer.face_winding, SG_FACEWINDING_CW));
-    pip->mtl_stencil_ref = desc->depth_stencil.stencil_ref;
+    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->mtl_index_size = _sg_mtl_index_size(pip->index_type);
     if (SG_INDEXTYPE_NONE != pip->index_type) {
         pip->mtl_index_type = _sg_mtl_index_type(pip->index_type);
     }
+    pip->mtl_cull_mode = _sg_mtl_cull_mode(_sg_select(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
+    pip->mtl_winding = _sg_mtl_winding(_sg_select(desc->rasterizer.face_winding, SG_FACEWINDING_CW));
+    pip->mtl_stencil_ref = desc->depth_stencil.stencil_ref;
     for (int i = 0; i < 4; i++) {
         pip->blend_color[i] = desc->blend.blend_color[i];
     }
@@ -1010,10 +1021,9 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     SOKOL_ASSERT(_sg_mtl_cur_pipeline && (_sg_mtl_cur_pipeline->slot.id == _sg_mtl_cur_pipeline_id.id));
     if (SG_CULLMODE_NONE != _sg_mtl_cur_pipeline->index_type) {
         /* indexed rendering */
-        SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_pipeline_id.id));
+        SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_indexbuffer_id.id));
         const _sg_buffer* ib = _sg_mtl_cur_indexbuffer;
-        const NSUInteger index_byte_size = (_sg_mtl_cur_pipeline->mtl_index_type == MTLIndexTypeUInt16) ? 2 : 4;
-        const NSUInteger index_buffer_offset = base_element * index_byte_size;
+        const NSUInteger index_buffer_offset = base_element * _sg_mtl_cur_pipeline->mtl_index_size;
         [_sg_mtl_cmd_encoder drawIndexedPrimitives:_sg_mtl_cur_pipeline->mtl_prim_type
             indexCount:num_elements
             indexType:_sg_mtl_cur_pipeline->mtl_index_type
