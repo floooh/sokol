@@ -730,7 +730,6 @@ typedef struct {
     sg_buffer_type type;
     sg_usage usage;
     const void* data_ptr;
-    int data_size;
     uint32_t _end_canary;
 } sg_buffer_desc;
 

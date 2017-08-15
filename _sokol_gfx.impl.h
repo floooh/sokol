@@ -574,12 +574,11 @@ _SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #ifdef SOKOL_DEBUG
     if (_sg_select(desc->usage,SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
         /* immutable: must provide entire content */
-        SOKOL_ASSERT(desc->data_ptr);
-        SOKOL_ASSERT(desc->size == desc->data_size);
+        SOKOL_ASSERT(0 != desc->data_ptr);
     }
     else {
         /* dynamic/streaming: do not provide initial data */
-        SOKOL_ASSERT((0 == desc->data_ptr) && (0 == desc->data_size));
+        SOKOL_ASSERT(0 == desc->data_ptr);
     }
     #endif
 }

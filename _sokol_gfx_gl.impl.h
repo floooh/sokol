@@ -776,7 +776,6 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(desc->data_size <= desc->size);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
     buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
@@ -792,7 +791,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
         glBindBuffer(gl_target, gl_buf);
         glBufferData(gl_target, buf->size, 0, gl_usage);
         if (desc->data_ptr) {
-            glBufferSubData(gl_target, 0, desc->data_size, desc->data_ptr);
+            glBufferSubData(gl_target, 0, buf->size, desc->data_ptr);
         }
         buf->gl_buf[slot] = gl_buf;
     }

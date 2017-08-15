@@ -537,7 +537,6 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(desc->data_size <= desc->size);
     buf->size = desc->size;
     buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
@@ -548,8 +547,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     for (int slot = 0; slot < buf->num_slots; slot++) {
         id<MTLBuffer> mtl_buf;
         if (buf->usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->data_ptr && (desc->data_size == buf->size));
-            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->data_ptr length:desc->data_size options:mtl_options];
+            SOKOL_ASSERT(desc->data_ptr);
+            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->data_ptr length:buf->size options:mtl_options];
         }
         else {
             mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
