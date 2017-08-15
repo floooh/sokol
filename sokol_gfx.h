@@ -833,6 +833,8 @@ typedef struct {
 
 typedef struct {
     const char* source;
+    const uint8_t* byte_code;
+    int byte_code_size;
     const char* entry;
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
@@ -842,6 +844,9 @@ typedef struct {
     uint32_t _start_canary;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
+    const char* source;         /* Metal allow vs/fs in single source */
+    const uint8_t* byte_code;
+    int byte_code_size;
     uint32_t _end_canary;
 } sg_shader_desc;
 
