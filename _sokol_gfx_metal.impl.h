@@ -5,6 +5,10 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
+#if !__has_feature(objc_arc)
+#error "Please enable ARC when using the Metal backend"
+#endif
+
 /* memset() */
 #include <string.h>
 #import <Metal/Metal.h>
