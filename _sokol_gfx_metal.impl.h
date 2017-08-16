@@ -30,9 +30,7 @@ _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
         case SG_ACTION_CLEAR:       return MTLLoadActionClear;
         case SG_ACTION_LOAD:        return MTLLoadActionLoad;
         case SG_ACTION_DONTCARE:    return MTLLoadActionDontCare;
-        default:
-            SOKOL_UNREACHABLE;
-            return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -54,9 +52,7 @@ _SOKOL_PRIVATE MTLVertexStepFunction _sg_mtl_step_function(sg_vertex_step step) 
     switch (step) {
         case SG_VERTEXSTEP_PER_VERTEX:      return MTLVertexStepFunctionPerVertex;
         case SG_VERTEXSTEP_PER_INSTANCE:    return MTLVertexStepFunctionPerInstance;
-        default:
-            SOKOL_UNREACHABLE;
-            return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -75,9 +71,7 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:    return MTLVertexFormatShort4;
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
-        default:
-            SOKOL_UNREACHABLE;
-            return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -104,7 +98,33 @@ _SOKOL_PRIVATE MTLPrimitiveType _sg_mtl_primitive_type(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_LINE_STRIP:       return MTLPrimitiveTypeLineStrip;
         case SG_PRIMITIVETYPE_TRIANGLES:        return MTLPrimitiveTypeTriangle;
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return MTLPrimitiveTypeTriangleStrip;
-        default: SOKOL_UNREACHABLE; break;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLPixelFormat _sg_mtl_texture_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA8:          return MTLPixelFormatRGBA8Unorm;
+        case SG_PIXELFORMAT_R10G10B10A2:    return MTLPixelFormatRGB10A2Unorm;
+        case SG_PIXELFORMAT_RGBA32F:        return MTLPixelFormatRGBA32Float;
+        case SG_PIXELFORMAT_RGBA16F:        return MTLPixelFormatRGBA16Float;
+        case SG_PIXELFORMAT_R32F:           return MTLPixelFormatR32Float;
+        case SG_PIXELFORMAT_R16F:           return MTLPixelFormatR16Float;
+        case SG_PIXELFORMAT_L8:             return MTLPixelFormatR8Unorm;
+        /* FIXME: macOS only */
+        case SG_PIXELFORMAT_DXT1:           return MTLPixelFormatBC1_RGBA;
+        case SG_PIXELFORMAT_DXT3:           return MTLPixelFormatBC2_RGBA;
+        case SG_PIXELFORMAT_DXT5:           return MTLPixelFormatBC3_RGBA;
+        /* FIXME: iOS only */
+        /*
+        case SG_PIXELFORMAT_PVRTC2_RGB:     return MTLPixelFormatPVRTC_RGB_2BPP;
+        case SG_PIXELFORMAT_PVRTC4_RGB:     return MTLPixelFormatPVRTC_RGB_4BPP;
+        case SG_PIXELFORMAT_PVRTC2_RGBA:    return MTLPixelFormatPVRTC_RGBA_2BPP;
+        case SG_PIXELFORMAT_PVRTC4_RGBA:    return MTLPixelFormatPVRTC_RGBA_4BPP;
+        case SG_PIXELFORMAT_ETC2_RGB8:      return MTLPixelFormatETC2_RGB8;
+        case SG_PIXELFORMAT_ETC2_SRGB8:     return MTLPixelFormatETC2_RGB8_sRGB;
+        */
+        default:                            return MTLPixelFormatInvalid;
     }
 }
 
@@ -248,6 +268,16 @@ _SOKOL_PRIVATE NSUInteger _sg_mtl_index_size(sg_index_type t) {
     }
 }
 
+_SOKOL_PRIVATE MTLTextureType _sg_mtl_texture_type(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:       return MTLTextureType2D;
+        case SG_IMAGETYPE_CUBE:     return MTLTextureTypeCube;
+        case SG_IMAGETYPE_3D:       return MTLTextureType3D;
+        case SG_IMAGETYPE_ARRAY:    return MTLTextureType2DArray;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
 /*-- a pool for all Metal resource object, with deferred release queue -------*/
 static uint32_t _sg_mtl_pool_size;
 static NSMutableArray* _sg_mtl_pool;
@@ -264,7 +294,7 @@ static _sg_mtl_release_item* _sg_mtl_release_queue;
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg_mtl_pool_size =
         2 * _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
-        3 * _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
+        5 * _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
         4 * _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
         2 * _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
         _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
@@ -387,6 +417,18 @@ typedef struct {
     sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+    uint32_t mtl_tex[_SG_MTL_NUM_INFLIGHT_FRAMES];
+    uint32_t mtl_sampler_state;
+    uint32_t mtl_depth_tex;
+    uint32_t mtl_msaa_tex;
 } _sg_image;
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
@@ -588,12 +630,112 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
-    // FIXME
+    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
+    img->render_target = desc->render_target;
+    img->width = desc->width;
+    img->height = desc->height;
+    img->depth = _sg_select(desc->depth, 1);
+    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
+    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_select(desc->sample_count, 1);
+    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
+    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->upd_frame_index = 0;
+    img->num_slots = img->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
+    img->active_slot = 0;
+
+    /* first initialize all Metal resource pool slots to 'empty' */
+    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+        img->mtl_tex[i] = _sg_mtl_add_resource(nil);
+    }
+    img->mtl_sampler_state = _sg_mtl_add_resource(nil);
+    img->mtl_depth_tex = _sg_mtl_add_resource(nil);
+    img->mtl_msaa_tex = _sg_mtl_add_resource(nil);
+
+    /* initialize a Metal texture descriptor with common attributes */
+    MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
+    mtl_desc.textureType = _sg_mtl_texture_type(img->type);
+    if (img->render_target) {
+        if (_sg_is_valid_rendertarget_color_format(img->pixel_format)) {
+            mtl_desc.pixelFormat = _sg_mtl_rendertarget_color_format(img->pixel_format);
+        }
+        else {
+            mtl_desc.pixelFormat = _sg_mtl_rendertarget_depth_format(img->pixel_format);
+        }
+    }
+    else {
+        mtl_desc.pixelFormat = _sg_mtl_texture_format(img->pixel_format);
+    }
+    if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
+        SOKOL_LOG("Unsupported texture pixel format!\n");
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
+    }
+    mtl_desc.width = img->width;
+    mtl_desc.height = img->height;
+    if (SG_IMAGETYPE_3D == img->type) {
+        mtl_desc.depth = img->depth;
+    }
+    else {
+        mtl_desc.depth = 1;
+    }
+    mtl_desc.mipmapLevelCount = img->num_mipmaps;
+    mtl_desc.sampleCount = img->sample_count;
+    if (SG_IMAGETYPE_ARRAY == img->type) {
+        mtl_desc.arrayLength = img->depth;
+    }
+    else {
+        mtl_desc.arrayLength = 1;
+    }
+    if (img->render_target) {
+        mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
+        mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
+        mtl_desc.storageMode = MTLStorageModePrivate;
+        mtl_desc.usage |= MTLTextureUsageRenderTarget;
+    }
+
+    /* special case depth-stencil-buffer? */
+    if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
+        SOKOL_ASSERT(img->render_target);
+        /* create only a depth texture */
+        id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+        SOKOL_ASSERT(nil != tex);
+        img->mtl_depth_tex = _sg_mtl_add_resource(tex);
+    }
+    else {
+        /* create the color texture(s) */
+        const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+        const int num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
+        for (int slot = 0; slot < img->num_slots; slot++) {
+            id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+            img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
+
+            /* FIXME: copy optional content data */
+            if (desc->num_data_items > 0) {
+
+            }
+        }
+    }
+
+    // FIXME: MSAA texture
+    // FIXME: sampler
+    img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
     SOKOL_ASSERT(img);
-    // FIXME
+    if (img->slot.state == SG_RESOURCESTATE_VALID) {
+        for (int slot = 0; slot < img->num_slots; slot++) {
+            _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_tex[slot]);
+        }
+        _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
+        _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
+        _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
+    }
     _sg_init_image(img);
 }
 
@@ -615,7 +757,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->vs.entry && desc->fs.entry);
 
-    /* copy over uniform block size */
+    /* uniform block sizes and image types */
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
         _sg_shader_stage* stage = &shd->stage[stage_index];
@@ -628,6 +770,15 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
             _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = ub_desc->size;
             stage->num_uniform_blocks++;
+        }
+        SOKOL_ASSERT(stage->num_images == 0);
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
+                break;
+            }
+            stage->images[img_index].type = img_desc->type;
+            stage->num_images++;
         }
     }
 
