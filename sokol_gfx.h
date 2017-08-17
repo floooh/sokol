@@ -704,6 +704,7 @@ typedef struct {
     const void* (*mtl_renderpass_descriptor_cb)(void);
     const void* (*mtl_drawable_cb)(void);
     int mtl_global_uniform_buffer_size;
+    int mtl_sampler_cache_size;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -719,7 +720,6 @@ typedef struct {
     .type:      SG_BUFFERTYPE_VERTEXBUFFER
     .usage:     SG_USAGE_IMMUTABLE
     .data_ptr   0
-    .data_size  0
 
     Buffers with the SG_USAGE_IMMUTABLE usage *must* fill the buffer
     with initial data (.data_ptr and .data_size cannot be 0).

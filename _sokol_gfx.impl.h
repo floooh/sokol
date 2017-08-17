@@ -172,6 +172,99 @@ _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
     return (SG_PIXELFORMAT_DEPTHSTENCIL == fmt);
 }
 
+/* return the bytes-per-pixel for a pixel format */
+_SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA32F:
+            return 16;
+        case SG_PIXELFORMAT_RGBA16F:
+            return 8;
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_R10G10B10A2:
+        case SG_PIXELFORMAT_R32F:
+            return 4;
+        case SG_PIXELFORMAT_RGB8:
+            return 3;
+        case SG_PIXELFORMAT_R5G5B5A1:
+        case SG_PIXELFORMAT_R5G6B5:
+        case SG_PIXELFORMAT_RGBA4:
+        case SG_PIXELFORMAT_R16F:
+            return 2;
+        case SG_PIXELFORMAT_L8:
+            return 1;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+/* return row pitch for an image */
+_SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
+    int pitch;
+    switch (fmt) {
+        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            pitch = ((width + 3) / 4) * 8;
+            pitch = pitch < 8 ? 8 : pitch;
+            break;
+        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_DXT5:
+            pitch = ((width + 3) / 4) * 16;
+            pitch = pitch < 16 ? 16 : pitch;
+            break;
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            {
+                const int block_size = 4*4;
+                const int bpp = 4;
+                int width_blocks = width / 4;
+                width_blocks = width_blocks < 2 ? 2 : width_blocks;
+                pitch = width_blocks * ((block_size * bpp) / 8);
+            }
+            break;
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+            {
+                const int block_size = 8*4;
+                const int bpp = 2;
+                int width_blocks = width / 4;
+                width_blocks = width_blocks < 2 ? 2 : width_blocks;
+                pitch = width_blocks * ((block_size * bpp) / 8);
+            }
+            break;
+        default:
+            pitch = width * _sg_pixelformat_bytesize(fmt);
+            break;
+    }
+    return pitch;
+}
+
+/* return pitch of a 2D subimage / texture slice */
+_SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height) {
+    int num_rows = 0;
+    switch (fmt) {
+        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_DXT5:
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            num_rows = ((height + 3) / 4);
+            break;
+        default:
+            num_rows = height;
+            break;
+    }
+    if (num_rows < 1) {
+        num_rows = 1;
+    }
+    return num_rows * _sg_row_pitch(fmt, width);
+}
+
 /* resolve pass action defaults into a new pass action struct */
 _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, sg_pass_action* to) {
     SOKOL_ASSERT(from && to);

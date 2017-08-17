@@ -22,7 +22,11 @@ enum {
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     /* FIXME: 256 on macOS, 16 on iOS! */
     _SG_MTL_UB_ALIGN = 256,
+    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64
 };
+
+#define _sg_mtl_min(a,b) ((a<b)?a:b)
+#define _sg_mtl_max(a,b) ((a>b)?a:b)
 
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
@@ -278,6 +282,58 @@ _SOKOL_PRIVATE MTLTextureType _sg_mtl_texture_type(sg_image_type t) {
     }
 }
 
+_SOKOL_PRIVATE bool _sg_mtl_is_pvrtc(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            return true;
+        default:
+            return false;
+    }
+}
+
+_SOKOL_PRIVATE MTLSamplerAddressMode _sg_mtl_address_mode(sg_wrap w) {
+    switch (w) {
+        case SG_WRAP_REPEAT:            return MTLSamplerAddressModeRepeat;
+        case SG_WRAP_CLAMP_TO_EDGE:     return MTLSamplerAddressModeClampToEdge;
+        case SG_WRAP_MIRRORED_REPEAT:   return MTLSamplerAddressModeMirrorRepeat;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+            return MTLSamplerMinMagFilterNearest;
+        case SG_FILTER_LINEAR:
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+            return MTLSamplerMinMagFilterLinear;
+        default:
+            SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:
+        case SG_FILTER_LINEAR:
+            return MTLSamplerMipFilterNotMipmapped;
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+            return MTLSamplerMipFilterNearest;
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+            return MTLSamplerMipFilterLinear;
+        default:
+            SOKOL_UNREACHABLE; return 0;
+    }
+}
+
 /*-- a pool for all Metal resource object, with deferred release queue -------*/
 static uint32_t _sg_mtl_pool_size;
 static NSMutableArray* _sg_mtl_pool;
@@ -389,6 +445,97 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
     }
 }
 
+/*-- a very simple sampler cache ---------------------------------------------*/
+/* 
+    since there's only a small number of different samplers, sampler objects
+    will never be deleted (except on shutdown), and searching an identical
+    sampler is a simple linear search
+*/
+typedef struct {
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t mtl_sampler_state;
+} _sg_mtl_sampler_cache_item;
+static int _sg_mtl_sampler_cache_capacity;
+static int _sg_mtl_sampler_cache_size;
+static _sg_mtl_sampler_cache_item* _sg_mtl_sampler_cache;
+
+/* initialize the sampler cache */
+_SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
+    _sg_mtl_sampler_cache_capacity = _sg_select(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg_mtl_sampler_cache_size = 0;
+    const int size = _sg_mtl_sampler_cache_capacity * sizeof(_sg_mtl_sampler_cache_item);
+    _sg_mtl_sampler_cache = SOKOL_MALLOC(size);
+    memset(_sg_mtl_sampler_cache, 0, size);
+}
+
+/* destroy the sampler cache, and release all sampler objects */
+_SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
+    SOKOL_ASSERT(_sg_mtl_sampler_cache);
+    SOKOL_ASSERT(_sg_mtl_sampler_cache_size <= _sg_mtl_sampler_cache_capacity);
+    for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
+        _sg_mtl_release_resource(frame_index, _sg_mtl_sampler_cache[i].mtl_sampler_state);
+    }
+    SOKOL_FREE(_sg_mtl_sampler_cache); _sg_mtl_sampler_cache = 0;
+    _sg_mtl_sampler_cache_size = 0;
+    _sg_mtl_sampler_cache_capacity = 0;
+}
+
+/* 
+    create and add an MTLSamplerStateObject and return its resource pool index,
+    reuse identical sampler state if one exists
+*/
+_SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const sg_image_desc* img_desc) {
+    SOKOL_ASSERT(img_desc);
+    SOKOL_ASSERT(_sg_mtl_sampler_cache);
+    /* sampler state cache is full */
+    SOKOL_ASSERT(_sg_mtl_sampler_cache_size < _sg_mtl_sampler_cache_capacity);
+    const sg_filter min_filter = _sg_select(img_desc->min_filter, SG_FILTER_NEAREST);
+    const sg_filter mag_filter = _sg_select(img_desc->mag_filter, SG_FILTER_NEAREST);
+    const sg_wrap wrap_u = _sg_select(img_desc->wrap_u, SG_WRAP_REPEAT);
+    const sg_wrap wrap_v = _sg_select(img_desc->wrap_v, SG_WRAP_REPEAT);
+    const sg_wrap wrap_w = _sg_select(img_desc->wrap_w, SG_WRAP_REPEAT);
+    /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
+    for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
+        _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
+        if ((min_filter == item->min_filter) &&
+            (mag_filter == item->mag_filter) &&
+            (wrap_u == item->wrap_u) &&
+            (wrap_v == item->wrap_v) &&
+            (wrap_w == item->wrap_w))
+        {
+            return item->mtl_sampler_state;
+        }
+    }
+    /* fallthrough: need to create a new MTLSamplerState object */
+    _sg_mtl_sampler_cache_item* new_item = &_sg_mtl_sampler_cache[_sg_mtl_sampler_cache_size++];
+    new_item->min_filter = min_filter;
+    new_item->mag_filter = mag_filter;
+    new_item->wrap_u = wrap_u;
+    new_item->wrap_v = wrap_v;
+    new_item->wrap_w = wrap_w;
+
+    MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
+    mtl_desc.sAddressMode = _sg_mtl_address_mode(wrap_u);
+    mtl_desc.tAddressMode = _sg_mtl_address_mode(wrap_v);
+    if (SG_IMAGETYPE_3D == img_desc->type) {
+        mtl_desc.rAddressMode = _sg_mtl_address_mode(wrap_w);
+    }
+    mtl_desc.minFilter = _sg_mtl_minmag_filter(min_filter);
+    mtl_desc.magFilter = _sg_mtl_minmag_filter(mag_filter);
+    mtl_desc.mipFilter = _sg_mtl_mip_filter(min_filter);
+    mtl_desc.lodMinClamp = 0.0f;
+    mtl_desc.lodMaxClamp = FLT_MAX;
+    mtl_desc.maxAnisotropy = 1;     /* FIXME: should be configurable */
+    mtl_desc.normalizedCoordinates = YES;
+    id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
+    new_item->mtl_sampler_state = _sg_mtl_add_resource(mtl_sampler);
+    return new_item->mtl_sampler_state;
+}
+
 /*-- Metal backend resource structs ------------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -426,9 +573,9 @@ typedef struct {
     int num_slots;
     int active_slot;
     uint32_t mtl_tex[_SG_MTL_NUM_INFLIGHT_FRAMES];
-    uint32_t mtl_sampler_state;
     uint32_t mtl_depth_tex;
     uint32_t mtl_msaa_tex;
+    uint32_t mtl_sampler_state;
 } _sg_image;
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
@@ -533,6 +680,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->mtl_renderpass_descriptor_cb);
     SOKOL_ASSERT(desc->mtl_drawable_cb);
     _sg_mtl_init_pool(desc);
+    _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_valid = true;
     _sg_mtl_in_pass = false;
     _sg_mtl_pass_valid = false;
@@ -564,6 +712,9 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
     for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
     }
+    _sg_mtl_destroy_sampler_cache(_sg_mtl_frame_index);
+    _sg_mtl_garbage_collect(_sg_mtl_frame_index + _SG_MTL_NUM_INFLIGHT_FRAMES + 2);
+    _sg_mtl_destroy_pool();
     _sg_mtl_valid = false;
     _sg_mtl_cmd_encoder = nil;
     _sg_mtl_cmd_buffer = nil;
@@ -572,7 +723,6 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
         _sg_mtl_uniform_buffers[i] = nil;
     }
     _sg_mtl_device = nil;
-    _sg_mtl_destroy_pool();
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -708,21 +858,61 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     }
     else {
         /* create the color texture(s) */
-        const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
-        const int num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
+        const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+        const uint16_t num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
         for (int slot = 0; slot < img->num_slots; slot++) {
             id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
             img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
 
-            /* FIXME: copy optional content data */
+            /* copy optional content data */
+            int data_index = 0;
             if (desc->num_data_items > 0) {
-
+                for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
+                    for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++, data_index++) {
+                        if (data_index < desc->num_data_items) {
+                            SOKOL_ASSERT(desc->data_ptrs && desc->data_ptrs[data_index]);
+                            SOKOL_ASSERT(desc->data_sizes && desc->data_sizes[data_index] > 0);
+                            const uint8_t* data_ptr = desc->data_ptrs[data_index];
+                            const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
+                            const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
+                            /* special case PVRTC formats: bytePerRow must be 0 */
+                            int bytes_per_row = 0;
+                            int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
+                            if (!_sg_mtl_is_pvrtc(img->pixel_format)) {
+                                bytes_per_row = _sg_row_pitch(img->pixel_format, mip_width);
+                            }
+                            MTLRegion region;
+                            if (img->type == SG_IMAGETYPE_3D) {
+                                const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
+                                region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
+                                /* FIXME: apparently the minimal bytes_per_image size for 3D texture
+                                   is 4 KByte... somehow need to handle this */
+                            }
+                            else {
+                                region = MTLRegionMake2D(0, 0, mip_width, mip_height);
+                            }
+                            for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+                                const int mtl_slice_index = (img->type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
+                                const int slice_offset = slice_index * bytes_per_slice;
+                                SOKOL_ASSERT((slice_offset + bytes_per_slice) <= desc->data_sizes[data_index]);
+                                [tex replaceRegion:region
+                                    mipmapLevel:mip_index
+                                    slice:mtl_slice_index
+                                    withBytes:data_ptr + slice_offset
+                                    bytesPerRow:bytes_per_row
+                                    bytesPerImage:bytes_per_slice];
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
     // FIXME: MSAA texture
-    // FIXME: sampler
+    // create sampler state
+    img->mtl_sampler_state = _sg_mtl_create_sampler(_sg_mtl_device, desc);
+
     img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
@@ -734,7 +924,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
         }
         _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
         _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
-        _sg_mtl_release_resource(_sg_mtl_frame_index, img->mtl_sampler_state);
+        /* NOTE: sampler state objects are shared and not released until shutdown */
     }
     _sg_init_image(img);
 }
@@ -1104,9 +1294,6 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     vp.zfar    = 1.0;
     [_sg_mtl_cmd_encoder setViewport:vp];
 }
-
-#define _sg_mtl_min(a,b) ((a<b)?a:b)
-#define _sg_mtl_max(a,b) ((a>b)?a:b)
 
 _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg_mtl_in_pass);
