@@ -928,8 +928,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             }
             const uint16_t num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
             int data_index = 0;
-            for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
-                for (uint16_t face_index = 0; face_index < num_faces; face_index++, data_index++) {
+            for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
+                for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++, data_index++) {
                     GLenum gl_img_target = img->gl_target;
                     if (SG_IMAGETYPE_CUBE == img->type) {
                         gl_img_target = _sg_gl_cubeface_target(face_index);
