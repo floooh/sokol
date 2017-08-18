@@ -1357,19 +1357,26 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_pool[pip->mtl_dss]];
 
     /* apply vertex buffers */
-    int vb_slot;
-    for (vb_slot = 0; vb_slot < num_vbs; vb_slot++) {
-        const _sg_buffer* vb = vbs[vb_slot];
-        const NSUInteger mtl_vb_slot = SG_MAX_SHADERSTAGE_UBS + vb_slot;
-        [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] offset:0 atIndex:mtl_vb_slot];
-    }
-    for (; vb_slot < SG_MAX_SHADERSTAGE_BUFFERS; vb_slot++) {
-        const NSUInteger mtl_vb_slot = SG_MAX_SHADERSTAGE_UBS + vb_slot;
-        [_sg_mtl_cmd_encoder setVertexBuffer:nil offset:0 atIndex:mtl_vb_slot];
+    int slot;
+    for (slot = 0; slot < num_vbs; slot++) {
+        const _sg_buffer* vb = vbs[slot];
+        const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
+        [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] offset:0 atIndex:mtl_slot];
     }
 
-    /* FIXME: apply vertex shader images */
-    /* FIXME: apply fragment shader images */
+    /* apply vertex shader images */
+    for (slot = 0; slot < num_vs_imgs; slot++) {
+        const _sg_image* img = vs_imgs[slot];
+        [_sg_mtl_cmd_encoder setVertexTexture:_sg_mtl_pool[img->mtl_tex[img->active_slot]] atIndex:slot];
+        [_sg_mtl_cmd_encoder setVertexSamplerState:_sg_mtl_pool[img->mtl_sampler_state] atIndex:slot];
+    }
+
+    /* apply fragment shader images */
+    for (slot = 0; slot < num_fs_imgs; slot++) {
+        const _sg_image* img = fs_imgs[slot];
+        [_sg_mtl_cmd_encoder setFragmentTexture:_sg_mtl_pool[img->mtl_tex[img->active_slot]] atIndex:slot];
+        [_sg_mtl_cmd_encoder setFragmentSamplerState:_sg_mtl_pool[img->mtl_sampler_state] atIndex:slot];
+    }
 }
 
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
