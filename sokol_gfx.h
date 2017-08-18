@@ -13,7 +13,8 @@
         #define SOKOL_GLES2
         #define SOKOL_GLES3
         #define SOKOL_D3D11
-        #define SOKOL_METAL
+        #define SOKOL_METAL_MACOS
+        #define SOKOL_METAL_IOS
 
     I.e. for the GL 3.3 Core Profile it should look like this:
 

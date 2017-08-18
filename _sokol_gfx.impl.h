@@ -30,8 +30,8 @@
         #define SOKOL_LOG(s)
     #endif
 #endif
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL"
+#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL_MACOS)||defined(SOKOL_METAL_IOS))
+#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL_MACOS or SOKOL_METAL_IOS"
 #endif
 
 #if defined(__clang__)
@@ -306,7 +306,7 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
 #include "_sokol_gfx_gl.impl.h"
 #elif defined(SOKOL_D3D11)
 #include "_sokol_gfx_d3d11.impl.h"
-#elif defined(SOKOL_METAL)
+#elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS)
 #include "_sokol_gfx_metal.impl.h"
 #else
 #error "No rendering backend selected"
@@ -716,7 +716,7 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
     /* on GL must have separate sources */
     SOKOL_ASSERT(desc->vs.source && desc->fs.source);
     SOKOL_ASSERT(!desc->source && !desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);
-    #elif defined(SOKOL_METAL)
+    #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS)
     /* if common source provided, must not have any byte code or per-stage source */
     if (desc->source) {
         SOKOL_ASSERT(!desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);

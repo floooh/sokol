@@ -20,8 +20,11 @@ extern "C" {
 enum {
     _SG_MTL_NUM_INFLIGHT_FRAMES = 2,
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    /* FIXME: 256 on macOS, 16 on iOS! */
+    #if defined(SOKOL_METAL_MACOS)
     _SG_MTL_UB_ALIGN = 256,
+    #else
+    _SG_MTL_UB_ALIGN = 16
+    #endif
     _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64
 };
 
@@ -45,7 +48,11 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
             return MTLResourceStorageModeShared;
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
+            #if defined(SOKOL_METAL_MACOS)
             return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
+            #else
+            return MTLCPUCacheModeWriteCombined;
+            #endif
         default:
             SOKOL_UNREACHABLE;
             return 0;
@@ -115,19 +122,18 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_texture_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R32F:           return MTLPixelFormatR32Float;
         case SG_PIXELFORMAT_R16F:           return MTLPixelFormatR16Float;
         case SG_PIXELFORMAT_L8:             return MTLPixelFormatR8Unorm;
-        /* FIXME: macOS only */
+        #if defined(SOKOL_METAL_MACOS)
         case SG_PIXELFORMAT_DXT1:           return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_DXT3:           return MTLPixelFormatBC2_RGBA;
         case SG_PIXELFORMAT_DXT5:           return MTLPixelFormatBC3_RGBA;
-        /* FIXME: iOS only */
-        /*
+        #else
         case SG_PIXELFORMAT_PVRTC2_RGB:     return MTLPixelFormatPVRTC_RGB_2BPP;
         case SG_PIXELFORMAT_PVRTC4_RGB:     return MTLPixelFormatPVRTC_RGB_4BPP;
         case SG_PIXELFORMAT_PVRTC2_RGBA:    return MTLPixelFormatPVRTC_RGBA_2BPP;
         case SG_PIXELFORMAT_PVRTC4_RGBA:    return MTLPixelFormatPVRTC_RGBA_4BPP;
         case SG_PIXELFORMAT_ETC2_RGB8:      return MTLPixelFormatETC2_RGB8;
         case SG_PIXELFORMAT_ETC2_SRGB8:     return MTLPixelFormatETC2_RGB8_sRGB;
-        */
+        #endif
         default:                            return MTLPixelFormatInvalid;
     }
 }
@@ -354,7 +360,6 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
         4 * _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
         2 * _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
         _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
-    /* an id array which holds strong references to MTLResource objects */
     _sg_mtl_pool = [NSMutableArray arrayWithCapacity:_sg_mtl_pool_size];
     NSNull* null = [NSNull null];
     for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
@@ -726,10 +731,14 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    // FIXME: find out if we're running on iOS
     switch (f) {
         case SG_FEATURE_INSTANCED_ARRAYS:
+        #if defined(SOKOL_METAL_MACOS)
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
+        #else
+        case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
+        case SG_FEATURE_TEXTURE_COMPRESSION_ETC2:
+        #endif
         case SG_FEATURE_TEXTURE_FLOAT:
         case SG_FEATURE_ORIGIN_TOP_LEFT:
         case SG_FEATURE_MSAA_RENDER_TARGETS:
@@ -910,6 +919,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     }
 
     // FIXME: MSAA texture
+
     // create sampler state
     img->mtl_sampler_state = _sg_mtl_create_sampler(_sg_mtl_device, desc);
 
@@ -1254,8 +1264,9 @@ _SOKOL_PRIVATE void _sg_commit() {
     SOKOL_ASSERT(nil == _sg_mtl_cmd_encoder);
     SOKOL_ASSERT(nil != _sg_mtl_cmd_buffer);
 
-    // FIXME: didModifyRange only on MacOS
+    #if defined(SOKOL_METAL_MACOS)
     [_sg_mtl_uniform_buffers[_sg_mtl_cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg_mtl_cur_ub_offset)];
+    #endif
 
     /* present, commit and signal semaphore when done */
     id cur_drawable = CFBridgingRelease(_sg_mtl_drawable_cb());
@@ -1395,9 +1406,8 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(_sg_mtl_cur_pipeline && _sg_mtl_cur_pipeline->shader);
     SOKOL_ASSERT(_sg_mtl_cur_pipeline->slot.id == _sg_mtl_cur_pipeline_id.id);
     SOKOL_ASSERT(_sg_mtl_cur_pipeline->shader->slot.id == _sg_mtl_cur_pipeline->shader_id.id);
-    _sg_shader* shd = _sg_mtl_cur_pipeline->shader;
-    SOKOL_ASSERT(ub_index < shd->stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(shd->stage[stage_index].uniform_blocks[ub_index].size == num_bytes);
+    SOKOL_ASSERT(ub_index < _sg_mtl_cur_pipeline->shader->stage[stage_index].num_uniform_blocks);
+    SOKOL_ASSERT(num_bytes == _sg_mtl_cur_pipeline->shader->stage[stage_index].uniform_blocks[ub_index].size);
 
     /* copy to global uniform buffer, record offset into cmd encoder, and advance offset */
     uint8_t* dst = &_sg_mtl_cur_ub_base_ptr[_sg_mtl_cur_ub_offset];
