@@ -340,7 +340,7 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
     }
 }
 
-/*-- a pool for all Metal resource object, with deferred release queue -------*/
+/*-- a pool for all Metal resource objects, with deferred release queue -------*/
 static uint32_t _sg_mtl_pool_size;
 static NSMutableArray* _sg_mtl_pool;
 static uint32_t _sg_mtl_free_queue_top;
@@ -354,7 +354,7 @@ typedef struct {
 static _sg_mtl_release_item* _sg_mtl_release_queue;
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
-    _sg_mtl_pool_size =
+    _sg_mtl_pool_size = 2 *
         2 * _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
         5 * _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
         4 * _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
@@ -450,8 +450,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
     }
 }
 
-/*-- a very simple sampler cache ---------------------------------------------*/
-/* 
+/*-- a very simple sampler cache -----------------------------------------------
+
     since there's only a small number of different samplers, sampler objects
     will never be deleted (except on shutdown), and searching an identical
     sampler is a simple linear search
