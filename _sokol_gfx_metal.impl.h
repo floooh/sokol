@@ -1083,6 +1083,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     /* create vertex-descriptor */
     MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
+    int mtl_attr_index = 0;
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
         if (layout_desc->stride == 0) {
@@ -1097,9 +1098,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
                 break;
             }
-            vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
-            vtx_desc.attributes[attr_index].offset = attr_desc->offset;
-            vtx_desc.attributes[attr_index].bufferIndex = mtl_vb_slot;
+            vtx_desc.attributes[mtl_attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
+            vtx_desc.attributes[mtl_attr_index].offset = attr_desc->offset;
+            vtx_desc.attributes[mtl_attr_index].bufferIndex = mtl_vb_slot;
+            mtl_attr_index++;
         }
     }
 
@@ -1567,7 +1569,20 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int data_size) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
-    // FIXME
+    /* only one update per frame and buffer allowed */
+    SOKOL_ASSERT(buf->upd_frame_index != _sg_mtl_frame_index);
+    SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
+    SOKOL_ASSERT(data_size <= buf->size);
+    buf->upd_frame_index = _sg_mtl_frame_index;
+    if (++buf->active_slot >= buf->num_slots) {
+        buf->active_slot = 0;
+    }
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
+    void* dst_ptr = [mtl_buf contents];
+    memcpy(dst_ptr, data, data_size);
+    #if defined(SOKOL_METAL_MACOS)
+    [mtl_buf didModifyRange:NSMakeRange(0, data_size)];
+    #endif
 }
 
 #ifdef __cplusplus
