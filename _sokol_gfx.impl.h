@@ -34,15 +34,9 @@
 #error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL_MACOS or SOKOL_METAL_IOS"
 #endif
 
-#if defined(__clang__)
-/* I want to know about unused functions in debug mode */
-#if !defined(SOKOL_DEBUG)
+#if defined(__GNUC__)
 #define _SOKOL_PRIVATE __attribute__((unused)) static
 #else
-#define _SOKOL_PRIVATE static
-#endif
-#else
-/* non-clang compilers */
 #define _SOKOL_PRIVATE static
 #endif
 
@@ -82,7 +76,7 @@ enum {
 };
 
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
-#define _sg_select(val, def) ((val == 0) ? def : val)
+#define _sg_select(val, def) (((val) == 0) ? (def) : (val))
 
 /*-- helper functions --------------------------------------------------------*/
 
@@ -679,8 +673,8 @@ _SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
 _SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->type >= 0) && (desc->type < _SG_IMAGETYPE_NUM));
-    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0) && (desc->depth >= 0));
-    SOKOL_ASSERT((desc->num_mipmaps >= 0) && (desc->num_mipmaps <= SG_MAX_MIPMAPS));
+    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0));
+    SOKOL_ASSERT((desc->num_mipmaps <= SG_MAX_MIPMAPS));
     SOKOL_ASSERT((desc->usage >= 0) && (desc->usage < _SG_USAGE_NUM));
     SOKOL_ASSERT((desc->pixel_format >= 0) && (desc->pixel_format < _SG_PIXELFORMAT_NUM));
     SOKOL_ASSERT(desc->sample_count >= 0);

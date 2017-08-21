@@ -1177,7 +1177,7 @@ _SOKOL_PRIVATE void _sg_load_blend(const sg_blend_state* src, sg_blend_state* ds
         dst->color_write_mask = 0;
     }
     else {
-        dst->color_write_mask = _sg_select(src->color_write_mask, SG_COLORMASK_RGBA);
+        dst->color_write_mask = _sg_select((sg_color_mask)src->color_write_mask, SG_COLORMASK_RGBA);
     }
     for (int i = 0; i < 4; i++) {
         dst->blend_color[i] = src->blend_color[i];
