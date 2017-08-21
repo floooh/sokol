@@ -229,6 +229,22 @@ typedef enum {
 } sg_image_type;
 
 /*
+    sg_cube_face
+
+    The cubemap faces. Use these as indices in the sg_image_desc.content
+    array.
+*/
+typedef enum {
+    SG_CUBEFACE_POS_X,
+    SG_CUBEFACE_NEG_X,
+    SG_CUBEFACE_POS_Y,
+    SG_CUBEFACE_NEG_Y,
+    SG_CUBEFACE_POS_Z,
+    SG_CUBEFACE_NEG_Z,
+    SG_CUBEFACE_NUM
+} sg_cube_face;
+
+/*
     sg_shader_stage
 
     There are 2 shader stages: vertex- and fragment-shader-stage.
@@ -720,19 +736,49 @@ typedef struct {
     .size:      0       (this *must* be set to a valid size in bytes)
     .type:      SG_BUFFERTYPE_VERTEXBUFFER
     .usage:     SG_USAGE_IMMUTABLE
-    .data_ptr   0
+    .content    0
 
     Buffers with the SG_USAGE_IMMUTABLE usage *must* fill the buffer
-    with initial data (.data_ptr and .data_size cannot be 0).
+    with initial data (.content must point to a data chunk with
+    exactly .size bytes).
 */
 typedef struct {
     uint32_t _start_canary;
     int size;
     sg_buffer_type type;
     sg_usage usage;
-    const void* data_ptr;
+    const void* content;
     uint32_t _end_canary;
 } sg_buffer_desc;
+
+/*
+    sg_subimage_content
+
+    Pointer to and size of a subimage-surface data, this is
+    used to describe the initial content of immutable-usage images,
+    or for updating a dynamic- or stream-usage images.
+
+    For 3D- or array-textures, one sg_subimage_content item
+    describes an entire mipmap level consisting of all array- or
+    3D-slices of the mipmap level. It is only possible to update
+    an entire mipmap level, not parts of it.
+*/
+typedef struct {
+    const void* ptr;    /* pointer to subimage data */
+    unsigned long size;           /* size in bytes of pointed-to subimage data */
+} sg_subimage_content;
+
+/*
+    sg_image_content
+
+    Defines the content of an image through a 2D array
+    of sg_subimage_content structs. The first array dimension
+    is the cubemap face, and the second array dimension the
+    mipmap level.
+*/
+typedef struct {
+    sg_subimage_content subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
+} sg_image_content;
 
 /*
     sg_image_desc
@@ -756,30 +802,16 @@ typedef struct {
     .wrap_u:            SG_WRAP_REPEAT
     .wrap_v:            SG_WRAP_REPEAT
     .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
-    .num_data_items:    0
-    .data_ptrs:         0
-    .data_sizes:        0
+    .content            an sg_image_content struct to define the initial content 
 
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
     WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
     sg_query_feature(SG_FEATURE_IMAGETYPE_3D) at runtime to check
     if array- and 3D-textures are supported.
 
-    Images with usage SG_USAGE_IMMUTABLE must be initialized with
-    data using the num_data_items, data_ptrs and data_sizes members.
-
-    The member data_ptrs is a pointer to an array of pointers, one per
-    subimage to be filled with data. Subimages are cubemap-faces, mipmaps,
-    array-layers and depth-slices.
-
-    The member data_sizes is a pointer to an array of ints, with the
-    size in bytes of each data item.
-
-    Finally, num_data_items is the number of elements in each of the
-    pointer- and size-arrays.
-
-    TODO: describe the correct order of data items when initializing
-    cubemaps, array- and 3D-textures and their mipmaps!
+    Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
+    providing a valid .content member which points to
+    initialization data.
 */
 typedef struct {
     uint32_t _start_canary;
@@ -800,9 +832,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
-    int num_data_items;
-    const void** data_ptrs;     /* number of subimages can be big (e.g. array/3d textures)... */
-    const int* data_sizes;      /* ...so don't embed fixed-size-arrays here */
+    sg_image_content content;
     uint32_t _end_canary;
 } sg_image_desc;
 
@@ -1034,7 +1064,7 @@ extern void sg_destroy_shader(sg_shader shd);
 extern void sg_destroy_pipeline(sg_pipeline pip);
 extern void sg_destroy_pass(sg_pass pass);
 extern void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
-extern void sg_update_image(sg_image img, int num_data_items, const void** data_ptrs, int* data_sizes); 
+extern void sg_update_image(sg_image img, const sg_image_content* data); 
 
 /* rendering functions */
 extern void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);

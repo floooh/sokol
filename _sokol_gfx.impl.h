@@ -667,11 +667,11 @@ _SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #ifdef SOKOL_DEBUG
     if (_sg_select(desc->usage,SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
         /* immutable: must provide entire content */
-        SOKOL_ASSERT(0 != desc->data_ptr);
+        SOKOL_ASSERT(0 != desc->content);
     }
     else {
         /* dynamic/streaming: do not provide initial data */
-        SOKOL_ASSERT(0 == desc->data_ptr);
+        SOKOL_ASSERT(0 == desc->content);
     }
     #endif
 }
@@ -689,22 +689,28 @@ _SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
     SOKOL_ASSERT((desc->wrap_u >= 0) && (desc->wrap_u < _SG_WRAP_NUM));
     SOKOL_ASSERT((desc->wrap_v >= 0) && (desc->wrap_v < _SG_WRAP_NUM));
     SOKOL_ASSERT((desc->wrap_w >= 0) && (desc->wrap_w < _SG_WRAP_NUM));
-    SOKOL_ASSERT(desc->num_data_items >= 0);
     #if SOKOL_DEBUG
     if (desc->render_target) {
+        /* render targets are immutable, but don't have initial data */
         SOKOL_ASSERT((desc->usage == _SG_USAGE_DEFAULT) || (desc->usage == SG_USAGE_IMMUTABLE));
         SOKOL_ASSERT((desc->pixel_format == _SG_PIXELFORMAT_DEFAULT) || 
                      _sg_is_valid_rendertarget_color_format(desc->pixel_format) || 
                      _sg_is_valid_rendertarget_depth_format(desc->pixel_format));
-        SOKOL_ASSERT((0 == desc->num_data_items) && (0 == desc->data_ptrs) && (0 == desc->data_sizes));
+        SOKOL_ASSERT((0 == desc->content.subimage[0][0].ptr) && (0 == desc->content.subimage[0][0].size));
         if (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)) {
             SOKOL_ASSERT((desc->type==_SG_IMAGETYPE_DEFAULT)||(desc->type==SG_IMAGETYPE_2D));
             SOKOL_ASSERT((desc->num_mipmaps==0)||(desc->num_mipmaps==1));
         }
     }
-    if (desc->num_data_items > 0) {
-        SOKOL_ASSERT(desc->data_ptrs);
-        SOKOL_ASSERT(desc->data_sizes);
+    else if (_sg_select(desc->usage, SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
+        /* immutable images must have initial content (except render targets) */
+        const int num_faces = _sg_select(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
+        for (int face_index = 0; face_index < num_faces; face_index++) {
+            for (int mip_index = 0; mip_index < _sg_select(desc->num_mipmaps, 1); mip_index++) {
+                SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].ptr);
+                SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].size > 0);
+            }
+        }
     }
     #endif
 }

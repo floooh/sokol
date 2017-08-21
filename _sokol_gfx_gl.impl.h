@@ -790,8 +790,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
         glGenBuffers(1, &gl_buf);
         glBindBuffer(gl_target, gl_buf);
         glBufferData(gl_target, buf->size, 0, gl_usage);
-        if (desc->data_ptr) {
-            glBufferSubData(gl_target, 0, buf->size, desc->data_ptr);
+        if (desc->content) {
+            glBufferSubData(gl_target, 0, buf->size, desc->content);
         }
         buf->gl_buf[slot] = gl_buf;
     }
@@ -934,14 +934,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                     if (SG_IMAGETYPE_CUBE == img->type) {
                         gl_img_target = _sg_gl_cubeface_target(face_index);
                     }
-                    const GLvoid* data_ptr = 0;
-                    int data_size = 0;
-                    if (data_index < desc->num_data_items) {
-                        SOKOL_ASSERT(desc->data_ptrs && desc->data_ptrs[data_index]);
-                        SOKOL_ASSERT(desc->data_sizes && (desc->data_sizes[data_index] > 0));
-                        data_ptr = desc->data_ptrs[data_index];
-                        data_size = desc->data_sizes[data_index];
-                    }
+                    const GLvoid* data_ptr = desc->content.subimage[face_index][mip_index].ptr;
+                    const int data_size = desc->content.subimage[face_index][mip_index].size;
                     uint16_t mip_width = img->width >> mip_index;
                     if (mip_width == 0) {
                         mip_width = 1;

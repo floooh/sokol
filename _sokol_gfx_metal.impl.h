@@ -766,8 +766,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     for (int slot = 0; slot < buf->num_slots; slot++) {
         id<MTLBuffer> mtl_buf;
         if (buf->usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->data_ptr);
-            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->data_ptr length:buf->size options:mtl_options];
+            SOKOL_ASSERT(desc->content);
+            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->content length:buf->size options:mtl_options];
         }
         else {
             mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
@@ -879,44 +879,41 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
             img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
 
-            /* copy optional content data */
-            int data_index = 0;
-            if (desc->num_data_items > 0) {
+            /* copy content data */
+            if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
                 for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-                    for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++, data_index++) {
-                        if (data_index < desc->num_data_items) {
-                            SOKOL_ASSERT(desc->data_ptrs && desc->data_ptrs[data_index]);
-                            SOKOL_ASSERT(desc->data_sizes && desc->data_sizes[data_index] > 0);
-                            const uint8_t* data_ptr = desc->data_ptrs[data_index];
-                            const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
-                            const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
-                            /* special case PVRTC formats: bytePerRow must be 0 */
-                            int bytes_per_row = 0;
-                            int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
-                            if (!_sg_mtl_is_pvrtc(img->pixel_format)) {
-                                bytes_per_row = _sg_row_pitch(img->pixel_format, mip_width);
-                            }
-                            MTLRegion region;
-                            if (img->type == SG_IMAGETYPE_3D) {
-                                const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
-                                region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
-                                /* FIXME: apparently the minimal bytes_per_image size for 3D texture
-                                   is 4 KByte... somehow need to handle this */
-                            }
-                            else {
-                                region = MTLRegionMake2D(0, 0, mip_width, mip_height);
-                            }
-                            for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-                                const int mtl_slice_index = (img->type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
-                                const int slice_offset = slice_index * bytes_per_slice;
-                                SOKOL_ASSERT((slice_offset + bytes_per_slice) <= desc->data_sizes[data_index]);
-                                [tex replaceRegion:region
-                                    mipmapLevel:mip_index
-                                    slice:mtl_slice_index
-                                    withBytes:data_ptr + slice_offset
-                                    bytesPerRow:bytes_per_row
-                                    bytesPerImage:bytes_per_slice];
-                            }
+                    for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
+                        SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].ptr);
+                        SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].size > 0);
+                        const uint8_t* data_ptr = desc->content.subimage[face_index][mip_index].ptr;
+                        const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
+                        const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
+                        /* special case PVRTC formats: bytePerRow must be 0 */
+                        int bytes_per_row = 0;
+                        int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
+                        if (!_sg_mtl_is_pvrtc(img->pixel_format)) {
+                            bytes_per_row = _sg_row_pitch(img->pixel_format, mip_width);
+                        }
+                        MTLRegion region;
+                        if (img->type == SG_IMAGETYPE_3D) {
+                            const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
+                            region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
+                            /* FIXME: apparently the minimal bytes_per_image size for 3D texture
+                               is 4 KByte... somehow need to handle this */
+                        }
+                        else {
+                            region = MTLRegionMake2D(0, 0, mip_width, mip_height);
+                        }
+                        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+                            const int mtl_slice_index = (img->type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
+                            const int slice_offset = slice_index * bytes_per_slice;
+                            SOKOL_ASSERT((slice_offset + bytes_per_slice) <= (int)desc->content.subimage[face_index][mip_index].size);
+                            [tex replaceRegion:region
+                                mipmapLevel:mip_index
+                                slice:mtl_slice_index
+                                withBytes:data_ptr + slice_offset
+                                bytesPerRow:bytes_per_row
+                                bytesPerImage:bytes_per_slice];
                         }
                     }
                 }
