@@ -1894,11 +1894,8 @@ _SOKOL_PRIVATE void _sg_commit() {
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
-    SOKOL_ASSERT(buf && data_ptr && data_size > 0);
     /* only one update per buffer per frame allowed */
     SOKOL_ASSERT(buf->upd_frame_index != _sg_gl.frame_index);
-    SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
-    SOKOL_ASSERT(data_size <= buf->size);
     buf->upd_frame_index = _sg_gl.frame_index;
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
@@ -1911,6 +1908,60 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     glBindBuffer(gl_tgt, gl_buf);
     glBufferSubData(gl_tgt, 0, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
+    SOKOL_ASSERT(img);
+    /* only one update per image per frame allowed */
+    SOKOL_ASSERT(img->upd_frame_index != _sg_gl.frame_index);
+    img->upd_frame_index = _sg_gl.frame_index;
+    if (++img->active_slot >= img->num_slots) {
+        img->active_slot = 0;
+    }
+    SOKOL_ASSERT(0 != img->gl_tex[img->active_slot]);
+    glBindTexture(img->gl_target, img->gl_tex[img->active_slot]);
+    const GLenum gl_img_format = _sg_gl_teximage_format(img->pixel_format);
+    const GLenum gl_img_type = _sg_gl_teximage_type(img->pixel_format);
+    const uint16_t num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
+    const uint16_t num_mips = img->num_mipmaps;
+    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint16_t mip_index = 0; mip_index < num_mips; mip_index++) {
+            GLenum gl_img_target = img->gl_target;
+            if (SG_IMAGETYPE_CUBE == img->type) {
+                gl_img_target = _sg_gl_cubeface_target(face_index);
+            }
+            const GLvoid* data_ptr = data->subimage[face_index][mip_index].ptr;
+            uint16_t mip_width = img->width >> mip_index;
+            if (mip_width == 0) {
+                mip_width = 1;
+            }
+            uint16_t mip_height = img->height >> mip_index;
+            if (mip_height == 0) {
+                mip_height = 1;
+            }
+            if ((SG_IMAGETYPE_2D == img->type) || (SG_IMAGETYPE_CUBE == img->type)) {
+                glTexSubImage2D(gl_img_target, mip_index,
+                    0, 0,
+                    mip_width, mip_height,
+                    gl_img_format, gl_img_type,
+                    data_ptr);
+            }
+            #if !defined(SOKOL_GLES2)
+            else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
+                uint16_t mip_depth = img->depth >> mip_index;
+                if (mip_depth == 0) {
+                    mip_depth = 1;
+                }
+                glTexSubImage3D(gl_img_target, mip_index,
+                    0, 0, 0,
+                    mip_width, mip_height, mip_depth,
+                    gl_img_format, gl_img_type,
+                    data_ptr);
+
+            }
+            #endif
+        }
+    }
 }
 
 #ifdef __cplusplus

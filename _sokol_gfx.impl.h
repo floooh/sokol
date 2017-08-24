@@ -975,6 +975,33 @@ _SOKOL_PRIVATE bool _sg_validate_draw(_sg_pipeline* pip,
     return true;
 }
 
+void _sg_validate_update_buffer(_sg_buffer* buf, const void* data, int size) {
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_VALID);
+    SOKOL_ASSERT(data && (size > 0) && (size <= buf->size));
+    SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
+}
+
+void _sg_validate_update_image(_sg_image* img, const sg_image_content* data) {
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_VALID);
+    SOKOL_ASSERT(data);
+    SOKOL_ASSERT(!img->render_target);
+    SOKOL_ASSERT((img->usage == SG_USAGE_DYNAMIC) || (img->usage == SG_USAGE_STREAM));
+    /* currently don't allow to update compressed textures */
+    SOKOL_ASSERT(!_sg_is_compressed_pixel_format(img->pixel_format));
+    #if defined(SOKOL_DEBUG)
+    /* check that all provided data is provided */
+    /* FIXME: we should check that the provided data size is correct */
+    const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6 : 1;
+    const uint16_t num_mips = img->num_mipmaps;
+    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint16_t mip_index = 0; mip_index < num_mips; mip_index++) {
+            SOKOL_ASSERT(data->subimage[face_index][mip_index].ptr);
+            SOKOL_ASSERT(data->subimage[face_index][mip_index].size > 0);
+        }
+    }
+    #endif
+}
+
 /*-- initialize an allocated resource ----------------------------------------*/
 void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
@@ -1235,8 +1262,18 @@ void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
     if (num_bytes > 0) {
         _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_validate_update_buffer(buf, data, num_bytes);
             _sg_update_buffer(buf, data, num_bytes);
         }
+    }
+}
+
+void sg_update_image(sg_image img_id, const sg_image_content* data) {
+    SOKOL_ASSERT(data);
+    _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
+        _sg_validate_update_image(img, data);
+        _sg_update_image(img, data);
     }
 }
 
