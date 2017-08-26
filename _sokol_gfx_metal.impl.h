@@ -787,6 +787,47 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
     _sg_init_buffer(buf);
 }
 
+_SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_image_content* content) {
+    const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const uint16_t num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
+    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
+            const uint8_t* data_ptr = content->subimage[face_index][mip_index].ptr;
+            const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
+            const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
+            /* special case PVRTC formats: bytePerRow must be 0 */
+            int bytes_per_row = 0;
+            int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
+            if (!_sg_mtl_is_pvrtc(img->pixel_format)) {
+                bytes_per_row = _sg_row_pitch(img->pixel_format, mip_width);
+            }
+            MTLRegion region;
+            if (img->type == SG_IMAGETYPE_3D) {
+                const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
+                region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
+                /* FIXME: apparently the minimal bytes_per_image size for 3D texture
+                 is 4 KByte... somehow need to handle this */
+            }
+            else {
+                region = MTLRegionMake2D(0, 0, mip_width, mip_height);
+            }
+            for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+                const int mtl_slice_index = (img->type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
+                const int slice_offset = slice_index * bytes_per_slice;
+                SOKOL_ASSERT((slice_offset + bytes_per_slice) <= (int)content->subimage[face_index][mip_index].size);
+                [mtl_tex replaceRegion:region
+                    mipmapLevel:mip_index
+                    slice:mtl_slice_index
+                    withBytes:data_ptr + slice_offset
+                    bytesPerRow:bytes_per_row
+                    bytesPerImage:bytes_per_slice];
+            }
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -873,50 +914,11 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     }
     else {
         /* create the color texture(s) */
-        const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
-        const uint16_t num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
         for (int slot = 0; slot < img->num_slots; slot++) {
             id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
             img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
-
-            /* copy content data */
             if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
-                for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-                    for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
-                        SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].ptr);
-                        SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].size > 0);
-                        const uint8_t* data_ptr = desc->content.subimage[face_index][mip_index].ptr;
-                        const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
-                        const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
-                        /* special case PVRTC formats: bytePerRow must be 0 */
-                        int bytes_per_row = 0;
-                        int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
-                        if (!_sg_mtl_is_pvrtc(img->pixel_format)) {
-                            bytes_per_row = _sg_row_pitch(img->pixel_format, mip_width);
-                        }
-                        MTLRegion region;
-                        if (img->type == SG_IMAGETYPE_3D) {
-                            const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
-                            region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
-                            /* FIXME: apparently the minimal bytes_per_image size for 3D texture
-                               is 4 KByte... somehow need to handle this */
-                        }
-                        else {
-                            region = MTLRegionMake2D(0, 0, mip_width, mip_height);
-                        }
-                        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-                            const int mtl_slice_index = (img->type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
-                            const int slice_offset = slice_index * bytes_per_slice;
-                            SOKOL_ASSERT((slice_offset + bytes_per_slice) <= (int)desc->content.subimage[face_index][mip_index].size);
-                            [tex replaceRegion:region
-                                mipmapLevel:mip_index
-                                slice:mtl_slice_index
-                                withBytes:data_ptr + slice_offset
-                                bytesPerRow:bytes_per_row
-                                bytesPerImage:bytes_per_slice];
-                        }
-                    }
-                }
+                _sg_mtl_copy_image_content(img, tex, &desc->content);
             }
         }
 
@@ -1584,7 +1586,12 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     SOKOL_ASSERT(img);
     /* only one update per frame and image allowed */
     SOKOL_ASSERT(img->upd_frame_index != _sg_mtl_frame_index);
-    // FIXME!
+    img->upd_frame_index = _sg_mtl_frame_index;
+    if (++img->active_slot >= img->num_slots) {
+        img->active_slot = 0;
+    }
+    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_pool[img->mtl_tex[img->active_slot]];
+    _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 
 #ifdef __cplusplus
