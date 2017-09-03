@@ -563,10 +563,10 @@ typedef struct {
     _sg_slot slot;
     sg_image_type type;
     bool render_target;
-    uint16_t width;
-    uint16_t height;
-    uint16_t depth;
-    uint16_t num_mipmaps;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
     sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
@@ -590,7 +590,7 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
 }
 
 typedef struct {
-    uint16_t size;
+    int size;
 } _sg_uniform_block;
 
 typedef struct {
@@ -598,8 +598,8 @@ typedef struct {
 } _sg_shader_image;
 
 typedef struct {
-    uint16_t num_uniform_blocks;
-    uint16_t num_images;
+    int num_uniform_blocks;
+    int num_images;
     _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t mtl_lib;
@@ -788,10 +788,10 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_image_content* content) {
-    const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint16_t num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
-    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-        for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
+    const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const int num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth : 1;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
             SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
             const uint8_t* data_ptr = content->subimage[face_index][mip_index].ptr;
