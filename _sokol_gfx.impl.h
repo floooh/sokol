@@ -991,10 +991,10 @@ void _sg_validate_update_image(_sg_image* img, const sg_image_content* data) {
     #if defined(SOKOL_DEBUG)
     /* check that all provided data is provided */
     /* FIXME: we should check that the provided data size is correct */
-    const uint16_t num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6 : 1;
-    const uint16_t num_mips = img->num_mipmaps;
-    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-        for (uint16_t mip_index = 0; mip_index < num_mips; mip_index++) {
+    const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6 : 1;
+    const int num_mips = img->num_mipmaps;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int mip_index = 0; mip_index < num_mips; mip_index++) {
             SOKOL_ASSERT(data->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(data->subimage[face_index][mip_index].size > 0);
         }

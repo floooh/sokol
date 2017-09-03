@@ -817,13 +817,13 @@ typedef struct {
     uint32_t _start_canary;
     sg_image_type type;
     bool render_target;
-    uint16_t width;
-    uint16_t height;
+    int width;
+    int height;
     union {
-        uint16_t depth;
-        uint16_t layers;
+        int depth;
+        int layers;
     };
-    uint16_t num_mipmaps;
+    int num_mipmaps;
     sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
@@ -1030,11 +1030,11 @@ typedef struct {
 */
 typedef struct {
     sg_image image;
-    uint16_t mip_level;
+    int mip_level;
     union {
-        uint16_t face;
-        uint16_t layer;
-        uint16_t slice;
+        int face;
+        int layer;
+        int slice;
     };
 } sg_attachment_desc;
 

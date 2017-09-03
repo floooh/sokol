@@ -466,10 +466,10 @@ typedef struct {
     _sg_slot slot;
     sg_image_type type;
     bool render_target;
-    uint16_t width;
-    uint16_t height;
-    uint16_t depth;
-    uint16_t num_mipmaps;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
     sg_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
@@ -500,8 +500,8 @@ typedef struct {
 } _sg_uniform;
 
 typedef struct {
-    uint16_t size;
-    uint16_t num_uniforms;
+    int size;
+    int num_uniforms;
     _sg_uniform uniforms[SG_MAX_UB_MEMBERS];
 } _sg_uniform_block;
 
@@ -512,8 +512,8 @@ typedef struct {
 } _sg_shader_image;
 
 typedef struct {
-    uint16_t num_uniform_blocks;
-    uint16_t num_images;
+    int num_uniform_blocks;
+    int num_images;
     _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_shader_stage;
@@ -926,21 +926,21 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                     #endif
                 }
             }
-            const uint16_t num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
+            const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
             int data_index = 0;
-            for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-                for (uint16_t mip_index = 0; mip_index < img->num_mipmaps; mip_index++, data_index++) {
+            for (int face_index = 0; face_index < num_faces; face_index++) {
+                for (int mip_index = 0; mip_index < img->num_mipmaps; mip_index++, data_index++) {
                     GLenum gl_img_target = img->gl_target;
                     if (SG_IMAGETYPE_CUBE == img->type) {
                         gl_img_target = _sg_gl_cubeface_target(face_index);
                     }
                     const GLvoid* data_ptr = desc->content.subimage[face_index][mip_index].ptr;
                     const int data_size = desc->content.subimage[face_index][mip_index].size;
-                    uint16_t mip_width = img->width >> mip_index;
+                    int mip_width = img->width >> mip_index;
                     if (mip_width == 0) {
                         mip_width = 1;
                     }
-                    uint16_t mip_height = img->height >> mip_index;
+                    int mip_height = img->height >> mip_index;
                     if (mip_height == 0) {
                         mip_height = 1;
                     }
@@ -957,7 +957,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                     }
                     #if !defined(SOKOL_GLES2)
                     else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
-                        uint16_t mip_depth = img->depth >> mip_index;
+                        int mip_depth = img->depth >> mip_index;
                         if (mip_depth == 0) {
                             mip_depth = 1;
                         }
@@ -1922,20 +1922,20 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     glBindTexture(img->gl_target, img->gl_tex[img->active_slot]);
     const GLenum gl_img_format = _sg_gl_teximage_format(img->pixel_format);
     const GLenum gl_img_type = _sg_gl_teximage_type(img->pixel_format);
-    const uint16_t num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
-    const uint16_t num_mips = img->num_mipmaps;
-    for (uint16_t face_index = 0; face_index < num_faces; face_index++) {
-        for (uint16_t mip_index = 0; mip_index < num_mips; mip_index++) {
+    const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
+    const int num_mips = img->num_mipmaps;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int mip_index = 0; mip_index < num_mips; mip_index++) {
             GLenum gl_img_target = img->gl_target;
             if (SG_IMAGETYPE_CUBE == img->type) {
                 gl_img_target = _sg_gl_cubeface_target(face_index);
             }
             const GLvoid* data_ptr = data->subimage[face_index][mip_index].ptr;
-            uint16_t mip_width = img->width >> mip_index;
+            int mip_width = img->width >> mip_index;
             if (mip_width == 0) {
                 mip_width = 1;
             }
-            uint16_t mip_height = img->height >> mip_index;
+            int mip_height = img->height >> mip_index;
             if (mip_height == 0) {
                 mip_height = 1;
             }
@@ -1948,7 +1948,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
             }
             #if !defined(SOKOL_GLES2)
             else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
-                uint16_t mip_depth = img->depth >> mip_index;
+                int mip_depth = img->depth >> mip_index;
                 if (mip_depth == 0) {
                     mip_depth = 1;
                 }
