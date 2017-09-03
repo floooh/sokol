@@ -539,7 +539,7 @@ typedef struct {
     GLenum type;
 } _sg_gl_attr;
 
-_SOKOL_PRIVATE void _sg_init_gl_attr(_sg_gl_attr* attr) {
+_SOKOL_PRIVATE void _sg_gl_init_attr(_sg_gl_attr* attr) {
     attr->vb_index = -1;
     attr->divisor = -1;
     attr->stride = 0;
@@ -586,7 +586,7 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     memset(pass, 0, sizeof(_sg_pass));
 }
 
-_SOKOL_PRIVATE void _sg_init_stencil_state(sg_stencil_state* s) {
+_SOKOL_PRIVATE void _sg_gl_init_stencil_state(sg_stencil_state* s) {
     SOKOL_ASSERT(s);
     s->fail_op = SG_STENCILOP_KEEP;
     s->depth_fail_op = SG_STENCILOP_KEEP;
@@ -594,10 +594,10 @@ _SOKOL_PRIVATE void _sg_init_stencil_state(sg_stencil_state* s) {
     s->compare_func = SG_COMPAREFUNC_ALWAYS;
 }
 
-_SOKOL_PRIVATE void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
+_SOKOL_PRIVATE void _sg_gl_init_depth_stencil_state(sg_depth_stencil_state* s) {
     SOKOL_ASSERT(s);
-    _sg_init_stencil_state(&s->stencil_front);
-    _sg_init_stencil_state(&s->stencil_back);
+    _sg_gl_init_stencil_state(&s->stencil_front);
+    _sg_gl_init_stencil_state(&s->stencil_back);
     s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
     s->depth_write_enabled = false;
     s->stencil_enabled = false;
@@ -606,7 +606,7 @@ _SOKOL_PRIVATE void _sg_init_depth_stencil_state(sg_depth_stencil_state* s) {
     s->stencil_ref = 0;
 }
 
-_SOKOL_PRIVATE void _sg_init_blend_state(sg_blend_state* s) {
+_SOKOL_PRIVATE void _sg_gl_init_blend_state(sg_blend_state* s) {
     SOKOL_ASSERT(s);
     s->enabled = false;
     s->src_factor_rgb = SG_BLENDFACTOR_ONE;
@@ -621,7 +621,7 @@ _SOKOL_PRIVATE void _sg_init_blend_state(sg_blend_state* s) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_init_rasterizer_state(sg_rasterizer_state* s) {
+_SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     SOKOL_ASSERT(s);
     s->scissor_test_enabled = false;
     s->alpha_to_coverage_enabled = false;
@@ -638,16 +638,16 @@ typedef struct {
     _sg_gl_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } _sg_state_cache;
 
-_SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* cache) {
+_SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
     
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_init_gl_attr(&cache->attrs[i]);
+        _sg_gl_init_attr(&cache->attrs[i]);
         glDisableVertexAttribArray(i);
     }
 
     /* depth-stencil state */
-    _sg_init_depth_stencil_state(&cache->ds);
+    _sg_gl_init_depth_stencil_state(&cache->ds);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_FALSE);
@@ -657,7 +657,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* cache) {
     glStencilMask(0);
 
     /* blend state */
-    _sg_init_blend_state(&cache->blend);
+    _sg_gl_init_blend_state(&cache->blend);
     glDisable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -665,7 +665,7 @@ _SOKOL_PRIVATE void _sg_init_state_cache(_sg_state_cache* cache) {
     glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     /* rasterizer state */
-    _sg_init_rasterizer_state(&cache->rast);
+    _sg_gl_init_rasterizer_state(&cache->rast);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
@@ -718,7 +718,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
     _sg_gl.cur_pipeline = 0;
     _sg_gl.cur_pipeline_id.id = SG_INVALID_ID;
-    _sg_init_state_cache(&_sg_gl.cache);
+    _sg_gl_reset_state_cache(&_sg_gl.cache);
     
     /* initialize feature flags */
     for (int i = 0; i < SG_NUM_FEATURES; i++) {
@@ -1010,7 +1010,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
     _sg_init_image(img);
 }
 
-_SOKOL_PRIVATE GLuint _sg_compile_shader(sg_shader_stage stage, const char* src) {
+_SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* src) {
     SOKOL_ASSERT(src);
     _SG_GL_CHECK_ERROR();
     GLuint gl_shd = glCreateShader(_sg_gl_shader_stage(stage));
@@ -1040,8 +1040,8 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
-    GLuint gl_vs = _sg_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
-    GLuint gl_fs = _sg_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
+    GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
+    GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
     if (!(gl_vs && gl_fs)) {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;
@@ -1147,16 +1147,16 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
     _sg_init_shader(shd);
 }
 
-_SOKOL_PRIVATE void _sg_load_stencil(const sg_stencil_state* src, sg_stencil_state* dst) {
+_SOKOL_PRIVATE void _sg_gl_load_stencil(const sg_stencil_state* src, sg_stencil_state* dst) {
     dst->fail_op = _sg_select(src->fail_op, SG_STENCILOP_KEEP);
     dst->depth_fail_op = _sg_select(src->depth_fail_op, SG_STENCILOP_KEEP);
     dst->pass_op = _sg_select(src->pass_op, SG_STENCILOP_KEEP);
     dst->compare_func = _sg_select(src->compare_func, SG_COMPAREFUNC_ALWAYS);
 }
 
-_SOKOL_PRIVATE void _sg_load_depth_stencil(const sg_depth_stencil_state* src, sg_depth_stencil_state* dst) {
-    _sg_load_stencil(&src->stencil_front, &dst->stencil_front);
-    _sg_load_stencil(&src->stencil_back, &dst->stencil_back);
+_SOKOL_PRIVATE void _sg_gl_load_depth_stencil(const sg_depth_stencil_state* src, sg_depth_stencil_state* dst) {
+    _sg_gl_load_stencil(&src->stencil_front, &dst->stencil_front);
+    _sg_gl_load_stencil(&src->stencil_back, &dst->stencil_back);
     dst->depth_compare_func = _sg_select(src->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
     dst->depth_write_enabled = src->depth_write_enabled;
     dst->stencil_enabled = src->stencil_enabled;
@@ -1165,7 +1165,7 @@ _SOKOL_PRIVATE void _sg_load_depth_stencil(const sg_depth_stencil_state* src, sg
     dst->stencil_ref = src->stencil_ref; 
 }
 
-_SOKOL_PRIVATE void _sg_load_blend(const sg_blend_state* src, sg_blend_state* dst) {
+_SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state* dst) {
     dst->enabled = src->enabled;
     dst->src_factor_rgb = _sg_select(src->src_factor_rgb, SG_BLENDFACTOR_ONE);
     dst->dst_factor_rgb = _sg_select(src->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
@@ -1184,7 +1184,7 @@ _SOKOL_PRIVATE void _sg_load_blend(const sg_blend_state* src, sg_blend_state* ds
     }
 }
 
-_SOKOL_PRIVATE void _sg_load_rasterizer(const sg_rasterizer_state* src, sg_rasterizer_state* dst) {
+_SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_rasterizer_state* dst) {
     dst->scissor_test_enabled = src->scissor_test_enabled;
     dst->alpha_to_coverage_enabled = src->alpha_to_coverage_enabled;
     dst->cull_mode = _sg_select(src->cull_mode, SG_CULLMODE_NONE);
@@ -1202,9 +1202,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->shader_id = desc->shader;
     pip->primitive_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
-    _sg_load_depth_stencil(&desc->depth_stencil, &pip->depth_stencil);
-    _sg_load_blend(&desc->blend, &pip->blend);
-    _sg_load_rasterizer(&desc->rasterizer, &pip->rast);
+    _sg_gl_load_depth_stencil(&desc->depth_stencil, &pip->depth_stencil);
+    _sg_gl_load_blend(&desc->blend, &pip->blend);
+    _sg_gl_load_rasterizer(&desc->rasterizer, &pip->rast);
 
     /* resolve vertex attributes */
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
@@ -1344,6 +1344,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
             }
         }
     }
+
     /* attach depth-stencil buffer to framebuffer */
     if (pass->ds_att.image) {
         const GLuint gl_render_buffer = pass->ds_att.image->gl_depth_render_buffer;
@@ -1965,7 +1966,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache() {
-    // FIXME!
+    _sg_gl_reset_state_cache(&_sg_gl.cache);
 }
 
 #ifdef __cplusplus

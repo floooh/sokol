@@ -292,7 +292,7 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
     return id & _SG_SLOT_MASK;
 }
 
-//-- include the selected rendering backend ----------------------------------*/
+/*-- include the selected rendering backend ----------------------------------*/
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
