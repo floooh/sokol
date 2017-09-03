@@ -1633,6 +1633,10 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 
+_SOKOL_PRIVATE void _sg_reset_state_cache() {
+    _sg_mtl_clear_state_cache();
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

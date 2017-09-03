@@ -1255,7 +1255,11 @@ void sg_end_pass() {
 
 void sg_commit() {
     _sg_commit();
-} 
+}
+
+void sg_reset_state_cache() {
+    _sg_reset_state_cache();
+}
 
 void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
     SOKOL_ASSERT(data);
