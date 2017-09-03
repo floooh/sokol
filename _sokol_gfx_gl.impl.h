@@ -636,6 +636,10 @@ typedef struct {
     sg_blend_state blend;
     sg_rasterizer_state rast;
     _sg_gl_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    GLenum cur_primitive_type;
+    GLenum cur_index_type;
+    _sg_pipeline* cur_pipeline;
+    sg_pipeline cur_pipeline_id; 
 } _sg_state_cache;
 
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
@@ -645,6 +649,12 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
         _sg_gl_init_attr(&cache->attrs[i]);
         glDisableVertexAttribArray(i);
     }
+    cache->cur_primitive_type = GL_TRIANGLES;
+    cache->cur_index_type = 0;
+
+    /* resource bindings */
+    cache->cur_pipeline = 0;
+    cache->cur_pipeline_id.id = SG_INVALID_ID;
 
     /* depth-stencil state */
     _sg_gl_init_depth_stencil_state(&cache->ds);
@@ -684,14 +694,10 @@ typedef struct {
     bool in_pass;
     uint32_t frame_index;
     GLuint default_framebuffer;
-    GLenum cur_primitive_type;
-    GLenum cur_index_type;
     int cur_pass_width;
     int cur_pass_height;
     _sg_pass* cur_pass;
     sg_pass cur_pass_id;
-    _sg_pipeline* cur_pipeline;
-    sg_pipeline cur_pipeline_id; 
     _sg_state_cache cache;
     bool features[SG_NUM_FEATURES];
     #if !defined(SOKOL_GLES2)
@@ -710,14 +716,10 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.in_pass = false;
     _sg_gl.frame_index = 1;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg_gl.default_framebuffer);
-    _sg_gl.cur_primitive_type = GL_TRIANGLES;
-    _sg_gl.cur_index_type = 0;
     _sg_gl.cur_pass_width = 0;
     _sg_gl.cur_pass_height = 0;
     _sg_gl.cur_pass = 0;
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
-    _sg_gl.cur_pipeline = 0;
-    _sg_gl.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_gl_reset_state_cache(&_sg_gl.cache);
     
     /* initialize feature flags */
@@ -1467,21 +1469,32 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
     }
     glViewport(0, 0, w, h);
+    bool need_pip_cache_flush = false;
     if (_sg_gl.cache.rast.scissor_test_enabled) {
+        need_pip_cache_flush = true;
         _sg_gl.cache.rast.scissor_test_enabled = false;
         glDisable(GL_SCISSOR_TEST);
     }
     if (_sg_gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
+        need_pip_cache_flush = true;
         _sg_gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     }
     if (!_sg_gl.cache.ds.depth_write_enabled) {
+        need_pip_cache_flush = true;
         _sg_gl.cache.ds.depth_write_enabled = true;
         glDepthMask(GL_TRUE);
     }
     if (_sg_gl.cache.ds.stencil_write_mask != 0xFF) {
+        need_pip_cache_flush = true;
         _sg_gl.cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
+    }
+    if (need_pip_cache_flush) {
+        /* we messed with the state cache directly, need to clear cached 
+           pipeline to force re-evaluation in next sg_apply_draw_state() */
+        _sg_gl.cache.cur_pipeline = 0;
+        _sg_gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
     bool use_mrt_clear = (0 != pass);
     #if defined(SOKOL_GLES2)
@@ -1607,147 +1620,150 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     SOKOL_ASSERT(pip->shader);
     _SG_GL_CHECK_ERROR();
 
-    _sg_gl.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
-    _sg_gl.cur_index_type = _sg_gl_index_type(pip->index_type);
-    _sg_gl.cur_pipeline = pip;
-    _sg_gl.cur_pipeline_id.id = pip->slot.id;
+    /* need to apply pipeline state? */
+    if ((_sg_gl.cache.cur_pipeline != pip) || (_sg_gl.cache.cur_pipeline_id.id != pip->slot.id)) {
+        _sg_gl.cache.cur_pipeline = pip;
+        _sg_gl.cache.cur_pipeline_id.id = pip->slot.id;
+        _sg_gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
+        _sg_gl.cache.cur_index_type = _sg_gl_index_type(pip->index_type);
 
-    /* update depth-stencil state */
-    const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
-    sg_depth_stencil_state* cache_ds = &_sg_gl.cache.ds;
-    if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
-        cache_ds->depth_compare_func = new_ds->depth_compare_func;
-        glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
-    }
-    if (new_ds->depth_write_enabled != cache_ds->depth_write_enabled) {
-        cache_ds->depth_write_enabled = new_ds->depth_write_enabled;
-        glDepthMask(new_ds->depth_write_enabled);
-    }
-    if (new_ds->stencil_enabled != cache_ds->stencil_enabled) {
-        cache_ds->stencil_enabled = new_ds->stencil_enabled;
-        if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST); 
-        else glDisable(GL_STENCIL_TEST);
-    }
-    if (new_ds->stencil_write_mask != cache_ds->stencil_write_mask) {
-        cache_ds->stencil_write_mask = new_ds->stencil_write_mask;
-        glStencilMask(new_ds->stencil_write_mask);
-    }
-    for (int i = 0; i < 2; i++) {
-        const sg_stencil_state* new_ss = (i==0)? &new_ds->stencil_front : &new_ds->stencil_back;
-        sg_stencil_state* cache_ss = (i==0)? &cache_ds->stencil_front : &cache_ds->stencil_back;
-        GLenum gl_face = (i==0)? GL_FRONT : GL_BACK;
-        if ((new_ss->compare_func != cache_ss->compare_func) ||
-            (new_ds->stencil_read_mask != cache_ds->stencil_read_mask) ||
-            (new_ds->stencil_ref != cache_ds->stencil_ref))
+        /* update depth-stencil state */
+        const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
+        sg_depth_stencil_state* cache_ds = &_sg_gl.cache.ds;
+        if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
+            cache_ds->depth_compare_func = new_ds->depth_compare_func;
+            glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
+        }
+        if (new_ds->depth_write_enabled != cache_ds->depth_write_enabled) {
+            cache_ds->depth_write_enabled = new_ds->depth_write_enabled;
+            glDepthMask(new_ds->depth_write_enabled);
+        }
+        if (new_ds->stencil_enabled != cache_ds->stencil_enabled) {
+            cache_ds->stencil_enabled = new_ds->stencil_enabled;
+            if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST); 
+            else glDisable(GL_STENCIL_TEST);
+        }
+        if (new_ds->stencil_write_mask != cache_ds->stencil_write_mask) {
+            cache_ds->stencil_write_mask = new_ds->stencil_write_mask;
+            glStencilMask(new_ds->stencil_write_mask);
+        }
+        for (int i = 0; i < 2; i++) {
+            const sg_stencil_state* new_ss = (i==0)? &new_ds->stencil_front : &new_ds->stencil_back;
+            sg_stencil_state* cache_ss = (i==0)? &cache_ds->stencil_front : &cache_ds->stencil_back;
+            GLenum gl_face = (i==0)? GL_FRONT : GL_BACK;
+            if ((new_ss->compare_func != cache_ss->compare_func) ||
+                (new_ds->stencil_read_mask != cache_ds->stencil_read_mask) ||
+                (new_ds->stencil_ref != cache_ds->stencil_ref))
+            {
+                cache_ss->compare_func = new_ss->compare_func;
+                cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
+                cache_ds->stencil_ref = new_ds->stencil_ref;
+                glStencilFuncSeparate(gl_face, 
+                    _sg_gl_compare_func(new_ss->compare_func), 
+                    new_ds->stencil_ref, 
+                    new_ds->stencil_read_mask);
+            }
+            if ((new_ss->fail_op != cache_ss->fail_op) ||
+                (new_ss->depth_fail_op != cache_ss->depth_fail_op) ||
+                (new_ss->pass_op != cache_ss->pass_op))
+            {
+                cache_ss->fail_op = new_ss->fail_op;
+                cache_ss->depth_fail_op = new_ss->depth_fail_op;
+                cache_ss->pass_op = new_ss->pass_op;
+                glStencilOpSeparate(gl_face,
+                    _sg_gl_stencil_op(new_ss->fail_op),
+                    _sg_gl_stencil_op(new_ss->depth_fail_op),
+                    _sg_gl_stencil_op(new_ss->pass_op));
+            }
+        }
+
+        /* update blend state */
+        const sg_blend_state* new_b = &pip->blend;
+        sg_blend_state* cache_b = &_sg_gl.cache.blend;
+        if (new_b->enabled != cache_b->enabled) {
+            cache_b->enabled = new_b->enabled;
+            if (new_b->enabled) glEnable(GL_BLEND);
+            else glDisable(GL_BLEND);
+        }
+        if ((new_b->src_factor_rgb != cache_b->src_factor_rgb) ||
+            (new_b->dst_factor_rgb != cache_b->dst_factor_rgb) ||
+            (new_b->src_factor_alpha != cache_b->src_factor_alpha) ||
+            (new_b->dst_factor_alpha != cache_b->dst_factor_alpha))
         {
-            cache_ss->compare_func = new_ss->compare_func;
-            cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
-            cache_ds->stencil_ref = new_ds->stencil_ref;
-            glStencilFuncSeparate(gl_face, 
-                _sg_gl_compare_func(new_ss->compare_func), 
-                new_ds->stencil_ref, 
-                new_ds->stencil_read_mask);
+            cache_b->src_factor_rgb = new_b->src_factor_rgb;
+            cache_b->dst_factor_rgb = new_b->dst_factor_rgb;
+            cache_b->src_factor_alpha = new_b->src_factor_alpha;
+            cache_b->dst_factor_alpha = new_b->dst_factor_alpha;
+            glBlendFuncSeparate(_sg_gl_blend_factor(new_b->src_factor_rgb),
+                _sg_gl_blend_factor(new_b->dst_factor_rgb),
+                _sg_gl_blend_factor(new_b->src_factor_alpha),
+                _sg_gl_blend_factor(new_b->dst_factor_alpha));
         }
-        if ((new_ss->fail_op != cache_ss->fail_op) ||
-            (new_ss->depth_fail_op != cache_ss->depth_fail_op) ||
-            (new_ss->pass_op != cache_ss->pass_op))
+        if ((new_b->op_rgb != cache_b->op_rgb) || (new_b->op_alpha != cache_b->op_alpha)) {
+            cache_b->op_rgb = new_b->op_rgb;
+            cache_b->op_alpha = new_b->op_alpha;
+            glBlendEquationSeparate(_sg_gl_blend_op(new_b->op_rgb), _sg_gl_blend_op(new_b->op_alpha));
+        }
+        if (new_b->color_write_mask != cache_b->color_write_mask) {
+            cache_b->color_write_mask = new_b->color_write_mask;
+            glColorMask((new_b->color_write_mask & SG_COLORMASK_R) != 0,
+                        (new_b->color_write_mask & SG_COLORMASK_G) != 0,
+                        (new_b->color_write_mask & SG_COLORMASK_B) != 0,
+                        (new_b->color_write_mask & SG_COLORMASK_A) != 0);
+        }
+        /* FIXME: fuzzy compare? */
+        if ((new_b->blend_color[0] != cache_b->blend_color[0]) ||
+            (new_b->blend_color[1] != cache_b->blend_color[1]) ||
+            (new_b->blend_color[2] != cache_b->blend_color[2]) ||
+            (new_b->blend_color[3] != cache_b->blend_color[3]))
         {
-            cache_ss->fail_op = new_ss->fail_op;
-            cache_ss->depth_fail_op = new_ss->depth_fail_op;
-            cache_ss->pass_op = new_ss->pass_op;
-            glStencilOpSeparate(gl_face,
-                _sg_gl_stencil_op(new_ss->fail_op),
-                _sg_gl_stencil_op(new_ss->depth_fail_op),
-                _sg_gl_stencil_op(new_ss->pass_op));
+            const float* bc = new_b->blend_color;
+            for (int i=0; i<4; i++) {
+                cache_b->blend_color[i] = bc[i];
+            }
+            glBlendColor(bc[0], bc[1], bc[2], bc[3]);
         }
-    }
 
-    /* update blend state */
-    const sg_blend_state* new_b = &pip->blend;
-    sg_blend_state* cache_b = &_sg_gl.cache.blend;
-    if (new_b->enabled != cache_b->enabled) {
-        cache_b->enabled = new_b->enabled;
-        if (new_b->enabled) glEnable(GL_BLEND);
-        else glDisable(GL_BLEND);
-    }
-    if ((new_b->src_factor_rgb != cache_b->src_factor_rgb) ||
-        (new_b->dst_factor_rgb != cache_b->dst_factor_rgb) ||
-        (new_b->src_factor_alpha != cache_b->src_factor_alpha) ||
-        (new_b->dst_factor_alpha != cache_b->dst_factor_alpha))
-    {
-        cache_b->src_factor_rgb = new_b->src_factor_rgb;
-        cache_b->dst_factor_rgb = new_b->dst_factor_rgb;
-        cache_b->src_factor_alpha = new_b->src_factor_alpha;
-        cache_b->dst_factor_alpha = new_b->dst_factor_alpha;
-        glBlendFuncSeparate(_sg_gl_blend_factor(new_b->src_factor_rgb),
-            _sg_gl_blend_factor(new_b->dst_factor_rgb),
-            _sg_gl_blend_factor(new_b->src_factor_alpha),
-            _sg_gl_blend_factor(new_b->dst_factor_alpha));
-    }
-    if ((new_b->op_rgb != cache_b->op_rgb) || (new_b->op_alpha != cache_b->op_alpha)) {
-        cache_b->op_rgb = new_b->op_rgb;
-        cache_b->op_alpha = new_b->op_alpha;
-        glBlendEquationSeparate(_sg_gl_blend_op(new_b->op_rgb), _sg_gl_blend_op(new_b->op_alpha));
-    }
-    if (new_b->color_write_mask != cache_b->color_write_mask) {
-        cache_b->color_write_mask = new_b->color_write_mask;
-        glColorMask((new_b->color_write_mask & SG_COLORMASK_R) != 0,
-                    (new_b->color_write_mask & SG_COLORMASK_G) != 0,
-                    (new_b->color_write_mask & SG_COLORMASK_B) != 0,
-                    (new_b->color_write_mask & SG_COLORMASK_A) != 0);
-    }
-    /* FIXME: fuzzy compare? */
-    if ((new_b->blend_color[0] != cache_b->blend_color[0]) ||
-        (new_b->blend_color[1] != cache_b->blend_color[1]) ||
-        (new_b->blend_color[2] != cache_b->blend_color[2]) ||
-        (new_b->blend_color[3] != cache_b->blend_color[3]))
-    {
-        const float* bc = new_b->blend_color;
-        for (int i=0; i<4; i++) {
-            cache_b->blend_color[i] = bc[i];
+        /* update rasterizer state */
+        const sg_rasterizer_state* new_r = &pip->rast;
+        sg_rasterizer_state* cache_r = &_sg_gl.cache.rast;
+        if (new_r->cull_mode != cache_r->cull_mode) {
+            cache_r->cull_mode = new_r->cull_mode;
+            if (SG_CULLMODE_NONE == new_r->cull_mode) {
+                glDisable(GL_CULL_FACE);
+            }
+            else {
+                glEnable(GL_CULL_FACE);
+                GLenum gl_mode = (SG_CULLMODE_FRONT == new_r->cull_mode) ? GL_FRONT : GL_BACK;
+                glCullFace(gl_mode);
+            }
         }
-        glBlendColor(bc[0], bc[1], bc[2], bc[3]);
-    }
+        if (new_r->face_winding != cache_r->face_winding) {
+            cache_r->face_winding = new_r->face_winding;
+            GLenum gl_winding = (SG_FACEWINDING_CW == new_r->face_winding) ? GL_CW : GL_CCW;
+            glFrontFace(gl_winding);
+        }
+        if (new_r->scissor_test_enabled != cache_r->scissor_test_enabled) {
+            cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
+            if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
+            else glDisable(GL_SCISSOR_TEST);
+        }
+        if (new_r->alpha_to_coverage_enabled != cache_r->alpha_to_coverage_enabled) {
+            cache_r->alpha_to_coverage_enabled = new_r->alpha_to_coverage_enabled;
+            if (new_r->alpha_to_coverage_enabled) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+            else glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        }
+        #ifdef SOKOL_GLCORE33
+        if (new_r->sample_count != cache_r->sample_count) {
+            cache_r->sample_count = new_r->sample_count;
+            if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
+            else glDisable(GL_MULTISAMPLE);
+        }
+        #endif
 
-    /* update rasterizer state */
-    const sg_rasterizer_state* new_r = &pip->rast;
-    sg_rasterizer_state* cache_r = &_sg_gl.cache.rast;
-    if (new_r->cull_mode != cache_r->cull_mode) {
-        cache_r->cull_mode = new_r->cull_mode;
-        if (SG_CULLMODE_NONE == new_r->cull_mode) {
-            glDisable(GL_CULL_FACE);
-        }
-        else {
-            glEnable(GL_CULL_FACE);
-            GLenum gl_mode = (SG_CULLMODE_FRONT == new_r->cull_mode) ? GL_FRONT : GL_BACK;
-            glCullFace(gl_mode);
-        }
+        /* bind shader program */
+        glUseProgram(pip->shader->gl_prog);
     }
-    if (new_r->face_winding != cache_r->face_winding) {
-        cache_r->face_winding = new_r->face_winding;
-        GLenum gl_winding = (SG_FACEWINDING_CW == new_r->face_winding) ? GL_CW : GL_CCW;
-        glFrontFace(gl_winding);
-    }
-    if (new_r->scissor_test_enabled != cache_r->scissor_test_enabled) {
-        cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
-        if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
-        else glDisable(GL_SCISSOR_TEST);
-    }
-    if (new_r->alpha_to_coverage_enabled != cache_r->alpha_to_coverage_enabled) {
-        cache_r->alpha_to_coverage_enabled = new_r->alpha_to_coverage_enabled;
-        if (new_r->alpha_to_coverage_enabled) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-        else glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-    }
-    #ifdef SOKOL_GLCORE33
-    if (new_r->sample_count != cache_r->sample_count) {
-        cache_r->sample_count = new_r->sample_count;
-        if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
-        else glDisable(GL_MULTISAMPLE);
-    }
-    #endif
-
-    /* bind shader program */
-    glUseProgram(pip->shader->gl_prog);
 
     /* bind textures */
     _SG_GL_CHECK_ERROR();
@@ -1817,14 +1833,15 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
-    if (_sg_gl.cur_pipeline->slot.id != _sg_gl.cur_pipeline_id.id) {
+    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline);
+    if (_sg_gl.cache.cur_pipeline->slot.id != _sg_gl.cache.cur_pipeline_id.id) {
         /* pipeline object was destroyed */
         return;
     }
-    if (_sg_gl.cur_pipeline->shader->slot.id != _sg_gl.cur_pipeline->shader_id.id) {
+    if (_sg_gl.cache.cur_pipeline->shader->slot.id != _sg_gl.cache.cur_pipeline->shader_id.id) {
         /* shader object was destroyed */
     }
-    _sg_shader_stage* stage = &_sg_gl.cur_pipeline->shader->stage[stage_index];
+    _sg_shader_stage* stage = &_sg_gl.cache.cur_pipeline->shader->stage[stage_index];
     SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
     _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
     SOKOL_ASSERT(ub->size == num_bytes);
@@ -1861,8 +1878,8 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
 }
 
 _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
-    const GLenum i_type = _sg_gl.cur_index_type;
-    const GLenum p_type = _sg_gl.cur_primitive_type;
+    const GLenum i_type = _sg_gl.cache.cur_index_type;
+    const GLenum p_type = _sg_gl.cache.cur_primitive_type;
     if (0 != i_type) {
         /* indexed rendering */
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
