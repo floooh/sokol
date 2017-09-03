@@ -1964,6 +1964,10 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
+_SOKOL_PRIVATE void _sg_reset_state_cache() {
+    // FIXME!
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
