@@ -1511,7 +1511,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         const _sg_buffer* vb = vbs[slot];
         if ((_sg_mtl_cur_vertexbuffers[slot] != vb) || (_sg_mtl_cur_vertexbuffer_ids[slot].id != vb->slot.id)) {
             _sg_mtl_cur_vertexbuffers[slot] = vb;
-            _sg_mtl_cur_vertexbuffer_ids[slot].id = vb;
+            _sg_mtl_cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
             SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
             [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] offset:0 atIndex:mtl_slot];
