@@ -115,18 +115,57 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
 } 
 
 /*-- main D3D11 backend state and functions ----------------------------------*/
+typedef struct {
+    bool valid;
+    ID3D11Device* dev;
+    ID3D11DeviceContext* ctx;
+    const void* (*rtv_cb)(void);
+    const void* (*dsv_cb)(void);
+    bool in_pass;
+    int cur_width;
+    int cur_height;
+    int num_rtvs;
+    ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
+    ID3D11DepthStencilView* cur_dsv;
+} _sg_backend;
+static _sg_backend _sg_d3d11;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->d3d11_device);
+    SOKOL_ASSERT(desc->d3d11_device_context);
+    SOKOL_ASSERT(desc->d3d11_render_target_view_cb);
+    SOKOL_ASSERT(desc->d3d11_depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->d3d11_render_target_view_cb != desc->d3d11_depth_stencil_view_cb);
+    memset(&_sg_d3d11, 0, sizeof(_sg_d3d11));
+    _sg_d3d11.valid = true;
+    _sg_d3d11.dev = (ID3D11Device*) desc->d3d11_device;
+    _sg_d3d11.ctx = (ID3D11DeviceContext*) desc->d3d11_device_context;
+    _sg_d3d11.rtv_cb = desc->d3d11_render_target_view_cb;
+    _sg_d3d11.dsv_cb = desc->d3d11_depth_stencil_view_cb;
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend() {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.valid);
+    memset(&_sg_d3d11, 0, sizeof(_sg_d3d11));
 }
 
-_SOKOL_PRIVATE bool _sg_query_feature() {
-    // FIXME
-    return false;
+_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
+    switch (f) {
+        case SG_FEATURE_INSTANCED_ARRAYS:
+        case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
+        case SG_FEATURE_TEXTURE_FLOAT:
+        case SG_FEATURE_TEXTURE_HALF_FLOAT:
+        case SG_FEATURE_ORIGIN_TOP_LEFT:
+        case SG_FEATURE_MSAA_RENDER_TARGETS:
+        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:
+        case SG_FEATURE_MULTIPLE_RENDER_TARGET:
+        case SG_FEATURE_IMAGETYPE_3D:
+        case SG_FEATURE_IMAGETYPE_ARRAY:
+            return true;
+        default:
+            return false;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
@@ -170,11 +209,56 @@ _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
 }
 
 _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action, int w, int h) {
-    // FIXME
+    SOKOL_ASSERT(action);
+    SOKOL_ASSERT(!_sg_d3d11.in_pass);
+    _sg_d3d11.in_pass = true;
+    _sg_d3d11.cur_width = w;
+    _sg_d3d11.cur_height = h;
+    if (pass) {
+        // FIXME: offscreen rendering 
+    }
+    else {
+        /* render to default frame buffer */
+        _sg_d3d11.num_rtvs = 1;
+        _sg_d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg_d3d11.rtv_cb();
+        _sg_d3d11.cur_dsv = (ID3D11DepthStencilView*) _sg_d3d11.dsv_cb();
+        for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            _sg_d3d11.cur_rtvs[i] = 0;
+        }
+        SOKOL_ASSERT(_sg_d3d11.cur_rtvs[0] && _sg_d3d11.cur_dsv);
+    }
+    /* apply the render-target- and depth-stencil-views */
+    ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, _sg_d3d11.num_rtvs, _sg_d3d11.cur_rtvs, _sg_d3d11.cur_dsv);
+
+    /* set viewport to cover whole screen */
+    D3D11_VIEWPORT vp = { 0 };
+    vp.Width = w;
+    vp.Height = h;
+    vp.MaxDepth = 1.0f;
+    ID3D11DeviceContext_RSSetViewports(_sg_d3d11.ctx, 1, &vp);
+
+    /* perform clear action */
+    for (int i = 0; i < _sg_d3d11.num_rtvs; i++) {
+        if (action->colors[i].action == SG_ACTION_CLEAR) {
+            ID3D11DeviceContext_ClearRenderTargetView(_sg_d3d11.ctx, _sg_d3d11.cur_rtvs[i], action->colors[i].val);
+        }
+    }
+    UINT ds_flags = 0;
+    if (action->depth.action == SG_ACTION_CLEAR) {
+        ds_flags |= D3D11_CLEAR_DEPTH;
+    }
+    if (action->stencil.action == SG_ACTION_CLEAR) {
+        ds_flags |= D3D11_CLEAR_STENCIL;
+    }
+    if (0 != ds_flags) {
+        ID3D11DeviceContext_ClearDepthStencilView(_sg_d3d11.ctx, _sg_d3d11.cur_dsv, ds_flags, action->depth.val, action->stencil.val);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_end_pass() {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
+    _sg_d3d11.in_pass = false;
+    // FIXME: MSAA resolve
 }
 
 _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {

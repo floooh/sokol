@@ -708,6 +708,31 @@ typedef struct {
         frame when rendering to the default framebuffer, will be called in
         sg_end_pass() of the default pass. the pointer must be obtained
         with CFBridgingRetain()
+    .mtl_global_uniform_buffer_size
+        the size of the global uniform buffer in bytes, this must be big
+        enough to hold all uniform block updates for a single frame,
+        the default vale is 4 MByte (4 * 1024 * 1024) 
+    .mtl_sampler_cache_size
+        the number of slots in the sampler cache, the Metal backend
+        will share texture samplers with the same state in this 
+        cache, the default value is 64
+
+    D3D11 specific:
+    .d3d11_device
+        a pointer to the ID3D11Device object, this must have been created 
+        before sg_setup() is called
+    .d3d11_device_context
+        a pointer to the ID3D11DeviceContext object
+    .d3d11_render_target_view_cb
+        a C callback function to obtain a pointer to the current
+        ID3D11RenderTargetView object of the default framebuffer,
+        this function will be called in sg_begin_pass() when rendering
+        to the default framebuffer
+    .d3d11_depth_stencil_view_cb
+        a C callback fnction to obtain a pointer to the current
+        ID3D11DepthStencilView object of the default framebuffer,
+        this function will be called in sg_begin_pass() when rendering
+        to the default framebuffer
 */
 typedef struct {
     uint32_t _start_canary;
@@ -722,6 +747,10 @@ typedef struct {
     const void* (*mtl_drawable_cb)(void);
     int mtl_global_uniform_buffer_size;
     int mtl_sampler_cache_size;
+    const void* d3d11_device;
+    const void* d3d11_device_context;
+    const void* (*d3d11_render_target_view_cb)(void);
+    const void* (*d3d11_depth_stencil_view_cb)(void);
     uint32_t _end_canary;
 } sg_desc;
 
