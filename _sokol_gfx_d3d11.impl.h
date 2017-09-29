@@ -22,12 +22,41 @@
 extern "C" {
 #endif
 
+/*-- enum translation functions ----------------------------------------------*/
+_SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
+    switch (usg) {
+        case SG_USAGE_IMMUTABLE:    
+            return D3D11_USAGE_IMMUTABLE;
+        case SG_USAGE_DYNAMIC:
+        case SG_USAGE_STREAM:
+            return D3D11_USAGE_DYNAMIC;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
+    switch (usg) {
+        case SG_USAGE_IMMUTABLE:
+            return 0;
+        case SG_USAGE_DYNAMIC:
+        case SG_USAGE_STREAM:
+            return D3D11_CPU_ACCESS_WRITE;
+        default:
+            SOKOL_UNREACHABLE;
+            return 0;
+    }
+}
+
 /*-- backend resource structures ---------------------------------------------*/
 typedef struct {
     _sg_slot slot;
     int size;
     sg_buffer_type type;
     sg_usage usage;
+    uint32_t upd_frame_index;
+    ID3D11Buffer* d3d11_buf;
 } _sg_buffer;
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
@@ -169,11 +198,38 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(!buf->d3d11_buf);
+    buf->size = desc->size;
+    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->upd_frame_index = 0;
+    D3D11_BUFFER_DESC d3d11_desc = {
+        .ByteWidth = buf->size,
+        .Usage = _sg_d3d11_usage(buf->usage),
+        .BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER,
+        .CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage)
+    };
+    D3D11_SUBRESOURCE_DATA* init_data_ptr = 0;
+    D3D11_SUBRESOURCE_DATA init_data = { 0 };
+    if (buf->usage == SG_USAGE_IMMUTABLE) {
+        SOKOL_ASSERT(desc->content);
+        init_data.pSysMem = desc->content;
+        init_data_ptr = &init_data;
+    }
+    HRESULT hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11_buf);
+    SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11_buf);
+    buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
-    // FIXME
+    SOKOL_ASSERT(buf);
+    if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+        SOKOL_ASSERT(buf->d3d11_buf);
+        ID3D11Buffer_Release(buf->d3d11_buf);
+    }
+    _sg_init_buffer(buf);
 }
 
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
