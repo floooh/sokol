@@ -53,6 +53,128 @@ _SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
     }
 }
 
+_SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitive_type prim_type) {
+    switch (prim_type) {
+        case SG_PRIMITIVETYPE_POINTS:           return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
+        case SG_PRIMITIVETYPE_LINES:            return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+        case SG_PRIMITIVETYPE_TRIANGLES:        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
+    switch (fmt) {
+        case SG_VERTEXFORMAT_FLOAT:     return DXGI_FORMAT_R32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT2:    return DXGI_FORMAT_R32G32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT3:    return DXGI_FORMAT_R32G32B32_FLOAT;
+        case SG_VERTEXFORMAT_FLOAT4:    return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_VERTEXFORMAT_BYTE4:     return DXGI_FORMAT_R8G8B8A8_SINT;
+        case SG_VERTEXFORMAT_BYTE4N:    return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case SG_VERTEXFORMAT_UBYTE4:    return DXGI_FORMAT_R8G8B8A8_UINT;
+        case SG_VERTEXFORMAT_UBYTE4N:   return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_VERTEXFORMAT_SHORT2:    return DXGI_FORMAT_R16G16_SINT;
+        case SG_VERTEXFORMAT_SHORT2N:   return DXGI_FORMAT_R16G16_SNORM;
+        case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
+        case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
+        /* FIXME: signed 10-10-10-2 vertex format not supported on d3d11 (only unsigned) */
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_INPUT_CLASSIFICATION _sg_d3d11_input_classification(sg_vertex_step step) {
+    switch (step) {
+        case SG_VERTEXSTEP_PER_VERTEX:      return D3D11_INPUT_PER_VERTEX_DATA;
+        case SG_VERTEXSTEP_PER_INSTANCE:    return D3D11_INPUT_PER_INSTANCE_DATA;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_CULL_MODE _sg_d3d11_cull_mode(sg_cull_mode m) {
+    switch (m) {
+        case SG_CULLMODE_NONE:      return D3D11_CULL_NONE;
+        case SG_CULLMODE_FRONT:     return D3D11_CULL_FRONT;
+        case SG_CULLMODE_BACK:      return D3D11_CULL_BACK;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_COMPARISON_FUNC _sg_d3d11_compare_func(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return D3D11_COMPARISON_NEVER;
+        case SG_COMPAREFUNC_LESS:           return D3D11_COMPARISON_LESS;
+        case SG_COMPAREFUNC_EQUAL:          return D3D11_COMPARISON_EQUAL;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return D3D11_COMPARISON_LESS_EQUAL;
+        case SG_COMPAREFUNC_GREATER:        return D3D11_COMPARISON_GREATER;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return D3D11_COMPARISON_NOT_EQUAL;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return D3D11_COMPARISON_GREATER_EQUAL;
+        case SG_COMPAREFUNC_ALWAYS:         return D3D11_COMPARISON_ALWAYS;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_STENCIL_OP _sg_d3d11_stencil_op(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return D3D11_STENCIL_OP_KEEP;
+        case SG_STENCILOP_ZERO:         return D3D11_STENCIL_OP_ZERO;
+        case SG_STENCILOP_REPLACE:      return D3D11_STENCIL_OP_REPLACE;
+        case SG_STENCILOP_INCR_CLAMP:   return D3D11_STENCIL_OP_INCR_SAT;
+        case SG_STENCILOP_DECR_CLAMP:   return D3D11_STENCIL_OP_DECR_SAT;
+        case SG_STENCILOP_INVERT:       return D3D11_STENCIL_OP_INVERT;
+        case SG_STENCILOP_INCR_WRAP:    return D3D11_STENCIL_OP_INCR;
+        case SG_STENCILOP_DECR_WRAP:    return D3D11_STENCIL_OP_DECR;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_BLEND _sg_d3d11_blend_factor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return D3D11_BLEND_ZERO;
+        case SG_BLENDFACTOR_ONE:                    return D3D11_BLEND_ONE;
+        case SG_BLENDFACTOR_SRC_COLOR:              return D3D11_BLEND_SRC_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return D3D11_BLEND_INV_SRC_COLOR;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return D3D11_BLEND_SRC_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return D3D11_BLEND_INV_SRC_ALPHA;
+        case SG_BLENDFACTOR_DST_COLOR:              return D3D11_BLEND_DEST_COLOR;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return D3D11_BLEND_INV_DEST_COLOR;
+        case SG_BLENDFACTOR_DST_ALPHA:              return D3D11_BLEND_DEST_ALPHA;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return D3D11_BLEND_INV_DEST_ALPHA;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return D3D11_BLEND_SRC_ALPHA_SAT;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return D3D11_BLEND_BLEND_FACTOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return D3D11_BLEND_INV_BLEND_FACTOR;
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return D3D11_BLEND_BLEND_FACTOR;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return D3D11_BLEND_INV_BLEND_FACTOR;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_BLEND_OP _sg_d3d11_blend_op(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return D3D11_BLEND_OP_ADD;
+        case SG_BLENDOP_SUBTRACT:           return D3D11_BLEND_OP_SUBTRACT;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return D3D11_BLEND_OP_REV_SUBTRACT;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
+    UINT8 res = 0;
+    if (m & SG_COLORMASK_R) {
+        res |= D3D11_COLOR_WRITE_ENABLE_RED;
+    }
+    if (m & SG_COLORMASK_G) {
+        res |= D3D11_COLOR_WRITE_ENABLE_GREEN;
+    }
+    if (m & SG_COLORMASK_B) {
+        res |= D3D11_COLOR_WRITE_ENABLE_BLUE;
+    }
+    if (m & SG_COLORMASK_A) {
+        res |= D3D11_COLOR_WRITE_ENABLE_ALPHA;
+    }
+    return res;
+}
+
 /*-- backend resource structures ---------------------------------------------*/
 typedef struct {
     _sg_slot slot;
@@ -112,6 +234,8 @@ typedef struct {
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
     ID3D11VertexShader* d3d11_vs;
     ID3D11PixelShader* d3d11_fs;
+    void* d3d11_vs_blob;
+    int d3d11_vs_blob_length;
 } _sg_shader;
 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader* shd) {
@@ -123,8 +247,13 @@ typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
-    sg_primitive_type primitive_type;
     sg_index_type index_type;
+    float blend_color[4];
+    D3D_PRIMITIVE_TOPOLOGY d3d11_topology;
+    ID3D11InputLayout* d3d11_il;
+    ID3D11RasterizerState* d3d11_rs;
+    ID3D11DepthStencilState* d3d11_dss;
+    ID3D11BlendState* d3d11_bs;
 } _sg_pipeline;
 
 _SOKOL_PRIVATE void _sg_init_pipeline(_sg_pipeline* pip) {
@@ -194,7 +323,6 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         case SG_FEATURE_TEXTURE_HALF_FLOAT:
         case SG_FEATURE_ORIGIN_TOP_LEFT:
         case SG_FEATURE_MSAA_RENDER_TARGETS:
-        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:
         case SG_FEATURE_MULTIPLE_RENDER_TARGET:
         case SG_FEATURE_IMAGETYPE_3D:
         case SG_FEATURE_IMAGETYPE_ARRAY:
@@ -276,7 +404,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
 _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(!shd->d3d11_vs && !shd->d3d11_fs);
+    SOKOL_ASSERT(!shd->d3d11_vs && !shd->d3d11_fs && !shd->d3d11_vs_blob);
     HRESULT hr;
 
     /* shader stage uniform blocks and image slots */
@@ -334,6 +462,11 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         hr = ID3D11Device_CreatePixelShader(_sg_d3d11.dev, fs_ptr, fs_length, NULL, &shd->d3d11_fs);
         SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_fs);
 
+        /* need to store the vertex shader byte code, this is needed later in sg_create_pipeline */
+        shd->d3d11_vs_blob_length = vs_length;
+        shd->d3d11_vs_blob = SOKOL_MALLOC(vs_length);
+        memcpy(shd->d3d11_vs_blob, vs_ptr, vs_length);
+
         shd->slot.state = SG_RESOURCESTATE_VALID;
     }
     else {
@@ -359,6 +492,9 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
     if (shd->d3d11_fs) {
         ID3D11PixelShader_Release(shd->d3d11_fs);
     }
+    if (shd->d3d11_vs_blob) {
+        SOKOL_FREE(shd->d3d11_vs_blob);
+    }
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage* stage = &shd->stage[stage_index];
         for (int ub_index = 0; ub_index < stage->num_uniform_blocks; ub_index++) {
@@ -372,11 +508,130 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(pip && shd && desc);
+    SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
+    SOKOL_ASSERT(shd->d3d11_vs_blob && shd->d3d11_vs_blob_length > 0);
+    SOKOL_ASSERT(!pip->d3d11_il && !pip->d3d11_rs && !pip->d3d11_dss && !pip->d3d11_bs);
+    HRESULT hr;
+
+    pip->shader = shd;
+    pip->shader_id = desc->shader;
+    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->d3d11_topology = _sg_d3d11_primitive_topology(_sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES));
+    for (int i = 0; i < 4; i++) {
+        pip->blend_color[i] = desc->blend.blend_color[i];
+    }
+
+    /* create input layout object */
+    D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
+    memset(d3d11_comps, 0, sizeof(d3d11_comps));
+    int d3d11_attr_index = 0;
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
+        if (layout_desc->stride == 0) {
+            break;
+        }
+        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
+            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
+                break;
+            }
+            SOKOL_ASSERT(d3d11_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
+            D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[d3d11_attr_index++];
+            d3d11_comp->SemanticName = attr_desc->name;
+            d3d11_comp->SemanticIndex = 0;
+            d3d11_comp->Format = _sg_d3d11_vertex_format(attr_desc->format);
+            d3d11_comp->InputSlot = layout_index;
+            d3d11_comp->AlignedByteOffset = attr_desc->offset;
+            const sg_vertex_step step_func = _sg_select(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+            d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
+            if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
+                d3d11_comp->InstanceDataStepRate = _sg_select(layout_desc->step_rate, 1);
+            }
+        }
+    }
+    hr = ID3D11Device_CreateInputLayout(_sg_d3d11.dev,
+        d3d11_comps,                /* pInputElementDesc */
+        d3d11_attr_index,           /* NumElements */
+        shd->d3d11_vs_blob,         /* pShaderByteCodeWithInputSignature */
+        shd->d3d11_vs_blob_length,  /* BytecodeLength */
+        &pip->d3d11_il);
+    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_il);
+
+    /* create rasterizer state */
+    D3D11_RASTERIZER_DESC rs_desc;
+    memset(&rs_desc, 0, sizeof(rs_desc));
+    rs_desc.FillMode = D3D11_FILL_SOLID;
+    rs_desc.CullMode = _sg_d3d11_cull_mode(_sg_select(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
+    rs_desc.FrontCounterClockwise = _sg_select(desc->rasterizer.face_winding, SG_FACEWINDING_CW) == SG_FACEWINDING_CCW;
+    rs_desc.DepthBias = 0;
+    rs_desc.DepthBiasClamp = 0.0f;
+    rs_desc.SlopeScaledDepthBias = 0.0f;
+    rs_desc.DepthClipEnable = TRUE;
+    rs_desc.ScissorEnable = desc->rasterizer.scissor_test_enabled;
+    rs_desc.MultisampleEnable = _sg_select(desc->rasterizer.sample_count, 1) > 1;
+    rs_desc.AntialiasedLineEnable = FALSE;
+    hr = ID3D11Device_CreateRasterizerState(_sg_d3d11.dev, &rs_desc, &pip->d3d11_rs);
+    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_rs);
+
+    /* create depth-stencil state */
+    D3D11_DEPTH_STENCIL_DESC dss_desc;
+    memset(&dss_desc, 0, sizeof(dss_desc));
+    dss_desc.DepthEnable = TRUE;
+    dss_desc.DepthWriteMask = desc->depth_stencil.depth_write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+    dss_desc.DepthFunc = _sg_d3d11_compare_func(_sg_select(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
+    dss_desc.StencilEnable = desc->depth_stencil.stencil_enabled;
+    dss_desc.StencilReadMask = desc->depth_stencil.stencil_read_mask;
+    dss_desc.StencilWriteMask = desc->depth_stencil.stencil_write_mask;
+    const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
+    dss_desc.FrontFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_select(sf->fail_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_select(sf->depth_fail_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_select(sf->pass_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(_sg_select(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
+    const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
+    dss_desc.BackFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_select(sb->fail_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_select(sb->depth_fail_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_select(sb->pass_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(_sg_select(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
+    hr = ID3D11Device_CreateDepthStencilState(_sg_d3d11.dev, &dss_desc, &pip->d3d11_dss);
+    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_dss);
+    
+    /* create blend state */
+    D3D11_BLEND_DESC bs_desc;
+    memset(&bs_desc, 0, sizeof(bs_desc));
+    bs_desc.AlphaToCoverageEnable = desc->rasterizer.alpha_to_coverage_enabled;
+    bs_desc.IndependentBlendEnable = FALSE;
+    bs_desc.RenderTarget[0].BlendEnable = desc->blend.enabled;
+    bs_desc.RenderTarget[0].SrcBlend = _sg_d3d11_blend_factor(_sg_select(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
+    bs_desc.RenderTarget[0].DestBlend = _sg_d3d11_blend_factor(_sg_select(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
+    bs_desc.RenderTarget[0].BlendOp = _sg_d3d11_blend_op(_sg_select(desc->blend.op_rgb, SG_BLENDOP_ADD));
+    bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
+    bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
+    bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(_sg_select(desc->blend.op_alpha, SG_BLENDOP_ADD));
+    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(_sg_select(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+    hr = ID3D11Device_CreateBlendState(_sg_d3d11.dev, &bs_desc, &pip->d3d11_bs);
+    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_bs);
+
+    pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
-    // FIXME
+    SOKOL_ASSERT(pip);
+    if (pip->d3d11_il) {
+        ID3D11InputLayout_Release(pip->d3d11_il);
+    }
+    if (pip->d3d11_rs) {
+        ID3D11RasterizerState_Release(pip->d3d11_rs);
+    }
+    if (pip->d3d11_dss) {
+        ID3D11DepthStencilState_Release(pip->d3d11_dss);
+    }
+    if (pip->d3d11_bs) {
+        ID3D11BlendState_Release(pip->d3d11_bs);
+    }
+    _sg_init_pipeline(pip);
 }
 
 _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
