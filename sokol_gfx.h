@@ -1013,7 +1013,7 @@ typedef struct {
     sg_blend_factor src_factor_alpha;
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
-    sg_color_mask color_write_mask;
+    uint8_t color_write_mask;
     int mrt_count;
     sg_pixel_format color_format;
     sg_pixel_format depth_format;    
