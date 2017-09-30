@@ -1120,6 +1120,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
                 break;
             }
+            SOKOL_ASSERT(mtl_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
             vtx_desc.attributes[mtl_attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
             vtx_desc.attributes[mtl_attr_index].offset = attr_desc->offset;
             vtx_desc.attributes[mtl_attr_index].bufferIndex = mtl_vb_slot;
