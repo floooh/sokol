@@ -35,7 +35,7 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg), or OutputDebugString() on Windows)
+    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     Optionally define the following to force debug checks and validations

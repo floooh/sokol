@@ -24,12 +24,8 @@
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG 
-        #if defined(_WIN32)
-            #define SOKOL_LOG(s) OutputDebugStringA(s)
-        #else
-            #include <stdio.h>
-            #define SOKOL_LOG(s) puts(s)
-        #endif
+        #include <stdio.h>
+        #define SOKOL_LOG(s) puts(s)
     #else
         #define SOKOL_LOG(s)
     #endif
