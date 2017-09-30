@@ -846,7 +846,7 @@ _SOKOL_PRIVATE void _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             SOKOL_ASSERT(attrs_continuous);
             SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_desc->stride);
             SOKOL_ASSERT((attr_desc->format > SG_VERTEXFORMAT_INVALID)&&(attr_desc->format<_SG_VERTEXFORMAT_NUM));
-            #ifdef SOKOL_GLES2
+            #if defined(SOKOL_GLES2) || defined(SOKOL_D3D11)
             SOKOL_ASSERT(attr_desc->name);
             #endif
             num_attrs++;
