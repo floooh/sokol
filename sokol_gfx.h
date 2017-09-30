@@ -24,12 +24,18 @@
     #define SOKOL_GLCORE33
     #include "sokol_gfx.h"
 
+    To enable shader compilation support in the D3D11 backend:
+        #define SOKOL_D3D11_SHADER_COMPILER
+
+    If SOKOL_D3D11_SHADER_COMPILER is enabled, the executable will link against 
+    d3dcompiler.lib (d3dcompiler_47.dll).
+
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
+    SOKOL_LOG(msg)      - your own logging function (default: puts(msg), or OutputDebugString() on Windows)
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     Optionally define the following to force debug checks and validations

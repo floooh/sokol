@@ -17,6 +17,10 @@
 #pragma comment (lib, "dxgi.lib")
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "dxguid.lib")
+#if defined(SOKOL_D3D11_SHADER_COMPILER)
+#include <d3dcompiler.h>
+#pragma comment (lib, "d3dcompiler.lib")
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,6 +93,7 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
 
 typedef struct {
     int size;
+    ID3D11Buffer* d3d11_cb;
 } _sg_uniform_block;
 
 typedef struct {
@@ -105,6 +110,8 @@ typedef struct {
 typedef struct {
     _sg_slot slot;
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
+    ID3D11VertexShader* d3d11_vs;
+    ID3D11PixelShader* d3d11_fs;
 } _sg_shader;
 
 _SOKOL_PRIVATE void _sg_init_shader(_sg_shader* shd) {
@@ -205,14 +212,15 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
-    D3D11_BUFFER_DESC d3d11_desc = {
-        .ByteWidth = buf->size,
-        .Usage = _sg_d3d11_usage(buf->usage),
-        .BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER,
-        .CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage)
-    };
+    D3D11_BUFFER_DESC d3d11_desc;
+    memset(&d3d11_desc, 0, sizeof(d3d11_desc));
+    d3d11_desc.ByteWidth = buf->size,
+    d3d11_desc.Usage = _sg_d3d11_usage(buf->usage),
+    d3d11_desc.BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER,
+    d3d11_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage);
     D3D11_SUBRESOURCE_DATA* init_data_ptr = 0;
-    D3D11_SUBRESOURCE_DATA init_data = { 0 };
+    D3D11_SUBRESOURCE_DATA init_data;
+    memset(&init_data, 0, sizeof(init_data));
     if (buf->usage == SG_USAGE_IMMUTABLE) {
         SOKOL_ASSERT(desc->content);
         init_data.pSysMem = desc->content;
@@ -225,8 +233,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
-    if (buf->slot.state == SG_RESOURCESTATE_VALID) {
-        SOKOL_ASSERT(buf->d3d11_buf);
+    if (buf->d3d11_buf) {
         ID3D11Buffer_Release(buf->d3d11_buf);
     }
     _sg_init_buffer(buf);
@@ -240,12 +247,128 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
     // FIXME
 }
 
+#if defined(SOKOL_D3D11_SHADER_COMPILER)
+_SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* stage_desc, const char* target) {
+    ID3DBlob* output = NULL;
+    ID3DBlob* errors = NULL;
+    HRESULT hr = D3DCompile(
+        stage_desc->source,             /* pSrcData */
+        strlen(stage_desc->source),     /* SrcDataSize */
+        NULL,                           /* pSourceName */
+        NULL,                           /* pDefines */
+        NULL,                           /* pInclude */
+        stage_desc->entry ? stage_desc->entry : "main",     /* pEntryPoint */
+        target,     /* pTarget (vs_5_0 or ps_5_0) */
+        D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3,   /* Flags1 */
+        0,          /* Flags2 */
+        &output,    /* ppCode */
+        &errors);   /* ppErrorMsgs */
+    if (errors) {
+        SOKOL_LOG(ID3D10Blob_GetBufferPointer(errors));
+        ID3D10Blob_Release(errors); errors = NULL;
+    }
+    return output;
+}
+#endif
+
+#define _sg_d3d11_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
+
 _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(!shd->d3d11_vs && !shd->d3d11_fs);
+    HRESULT hr;
+
+    /* shader stage uniform blocks and image slots */
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
+        _sg_shader_stage* stage = &shd->stage[stage_index];
+        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
+            if (0 == ub_desc->size) {
+                break;
+            }
+            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
+            ub->size = ub_desc->size;
+
+            /* create a D3D constant buffer */
+            /* FIXME: on D3D11.1 we should use a global per-frame constant buffer */
+            SOKOL_ASSERT(!ub->d3d11_cb);
+            D3D11_BUFFER_DESC cb_desc;
+            memset(&cb_desc, 0, sizeof(cb_desc));
+            cb_desc.ByteWidth = _sg_d3d11_roundup(ub->size, 16);
+            cb_desc.Usage = D3D11_USAGE_DEFAULT;
+            cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &cb_desc, NULL, &ub->d3d11_cb);
+            SOKOL_ASSERT(SUCCEEDED(hr) && ub->d3d11_cb);
+
+            stage->num_uniform_blocks++;
+        }
+        SOKOL_ASSERT(stage->num_images == 0);
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
+                break;
+            }
+            stage->images[img_index].type = img_desc->type;
+            stage->num_images++;
+        }
+    }
+
+    /* FIXME: byte code */
+
+    /* compile shader code */
+    #if defined(SOKOL_D3D11_SHADER_COMPILER)
+    ID3DBlob* vs_blob = _sg_d3d11_compile_shader(&desc->vs, "vs_5_0");
+    ID3DBlob* fs_blob = _sg_d3d11_compile_shader(&desc->fs, "ps_5_0");
+    if (vs_blob && fs_blob) {
+        const void* vs_ptr = ID3D10Blob_GetBufferPointer(vs_blob);
+        SIZE_T vs_length = ID3D10Blob_GetBufferSize(vs_blob);
+        SOKOL_ASSERT(vs_ptr && vs_length > 0);
+        hr = ID3D11Device_CreateVertexShader(_sg_d3d11.dev, vs_ptr, vs_length, NULL, &shd->d3d11_vs);
+        SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_vs);
+        const void* fs_ptr = ID3D10Blob_GetBufferPointer(fs_blob);
+        SIZE_T fs_length = ID3D10Blob_GetBufferSize(fs_blob);
+        SOKOL_ASSERT(fs_ptr && fs_length > 0);
+        hr = ID3D11Device_CreatePixelShader(_sg_d3d11.dev, fs_ptr, fs_length, NULL, &shd->d3d11_fs);
+        SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_fs);
+
+        shd->slot.state = SG_RESOURCESTATE_VALID;
+    }
+    else {
+        /* compilation errors */
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    if (vs_blob) {
+        ID3D10Blob_Release(vs_blob); vs_blob = NULL;
+    }
+    if (fs_blob) {
+        ID3D10Blob_Release(fs_blob); fs_blob = NULL;
+    }
+    #else
+        /* FIXME: shader byte code */
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
-    // FIXME
+    SOKOL_ASSERT(shd);
+    if (shd->d3d11_vs) {
+        ID3D11VertexShader_Release(shd->d3d11_vs);
+    }
+    if (shd->d3d11_fs) {
+        ID3D11PixelShader_Release(shd->d3d11_fs);
+    }
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        _sg_shader_stage* stage = &shd->stage[stage_index];
+        for (int ub_index = 0; ub_index < stage->num_uniform_blocks; ub_index++) {
+            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
+            if (ub->d3d11_cb) {
+                ID3D11Buffer_Release(ub->d3d11_cb);
+            }
+        }
+    }
+    _sg_init_shader(shd);
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
