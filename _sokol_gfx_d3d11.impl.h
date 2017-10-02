@@ -696,11 +696,27 @@ _SOKOL_PRIVATE void _sg_end_pass() {
 }
 
 _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
+    D3D11_VIEWPORT vp;
+    vp.TopLeftX = (FLOAT) x;
+    vp.TopLeftY = (FLOAT) (origin_top_left ? y : (_sg_d3d11.cur_height - (y + h)));
+    vp.Width = (FLOAT) w;
+    vp.Height = (FLOAT) h;
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    ID3D11DeviceContext_RSSetViewports(_sg_d3d11.ctx, 1, &vp);
 }
 
 _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
+    D3D11_RECT rect;
+    rect.left = x;
+    rect.top = (origin_top_left ? y : (_sg_d3d11.cur_height - (y + h)));
+    rect.right = x + w;
+    rect.bottom = origin_top_left ? (y + h) : (_sg_d3d11.cur_height - y);
+    ID3D11DeviceContext_RSSetScissorRects(_sg_d3d11.ctx, 1, &rect);
 }
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
