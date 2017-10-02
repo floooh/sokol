@@ -64,6 +64,15 @@ _SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitiv
     }
 }
 
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
+    switch (index_type) {
+        case SG_INDEXTYPE_NONE:     return DXGI_FORMAT_UNKNOWN;
+        case SG_INDEXTYPE_UINT16:   return DXGI_FORMAT_R16_UINT;
+        case SG_INDEXTYPE_UINT32:   return DXGI_FORMAT_R32_UINT;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
     switch (fmt) {
         case SG_VERTEXFORMAT_FLOAT:     return DXGI_FORMAT_R32_FLOAT;
@@ -215,7 +224,6 @@ _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
 
 typedef struct {
     int size;
-    ID3D11Buffer* d3d11_cb;
 } _sg_uniform_block;
 
 typedef struct {
@@ -227,6 +235,7 @@ typedef struct {
     int num_images;
     _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11Buffer* d3d11_cbs[SG_MAX_SHADERSTAGE_UBS];
 } _sg_shader_stage;
 
 typedef struct {
@@ -249,7 +258,10 @@ typedef struct {
     sg_shader shader_id;
     sg_index_type index_type;
     float blend_color[4];
+    UINT d3d11_stencil_ref;
+    UINT d3d11_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
     D3D_PRIMITIVE_TOPOLOGY d3d11_topology;
+    DXGI_FORMAT d3d11_index_format;
     ID3D11InputLayout* d3d11_il;
     ID3D11RasterizerState* d3d11_rs;
     ID3D11DepthStencilState* d3d11_dss;
@@ -287,6 +299,8 @@ typedef struct {
     const void* (*rtv_cb)(void);
     const void* (*dsv_cb)(void);
     bool in_pass;
+    bool use_indexed_draw;
+    uint32_t frame_index;
     int cur_width;
     int cur_height;
     int num_rtvs;
@@ -422,14 +436,14 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
 
             /* create a D3D constant buffer */
             /* FIXME: on D3D11.1 we should use a global per-frame constant buffer */
-            SOKOL_ASSERT(!ub->d3d11_cb);
+            SOKOL_ASSERT(!stage->d3d11_cbs[ub_index]);
             D3D11_BUFFER_DESC cb_desc;
             memset(&cb_desc, 0, sizeof(cb_desc));
             cb_desc.ByteWidth = _sg_d3d11_roundup(ub->size, 16);
             cb_desc.Usage = D3D11_USAGE_DEFAULT;
             cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-            hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &cb_desc, NULL, &ub->d3d11_cb);
-            SOKOL_ASSERT(SUCCEEDED(hr) && ub->d3d11_cb);
+            hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &cb_desc, NULL, &stage->d3d11_cbs[ub_index]);
+            SOKOL_ASSERT(SUCCEEDED(hr) && stage->d3d11_cbs[ub_index]);
 
             stage->num_uniform_blocks++;
         }
@@ -498,9 +512,8 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage* stage = &shd->stage[stage_index];
         for (int ub_index = 0; ub_index < stage->num_uniform_blocks; ub_index++) {
-            _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
-            if (ub->d3d11_cb) {
-                ID3D11Buffer_Release(ub->d3d11_cb);
+            if (stage->d3d11_cbs[ub_index]) {
+                ID3D11Buffer_Release(stage->d3d11_cbs[ub_index]);
             }
         }
     }
@@ -519,10 +532,12 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->shader = shd;
     pip->shader_id = desc->shader;
     pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->d3d11_index_format = _sg_d3d11_index_format(pip->index_type);
     pip->d3d11_topology = _sg_d3d11_primitive_topology(_sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES));
     for (int i = 0; i < 4; i++) {
         pip->blend_color[i] = desc->blend.blend_color[i];
     }
+    pip->d3d11_stencil_ref = desc->depth_stencil.stencil_ref;
 
     /* create input layout object */
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
@@ -533,6 +548,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (layout_desc->stride == 0) {
             break;
         }
+        pip->d3d11_vb_strides[layout_index] = layout_desc->stride;
         for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
@@ -725,7 +741,41 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
-    // FIXME
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(pip->shader);
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
+    SOKOL_ASSERT(pip->d3d11_rs && pip->d3d11_bs && pip->d3d11_dss && pip->d3d11_il);
+
+    _sg_d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
+
+    /* FIXME: is it worth it to implement a state cache here? measure! */
+    ID3D11DeviceContext_RSSetState(_sg_d3d11.ctx, pip->d3d11_rs);
+    ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
+    ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
+    ID3D11Buffer* d3d11_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT d3d11_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    int vb_slot;
+    for (vb_slot = 0; vb_slot < num_vbs; vb_slot++) {
+        SOKOL_ASSERT(vbs[vb_slot]->d3d11_buf);
+        d3d11_vbs[vb_slot] = vbs[vb_slot]->d3d11_buf;
+        d3d11_offsets[vb_slot] = 0;
+    }
+    for (; vb_slot < SG_MAX_SHADERSTAGE_BUFFERS; vb_slot++) {
+        d3d11_vbs[vb_slot] = 0; 
+        d3d11_offsets[vb_slot] = 0;
+    }
+    ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_offsets);
+    ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
+    ID3D11Buffer* d3d11_ib = ib ? ib->d3d11_buf : 0;
+    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, 0); 
+    ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
+    ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
+    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
+    ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_VS].d3d11_cbs);
+    ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_FS].d3d11_cbs);
+
+    // FIXME: apply images and samplers
 }
 
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -733,11 +783,28 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
 }
 
 _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
+    if (_sg_d3d11.use_indexed_draw) {
+        if (1 == num_instances) {
+            ID3D11DeviceContext_DrawIndexed(_sg_d3d11.ctx, num_elements, base_element, 0);
+        }
+        else {
+            ID3D11DeviceContext_DrawIndexedInstanced(_sg_d3d11.ctx, num_elements, num_instances, base_element, 0, 0);
+        }
+    }
+    else {
+        if (1 == num_instances) {
+            ID3D11DeviceContext_Draw(_sg_d3d11.ctx, num_elements, base_element);
+        }
+        else {
+            ID3D11DeviceContext_DrawInstanced(_sg_d3d11.ctx, num_elements, num_instances, base_element, 0);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_commit() {
-    // FIXME
+    SOKOL_ASSERT(!_sg_d3d11.in_pass);
+    _sg_d3d11.frame_index++;
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
