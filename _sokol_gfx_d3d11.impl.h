@@ -375,9 +375,9 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->upd_frame_index = 0;
     D3D11_BUFFER_DESC d3d11_desc;
     memset(&d3d11_desc, 0, sizeof(d3d11_desc));
-    d3d11_desc.ByteWidth = buf->size,
-    d3d11_desc.Usage = _sg_d3d11_usage(buf->usage),
-    d3d11_desc.BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER,
+    d3d11_desc.ByteWidth = buf->size;
+    d3d11_desc.Usage = _sg_d3d11_usage(buf->usage);
+    d3d11_desc.BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER;
     d3d11_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage);
     D3D11_SUBRESOURCE_DATA* init_data_ptr = 0;
     D3D11_SUBRESOURCE_DATA init_data;
