@@ -5,9 +5,6 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
-#ifndef UNICODE
-#define UNICODE
-#endif
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
