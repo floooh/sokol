@@ -301,6 +301,8 @@ typedef struct {
     int cur_width;
     int cur_height;
     int num_rtvs;
+    _sg_pipeline* cur_pipeline;
+    sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
     /* the following arrays are used for unbinding resources, they will always contain zeroes */ 
@@ -728,6 +730,8 @@ _SOKOL_PRIVATE void _sg_end_pass() {
     SOKOL_ASSERT(_sg_d3d11.in_pass);
     _sg_d3d11.in_pass = false;
     // FIXME: MSAA resolve
+    _sg_d3d11.cur_pipeline = 0;
+    _sg_d3d11.cur_pipeline_id.id = SG_INVALID_ID;
     _sg_d3d11_clear_state();
 }
 
@@ -767,6 +771,8 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     SOKOL_ASSERT(_sg_d3d11.in_pass);
     SOKOL_ASSERT(pip->d3d11_rs && pip->d3d11_bs && pip->d3d11_dss && pip->d3d11_il);
 
+    _sg_d3d11.cur_pipeline = pip;
+    _sg_d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg_d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
 
     /* FIXME: is it worth it to implement a state cache here? measure! */
@@ -799,7 +805,19 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 }
 
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    // FIXME
+    SOKOL_ASSERT(_sg_d3d11.ctx && _sg_d3d11.in_pass);
+    SOKOL_ASSERT(data && (num_bytes > 0));
+    SOKOL_ASSERT((stage_index >= 0) && (stage_index < SG_NUM_SHADER_STAGES));
+    SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
+    SOKOL_ASSERT(_sg_d3d11.cur_pipeline && _sg_d3d11.cur_pipeline->slot.id == _sg_d3d11.cur_pipeline_id.id);
+    SOKOL_ASSERT(_sg_d3d11.cur_pipeline->shader && _sg_d3d11.cur_pipeline->shader->slot.id == _sg_d3d11.cur_pipeline->shader_id.id);
+    SOKOL_ASSERT(ub_index < _sg_d3d11.cur_pipeline->shader->stage[stage_index].num_uniform_blocks);
+    SOKOL_ASSERT(num_bytes == _sg_d3d11.cur_pipeline->shader->stage[stage_index].uniform_blocks[ub_index].size);
+
+    /* NOTE: on feature level 11.1 we should use one big per-frame constant buffer, similar to the Metal backend */
+    ID3D11Buffer* cb = _sg_d3d11.cur_pipeline->shader->stage[stage_index].d3d11_cbs[ub_index];
+    SOKOL_ASSERT(cb);
+    ID3D11DeviceContext_UpdateSubresource(_sg_d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data, 0, 0);
 }
 
 _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
