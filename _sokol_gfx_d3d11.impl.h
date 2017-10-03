@@ -306,6 +306,12 @@ typedef struct {
     int num_rtvs;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
+    /* the following arrays are used for unbinding resources, they will always contain zeroes */ 
+    ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
+    ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
+    ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
 } _sg_backend;
 static _sg_backend _sg_d3d11;
 
@@ -344,6 +350,22 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_clear_state() {
+    /* clear all the device context state, so that resource refs don't keep stuck in the d3d device context */
+    ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg_d3d11.zero_rtvs, NULL);
+    ID3D11DeviceContext_RSSetState(_sg_d3d11.ctx, NULL);
+    ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, NULL, 0);
+    ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, NULL, NULL, 0xFFFFFFFF);
+    ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, _sg_d3d11.zero_vbs, _sg_d3d11.zero_vb_strides, _sg_d3d11.zero_vb_offsets);
+    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0); 
+    ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, NULL);
+    ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, NULL, NULL, 0);
+    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, NULL, NULL, 0);
+    ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg_d3d11.zero_cbs);
+    ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg_d3d11.zero_cbs);
+    /* FIXME: textures and samplers */
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
@@ -678,7 +700,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         SOKOL_ASSERT(_sg_d3d11.cur_rtvs[0] && _sg_d3d11.cur_dsv);
     }
     /* apply the render-target- and depth-stencil-views */
-    ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, _sg_d3d11.num_rtvs, _sg_d3d11.cur_rtvs, _sg_d3d11.cur_dsv);
+    ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg_d3d11.cur_rtvs, _sg_d3d11.cur_dsv);
 
     /* set viewport to cover whole screen */
     D3D11_VIEWPORT vp = { 0 };
@@ -709,6 +731,7 @@ _SOKOL_PRIVATE void _sg_end_pass() {
     SOKOL_ASSERT(_sg_d3d11.in_pass);
     _sg_d3d11.in_pass = false;
     // FIXME: MSAA resolve
+    _sg_d3d11_clear_state();
 }
 
 _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -816,7 +839,8 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache() {
-    // FIXME
+    /* just clear the d3d11 device context state */
+    _sg_d3d11_clear_state();
 }
 
 #ifdef __cplusplus
