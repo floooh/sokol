@@ -25,7 +25,7 @@
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG 
         #include <stdio.h>
-        #define SOKOL_LOG(s) puts(s)
+        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
     #else
         #define SOKOL_LOG(s)
     #endif
