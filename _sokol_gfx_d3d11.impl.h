@@ -500,6 +500,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         /* need to store the vertex shader byte code, this is needed later in sg_create_pipeline */
         shd->d3d11_vs_blob_length = vs_length;
         shd->d3d11_vs_blob = SOKOL_MALLOC(vs_length);
+        SOKOL_ASSERT(shd->d3d11_vs_blob);
         memcpy(shd->d3d11_vs_blob, vs_ptr, vs_length);
 
         shd->slot.state = SG_RESOURCESTATE_VALID;

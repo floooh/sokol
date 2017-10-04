@@ -318,13 +318,14 @@ typedef struct {
 } _sg_pool;
 
 _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
-    SOKOL_ASSERT(pool && (num > 0));
+    SOKOL_ASSERT(pool && (num > 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
     pool->size = num + 1;
     pool->queue_top = 0;
     pool->unique_counter = 0;
     /* it's not a bug to only reserve 'num' here */
     pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    SOKOL_ASSERT(pool->free_queue);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
@@ -389,6 +390,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT((desc->buffer_pool_size >= 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->buffer_pool, _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
     p->buffers = (_sg_buffer*) SOKOL_MALLOC(sizeof(_sg_buffer) * p->buffer_pool.size);
+    SOKOL_ASSERT(p->buffers);
     for (int i = 0; i < p->buffer_pool.size; i++) {
         _sg_init_buffer(&p->buffers[i]);
     }
@@ -396,6 +398,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT((desc->image_pool_size >= 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->image_pool, _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
     p->images = (_sg_image*) SOKOL_MALLOC(sizeof(_sg_image) * p->image_pool.size);
+    SOKOL_ASSERT(p->images);
     for (int i = 0; i < p->image_pool.size; i++) {
         _sg_init_image(&p->images[i]);
     }
@@ -403,6 +406,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT((desc->shader_pool_size >= 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->shader_pool, _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
     p->shaders = (_sg_shader*) SOKOL_MALLOC(sizeof(_sg_shader) * p->shader_pool.size);
+    SOKOL_ASSERT(p->shaders);
     for (int i = 0; i < p->shader_pool.size; i++) {
         _sg_init_shader(&p->shaders[i]);
     }
@@ -410,6 +414,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT((desc->pipeline_pool_size >= 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pipeline_pool, _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
     p->pipelines = (_sg_pipeline*) SOKOL_MALLOC(sizeof(_sg_pipeline) * p->pipeline_pool.size);
+    SOKOL_ASSERT(p->pipelines);
     for (int i = 0; i < p->pipeline_pool.size; i++) {
         _sg_init_pipeline(&p->pipelines[i]);
     }
@@ -417,6 +422,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT((desc->pass_pool_size >= 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pass_pool, _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
     p->passes = (_sg_pass*) SOKOL_MALLOC(sizeof(_sg_pass) * p->pass_pool.size);
+    SOKOL_ASSERT(p->passes);
     for (int i = 0; i < p->pass_pool.size; i++) {
         _sg_init_pass(&p->passes[i]);
     }
