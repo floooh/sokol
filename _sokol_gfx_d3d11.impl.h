@@ -212,6 +212,13 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    int upd_frame_index;
+    ID3D11Texture2D* d3d11_tex2d;
+    ID3D11Texture3D* d3d11_tex3d;
+    ID3D11Texture2D* d3d11_texds;
+    ID3D11Texture2D* d3d11_texmsaa;
+    ID3D11ShaderResourceView* d3d11_srv;
+    ID3D11SamplerState* d3d11_smp;
 } _sg_image;
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
@@ -311,6 +318,8 @@ typedef struct {
     UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
     UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
     ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
+    /* global subresourcedata array for texture updates */
+    D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
 } _sg_backend;
 static _sg_backend _sg_d3d11;
 
@@ -402,12 +411,87 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
     _sg_init_buffer(buf);
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image* img, const sg_image_content* content) {
+    const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const int num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth:1;
+    int subres_index = 0;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+            for (int mip_index = 0; mip_index < img->num_mipmaps; mip_index++, subres_index++) {
+                SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+                D3D11_SUBRESOURCE_DATA* subres_data = &_sg_d3d11.subres_data[subres_index];
+                const int mip_width = ((img->width>>mip_index)>0) ? img->width>>mip_index : 1;
+                const int mip_height = ((img->height>>mip_index)>0) ? img->height>>mip_index : 1;
+                const sg_subimage_content* subimg_content = &(content->subimage[face_index][mip_index]);
+                const int slice_size = subimg_content->size / num_slices;
+                const int slice_offset = slice_size * slice_index;
+                const uint8_t* ptr = (const uint8_t*) subimg_content->ptr;
+                subres_data->pSysMem = ptr + slice_offset;
+                subres_data->SysMemPitch = _sg_row_pitch(img->pixel_format, mip_width);
+                if (img->type == SG_IMAGETYPE_3D) {
+                    const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1;
+                    subres_data->SysMemSlicePitch = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
+                }
+                else {
+                    subres_data->SysMemSlicePitch = 0;
+                }
+            }
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
-    // FIXME
+    SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(!img->d3d11_tex2d && !img->d3d11_tex3d && !img->d3d11_texds && !img->d3d11_texmsaa);
+    SOKOL_ASSERT(!img->d3d11_srv && !img->d3d11_smp);
+    
+    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
+    img->render_target = desc->render_target;
+    img->width = desc->width;
+    img->height = desc->height;
+    img->depth = _sg_select(desc->depth, 1);
+    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
+    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_select(desc->sample_count, 1);
+    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
+    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->upd_frame_index = 0;
+
+    D3D11_SUBRESOURCE_DATA* init_data = 0;
+    if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
+        _sg_d3d11_fill_subres_data(img, &desc->content);
+        init_data = _sg_d3d11.subres_data;
+    }
+
+    /* FIXME: create texture, sampler, ... */
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
-    // FIXME
+    SOKOL_ASSERT(img);
+    if (img->d3d11_tex2d) {
+        ID3D11Texture2D_Release(img->d3d11_tex2d);
+    }
+    if (img->d3d11_tex3d) {
+        ID3D11Texture3D_Release(img->d3d11_tex3d);
+    }
+    if (img->d3d11_texds) {
+        ID3D11Texture2D_Release(img->d3d11_texds);
+    }
+    if (img->d3d11_texmsaa) {
+        ID3D11Texture2D_Release(img->d3d11_texmsaa);
+    }
+    if (img->d3d11_srv) {
+        ID3D11ShaderResourceView_Release(img->d3d11_srv);
+    }
+    if (img->d3d11_smp) {
+        ID3D11SamplerState_Release(img->d3d11_smp);
+    }
+    _sg_init_image(img);
 }
 
 #if defined(SOKOL_D3D11_SHADER_COMPILER)
