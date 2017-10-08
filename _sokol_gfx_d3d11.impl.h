@@ -50,6 +50,45 @@ _SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
     }
 }
 
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_RGBA4:          return DXGI_FORMAT_B4G4R4A4_UNORM;
+        case SG_PIXELFORMAT_R5G6B5:         return DXGI_FORMAT_B5G6R5_UNORM;
+        case SG_PIXELFORMAT_R5G5B5A1:       return DXGI_FORMAT_B5G5R5A1_UNORM;
+        case SG_PIXELFORMAT_R10G10B10A2:    return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
+        case SG_PIXELFORMAT_L8:             return DXGI_FORMAT_R8_UNORM;
+        case SG_PIXELFORMAT_DXT1:           return DXGI_FORMAT_BC1_UNORM;
+        case SG_PIXELFORMAT_DXT3:           return DXGI_FORMAT_BC2_UNORM;
+        case SG_PIXELFORMAT_DXT5:           return DXGI_FORMAT_BC3_UNORM;
+        default:                            return DXGI_FORMAT_UNKNOWN;
+    };
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rendertarget_color_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
+        case SG_PIXELFORMAT_L8:             return DXGI_FORMAT_R8_UNORM;
+        default:                            return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rendertarget_depth_format(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_D16_UNORM;
+        case SG_PIXELFORMAT_DEPTHSTENCIL:   return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        default:                            return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
 _SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitive_type prim_type) {
     switch (prim_type) {
         case SG_PRIMITIVETYPE_POINTS:           return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
@@ -66,6 +105,53 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
         case SG_INDEXTYPE_NONE:     return DXGI_FORMAT_UNKNOWN;
         case SG_INDEXTYPE_UINT16:   return DXGI_FORMAT_R16_UINT;
         case SG_INDEXTYPE_UINT32:   return DXGI_FORMAT_R32_UINT;
+        default: SOKOL_UNREACHABLE; return 0;
+    }
+}
+
+_SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f) {
+    if (mag_f == SG_FILTER_NEAREST) {
+        switch (min_f) {
+            case SG_FILTER_NEAREST:
+            case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+                return D3D11_FILTER_MIN_MAG_MIP_POINT;
+            case SG_FILTER_LINEAR:
+            case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+                return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+            case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+                return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+            case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+                return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+            default:
+                SOKOL_UNREACHABLE; break;
+        }
+    }
+    else if (mag_f == SG_FILTER_LINEAR) {
+        switch (min_f) {
+            case SG_FILTER_NEAREST:
+            case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+                return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
+            case SG_FILTER_LINEAR:
+            case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+                return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+            case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+                return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
+            case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+                return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            default:
+                SOKOL_UNREACHABLE; break;
+        }
+    }
+    /* invalid value for mag filter */
+    SOKOL_UNREACHABLE;
+    return D3D11_FILTER_MIN_MAG_MIP_POINT;
+}
+
+_SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
+    switch (m) {
+        case SG_WRAP_REPEAT:            return D3D11_TEXTURE_ADDRESS_WRAP;
+        case SG_WRAP_CLAMP_TO_EDGE:     return D3D11_TEXTURE_ADDRESS_CLAMP;
+        case SG_WRAP_MIRRORED_REPEAT:   return D3D11_TEXTURE_ADDRESS_MIRROR;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -445,6 +531,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!img->d3d11_tex2d && !img->d3d11_tex3d && !img->d3d11_texds && !img->d3d11_texmsaa);
     SOKOL_ASSERT(!img->d3d11_srv && !img->d3d11_smp);
+    HRESULT hr;
     
     img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
@@ -462,13 +549,146 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
     img->upd_frame_index = 0;
 
-    D3D11_SUBRESOURCE_DATA* init_data = 0;
-    if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
-        _sg_d3d11_fill_subres_data(img, &desc->content);
-        init_data = _sg_d3d11.subres_data;
+    /* special case depth-stencil buffer? */
+    if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
+        /* create only a depth-texture */
+        D3D11_TEXTURE2D_DESC d3d11_desc;
+        memset(&d3d11_desc, 0, sizeof(d3d11_desc));
+        d3d11_desc.Width = img->width;
+        d3d11_desc.Height = img->height;
+        d3d11_desc.MipLevels = 1;
+        d3d11_desc.ArraySize = 1;
+        d3d11_desc.Format = _sg_d3d11_rendertarget_depth_format(img->pixel_format);
+        d3d11_desc.Usage = D3D11_USAGE_DEFAULT;
+        d3d11_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        d3d11_desc.SampleDesc.Count = img->sample_count;
+        d3d11_desc.SampleDesc.Quality = (img->sample_count > 1) ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+        hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_desc, NULL, &img->d3d11_texds);
+        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texds);
     }
+    else {
+        /* create color texture */
+        
+        /* prepare initial content pointers */
+        D3D11_SUBRESOURCE_DATA* init_data = 0;
+        if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
+            _sg_d3d11_fill_subres_data(img, &desc->content);
+            init_data = _sg_d3d11.subres_data;
+        }
+        if (img->type != SG_IMAGETYPE_3D) {
+            /* 2D-, cube- or array-texture */
+            /* if this is an MSAA render target, the following texture will be the 'resolve-texture' */
+            D3D11_TEXTURE2D_DESC d3d11_tex_desc;
+            memset(&d3d11_tex_desc, 0, sizeof(d3d11_tex_desc));
+            d3d11_tex_desc.Width = img->width;
+            d3d11_tex_desc.Height = img->height;
+            d3d11_tex_desc.MipLevels = img->num_mipmaps;
+            switch (img->type) {
+                case SG_IMAGETYPE_ARRAY:    d3d11_tex_desc.ArraySize = img->depth; break;
+                case SG_IMAGETYPE_CUBE:     d3d11_tex_desc.ArraySize = 6; break;
+                default:                    d3d11_tex_desc.ArraySize = 1; break;
+            }
+            d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            if (img->render_target) {
+                d3d11_tex_desc.Format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
+                d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
+                if (img->sample_count == 1) {
+                    d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+                }
+                d3d11_tex_desc.CPUAccessFlags = 0;
+            }
+            else {
+                d3d11_tex_desc.Format = _sg_d3d11_texture_format(img->pixel_format);
+                d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
+                d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
+            }
+            d3d11_tex_desc.SampleDesc.Count = 1;
+            d3d11_tex_desc.SampleDesc.Quality = 0;
+            d3d11_tex_desc.MiscFlags = (img->type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+            hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex2d);
+            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex2d);
 
-    /* FIXME: create texture, sampler, ... */
+            /* also need to create a separate MSAA render target texture? */
+            if (img->sample_count > 1) {
+                d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+                d3d11_tex_desc.SampleDesc.Count = img->sample_count;
+                d3d11_tex_desc.SampleDesc.Quality = (img->sample_count > 1) ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+                hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11_texmsaa);
+                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texmsaa);
+            }
+
+            /* shader-resource-view */
+            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+            memset(&d3d11_srv_desc, 0, sizeof(d3d11_srv_desc));
+            d3d11_srv_desc.Format = d3d11_tex_desc.Format;
+            switch (img->type) {
+                case SG_IMAGETYPE_2D:
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                    d3d11_srv_desc.Texture2D.MipLevels = img->num_mipmaps;
+                    break;
+                case SG_IMAGETYPE_CUBE:
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                    d3d11_srv_desc.TextureCube.MipLevels = img->num_mipmaps;
+                    break;
+                case SG_IMAGETYPE_ARRAY:
+                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                    d3d11_srv_desc.Texture2DArray.MipLevels = img->num_mipmaps;
+                    d3d11_srv_desc.Texture2DArray.ArraySize = img->depth;
+                    break;
+                default:
+                    SOKOL_UNREACHABLE; break;
+            }
+            hr = ID3D11Device_CreateShaderResourceView(_sg_d3d11.dev, (ID3D11Resource*)img->d3d11_tex2d, &d3d11_srv_desc, &img->d3d11_srv);
+            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_srv);
+        }
+        else {
+            /* 3D texture */
+            D3D11_TEXTURE3D_DESC d3d11_tex_desc;
+            memset(&d3d11_tex_desc, 0, sizeof(d3d11_tex_desc));
+            d3d11_tex_desc.Width = img->width;
+            d3d11_tex_desc.Height = img->height;
+            d3d11_tex_desc.Depth = img->depth;
+            d3d11_tex_desc.MipLevels = img->num_mipmaps;
+            if (img->render_target) {
+                d3d11_tex_desc.Format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
+                d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
+                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
+                d3d11_tex_desc.CPUAccessFlags = 0;
+            }
+            else {
+                d3d11_tex_desc.Format = _sg_d3d11_texture_format(img->pixel_format);
+                d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
+                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
+            }
+            hr = ID3D11Device_CreateTexture3D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex3d);
+            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex3d);
+
+            /* shader resource view for 3d texture */
+            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+            memset(&d3d11_srv_desc, 0, sizeof(d3d11_srv_desc));
+            d3d11_srv_desc.Format = d3d11_tex_desc.Format;
+            d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+            d3d11_srv_desc.Texture3D.MipLevels = img->num_mipmaps;
+            hr = ID3D11Device_CreateShaderResourceView(_sg_d3d11.dev, (ID3D11Resource*)img->d3d11_tex3d, &d3d11_srv_desc, &img->d3d11_srv);
+            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_srv);
+        }
+
+        /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
+        D3D11_SAMPLER_DESC d3d11_smp_desc;
+        memset(&d3d11_smp_desc, 0, sizeof(d3d11_smp_desc));
+        d3d11_smp_desc.Filter = _sg_d3d11_filter(img->min_filter, img->mag_filter);
+        d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->wrap_u);
+        d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->wrap_v);
+        d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->wrap_w);
+        d3d11_smp_desc.MaxAnisotropy = 1;
+        d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        d3d11_smp_desc.MinLOD = -D3D11_FLOAT32_MAX;
+        d3d11_smp_desc.MaxLOD = D3D11_FLOAT32_MAX;
+        hr = ID3D11Device_CreateSamplerState(_sg_d3d11.dev, &d3d11_smp_desc, &img->d3d11_smp);
+        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_smp);
+    }
+    img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
