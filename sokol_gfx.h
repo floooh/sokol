@@ -939,7 +939,8 @@ typedef struct {
         .step_rate      1
         .attrs[]:
             .name       0 (GLES2 requires an attribute name here)
-            .index      0 (optional attribute slot if no name given)
+            .sem_name   0 (D3D11 requires a semantic name here)
+            .sem_index  0 (D3D11 requires a semantic index here)
             .offset     0
             .format     SG_VERTEXFORMAT_INVALID (must be initialized!)
     .shader:            0 (must be intilized with a valid sg_shader id!)
@@ -977,6 +978,8 @@ typedef struct {
 */
 typedef struct {
     const char* name;
+    const char* sem_name;
+    int sem_index;
     int offset;
     sg_vertex_format format;
 } sg_vertex_attr_desc;

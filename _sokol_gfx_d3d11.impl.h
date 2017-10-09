@@ -404,6 +404,8 @@ typedef struct {
     UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
     UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
     ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
+    ID3D11ShaderResourceView* zero_srvs[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11SamplerState* zero_smps[SG_MAX_SHADERSTAGE_IMAGES];
     /* global subresourcedata array for texture updates */
     D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
 } _sg_backend;
@@ -459,7 +461,10 @@ _SOKOL_PRIVATE void _sg_d3d11_clear_state() {
     ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, NULL, NULL, 0);
     ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg_d3d11.zero_cbs);
     ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg_d3d11.zero_cbs);
-    /* FIXME: textures and samplers */
+    ID3D11DeviceContext_VSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_srvs);
+    ID3D11DeviceContext_PSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_srvs);
+    ID3D11DeviceContext_VSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_smps);
+    ID3D11DeviceContext_PSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_smps);
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
@@ -882,8 +887,8 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             }
             SOKOL_ASSERT(d3d11_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
             D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[d3d11_attr_index++];
-            d3d11_comp->SemanticName = attr_desc->name;
-            d3d11_comp->SemanticIndex = 0;
+            d3d11_comp->SemanticName = attr_desc->sem_name;
+            d3d11_comp->SemanticIndex = attr_desc->sem_index;
             d3d11_comp->Format = _sg_d3d11_vertex_format(attr_desc->format);
             d3d11_comp->InputSlot = layout_index;
             d3d11_comp->AlignedByteOffset = attr_desc->offset;
@@ -1080,33 +1085,64 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg_d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
 
+    /* gather all the D3D11 resources into arrays */
+    ID3D11Buffer* d3d11_ib = ib ? ib->d3d11_buf : 0;
+    ID3D11Buffer* d3d11_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT d3d11_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    ID3D11ShaderResourceView* d3d11_vs_srvs[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11ShaderResourceView* d3d11_fs_srvs[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11SamplerState* d3d11_fs_smps[SG_MAX_SHADERSTAGE_IMAGES];
+    int i;
+    for (i = 0; i < num_vbs; i++) {
+        SOKOL_ASSERT(vbs[i]->d3d11_buf);
+        d3d11_vbs[i] = vbs[i]->d3d11_buf;
+        d3d11_vb_offsets[i] = 0;
+    }
+    for (; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+        d3d11_vbs[i] = 0; 
+        d3d11_vb_offsets[i] = 0;
+    }
+    for (i = 0; i < num_vs_imgs; i++) {
+        SOKOL_ASSERT(vs_imgs[i]->d3d11_srv);
+        SOKOL_ASSERT(vs_imgs[i]->d3d11_smp);
+        d3d11_vs_srvs[i] = vs_imgs[i]->d3d11_srv;
+        d3d11_vs_smps[i] = vs_imgs[i]->d3d11_smp;
+    }
+    for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        d3d11_vs_srvs[i] = 0;
+        d3d11_vs_smps[i] = 0;
+    }
+    for (i = 0; i < num_fs_imgs; i++) {
+        SOKOL_ASSERT(fs_imgs[i]->d3d11_srv);
+        SOKOL_ASSERT(fs_imgs[i]->d3d11_smp);
+        d3d11_fs_srvs[i] = fs_imgs[i]->d3d11_srv;
+        d3d11_fs_smps[i] = fs_imgs[i]->d3d11_smp;
+    }
+    for (; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        d3d11_fs_srvs[i] = 0;
+        d3d11_fs_smps[i] = 0;
+    }
+
     /* FIXME: is it worth it to implement a state cache here? measure! */
     ID3D11DeviceContext_RSSetState(_sg_d3d11.ctx, pip->d3d11_rs);
     ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
     ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
-    ID3D11Buffer* d3d11_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT d3d11_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-    int vb_slot;
-    for (vb_slot = 0; vb_slot < num_vbs; vb_slot++) {
-        SOKOL_ASSERT(vbs[vb_slot]->d3d11_buf);
-        d3d11_vbs[vb_slot] = vbs[vb_slot]->d3d11_buf;
-        d3d11_offsets[vb_slot] = 0;
-    }
-    for (; vb_slot < SG_MAX_SHADERSTAGE_BUFFERS; vb_slot++) {
-        d3d11_vbs[vb_slot] = 0; 
-        d3d11_offsets[vb_slot] = 0;
-    }
-    ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_offsets);
+
+    ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_vb_offsets);
     ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
-    ID3D11Buffer* d3d11_ib = ib ? ib->d3d11_buf : 0;
     ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, 0); 
     ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
+    
     ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
-    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
     ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_VS].d3d11_cbs);
+    ID3D11DeviceContext_VSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
+    ID3D11DeviceContext_VSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_smps);
+    
+    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
     ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_FS].d3d11_cbs);
-
-    // FIXME: apply images and samplers
+    ID3D11DeviceContext_PSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
+    ID3D11DeviceContext_PSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
 }
 
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -1120,6 +1156,7 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(num_bytes == _sg_d3d11.cur_pipeline->shader->stage[stage_index].uniform_blocks[ub_index].size);
 
     /* NOTE: on feature level 11.1 we should use one big per-frame constant buffer, similar to the Metal backend */
+    /* hmm, but this would probably require implementing our own command buffer, to delay all rendering to sg_commit :/ */
     ID3D11Buffer* cb = _sg_d3d11.cur_pipeline->shader->stage[stage_index].d3d11_cbs[ub_index];
     SOKOL_ASSERT(cb);
     ID3D11DeviceContext_UpdateSubresource(_sg_d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data, 0, 0);
