@@ -1912,6 +1912,7 @@ _SOKOL_PRIVATE void _sg_commit() {
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
+    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     /* only one update per buffer per frame allowed */
     SOKOL_ASSERT(buf->upd_frame_index != _sg_gl.frame_index);
     buf->upd_frame_index = _sg_gl.frame_index;
@@ -1929,7 +1930,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
 }
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
-    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(img && data);
     /* only one update per image per frame allowed */
     SOKOL_ASSERT(img->upd_frame_index != _sg_gl.frame_index);
     img->upd_frame_index = _sg_gl.frame_index;

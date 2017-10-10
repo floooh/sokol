@@ -1623,7 +1623,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
 }
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
-    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(img && data);
     /* only one update per frame and image allowed */
     SOKOL_ASSERT(img->upd_frame_index != _sg_mtl_frame_index);
     img->upd_frame_index = _sg_mtl_frame_index;
