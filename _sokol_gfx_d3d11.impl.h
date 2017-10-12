@@ -1005,7 +1005,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         SOKOL_ASSERT(pass->d3d11_rtvs[i] == 0);
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
-            SOKOL_ASSERT(att_images[i] && (att_images[0]->slot.id == att_desc->image.id));
+            SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
             att = &pass->color_atts[i];
             SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
