@@ -1134,7 +1134,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg_d3d11.cur_rtvs, _sg_d3d11.cur_dsv);
 
     /* set viewport to cover whole screen */
-    D3D11_VIEWPORT vp = { 0 };
+    D3D11_VIEWPORT vp;
+    memset(&vp, 0, sizeof(vp));
     vp.Width = w;
     vp.Height = h;
     vp.MaxDepth = 1.0f;
