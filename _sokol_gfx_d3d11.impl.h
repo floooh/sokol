@@ -1365,7 +1365,42 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
 }
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
-    // FIXME
+    SOKOL_ASSERT(img && data);
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(img->d3d11_tex2d || img->d3d11_tex3d);
+    /* only one update per frame and buffer allowed */
+    SOKOL_ASSERT(img->upd_frame_index != _sg_d3d11.frame_index);
+    img->upd_frame_index = _sg_d3d11.frame_index;
+    ID3D11Resource* d3d11_res = 0;
+    if (img->d3d11_tex3d) {
+        d3d11_res = (ID3D11Resource*) img->d3d11_tex3d;
+    }
+    else {
+        d3d11_res = (ID3D11Resource*) img->d3d11_tex2d;
+    }
+    SOKOL_ASSERT(d3d11_res);
+    const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const int num_slices = (img->type == SG_IMAGETYPE_ARRAY) ? img->depth:1;
+    int subres_index = 0;
+    HRESULT hr;
+    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
+            for (int mip_index = 0; mip_index < img->num_mipmaps; mip_index++, subres_index++) {
+                SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
+                const int mip_width = ((img->width>>mip_index)>0) ? img->width>>mip_index : 1;
+                const int mip_height = ((img->height>>mip_index)>0) ? img->height>>mip_index : 1;
+                const sg_subimage_content* subimg_content = &(data->subimage[face_index][mip_index]);
+                const int slice_size = subimg_content->size / num_slices;
+                const int slice_offset = slice_size * slice_index;
+                const uint8_t* slice_ptr = ((const uint8_t*)subimg_content->ptr) + slice_offset;
+                hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, d3d11_res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
+                SOKOL_ASSERT(SUCCEEDED(hr));
+                memcpy(d3d11_msr.pData, slice_ptr, slice_size);
+                ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, d3d11_res, subres_index);
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache() {
