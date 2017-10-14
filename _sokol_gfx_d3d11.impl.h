@@ -5,6 +5,8 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
+#define D3D11_NO_HELPERS
+#define CINTERFACE
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -33,7 +35,7 @@ _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
             return D3D11_USAGE_DYNAMIC;
         default:
             SOKOL_UNREACHABLE;
-            return 0;
+            return (D3D11_USAGE) 0;
     }
 }
 
@@ -96,7 +98,7 @@ _SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitiv
         case SG_PRIMITIVETYPE_LINE_STRIP:       return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
         case SG_PRIMITIVETYPE_TRIANGLES:        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_PRIMITIVE_TOPOLOGY) 0;
     }
 }
 
@@ -105,7 +107,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
         case SG_INDEXTYPE_NONE:     return DXGI_FORMAT_UNKNOWN;
         case SG_INDEXTYPE_UINT16:   return DXGI_FORMAT_R16_UINT;
         case SG_INDEXTYPE_UINT32:   return DXGI_FORMAT_R32_UINT;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
     }
 }
 
@@ -152,7 +154,7 @@ _SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
         case SG_WRAP_REPEAT:            return D3D11_TEXTURE_ADDRESS_WRAP;
         case SG_WRAP_CLAMP_TO_EDGE:     return D3D11_TEXTURE_ADDRESS_CLAMP;
         case SG_WRAP_MIRRORED_REPEAT:   return D3D11_TEXTURE_ADDRESS_MIRROR;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_TEXTURE_ADDRESS_MODE) 0;
     }
 }
 
@@ -171,7 +173,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
         case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
         /* FIXME: signed 10-10-10-2 vertex format not supported on d3d11 (only unsigned) */
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
     }
 }
 
@@ -179,7 +181,7 @@ _SOKOL_PRIVATE D3D11_INPUT_CLASSIFICATION _sg_d3d11_input_classification(sg_vert
     switch (step) {
         case SG_VERTEXSTEP_PER_VERTEX:      return D3D11_INPUT_PER_VERTEX_DATA;
         case SG_VERTEXSTEP_PER_INSTANCE:    return D3D11_INPUT_PER_INSTANCE_DATA;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_INPUT_CLASSIFICATION) 0;
     }
 }
 
@@ -188,7 +190,7 @@ _SOKOL_PRIVATE D3D11_CULL_MODE _sg_d3d11_cull_mode(sg_cull_mode m) {
         case SG_CULLMODE_NONE:      return D3D11_CULL_NONE;
         case SG_CULLMODE_FRONT:     return D3D11_CULL_FRONT;
         case SG_CULLMODE_BACK:      return D3D11_CULL_BACK;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_CULL_MODE) 0;
     }
 }
 
@@ -202,7 +204,7 @@ _SOKOL_PRIVATE D3D11_COMPARISON_FUNC _sg_d3d11_compare_func(sg_compare_func f) {
         case SG_COMPAREFUNC_NOT_EQUAL:      return D3D11_COMPARISON_NOT_EQUAL;
         case SG_COMPAREFUNC_GREATER_EQUAL:  return D3D11_COMPARISON_GREATER_EQUAL;
         case SG_COMPAREFUNC_ALWAYS:         return D3D11_COMPARISON_ALWAYS;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_COMPARISON_FUNC) 0;
     }
 }
 
@@ -216,7 +218,7 @@ _SOKOL_PRIVATE D3D11_STENCIL_OP _sg_d3d11_stencil_op(sg_stencil_op op) {
         case SG_STENCILOP_INVERT:       return D3D11_STENCIL_OP_INVERT;
         case SG_STENCILOP_INCR_WRAP:    return D3D11_STENCIL_OP_INCR;
         case SG_STENCILOP_DECR_WRAP:    return D3D11_STENCIL_OP_DECR;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_STENCIL_OP) 0;
     }
 }
 
@@ -237,7 +239,7 @@ _SOKOL_PRIVATE D3D11_BLEND _sg_d3d11_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return D3D11_BLEND_INV_BLEND_FACTOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return D3D11_BLEND_BLEND_FACTOR;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return D3D11_BLEND_INV_BLEND_FACTOR;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_BLEND) 0;
     }
 }
 
@@ -246,7 +248,7 @@ _SOKOL_PRIVATE D3D11_BLEND_OP _sg_d3d11_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return D3D11_BLEND_OP_ADD;
         case SG_BLENDOP_SUBTRACT:           return D3D11_BLEND_OP_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return D3D11_BLEND_OP_REV_SUBTRACT;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (D3D11_BLEND_OP) 0;
     }
 }
 
@@ -748,7 +750,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         &output,    /* ppCode */
         &errors);   /* ppErrorMsgs */
     if (errors) {
-        SOKOL_LOG(ID3D10Blob_GetBufferPointer(errors));
+        SOKOL_LOG((LPCSTR)ID3D10Blob_GetBufferPointer(errors));
         ID3D10Blob_Release(errors); errors = NULL;
     }
     return output;
@@ -980,7 +982,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
     bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
     bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(_sg_select(desc->blend.op_alpha, SG_BLENDOP_ADD));
-    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(_sg_select(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(_sg_select((sg_color_mask)desc->blend.color_write_mask, SG_COLORMASK_RGBA));
     hr = ID3D11Device_CreateBlendState(_sg_d3d11.dev, &bs_desc, &pip->d3d11_bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_bs);
 
