@@ -799,21 +799,35 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         }
     }
 
-    /* FIXME: byte code */
-
-    /* compile shader code */
+    const void* vs_ptr = 0, *fs_ptr = 0;
+    SIZE_T vs_length = 0, fs_length = 0;
     #if defined(SOKOL_D3D11_SHADER_COMPILER)
-    ID3DBlob* vs_blob = _sg_d3d11_compile_shader(&desc->vs, "vs_5_0");
-    ID3DBlob* fs_blob = _sg_d3d11_compile_shader(&desc->fs, "ps_5_0");
-    if (vs_blob && fs_blob) {
-        const void* vs_ptr = ID3D10Blob_GetBufferPointer(vs_blob);
-        SIZE_T vs_length = ID3D10Blob_GetBufferSize(vs_blob);
-        SOKOL_ASSERT(vs_ptr && vs_length > 0);
+    ID3DBlob* vs_blob = 0, *fs_blob = 0;
+    #endif
+    if (desc->vs.byte_code && desc->fs.byte_code) {
+        /* create from byte code */
+        vs_ptr = desc->vs.byte_code;
+        fs_ptr = desc->fs.byte_code;
+        vs_length = desc->vs.byte_code_size;
+        fs_length = desc->fs.byte_code_size;
+    }
+    else {
+        /* compile shader code */
+        #if defined(SOKOL_D3D11_SHADER_COMPILER)
+        vs_blob = _sg_d3d11_compile_shader(&desc->vs, "vs_5_0");
+        fs_blob = _sg_d3d11_compile_shader(&desc->fs, "ps_5_0");
+        if (vs_blob && fs_blob) {
+            vs_ptr = ID3D10Blob_GetBufferPointer(vs_blob);
+            vs_length = ID3D10Blob_GetBufferSize(vs_blob);
+            fs_ptr = ID3D10Blob_GetBufferPointer(fs_blob);
+            fs_length = ID3D10Blob_GetBufferSize(fs_blob);
+        }
+        #endif
+    }
+    if (vs_ptr && fs_ptr && (vs_length > 0) && (fs_length > 0)) {
+        /* create the D3D vertex- and pixel-shader objects */
         hr = ID3D11Device_CreateVertexShader(_sg_d3d11.dev, vs_ptr, vs_length, NULL, &shd->d3d11_vs);
         SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_vs);
-        const void* fs_ptr = ID3D10Blob_GetBufferPointer(fs_blob);
-        SIZE_T fs_length = ID3D10Blob_GetBufferSize(fs_blob);
-        SOKOL_ASSERT(fs_ptr && fs_length > 0);
         hr = ID3D11Device_CreatePixelShader(_sg_d3d11.dev, fs_ptr, fs_length, NULL, &shd->d3d11_fs);
         SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_fs);
 
@@ -826,17 +840,15 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         shd->slot.state = SG_RESOURCESTATE_VALID;
     }
     else {
-        /* compilation errors */
         shd->slot.state = SG_RESOURCESTATE_FAILED;
     }
+    #if defined(SOKOL_D3D11_SHADER_COMPILER)
     if (vs_blob) {
-        ID3D10Blob_Release(vs_blob); vs_blob = NULL;
+        ID3D10Blob_Release(vs_blob); vs_blob = 0;
     }
     if (fs_blob) {
-        ID3D10Blob_Release(fs_blob); fs_blob = NULL;
+        ID3D10Blob_Release(fs_blob); fs_blob = 0;
     }
-    #else
-        /* FIXME: shader byte code */
     #endif
 }
 
