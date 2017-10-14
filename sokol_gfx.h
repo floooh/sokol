@@ -1130,6 +1130,7 @@ extern void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
 
 /* struct setup helper methods (useful for C++) */
 extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format);
+extern sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format);
 extern sg_shader_uniform_desc sg_named_uniform(const char* name, int offset, sg_uniform_type type, int array_count);
 extern sg_shader_image_desc sg_named_image(const char* name, sg_image_type type);
 

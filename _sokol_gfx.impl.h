@@ -1315,6 +1315,15 @@ sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format
     return desc;
 }
 
+sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format) {
+    sg_vertex_attr_desc desc;
+    desc.sem_name = sem_name;
+    desc.sem_index = sem_index;
+    desc.offset = offset;
+    desc.format = format;
+    return desc;
+}
+
 sg_shader_uniform_desc sg_named_uniform(const char* name, int offset, sg_uniform_type type, int array_count) {
     sg_shader_uniform_desc desc;
     desc.name = name;
