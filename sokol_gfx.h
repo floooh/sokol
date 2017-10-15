@@ -42,6 +42,200 @@
     even in release mode:
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+
+
+    sokol_gfx DOES NOT:
+    ===================
+    - create a window or the 3D-API contex/device, you must do this
+      before sokol_gfx is initialized, and pass any required information
+      (like 3D device pointers) to the sokol_gfx initialization call
+
+    - present the rendered frame, how this is done exactly usually depends
+      on how the window and 3D-API context/device was created
+
+    - provide a unified shader language, instead 3D-API-specific shader
+      source-code or shader-bytecode must be provided
+
+    For complete code examples using the various backend 3D-APIs, see:
+
+        https://github.com/floooh/sokol-samples
+
+
+    STEP BY STEP
+    ============
+    --- to initialize sokol_gfx, after creating a window and a 3D-API 
+        context/device, call:
+
+            sg_setup(const sg_desc*) 
+
+    --- create resource objects (at least buffers, shaders and pipelines,
+        and optionally images and passes):
+
+            sg_buffer sg_make_buffer(const sg_buffer_desc*)
+            sg_image sg_make_image(const sg_image_desc*)
+            sg_shader sg_make_shader(const sg_shader_desc*)
+            sg_pipeline sg_make_pipeline(const sg_pipeline_desc*)
+            sg_pass sg_make_pass(const sg_pass_desc*)
+
+    --- start rendering to the default frame buffer with:
+
+            sg_begin_default_pass(const sg_pass_action* actions, int width, int height)
+
+    --- or start rendering to an offscreen framebuffer with:
+
+            sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
+
+    --- fill an sg_draw_state struct with the resource bindings for the next 
+        draw call (one pipeline object, 1..N vertex buffers, 0 or 1
+        index buffer, 0..N image objects to use as textures each on 
+        the vertex-shader- and fragment-shader-stage and then call
+            
+            sg_apply_draw_state(const sg_draw_state* draw_state)
+
+        to update the resource bindings
+
+    --- optionally update shader uniform data with:
+
+            sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+
+    --- kick off a draw call with:
+    
+            sg_draw(int base_element, int num_element, int num_instaces) 
+
+    --- finish the current rendering pass with:
+            
+            sg_end_pass()
+
+    --- when done with the current frame, call
+
+            sg_commit()
+
+    --- at the end of your program, shutdown sokol_gfx with:
+
+            sg_shutdown()
+    
+    --- if you need to destroy resources before sg_shutdown(), call:
+
+            sg_destroy_buffer(sg_buffer buf)
+            sg_destroy_image(sg_image img)
+            sg_destroy_shader(sg_shader shd)
+            sg_destroy_pipeline(sg_pipeline pip)
+            sg_destroy_pass(sg_pass pass)
+
+    --- to set a new viewport rectangle, call
+
+            sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
+
+    --- to set a new scissor rect, call:
+
+            sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left)
+
+        both sg_apply_viewport() and sg_apply_scissor_rect() must be called
+        inside a rendering pass
+        
+        beginning a pass will reset the viewport to the size of the framebuffer used 
+        in the new pass, 
+
+        scissor testing must be enabled in the pipeline object
+
+    --- to update the content of buffer and image resources, call:
+
+            sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+            sg_update_image(sg_image img, const sg_image_content* content)
+        
+        buffers and images to be updated must have been created with 
+        SG_USAGE_DYNAMIC or SG_USAGE_STREAM
+        
+    --- to check for support of optional features:
+        
+            bool sg_query_feature(sg_feature feature)
+
+    --- if you need to call into the underlying 3D-API directly, you must call:
+
+            sg_reset_state_cache()
+
+        ...before calling sokol_gfx functions again
+
+
+    BACKEND-SPECIFIC TOPICS:
+    ========================
+    --- the GL backends need to know about the internal structure of uniform 
+        blocks, and the texture sampler-name and -type:
+
+            typedef struct {
+                float mvp[16];      // model-view-projection matrix
+                float offset0[2];   // some 2D vectors
+                float offset1[2];
+                float offset2[2];
+            } params_t;
+             
+            // uniform block structure and texture image defintion in sg_shader_desc:
+            sg_shader_desc desc = {
+                // uniform block description (size and internal structure)
+                .vs.uniform_blocks[0] = {
+                    .size = sizeof(params_t),
+                    .uniforms = {
+                        [0] = { .name="mvp", .offset=offsetof(params_t, mvp), .type=SG_UNIFORMTYPE_MAT4 },
+                        [1] = { .name="offset0", .offset=offsetof(params_t, offset0), .type=SG_UNIFORMTYPE_VEC2 },
+                        ...
+                    }
+                },
+                // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
+                .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
+                ...
+            };
+
+    --- the Metal and D3D11 backends only need to know the size of uniform blocks, 
+        not their internal member structure, and they only need to know
+        the type of a texture sampler, not its name:
+
+            sg_shader_desc desc = {
+                .vs.uniform_blocks[0].size = sizeof(params_t),
+                .fs.images[0].type = SG_IMAGETYPE_ARRAY,
+                ...
+            };
+
+    --- when creating a pipeline object, GLES2/WebGL need to know the vertex
+        attribute names as used in the vertex shader when describing vertex 
+        layouts:
+
+            sg_pipeline_desc desc = {
+                .vertex_layouts[0] = {
+                    .stride = 28,
+                    .attrs = {
+                        [0] = { .name="position", .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .name="color1", .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                    }
+                }
+            };
+
+    --- on D3D11 you need to provide a semantic name and semantic index in the
+        vertex attribute definition instead (see the D3D11 documentaion on
+        D3D11_INPUT_ELEMENT_DESC for details):
+
+            sg_pipeline_desc desc = {
+                .vertex_layouts[0] = {
+                    .stride = 28,
+                    .attrs = {
+                        [0] = { .sem_name="POSITION", .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .sem_name="COLOR", .sem_index=1, .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                    }
+                }
+            };
+
+    --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute 
+        name or semantic name, since vertex attributes can be bound by their slot index
+        (this is mandatory in Metal, and optional in GL):
+
+            sg_pipeline_desc desc = {
+                .vertex_layouts[0] = {
+                    .stride = 28,
+                    .attrs = {
+                        [0] = { .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                    }
+                }
+            };
 */
 #include <stdint.h>
 #include <stdbool.h>
