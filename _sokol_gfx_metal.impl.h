@@ -988,6 +988,16 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
     return lib;
 }
 
+_SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, int num_bytes) {
+    NSError* err = NULL;
+    dispatch_data_t lib_data = dispatch_data_create(ptr, num_bytes, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
+    id<MTLLibrary> lib = [_sg_mtl_device newLibraryWithData:lib_data error:&err];
+    if (err) {
+        SOKOL_LOG([err.localizedDescription UTF8String]);
+    }
+    return lib;
+}
+
 _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -1024,8 +1034,18 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
     id<MTLLibrary> fs_lib;
     id<MTLFunction> vs_func;
     id<MTLFunction> fs_func;
-    /* common source? */
-    if (desc->source) {
+    if (desc->byte_code) {
+        /* single byte code blob provided */
+        lib = _sg_mtl_library_from_bytecode(desc->byte_code, desc->byte_code_size);
+        if (nil == lib) {
+            shd->slot.state = SG_RESOURCESTATE_FAILED;
+            return;
+        }
+        vs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
+        fs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
+    }
+    else if (desc->source) {
+        /* single source code provided */
         lib = _sg_mtl_compile_library(desc->source);
         if (nil == lib) {
             shd->slot.state = SG_RESOURCESTATE_FAILED;
@@ -1034,20 +1054,31 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         vs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
         fs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
     }
-    else {
-        /* separate sources? */
-        if (desc->vs.source) {
-            vs_lib = _sg_mtl_compile_library(desc->vs.source);
-        }
-        if (desc->fs.source) {
-            fs_lib = _sg_mtl_compile_library(desc->fs.source);
-        }
+    else if (desc->vs.byte_code && desc->fs.byte_code) {
+        /* separate byte code provided */
+        vs_lib = _sg_mtl_library_from_bytecode(desc->vs.byte_code, desc->vs.byte_code_size);
+        fs_lib = _sg_mtl_library_from_bytecode(desc->fs.byte_code, desc->fs.byte_code_size);
         if (nil == vs_lib || nil == fs_lib) {
             shd->slot.state = SG_RESOURCESTATE_FAILED;
             return;
         }
         vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
+    }
+    else if (desc->vs.source && desc->fs.source) {
+        /* separate sources provided */
+        vs_lib = _sg_mtl_compile_library(desc->vs.source);
+        fs_lib = _sg_mtl_compile_library(desc->fs.source);
+        if (nil == vs_lib || nil == fs_lib) {
+            shd->slot.state = SG_RESOURCESTATE_FAILED;
+            return;
+        }
+        vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
+        fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
+    }
+    else {
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     if (nil == vs_func) {
         SOKOL_LOG("vertex shader function not found\n");
@@ -1584,7 +1615,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     }
     SOKOL_ASSERT(_sg_mtl_cmd_encoder);
     SOKOL_ASSERT(_sg_mtl_cur_pipeline && (_sg_mtl_cur_pipeline->slot.id == _sg_mtl_cur_pipeline_id.id));
-    if (SG_CULLMODE_NONE != _sg_mtl_cur_pipeline->index_type) {
+    if (SG_INDEXTYPE_NONE != _sg_mtl_cur_pipeline->index_type) {
         /* indexed rendering */
         SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_indexbuffer_id.id));
         const _sg_buffer* ib = _sg_mtl_cur_indexbuffer;
