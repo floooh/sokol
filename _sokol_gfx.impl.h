@@ -75,6 +75,189 @@ enum {
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
 };
 
+/* validation errors */
+#if defined(SOKOL_DEBUG)
+typedef enum {
+    _SG_VALIDATE_NONE,              /* value 0 is reserved */
+
+    /* buffer creation */
+    _SG_VALIDATE_BUFFERDESC_CANARY,
+    _SG_VALIDATE_BUFFERDESC_SIZE,
+    _SG_VALIDATE_BUFFERDESC_CONTENT,
+
+    /* image creation */
+    _SG_VALIDATE_IMAGEDESC_CANARY,
+    _SG_VALIDATE_IMAGEDESC_WIDTH,
+    _SG_VALIDATE_IMAGEDESC_HEIGHT,
+    _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
+    _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
+    _SG_VALIDATE_IMAGEDESC_CONTENT,
+
+    /* shader creation */
+    _SG_VALIDATE_SHADERDESC_CANARY,
+    _SG_VALIDATE_SHADERDESC_NO_UNIFIED,
+    _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY,
+    _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY,
+    _SG_VALIDATE_SHADERDESC_NO_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
+    _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
+    _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET,
+    _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
+    _SG_VALIDATE_SHADERDESC_IMG_NAME,
+
+    /* pipeline creation */
+    _SG_VALIDATE_PIPELINEDESC_CANARY,
+    _SG_VALIDATE_PIPELINEDESC_SHADER,
+    _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT,
+    _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE,
+    _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW,
+
+    /* pass creation */
+    _SG_VALIDATE_PASSDESC_CANARY,
+    _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_IMAGE,
+    _SG_VALIDATE_PASSDESC_MIPLEVEL,
+    _SG_VALIDATE_PASSDESC_FACE,
+    _SG_VALIDATE_PASSDESC_LAYER,
+    _SG_VALIDATE_PASSDESC_SLICE,
+    _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
+    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
+    _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
+    _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
+
+    /* sg_begin_pass validation */
+    _SG_VALIDATE_BP_INV_IMAGE,
+
+    /* sg_apply_draw_state validation */
+    _SG_VALIDATE_ADS_PIP,
+    _SG_VALIDATE_ADS_INV_PIP,
+    _SG_VALIDATE_ADS_ATT_COUNT,
+    _SG_VALIDATE_ADS_COLOR_FORMAT,
+    _SG_VALIDATE_ADS_DEPTH_FORMAT,
+    _SG_VALIDATE_ADS_SAMPLE_COUNT,
+    _SG_VALIDATE_ADS_VBS,
+    _SG_VALIDATE_ADS_IB,
+    _SG_VALIDATE_ADS_VS_IMGS,
+    _SG_VALIDATE_ADS_VS_IMG_TYPES,
+    _SG_VALIDATE_ADS_FS_IMGS,
+    _SG_VALIDATE_ADS_FS_IMG_TYPES,
+
+    /* sg_apply_uniform_block validation */
+    _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
+    _SG_VALIDATE_AUB_SIZE,
+
+    /* sg_draw validation */
+
+} _sg_validate_error;
+#endif /* SOKOL_DEBUG */
+
+/* return a human readable string for an _sg_validate_error */
+#if defined(SOKOL_DEBUG)
+_SOKOL_PRIVATE const char* _sg_validate_error_string(_sg_validate_error err) {
+    switch (err) {
+        /* buffer creation validation errors */
+        case _SG_VALIDATE_BUFFERDESC_CANARY:        return "sg_buffer_desc not initialized";
+        case _SG_VALIDATE_BUFFERDESC_SIZE:          return "sg_buffer_desc.size cannot be 0";
+        case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content)";
+
+        /* image creation validation errros */
+        case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
+        case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
+        case _SG_VALIDATE_IMAGEDESC_HEIGHT:             return "sg_image_desc.height must be > 0";
+        case _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT:     return "invalid pixel format for render-target image";
+        case _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT:  return "invalid pixel format for non-render-target image";
+        case _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT:     return "non-render-target images cannot be multisampled";
+        case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA render targets not supported (SG_FEATURE_MSAA_RENDER_TARGETS)";
+        case _SG_VALIDATE_IMAGEDESC_CONTENT:            return "missing or invalid content for immutable image";
+
+        /* shader creation */
+        case _SG_VALIDATE_SHADERDESC_CANARY:            return "sg_shader_desc not initialized";
+        case _SG_VALIDATE_SHADERDESC_NO_UNIFIED:        return "unified vs/fs shader code only allowed on Metal";
+        case _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY:       return "vertex shader entry function name required for unified shader code";
+        case _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY:       return "fragment shader entry function name required for unified shader code";
+        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE:       return "shader byte code is only supported on Metal and D3D11";
+        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE:  return "shader byte code provided, but no size";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_UBS:       return "shader uniform blocks must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:      return "shader images must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:     return "GL backend requires uniform block member declarations";
+        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET:  return "uniform block member overflows uniform block size";
+        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:    return "uniform block member name missing";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE:     return "invalid uniform block member type for array";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:    return "invalid uniform block member array count";
+        case _SG_VALIDATE_SHADERDESC_IMG_NAME:          return "GL backend requires uniform block member names";
+        
+        /* pipeline creation */
+        case _SG_VALIDATE_PIPELINEDESC_CANARY:          return "sg_pipeline_desc not initialized";
+        case _SG_VALIDATE_PIPELINEDESC_SHADER:          return "sg_pipeline_desc.shader missing or invalid";
+        case _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT:       return "no vertex layout in sg_pipeline_desc.vertex_layouts[0]";
+        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS: return "vertex layouts must occupy continuous slots";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4:  return "vertex layout stride must be multiple of 4";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC: return "invalid step_func in sg_pipeline_desc.vertex_layouts";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE: return "invalid step_rate in sg_pipeline_desc.vertex_layouts";
+        case _SG_VALIDATE_PIPELINEDESC_NO_ATTRS:        return "sg_pipeline_desc.vertex_layout has stride but no attrs";
+        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS:   return "vertex attributes must occupy continuous slots";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_NAME:       return "GLES2/WebGL vertex layouts must have attribute names";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS:  return "D3D11 vertex layouts must have attribute semantics (sem_name and sem_index)";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW:   return "vertex attribute offset+sizeof(format) is greater than vertex layout stride";
+
+        /* pass creation */
+        case _SG_VALIDATE_PASSDESC_CANARY:                  return "sg_pass_desc not initialized";
+        case _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS:           return "sg_pass_desc.color_attachments[0] must be valid";
+        case _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS:      return "color attachments must occupy continuous slots";
+        case _SG_VALIDATE_PASSDESC_IMAGE:                   return "pass attachment image is not valid";
+        case _SG_VALIDATE_PASSDESC_MIPLEVEL:                return "pass attachment mip level is bigger than image has mipmaps";
+        case _SG_VALIDATE_PASSDESC_FACE:                    return "pass attachment image is cubemap, but face index is too big";
+        case _SG_VALIDATE_PASSDESC_LAYER:                   return "pass attachment image is array texture, but layer index is too big";
+        case _SG_VALIDATE_PASSDESC_SLICE:                   return "pass attachment image is 3d texture, but slice value is too big";
+        case _SG_VALIDATE_PASSDESC_IMAGE_NO_RT:             return "pass attachment image must be render targets";
+        case _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS:      return "all pass color attachment images must have the same pixel format";
+        case _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images cannot have a depth pixel format";
+        case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image cannot have a color pixel format";
+        case _SG_VALIDATE_PASSDESC_IMAGE_SIZES:             return "all pass attachments must have the same size";
+        case _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS:     return "all pass attachments must have the same sample count";
+
+        /* sg_begin_pass */
+        case _SG_VALIDATE_BP_INV_IMAGE:     return "sg_begin_pass: one or more attachment images are no longer valid";
+
+        /* sg_apply_draw_state */
+        case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object missing";
+        case _SG_VALIDATE_ADS_INV_PIP:      return "sg_apply_draw_state: pipeline object no longer valid";
+        case _SG_VALIDATE_ADS_ATT_COUNT:    return "sg_apply_draw_state: color_attachment_count in pipeline doesn't match number of pass color attachments";
+        case _SG_VALIDATE_ADS_COLOR_FORMAT: return "sg_apply_draw_state: color_format in pipeline doesn't match pass color attachment pixel format";
+        case _SG_VALIDATE_ADS_DEPTH_FORMAT: return "sg_apply_draw_state: depth_format in pipeline doesn't match pass depth attachment pixel format";
+        case _SG_VALIDATE_ADS_SAMPLE_COUNT: return "sg_apply_draw_state: MSAA sample count in pipeline doesn't match render pass attachment sample count";
+        case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of vertex layouts in pipeline";
+        case _SG_VALIDATE_ADS_IB:           return "sg_apply_draw_state: pipeline object defined indexed rendering, but no index buffer provided";
+        case _SG_VALIDATE_ADS_VS_IMGS:      return "sg_apply_draw_state: vertex shader image count doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_VS_IMG_TYPES: return "sg_apply_draw_state: vertex shader image type doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_FS_IMGS:      return "sg_apply_draw_state: fragment shader image count doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_FS_IMG_TYPES: return "sg_apply_draw_state: fragment shader image type doesn't match declaration in sg_shader_desc";
+
+        /* sg_apply_uniform_block */
+        case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
+        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
+
+        default: return "unknown validation error";
+    }
+}
+#endif /* SOKOL_DEBUG */
+
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
 #define _sg_select(val, def) (((val) == 0) ? (def) : (val))
 
