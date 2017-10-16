@@ -1173,8 +1173,8 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rp_desc.inputPrimitiveTopology = _sg_mtl_primitive_topology_class(prim_type);
     rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
-    const int mrt_count = _sg_select(desc->blend.mrt_count, 1);
-    for (int i = 0; i < mrt_count; i++) {
+    const int att_count = _sg_select(desc->blend.color_attachment_count, 1);
+    for (int i = 0; i < att_count; i++) {
         rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_select(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
         rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(_sg_select(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
         rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;

@@ -1161,6 +1161,9 @@ typedef struct {
         .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
         .op_rgb:                SG_BLENDOP_ADD
         .color_write_mask:      SG_COLORMASK_RGBA
+        .color_attchment_count  1
+        .color_format           SG_PIXELFORMAT_RGBA8
+        .depth_format           SG_PIXELFROMAT_DEPTHSTENCIL
         .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
     .rasterizer:
         .scissor_test_enabled:          false
@@ -1168,7 +1171,6 @@ typedef struct {
         .cull_mode:                     SG_CULLMODE_NONE
         .face_winding:                  SG_FACEWINDING_CW
         .sample_count:                  1
-
 */
 typedef struct {
     const char* name;
@@ -1212,7 +1214,7 @@ typedef struct {
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
     uint8_t color_write_mask;
-    int mrt_count;
+    int color_attachment_count;
     sg_pixel_format color_format;
     sg_pixel_format depth_format;    
     float blend_color[4];
