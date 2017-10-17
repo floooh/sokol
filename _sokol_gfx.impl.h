@@ -586,7 +586,10 @@ typedef enum {
     _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
     _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
     _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
+    _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
+    _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT,
     _SG_VALIDATE_IMAGEDESC_CONTENT,
+    _SG_VALIDATE_IMAGEDESC_NO_CONTENT,
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
@@ -663,7 +666,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_BUFFERDESC_CANARY:        return "sg_buffer_desc not initialized";
         case _SG_VALIDATE_BUFFERDESC_SIZE:          return "sg_buffer_desc.size cannot be 0";
         case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content)";
-        case _SG_VALIDATE_BUFFERDESC_NO_CONTENT:    return "dynamic/stream buffers cannot be initialized with content";
+        case _SG_VALIDATE_BUFFERDESC_NO_CONTENT:    return "dynamic/stream usage buffers cannot be initialized with content";
 
         /* image creation validation errros */
         case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
@@ -673,7 +676,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT:  return "invalid pixel format for non-render-target image";
         case _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT:     return "non-render-target images cannot be multisampled";
         case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA render targets not supported (SG_FEATURE_MSAA_RENDER_TARGETS)";
+        case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
+        case _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT:      return "render target images cannot be initialized with content";
         case _SG_VALIDATE_IMAGEDESC_CONTENT:            return "missing or invalid content for immutable image";
+        case _SG_VALIDATE_IMAGEDESC_NO_CONTENT:         return "dynamic/stream usage images cannot be initialized with content";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:            return "sg_shader_desc not initialized";
@@ -795,42 +801,54 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->type >= 0) && (desc->type < _SG_IMAGETYPE_NUM));
-    SOKOL_ASSERT((desc->width > 0) && (desc->height > 0));
-    SOKOL_ASSERT((desc->num_mipmaps <= SG_MAX_MIPMAPS));
-    SOKOL_ASSERT((desc->usage >= 0) && (desc->usage < _SG_USAGE_NUM));
-    SOKOL_ASSERT((desc->pixel_format >= 0) && (desc->pixel_format < _SG_PIXELFORMAT_NUM));
-    SOKOL_ASSERT(desc->sample_count >= 0);
-    SOKOL_ASSERT((desc->min_filter >= 0) && (desc->min_filter < _SG_FILTER_NUM));
-    SOKOL_ASSERT((desc->mag_filter >= 0) && (desc->mag_filter < _SG_FILTER_NUM));
-    SOKOL_ASSERT((desc->wrap_u >= 0) && (desc->wrap_u < _SG_WRAP_NUM));
-    SOKOL_ASSERT((desc->wrap_v >= 0) && (desc->wrap_v < _SG_WRAP_NUM));
-    SOKOL_ASSERT((desc->wrap_w >= 0) && (desc->wrap_w < _SG_WRAP_NUM));
-    #if SOKOL_DEBUG
-    if (desc->render_target) {
-        /* render targets are immutable, but don't have initial data */
-        SOKOL_ASSERT((desc->usage == _SG_USAGE_DEFAULT) || (desc->usage == SG_USAGE_IMMUTABLE));
-        SOKOL_ASSERT((desc->pixel_format == _SG_PIXELFORMAT_DEFAULT) || 
-                     _sg_is_valid_rendertarget_color_format(desc->pixel_format) || 
-                     _sg_is_valid_rendertarget_depth_format(desc->pixel_format));
-        SOKOL_ASSERT((0 == desc->content.subimage[0][0].ptr) && (0 == desc->content.subimage[0][0].size));
-        if (_sg_is_valid_rendertarget_depth_format(desc->pixel_format)) {
-            SOKOL_ASSERT((desc->type==_SG_IMAGETYPE_DEFAULT)||(desc->type==SG_IMAGETYPE_2D));
-            SOKOL_ASSERT((desc->num_mipmaps==0)||(desc->num_mipmaps==1));
+_SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(desc);
+        _sg_validate_start();
+        SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_IMAGEDESC_CANARY);
+        SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_IMAGEDESC_CANARY);
+        SOKOL_VALIDATE(desc->width > 0, _SG_VALIDATE_IMAGEDESC_WIDTH);
+        SOKOL_VALIDATE(desc->height > 0, _SG_VALIDATE_IMAGEDESC_HEIGHT);
+        const sg_pixel_format fmt = _sg_def(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+        const sg_usage usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
+        if (desc->render_target) {
+            if (desc->sample_count > 1) {
+                SOKOL_VALIDATE(_sg_query_feature(SG_FEATURE_MSAA_RENDER_TARGETS), _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
+            }
+            const bool valid_color_fmt = _sg_is_valid_rendertarget_color_format(fmt);
+            const bool valid_depth_fmt = _sg_is_valid_rendertarget_depth_format(fmt);
+            SOKOL_VALIDATE(valid_color_fmt || valid_depth_fmt, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
+            SOKOL_VALIDATE(usage == SG_USAGE_IMMUTABLE, _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
+            SOKOL_VALIDATE(desc->content.subimage[0][0].ptr==0, _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT);
         }
-    }
-    else if (_sg_def(desc->usage, SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
-        /* immutable images must have initial content (except render targets) */
-        const int num_faces = _sg_def(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
-        for (int face_index = 0; face_index < num_faces; face_index++) {
-            for (int mip_index = 0; mip_index < _sg_def(desc->num_mipmaps, 1); mip_index++) {
-                SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].ptr);
-                SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].size > 0);
+        else {
+            SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
+            const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
+            SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
+            if (usage == SG_USAGE_IMMUTABLE) {
+                const int num_faces = _sg_def(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
+                const int num_mips = _sg_def(desc->num_mipmaps, 1);
+                for (int face_index = 0; face_index < num_faces; face_index++) {
+                    for (int mip_index = 0; mip_index < num_mips; mip_index++) {
+                        const bool has_data = desc->content.subimage[face_index][mip_index].ptr;
+                        const bool has_size = desc->content.subimage[face_index][mip_index].size > 0;
+                        SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDESC_CONTENT);
+                    }
+                }
+            }
+            else {
+                for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
+                    for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
+                        const bool no_data = 0 == desc->content.subimage[face_index][mip_index].ptr;
+                        const bool no_size = 0 == desc->content.subimage[face_index][mip_index].size;
+                        SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_NO_CONTENT);
+                    }
+                }
             }
         }
-    }
+        return _sg_validate_success();
     #endif
 }
 
@@ -1250,11 +1268,14 @@ void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
 
 void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg_validate_image_desc(desc);
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_image(img, desc);
+    if (_sg_validate_image_desc(desc)) {
+        _sg_create_image(img, desc);
+    }
+    else {
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+    }
     SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
