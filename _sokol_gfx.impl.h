@@ -832,7 +832,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                 const int num_mips = _sg_def(desc->num_mipmaps, 1);
                 for (int face_index = 0; face_index < num_faces; face_index++) {
                     for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                        const bool has_data = desc->content.subimage[face_index][mip_index].ptr;
+                        const bool has_data = desc->content.subimage[face_index][mip_index].ptr != 0;
                         const bool has_size = desc->content.subimage[face_index][mip_index].size > 0;
                         SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDESC_CONTENT);
                     }
@@ -841,7 +841,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             else {
                 for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
                     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
-                        const bool no_data = 0 == desc->content.subimage[face_index][mip_index].ptr;
+                        const bool no_data = 0 == desc->content.subimage[face_index][mip_index].ptr != 0;
                         const bool no_size = 0 == desc->content.subimage[face_index][mip_index].size;
                         SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_NO_CONTENT);
                     }
