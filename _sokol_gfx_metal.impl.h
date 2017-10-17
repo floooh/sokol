@@ -355,11 +355,11 @@ static _sg_mtl_release_item* _sg_mtl_release_queue;
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg_mtl_pool_size = 2 *
-        2 * _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
-        5 * _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
-        4 * _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
-        2 * _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
-        _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
+        2 * _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
+        5 * _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
+        4 * _sg_def(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
+        2 * _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
+        _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     _sg_mtl_pool = [NSMutableArray arrayWithCapacity:_sg_mtl_pool_size];
     NSNull* null = [NSNull null];
     for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
@@ -470,7 +470,7 @@ static _sg_mtl_sampler_cache_item* _sg_mtl_sampler_cache;
 
 /* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    _sg_mtl_sampler_cache_capacity = _sg_select(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg_mtl_sampler_cache_capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
     _sg_mtl_sampler_cache_size = 0;
     const int size = _sg_mtl_sampler_cache_capacity * sizeof(_sg_mtl_sampler_cache_item);
     _sg_mtl_sampler_cache = SOKOL_MALLOC(size);
@@ -498,11 +498,11 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     SOKOL_ASSERT(_sg_mtl_sampler_cache);
     /* sampler state cache is full */
     SOKOL_ASSERT(_sg_mtl_sampler_cache_size < _sg_mtl_sampler_cache_capacity);
-    const sg_filter min_filter = _sg_select(img_desc->min_filter, SG_FILTER_NEAREST);
-    const sg_filter mag_filter = _sg_select(img_desc->mag_filter, SG_FILTER_NEAREST);
-    const sg_wrap wrap_u = _sg_select(img_desc->wrap_u, SG_WRAP_REPEAT);
-    const sg_wrap wrap_v = _sg_select(img_desc->wrap_v, SG_WRAP_REPEAT);
-    const sg_wrap wrap_w = _sg_select(img_desc->wrap_w, SG_WRAP_REPEAT);
+    const sg_filter min_filter = _sg_def(img_desc->min_filter, SG_FILTER_NEAREST);
+    const sg_filter mag_filter = _sg_def(img_desc->mag_filter, SG_FILTER_NEAREST);
+    const sg_wrap wrap_u = _sg_def(img_desc->wrap_u, SG_WRAP_REPEAT);
+    const sg_wrap wrap_v = _sg_def(img_desc->wrap_v, SG_WRAP_REPEAT);
+    const sg_wrap wrap_w = _sg_def(img_desc->wrap_w, SG_WRAP_REPEAT);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
     for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
         _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
@@ -726,7 +726,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_device = CFBridgingRelease(desc->mtl_device);
     _sg_mtl_sem = dispatch_semaphore_create(_SG_MTL_NUM_INFLIGHT_FRAMES);
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
-    _sg_mtl_ub_size = _sg_select(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
     for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = [_sg_mtl_device
             newBufferWithLength:_sg_mtl_ub_size
@@ -780,8 +780,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     buf->size = desc->size;
-    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
-    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
     buf->num_slots = buf->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
     buf->active_slot = 0;
@@ -854,20 +854,20 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_un
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
-    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
+    img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
     img->height = desc->height;
-    img->depth = _sg_select(desc->depth, 1);
-    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
-    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
-    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
-    img->sample_count = _sg_select(desc->sample_count, 1);
-    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
-    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
-    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
-    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
-    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->depth = _sg_def(desc->depth, 1);
+    img->num_mipmaps = _sg_def(desc->num_mipmaps, 1);
+    img->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_def(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_def(desc->sample_count, 1);
+    img->min_filter = _sg_def(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_def(desc->mag_filter, SG_FILTER_NEAREST);
+    img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
     img->upd_frame_index = 0;
     img->num_slots = img->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
     img->active_slot = 0;
@@ -1120,15 +1120,15 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
-    sg_primitive_type prim_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
+    sg_primitive_type prim_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->mtl_prim_type = _sg_mtl_primitive_type(prim_type);
-    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
     pip->mtl_index_size = _sg_mtl_index_size(pip->index_type);
     if (SG_INDEXTYPE_NONE != pip->index_type) {
         pip->mtl_index_type = _sg_mtl_index_type(pip->index_type);
     }
-    pip->mtl_cull_mode = _sg_mtl_cull_mode(_sg_select(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
-    pip->mtl_winding = _sg_mtl_winding(_sg_select(desc->rasterizer.face_winding, SG_FACEWINDING_CW));
+    pip->mtl_cull_mode = _sg_mtl_cull_mode(_sg_def(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
+    pip->mtl_winding = _sg_mtl_winding(_sg_def(desc->rasterizer.face_winding, SG_FACEWINDING_CW));
     pip->mtl_stencil_ref = desc->depth_stencil.stencil_ref;
     for (int i = 0; i < 4; i++) {
         pip->blend_color[i] = desc->blend.blend_color[i];
@@ -1144,8 +1144,8 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         }
         const int mtl_vb_slot = layout_index + SG_MAX_SHADERSTAGE_UBS;
         vtx_desc.layouts[mtl_vb_slot].stride = layout_desc->stride;
-        vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(_sg_select(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX));
-        vtx_desc.layouts[mtl_vb_slot].stepRate = _sg_select(layout_desc->step_rate, 1);
+        vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(_sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX));
+        vtx_desc.layouts[mtl_vb_slot].stepRate = _sg_def(layout_desc->step_rate, 1);
         for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
@@ -1166,24 +1166,24 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rp_desc.vertexFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
     SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_POOL_INDEX);
     rp_desc.fragmentFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
-    rp_desc.sampleCount = _sg_select(desc->rasterizer.sample_count, 1);
+    rp_desc.sampleCount = _sg_def(desc->rasterizer.sample_count, 1);
     rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
     rp_desc.rasterizationEnabled = YES;
     rp_desc.inputPrimitiveTopology = _sg_mtl_primitive_topology_class(prim_type);
-    rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
-    rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_select(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
-    const int att_count = _sg_select(desc->blend.color_attachment_count, 1);
+    rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
+    rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
+    const int att_count = _sg_def(desc->blend.color_attachment_count, 1);
     for (int i = 0; i < att_count; i++) {
-        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_select(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(_sg_select(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(_sg_def(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
         rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
-        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(_sg_select(desc->blend.op_alpha, SG_BLENDOP_ADD));
-        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(_sg_select(desc->blend.op_rgb, SG_BLENDOP_ADD));
-        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
-        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
-        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
-        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(_sg_select(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
+        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(_sg_def(desc->blend.op_alpha, SG_BLENDOP_ADD));
+        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(_sg_def(desc->blend.op_rgb, SG_BLENDOP_ADD));
+        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(_sg_def(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
+        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(_sg_def(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
+        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(_sg_def(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
+        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(_sg_def(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
     }
     NSError* err = NULL;
     id<MTLRenderPipelineState> mtl_rps = [_sg_mtl_device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
@@ -1196,23 +1196,23 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     /* depth-stencil-state */
     MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
-    ds_desc.depthCompareFunction = _sg_mtl_compare_func(_sg_select(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
+    ds_desc.depthCompareFunction = _sg_mtl_compare_func(_sg_def(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
     ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
     if (desc->depth_stencil.stencil_enabled) {
         const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
         ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
-        ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_select(sb->fail_op, SG_STENCILOP_KEEP));
-        ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_select(sb->depth_fail_op, SG_STENCILOP_KEEP));
-        ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_select(sb->pass_op, SG_STENCILOP_KEEP));
-        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_select(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
+        ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_def(sb->fail_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_def(sb->depth_fail_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_def(sb->pass_op, SG_STENCILOP_KEEP));
+        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_def(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
         ds_desc.backFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
         ds_desc.backFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
         const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
         ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
-        ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_select(sf->fail_op, SG_STENCILOP_KEEP));
-        ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_select(sf->depth_fail_op, SG_STENCILOP_KEEP));
-        ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_select(sf->pass_op, SG_STENCILOP_KEEP));
-        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_select(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
+        ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(_sg_def(sf->fail_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(_sg_def(sf->depth_fail_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(_sg_def(sf->pass_op, SG_STENCILOP_KEEP));
+        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(_sg_def(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
         ds_desc.frontFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
         ds_desc.frontFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
     }

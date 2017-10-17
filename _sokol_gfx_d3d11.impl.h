@@ -480,8 +480,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!buf->d3d11_buf);
     buf->size = desc->size;
-    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
-    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
     D3D11_BUFFER_DESC d3d11_desc;
     memset(&d3d11_desc, 0, sizeof(d3d11_desc));
@@ -546,20 +546,20 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(!img->d3d11_srv && !img->d3d11_smp);
     HRESULT hr;
     
-    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
+    img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
     img->height = desc->height;
-    img->depth = _sg_select(desc->depth, 1);
-    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
-    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
-    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
-    img->sample_count = _sg_select(desc->sample_count, 1);
-    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
-    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
-    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
-    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
-    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->depth = _sg_def(desc->depth, 1);
+    img->num_mipmaps = _sg_def(desc->num_mipmaps, 1);
+    img->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_def(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_def(desc->sample_count, 1);
+    img->min_filter = _sg_def(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_def(desc->mag_filter, SG_FILTER_NEAREST);
+    img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
     img->upd_frame_index = 0;
 
     /* special case depth-stencil buffer? */
@@ -887,9 +887,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
-    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
     pip->d3d11_index_format = _sg_d3d11_index_format(pip->index_type);
-    pip->d3d11_topology = _sg_d3d11_primitive_topology(_sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES));
+    pip->d3d11_topology = _sg_d3d11_primitive_topology(_sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES));
     for (int i = 0; i < 4; i++) {
         pip->blend_color[i] = desc->blend.blend_color[i];
     }
@@ -917,10 +917,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             d3d11_comp->Format = _sg_d3d11_vertex_format(attr_desc->format);
             d3d11_comp->InputSlot = layout_index;
             d3d11_comp->AlignedByteOffset = attr_desc->offset;
-            const sg_vertex_step step_func = _sg_select(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+            const sg_vertex_step step_func = _sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
             d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
             if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
-                d3d11_comp->InstanceDataStepRate = _sg_select(layout_desc->step_rate, 1);
+                d3d11_comp->InstanceDataStepRate = _sg_def(layout_desc->step_rate, 1);
             }
         }
     }
@@ -936,14 +936,14 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     D3D11_RASTERIZER_DESC rs_desc;
     memset(&rs_desc, 0, sizeof(rs_desc));
     rs_desc.FillMode = D3D11_FILL_SOLID;
-    rs_desc.CullMode = _sg_d3d11_cull_mode(_sg_select(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
-    rs_desc.FrontCounterClockwise = _sg_select(desc->rasterizer.face_winding, SG_FACEWINDING_CW) == SG_FACEWINDING_CCW;
+    rs_desc.CullMode = _sg_d3d11_cull_mode(_sg_def(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
+    rs_desc.FrontCounterClockwise = _sg_def(desc->rasterizer.face_winding, SG_FACEWINDING_CW) == SG_FACEWINDING_CCW;
     rs_desc.DepthBias = 0;
     rs_desc.DepthBiasClamp = 0.0f;
     rs_desc.SlopeScaledDepthBias = 0.0f;
     rs_desc.DepthClipEnable = TRUE;
     rs_desc.ScissorEnable = desc->rasterizer.scissor_test_enabled;
-    rs_desc.MultisampleEnable = _sg_select(desc->rasterizer.sample_count, 1) > 1;
+    rs_desc.MultisampleEnable = _sg_def(desc->rasterizer.sample_count, 1) > 1;
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = ID3D11Device_CreateRasterizerState(_sg_d3d11.dev, &rs_desc, &pip->d3d11_rs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_rs);
@@ -953,20 +953,20 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     memset(&dss_desc, 0, sizeof(dss_desc));
     dss_desc.DepthEnable = TRUE;
     dss_desc.DepthWriteMask = desc->depth_stencil.depth_write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-    dss_desc.DepthFunc = _sg_d3d11_compare_func(_sg_select(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
+    dss_desc.DepthFunc = _sg_d3d11_compare_func(_sg_def(desc->depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS));
     dss_desc.StencilEnable = desc->depth_stencil.stencil_enabled;
     dss_desc.StencilReadMask = desc->depth_stencil.stencil_read_mask;
     dss_desc.StencilWriteMask = desc->depth_stencil.stencil_write_mask;
     const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
-    dss_desc.FrontFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_select(sf->fail_op, SG_STENCILOP_KEEP));
-    dss_desc.FrontFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_select(sf->depth_fail_op, SG_STENCILOP_KEEP));
-    dss_desc.FrontFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_select(sf->pass_op, SG_STENCILOP_KEEP));
-    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(_sg_select(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
+    dss_desc.FrontFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_def(sf->fail_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_def(sf->depth_fail_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_def(sf->pass_op, SG_STENCILOP_KEEP));
+    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(_sg_def(sf->compare_func, SG_COMPAREFUNC_ALWAYS));
     const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
-    dss_desc.BackFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_select(sb->fail_op, SG_STENCILOP_KEEP));
-    dss_desc.BackFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_select(sb->depth_fail_op, SG_STENCILOP_KEEP));
-    dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_select(sb->pass_op, SG_STENCILOP_KEEP));
-    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(_sg_select(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
+    dss_desc.BackFace.StencilFailOp = _sg_d3d11_stencil_op(_sg_def(sb->fail_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilDepthFailOp = _sg_d3d11_stencil_op(_sg_def(sb->depth_fail_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(_sg_def(sb->pass_op, SG_STENCILOP_KEEP));
+    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(_sg_def(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
     hr = ID3D11Device_CreateDepthStencilState(_sg_d3d11.dev, &dss_desc, &pip->d3d11_dss);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_dss);
     
@@ -976,13 +976,13 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     bs_desc.AlphaToCoverageEnable = desc->rasterizer.alpha_to_coverage_enabled;
     bs_desc.IndependentBlendEnable = FALSE;
     bs_desc.RenderTarget[0].BlendEnable = desc->blend.enabled;
-    bs_desc.RenderTarget[0].SrcBlend = _sg_d3d11_blend_factor(_sg_select(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
-    bs_desc.RenderTarget[0].DestBlend = _sg_d3d11_blend_factor(_sg_select(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
-    bs_desc.RenderTarget[0].BlendOp = _sg_d3d11_blend_op(_sg_select(desc->blend.op_rgb, SG_BLENDOP_ADD));
-    bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
-    bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(_sg_select(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
-    bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(_sg_select(desc->blend.op_alpha, SG_BLENDOP_ADD));
-    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(_sg_select((sg_color_mask)desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+    bs_desc.RenderTarget[0].SrcBlend = _sg_d3d11_blend_factor(_sg_def(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
+    bs_desc.RenderTarget[0].DestBlend = _sg_d3d11_blend_factor(_sg_def(desc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO));
+    bs_desc.RenderTarget[0].BlendOp = _sg_d3d11_blend_op(_sg_def(desc->blend.op_rgb, SG_BLENDOP_ADD));
+    bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(_sg_def(desc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE));
+    bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(_sg_def(desc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO));
+    bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(_sg_def(desc->blend.op_alpha, SG_BLENDOP_ADD));
+    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(_sg_def((sg_color_mask)desc->blend.color_write_mask, SG_COLORMASK_RGBA));
     hr = ID3D11Device_CreateBlendState(_sg_d3d11.dev, &bs_desc, &pip->d3d11_bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_bs);
 

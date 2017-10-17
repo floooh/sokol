@@ -780,8 +780,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
-    buf->type = _sg_select(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
-    buf->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
+    buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
     buf->num_slots = buf->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
     buf->active_slot = 0;
@@ -792,7 +792,8 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
         glGenBuffers(1, &gl_buf);
         glBindBuffer(gl_target, gl_buf);
         glBufferData(gl_target, buf->size, 0, gl_usage);
-        if (desc->content) {
+        if (buf->usage == SG_USAGE_IMMUTABLE) {
+            SOKOL_ASSERT(desc->content);
             glBufferSubData(gl_target, 0, buf->size, desc->content);
         }
         buf->gl_buf[slot] = gl_buf;
@@ -836,20 +837,20 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
-    img->type = _sg_select(desc->type, SG_IMAGETYPE_2D);
+    img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
     img->height = desc->height;
-    img->depth = _sg_select(desc->depth, 1);
-    img->num_mipmaps = _sg_select(desc->num_mipmaps, 1);
-    img->usage = _sg_select(desc->usage, SG_USAGE_IMMUTABLE);
-    img->pixel_format = _sg_select(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
-    img->sample_count = _sg_select(desc->sample_count, 1);
-    img->min_filter = _sg_select(desc->min_filter, SG_FILTER_NEAREST);
-    img->mag_filter = _sg_select(desc->mag_filter, SG_FILTER_NEAREST);
-    img->wrap_u = _sg_select(desc->wrap_u, SG_WRAP_REPEAT);
-    img->wrap_v = _sg_select(desc->wrap_v, SG_WRAP_REPEAT);
-    img->wrap_w = _sg_select(desc->wrap_w, SG_WRAP_REPEAT);
+    img->depth = _sg_def(desc->depth, 1);
+    img->num_mipmaps = _sg_def(desc->num_mipmaps, 1);
+    img->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
+    img->pixel_format = _sg_def(desc->pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->sample_count = _sg_def(desc->sample_count, 1);
+    img->min_filter = _sg_def(desc->min_filter, SG_FILTER_NEAREST);
+    img->mag_filter = _sg_def(desc->mag_filter, SG_FILTER_NEAREST);
+    img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
+    img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
+    img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
     img->upd_frame_index = 0;
 
     /* check if texture format is support */
@@ -1095,7 +1096,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
                 _sg_uniform* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
                 u->offset = u_desc->offset;
-                u->count = _sg_select(u_desc->array_count, 1);
+                u->count = _sg_def(u_desc->array_count, 1);
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -1150,16 +1151,16 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_load_stencil(const sg_stencil_state* src, sg_stencil_state* dst) {
-    dst->fail_op = _sg_select(src->fail_op, SG_STENCILOP_KEEP);
-    dst->depth_fail_op = _sg_select(src->depth_fail_op, SG_STENCILOP_KEEP);
-    dst->pass_op = _sg_select(src->pass_op, SG_STENCILOP_KEEP);
-    dst->compare_func = _sg_select(src->compare_func, SG_COMPAREFUNC_ALWAYS);
+    dst->fail_op = _sg_def(src->fail_op, SG_STENCILOP_KEEP);
+    dst->depth_fail_op = _sg_def(src->depth_fail_op, SG_STENCILOP_KEEP);
+    dst->pass_op = _sg_def(src->pass_op, SG_STENCILOP_KEEP);
+    dst->compare_func = _sg_def(src->compare_func, SG_COMPAREFUNC_ALWAYS);
 }
 
 _SOKOL_PRIVATE void _sg_gl_load_depth_stencil(const sg_depth_stencil_state* src, sg_depth_stencil_state* dst) {
     _sg_gl_load_stencil(&src->stencil_front, &dst->stencil_front);
     _sg_gl_load_stencil(&src->stencil_back, &dst->stencil_back);
-    dst->depth_compare_func = _sg_select(src->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
+    dst->depth_compare_func = _sg_def(src->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
     dst->depth_write_enabled = src->depth_write_enabled;
     dst->stencil_enabled = src->stencil_enabled;
     dst->stencil_read_mask = src->stencil_read_mask;
@@ -1169,17 +1170,17 @@ _SOKOL_PRIVATE void _sg_gl_load_depth_stencil(const sg_depth_stencil_state* src,
 
 _SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state* dst) {
     dst->enabled = src->enabled;
-    dst->src_factor_rgb = _sg_select(src->src_factor_rgb, SG_BLENDFACTOR_ONE);
-    dst->dst_factor_rgb = _sg_select(src->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
-    dst->op_rgb = _sg_select(src->op_rgb, SG_BLENDOP_ADD);
-    dst->src_factor_alpha = _sg_select(src->src_factor_alpha, SG_BLENDFACTOR_ONE);
-    dst->dst_factor_alpha = _sg_select(src->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
-    dst->op_alpha = _sg_select(src->op_alpha, SG_BLENDOP_ADD);
+    dst->src_factor_rgb = _sg_def(src->src_factor_rgb, SG_BLENDFACTOR_ONE);
+    dst->dst_factor_rgb = _sg_def(src->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+    dst->op_rgb = _sg_def(src->op_rgb, SG_BLENDOP_ADD);
+    dst->src_factor_alpha = _sg_def(src->src_factor_alpha, SG_BLENDFACTOR_ONE);
+    dst->dst_factor_alpha = _sg_def(src->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+    dst->op_alpha = _sg_def(src->op_alpha, SG_BLENDOP_ADD);
     if (src->color_write_mask == SG_COLORMASK_NONE) {
         dst->color_write_mask = 0;
     }
     else {
-        dst->color_write_mask = _sg_select((sg_color_mask)src->color_write_mask, SG_COLORMASK_RGBA);
+        dst->color_write_mask = _sg_def((sg_color_mask)src->color_write_mask, SG_COLORMASK_RGBA);
     }
     for (int i = 0; i < 4; i++) {
         dst->blend_color[i] = src->blend_color[i];
@@ -1189,9 +1190,9 @@ _SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state*
 _SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_rasterizer_state* dst) {
     dst->scissor_test_enabled = src->scissor_test_enabled;
     dst->alpha_to_coverage_enabled = src->alpha_to_coverage_enabled;
-    dst->cull_mode = _sg_select(src->cull_mode, SG_CULLMODE_NONE);
-    dst->face_winding = _sg_select(src->face_winding, SG_FACEWINDING_CW);
-    dst->sample_count = _sg_select(src->sample_count, 1);
+    dst->cull_mode = _sg_def(src->cull_mode, SG_CULLMODE_NONE);
+    dst->face_winding = _sg_def(src->face_winding, SG_FACEWINDING_CW);
+    dst->sample_count = _sg_def(src->sample_count, 1);
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
@@ -1202,8 +1203,8 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     SOKOL_ASSERT(shd->gl_prog);
     pip->shader = shd;
     pip->shader_id = desc->shader;
-    pip->primitive_type = _sg_select(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
-    pip->index_type = _sg_select(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->primitive_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
+    pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
     _sg_gl_load_depth_stencil(&desc->depth_stencil, &pip->depth_stencil);
     _sg_gl_load_blend(&desc->blend, &pip->blend);
     _sg_gl_load_rasterizer(&desc->rasterizer, &pip->rast);
@@ -1217,8 +1218,8 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (layout_desc->stride == 0) {
             break;
         }
-        const sg_vertex_step step_func = _sg_select(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
-        const int step_rate = _sg_select(layout_desc->step_rate, 1);
+        const sg_vertex_step step_func = _sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+        const int step_rate = _sg_def(layout_desc->step_rate, 1);
         for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {

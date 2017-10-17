@@ -14,6 +14,9 @@
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
+#ifndef SOKOL_VALIDATE
+    #define SOKOL_VALIDATE(cond, err) _sg_validate(cond, err)
+#endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
@@ -75,191 +78,8 @@ enum {
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
 };
 
-/* validation errors */
-#if defined(SOKOL_DEBUG)
-typedef enum {
-    _SG_VALIDATE_NONE,              /* value 0 is reserved */
-
-    /* buffer creation */
-    _SG_VALIDATE_BUFFERDESC_CANARY,
-    _SG_VALIDATE_BUFFERDESC_SIZE,
-    _SG_VALIDATE_BUFFERDESC_CONTENT,
-
-    /* image creation */
-    _SG_VALIDATE_IMAGEDESC_CANARY,
-    _SG_VALIDATE_IMAGEDESC_WIDTH,
-    _SG_VALIDATE_IMAGEDESC_HEIGHT,
-    _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT,
-    _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
-    _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
-    _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
-    _SG_VALIDATE_IMAGEDESC_CONTENT,
-
-    /* shader creation */
-    _SG_VALIDATE_SHADERDESC_CANARY,
-    _SG_VALIDATE_SHADERDESC_NO_UNIFIED,
-    _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY,
-    _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY,
-    _SG_VALIDATE_SHADERDESC_NO_BYTECODE,
-    _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
-    _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
-    _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
-    _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
-    _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET,
-    _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
-    _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE,
-    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
-    _SG_VALIDATE_SHADERDESC_IMG_NAME,
-
-    /* pipeline creation */
-    _SG_VALIDATE_PIPELINEDESC_CANARY,
-    _SG_VALIDATE_PIPELINEDESC_SHADER,
-    _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT,
-    _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE,
-    _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
-    _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS,
-    _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
-    _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
-    _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW,
-
-    /* pass creation */
-    _SG_VALIDATE_PASSDESC_CANARY,
-    _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS,
-    _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS,
-    _SG_VALIDATE_PASSDESC_IMAGE,
-    _SG_VALIDATE_PASSDESC_MIPLEVEL,
-    _SG_VALIDATE_PASSDESC_FACE,
-    _SG_VALIDATE_PASSDESC_LAYER,
-    _SG_VALIDATE_PASSDESC_SLICE,
-    _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
-    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
-    _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT,
-    _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
-    _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
-    _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
-
-    /* sg_begin_pass validation */
-    _SG_VALIDATE_BP_INV_IMAGE,
-
-    /* sg_apply_draw_state validation */
-    _SG_VALIDATE_ADS_PIP,
-    _SG_VALIDATE_ADS_INV_PIP,
-    _SG_VALIDATE_ADS_ATT_COUNT,
-    _SG_VALIDATE_ADS_COLOR_FORMAT,
-    _SG_VALIDATE_ADS_DEPTH_FORMAT,
-    _SG_VALIDATE_ADS_SAMPLE_COUNT,
-    _SG_VALIDATE_ADS_VBS,
-    _SG_VALIDATE_ADS_IB,
-    _SG_VALIDATE_ADS_VS_IMGS,
-    _SG_VALIDATE_ADS_VS_IMG_TYPES,
-    _SG_VALIDATE_ADS_FS_IMGS,
-    _SG_VALIDATE_ADS_FS_IMG_TYPES,
-
-    /* sg_apply_uniform_block validation */
-    _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
-    _SG_VALIDATE_AUB_SIZE,
-
-    /* sg_draw validation */
-
-} _sg_validate_error;
-#endif /* SOKOL_DEBUG */
-
-/* return a human readable string for an _sg_validate_error */
-#if defined(SOKOL_DEBUG)
-_SOKOL_PRIVATE const char* _sg_validate_error_string(_sg_validate_error err) {
-    switch (err) {
-        /* buffer creation validation errors */
-        case _SG_VALIDATE_BUFFERDESC_CANARY:        return "sg_buffer_desc not initialized";
-        case _SG_VALIDATE_BUFFERDESC_SIZE:          return "sg_buffer_desc.size cannot be 0";
-        case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content)";
-
-        /* image creation validation errros */
-        case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
-        case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
-        case _SG_VALIDATE_IMAGEDESC_HEIGHT:             return "sg_image_desc.height must be > 0";
-        case _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT:     return "invalid pixel format for render-target image";
-        case _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT:  return "invalid pixel format for non-render-target image";
-        case _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT:     return "non-render-target images cannot be multisampled";
-        case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA render targets not supported (SG_FEATURE_MSAA_RENDER_TARGETS)";
-        case _SG_VALIDATE_IMAGEDESC_CONTENT:            return "missing or invalid content for immutable image";
-
-        /* shader creation */
-        case _SG_VALIDATE_SHADERDESC_CANARY:            return "sg_shader_desc not initialized";
-        case _SG_VALIDATE_SHADERDESC_NO_UNIFIED:        return "unified vs/fs shader code only allowed on Metal";
-        case _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY:       return "vertex shader entry function name required for unified shader code";
-        case _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY:       return "fragment shader entry function name required for unified shader code";
-        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE:       return "shader byte code is only supported on Metal and D3D11";
-        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE:  return "shader byte code provided, but no size";
-        case _SG_VALIDATE_SHADERDESC_NO_CONT_UBS:       return "shader uniform blocks must occupy continuous slots";
-        case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:      return "shader images must occupy continuous slots";
-        case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:     return "GL backend requires uniform block member declarations";
-        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET:  return "uniform block member overflows uniform block size";
-        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:    return "uniform block member name missing";
-        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE:     return "invalid uniform block member type for array";
-        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:    return "invalid uniform block member array count";
-        case _SG_VALIDATE_SHADERDESC_IMG_NAME:          return "GL backend requires uniform block member names";
-        
-        /* pipeline creation */
-        case _SG_VALIDATE_PIPELINEDESC_CANARY:          return "sg_pipeline_desc not initialized";
-        case _SG_VALIDATE_PIPELINEDESC_SHADER:          return "sg_pipeline_desc.shader missing or invalid";
-        case _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT:       return "no vertex layout in sg_pipeline_desc.vertex_layouts[0]";
-        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS: return "vertex layouts must occupy continuous slots";
-        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4:  return "vertex layout stride must be multiple of 4";
-        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC: return "invalid step_func in sg_pipeline_desc.vertex_layouts";
-        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE: return "invalid step_rate in sg_pipeline_desc.vertex_layouts";
-        case _SG_VALIDATE_PIPELINEDESC_NO_ATTRS:        return "sg_pipeline_desc.vertex_layout has stride but no attrs";
-        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS:   return "vertex attributes must occupy continuous slots";
-        case _SG_VALIDATE_PIPELINEDESC_ATTR_NAME:       return "GLES2/WebGL vertex layouts must have attribute names";
-        case _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS:  return "D3D11 vertex layouts must have attribute semantics (sem_name and sem_index)";
-        case _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW:   return "vertex attribute offset+sizeof(format) is greater than vertex layout stride";
-
-        /* pass creation */
-        case _SG_VALIDATE_PASSDESC_CANARY:                  return "sg_pass_desc not initialized";
-        case _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS:           return "sg_pass_desc.color_attachments[0] must be valid";
-        case _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS:      return "color attachments must occupy continuous slots";
-        case _SG_VALIDATE_PASSDESC_IMAGE:                   return "pass attachment image is not valid";
-        case _SG_VALIDATE_PASSDESC_MIPLEVEL:                return "pass attachment mip level is bigger than image has mipmaps";
-        case _SG_VALIDATE_PASSDESC_FACE:                    return "pass attachment image is cubemap, but face index is too big";
-        case _SG_VALIDATE_PASSDESC_LAYER:                   return "pass attachment image is array texture, but layer index is too big";
-        case _SG_VALIDATE_PASSDESC_SLICE:                   return "pass attachment image is 3d texture, but slice value is too big";
-        case _SG_VALIDATE_PASSDESC_IMAGE_NO_RT:             return "pass attachment image must be render targets";
-        case _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS:      return "all pass color attachment images must have the same pixel format";
-        case _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images cannot have a depth pixel format";
-        case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image cannot have a color pixel format";
-        case _SG_VALIDATE_PASSDESC_IMAGE_SIZES:             return "all pass attachments must have the same size";
-        case _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS:     return "all pass attachments must have the same sample count";
-
-        /* sg_begin_pass */
-        case _SG_VALIDATE_BP_INV_IMAGE:     return "sg_begin_pass: one or more attachment images are no longer valid";
-
-        /* sg_apply_draw_state */
-        case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object missing";
-        case _SG_VALIDATE_ADS_INV_PIP:      return "sg_apply_draw_state: pipeline object no longer valid";
-        case _SG_VALIDATE_ADS_ATT_COUNT:    return "sg_apply_draw_state: color_attachment_count in pipeline doesn't match number of pass color attachments";
-        case _SG_VALIDATE_ADS_COLOR_FORMAT: return "sg_apply_draw_state: color_format in pipeline doesn't match pass color attachment pixel format";
-        case _SG_VALIDATE_ADS_DEPTH_FORMAT: return "sg_apply_draw_state: depth_format in pipeline doesn't match pass depth attachment pixel format";
-        case _SG_VALIDATE_ADS_SAMPLE_COUNT: return "sg_apply_draw_state: MSAA sample count in pipeline doesn't match render pass attachment sample count";
-        case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of vertex layouts in pipeline";
-        case _SG_VALIDATE_ADS_IB:           return "sg_apply_draw_state: pipeline object defined indexed rendering, but no index buffer provided";
-        case _SG_VALIDATE_ADS_VS_IMGS:      return "sg_apply_draw_state: vertex shader image count doesn't match declaration in sg_shader_desc";
-        case _SG_VALIDATE_ADS_VS_IMG_TYPES: return "sg_apply_draw_state: vertex shader image type doesn't match declaration in sg_shader_desc";
-        case _SG_VALIDATE_ADS_FS_IMGS:      return "sg_apply_draw_state: fragment shader image count doesn't match declaration in sg_shader_desc";
-        case _SG_VALIDATE_ADS_FS_IMG_TYPES: return "sg_apply_draw_state: fragment shader image type doesn't match declaration in sg_shader_desc";
-
-        /* sg_apply_uniform_block */
-        case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
-        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
-
-        default: return "unknown validation error";
-    }
-}
-#endif /* SOKOL_DEBUG */
-
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
-#define _sg_select(val, def) (((val) == 0) ? (def) : (val))
+#define _sg_def(val, def) (((val) == 0) ? (def) : (val))
 
 /*-- helper functions --------------------------------------------------------*/
 
@@ -571,7 +391,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     /* note: the pools here will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->buffer_pool_size >= 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->buffer_pool, _sg_select(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
+    _sg_init_pool(&p->buffer_pool, _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
     p->buffers = (_sg_buffer*) SOKOL_MALLOC(sizeof(_sg_buffer) * p->buffer_pool.size);
     SOKOL_ASSERT(p->buffers);
     for (int i = 0; i < p->buffer_pool.size; i++) {
@@ -579,7 +399,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     }
 
     SOKOL_ASSERT((desc->image_pool_size >= 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->image_pool, _sg_select(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
+    _sg_init_pool(&p->image_pool, _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
     p->images = (_sg_image*) SOKOL_MALLOC(sizeof(_sg_image) * p->image_pool.size);
     SOKOL_ASSERT(p->images);
     for (int i = 0; i < p->image_pool.size; i++) {
@@ -587,7 +407,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     }
 
     SOKOL_ASSERT((desc->shader_pool_size >= 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->shader_pool, _sg_select(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
+    _sg_init_pool(&p->shader_pool, _sg_def(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
     p->shaders = (_sg_shader*) SOKOL_MALLOC(sizeof(_sg_shader) * p->shader_pool.size);
     SOKOL_ASSERT(p->shaders);
     for (int i = 0; i < p->shader_pool.size; i++) {
@@ -595,7 +415,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     }
 
     SOKOL_ASSERT((desc->pipeline_pool_size >= 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->pipeline_pool, _sg_select(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
+    _sg_init_pool(&p->pipeline_pool, _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
     p->pipelines = (_sg_pipeline*) SOKOL_MALLOC(sizeof(_sg_pipeline) * p->pipeline_pool.size);
     SOKOL_ASSERT(p->pipelines);
     for (int i = 0; i < p->pipeline_pool.size; i++) {
@@ -603,7 +423,7 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     }
 
     SOKOL_ASSERT((desc->pass_pool_size >= 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->pass_pool, _sg_select(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
+    _sg_init_pool(&p->pass_pool, _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
     p->passes = (_sg_pass*) SOKOL_MALLOC(sizeof(_sg_pass) * p->pass_pool.size);
     SOKOL_ASSERT(p->passes);
     for (int i = 0; i < p->pass_pool.size; i++) {
@@ -747,115 +567,231 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p) {
     }
 }
 
-/*-- public API functions ----------------------------------------------------*/ 
+/*-- validation error codes --------------------------------------------------*/
+#if defined(SOKOL_DEBUG)
+typedef enum {
+    _SG_VALIDATE_NONE,              /* value 0 is reserved */
+
+    /* buffer creation */
+    _SG_VALIDATE_BUFFERDESC_CANARY,
+    _SG_VALIDATE_BUFFERDESC_SIZE,
+    _SG_VALIDATE_BUFFERDESC_CONTENT,
+    _SG_VALIDATE_BUFFERDESC_NO_CONTENT,
+
+    /* image creation */
+    _SG_VALIDATE_IMAGEDESC_CANARY,
+    _SG_VALIDATE_IMAGEDESC_WIDTH,
+    _SG_VALIDATE_IMAGEDESC_HEIGHT,
+    _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
+    _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
+    _SG_VALIDATE_IMAGEDESC_CONTENT,
+
+    /* shader creation */
+    _SG_VALIDATE_SHADERDESC_CANARY,
+    _SG_VALIDATE_SHADERDESC_NO_UNIFIED,
+    _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY,
+    _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY,
+    _SG_VALIDATE_SHADERDESC_NO_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
+    _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
+    _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET,
+    _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
+    _SG_VALIDATE_SHADERDESC_IMG_NAME,
+
+    /* pipeline creation */
+    _SG_VALIDATE_PIPELINEDESC_CANARY,
+    _SG_VALIDATE_PIPELINEDESC_SHADER,
+    _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT,
+    _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE,
+    _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW,
+
+    /* pass creation */
+    _SG_VALIDATE_PASSDESC_CANARY,
+    _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_IMAGE,
+    _SG_VALIDATE_PASSDESC_MIPLEVEL,
+    _SG_VALIDATE_PASSDESC_FACE,
+    _SG_VALIDATE_PASSDESC_LAYER,
+    _SG_VALIDATE_PASSDESC_SLICE,
+    _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
+    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
+    _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
+    _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
+
+    /* sg_begin_pass validation */
+    _SG_VALIDATE_BP_INV_IMAGE,
+
+    /* sg_apply_draw_state validation */
+    _SG_VALIDATE_ADS_PIP,
+    _SG_VALIDATE_ADS_INV_PIP,
+    _SG_VALIDATE_ADS_ATT_COUNT,
+    _SG_VALIDATE_ADS_COLOR_FORMAT,
+    _SG_VALIDATE_ADS_DEPTH_FORMAT,
+    _SG_VALIDATE_ADS_SAMPLE_COUNT,
+    _SG_VALIDATE_ADS_VBS,
+    _SG_VALIDATE_ADS_IB,
+    _SG_VALIDATE_ADS_VS_IMGS,
+    _SG_VALIDATE_ADS_VS_IMG_TYPES,
+    _SG_VALIDATE_ADS_FS_IMGS,
+    _SG_VALIDATE_ADS_FS_IMG_TYPES,
+
+    /* sg_apply_uniform_block validation */
+    _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
+    _SG_VALIDATE_AUB_SIZE,
+} _sg_validate_error;
+
+/* return a human readable string for an _sg_validate_error */
+_SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
+    switch (err) {
+        /* buffer creation validation errors */
+        case _SG_VALIDATE_BUFFERDESC_CANARY:        return "sg_buffer_desc not initialized";
+        case _SG_VALIDATE_BUFFERDESC_SIZE:          return "sg_buffer_desc.size cannot be 0";
+        case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content)";
+        case _SG_VALIDATE_BUFFERDESC_NO_CONTENT:    return "dynamic/stream buffers cannot be initialized with content";
+
+        /* image creation validation errros */
+        case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
+        case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
+        case _SG_VALIDATE_IMAGEDESC_HEIGHT:             return "sg_image_desc.height must be > 0";
+        case _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT:     return "invalid pixel format for render-target image";
+        case _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT:  return "invalid pixel format for non-render-target image";
+        case _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT:     return "non-render-target images cannot be multisampled";
+        case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA render targets not supported (SG_FEATURE_MSAA_RENDER_TARGETS)";
+        case _SG_VALIDATE_IMAGEDESC_CONTENT:            return "missing or invalid content for immutable image";
+
+        /* shader creation */
+        case _SG_VALIDATE_SHADERDESC_CANARY:            return "sg_shader_desc not initialized";
+        case _SG_VALIDATE_SHADERDESC_NO_UNIFIED:        return "unified vs/fs shader code only allowed on Metal";
+        case _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY:       return "vertex shader entry function name required for unified shader code";
+        case _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY:       return "fragment shader entry function name required for unified shader code";
+        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE:       return "shader byte code is only supported on Metal and D3D11";
+        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE:  return "shader byte code provided, but no size";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_UBS:       return "shader uniform blocks must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:      return "shader images must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:     return "GL backend requires uniform block member declarations";
+        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET:  return "uniform block member overflows uniform block size";
+        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:    return "uniform block member name missing";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE:     return "invalid uniform block member type for array";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:    return "invalid uniform block member array count";
+        case _SG_VALIDATE_SHADERDESC_IMG_NAME:          return "GL backend requires uniform block member names";
+        
+        /* pipeline creation */
+        case _SG_VALIDATE_PIPELINEDESC_CANARY:          return "sg_pipeline_desc not initialized";
+        case _SG_VALIDATE_PIPELINEDESC_SHADER:          return "sg_pipeline_desc.shader missing or invalid";
+        case _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT:       return "no vertex layout in sg_pipeline_desc.vertex_layouts[0]";
+        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS: return "vertex layouts must occupy continuous slots";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4:  return "vertex layout stride must be multiple of 4";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC: return "invalid step_func in sg_pipeline_desc.vertex_layouts";
+        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE: return "invalid step_rate in sg_pipeline_desc.vertex_layouts";
+        case _SG_VALIDATE_PIPELINEDESC_NO_ATTRS:        return "sg_pipeline_desc.vertex_layout has stride but no attrs";
+        case _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS:   return "vertex attributes must occupy continuous slots";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_NAME:       return "GLES2/WebGL vertex layouts must have attribute names";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS:  return "D3D11 vertex layouts must have attribute semantics (sem_name and sem_index)";
+        case _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW:   return "vertex attribute offset+sizeof(format) is greater than vertex layout stride";
+
+        /* pass creation */
+        case _SG_VALIDATE_PASSDESC_CANARY:                  return "sg_pass_desc not initialized";
+        case _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS:           return "sg_pass_desc.color_attachments[0] must be valid";
+        case _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS:      return "color attachments must occupy continuous slots";
+        case _SG_VALIDATE_PASSDESC_IMAGE:                   return "pass attachment image is not valid";
+        case _SG_VALIDATE_PASSDESC_MIPLEVEL:                return "pass attachment mip level is bigger than image has mipmaps";
+        case _SG_VALIDATE_PASSDESC_FACE:                    return "pass attachment image is cubemap, but face index is too big";
+        case _SG_VALIDATE_PASSDESC_LAYER:                   return "pass attachment image is array texture, but layer index is too big";
+        case _SG_VALIDATE_PASSDESC_SLICE:                   return "pass attachment image is 3d texture, but slice value is too big";
+        case _SG_VALIDATE_PASSDESC_IMAGE_NO_RT:             return "pass attachment image must be render targets";
+        case _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS:      return "all pass color attachment images must have the same pixel format";
+        case _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images cannot have a depth pixel format";
+        case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image cannot have a color pixel format";
+        case _SG_VALIDATE_PASSDESC_IMAGE_SIZES:             return "all pass attachments must have the same size";
+        case _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS:     return "all pass attachments must have the same sample count";
+
+        /* sg_begin_pass */
+        case _SG_VALIDATE_BP_INV_IMAGE:     return "sg_begin_pass: one or more attachment images are no longer valid";
+
+        /* sg_apply_draw_state */
+        case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object missing";
+        case _SG_VALIDATE_ADS_INV_PIP:      return "sg_apply_draw_state: pipeline object no longer valid";
+        case _SG_VALIDATE_ADS_ATT_COUNT:    return "sg_apply_draw_state: color_attachment_count in pipeline doesn't match number of pass color attachments";
+        case _SG_VALIDATE_ADS_COLOR_FORMAT: return "sg_apply_draw_state: color_format in pipeline doesn't match pass color attachment pixel format";
+        case _SG_VALIDATE_ADS_DEPTH_FORMAT: return "sg_apply_draw_state: depth_format in pipeline doesn't match pass depth attachment pixel format";
+        case _SG_VALIDATE_ADS_SAMPLE_COUNT: return "sg_apply_draw_state: MSAA sample count in pipeline doesn't match render pass attachment sample count";
+        case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of vertex layouts in pipeline";
+        case _SG_VALIDATE_ADS_IB:           return "sg_apply_draw_state: pipeline object defined indexed rendering, but no index buffer provided";
+        case _SG_VALIDATE_ADS_VS_IMGS:      return "sg_apply_draw_state: vertex shader image count doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_VS_IMG_TYPES: return "sg_apply_draw_state: vertex shader image type doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_FS_IMGS:      return "sg_apply_draw_state: fragment shader image count doesn't match declaration in sg_shader_desc";
+        case _SG_VALIDATE_ADS_FS_IMG_TYPES: return "sg_apply_draw_state: fragment shader image type doesn't match declaration in sg_shader_desc";
+
+        /* sg_apply_uniform_block */
+        case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
+        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
+
+        default: return "unknown validation error";
+    }
+}
+#endif /* defined(SOKOL_DEBUG) */
+
+/*-- generic backend state ---------------------------------------------------*/ 
 typedef struct {
     _sg_pools pools;
     bool valid;
     bool next_draw_valid;
+    #if defined(SOKOL_DEBUG)
+    _sg_validate_error validate_error;
+    #endif
 } _sg_state;
 static _sg_state _sg;
 
-void sg_setup(const sg_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    memset(&_sg, 0, sizeof(_sg));
-    _sg_setup_pools(&_sg.pools, desc);
-    _sg.next_draw_valid = false;
-    _sg_setup_backend(desc);
-    _sg.valid = true;
+/*-- validation checks -------------------------------------------------------*/
+#if defined(SOKOL_DEBUG)
+_SOKOL_PRIVATE void _sg_validate_start() {
+    _sg.validate_error = _SG_VALIDATE_NONE;
 }
 
-void sg_shutdown() {
-    _sg_destroy_all_resources(&_sg.pools);
-    _sg_discard_backend();
-    _sg_discard_pools(&_sg.pools);
-    _sg.valid = false;
-}
-
-bool sg_isvalid() {
-    return _sg.valid;
-}
-
-bool sg_query_feature(sg_feature f) {
-    return _sg_query_feature(f);
-}
-
-/*-- allocate resource id ----------------------------------------------------*/
-sg_buffer sg_alloc_buffer() {
-    sg_buffer res;
-    res.id = _sg_pool_alloc_id(&_sg.pools.buffer_pool);
-    if (res.id != SG_INVALID_ID) {
-        _sg_buffer* buf = _sg_buffer_at(&_sg.pools, res.id);
-        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_INITIAL) && (buf->slot.id == SG_INVALID_ID));
-        buf->slot.id = res.id;
-        buf->slot.state = SG_RESOURCESTATE_ALLOC;
+_SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error err) {
+    if (!cond) {
+        _sg.validate_error = err;
+        SOKOL_LOG(_sg_validate_string(err));
     }
-    return res;
 }
 
-sg_image sg_alloc_image() {
-    sg_image res;
-    res.id = _sg_pool_alloc_id(&_sg.pools.image_pool);
-    if (res.id != SG_INVALID_ID) {
-        _sg_image* img = _sg_image_at(&_sg.pools, res.id);
-        SOKOL_ASSERT(img && (img->slot.state == SG_RESOURCESTATE_INITIAL) && (img->slot.id == SG_INVALID_ID));
-        img->slot.id = res.id;
-        img->slot.state = SG_RESOURCESTATE_ALLOC;
-    }
-    return res;
+_SOKOL_PRIVATE bool _sg_validate_success() {
+    return _sg.validate_error == _SG_VALIDATE_NONE;
 }
+#endif
 
-sg_shader sg_alloc_shader() {
-    sg_shader res;
-    res.id = _sg_pool_alloc_id(&_sg.pools.shader_pool);
-    if (res.id != SG_INVALID_ID) {
-        _sg_shader* shd = _sg_shader_at(&_sg.pools, res.id);
-        SOKOL_ASSERT(shd && (shd->slot.state == SG_RESOURCESTATE_INITIAL) && (shd->slot.id == SG_INVALID_ID));
-        shd->slot.id = res.id;
-        shd->slot.state = SG_RESOURCESTATE_ALLOC;
-    }
-    return res;
-}
-
-sg_pipeline sg_alloc_pipeline() {
-    sg_pipeline res;
-    res.id = _sg_pool_alloc_id(&_sg.pools.pipeline_pool);
-    if (res.id != SG_INVALID_ID) {
-        _sg_pipeline* pip = _sg_pipeline_at(&_sg.pools, res.id);
-        SOKOL_ASSERT(pip && (pip->slot.state == SG_RESOURCESTATE_INITIAL) && (pip->slot.id == SG_INVALID_ID));
-        pip->slot.id = res.id;
-        pip->slot.state = SG_RESOURCESTATE_ALLOC;
-    }
-    return res;
-}
-
-sg_pass sg_alloc_pass() {
-    sg_pass res;
-    res.id = _sg_pool_alloc_id(&_sg.pools.pass_pool);
-    if (res.id != SG_INVALID_ID) {
-        _sg_pass* pass = _sg_pass_at(&_sg.pools, res.id);
-        SOKOL_ASSERT(pass && (pass->slot.state == SG_RESOURCESTATE_INITIAL) && (pass->slot.id == SG_INVALID_ID));
-        pass->slot.id = res.id;
-        pass->slot.state = SG_RESOURCESTATE_ALLOC;
-    }
-    return res;
-}
-
-/*-- validate description structs --------------------------------------------*/
-_SOKOL_PRIVATE void _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->size > 0);
-    SOKOL_ASSERT((desc->type>=_SG_BUFFERTYPE_DEFAULT)&&(desc->type<_SG_BUFFERTYPE_NUM));
-    SOKOL_ASSERT((desc->usage>=_SG_USAGE_DEFAULT)&&(desc->usage<_SG_USAGE_NUM));
-    #ifdef SOKOL_DEBUG
-    if (_sg_select(desc->usage,SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
-        /* immutable: must provide entire content */
-        SOKOL_ASSERT(0 != desc->content);
-    }
-    else {
-        /* dynamic/streaming: do not provide initial data */
-        SOKOL_ASSERT(0 == desc->content);
-    }
+_SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(desc);
+        _sg_validate_start();
+        SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
+        SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
+        SOKOL_VALIDATE(desc->size > 0, _SG_VALIDATE_BUFFERDESC_SIZE);
+        if (_sg_def(desc->usage, SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
+            SOKOL_VALIDATE(0 != desc->content, _SG_VALIDATE_BUFFERDESC_CONTENT);
+        }
+        else {
+            SOKOL_VALIDATE(0 == desc->content, _SG_VALIDATE_BUFFERDESC_NO_CONTENT);
+        }
+        return _sg_validate_success();
     #endif
 }
 
@@ -885,11 +821,11 @@ _SOKOL_PRIVATE void _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_ASSERT((desc->num_mipmaps==0)||(desc->num_mipmaps==1));
         }
     }
-    else if (_sg_select(desc->usage, SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
+    else if (_sg_def(desc->usage, SG_USAGE_IMMUTABLE) == SG_USAGE_IMMUTABLE) {
         /* immutable images must have initial content (except render targets) */
-        const int num_faces = _sg_select(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
+        const int num_faces = _sg_def(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
         for (int face_index = 0; face_index < num_faces; face_index++) {
-            for (int mip_index = 0; mip_index < _sg_select(desc->num_mipmaps, 1); mip_index++) {
+            for (int mip_index = 0; mip_index < _sg_def(desc->num_mipmaps, 1); mip_index++) {
                 SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].ptr);
                 SOKOL_ASSERT(desc->content.subimage[face_index][mip_index].size > 0);
             }
@@ -972,7 +908,7 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
                         #ifdef SOKOL_GLES2
                         SOKOL_ASSERT(u_desc->name);
                         #endif
-                        int array_count = _sg_select(u_desc->array_count, 1);
+                        int array_count = _sg_def(u_desc->array_count, 1);
                         SOKOL_ASSERT(array_count >= 1);
                         SOKOL_ASSERT(u_desc->offset >= 0);
                         SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, array_count)) <= ub_desc->size);
@@ -1211,14 +1147,104 @@ void _sg_validate_update_image(_sg_image* img, const sg_image_content* data) {
     #endif
 }
 
+/*-- public API functions ----------------------------------------------------*/
+void sg_setup(const sg_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
+    memset(&_sg, 0, sizeof(_sg));
+    _sg_setup_pools(&_sg.pools, desc);
+    _sg.next_draw_valid = false;
+    _sg_setup_backend(desc);
+    _sg.valid = true;
+}
+
+void sg_shutdown() {
+    _sg_destroy_all_resources(&_sg.pools);
+    _sg_discard_backend();
+    _sg_discard_pools(&_sg.pools);
+    _sg.valid = false;
+}
+
+bool sg_isvalid() {
+    return _sg.valid;
+}
+
+bool sg_query_feature(sg_feature f) {
+    return _sg_query_feature(f);
+}
+
+/*-- allocate resource id ----------------------------------------------------*/
+sg_buffer sg_alloc_buffer() {
+    sg_buffer res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.buffer_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_buffer* buf = _sg_buffer_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_INITIAL) && (buf->slot.id == SG_INVALID_ID));
+        buf->slot.id = res.id;
+        buf->slot.state = SG_RESOURCESTATE_ALLOC;
+    }
+    return res;
+}
+
+sg_image sg_alloc_image() {
+    sg_image res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.image_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_image* img = _sg_image_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(img && (img->slot.state == SG_RESOURCESTATE_INITIAL) && (img->slot.id == SG_INVALID_ID));
+        img->slot.id = res.id;
+        img->slot.state = SG_RESOURCESTATE_ALLOC;
+    }
+    return res;
+}
+
+sg_shader sg_alloc_shader() {
+    sg_shader res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.shader_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_shader* shd = _sg_shader_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(shd && (shd->slot.state == SG_RESOURCESTATE_INITIAL) && (shd->slot.id == SG_INVALID_ID));
+        shd->slot.id = res.id;
+        shd->slot.state = SG_RESOURCESTATE_ALLOC;
+    }
+    return res;
+}
+
+sg_pipeline sg_alloc_pipeline() {
+    sg_pipeline res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.pipeline_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_pipeline* pip = _sg_pipeline_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(pip && (pip->slot.state == SG_RESOURCESTATE_INITIAL) && (pip->slot.id == SG_INVALID_ID));
+        pip->slot.id = res.id;
+        pip->slot.state = SG_RESOURCESTATE_ALLOC;
+    }
+    return res;
+}
+
+sg_pass sg_alloc_pass() {
+    sg_pass res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.pass_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_pass* pass = _sg_pass_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(pass && (pass->slot.state == SG_RESOURCESTATE_INITIAL) && (pass->slot.id == SG_INVALID_ID));
+        pass->slot.id = res.id;
+        pass->slot.state = SG_RESOURCESTATE_ALLOC;
+    }
+    return res;
+}
+
 /*-- initialize an allocated resource ----------------------------------------*/
 void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg_validate_buffer_desc(desc);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_buffer(buf, desc);
+    if (_sg_validate_buffer_desc(desc)) {
+        _sg_create_buffer(buf, desc);
+    }
+    else {
+        buf->slot.state = SG_RESOURCESTATE_FAILED;
+    }
     SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
