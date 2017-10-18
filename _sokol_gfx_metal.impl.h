@@ -607,7 +607,6 @@ typedef struct {
 
 typedef struct {
     _sg_slot slot;
-    uint32_t mtl_lib;
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
 } _sg_shader;
 
@@ -1001,7 +1000,6 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, 
 _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(desc->vs.entry && desc->fs.entry);
 
     /* uniform block sizes and image types */
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
@@ -1029,32 +1027,13 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
     }
 
     /* create metal libray objects and lookup entry functions */
-    id<MTLLibrary> lib;
     id<MTLLibrary> vs_lib;
     id<MTLLibrary> fs_lib;
     id<MTLFunction> vs_func;
     id<MTLFunction> fs_func;
-    if (desc->byte_code) {
-        /* single byte code blob provided */
-        lib = _sg_mtl_library_from_bytecode(desc->byte_code, desc->byte_code_size);
-        if (nil == lib) {
-            shd->slot.state = SG_RESOURCESTATE_FAILED;
-            return;
-        }
-        vs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
-        fs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
-    }
-    else if (desc->source) {
-        /* single source code provided */
-        lib = _sg_mtl_compile_library(desc->source);
-        if (nil == lib) {
-            shd->slot.state = SG_RESOURCESTATE_FAILED;
-            return;
-        }
-        vs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
-        fs_func = [lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
-    }
-    else if (desc->vs.byte_code && desc->fs.byte_code) {
+    const char* vs_entry = _sg_def(desc->vs.entry, "_main");
+    const char* fs_entry = _sg_def(desc->fs.entry, "_main");
+    if (desc->vs.byte_code && desc->fs.byte_code) {
         /* separate byte code provided */
         vs_lib = _sg_mtl_library_from_bytecode(desc->vs.byte_code, desc->vs.byte_code_size);
         fs_lib = _sg_mtl_library_from_bytecode(desc->fs.byte_code, desc->fs.byte_code_size);
@@ -1062,8 +1041,8 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
             shd->slot.state = SG_RESOURCESTATE_FAILED;
             return;
         }
-        vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
-        fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
+        vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
+        fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
     }
     else if (desc->vs.source && desc->fs.source) {
         /* separate sources provided */
@@ -1073,25 +1052,24 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
             shd->slot.state = SG_RESOURCESTATE_FAILED;
             return;
         }
-        vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->vs.entry]];
-        fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:desc->fs.entry]];
+        vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
+        fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
     }
     else {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
     if (nil == vs_func) {
-        SOKOL_LOG("vertex shader function not found\n");
+        SOKOL_LOG("vertex shader entry function not found\n");
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
     if (nil == fs_func) {
-        SOKOL_LOG("fragment shader function not found\n");
+        SOKOL_LOG("fragment shader entry function not found\n");
         shd->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
     /* it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index */
-    shd->mtl_lib = _sg_mtl_add_resource(lib);
     shd->stage[SG_SHADERSTAGE_VS].mtl_lib  = _sg_mtl_add_resource(vs_lib);
     shd->stage[SG_SHADERSTAGE_FS].mtl_lib  = _sg_mtl_add_resource(fs_lib);
     shd->stage[SG_SHADERSTAGE_VS].mtl_func = _sg_mtl_add_resource(vs_func);
@@ -1107,7 +1085,6 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
         _sg_mtl_release_resource(_sg_mtl_frame_index, shd->stage[SG_SHADERSTAGE_VS].mtl_lib);
         _sg_mtl_release_resource(_sg_mtl_frame_index, shd->stage[SG_SHADERSTAGE_FS].mtl_func);
         _sg_mtl_release_resource(_sg_mtl_frame_index, shd->stage[SG_SHADERSTAGE_FS].mtl_lib);
-        _sg_mtl_release_resource(_sg_mtl_frame_index, shd->mtl_lib);
     }
     _sg_init_shader(shd);
 }

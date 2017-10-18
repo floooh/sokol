@@ -1105,9 +1105,6 @@ typedef struct {
     uint32_t _start_canary;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
-    const char* source;         /* Metal allow vs/fs in single source */
-    const uint8_t* byte_code;
-    int byte_code_size;
     uint32_t _end_canary;
 } sg_shader_desc;
 

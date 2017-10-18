@@ -858,39 +858,24 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
     #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         /* on GL must have separate sources */
         SOKOL_ASSERT(desc->vs.source && desc->fs.source);
-        SOKOL_ASSERT(!desc->source && !desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);
+        SOKOL_ASSERT(!desc->vs.byte_code && !desc->fs.byte_code);
     #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS)
-        /* if common source provided, must not have any byte code or per-stage source */
-        if (desc->source) {
-            SOKOL_ASSERT(!desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);
-            SOKOL_ASSERT(!desc->vs.source && !desc->fs.source);
-        }
         /* if vs source provided, must not have any byte code or common source, must have fs source */
         if (desc->vs.source) {
-            SOKOL_ASSERT(!desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);
-            SOKOL_ASSERT(!desc->source && desc->fs.source);
+            SOKOL_ASSERT(desc->fs.source && !desc->vs.byte_code && !desc->fs.byte_code);
         }
         /* if fs source provided, must not have any byte code or common source, must have vs source */
         if (desc->fs.source) {
-            SOKOL_ASSERT(!desc->byte_code && !desc->vs.byte_code && !desc->fs.byte_code);
-            SOKOL_ASSERT(!desc->source && desc->vs.source);
-        }
-        /* if common byte code provided, must not have any source, or per-stage byte code */
-        if (desc->byte_code) {
-            SOKOL_ASSERT(!desc->source && !desc->vs.source && !desc->fs.source);
-            SOKOL_ASSERT(!desc->vs.byte_code && !desc->fs.byte_code);
-            SOKOL_ASSERT(desc->byte_code_size > 0);
+            SOKOL_ASSERT(desc->vs.source && !desc->vs.byte_code && !desc->fs.byte_code);
         }
         /* if vs byte code provided, must not have any source or common byte code, must have fs byte code */
         if (desc->vs.byte_code) {
-            SOKOL_ASSERT(!desc->source && !desc->vs.source && !desc->fs.source);
-            SOKOL_ASSERT(!desc->byte_code && desc->fs.byte_code);
+            SOKOL_ASSERT(desc->fs.byte_code && !desc->vs.source && !desc->fs.source);
             SOKOL_ASSERT(desc->vs.byte_code_size > 0);
         }
         /* if fs byte code provided, must not have any source or common byte code, must have vs byte code */
         if (desc->fs.byte_code) {
-            SOKOL_ASSERT(!desc->source && !desc->vs.source && !desc->fs.source);
-            SOKOL_ASSERT(!desc->byte_code && desc->vs.byte_code);
+            SOKOL_ASSERT(desc->vs.byte_code && !desc->vs.source && !desc->fs.source);
             SOKOL_ASSERT(desc->fs.byte_code_size > 0);
         }
     #elif defined(SOKOL_D3D11)
