@@ -593,18 +593,16 @@ typedef enum {
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
-    _SG_VALIDATE_SHADERDESC_NO_UNIFIED,
-    _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY,
-    _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY,
-    _SG_VALIDATE_SHADERDESC_NO_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_SOURCE,
+    _SG_VALIDATE_SHADERDESC_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE,
     _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
     _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
     _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS,
     _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
-    _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET,
     _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
-    _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE,
-    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
+    _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH,
     _SG_VALIDATE_SHADERDESC_IMG_NAME,
 
     /* pipeline creation */
@@ -682,20 +680,18 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_IMAGEDESC_NO_CONTENT:         return "dynamic/stream usage images cannot be initialized with content";
 
         /* shader creation */
-        case _SG_VALIDATE_SHADERDESC_CANARY:            return "sg_shader_desc not initialized";
-        case _SG_VALIDATE_SHADERDESC_NO_UNIFIED:        return "unified vs/fs shader code only allowed on Metal";
-        case _SG_VALIDATE_SHADERDESC_NO_VS_ENTRY:       return "vertex shader entry function name required for unified shader code";
-        case _SG_VALIDATE_SHADERDESC_NO_FS_ENTRY:       return "fragment shader entry function name required for unified shader code";
-        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE:       return "shader byte code is only supported on Metal and D3D11";
-        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE:  return "shader byte code provided, but no size";
-        case _SG_VALIDATE_SHADERDESC_NO_CONT_UBS:       return "shader uniform blocks must occupy continuous slots";
-        case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:      return "shader images must occupy continuous slots";
-        case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:     return "GL backend requires uniform block member declarations";
-        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_OFFSET:  return "uniform block member overflows uniform block size";
-        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:    return "uniform block member name missing";
-        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_TYPE:     return "invalid uniform block member type for array";
-        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:    return "invalid uniform block member array count";
-        case _SG_VALIDATE_SHADERDESC_IMG_NAME:          return "GL backend requires uniform block member names";
+        case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
+        case _SG_VALIDATE_SHADERDESC_SOURCE:                return "shader source code required";
+        case _SG_VALIDATE_SHADERDESC_BYTECODE:              return "shader byte code required";
+        case _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE:    return "shader source or byte code required";
+        case _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE:      return "shader byte code length (in bytes) required";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_UBS:           return "shader uniform blocks must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS:    return "uniform block members must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:         return "GL backend requires uniform block member declarations";
+        case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:        return "uniform block member name missing";
+        case _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH:      return "size of uniform block members doesn't match uniform block size";
+        case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:          return "shader images must occupy continuous slots";
+        case _SG_VALIDATE_SHADERDESC_IMG_NAME:              return "GL backend requires uniform block member names";
         
         /* pipeline creation */
         case _SG_VALIDATE_PIPELINEDESC_CANARY:          return "sg_pipeline_desc not initialized";
@@ -852,96 +848,83 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
-    SOKOL_ASSERT(desc);
-    #ifdef SOKOL_DEBUG
-    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-        /* on GL must have separate sources */
-        SOKOL_ASSERT(desc->vs.source && desc->fs.source);
-        SOKOL_ASSERT(!desc->vs.byte_code && !desc->fs.byte_code);
-    #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS)
-        /* if vs source provided, must not have any byte code or common source, must have fs source */
-        if (desc->vs.source) {
-            SOKOL_ASSERT(desc->fs.source && !desc->vs.byte_code && !desc->fs.byte_code);
-        }
-        /* if fs source provided, must not have any byte code or common source, must have vs source */
-        if (desc->fs.source) {
-            SOKOL_ASSERT(desc->vs.source && !desc->vs.byte_code && !desc->fs.byte_code);
-        }
-        /* if vs byte code provided, must not have any source or common byte code, must have fs byte code */
-        if (desc->vs.byte_code) {
-            SOKOL_ASSERT(desc->fs.byte_code && !desc->vs.source && !desc->fs.source);
-            SOKOL_ASSERT(desc->vs.byte_code_size > 0);
-        }
-        /* if fs byte code provided, must not have any source or common byte code, must have vs byte code */
-        if (desc->fs.byte_code) {
-            SOKOL_ASSERT(desc->vs.byte_code && !desc->vs.source && !desc->fs.source);
-            SOKOL_ASSERT(desc->fs.byte_code_size > 0);
-        }
-    #elif defined(SOKOL_D3D11)
-        /* on D3D11, separate VS/FS sources or bytecode must be provided */
-        #if defined(SOKOL_D3D11_SHADER_COMPILER)
-            SOKOL_ASSERT((desc->vs.source && desc->fs.source) || (desc->vs.byte_code && desc->fs.byte_code));
+_SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(desc);
+        _sg_validate_start();
+        SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
+        SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
+        #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+            /* on GL, must provide shader source code */
+            SOKOL_VALIDATE(desc->vs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
+            SOKOL_VALIDATE(desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
+        #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS) || defined(SOKOL_D3D11_SHADER_COMPILER)
+            /* on Metal or D3D with shader compiler, must provide shader source code or byte code */
+            SOKOL_VALIDATE(desc->vs.source||desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            SOKOL_VALIDATE(desc->fs.source||desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
         #else
-            /* without shader compiler, byte code must be provided */
-            SOKOL_ASSERT(desc->vs.byte_code && desc->fs.byte_code);
+            /* on D3D11 without shader compiler, must provide byte code */
+            SOKOL_VALIDATE(desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
+            SOKOL_VALIDATE(desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE); 
         #endif
+        /* if shader byte code, the size must also be provided */
         if (desc->vs.byte_code) {
-            SOKOL_ASSERT(!desc->vs.source);
-            SOKOL_ASSERT(desc->vs.byte_code_size > 0);
+            SOKOL_VALIDATE(desc->vs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
         if (desc->fs.byte_code) {
-            SOKOL_ASSERT(!desc->fs.source);
-            SOKOL_ASSERT(desc->fs.byte_code_size > 0);
+            SOKOL_VALIDATE(desc->fs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
-    #endif
-    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
-        const sg_shader_stage_desc* stage_desc = (i == 0)? &desc->vs : &desc->fs;
-        bool uniform_blocks_continuous = true;
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
-            SOKOL_ASSERT(ub_desc->size >= 0);
-            if (ub_desc->size > 0) {
-                SOKOL_ASSERT(uniform_blocks_continuous);
-                bool uniforms_continuous = true;
-                int uniform_offset = 0;
-                for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
-                    const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
-                    if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
-                        SOKOL_ASSERT(uniforms_continuous);
-                        #ifdef SOKOL_GLES2
-                        SOKOL_ASSERT(u_desc->name);
-                        #endif
-                        int array_count = _sg_def(u_desc->array_count, 1);
-                        SOKOL_ASSERT(array_count >= 1);
-                        uniform_offset += _sg_uniform_size(u_desc->type, array_count);
-                        SOKOL_ASSERT(uniform_offset <= ub_desc->size);
+        for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+            const sg_shader_stage_desc* stage_desc = (stage_index == 0)? &desc->vs : &desc->fs;
+            bool uniform_blocks_continuous = true;
+            for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+                const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
+                if (ub_desc->size > 0) {
+                    SOKOL_VALIDATE(uniform_blocks_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UBS);
+                    bool uniforms_continuous = true;
+                    int uniform_offset = 0;
+                    int num_uniforms = 0;
+                    for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
+                        const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
+                        if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
+                            SOKOL_VALIDATE(uniforms_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS);
+                            #if defined(SOKOL_GLES2)
+                            SOKOL_VALIDATE(u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
+                            #endif
+                            const int array_count = _sg_def(u_desc->array_count, 1);
+                            uniform_offset += _sg_uniform_size(u_desc->type, array_count);
+                            num_uniforms++;
+                        }
+                        else {
+                            uniforms_continuous = false;
+                        }
                     }
-                    else {
-                        uniforms_continuous = false;
-                    }
+                    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+                    SOKOL_VALIDATE(uniform_offset == ub_desc->size, _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
+                    SOKOL_VALIDATE(num_uniforms > 0, _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS);
+                    #endif
+                }
+                else {
+                    uniform_blocks_continuous = false;
                 }
             }
-            else {
-                uniform_blocks_continuous = false;
-                /* check that invalid uniform block entries have no members */
-                SOKOL_ASSERT(ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID);
+            bool images_continuous = true;
+            for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+                const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+                if (img_desc->type != _SG_IMAGETYPE_DEFAULT) {
+                    SOKOL_VALIDATE(images_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS);
+                    #if defined(SOKOL_GLES2)
+                    SOKOL_VALIDATE(img_desc->name, _SG_VALIDATE_SHADERDESC_IMG_NAME);
+                    #endif
+                } 
+                else {
+                    images_continuous = false;
+                }
             }
         }
-        bool images_continuous = true;
-        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (img_desc->type != _SG_IMAGETYPE_DEFAULT) {
-                SOKOL_ASSERT(images_continuous);
-                #ifdef SOKOL_GLES2
-                SOKOL_ASSERT(img_desc->name);
-                #endif
-            } 
-            else {
-                images_continuous = false;
-            }
-        }
-    }
+        return _sg_validate_success();
     #endif
 }
 
@@ -1267,11 +1250,14 @@ void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
 
 void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg_validate_shader_desc(desc);
     _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_create_shader(shd, desc);
+    if (_sg_validate_shader_desc(desc)) {
+        _sg_create_shader(shd, desc);
+    }
+    else {
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+    }
     SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
