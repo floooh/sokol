@@ -611,9 +611,8 @@ typedef enum {
     _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT,
     _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS,
     _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE,
     _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_TOO_MANY_ATTRS,
     _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS,
     _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
     _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
@@ -699,9 +698,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT:       return "no vertex layout in sg_pipeline_desc.vertex_layouts[0]";
         case _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS: return "vertex layouts must occupy continuous slots";
         case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4:  return "vertex layout stride must be multiple of 4";
-        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPFUNC: return "invalid step_func in sg_pipeline_desc.vertex_layouts";
-        case _SG_VALIDATE_PIPELINEDESC_LAYOUT_STEPRATE: return "invalid step_rate in sg_pipeline_desc.vertex_layouts";
         case _SG_VALIDATE_PIPELINEDESC_NO_ATTRS:        return "sg_pipeline_desc.vertex_layout has stride but no attrs";
+        case _SG_VALIDATE_PIPELINEDESC_TOO_MANY_ATTRS:  return "too many vertex attributes across all layouts";
         case _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS:   return "vertex attributes must occupy continuous slots";
         case _SG_VALIDATE_PIPELINEDESC_ATTR_NAME:       return "GLES2/WebGL vertex layouts must have attribute names";
         case _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS:  return "D3D11 vertex layouts must have attribute semantics (sem_name and sem_index)";
@@ -928,43 +926,53 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->shader.id != SG_INVALID_ID);
-    SOKOL_ASSERT(desc->vertex_layouts[0].attrs[0].format != SG_VERTEXFORMAT_INVALID);
-    #ifdef SOKOL_DEBUG
-    int num_attrs = 0;
-    bool layouts_continuous = true;
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
-        if (layout_desc->stride == 0) {
-            layouts_continuous = false;
-            continue;
-        }
-        SOKOL_ASSERT((layout_desc->stride & 3) == 0);
-        SOKOL_ASSERT((layout_desc->step_func>=0) && (layout_desc->step_func<_SG_VERTEXSTEP_NUM));
-        SOKOL_ASSERT(layouts_continuous);
-        bool attrs_continuous = true;
-        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
-            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
-                attrs_continuous = false;
+_SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(desc);
+        _sg_validate_start();
+        SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
+        SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
+        SOKOL_VALIDATE(desc->shader.id != SG_INVALID_ID, _SG_VALIDATE_PIPELINEDESC_SHADER);
+        _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        SOKOL_VALIDATE(shd && shd->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
+        SOKOL_VALIDATE(desc->vertex_layouts[0].stride > 0, _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT);
+        bool layouts_continuous = true;
+        int num_attrs = 0;
+        for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+            const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
+            if (layout_desc->stride == 0) {
+                layouts_continuous = false;
                 continue;
             }
-            SOKOL_ASSERT(attrs_continuous);
-            SOKOL_ASSERT(attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format) <= layout_desc->stride);
-            SOKOL_ASSERT((attr_desc->format > SG_VERTEXFORMAT_INVALID)&&(attr_desc->format<_SG_VERTEXFORMAT_NUM));
-            #if defined(SOKOL_GLES2)
-            /* on GLES2, vertex attribute names must be provided */
-            SOKOL_ASSERT(attr_desc->name);
-            #elif defined(SOKOL_D3D11)
-            /* on D3D11, semantic names (and semantic indices) must be provided */
-            SOKOL_ASSERT(attr_desc->sem_name);
-            #endif
-            num_attrs++;
+            SOKOL_VALIDATE((layout_desc->stride & 3) == 0, _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
+            SOKOL_VALIDATE(layouts_continuous, _SG_VALIDATE_PIPELINEDESC_NO_CONT_LAYOUTS);
+            bool attrs_continuous = true;
+            int num_layout_attrs = 0;
+            for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+                const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
+                if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
+                    attrs_continuous = false;
+                    continue;
+                }
+                SOKOL_VALIDATE(attrs_continuous, _SG_VALIDATE_PIPELINEDESC_NO_CONT_ATTRS);
+                const bool attr_overflow = (attr_desc->offset + _sg_vertexformat_bytesize(attr_desc->format)) > layout_desc->stride;
+                SOKOL_VALIDATE(!attr_overflow, _SG_VALIDATE_PIPELINEDESC_ATTR_OVERFLOW);
+                #if defined(SOKOL_GLES2)
+                /* on GLES2, vertex attribute names must be provided */
+                SOKOL_VALIDATE(attr_desc->name, _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
+                #elif defined(SOKOL_D3D11)
+                /* on D3D11, semantic names (and semantic indices) must be provided */
+                SOKOL_VALIDATE(attr_desc->sem_name, _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+                #endif
+                num_layout_attrs++;
+                num_attrs++;
+            }
+            SOKOL_VALIDATE(num_layout_attrs > 0, _SG_VALIDATE_PIPELINEDESC_NO_ATTRS);
         }
-    }
-    SOKOL_ASSERT(num_attrs < SG_MAX_VERTEX_ATTRIBUTES);
+        SOKOL_VALIDATE(num_attrs <= SG_MAX_VERTEX_ATTRIBUTES, _SG_VALIDATE_PIPELINEDESC_TOO_MANY_ATTRS);
+        return _sg_validate_success();
     #endif
 }
 
@@ -1263,13 +1271,16 @@ void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
 
 void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg_validate_pipeline_desc(desc);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
-    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
-    _sg_create_pipeline(pip, shd, desc);
+    if (_sg_validate_pipeline_desc(desc)) {
+        _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
+        _sg_create_pipeline(pip, shd, desc);
+    }
+    else {
+        pip->slot.state = SG_RESOURCESTATE_FAILED;
+    }
     SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
