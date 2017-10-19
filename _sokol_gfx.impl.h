@@ -904,6 +904,7 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (ub_desc->size > 0) {
                 SOKOL_ASSERT(uniform_blocks_continuous);
                 bool uniforms_continuous = true;
+                int uniform_offset = 0;
                 for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                     const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                     if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
@@ -913,8 +914,8 @@ _SOKOL_PRIVATE void _sg_validate_shader_desc(const sg_shader_desc* desc) {
                         #endif
                         int array_count = _sg_def(u_desc->array_count, 1);
                         SOKOL_ASSERT(array_count >= 1);
-                        SOKOL_ASSERT(u_desc->offset >= 0);
-                        SOKOL_ASSERT((u_desc->offset + _sg_uniform_size(u_desc->type, array_count)) <= ub_desc->size);
+                        uniform_offset += _sg_uniform_size(u_desc->type, array_count);
+                        SOKOL_ASSERT(uniform_offset <= ub_desc->size);
                     }
                     else {
                         uniforms_continuous = false;
@@ -1539,10 +1540,9 @@ sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset,
     return desc;
 }
 
-sg_shader_uniform_desc sg_named_uniform(const char* name, int offset, sg_uniform_type type, int array_count) {
+sg_shader_uniform_desc sg_named_uniform(const char* name, sg_uniform_type type, int array_count) {
     sg_shader_uniform_desc desc;
     desc.name = name;
-    desc.offset = offset;
     desc.type = type;
     desc.array_count = array_count;
     return desc;

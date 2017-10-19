@@ -441,7 +441,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16;
         case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;
-        default:    return 0;
+        default:    SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -1088,6 +1088,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
             _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
             ub->size = ub_desc->size;
             SOKOL_ASSERT(ub->num_uniforms == 0);
+            int cur_uniform_offset = 0;
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
@@ -1095,8 +1096,9 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
                 }
                 _sg_uniform* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
-                u->offset = u_desc->offset;
                 u->count = _sg_def(u_desc->array_count, 1);
+                u->offset = cur_uniform_offset;
+                cur_uniform_offset += _sg_uniform_size(u->type, u->count);
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -1105,6 +1107,7 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
                 }
                 ub->num_uniforms++;
             }
+            SOKOL_ASSERT(ub_desc->size == cur_uniform_offset);
             stage->num_uniform_blocks++;
         }
     }
