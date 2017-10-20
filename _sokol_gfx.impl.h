@@ -629,7 +629,7 @@ typedef enum {
     _SG_VALIDATE_PASSDESC_SLICE,
     _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
     _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
-    _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT,
     _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
     _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
     _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
@@ -716,8 +716,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_PASSDESC_SLICE:                   return "pass attachment image is 3d texture, but slice value is too big";
         case _SG_VALIDATE_PASSDESC_IMAGE_NO_RT:             return "pass attachment image must be render targets";
         case _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS:      return "all pass color attachment images must have the same pixel format";
-        case _SG_VALDIATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images cannot have a depth pixel format";
-        case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image cannot have a color pixel format";
+        case _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images must have a renderable pixel format";
+        case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image must have depth pixel format";
         case _SG_VALIDATE_PASSDESC_IMAGE_SIZES:             return "all pass attachments must have the same size";
         case _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS:     return "all pass attachments must have the same sample count";
 
@@ -935,7 +935,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->shader.id != SG_INVALID_ID, _SG_VALIDATE_PIPELINEDESC_SHADER);
-        _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        const _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         SOKOL_VALIDATE(shd && shd->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
         SOKOL_VALIDATE(desc->vertex_layouts[0].stride > 0, _SG_VALIDATE_PIPELINEDESC_NO_LAYOUT);
         bool layouts_continuous = true;
@@ -976,8 +976,74 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_validate_pass_desc(const sg_pass_desc* desc) {
-    SOKOL_ASSERT(desc->color_attachments[0].image.id != SG_INVALID_ID);
+_SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(desc);
+        _sg_validate_start();
+        SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PASSDESC_CANARY);
+        SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PASSDESC_CANARY);
+        bool atts_cont = true;
+        sg_pixel_format color_fmt = SG_PIXELFORMAT_NONE;
+        int width = -1, height = -1, sample_count = -1;
+        for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
+            const sg_attachment_desc* att = &desc->color_attachments[att_index];
+            if (att->image.id == SG_INVALID_ID) {
+                SOKOL_VALIDATE(att_index > 0, _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS);
+                atts_cont = false;
+                continue;
+            }
+            SOKOL_VALIDATE(atts_cont, _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
+            const _sg_image* img = _sg_lookup_image(&_sg.pools, att->image.id);
+            SOKOL_VALIDATE(img && img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_VALIDATE(att->mip_level < img->num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
+            if (img->type == SG_IMAGETYPE_CUBE) {
+                SOKOL_VALIDATE(att->face < 6, _SG_VALIDATE_PASSDESC_FACE);
+            }
+            else if (img->type == SG_IMAGETYPE_ARRAY) {
+                SOKOL_VALIDATE(att->layer < img->depth, _SG_VALIDATE_PASSDESC_LAYER);
+            }
+            else if (img->type == SG_IMAGETYPE_3D) {
+                SOKOL_VALIDATE(att->slice < img->depth, _SG_VALIDATE_PASSDESC_SLICE);
+            }
+            SOKOL_VALIDATE(img->render_target, _SG_VALIDATE_PASSDESC_IMAGE_NO_RT);
+            if (att_index == 0) {
+                color_fmt = img->pixel_format;
+                width = img->width >> att->mip_level;
+                height = img->height >> att->mip_level;
+                sample_count = img->sample_count;
+            }
+            else {
+                SOKOL_VALIDATE(img->pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
+                SOKOL_VALIDATE(width == img->width >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
+                SOKOL_VALIDATE(height == img->height >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
+                SOKOL_VALIDATE(sample_count == img->sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
+            }
+            SOKOL_VALIDATE(_sg_is_valid_rendertarget_color_format(img->pixel_format), _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
+        }
+        if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
+            const sg_attachment_desc* att = &desc->depth_stencil_attachment;
+            const _sg_image* img = _sg_lookup_image(&_sg.pools, att->image.id);
+            SOKOL_VALIDATE(img && img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_VALIDATE(att->mip_level < img->num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
+            if (img->type == SG_IMAGETYPE_CUBE) {
+                SOKOL_VALIDATE(att->face < 6, _SG_VALIDATE_PASSDESC_FACE);
+            }
+            else if (img->type == SG_IMAGETYPE_ARRAY) {
+                SOKOL_VALIDATE(att->layer < img->depth, _SG_VALIDATE_PASSDESC_LAYER);
+            }
+            else if (img->type == SG_IMAGETYPE_3D) {
+                SOKOL_VALIDATE(att->slice < img->depth, _SG_VALIDATE_PASSDESC_SLICE);
+            }
+            SOKOL_VALIDATE(img->render_target, _SG_VALIDATE_PASSDESC_IMAGE_NO_RT);
+            SOKOL_VALIDATE(width == img->width >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
+            SOKOL_VALIDATE(height == img->height >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
+            SOKOL_VALIDATE(sample_count == img->sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
+            SOKOL_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->pixel_format), _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
+        }
+        return _sg_validate_success();
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_validate_draw_state(const sg_draw_state* ds) {
@@ -1286,30 +1352,33 @@ void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
 
 void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID && desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    _sg_validate_pass_desc(desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    /* lookup pass attachment image pointers */
-    _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        if (desc->color_attachments[i].image.id) {
-            att_imgs[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
-            SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
+    if (_sg_validate_pass_desc(desc)) {
+        /* lookup pass attachment image pointers */
+        _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (desc->color_attachments[i].image.id) {
+                att_imgs[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
+                SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
+            }
+            else {
+                att_imgs[i] = 0;
+            }
+        }
+        const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
+        if (desc->depth_stencil_attachment.image.id) {
+            att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
+            SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
         }
         else {
-            att_imgs[i] = 0;
+            att_imgs[ds_att_index] = 0;
         }
-    }
-    const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
-    if (desc->depth_stencil_attachment.image.id) {
-        att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
-        SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
+        _sg_create_pass(pass, att_imgs, desc);
     }
     else {
-        att_imgs[ds_att_index] = 0;
+        pass->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    _sg_create_pass(pass, att_imgs, desc);
     SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
