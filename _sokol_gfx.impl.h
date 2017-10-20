@@ -859,22 +859,22 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
         #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
             /* on GL, must provide shader source code */
-            SOKOL_VALIDATE(desc->vs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
-            SOKOL_VALIDATE(desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
+            SOKOL_VALIDATE(0 != desc->vs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
+            SOKOL_VALIDATE(0 != desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
         #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS) || defined(SOKOL_D3D11_SHADER_COMPILER)
             /* on Metal or D3D with shader compiler, must provide shader source code or byte code */
-            SOKOL_VALIDATE(desc->vs.source||desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-            SOKOL_VALIDATE(desc->fs.source||desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
         #else
             /* on D3D11 without shader compiler, must provide byte code */
-            SOKOL_VALIDATE(desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
-            SOKOL_VALIDATE(desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE); 
+            SOKOL_VALIDATE(0 != desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
+            SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE); 
         #endif
         /* if shader byte code, the size must also be provided */
-        if (desc->vs.byte_code) {
+        if (0 != desc->vs.byte_code) {
             SOKOL_VALIDATE(desc->vs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
-        if (desc->fs.byte_code) {
+        if (0 != desc->fs.byte_code) {
             SOKOL_VALIDATE(desc->fs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
         for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
