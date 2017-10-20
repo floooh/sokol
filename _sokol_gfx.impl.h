@@ -635,7 +635,8 @@ typedef enum {
     _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
 
     /* sg_begin_pass validation */
-    _SG_VALIDATE_BP_INV_IMAGE,
+    _SG_VALIDATE_BEGINPASS_PASS,
+    _SG_VALIDATE_BEGINPASS_IMAGE,
 
     /* sg_apply_draw_state validation */
     _SG_VALIDATE_ADS_PIP,
@@ -722,7 +723,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS:     return "all pass attachments must have the same sample count";
 
         /* sg_begin_pass */
-        case _SG_VALIDATE_BP_INV_IMAGE:     return "sg_begin_pass: one or more attachment images are no longer valid";
+        case _SG_VALIDATE_BEGINPASS_PASS:       return "sg_begin_pass: pass must be valid";
+        case _SG_VALIDATE_BEGINPASS_IMAGE:      return "sg_begin_pass: one or more attachment images are not valid";
 
         /* sg_apply_draw_state */
         case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object missing";
@@ -751,6 +753,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
 typedef struct {
     _sg_pools pools;
     bool valid;
+    bool pass_valid;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     _sg_validate_error validate_error;
@@ -1046,58 +1049,32 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        _sg_validate_start();
+        SOKOL_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            const _sg_attachment* att = &pass->color_atts[i];
+            if (att->image) {
+                SOKOL_VALIDATE(att->image->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+                SOKOL_VALIDATE(att->image->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
+            }
+        }
+        if (pass->ds_att.image) {
+            const _sg_attachment* att = &pass->ds_att;
+            SOKOL_VALIDATE(att->image->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+            SOKOL_VALIDATE(att->image->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
+        }
+        return _sg_validate_success();
+    #endif
+}
+
 _SOKOL_PRIVATE void _sg_validate_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     SOKOL_ASSERT(ds->pipeline.id);
     SOKOL_ASSERT(ds->vertex_buffers[0].id);
-}
-
-_SOKOL_PRIVATE void _sg_validate_begin_pass(const _sg_pass* pass, const sg_pass_action* pass_action) {
-    SOKOL_ASSERT(pass && pass_action);
-    /* must have at least one color attachment */
-    SOKOL_ASSERT(pass->color_atts[0].image);
-    /* check color attachments */
-    #if defined(SOKOL_DEBUG)
-    const _sg_image* img = pass->color_atts[0].image;
-    bool img_continuous = true;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        const _sg_attachment* att = &pass->color_atts[i];
-        if (att->image) {
-            SOKOL_ASSERT(img_continuous);
-            /* pass valid? */
-            SOKOL_ASSERT(att->image->slot.state == SG_RESOURCESTATE_VALID);
-            /* pass still exists? */
-            SOKOL_ASSERT(att->image->slot.id == att->image_id.id);
-            /* all images must be render target */
-            SOKOL_ASSERT(att->image->render_target);
-            /* all images must be immutable */
-            SOKOL_ASSERT(att->image->usage == SG_USAGE_IMMUTABLE);
-            /* all images must have same size */
-            SOKOL_ASSERT(att->image->width == img->width);
-            SOKOL_ASSERT(att->image->height == img->height);
-            /* all images must have same pixel format */
-            SOKOL_ASSERT(att->image->pixel_format == img->pixel_format);
-            /* must be a valid color render target pixel format */
-            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att->image->pixel_format));
-            /* all images must have same sample count */
-            SOKOL_ASSERT(att->image->sample_count == img->sample_count);
-        }
-        else {
-            img_continuous = false;
-        }
-    }
-    /* check depth-stencil attachment */
-    const _sg_attachment* ds_att = &pass->ds_att;
-    if (ds_att->image) {
-        SOKOL_ASSERT(ds_att->image->slot.state == SG_RESOURCESTATE_VALID);
-        SOKOL_ASSERT(ds_att->image->slot.id == ds_att->image_id.id);
-        SOKOL_ASSERT(ds_att->image->render_target);
-        SOKOL_ASSERT(ds_att->image->usage == SG_USAGE_IMMUTABLE);
-        SOKOL_ASSERT(ds_att->image->width == img->width);
-        SOKOL_ASSERT(ds_att->image->height == img->height);
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(ds_att->image->pixel_format));
-    }
-    #endif /* SOKOL_DEBUG */
 }
 
 _SOKOL_PRIVATE bool _sg_validate_draw(_sg_pipeline* pip, 
@@ -1474,6 +1451,7 @@ void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int hei
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     sg_pass_action pa;
     _sg_resolve_default_pass_action(pass_action, &pa);
+    _sg.pass_valid = true;
     _sg_begin_pass(0, &pa, width, height);
 }
 
@@ -1481,26 +1459,39 @@ void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     SOKOL_ASSERT(pass_action);
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_VALID);
-    sg_pass_action pa;
-    _sg_resolve_default_pass_action(pass_action, &pa);
-    _sg_validate_begin_pass(pass, &pa);
-    const int w = pass->color_atts[0].image->width;
-    const int h = pass->color_atts[0].image->height;
-    _sg_begin_pass(pass, &pa, w, h);
+    if (pass && _sg_validate_begin_pass(pass)) {
+        _sg.pass_valid = true;
+        sg_pass_action pa;
+        _sg_resolve_default_pass_action(pass_action, &pa);
+        const int w = pass->color_atts[0].image->width;
+        const int h = pass->color_atts[0].image->height;
+        _sg_begin_pass(pass, &pa, w, h);
+    }
+    else {
+        _sg.pass_valid = false;
+    }
 }
 
 void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
+    if (!_sg.pass_valid) {
+        return;
+    }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
 }
 
 void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
+    if (!_sg.pass_valid) {
+        return;
+    }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
 }
 
 void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
+    if (!_sg.pass_valid) {
+        return;
+    }
     _sg_validate_draw_state(ds);
     /* lookup resource pointers (lookups might yield 0, but this must be handled in backend) */
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, ds->pipeline.id);
@@ -1546,19 +1537,25 @@ void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* dat
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data);
     SOKOL_ASSERT(num_bytes > 0);
-    if (_sg.next_draw_valid) {
-        _sg_apply_uniform_block(stage, ub_index, data, num_bytes);
+    if (!(_sg.pass_valid && _sg.next_draw_valid)) {
+        return;
     }
+    _sg_apply_uniform_block(stage, ub_index, data, num_bytes);
 }
 
 void sg_draw(int base_element, int num_elements, int num_instances) {
-    if (_sg.next_draw_valid) {
-        _sg_draw(base_element, num_elements, num_instances);
+    if (!(_sg.pass_valid && _sg.next_draw_valid)) {
+        return;
     }
+    _sg_draw(base_element, num_elements, num_instances);
 }
 
 void sg_end_pass() {
+    if (!_sg.pass_valid) {
+        return;
+    }
     _sg_end_pass();
+    _sg.pass_valid = false;
 }
 
 void sg_commit() {
