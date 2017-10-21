@@ -40,10 +40,12 @@
 
     API usage validation macros:
 
-    SOKOL_VALIDATE_FATAL        - set this to (1) if validation errors be fatal (default is not)
     SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
     SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err)) 
     SOKOL_VALIDATE_END()        - end a validation block, return true if all checks in block passed (default: bool _sg_validate())
+
+    If you don't want validation errors to be fatal, define SOKOL_VALIDATE_NON_FATAL,
+    be aware though that this may spam SOKOL_LOG messages.
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -1166,7 +1168,7 @@ typedef struct {
         .color_write_mask:      SG_COLORMASK_RGBA
         .color_attchment_count  1
         .color_format           SG_PIXELFORMAT_RGBA8
-        .depth_format           SG_PIXELFROMAT_DEPTHSTENCIL
+        .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
         .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
     .rasterizer:
         .scissor_test_enabled:          false
@@ -1219,7 +1221,7 @@ typedef struct {
     uint8_t color_write_mask;
     int color_attachment_count;
     sg_pixel_format color_format;
-    sg_pixel_format depth_format;    
+    sg_pixel_format depth_format;
     float blend_color[4];
 } sg_blend_state;
 
