@@ -790,9 +790,10 @@ _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error err) {
 _SOKOL_PRIVATE bool _sg_validate_end() {
     if (_sg.validate_error != _SG_VALIDATE_SUCCESS) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
-            SOKOL_LOG("^^^^  VALIDATION FAILED, TERMINATING ^^^^")
+            SOKOL_LOG("^^^^  VALIDATION FAILED, TERMINATING ^^^^");
             SOKOL_ASSERT(false);
         #endif
+        return false;
     }
     else {
         return true;
