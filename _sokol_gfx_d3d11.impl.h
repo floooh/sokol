@@ -350,6 +350,11 @@ typedef struct {
     _sg_shader* shader;
     sg_shader shader_id;
     sg_index_type index_type;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
     float blend_color[4];
     UINT d3d11_stencil_ref;
     UINT d3d11_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -375,6 +380,7 @@ typedef struct {
 
 typedef struct {
     _sg_slot slot;
+    int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment ds_att;
     ID3D11RenderTargetView* d3d11_rtvs[SG_MAX_COLOR_ATTACHMENTS];
@@ -888,6 +894,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->shader = shd;
     pip->shader_id = desc->shader;
     pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->color_attachment_count = _sg_def(desc->blend.color_attachment_count, 1);
+    pip->color_format = _sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8);
+    pip->depth_format = _sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
+    pip->sample_count = _sg_def(desc->rasterizer.sample_count, 1);
     pip->d3d11_index_format = _sg_d3d11_index_format(pip->index_type);
     pip->d3d11_topology = _sg_d3d11_primitive_topology(_sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES));
     for (int i = 0; i < 4; i++) {
@@ -904,6 +914,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (layout_desc->stride == 0) {
             break;
         }
+        pip->vertex_layout_valid[layout_index] = true;
         pip->d3d11_vb_strides[layout_index] = layout_desc->stride;
         for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
             const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
@@ -1019,6 +1030,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         SOKOL_ASSERT(pass->d3d11_rtvs[i] == 0);
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
+            pass->num_color_atts++;
             SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
             att = &pass->color_atts[i];

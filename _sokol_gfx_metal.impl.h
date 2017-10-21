@@ -619,6 +619,11 @@ typedef struct {
     _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
     MTLPrimitiveType mtl_prim_type;
     sg_index_type index_type;
     NSUInteger mtl_index_size;
@@ -645,6 +650,7 @@ typedef struct {
 
 typedef struct {
     _sg_slot slot;
+    int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment ds_att;
 } _sg_pass;
@@ -1097,6 +1103,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
+    pip->color_attachment_count = _sg_def(desc->blend.color_attachment_count, 1);
+    pip->color_format = _sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8);
+    pip->depth_format = _sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
+    pip->sample_count = _sg_def(desc->rasterizer.sample_count, 1);
     sg_primitive_type prim_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->mtl_prim_type = _sg_mtl_primitive_type(prim_type);
     pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
@@ -1119,6 +1129,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (layout_desc->stride == 0) {
             break;
         }
+        pip->vertex_layout_valid[layout_index] = true;
         const int mtl_vb_slot = layout_index + SG_MAX_SHADERSTAGE_UBS;
         vtx_desc.layouts[mtl_vb_slot].stride = layout_desc->stride;
         vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(_sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX));
@@ -1221,6 +1232,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         SOKOL_ASSERT(0 == pass->color_atts[i].image);
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
+            pass->num_color_atts++;
             SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
             att = &pass->color_atts[i];

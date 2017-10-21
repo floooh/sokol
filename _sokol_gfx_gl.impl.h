@@ -555,6 +555,11 @@ typedef struct {
     sg_shader shader_id;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
     _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
@@ -577,6 +582,7 @@ typedef struct {
 typedef struct {
     _sg_slot slot;
     GLuint gl_fb;
+    int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment ds_att;
 } _sg_pass;
@@ -1208,6 +1214,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->shader_id = desc->shader;
     pip->primitive_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
+    pip->color_attachment_count = _sg_def(desc->blend.color_attachment_count, 1);
+    pip->color_format = _sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8);
+    pip->depth_format = _sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
+    pip->sample_count = _sg_def(desc->rasterizer.sample_count, 1);
     _sg_gl_load_depth_stencil(&desc->depth_stencil, &pip->depth_stencil);
     _sg_gl_load_blend(&desc->blend, &pip->blend);
     _sg_gl_load_rasterizer(&desc->rasterizer, &pip->rast);
@@ -1221,6 +1231,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (layout_desc->stride == 0) {
             break;
         }
+        pip->vertex_layout_valid[layout_index] = true;
         const sg_vertex_step step_func = _sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
         const int step_rate = _sg_def(layout_desc->step_rate, 1);
         for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
@@ -1280,6 +1291,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         SOKOL_ASSERT(0 == pass->color_atts[i].image);
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
+            pass->num_color_atts++;
             SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
             att = &pass->color_atts[i];
