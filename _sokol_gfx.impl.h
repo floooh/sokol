@@ -14,8 +14,17 @@
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
+#ifndef SOKOL_VALIDATE_FATAL
+    #define SOKOL_VALIDATE_FATAL (0)
+#endif
+#ifndef SOKOL_VALIDATE_BEGIN
+    #define SOKOL_VALIDATE_BEGIN() _sg_validate_begin()
+#endif
 #ifndef SOKOL_VALIDATE
     #define SOKOL_VALIDATE(cond, err) _sg_validate(cond, err)
+#endif
+#ifndef SOKOL_VALIDATE_END
+    #define SOKOL_VALIDATE_END() _sg_validate_end()
 #endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
@@ -570,7 +579,8 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p) {
 /*-- validation error codes --------------------------------------------------*/
 #if defined(SOKOL_DEBUG)
 typedef enum {
-    _SG_VALIDATE_NONE,              /* value 0 is reserved */
+    /* special case 'validation was successful' */
+    _SG_VALIDATE_SUCCESS,
 
     /* buffer creation */
     _SG_VALIDATE_BUFFERDESC_CANARY,
@@ -763,8 +773,8 @@ static _sg_state _sg;
 
 /*-- validation checks -------------------------------------------------------*/
 #if defined(SOKOL_DEBUG)
-_SOKOL_PRIVATE void _sg_validate_start() {
-    _sg.validate_error = _SG_VALIDATE_NONE;
+_SOKOL_PRIVATE void _sg_validate_begin() {
+    _sg.validate_error = _SG_VALIDATE_SUCCESS;
 }
 
 _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error err) {
@@ -774,8 +784,17 @@ _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error err) {
     }
 }
 
-_SOKOL_PRIVATE bool _sg_validate_success() {
-    return _sg.validate_error == _SG_VALIDATE_NONE;
+_SOKOL_PRIVATE bool _sg_validate_end() {
+    if (_sg.validate_error != _SG_VALIDATE_SUCCESS) {
+        #if SOKOL_VALIDATE_FATAL
+            SOKOL_LOG("SOKOL_VALIDATE_FATAL is set, terminating")
+            SOKOL_ASSERT(false);
+        #endif
+        return false;
+    }
+    else {
+        return true;
+    }
 }
 #endif
 
@@ -784,7 +803,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         return true;
     #else
         SOKOL_ASSERT(desc);
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
         SOKOL_VALIDATE(desc->size > 0, _SG_VALIDATE_BUFFERDESC_SIZE);
@@ -794,7 +813,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         else {
             SOKOL_VALIDATE(0 == desc->content, _SG_VALIDATE_BUFFERDESC_NO_CONTENT);
         }
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -803,7 +822,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         return true;
     #else
         SOKOL_ASSERT(desc);
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_IMAGEDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_IMAGEDESC_CANARY);
         SOKOL_VALIDATE(desc->width > 0, _SG_VALIDATE_IMAGEDESC_WIDTH);
@@ -845,7 +864,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                 }
             }
         }
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -854,7 +873,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         return true;
     #else
         SOKOL_ASSERT(desc);
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
         #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -925,7 +944,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 }
             }
         }
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -934,7 +953,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         return true;
     #else
         SOKOL_ASSERT(desc);
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->shader.id != SG_INVALID_ID, _SG_VALIDATE_PIPELINEDESC_SHADER);
@@ -975,7 +994,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             SOKOL_VALIDATE(num_layout_attrs > 0, _SG_VALIDATE_PIPELINEDESC_NO_ATTRS);
         }
         SOKOL_VALIDATE(num_attrs <= SG_MAX_VERTEX_ATTRIBUTES, _SG_VALIDATE_PIPELINEDESC_TOO_MANY_ATTRS);
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -984,7 +1003,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         return true;
     #else
         SOKOL_ASSERT(desc);
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PASSDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PASSDESC_CANARY);
         bool atts_cont = true;
@@ -1045,7 +1064,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             SOKOL_VALIDATE(sample_count == img->sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
             SOKOL_VALIDATE(_sg_is_valid_rendertarget_depth_format(img->pixel_format), _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT);
         }
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -1053,7 +1072,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
     #if !defined(SOKOL_DEBUG)
         return true;
     #else
-        _sg_validate_start();
+        SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             const _sg_attachment* att = &pass->color_atts[i];
@@ -1067,7 +1086,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
             SOKOL_VALIDATE(att->image->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
             SOKOL_VALIDATE(att->image->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
         }
-        return _sg_validate_success();
+        return SOKOL_VALIDATE_END();
     #endif
 }
 

@@ -33,11 +33,17 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err)) 
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
+
+    API usage validation macros:
+
+    SOKOL_VALIDATE_FATAL        - set this to (1) if validation errors be fatal (default is not)
+    SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
+    SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err)) 
+    SOKOL_VALIDATE_END()        - end a validation block, return true if all checks in block passed (default: bool _sg_validate())
 
     Optionally define the following to force debug checks and validations
     even in release mode:
