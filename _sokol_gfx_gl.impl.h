@@ -1850,13 +1850,8 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT(_sg_gl.cache.cur_pipeline);
-    if (_sg_gl.cache.cur_pipeline->slot.id != _sg_gl.cache.cur_pipeline_id.id) {
-        /* pipeline object was destroyed */
-        return;
-    }
-    if (_sg_gl.cache.cur_pipeline->shader->slot.id != _sg_gl.cache.cur_pipeline->shader_id.id) {
-        /* shader object was destroyed */
-    }
+    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline->slot.id == _sg_gl.cache.cur_pipeline_id.id);
+    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline->shader->slot.id == _sg_gl.cache.cur_pipeline->shader_id.id);
     _sg_shader_stage* stage = &_sg_gl.cache.cur_pipeline->shader->stage[stage_index];
     SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
     _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
