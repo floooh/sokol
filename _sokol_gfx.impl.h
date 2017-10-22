@@ -665,6 +665,7 @@ typedef enum {
     _SG_VALIDATE_ADS_SAMPLE_COUNT,
 
     /* sg_apply_uniform_block validation */
+    _SG_VALIDATE_AUB_NO_PIPELINE,
     _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
     _SG_VALIDATE_AUB_SIZE,
 } _sg_validate_error;
@@ -753,6 +754,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_ADS_SAMPLE_COUNT: return "sg_apply_draw_state: MSAA sample count in pipeline doesn't match render pass attachment sample count";
 
         /* sg_apply_uniform_block */
+        case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniform_block: must be called after sg_apply_draw_state()";
         case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
         case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
 
@@ -766,6 +768,7 @@ typedef struct {
     _sg_pools pools;
     bool valid;
     sg_pass cur_pass;
+    sg_pipeline cur_pipeline;
     bool pass_valid;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
@@ -1181,6 +1184,29 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT((stage_index == SG_SHADERSTAGE_VS) || (stage_index == SG_SHADERSTAGE_FS));
+        SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
+        SOKOL_VALIDATE_BEGIN();
+        SOKOL_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, _SG_VALIDATE_AUB_NO_PIPELINE);
+        const _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
+        SOKOL_ASSERT(pip && (pip->slot.id == _sg.cur_pipeline.id));
+        SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->shader_id.id));
+
+        /* check that there is a uniform block at 'stage' and 'ub_index' */
+        const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
+        SOKOL_VALIDATE(ub_index < stage->num_uniform_blocks, _SG_VALIDATE_AUB_NO_UB_AT_SLOT);
+
+        /* check that the provided data size matches the uniform block size */
+        SOKOL_VALIDATE(num_bytes == stage->uniform_blocks[ub_index].size, _SG_VALIDATE_AUB_SIZE);
+
+        return SOKOL_VALIDATE_END();
+    #endif
+}
+
 void _sg_validate_update_buffer(_sg_buffer* buf, const void* data, int size) {
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_VALID);
     SOKOL_ASSERT(data && (size > 0) && (size <= buf->size));
@@ -1514,14 +1540,15 @@ void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_
 void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
-    if (!_sg.pass_valid) {
-        return;
-    }
     if (!_sg_validate_draw_state(ds)) {
         _sg.next_draw_valid = false;
         return;
     }
+    if (!_sg.pass_valid) {
+        return;
+    }
     _sg.next_draw_valid = true;
+    _sg.cur_pipeline = ds->pipeline;
 
     /* lookup resource pointers, resources which are not in SG_RESOURCESTATE_VALID
        are not a fatal error, but supress the following drawcalls, this is to
@@ -1585,8 +1612,11 @@ void sg_apply_draw_state(const sg_draw_state* ds) {
 void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
-    SOKOL_ASSERT(data);
-    SOKOL_ASSERT(num_bytes > 0);
+    SOKOL_ASSERT(data && (num_bytes > 0));
+    if (!_sg_validate_apply_uniform_block(stage, ub_index, data, num_bytes)) {
+        _sg.next_draw_valid = false;
+        return;
+    }
     if (!(_sg.pass_valid && _sg.next_draw_valid)) {
         return;
     }
@@ -1605,6 +1635,8 @@ void sg_end_pass() {
         return;
     }
     _sg_end_pass();
+    _sg.cur_pass.id = SG_INVALID_ID;
+    _sg.cur_pipeline.id = SG_INVALID_ID;
     _sg.pass_valid = false;
 }
 
