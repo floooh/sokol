@@ -109,7 +109,7 @@
 
     --- kick off a draw call with:
     
-            sg_draw(int base_element, int num_element, int num_instaces) 
+            sg_draw(int base_element, int num_elements, int num_instaces) 
 
     --- finish the current rendering pass with:
             
