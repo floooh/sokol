@@ -668,6 +668,11 @@ typedef enum {
     _SG_VALIDATE_AUB_NO_PIPELINE,
     _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
     _SG_VALIDATE_AUB_SIZE,
+        
+    /* sg_update_buffer validation */
+    _SG_VALIDATE_UPDBUF_USAGE,
+    _SG_VALIDATE_UPDBUF_SIZE,
+    _SG_VALIDATE_UPDBUF_ONCE
 } _sg_validate_error;
 
 /* return a human readable string for an _sg_validate_error */
@@ -758,6 +763,11 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
         case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
 
+        /* sg_update_buffer */
+        case _SG_VALIDATE_UPDBUF_USAGE:     return "sg_update_buffer: cannot update immutable buffer";
+        case _SG_VALIDATE_UPDBUF_SIZE:      return "sg_update_buffer: update size is bigger than buffer size";
+        case _SG_VALIDATE_UPDBUF_ONCE:      return "sg_update_buffer: only one update allowed per buffer and frame";
+
         default: return "unknown validation error";
     }
 }
@@ -767,6 +777,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
 typedef struct {
     _sg_pools pools;
     bool valid;
+    uint32_t frame_index;
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
     bool pass_valid;
@@ -1207,7 +1218,18 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index
     #endif
 }
 
-void _sg_validate_update_buffer(_sg_buffer* buf, const void* data, int size) {
+_SOKOL_PRIVATE bool _sg_validate_update_buffer(_sg_buffer* buf, const void* data, int size) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(buf && data);
+        SOKOL_VALIDATE_BEGIN();
+        SOKOL_VALIDATE(buf->usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDBUF_USAGE);
+        SOKOL_VALIDATE(buf->size >= size, _SG_VALIDATE_UPDBUF_SIZE);
+        SOKOL_VALIDATE(buf->upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDBUF_ONCE);
+        return SOKOL_VALIDATE_END();
+    #endif
+
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_VALID);
     SOKOL_ASSERT(data && (size > 0) && (size <= buf->size));
     SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
@@ -1240,6 +1262,7 @@ void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     memset(&_sg, 0, sizeof(_sg));
     _sg_setup_pools(&_sg.pools, desc);
+    _sg.frame_index = 1;
     _sg.next_draw_valid = false;
     _sg_setup_backend(desc);
     _sg.valid = true;
@@ -1642,6 +1665,7 @@ void sg_end_pass() {
 
 void sg_commit() {
     _sg_commit();
+    _sg.frame_index++;
 }
 
 void sg_reset_state_cache() {
@@ -1649,13 +1673,17 @@ void sg_reset_state_cache() {
 }
 
 void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
-    SOKOL_ASSERT(data);
-    if (num_bytes > 0) {
-        _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-        if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_validate_update_buffer(buf, data, num_bytes);
-            _sg_update_buffer(buf, data, num_bytes);
-        }
+    if (num_bytes == 0) {
+        return;
+    }
+    _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (!(buf && buf->slot.state == SG_RESOURCESTATE_VALID)) {
+        return;
+    }
+    if (_sg_validate_update_buffer(buf, data, num_bytes)) {
+        SOKOL_ASSERT(buf->upd_frame_index != _sg.frame_index);
+        _sg_update_buffer(buf, data, num_bytes);
+        buf->upd_frame_index = _sg.frame_index;
     }
 }
 
@@ -1664,7 +1692,9 @@ void sg_update_image(sg_image img_id, const sg_image_content* data) {
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
         _sg_validate_update_image(img, data);
+        SOKOL_ASSERT(img->upd_frame_index != _sg.frame_index);
         _sg_update_image(img, data);
+        img->upd_frame_index = _sg.frame_index;
     }
 }
 

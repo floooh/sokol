@@ -401,7 +401,6 @@ typedef struct {
     const void* (*dsv_cb)(void);
     bool in_pass;
     bool use_indexed_draw;
-    uint32_t frame_index;
     int cur_width;
     int cur_height;
     int num_rtvs;
@@ -433,7 +432,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->d3d11_render_target_view_cb != desc->d3d11_depth_stencil_view_cb);
     memset(&_sg_d3d11, 0, sizeof(_sg_d3d11));
     _sg_d3d11.valid = true;
-    _sg_d3d11.frame_index = 1;
     _sg_d3d11.dev = (ID3D11Device*) desc->d3d11_device;
     _sg_d3d11.ctx = (ID3D11DeviceContext*) desc->d3d11_device_context;
     _sg_d3d11.rtv_cb = desc->d3d11_render_target_view_cb;
@@ -1373,16 +1371,12 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 
 _SOKOL_PRIVATE void _sg_commit() {
     SOKOL_ASSERT(!_sg_d3d11.in_pass);
-    _sg_d3d11.frame_index++;
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
     SOKOL_ASSERT(buf && data_ptr && data_size);
     SOKOL_ASSERT(_sg_d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11_buf);
-    /* only one update per frame and buffer allowed */
-    SOKOL_ASSERT(buf->upd_frame_index != _sg_d3d11.frame_index);
-    buf->upd_frame_index = _sg_d3d11.frame_index;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
     SOKOL_ASSERT(SUCCEEDED(hr));
@@ -1394,9 +1388,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(_sg_d3d11.ctx);
     SOKOL_ASSERT(img->d3d11_tex2d || img->d3d11_tex3d);
-    /* only one update per frame and buffer allowed */
-    SOKOL_ASSERT(img->upd_frame_index != _sg_d3d11.frame_index);
-    img->upd_frame_index = _sg_d3d11.frame_index;
     ID3D11Resource* d3d11_res = 0;
     if (img->d3d11_tex3d) {
         d3d11_res = (ID3D11Resource*) img->d3d11_tex3d;

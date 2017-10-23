@@ -698,7 +698,6 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 typedef struct {
     bool valid;
     bool in_pass;
-    uint32_t frame_index;
     GLuint default_framebuffer;
     int cur_pass_width;
     int cur_pass_height;
@@ -720,7 +719,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     #endif
     _sg_gl.valid = true;
     _sg_gl.in_pass = false;
-    _sg_gl.frame_index = 1;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg_gl.default_framebuffer);
     _sg_gl.cur_pass_width = 0;
     _sg_gl.cur_pass_height = 0;
@@ -1919,14 +1917,11 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 
 _SOKOL_PRIVATE void _sg_commit() {
     SOKOL_ASSERT(!_sg_gl.in_pass);
-    _sg_gl.frame_index++;
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
     SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     /* only one update per buffer per frame allowed */
-    SOKOL_ASSERT(buf->upd_frame_index != _sg_gl.frame_index);
-    buf->upd_frame_index = _sg_gl.frame_index;
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
     }
@@ -1943,8 +1938,6 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     /* only one update per image per frame allowed */
-    SOKOL_ASSERT(img->upd_frame_index != _sg_gl.frame_index);
-    img->upd_frame_index = _sg_gl.frame_index;
     if (++img->active_slot >= img->num_slots) {
         img->active_slot = 0;
     }

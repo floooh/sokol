@@ -1628,9 +1628,6 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int data_size) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
-    /* only one update per frame and buffer allowed */
-    SOKOL_ASSERT(buf->upd_frame_index != _sg_mtl_frame_index);
-    buf->upd_frame_index = _sg_mtl_frame_index;
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
     }
@@ -1644,9 +1641,6 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
-    /* only one update per frame and image allowed */
-    SOKOL_ASSERT(img->upd_frame_index != _sg_mtl_frame_index);
-    img->upd_frame_index = _sg_mtl_frame_index;
     if (++img->active_slot >= img->num_slots) {
         img->active_slot = 0;
     }
