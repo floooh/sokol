@@ -29,9 +29,6 @@ enum {
     _SG_MTL_INVALID_POOL_INDEX = 0xFFFFFFFF
 };
 
-#define _sg_mtl_min(a,b) ((a<b)?a:b)
-#define _sg_mtl_max(a,b) ((a>b)?a:b)
-
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
     switch (a) {
@@ -823,8 +820,8 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_un
             SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
             const uint8_t* data_ptr = content->subimage[face_index][mip_index].ptr;
-            const int mip_width = _sg_mtl_max(img->width >> mip_index, 1);
-            const int mip_height = _sg_mtl_max(img->height >> mip_index, 1);
+            const int mip_width = _sg_max(img->width >> mip_index, 1);
+            const int mip_height = _sg_max(img->height >> mip_index, 1);
             /* special case PVRTC formats: bytePerRow must be 0 */
             int bytes_per_row = 0;
             int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
@@ -833,7 +830,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_un
             }
             MTLRegion region;
             if (img->type == SG_IMAGETYPE_3D) {
-                const int mip_depth = _sg_mtl_max(img->depth >> mip_index, 1);
+                const int mip_depth = _sg_max(img->depth >> mip_index, 1);
                 region = MTLRegionMake3D(0, 0, 0, mip_width, mip_height, mip_depth);
                 /* FIXME: apparently the minimal bytes_per_image size for 3D texture
                  is 4 KByte... somehow need to handle this */
@@ -1467,16 +1464,16 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     }
     SOKOL_ASSERT(_sg_mtl_cmd_encoder);
     /* clip against framebuffer rect */
-    x = _sg_mtl_min(_sg_mtl_max(0, x), _sg_mtl_cur_width-1);
-    y = _sg_mtl_min(_sg_mtl_max(0, y), _sg_mtl_cur_height-1);
+    x = _sg_min(_sg_max(0, x), _sg_mtl_cur_width-1);
+    y = _sg_min(_sg_max(0, y), _sg_mtl_cur_height-1);
     if ((x + w) > _sg_mtl_cur_width) {
         w = _sg_mtl_cur_width - x;
     }
     if ((y + h) > _sg_mtl_cur_height) {
         h = _sg_mtl_cur_height - y;
     }
-    w = _sg_mtl_max(w, 1);
-    h = _sg_mtl_max(h, 1);
+    w = _sg_max(w, 1);
+    h = _sg_max(h, 1);
 
     MTLScissorRect r;
     r.x = x;
