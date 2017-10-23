@@ -291,6 +291,10 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     }
 }
 
+/* some general helper macros */
+#define _sg_min(a,b) ((a<b)?a:b)
+#define _sg_max(a,b) ((a>b)?a:b)
+
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
 typedef struct {
     uint32_t id;
@@ -672,7 +676,15 @@ typedef enum {
     /* sg_update_buffer validation */
     _SG_VALIDATE_UPDBUF_USAGE,
     _SG_VALIDATE_UPDBUF_SIZE,
-    _SG_VALIDATE_UPDBUF_ONCE
+    _SG_VALIDATE_UPDBUF_ONCE,
+    
+    /* sg_update_image validation */
+    _SG_VALIDATE_UPDIMG_USAGE,
+    _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
+    _SG_VALIDATE_UPDIMG_SIZEMISMATCH,
+    _SG_VALIDATE_UPDIMG_COMPRESSED,
+    _SG_VALIDATE_UPDIMG_ONCE
+
 } _sg_validate_error;
 
 /* return a human readable string for an _sg_validate_error */
@@ -768,6 +780,13 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_UPDBUF_SIZE:      return "sg_update_buffer: update size is bigger than buffer size";
         case _SG_VALIDATE_UPDBUF_ONCE:      return "sg_update_buffer: only one update allowed per buffer and frame";
 
+        /* sg_update_image */
+        case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
+        case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
+        case _SG_VALIDATE_UPDIMG_SIZEMISMATCH:  return "sg_update_image: subimage data size mismatch";
+        case _SG_VALIDATE_UPDIMG_COMPRESSED:    return "sg_update_image: cannot update images with compressed format";
+        case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
+
         default: return "unknown validation error";
     }
 }
@@ -860,6 +879,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
+            /* FIXME: should use the same "expected size" computation as in _sg_validate_update_image() here */
             if (usage == SG_USAGE_IMMUTABLE) {
                 const int num_faces = _sg_def(desc->type, SG_IMAGETYPE_2D)==SG_IMAGETYPE_CUBE ? 6:1;
                 const int num_mips = _sg_def(desc->num_mipmaps, 1);
@@ -1218,7 +1238,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_update_buffer(_sg_buffer* buf, const void* data, int size) {
+_SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer* buf, const void* data, int size) {
     #if !defined(SOKOL_DEBUG)
         return true;
     #else
@@ -1229,30 +1249,30 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(_sg_buffer* buf, const void* data
         SOKOL_VALIDATE(buf->upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDBUF_ONCE);
         return SOKOL_VALIDATE_END();
     #endif
-
-    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_VALID);
-    SOKOL_ASSERT(data && (size > 0) && (size <= buf->size));
-    SOKOL_ASSERT((buf->usage == SG_USAGE_DYNAMIC) || (buf->usage == SG_USAGE_STREAM));
 }
 
-void _sg_validate_update_image(_sg_image* img, const sg_image_content* data) {
-    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_VALID);
-    SOKOL_ASSERT(data);
-    SOKOL_ASSERT(!img->render_target);
-    SOKOL_ASSERT((img->usage == SG_USAGE_DYNAMIC) || (img->usage == SG_USAGE_STREAM));
-    /* currently don't allow to update compressed textures */
-    SOKOL_ASSERT(!_sg_is_compressed_pixel_format(img->pixel_format));
-    #if defined(SOKOL_DEBUG)
-    /* check that all provided data is provided */
-    /* FIXME: we should check that the provided data size is correct */
-    const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6 : 1;
-    const int num_mips = img->num_mipmaps;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-            SOKOL_ASSERT(data->subimage[face_index][mip_index].ptr);
-            SOKOL_ASSERT(data->subimage[face_index][mip_index].size > 0);
+_SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image* img, const sg_image_content* data) {
+    #if !defined(SOKOL_DEBUG)
+        return true;
+    #else
+        SOKOL_ASSERT(img && data);
+        SOKOL_VALIDATE_BEGIN();
+        SOKOL_VALIDATE(img->usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDIMG_USAGE);
+        SOKOL_VALIDATE(img->upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDIMG_ONCE);
+        SOKOL_VALIDATE(!_sg_is_compressed_pixel_format(img->pixel_format), _SG_VALIDATE_UPDIMG_COMPRESSED);
+        const int num_faces = (img->type == SG_IMAGETYPE_CUBE) ? 6 : 1;
+        const int num_mips = img->num_mipmaps;
+        for (int face_index = 0; face_index < num_faces; face_index++) {
+            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
+                SOKOL_VALIDATE(data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
+                const int mip_width = _sg_max(img->width >> mip_index, 1);
+                const int mip_height = _sg_max(img->height >> mip_index, 1);
+                const int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
+                const int expected_size = bytes_per_slice * img->depth;
+                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size == expected_size, _SG_VALIDATE_UPDIMG_SIZEMISMATCH);
+            }
         }
-    }
+        return SOKOL_VALIDATE_END();
     #endif
 }
 
@@ -1688,10 +1708,11 @@ void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
 }
 
 void sg_update_image(sg_image img_id, const sg_image_content* data) {
-    SOKOL_ASSERT(data);
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
-        _sg_validate_update_image(img, data);
+    if (!(img && img->slot.state == SG_RESOURCESTATE_VALID)) {
+        return;
+    }
+    if (_sg_validate_update_image(img, data)) {
         SOKOL_ASSERT(img->upd_frame_index != _sg.frame_index);
         _sg_update_image(img, data);
         img->upd_frame_index = _sg.frame_index;
