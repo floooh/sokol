@@ -1004,7 +1004,7 @@ typedef struct {
 */
 typedef struct {
     const void* ptr;    /* pointer to subimage data */
-    unsigned long size;           /* size in bytes of pointed-to subimage data */
+    int size;           /* size in bytes of pointed-to subimage data */
 } sg_subimage_content;
 
 /*
