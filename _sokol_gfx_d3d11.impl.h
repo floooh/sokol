@@ -951,7 +951,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rs_desc.DepthBiasClamp = 0.0f;
     rs_desc.SlopeScaledDepthBias = 0.0f;
     rs_desc.DepthClipEnable = TRUE;
-    rs_desc.ScissorEnable = desc->rasterizer.scissor_test_enabled;
+    rs_desc.ScissorEnable = TRUE;
     rs_desc.MultisampleEnable = _sg_def(desc->rasterizer.sample_count, 1) > 1;
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = ID3D11Device_CreateRasterizerState(_sg_d3d11.dev, &rs_desc, &pip->d3d11_rs);
@@ -1169,13 +1169,19 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     /* apply the render-target- and depth-stencil-views */
     ID3D11DeviceContext_OMSetRenderTargets(_sg_d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg_d3d11.cur_rtvs, _sg_d3d11.cur_dsv);
 
-    /* set viewport to cover whole screen */
+    /* set viewport and scissor rect to cover whole screen */
     D3D11_VIEWPORT vp;
     memset(&vp, 0, sizeof(vp));
     vp.Width = w;
     vp.Height = h;
     vp.MaxDepth = 1.0f;
     ID3D11DeviceContext_RSSetViewports(_sg_d3d11.ctx, 1, &vp);
+    D3D11_RECT rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = w;
+    rect.bottom = h;
+    ID3D11DeviceContext_RSSetScissorRects(_sg_d3d11.ctx, 1, &rect);
 
     /* perform clear action */
     for (int i = 0; i < _sg_d3d11.num_rtvs; i++) {
