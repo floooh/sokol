@@ -1264,7 +1264,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image* img, const sg_ima
         const int num_mips = img->num_mipmaps;
         for (int face_index = 0; face_index < num_faces; face_index++) {
             for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                SOKOL_VALIDATE(data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
+                SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
                 const int mip_width = _sg_max(img->width >> mip_index, 1);
                 const int mip_height = _sg_max(img->height >> mip_index, 1);
                 const int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
