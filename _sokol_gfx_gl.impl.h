@@ -629,7 +629,6 @@ _SOKOL_PRIVATE void _sg_gl_init_blend_state(sg_blend_state* s) {
 
 _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     SOKOL_ASSERT(s);
-    s->scissor_test_enabled = false;
     s->alpha_to_coverage_enabled = false;
     s->cull_mode = SG_CULLMODE_NONE;
     s->face_winding = SG_FACEWINDING_CW;
@@ -686,7 +685,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
     glDisable(GL_POLYGON_OFFSET_FILL);
-    glDisable(GL_SCISSOR_TEST);
+    glEnable(GL_SCISSOR_TEST);
     glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glEnable(GL_DITHER);
     #if defined(SOKOL_GLCORE33)
@@ -1195,7 +1194,6 @@ _SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state*
 }
 
 _SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_rasterizer_state* dst) {
-    dst->scissor_test_enabled = src->scissor_test_enabled;
     dst->alpha_to_coverage_enabled = src->alpha_to_coverage_enabled;
     dst->cull_mode = _sg_def(src->cull_mode, SG_CULLMODE_NONE);
     dst->face_winding = _sg_def(src->face_winding, SG_FACEWINDING_CW);
@@ -1483,12 +1481,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
     }
     glViewport(0, 0, w, h);
+    glScissor(0, 0, w, h);
     bool need_pip_cache_flush = false;
-    if (_sg_gl.cache.rast.scissor_test_enabled) {
-        need_pip_cache_flush = true;
-        _sg_gl.cache.rast.scissor_test_enabled = false;
-        glDisable(GL_SCISSOR_TEST);
-    }
     if (_sg_gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
         need_pip_cache_flush = true;
         _sg_gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
@@ -1756,11 +1750,6 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
             cache_r->face_winding = new_r->face_winding;
             GLenum gl_winding = (SG_FACEWINDING_CW == new_r->face_winding) ? GL_CW : GL_CCW;
             glFrontFace(gl_winding);
-        }
-        if (new_r->scissor_test_enabled != cache_r->scissor_test_enabled) {
-            cache_r->scissor_test_enabled = new_r->scissor_test_enabled;
-            if (new_r->scissor_test_enabled) glEnable(GL_SCISSOR_TEST);
-            else glDisable(GL_SCISSOR_TEST);
         }
         if (new_r->alpha_to_coverage_enabled != cache_r->alpha_to_coverage_enabled) {
             cache_r->alpha_to_coverage_enabled = new_r->alpha_to_coverage_enabled;

@@ -1171,7 +1171,6 @@ typedef struct {
         .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
         .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
     .rasterizer:
-        .scissor_test_enabled:          false
         .alpha_to_coverage_enabled:     false
         .cull_mode:                     SG_CULLMODE_NONE
         .face_winding:                  SG_FACEWINDING_CW
@@ -1226,7 +1225,6 @@ typedef struct {
 } sg_blend_state;
 
 typedef struct {
-    bool scissor_test_enabled;
     bool alpha_to_coverage_enabled;
     sg_cull_mode cull_mode;
     sg_face_winding face_winding;
