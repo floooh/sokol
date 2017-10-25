@@ -905,6 +905,12 @@ typedef struct {
     .pipeline_pool_size:    64
     .pass_pool_size:        16 
     
+    GL specific:
+    .gl_force_gles2
+        if this is true the GL backend will act in "GLES2 fallback mode" even
+        when compiled with SOKOL_GLES3, this is useful to fall back 
+        to traditional WebGL if a browser doesn't support a WebGL2 context
+
     Metal specific:
     .mtl_device     
         a pointer to the MTLDevice object, obtained with CFBridgingRetain()
@@ -951,12 +957,15 @@ typedef struct {
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
-    /* Metal specific */
+    /* GL specific */
+    bool gl_force_gles2;
+    /* Metal-specific */
     const void* mtl_device;
     const void* (*mtl_renderpass_descriptor_cb)(void);
     const void* (*mtl_drawable_cb)(void);
     int mtl_global_uniform_buffer_size;
     int mtl_sampler_cache_size;
+    /* D3D11-specific */
     const void* d3d11_device;
     const void* d3d11_device_context;
     const void* (*d3d11_render_target_view_cb)(void);

@@ -65,6 +65,9 @@ enum {
 #endif
 #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); } 
 
+/* true if runnin in GLES2-fallback mode */
+static bool _sg_gl_gles2;
+
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
@@ -343,60 +346,65 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
     #if defined(SOKOL_GLES2)
     return _sg_gl_teximage_format(fmt);
     #else
-    switch (fmt) {
-        case SG_PIXELFORMAT_NONE:
-            return 0;
-        case SG_PIXELFORMAT_RGBA8:
-            return GL_RGBA8;
-        case SG_PIXELFORMAT_RGB8:
-            return GL_RGB8;
-        case SG_PIXELFORMAT_RGBA4:
-            return GL_RGBA4;
-        case SG_PIXELFORMAT_R5G6B5:
-            #if defined(SOKOL_GLES3)
-                return GL_RGB565;
-            #else
-                return GL_RGB5;
-            #endif
-        case SG_PIXELFORMAT_R5G5B5A1:
-            return GL_RGB5_A1;
-        case SG_PIXELFORMAT_R10G10B10A2:
-            return GL_RGB10_A2;
-        case SG_PIXELFORMAT_RGBA32F:
-            return GL_RGBA32F;
-        case SG_PIXELFORMAT_RGBA16F:
-            return GL_RGBA16F;
-        case SG_PIXELFORMAT_R32F:
-            return GL_R32F;
-        case SG_PIXELFORMAT_R16F:
-            return GL_R16F;
-        case SG_PIXELFORMAT_L8:
-            return GL_R8;
-        case SG_PIXELFORMAT_DEPTH:
-            /* FIXME */
-            return GL_DEPTH_COMPONENT16;
-        case SG_PIXELFORMAT_DEPTHSTENCIL:
-            return GL_DEPTH24_STENCIL8;
-        case SG_PIXELFORMAT_DXT1:
-            return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-        case SG_PIXELFORMAT_DXT3:
-            return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
-        case SG_PIXELFORMAT_DXT5:
-            return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-            return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
-            return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
-            return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
-        case SG_PIXELFORMAT_ETC2_RGB8:
-            return GL_COMPRESSED_RGB8_ETC2;
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-            return GL_COMPRESSED_SRGB8_ETC2;
-        default:
-            SOKOL_UNREACHABLE; return 0;
+    if (_sg_gl_gles2) {
+        return _sg_gl_teximage_format(fmt);
+    }
+    else {
+        switch (fmt) {
+            case SG_PIXELFORMAT_NONE:
+                return 0;
+            case SG_PIXELFORMAT_RGBA8:
+                return GL_RGBA8;
+            case SG_PIXELFORMAT_RGB8:
+                return GL_RGB8;
+            case SG_PIXELFORMAT_RGBA4:
+                return GL_RGBA4;
+            case SG_PIXELFORMAT_R5G6B5:
+                #if defined(SOKOL_GLES3)
+                    return GL_RGB565;
+                #else
+                    return GL_RGB5;
+                #endif
+            case SG_PIXELFORMAT_R5G5B5A1:
+                return GL_RGB5_A1;
+            case SG_PIXELFORMAT_R10G10B10A2:
+                return GL_RGB10_A2;
+            case SG_PIXELFORMAT_RGBA32F:
+                return GL_RGBA32F;
+            case SG_PIXELFORMAT_RGBA16F:
+                return GL_RGBA16F;
+            case SG_PIXELFORMAT_R32F:
+                return GL_R32F;
+            case SG_PIXELFORMAT_R16F:
+                return GL_R16F;
+            case SG_PIXELFORMAT_L8:
+                return GL_R8;
+            case SG_PIXELFORMAT_DEPTH:
+                /* FIXME */
+                return GL_DEPTH_COMPONENT16;
+            case SG_PIXELFORMAT_DEPTHSTENCIL:
+                return GL_DEPTH24_STENCIL8;
+            case SG_PIXELFORMAT_DXT1:
+                return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            case SG_PIXELFORMAT_DXT3:
+                return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+            case SG_PIXELFORMAT_DXT5:
+                return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            case SG_PIXELFORMAT_PVRTC2_RGB:
+                return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
+            case SG_PIXELFORMAT_PVRTC4_RGB:
+                return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
+            case SG_PIXELFORMAT_PVRTC2_RGBA:
+                return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+            case SG_PIXELFORMAT_PVRTC4_RGBA:
+                return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
+            case SG_PIXELFORMAT_ETC2_RGB8:
+                return GL_COMPRESSED_RGB8_ETC2;
+            case SG_PIXELFORMAT_ETC2_SRGB8:
+                return GL_COMPRESSED_SRGB8_ETC2;
+            default:
+                SOKOL_UNREACHABLE; return 0;
+        }
     }
     #endif
 }
@@ -612,6 +620,7 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 }
 
 /*-- state cache implementation ----------------------------------------------*/
+/*-- state cache and backend structs -----------------------------------------*/
 typedef struct {
     sg_depth_stencil_state ds;
     sg_blend_state blend;
@@ -684,14 +693,12 @@ typedef struct {
     GLuint vao; 
     #endif
 } _sg_backend;
+
 static _sg_backend _sg_gl;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+    _sg_gl_gles2 = desc->gl_force_gles2;
     memset(&_sg_gl, 0, sizeof(_sg_gl));
-    #if !defined(SOKOL_GLES2)
-    glGenVertexArrays(1, &_sg_gl.vao);
-    glBindVertexArray(_sg_gl.vao);
-    #endif
     _sg_gl.valid = true;
     _sg_gl.in_pass = false;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg_gl.default_framebuffer);
@@ -699,6 +706,12 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.cur_pass_height = 0;
     _sg_gl.cur_pass = 0;
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
+    #if !defined(SOKOL_GLES2)
+    if (!_sg_gl_gles2) {
+        glGenVertexArrays(1, &_sg_gl.vao);
+        glBindVertexArray(_sg_gl.vao);
+    }
+    #endif
     _sg_gl_reset_state_cache(&_sg_gl.cache);
     
     /* initialize feature flags */
@@ -742,8 +755,10 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_discard_backend() {
     SOKOL_ASSERT(_sg_gl.valid);
     #if !defined(SOKOL_GLES2)
-    glDeleteVertexArrays(1, &_sg_gl.vao);
-    _sg_gl.vao = 0;
+    if (!_sg_gl_gles2) {
+        glDeleteVertexArrays(1, &_sg_gl.vao);
+        _sg_gl.vao = 0;
+    }
     #endif
     _sg_gl.valid = false;
 }
@@ -856,7 +871,10 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
 
     /* special case depth-stencil-buffer? */
     #if !defined(SOKOL_GLES2)
-    const bool msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+    bool msaa = false;
+    if (!_sg_gl_gles2) {
+        msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+    }
     #endif
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
         SOKOL_ASSERT((img->usage == SG_USAGE_IMMUTABLE) && (img->num_slots == 1));
@@ -902,7 +920,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
                     #if !defined(SOKOL_GLES2)
-                    if (img->type == SG_IMAGETYPE_3D) {
+                    if (!_sg_gl_gles2 && (img->type == SG_IMAGETYPE_3D)) {
                         glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                     }
                     #endif
@@ -938,7 +956,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                         }
                     }
                     #if !defined(SOKOL_GLES2)
-                    else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
+                    else if (!_sg_gl_gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                         int mip_depth = img->depth >> mip_index;
                         if (mip_depth == 0) {
                             mip_depth = 1;
@@ -959,16 +977,13 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         }
 
         /* if this is a MSAA render target, need to create a separate render buffer */
-        if (img->render_target) {
-            /* MSAA render buffer */
-            #if !defined(SOKOL_GLES2)
-            if (msaa) {
-                glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
-                glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
-                glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
-            }
-            #endif
+        #if !defined(SOKOL_GLES2)
+        if (img->render_target && msaa) {
+            glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
         }
+        #endif
     }
     _SG_GL_CHECK_ERROR();
     img->slot.state = SG_RESOURCESTATE_VALID;
@@ -1327,7 +1342,9 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
                     default:
                         /* 3D- or array-texture */
                         #if !defined(SOKOL_GLES2)
-                        glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
+                        if (!_sg_gl_gles2) {
+                            glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
+                        }
                         #endif
                         break;
                 }
@@ -1373,8 +1390,9 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
                         break;
                     default:
                         #if !defined(SOKOL_GLES2)
-                        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
-                            gl_tex, att->mip_level, att->slice);
+                        if (!_sg_gl_gles2) {
+                            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, att->mip_level, att->slice);
+                        }
                         #endif
                         break;
                 }
@@ -1434,22 +1452,24 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         SOKOL_ASSERT(pass->gl_fb);
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
         #if !defined(SOKOL_GLES2)
-        GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
-            GL_COLOR_ATTACHMENT0,
-            GL_COLOR_ATTACHMENT1,
-            GL_COLOR_ATTACHMENT2,
-            GL_COLOR_ATTACHMENT3
-        };
-        int num_attrs = 0;
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (pass->color_atts[num_attrs].image) {
-                num_attrs++;
+        if (!_sg_gl_gles2) {
+            GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+                GL_COLOR_ATTACHMENT0,
+                GL_COLOR_ATTACHMENT1,
+                GL_COLOR_ATTACHMENT2,
+                GL_COLOR_ATTACHMENT3
+            };
+            int num_attrs = 0;
+            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+                if (pass->color_atts[num_attrs].image) {
+                    num_attrs++;
+                }
+                else {
+                    break;
+                }
             }
-            else {
-                break;
-            }
+            glDrawBuffers(num_attrs, att);
         }
-        glDrawBuffers(num_attrs, att);
         #endif
     }
     else {
@@ -1483,6 +1503,10 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     bool use_mrt_clear = (0 != pass);
     #if defined(SOKOL_GLES2)
     use_mrt_clear = false;
+    #else
+    if (_sg_gl_gles2) {
+        use_mrt_clear = false;
+    }
     #endif
     if (!use_mrt_clear) {
         GLbitfield clear_mask = 0;
@@ -1544,7 +1568,7 @@ _SOKOL_PRIVATE void _sg_end_pass() {
     /* if this was an offscreen pass, and MSAA rendering was used, need 
        to resolve into the pass images */
     #if !defined(SOKOL_GLES2)
-    if (_sg_gl.cur_pass) {
+    if (!_sg_gl_gles2 && _sg_gl.cur_pass) {
         /* check if the pass object is still valid */
         const _sg_pass* pass = _sg_gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg_gl.cur_pass_id.id);
@@ -1935,7 +1959,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
                     data_ptr);
             }
             #if !defined(SOKOL_GLES2)
-            else if ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type)) {
+            else if (!_sg_gl_gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                 int mip_depth = img->depth >> mip_index;
                 if (mip_depth == 0) {
                     mip_depth = 1;
