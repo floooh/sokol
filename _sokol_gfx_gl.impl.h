@@ -70,9 +70,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
         case SG_BUFFERTYPE_VERTEXBUFFER:    return GL_ARRAY_BUFFER;
         case SG_BUFFERTYPE_INDEXBUFFER:     return GL_ELEMENT_ARRAY_BUFFER;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -84,7 +82,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t) {
         case SG_IMAGETYPE_3D:       return GL_TEXTURE_3D;
         case SG_IMAGETYPE_ARRAY:    return GL_TEXTURE_2D_ARRAY;
         #endif
-        default: return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -93,9 +91,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_usage(sg_usage u) {
         case SG_USAGE_IMMUTABLE:    return GL_STATIC_DRAW;
         case SG_USAGE_DYNAMIC:      return GL_DYNAMIC_DRAW;
         case SG_USAGE_STREAM:       return GL_STREAM_DRAW;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -103,9 +99,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_shader_stage(sg_shader_stage stage) {
     switch (stage) {
         case SG_SHADERSTAGE_VS:     return GL_VERTEX_SHADER;
         case SG_SHADERSTAGE_FS:     return GL_FRAGMENT_SHADER;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -124,7 +118,7 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:    return 4;
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
-        default:    return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -149,7 +143,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         default:
-            return 0;
+            SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -173,9 +167,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_primitive_type(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_LINE_STRIP:       return GL_LINE_STRIP;
         case SG_PRIMITIVETYPE_TRIANGLES:        return GL_TRIANGLES;
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return GL_TRIANGLE_STRIP;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -184,9 +176,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_index_type(sg_index_type t) {
         case SG_INDEXTYPE_NONE:     return 0;
         case SG_INDEXTYPE_UINT16:   return GL_UNSIGNED_SHORT;
         case SG_INDEXTYPE_UINT32:   return GL_UNSIGNED_INT;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -200,9 +190,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_compare_func(sg_compare_func cmp) {
         case SG_COMPAREFUNC_NOT_EQUAL:      return GL_NOTEQUAL;
         case SG_COMPAREFUNC_GREATER_EQUAL:  return GL_GEQUAL;
         case SG_COMPAREFUNC_ALWAYS:         return GL_ALWAYS;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -216,9 +204,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_stencil_op(sg_stencil_op op) {
         case SG_STENCILOP_INVERT:       return GL_INVERT;
         case SG_STENCILOP_INCR_WRAP:    return GL_INCR_WRAP;
         case SG_STENCILOP_DECR_WRAP:    return GL_DECR_WRAP;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -239,9 +225,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return GL_CONSTANT_ALPHA;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return GL_ONE_MINUS_CONSTANT_ALPHA;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -250,9 +234,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return GL_FUNC_ADD;
         case SG_BLENDOP_SUBTRACT:           return GL_FUNC_SUBTRACT;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return GL_FUNC_REVERSE_SUBTRACT;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -264,9 +246,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
         case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return GL_NEAREST_MIPMAP_LINEAR;
         case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return GL_LINEAR_MIPMAP_NEAREST;
         case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return GL_LINEAR_MIPMAP_LINEAR;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -275,9 +255,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
         case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
         case SG_WRAP_REPEAT:            return GL_REPEAT;
         case SG_WRAP_MIRRORED_REPEAT:   return GL_MIRRORED_REPEAT;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -308,8 +286,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
             /* FIXME */
             return GL_UNSIGNED_INT_24_8;
         default:
-            SOKOL_LOG("_sg_gl_teximage_type(): invalid pixel format!\n");
-            return 0;
+            SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -358,8 +335,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_ETC2_SRGB8:
             return GL_COMPRESSED_SRGB8_ETC2;
         default:
-            SOKOL_UNREACHABLE;
-            return -1;
+            SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -420,8 +396,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_ETC2_SRGB8:
             return GL_COMPRESSED_SRGB8_ETC2;
         default:
-            SOKOL_UNREACHABLE;
-            return -1;
+            SOKOL_UNREACHABLE; return 0;
     }
     #endif
 }
@@ -433,7 +408,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_cubeface_target(int face_index) {
         case 2: return GL_TEXTURE_CUBE_MAP_POSITIVE_Y;
         case 3: return GL_TEXTURE_CUBE_MAP_NEGATIVE_Y;
         case 4: return GL_TEXTURE_CUBE_MAP_POSITIVE_Z;
-        default: return GL_TEXTURE_CUBE_MAP_NEGATIVE_Z;
+        case 5: return GL_TEXTURE_CUBE_MAP_NEGATIVE_Z;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
@@ -441,7 +417,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16;
         case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;
-        default:    SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return 0;
     }
 }
 
