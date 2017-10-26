@@ -145,8 +145,6 @@
         beginning a pass will reset the viewport to the size of the framebuffer used 
         in the new pass, 
 
-        scissor testing must be enabled in the pipeline object
-
     --- to update the content of buffer and image resources, call:
 
             sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
