@@ -459,6 +459,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    uint32_t max_anisotropy;
     uint32_t mtl_sampler_state;
 } _sg_mtl_sampler_cache_item;
 static int _sg_mtl_sampler_cache_capacity;
@@ -500,6 +501,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     const sg_wrap wrap_u = _sg_def(img_desc->wrap_u, SG_WRAP_REPEAT);
     const sg_wrap wrap_v = _sg_def(img_desc->wrap_v, SG_WRAP_REPEAT);
     const sg_wrap wrap_w = _sg_def(img_desc->wrap_w, SG_WRAP_REPEAT);
+    const uint32_t max_anisotropy = _sg_def(img_desc->max_anisotropy, 1);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
     for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
         _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
@@ -507,7 +509,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
             (mag_filter == item->mag_filter) &&
             (wrap_u == item->wrap_u) &&
             (wrap_v == item->wrap_v) &&
-            (wrap_w == item->wrap_w))
+            (wrap_w == item->wrap_w) &&
+            (max_anisotropy == item->max_anisotropy))
         {
             return item->mtl_sampler_state;
         }
@@ -519,6 +522,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     new_item->wrap_u = wrap_u;
     new_item->wrap_v = wrap_v;
     new_item->wrap_w = wrap_w;
+    new_item->max_anisotropy = max_anisotropy;
 
     MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
     mtl_desc.sAddressMode = _sg_mtl_address_mode(wrap_u);
@@ -531,7 +535,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     mtl_desc.mipFilter = _sg_mtl_mip_filter(min_filter);
     mtl_desc.lodMinClamp = 0.0f;
     mtl_desc.lodMaxClamp = FLT_MAX;
-    mtl_desc.maxAnisotropy = 1;     /* FIXME: should be configurable */
+    mtl_desc.maxAnisotropy = max_anisotropy;
     mtl_desc.normalizedCoordinates = YES;
     id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
     new_item->mtl_sampler_state = _sg_mtl_add_resource(mtl_sampler);
@@ -571,6 +575,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    uint32_t max_anisotropy;
     uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
@@ -870,6 +875,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
     img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
     img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
+    img->max_anisotropy = _sg_def(desc->max_anisotropy, 1);
     img->upd_frame_index = 0;
     img->num_slots = img->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
     img->active_slot = 0;
