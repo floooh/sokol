@@ -468,6 +468,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    uint32_t max_anisotropy;
     GLenum gl_target;
     GLuint gl_depth_render_buffer;
     GLuint gl_msaa_render_buffer;
@@ -889,6 +890,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
     img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
     img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
+    img->max_anisotropy = _sg_def(desc->max_anisotropy, 1);
     img->upd_frame_index = 0;
 
     /* check if texture format is support */
@@ -956,6 +958,13 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                 }
                 glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
                 glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+                if (_sg_gl.ext_anisotropic && (img->max_anisotropy > 1)) {
+                    GLint max_aniso = (GLint) img->max_anisotropy;
+                    if (max_aniso > _sg_gl.max_anisotropy) {
+                        max_aniso = _sg_gl.max_anisotropy;
+                    }
+                    glTexParameteri(img->gl_target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
+                }
                 if (img->type == SG_IMAGETYPE_CUBE) {
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
