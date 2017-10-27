@@ -1048,6 +1048,7 @@ typedef struct {
     .wrap_u:            SG_WRAP_REPEAT
     .wrap_v:            SG_WRAP_REPEAT
     .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
+    .max_anisotropy     1 (must be 1..16)
     .content            an sg_image_content struct to define the initial content 
 
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
@@ -1078,6 +1079,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    uint32_t max_anisotropy;
     sg_image_content content;
     uint32_t _end_canary;
 } sg_image_desc;
