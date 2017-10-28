@@ -365,7 +365,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     SOKOL_ASSERT([_sg_mtl_pool count] == _sg_mtl_pool_size);
     /* a queue of currently free slot indices */
     _sg_mtl_free_queue_top = 0;
-    _sg_mtl_free_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(int));
+    _sg_mtl_free_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(uint32_t));
     for (int i = _sg_mtl_pool_size-1; i >= 0; i--) {
         _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = (uint32_t)i;
     }
