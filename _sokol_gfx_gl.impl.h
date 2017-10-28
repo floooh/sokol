@@ -949,35 +949,27 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             glBindTexture(img->gl_target, img->gl_tex[slot]);
             GLenum gl_min_filter = _sg_gl_filter(img->min_filter);
             GLenum gl_mag_filter = _sg_gl_filter(img->mag_filter);
-            if (1 == img->num_mipmaps) {
-                if ((gl_min_filter==GL_NEAREST_MIPMAP_NEAREST)||(gl_min_filter==GL_NEAREST_MIPMAP_LINEAR)) {
-                    gl_min_filter = GL_NEAREST;
+            glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
+            glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+            if (_sg_gl.ext_anisotropic && (img->max_anisotropy > 1)) {
+                GLint max_aniso = (GLint) img->max_anisotropy;
+                if (max_aniso > _sg_gl.max_anisotropy) {
+                    max_aniso = _sg_gl.max_anisotropy;
                 }
-                else if ((gl_min_filter==GL_LINEAR_MIPMAP_NEAREST)||(gl_min_filter==GL_LINEAR_MIPMAP_LINEAR)) {
-                    gl_min_filter = GL_LINEAR;
+                glTexParameteri(img->gl_target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
+            }
+            if (img->type == SG_IMAGETYPE_CUBE) {
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            }
+            else {
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
+                glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
+                #if !defined(SOKOL_GLES2)
+                if (!_sg_gl_gles2 && (img->type == SG_IMAGETYPE_3D)) {
+                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                 }
-                glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
-                glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
-                if (_sg_gl.ext_anisotropic && (img->max_anisotropy > 1)) {
-                    GLint max_aniso = (GLint) img->max_anisotropy;
-                    if (max_aniso > _sg_gl.max_anisotropy) {
-                        max_aniso = _sg_gl.max_anisotropy;
-                    }
-                    glTexParameteri(img->gl_target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
-                }
-                if (img->type == SG_IMAGETYPE_CUBE) {
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                }
-                else {
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
-                    #if !defined(SOKOL_GLES2)
-                    if (!_sg_gl_gles2 && (img->type == SG_IMAGETYPE_3D)) {
-                        glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
-                    }
-                    #endif
-                }
+                #endif
             }
             const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
             int data_index = 0;
