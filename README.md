@@ -29,7 +29,7 @@ Eventually Oryol will just be a thin C++ layer over Sokol.
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
-### sokol_gfx.h:
+# sokol_gfx.h:
 
 - simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
 - does *not* handle window creation or 3D API context initialization
