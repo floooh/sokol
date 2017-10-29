@@ -93,7 +93,7 @@ int main() {
             "}\n"
     });
 
-    /* a pipeline state object */
+    /* a pipeline state object (default render states are fine for triangle) */
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .vertex_layouts[0] = {
