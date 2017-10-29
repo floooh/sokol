@@ -118,7 +118,7 @@ int main() {
     /* draw loop */
     while (!glfwWindowShouldClose(w)) {
         int cur_width, cur_height;
-        glfwGetWindowSize(w, &cur_width, &cur_height);
+        glfwGetFramebufferSize(w, &cur_width, &cur_height);
         sg_begin_default_pass(&pass_action, cur_width, cur_height);
         sg_apply_draw_state(&draw_state);
         sg_draw(0, 3, 1);
