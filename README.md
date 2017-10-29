@@ -35,7 +35,7 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 - does *not* handle window creation or 3D API context initialization
 - does *not* provide shader dialect cross-translation
 
-A triangle with GLFW and FlextGL:
+A triangle in C99 with GLFW and FlextGL:
 
 ```c
 #define GLFW_INCLUDE_NONE
