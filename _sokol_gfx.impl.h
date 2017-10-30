@@ -1458,6 +1458,9 @@ sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
     if (buf_id.id != SG_INVALID_ID) {
         sg_init_buffer(buf_id, desc);
     }
+    else {
+        SOKOL_LOG("buffer pool exhausted!");
+    }
     return buf_id;
 }
 
@@ -1466,6 +1469,9 @@ sg_image sg_make_image(const sg_image_desc* desc) {
     sg_image img_id = sg_alloc_image();
     if (img_id.id != SG_INVALID_ID) {
         sg_init_image(img_id, desc);
+    }
+    else {
+        SOKOL_LOG("image pool exhausted!");
     }
     return img_id;
 }
@@ -1476,6 +1482,9 @@ sg_shader sg_make_shader(const sg_shader_desc* desc) {
     if (shd_id.id != SG_INVALID_ID) {
         sg_init_shader(shd_id, desc);
     }
+    else {
+        SOKOL_LOG("shader pool exhausted!");
+    }
     return shd_id;
 }
 
@@ -1485,6 +1494,9 @@ sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc) {
     if (pip_id.id != SG_INVALID_ID) {
         sg_init_pipeline(pip_id, desc);
     }
+    else {
+        SOKOL_LOG("pipeline pool exhausted!");
+    }
     return pip_id;
 }
 
@@ -1493,6 +1505,9 @@ sg_pass sg_make_pass(const sg_pass_desc* desc) {
     sg_pass pass_id = sg_alloc_pass();
     if (pass_id.id != SG_INVALID_ID) {
         sg_init_pass(pass_id, desc);
+    }
+    else {
+        SOKOL_LOG("pass pool exhausted!");
     }
     return pass_id;
 }
