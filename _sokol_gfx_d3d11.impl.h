@@ -111,8 +111,11 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_index_format(sg_index_type index_type) {
     }
 }
 
-_SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f) {
-    if (mag_f == SG_FILTER_NEAREST) {
+_SOKOL_PRIVATE D3D11_FILTER _sg_d3d11_filter(sg_filter min_f, sg_filter mag_f, uint32_t max_anisotropy) {
+    if (max_anisotropy > 1) {
+        return D3D11_FILTER_ANISOTROPIC;
+    }
+    else if (mag_f == SG_FILTER_NEAREST) {
         switch (min_f) {
             case SG_FILTER_NEAREST:
             case SG_FILTER_NEAREST_MIPMAP_NEAREST:
@@ -300,6 +303,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    uint32_t max_anisotropy;
     int upd_frame_index;
     DXGI_FORMAT d3d11_format;
     ID3D11Texture2D* d3d11_tex2d;
@@ -564,6 +568,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_u = _sg_def(desc->wrap_u, SG_WRAP_REPEAT);
     img->wrap_v = _sg_def(desc->wrap_v, SG_WRAP_REPEAT);
     img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
+    img->max_anisotropy = _sg_def(desc->max_anisotropy, 1);
     img->upd_frame_index = 0;
 
     /* special case depth-stencil buffer? */
@@ -699,11 +704,11 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
         D3D11_SAMPLER_DESC d3d11_smp_desc;
         memset(&d3d11_smp_desc, 0, sizeof(d3d11_smp_desc));
-        d3d11_smp_desc.Filter = _sg_d3d11_filter(img->min_filter, img->mag_filter);
+        d3d11_smp_desc.Filter = _sg_d3d11_filter(img->min_filter, img->mag_filter, img->max_anisotropy);
         d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->wrap_u);
         d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->wrap_v);
         d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->wrap_w);
-        d3d11_smp_desc.MaxAnisotropy = 1;
+        d3d11_smp_desc.MaxAnisotropy = img->max_anisotropy;
         d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         d3d11_smp_desc.MinLOD = -D3D11_FLOAT32_MAX;
         d3d11_smp_desc.MaxLOD = D3D11_FLOAT32_MAX;
