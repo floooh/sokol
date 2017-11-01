@@ -86,6 +86,7 @@ enum {
 
 /* a helper macro to select a default if val is zero-initialized (which means 'default') */
 #define _sg_def(val, def) (((val) == 0) ? (def) : (val))
+#define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
 
 /*-- helper functions --------------------------------------------------------*/
 

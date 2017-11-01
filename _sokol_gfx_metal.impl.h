@@ -460,6 +460,8 @@ typedef struct {
     sg_wrap wrap_v;
     sg_wrap wrap_w;
     uint32_t max_anisotropy;
+    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
+    int max_lod;
     uint32_t mtl_sampler_state;
 } _sg_mtl_sampler_cache_item;
 static int _sg_mtl_sampler_cache_capacity;
@@ -495,13 +497,15 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     SOKOL_ASSERT(img_desc);
     SOKOL_ASSERT(_sg_mtl_sampler_cache);
     /* sampler state cache is full */
-    SOKOL_ASSERT(_sg_mtl_sampler_cache_size < _sg_mtl_sampler_cache_capacity);
     const sg_filter min_filter = _sg_def(img_desc->min_filter, SG_FILTER_NEAREST);
     const sg_filter mag_filter = _sg_def(img_desc->mag_filter, SG_FILTER_NEAREST);
     const sg_wrap wrap_u = _sg_def(img_desc->wrap_u, SG_WRAP_REPEAT);
     const sg_wrap wrap_v = _sg_def(img_desc->wrap_v, SG_WRAP_REPEAT);
     const sg_wrap wrap_w = _sg_def(img_desc->wrap_w, SG_WRAP_REPEAT);
     const uint32_t max_anisotropy = _sg_def(img_desc->max_anisotropy, 1);
+    /* convert floats to valid int for proper comparison */
+    const int min_lod = (int)(img_desc->min_lod * 1000.0f);
+    const int max_lod = (int)(_sg_def(img_desc->max_lod, 1000.0f) * 1000.0f);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
     for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
         _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
@@ -510,20 +514,24 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
             (wrap_u == item->wrap_u) &&
             (wrap_v == item->wrap_v) &&
             (wrap_w == item->wrap_w) &&
-            (max_anisotropy == item->max_anisotropy))
+            (max_anisotropy == item->max_anisotropy) &&
+            (min_lod == item->min_lod) &&
+            (max_lod == item->max_lod))
         {
             return item->mtl_sampler_state;
         }
     }
     /* fallthrough: need to create a new MTLSamplerState object */
+    SOKOL_ASSERT(_sg_mtl_sampler_cache_size < _sg_mtl_sampler_cache_capacity);
     _sg_mtl_sampler_cache_item* new_item = &_sg_mtl_sampler_cache[_sg_mtl_sampler_cache_size++];
     new_item->min_filter = min_filter;
     new_item->mag_filter = mag_filter;
     new_item->wrap_u = wrap_u;
     new_item->wrap_v = wrap_v;
     new_item->wrap_w = wrap_w;
+    new_item->min_lod = min_lod;
+    new_item->max_lod = max_lod;
     new_item->max_anisotropy = max_anisotropy;
-
     MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
     mtl_desc.sAddressMode = _sg_mtl_address_mode(wrap_u);
     mtl_desc.tAddressMode = _sg_mtl_address_mode(wrap_v);
@@ -533,8 +541,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     mtl_desc.minFilter = _sg_mtl_minmag_filter(min_filter);
     mtl_desc.magFilter = _sg_mtl_minmag_filter(mag_filter);
     mtl_desc.mipFilter = _sg_mtl_mip_filter(min_filter);
-    mtl_desc.lodMinClamp = 0.0f;
-    mtl_desc.lodMaxClamp = FLT_MAX;
+    mtl_desc.lodMinClamp = img_desc->min_lod;
+    mtl_desc.lodMaxClamp = _sg_def_flt(img_desc->max_lod, FLT_MAX);
     mtl_desc.maxAnisotropy = max_anisotropy;
     mtl_desc.normalizedCoordinates = YES;
     id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
