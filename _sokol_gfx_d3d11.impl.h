@@ -710,8 +710,8 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->wrap_w);
         d3d11_smp_desc.MaxAnisotropy = img->max_anisotropy;
         d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-        d3d11_smp_desc.MinLOD = -D3D11_FLOAT32_MAX;
-        d3d11_smp_desc.MaxLOD = D3D11_FLOAT32_MAX;
+        d3d11_smp_desc.MinLOD = desc->min_lod;
+        d3d11_smp_desc.MaxLOD = _sg_def_flt(desc->max_lod, D3D11_FLOAT32_MAX);
         hr = ID3D11Device_CreateSamplerState(_sg_d3d11.dev, &d3d11_smp_desc, &img->d3d11_smp);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_smp);
     }
