@@ -975,7 +975,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                 if (!_sg_gl_gles2) {
                     /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
                     const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-                    const float max_lod = _sg_clamp(_sg_def(desc->max_lod, 1000.0f), 0.0f, 1000.0f);
+                    const float max_lod = _sg_clamp(_sg_def_flt(desc->max_lod, 1000.0f), 0.0f, 1000.0f);
                     glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
                     glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
                 }

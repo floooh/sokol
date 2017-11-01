@@ -505,7 +505,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     const uint32_t max_anisotropy = _sg_def(img_desc->max_anisotropy, 1);
     /* convert floats to valid int for proper comparison */
     const int min_lod = (int)(img_desc->min_lod * 1000.0f);
-    const int max_lod = (int)(_sg_def(img_desc->max_lod, 1000.0f) * 1000.0f);
+    const int max_lod = (int)(_sg_def_flt(img_desc->max_lod, 1000.0f) * 1000.0f);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
     for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
         _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
