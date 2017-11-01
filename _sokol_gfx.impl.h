@@ -295,6 +295,7 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 /* some general helper macros */
 #define _sg_min(a,b) ((a<b)?a:b)
 #define _sg_max(a,b) ((a>b)?a:b)
+#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
 
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
 typedef struct {
