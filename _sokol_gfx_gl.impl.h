@@ -629,10 +629,15 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 /*-- state cache implementation ----------------------------------------------*/
 /*-- state cache and backend structs -----------------------------------------*/
 typedef struct {
+    _sg_gl_attr gl_attr;
+    GLuint gl_vbuf;
+} _sg_gl_cache_attr;
+
+typedef struct {
     sg_depth_stencil_state ds;
     sg_blend_state blend;
     sg_rasterizer_state rast;
-    _sg_gl_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline* cur_pipeline;
@@ -643,9 +648,11 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
     
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_gl_init_attr(&cache->attrs[i]);
+        _sg_gl_init_attr(&cache->attrs[i].gl_attr);
+        cache->attrs[i].gl_vbuf = 0;
         glDisableVertexAttribArray(i);
     }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     cache->cur_primitive_type = GL_TRIANGLES;
     cache->cur_index_type = 0;
 
@@ -1854,35 +1861,51 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     GLuint gl_vb = 0;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
-        _sg_gl_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
+        _sg_gl_cache_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
+        bool cache_attr_dirty = false;
         if (attr->vb_index >= 0) {
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer* vb = vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
-            if (gl_vb != vb->gl_buf[vb->active_slot]) {
-                gl_vb = vb->gl_buf[vb->active_slot];
-                glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
+            if ((vb->gl_buf[vb->active_slot] != cache_attr->gl_vbuf) ||
+                (attr->size != cache_attr->gl_attr.size) ||
+                (attr->type != cache_attr->gl_attr.type) ||
+                (attr->normalized != cache_attr->gl_attr.normalized) ||
+                (attr->stride != cache_attr->gl_attr.stride) ||
+                (attr->offset != cache_attr->gl_attr.offset))
+            {
+                if (gl_vb != vb->gl_buf[vb->active_slot]) {
+                    gl_vb = vb->gl_buf[vb->active_slot];
+                    glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
+                }
+                glVertexAttribPointer(attr_index, attr->size, attr->type, 
+                    attr->normalized, attr->stride, 
+                    (const GLvoid*)(GLintptr)attr->offset);
+                cache_attr_dirty = true;
             }
-            glVertexAttribPointer(attr_index, attr->size, attr->type, 
-                attr->normalized, attr->stride, 
-                (const GLvoid*)(GLintptr)attr->offset);
-            if (cache_attr->vb_index == -1) {
+            if (cache_attr->gl_attr.vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
+                cache_attr_dirty = true;
             }
             if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
-                if (cache_attr->divisor != attr->divisor) {
+                if (cache_attr->gl_attr.divisor != attr->divisor) {
                     glVertexAttribDivisor(attr_index, attr->divisor);
+                    cache_attr_dirty = true;
                 }
             }
         }
         else {
             /* attribute is disabled */
-            if (cache_attr->vb_index != -1) {
+            if (cache_attr->gl_attr.vb_index != -1) {
                 glDisableVertexAttribArray(attr_index);
+                cache_attr_dirty = true;
             }
         }
-        *cache_attr = *attr;
+        if (cache_attr_dirty) {
+            cache_attr->gl_attr = *attr;
+            cache_attr->gl_vbuf = gl_vb;
+        }
     }
     _SG_GL_CHECK_ERROR();
 }
