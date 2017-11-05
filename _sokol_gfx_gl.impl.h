@@ -638,6 +638,7 @@ typedef struct {
     sg_blend_state blend;
     sg_rasterizer_state rast;
     _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    GLuint cur_gl_ib;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline* cur_pipeline;
@@ -647,12 +648,14 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
     
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_gl_init_attr(&cache->attrs[i].gl_attr);
         cache->attrs[i].gl_vbuf = 0;
         glDisableVertexAttribArray(i);
     }
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    cache->cur_gl_ib = 0;
     cache->cur_primitive_type = GL_TRIANGLES;
     cache->cur_index_type = 0;
 
@@ -1851,12 +1854,12 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     _SG_GL_CHECK_ERROR();
 
     /* index buffer (can be 0) */
-    if (ib) {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->gl_buf[ib->active_slot]);
+    const GLuint gl_ib = ib ? ib->gl_buf[ib->active_slot] : 0;
+    if (gl_ib != _sg_gl.cache.cur_gl_ib) {
+        _sg_gl.cache.cur_gl_ib = gl_ib;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     }
-    else {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    }
+
     /* vertex attributes */
     GLuint gl_vb = 0;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
