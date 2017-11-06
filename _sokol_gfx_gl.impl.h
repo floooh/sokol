@@ -12,10 +12,6 @@
 extern "C" {
 #endif
 
-enum {
-    _SG_GL_NUM_UPDATE_SLOTS = 2,
-};
-
 #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
 #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
 #endif
@@ -444,7 +440,7 @@ typedef struct {
     uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
-    GLuint gl_buf[_SG_GL_NUM_UPDATE_SLOTS];
+    GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
 } _sg_buffer;
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
@@ -475,7 +471,7 @@ typedef struct {
     uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
-    GLuint gl_tex[_SG_GL_NUM_UPDATE_SLOTS];
+    GLuint gl_tex[SG_NUM_INFLIGHT_FRAMES];
 } _sg_image;
 
 _SOKOL_PRIVATE void _sg_init_image(_sg_image* img) {
@@ -832,7 +828,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
-    buf->num_slots = buf->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
+    buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     GLenum gl_target = _sg_gl_buffer_target(buf->type);
     GLenum gl_usage  = _sg_gl_usage(buf->usage);
@@ -922,7 +918,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     }
 
     /* create 1 or 2 GL textures, depending on requested update strategy */
-    img->num_slots = img->usage == SG_USAGE_STREAM ? _SG_GL_NUM_UPDATE_SLOTS : 1;
+    img->num_slots = (img->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     img->active_slot = 0;
 
     /* special case depth-stencil-buffer? */
@@ -1995,7 +1991,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
         buf->active_slot = 0;
     }
     GLenum gl_tgt = _sg_gl_buffer_target(buf->type);
-    SOKOL_ASSERT(buf->active_slot < _SG_GL_NUM_UPDATE_SLOTS);
+    SOKOL_ASSERT(buf->active_slot < SG_NUM_INFLIGHT_FRAMES);
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
@@ -2010,6 +2006,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     if (++img->active_slot >= img->num_slots) {
         img->active_slot = 0;
     }
+    SOKOL_ASSERT(img->active_slot < SG_NUM_INFLIGHT_FRAMES);
     SOKOL_ASSERT(0 != img->gl_tex[img->active_slot]);
     glBindTexture(img->gl_target, img->gl_tex[img->active_slot]);
     const GLenum gl_img_format = _sg_gl_teximage_format(img->pixel_format);

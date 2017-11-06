@@ -287,6 +287,7 @@ typedef struct { uint32_t id; } sg_pass;
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_SHADER_STAGES = 2,
+    SG_NUM_INFLIGHT_FRAMES = 2,
     SG_MAX_COLOR_ATTACHMENTS = 4,
     SG_MAX_SHADERSTAGE_BUFFERS = 4,
     SG_MAX_SHADERSTAGE_IMAGES = 12,

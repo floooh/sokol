@@ -18,7 +18,6 @@ extern "C" {
 #endif
     
 enum {
-    _SG_MTL_NUM_INFLIGHT_FRAMES = 2,
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     #if defined(SOKOL_METAL_MACOS)
     _SG_MTL_UB_ALIGN = 256,
@@ -425,7 +424,7 @@ _SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t pool
 
 /* run garbage-collection pass on all resources in the release-queue */
 _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
-    const uint32_t safe_release_frame_index = frame_index + _SG_MTL_NUM_INFLIGHT_FRAMES + 1;
+    const uint32_t safe_release_frame_index = frame_index + SG_NUM_INFLIGHT_FRAMES + 1;
     while (_sg_mtl_release_queue_back != _sg_mtl_release_queue_front) {
         if (_sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index < safe_release_frame_index) {
             /* don't need to check further, release-items past this are too young */
@@ -559,7 +558,7 @@ typedef struct {
     uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
-    uint32_t mtl_buf[_SG_MTL_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
+    uint32_t mtl_buf[SG_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
 } _sg_buffer;
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
@@ -587,7 +586,7 @@ typedef struct {
     uint32_t upd_frame_index;
     int num_slots;
     int active_slot;
-    uint32_t mtl_tex[_SG_MTL_NUM_INFLIGHT_FRAMES];
+    uint32_t mtl_tex[SG_NUM_INFLIGHT_FRAMES];
     uint32_t mtl_depth_tex;
     uint32_t mtl_msaa_tex;
     uint32_t mtl_sampler_state;
@@ -712,7 +711,7 @@ static uint32_t _sg_mtl_cur_frame_rotate_index;
 static uint32_t _sg_mtl_ub_size;
 static uint32_t _sg_mtl_cur_ub_offset;
 static uint8_t* _sg_mtl_cur_ub_base_ptr;
-static id<MTLBuffer> _sg_mtl_uniform_buffers[_SG_MTL_NUM_INFLIGHT_FRAMES];
+static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 static dispatch_semaphore_t _sg_mtl_sem;
 static bool _sg_mtl_in_pass;
 static bool _sg_mtl_pass_valid;
@@ -739,10 +738,10 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_cur_ub_offset = 0;
     _sg_mtl_cur_ub_base_ptr = 0;
     _sg_mtl_device = CFBridgingRelease(desc->mtl_device);
-    _sg_mtl_sem = dispatch_semaphore_create(_SG_MTL_NUM_INFLIGHT_FRAMES);
+    _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = [_sg_mtl_device
             newBufferWithLength:_sg_mtl_ub_size
             options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
@@ -753,17 +752,17 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_discard_backend() {
     SOKOL_ASSERT(_sg_mtl_valid);
     /* wait for the last frame to finish */
-    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
     }
     _sg_mtl_destroy_sampler_cache(_sg_mtl_frame_index);
-    _sg_mtl_garbage_collect(_sg_mtl_frame_index + _SG_MTL_NUM_INFLIGHT_FRAMES + 2);
+    _sg_mtl_garbage_collect(_sg_mtl_frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg_mtl_valid = false;
     _sg_mtl_cmd_encoder = nil;
     _sg_mtl_cmd_buffer = nil;
     _sg_mtl_cmd_queue = nil;
-    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = nil;
     }
     _sg_mtl_device = nil;
@@ -798,7 +797,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
-    buf->num_slots = buf->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
+    buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->usage);
     for (int slot = 0; slot < buf->num_slots; slot++) {
@@ -885,11 +884,11 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
     img->max_anisotropy = _sg_def(desc->max_anisotropy, 1);
     img->upd_frame_index = 0;
-    img->num_slots = img->usage==SG_USAGE_STREAM ? _SG_MTL_NUM_INFLIGHT_FRAMES : 1;
+    img->num_slots = (img->usage == SG_USAGE_IMMUTABLE) ? 1 :SG_NUM_INFLIGHT_FRAMES;
     img->active_slot = 0;
 
     /* first initialize all Metal resource pool slots to 'empty' */
-    for (int i = 0; i < _SG_MTL_NUM_INFLIGHT_FRAMES; i++) {
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         img->mtl_tex[i] = _sg_mtl_add_resource(nil);
     }
     img->mtl_sampler_state = _sg_mtl_add_resource(nil);
@@ -1452,7 +1451,7 @@ _SOKOL_PRIVATE void _sg_commit() {
     _sg_mtl_garbage_collect(_sg_mtl_frame_index);
 
     /* rotate uniform buffer slot */
-    if (++_sg_mtl_cur_frame_rotate_index >= _SG_MTL_NUM_INFLIGHT_FRAMES) {
+    if (++_sg_mtl_cur_frame_rotate_index >= SG_NUM_INFLIGHT_FRAMES) {
         _sg_mtl_cur_frame_rotate_index = 0;
     }
     _sg_mtl_frame_index++;
