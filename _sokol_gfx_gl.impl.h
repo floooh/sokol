@@ -740,7 +740,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.ext_anisotropic = false;
     _sg_gl.features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
     #if defined(SOKOL_GLCORE33)
-        _sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS] = true;
+        _sg_gl.features[SG_FEATURE_INSTANCING] = true;
         _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
         _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
         _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
@@ -762,7 +762,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             }
         }
     #elif defined(SOKOL_GLES3)
-        _sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS] = true;
+        _sg_gl.features[SG_FEATURE_INSTANCING] = true;
         _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
         _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
         _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
@@ -783,7 +783,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             strstr(ext, "_compressed_texture_atc");
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        _sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS] =
+        _sg_gl.features[SG_FEATURE_INSTANCING] =
             strstr(ext, "_instanced_arrays");
         _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] =
             strstr(ext, "_texture_float");
@@ -1891,7 +1891,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 glEnableVertexAttribArray(attr_index);
                 cache_attr_dirty = true;
             }
-            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
                 if (cache_attr->gl_attr.divisor != attr->divisor) {
                     glVertexAttribDivisor(attr_index, attr->divisor);
                     cache_attr_dirty = true;
@@ -1966,7 +1966,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
         }
@@ -1977,7 +1977,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            if (_sg_gl.features[SG_FEATURE_INSTANCED_ARRAYS]) {
+            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
         }

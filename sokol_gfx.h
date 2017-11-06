@@ -304,7 +304,7 @@ enum {
     sg_query_feature() to check whether the feature is supported.
 */
 typedef enum {
-    SG_FEATURE_INSTANCED_ARRAYS,
+    SG_FEATURE_INSTANCING,
     SG_FEATURE_TEXTURE_COMPRESSION_DXT,
     SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
     SG_FEATURE_TEXTURE_COMPRESSION_ATC,

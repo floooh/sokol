@@ -771,7 +771,7 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
-        case SG_FEATURE_INSTANCED_ARRAYS:
+        case SG_FEATURE_INSTANCING:
         #if defined(SOKOL_METAL_MACOS)
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
         #else
