@@ -441,6 +441,7 @@ typedef struct {
     int num_slots;
     int active_slot;
     GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
+    bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
 } _sg_buffer;
 
 _SOKOL_PRIVATE void _sg_init_buffer(_sg_buffer* buf) {
@@ -830,16 +831,24 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->upd_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
+    buf->ext_buffers = (0 != desc->gl_buffers[0]);
     GLenum gl_target = _sg_gl_buffer_target(buf->type);
     GLenum gl_usage  = _sg_gl_usage(buf->usage);
     for (int slot = 0; slot < buf->num_slots; slot++) {
-        GLuint gl_buf;
-        glGenBuffers(1, &gl_buf);
-        glBindBuffer(gl_target, gl_buf);
-        glBufferData(gl_target, buf->size, 0, gl_usage);
-        if (buf->usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->content);
-            glBufferSubData(gl_target, 0, buf->size, desc->content);
+        GLuint gl_buf = 0;
+        if (buf->ext_buffers) {
+            SOKOL_ASSERT(desc->gl_buffers[slot]);
+            gl_buf = desc->gl_buffers[slot];
+            glBindBuffer(gl_target, gl_buf);
+        }
+        else {
+            glGenBuffers(1, &gl_buf);
+            glBindBuffer(gl_target, gl_buf);
+            glBufferData(gl_target, buf->size, 0, gl_usage);
+            if (buf->usage == SG_USAGE_IMMUTABLE) {
+                SOKOL_ASSERT(desc->content);
+                glBufferSubData(gl_target, 0, buf->size, desc->content);
+            }
         }
         buf->gl_buf[slot] = gl_buf;
     }
@@ -850,12 +859,14 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
     _SG_GL_CHECK_ERROR();
-    for (int slot = 0; slot < buf->num_slots; slot++) {
-        if (buf->gl_buf[slot]) {
-            glDeleteBuffers(1, &buf->gl_buf[slot]);
+    if (!buf->ext_buffers) {
+        for (int slot = 0; slot < buf->num_slots; slot++) {
+            if (buf->gl_buf[slot]) {
+                glDeleteBuffers(1, &buf->gl_buf[slot]);
+            }
         }
+        _SG_GL_CHECK_ERROR();
     }
-    _SG_GL_CHECK_ERROR();
     _sg_init_buffer(buf);
 }
 

@@ -988,6 +988,29 @@ typedef struct {
     Buffers with the SG_USAGE_IMMUTABLE usage *must* fill the buffer
     with initial data (.content must point to a data chunk with
     exactly .size bytes).
+
+    ADVANCED TOPIC: Injecting native 3D-API buffers:
+
+    The following struct members allow to inject your own GL, Metal
+    or D3D11 buffers into sokol_gfx:
+    
+    .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
+    .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
+    .d3d11_buffer
+
+    You must still provide all other members except the .content member, and
+    these must match the creation parameters of the native buffers you
+    provide. For SG_USAGE_IMMUTABLE, only provide a single native 3D-API
+    buffer, otherwise you need to provide SG_NUM_INFLIGHT_FRAMES buffers
+    (only for GL and Metal, not D3D11). Providing multiple buffers for GL and
+    Metal is necessary because sokol_gfx will rotate through them when
+    calling sg_update_buffer() to prevent lock-stalls.
+
+    Note that it is expected that immutable injected buffer have already been
+    initialized with content, and the .content member must be 0!
+
+    Also you need to call sg_reset_state_cache() after calling native 3D-API
+    functions, and before calling any sokol_gfx function.
 */
 typedef struct {
     uint32_t _start_canary;
@@ -995,6 +1018,9 @@ typedef struct {
     sg_buffer_type type;
     sg_usage usage;
     const void* content;
+    uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    void* d3d11_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
 
