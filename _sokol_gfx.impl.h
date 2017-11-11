@@ -653,18 +653,15 @@ typedef enum {
 
     /* sg_apply_draw_state validation */
     _SG_VALIDATE_ADS_PIP,
-    _SG_VALIDATE_ADS_INV_PIP,
     _SG_VALIDATE_ADS_VBS,
-    _SG_VALIDATE_ADS_INV_VBS,
+    _SG_VALIDATE_ADS_VB_TYPE,
     _SG_VALIDATE_ADS_NO_IB,
     _SG_VALIDATE_ADS_IB,
-    _SG_VALIDATE_ADS_INV_IB,
+    _SG_VALIDATE_ADS_IB_TYPE,
     _SG_VALIDATE_ADS_VS_IMGS,
     _SG_VALIDATE_ADS_VS_IMG_TYPES,
-    _SG_VALIDATE_ADS_INV_VS_IMGS,
     _SG_VALIDATE_ADS_FS_IMGS,
     _SG_VALIDATE_ADS_FS_IMG_TYPES,
-    _SG_VALIDATE_ADS_INV_FS_IMGS,
     _SG_VALIDATE_ADS_ATT_COUNT,
     _SG_VALIDATE_ADS_COLOR_FORMAT,
     _SG_VALIDATE_ADS_DEPTH_FORMAT,
@@ -760,9 +757,11 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
 
         /* sg_apply_draw_state */
         case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object required";
-        case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of pipeline vertex layoyts";
+        case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of pipeline vertex layouts";
+        case _SG_VALIDATE_ADS_VB_TYPE:      return "sg_apply_draw_state: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER";
         case _SG_VALIDATE_ADS_NO_IB:        return "sg_apply_draw_state: pipeline object defines indexed rendering, but no index buffer provided";
         case _SG_VALIDATE_ADS_IB:           return "sg_apply_draw_state: pipeline object defines non-indexed rendering, but no index buffer provided";
+        case _SG_VALIDATE_ADS_IB_TYPE:      return "sg_apply_draw_state: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER";
         case _SG_VALIDATE_ADS_VS_IMGS:      return "sg_apply_draw_state: vertex shader image count doesn't match sg_shader_desc";
         case _SG_VALIDATE_ADS_VS_IMG_TYPES: return "sg_apply_draw_state: one or more vertex shader image types don't match sg_shader_desc";
         case _SG_VALIDATE_ADS_FS_IMGS:      return "sg_apply_draw_state: fragment shader image count doesn't match sg_shader_desc";
@@ -1148,6 +1147,10 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
         for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
             if (ds->vertex_buffers[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(pip->vertex_layout_valid[i], _SG_VALIDATE_ADS_VBS);
+                /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
+                const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, ds->vertex_buffers[i].id);
+                SOKOL_ASSERT(buf);
+                SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
             }
             else {
                 /* vertex buffer provided in a slot which has no vertex layout in pipeline */
@@ -1163,6 +1166,12 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
         else {
             /* pipeline defines indexed rendering, but no index buffer provided */
             SOKOL_VALIDATE(ds->index_buffer.id != SG_INVALID_ID, _SG_VALIDATE_ADS_NO_IB);
+        }
+        if (ds->index_buffer.id != SG_INVALID_ID) {
+            /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_VERTEXBUFFER */
+            const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, ds->index_buffer.id);
+            SOKOL_ASSERT(buf);
+            SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
         }
 
         /* has expected vertex shader images */
