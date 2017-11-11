@@ -839,7 +839,6 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
         if (buf->ext_buffers) {
             SOKOL_ASSERT(desc->gl_buffers[slot]);
             gl_buf = desc->gl_buffers[slot];
-            glBindBuffer(gl_target, gl_buf);
         }
         else {
             glGenBuffers(1, &gl_buf);
