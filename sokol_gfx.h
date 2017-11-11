@@ -1018,8 +1018,11 @@ typedef struct {
     sg_buffer_type type;
     sg_usage usage;
     const void* content;
+    /* GL specific */
     uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    /* Metal specific */
     void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    /* D3D11 specific */
     void* d3d11_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
@@ -1088,6 +1091,18 @@ typedef struct {
     Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
     providing a valid .content member which points to
     initialization data.
+    
+    ADVANCED TOPIC: Injecting native 3D-API textures:
+
+    The following struct members allow to inject your own GL, Metal
+    or D3D11 textures into sokol_gfx:
+    
+    .gl_textures[SG_NUM_INFLIGHT_FRAMES]
+    .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
+    .d3d11_texture
+
+    The same rules apply as for injecting native buffers
+    (see sg_buffer_desc documentation for more details).
 */
 typedef struct {
     uint32_t _start_canary;
@@ -1112,6 +1127,12 @@ typedef struct {
     float min_lod;
     float max_lod;
     sg_image_content content;
+    /* GL specific */
+    uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
+    /* Metal specific */
+    void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
+    /* D3D11 specific */
+    void* d3d11_texture;
     uint32_t _end_canary;
 } sg_image_desc;
 
