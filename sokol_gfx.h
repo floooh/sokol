@@ -911,18 +911,23 @@ typedef struct {
         to traditional WebGL if a browser doesn't support a WebGL2 context
 
     Metal specific:
+        (NOTE: All Objective-C object references are transferred through
+        a bridged (const void*) to sokol_gfx, which will use a unretained
+        bridged cast (__bridged id<xxx>) to retrieve the Objective-C
+        references back. Since the bridge cast is unretained, the caller
+        must hold a strong reference to the Objective-C object for the 
+        duration of the sokol_gfx call!
+
     .mtl_device     
-        a pointer to the MTLDevice object, obtained with CFBridgingRetain()
+        a pointer to the MTLDevice object
     .mtl_renderpass_descriptor_cb
-        a C callback function to obtain the MTLRenderPassDescriptor for the
-        current frame when rendering to the default framebuffer, will be called 
-        in sg_begin_default_pass(), the pointer must be obtained with
-        CFBridgingRetain()
+        a C callback function to obtain the MTLRenderPassDescriptor for the 
+        current frame when rendering to the default framebuffer, will be called
+        in sg_begin_default_pass()
     .mtl_drawable_cb
-        a C callback function to obtain a CAMetalDrawable for the current
+        a C callback function to obtain a MTLDrawable for the the current
         frame when rendering to the default framebuffer, will be called in
-        sg_end_pass() of the default pass. the pointer must be obtained
-        with CFBridgingRetain()
+        sg_end_pass() of the default pass
     .mtl_global_uniform_buffer_size
         the size of the global uniform buffer in bytes, this must be big
         enough to hold all uniform block updates for a single frame,
@@ -1021,9 +1026,9 @@ typedef struct {
     /* GL specific */
     uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
     /* Metal specific */
-    void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
-    void* d3d11_buffer;
+    const void* d3d11_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
 
@@ -1130,9 +1135,9 @@ typedef struct {
     /* GL specific */
     uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* Metal specific */
-    void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
+    const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
-    void* d3d11_texture;
+    const void* d3d11_texture;
     uint32_t _end_canary;
 } sg_image_desc;
 
