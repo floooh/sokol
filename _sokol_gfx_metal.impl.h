@@ -737,7 +737,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_cur_frame_rotate_index = 0;
     _sg_mtl_cur_ub_offset = 0;
     _sg_mtl_cur_ub_base_ptr = 0;
-    _sg_mtl_device = CFBridgingRelease(desc->mtl_device);
+    _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl_device;
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
@@ -799,15 +799,22 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->upd_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
+    const bool injected = (0 != desc->mtl_buffers[0]);
     MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(buf->usage);
     for (int slot = 0; slot < buf->num_slots; slot++) {
         id<MTLBuffer> mtl_buf;
-        if (buf->usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->content);
-            mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->content length:buf->size options:mtl_options];
+        if (injected) {
+            SOKOL_ASSERT(desc->mtl_buffers[slot]);
+            mtl_buf = (__bridge id<MTLBuffer>) desc->mtl_buffers[slot];
         }
         else {
-            mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
+            if (buf->usage == SG_USAGE_IMMUTABLE) {
+                SOKOL_ASSERT(desc->content);
+                mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->content length:buf->size options:mtl_options];
+            }
+            else {
+                mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
+            }
         }
         buf->mtl_buf[slot] = _sg_mtl_add_resource(mtl_buf);
     }
@@ -886,6 +893,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->upd_frame_index = 0;
     img->num_slots = (img->usage == SG_USAGE_IMMUTABLE) ? 1 :SG_NUM_INFLIGHT_FRAMES;
     img->active_slot = 0;
+    const bool injected = (0 != desc->mtl_textures[0]);
 
     /* first initialize all Metal resource pool slots to 'empty' */
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -942,6 +950,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         SOKOL_ASSERT(img->render_target);
         SOKOL_ASSERT(img->type == SG_IMAGETYPE_2D);
         SOKOL_ASSERT(img->num_mipmaps == 1);
+        SOKOL_ASSERT(!injected);
         if (img->sample_count > 1) {
             mtl_desc.textureType = MTLTextureType2DMultisample;
             mtl_desc.sampleCount = img->sample_count;
@@ -953,11 +962,18 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     else {
         /* create the color texture(s) */
         for (int slot = 0; slot < img->num_slots; slot++) {
-            id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
-            img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
-            if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
-                _sg_mtl_copy_image_content(img, tex, &desc->content);
+            id<MTLTexture> tex;
+            if (injected) {
+                SOKOL_ASSERT(desc->mtl_textures[slot]);
+                tex = (__bridge id<MTLTexture>) desc->mtl_textures[slot];
             }
+            else {
+                tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+                if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
+                    _sg_mtl_copy_image_content(img, tex, &desc->content);
+                }
+            }
+            img->mtl_tex[slot] = _sg_mtl_add_resource(tex);
         }
 
         /* if MSAA color render target, create an additional MSAA render-surface texture */
@@ -1311,7 +1327,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     }
     else {
         /* default render pass, call user-provided callback to provide render pass descriptor */
-        pass_desc = CFBridgingRelease(_sg_mtl_renderpass_descriptor_cb());
+        pass_desc = (__bridge MTLRenderPassDescriptor*) _sg_mtl_renderpass_descriptor_cb();
 
     }
     if (pass_desc) {
@@ -1439,7 +1455,7 @@ _SOKOL_PRIVATE void _sg_commit() {
     #endif
 
     /* present, commit and signal semaphore when done */
-    id cur_drawable = CFBridgingRelease(_sg_mtl_drawable_cb());
+    id<MTLDrawable> cur_drawable = (__bridge id<MTLDrawable>) _sg_mtl_drawable_cb();
     [_sg_mtl_cmd_buffer presentDrawable:cur_drawable];
     __block dispatch_semaphore_t sem = _sg_mtl_sem;
     [_sg_mtl_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
