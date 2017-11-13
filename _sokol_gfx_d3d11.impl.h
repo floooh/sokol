@@ -491,22 +491,29 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->upd_frame_index = 0;
-    D3D11_BUFFER_DESC d3d11_desc;
-    memset(&d3d11_desc, 0, sizeof(d3d11_desc));
-    d3d11_desc.ByteWidth = buf->size;
-    d3d11_desc.Usage = _sg_d3d11_usage(buf->usage);
-    d3d11_desc.BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER;
-    d3d11_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage);
-    D3D11_SUBRESOURCE_DATA* init_data_ptr = 0;
-    D3D11_SUBRESOURCE_DATA init_data;
-    memset(&init_data, 0, sizeof(init_data));
-    if (buf->usage == SG_USAGE_IMMUTABLE) {
-        SOKOL_ASSERT(desc->content);
-        init_data.pSysMem = desc->content;
-        init_data_ptr = &init_data;
+    const bool injected = (0 != desc->d3d11_buffer);
+    if (injected) {
+        buf->d3d11_buf = (ID3D11Buffer*) desc->d3d11_buffer;
+        ID3D11Buffer_AddRef(buf->d3d11_buf);
     }
-    HRESULT hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11_buf);
-    SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11_buf);
+    else {
+        D3D11_BUFFER_DESC d3d11_desc;
+        memset(&d3d11_desc, 0, sizeof(d3d11_desc));
+        d3d11_desc.ByteWidth = buf->size;
+        d3d11_desc.Usage = _sg_d3d11_usage(buf->usage);
+        d3d11_desc.BindFlags = buf->type == SG_BUFFERTYPE_VERTEXBUFFER ? D3D11_BIND_VERTEX_BUFFER : D3D11_BIND_INDEX_BUFFER;
+        d3d11_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(buf->usage);
+        D3D11_SUBRESOURCE_DATA* init_data_ptr = 0;
+        D3D11_SUBRESOURCE_DATA init_data;
+        memset(&init_data, 0, sizeof(init_data));
+        if (buf->usage == SG_USAGE_IMMUTABLE) {
+            SOKOL_ASSERT(desc->content);
+            init_data.pSysMem = desc->content;
+            init_data_ptr = &init_data;
+        }
+        HRESULT hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11_buf);
+        SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11_buf);
+    }
     buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
@@ -570,10 +577,12 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     img->wrap_w = _sg_def(desc->wrap_w, SG_WRAP_REPEAT);
     img->max_anisotropy = _sg_def(desc->max_anisotropy, 1);
     img->upd_frame_index = 0;
+    const bool injected = (0 != desc->d3d11_texture);
 
     /* special case depth-stencil buffer? */
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
         /* create only a depth-texture */
+        SOKOL_ASSERT(!injected);
         img->d3d11_format = _sg_d3d11_rendertarget_depth_format(img->pixel_format);
         D3D11_TEXTURE2D_DESC d3d11_desc;
         memset(&d3d11_desc, 0, sizeof(d3d11_desc));
@@ -590,11 +599,11 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texds);
     }
     else {
-        /* create color texture */
-        
+        /* create (or inject) color texture */
+
         /* prepare initial content pointers */
         D3D11_SUBRESOURCE_DATA* init_data = 0;
-        if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
+        if (!injected && (img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
             _sg_d3d11_fill_subres_data(img, &desc->content);
             init_data = _sg_d3d11.subres_data;
         }
@@ -630,8 +639,14 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             d3d11_tex_desc.SampleDesc.Count = 1;
             d3d11_tex_desc.SampleDesc.Quality = 0;
             d3d11_tex_desc.MiscFlags = (img->type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
-            hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex2d);
-            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex2d);
+            if (injected) {
+                img->d3d11_tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
+                ID3D11Texture2D_AddRef(img->d3d11_tex2d);
+            }
+            else {
+                hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex2d);
+                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex2d);
+            }
 
             /* also need to create a separate MSAA render target texture? */
             if (img->sample_count > 1) {
@@ -688,8 +703,14 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
             }
-            hr = ID3D11Device_CreateTexture3D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex3d);
-            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex3d);
+            if (injected) {
+                img->d3d11_tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
+                ID3D11Texture3D_AddRef(img->d3d11_tex3d);
+            }
+            else {
+                hr = ID3D11Device_CreateTexture3D(_sg_d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex3d);
+                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex3d);
+            }
 
             /* shader resource view for 3d texture */
             D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
