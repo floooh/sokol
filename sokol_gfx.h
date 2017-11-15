@@ -1241,6 +1241,9 @@ typedef struct {
         .cull_mode:                     SG_CULLMODE_NONE
         .face_winding:                  SG_FACEWINDING_CW
         .sample_count:                  1
+        .depth_bias:                    0.0f
+        .depth_bias_clamp:              0.0f
+        .slope_scaled_depth_bias:       0.0f
 */
 typedef struct {
     const char* name;
@@ -1295,6 +1298,9 @@ typedef struct {
     sg_cull_mode cull_mode;
     sg_face_winding face_winding;
     int sample_count;
+    float depth_bias;
+    float depth_bias_clamp;
+    float slope_scaled_depth_bias;
 } sg_rasterizer_state;
 
 typedef struct {

@@ -622,6 +622,9 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     s->cull_mode = SG_CULLMODE_NONE;
     s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
+    s->depth_bias = 0.0f;
+    s->depth_bias_clamp = 0.0f;
+    s->slope_scaled_depth_bias = 0.0f;
 }
 
 /*-- state cache implementation ----------------------------------------------*/
@@ -635,6 +638,7 @@ typedef struct {
     sg_depth_stencil_state ds;
     sg_blend_state blend;
     sg_rasterizer_state rast;
+    bool polygon_offset_enabled;
     _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint cur_gl_ib;
     GLenum cur_primitive_type;
@@ -681,13 +685,16 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 
     /* rasterizer state */
     _sg_gl_init_rasterizer_state(&cache->rast);
+    cache->polygon_offset_enabled = false;
+    glPolygonOffset(0.0f, 0.0f);
+    glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
-    glDisable(GL_POLYGON_OFFSET_FILL);
     glEnable(GL_SCISSOR_TEST);
     glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glEnable(GL_DITHER);
+    glDisable(GL_POLYGON_OFFSET_FILL);
     #if defined(SOKOL_GLCORE33)
         glEnable(GL_MULTISAMPLE);
     #endif
@@ -1276,6 +1283,9 @@ _SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_ra
     dst->cull_mode = _sg_def(src->cull_mode, SG_CULLMODE_NONE);
     dst->face_winding = _sg_def(src->face_winding, SG_FACEWINDING_CW);
     dst->sample_count = _sg_def(src->sample_count, 1);
+    dst->depth_bias = src->depth_bias;
+    dst->depth_bias_clamp = src->depth_bias_clamp;
+    dst->slope_scaled_depth_bias = src->slope_scaled_depth_bias;
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
@@ -1849,6 +1859,29 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
             else glDisable(GL_MULTISAMPLE);
         }
         #endif
+        if (!_sg_fequal(new_r->depth_bias, cache_r->depth_bias, 0.000001f) ||
+            !_sg_fequal(new_r->slope_scaled_depth_bias, cache_r->slope_scaled_depth_bias, 0.000001f))
+        {
+            /* according to ANGLE's D3D11 backend:
+                D3D11 SlopeScaledDepthBias ==> GL polygonOffsetFactor
+                D3D11 DepthBias ==> GL polygonOffsetUnits
+                DepthBiasClamp has no meaning on GL
+            */
+            cache_r->depth_bias = new_r->depth_bias;
+            cache_r->slope_scaled_depth_bias = new_r->slope_scaled_depth_bias;
+            glPolygonOffset(new_r->slope_scaled_depth_bias, new_r->depth_bias);
+            bool po_enabled = true;
+            if (_sg_fequal(new_r->depth_bias, 0.0f, 0.000001f) &&
+                _sg_fequal(new_r->slope_scaled_depth_bias, 0.0f, 0.000001f))
+            {
+                po_enabled = false;
+            }
+            if (po_enabled != _sg_gl.cache.polygon_offset_enabled) {
+                _sg_gl.cache.polygon_offset_enabled = po_enabled;
+                if (po_enabled) glEnable(GL_POLYGON_OFFSET_FILL);
+                else glDisable(GL_POLYGON_OFFSET_FILL);
+            }
+        }
 
         /* bind shader program */
         glUseProgram(pip->shader->gl_prog);
