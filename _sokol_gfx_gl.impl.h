@@ -623,8 +623,8 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
     s->depth_bias = 0.0f;
+    s->depth_bias_slope_scale = 0.0f;
     s->depth_bias_clamp = 0.0f;
-    s->slope_scaled_depth_bias = 0.0f;
 }
 
 /*-- state cache implementation ----------------------------------------------*/
@@ -1284,8 +1284,8 @@ _SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_ra
     dst->face_winding = _sg_def(src->face_winding, SG_FACEWINDING_CW);
     dst->sample_count = _sg_def(src->sample_count, 1);
     dst->depth_bias = src->depth_bias;
+    dst->depth_bias_slope_scale = src->depth_bias_slope_scale;
     dst->depth_bias_clamp = src->depth_bias_clamp;
-    dst->slope_scaled_depth_bias = src->slope_scaled_depth_bias;
 }
 
 _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
@@ -1860,7 +1860,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         }
         #endif
         if (!_sg_fequal(new_r->depth_bias, cache_r->depth_bias, 0.000001f) ||
-            !_sg_fequal(new_r->slope_scaled_depth_bias, cache_r->slope_scaled_depth_bias, 0.000001f))
+            !_sg_fequal(new_r->depth_bias_slope_scale, cache_r->depth_bias_slope_scale, 0.000001f))
         {
             /* according to ANGLE's D3D11 backend:
                 D3D11 SlopeScaledDepthBias ==> GL polygonOffsetFactor
@@ -1868,11 +1868,11 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 DepthBiasClamp has no meaning on GL
             */
             cache_r->depth_bias = new_r->depth_bias;
-            cache_r->slope_scaled_depth_bias = new_r->slope_scaled_depth_bias;
-            glPolygonOffset(new_r->slope_scaled_depth_bias, new_r->depth_bias);
+            cache_r->depth_bias_slope_scale = new_r->depth_bias_slope_scale;
+            glPolygonOffset(new_r->depth_bias_slope_scale, new_r->depth_bias);
             bool po_enabled = true;
             if (_sg_fequal(new_r->depth_bias, 0.0f, 0.000001f) &&
-                _sg_fequal(new_r->slope_scaled_depth_bias, 0.0f, 0.000001f))
+                _sg_fequal(new_r->depth_bias_slope_scale, 0.0f, 0.000001f))
             {
                 po_enabled = false;
             }

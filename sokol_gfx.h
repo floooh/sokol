@@ -1242,8 +1242,8 @@ typedef struct {
         .face_winding:                  SG_FACEWINDING_CW
         .sample_count:                  1
         .depth_bias:                    0.0f
+        .depth_bias_slope_scale:        0.0f
         .depth_bias_clamp:              0.0f
-        .slope_scaled_depth_bias:       0.0f
 */
 typedef struct {
     const char* name;
@@ -1299,8 +1299,8 @@ typedef struct {
     sg_face_winding face_winding;
     int sample_count;
     float depth_bias;
+    float depth_bias_slope_scale;
     float depth_bias_clamp;
-    float slope_scaled_depth_bias;
 } sg_rasterizer_state;
 
 typedef struct {
