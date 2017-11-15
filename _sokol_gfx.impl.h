@@ -84,9 +84,14 @@ enum {
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
 };
 
-/* a helper macro to select a default if val is zero-initialized (which means 'default') */
+/* helper macros */
 #define _sg_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
+#define _sg_min(a,b) ((a<b)?a:b)
+#define _sg_max(a,b) ((a>b)?a:b)
+#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
+#define _sg_fequal(val,cmp,delta) (((val-cmp)> -delta)&&((val-cmp)<delta))
+
 
 /*-- helper functions --------------------------------------------------------*/
 
@@ -291,11 +296,6 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
         to->stencil.val = SG_DEFAULT_CLEAR_STENCIL;
     }
 }
-
-/* some general helper macros */
-#define _sg_min(a,b) ((a<b)?a:b)
-#define _sg_max(a,b) ((a>b)?a:b)
-#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
 
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
 typedef struct {

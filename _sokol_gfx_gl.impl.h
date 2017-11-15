@@ -1806,11 +1806,10 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                         (new_b->color_write_mask & SG_COLORMASK_B) != 0,
                         (new_b->color_write_mask & SG_COLORMASK_A) != 0);
         }
-        /* FIXME: fuzzy compare? */
-        if ((new_b->blend_color[0] != cache_b->blend_color[0]) ||
-            (new_b->blend_color[1] != cache_b->blend_color[1]) ||
-            (new_b->blend_color[2] != cache_b->blend_color[2]) ||
-            (new_b->blend_color[3] != cache_b->blend_color[3]))
+        if (!_sg_fequal(new_b->blend_color[0], cache_b->blend_color[0], 0.0001f) ||
+            !_sg_fequal(new_b->blend_color[1], cache_b->blend_color[1], 0.0001f) ||
+            !_sg_fequal(new_b->blend_color[2], cache_b->blend_color[2], 0.0001f) ||
+            !_sg_fequal(new_b->blend_color[3], cache_b->blend_color[3], 0.0001f))
         {
             const float* bc = new_b->blend_color;
             for (int i=0; i<4; i++) {
