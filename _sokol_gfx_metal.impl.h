@@ -633,6 +633,9 @@ typedef struct {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
+    float depth_bias;
+    float depth_bias_slope_scale;
+    float depth_bias_clamp;
     MTLPrimitiveType mtl_prim_type;
     sg_index_type index_type;
     NSUInteger mtl_index_size;
@@ -1133,6 +1136,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->color_format = _sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8);
     pip->depth_format = _sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
     pip->sample_count = _sg_def(desc->rasterizer.sample_count, 1);
+    pip->depth_bias = desc->rasterizer.depth_bias;
+    pip->depth_bias_slope_scale = desc->rasterizer.depth_bias_slope_scale;
+    pip->depth_bias_clamp = desc->rasterizer.depth_bias_clamp;
     sg_primitive_type prim_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     pip->mtl_prim_type = _sg_mtl_primitive_type(prim_type);
     pip->index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
@@ -1548,10 +1554,12 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         _sg_mtl_cur_pipeline = pip;
         _sg_mtl_cur_pipeline_id.id = pip->slot.id;
         const float* c = pip->blend_color;
+        /* FIXME: those should be filtered through a simple state cache */
         [_sg_mtl_cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
         [_sg_mtl_cmd_encoder setCullMode:pip->mtl_cull_mode];
         [_sg_mtl_cmd_encoder setFrontFacingWinding:pip->mtl_winding];
         [_sg_mtl_cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
+        [_sg_mtl_cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
         SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_POOL_INDEX);
         [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_pool[pip->mtl_rps]];
         SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_POOL_INDEX);
