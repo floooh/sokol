@@ -22,7 +22,7 @@ enum {
     #if defined(SOKOL_METAL_MACOS)
     _SG_MTL_UB_ALIGN = 256,
     #else
-    _SG_MTL_UB_ALIGN = 16
+    _SG_MTL_UB_ALIGN = 16,
     #endif
     _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_MTL_INVALID_POOL_INDEX = 0xFFFFFFFF
@@ -82,6 +82,7 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
     }
 }
 
+#if defined(SOKOL_METAL_MACOS)
 _SOKOL_PRIVATE MTLPrimitiveTopologyClass _sg_mtl_primitive_topology_class(sg_primitive_type t) {
     switch (t) {
         case SG_PRIMITIVETYPE_POINTS:
@@ -97,6 +98,7 @@ _SOKOL_PRIVATE MTLPrimitiveTopologyClass _sg_mtl_primitive_topology_class(sg_pri
             return 0;
     }
 }
+#endif
 
 _SOKOL_PRIVATE MTLPrimitiveType _sg_mtl_primitive_type(sg_primitive_type t) {
     switch (t) {
@@ -744,10 +746,14 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
+    #if defined(SOKOL_METAL_MACOS)
+    res_opts |= MTLResourceStorageModeManaged;
+    #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = [_sg_mtl_device
             newBufferWithLength:_sg_mtl_ub_size
-            options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
+            options:res_opts
         ];
     }
 }
@@ -1190,7 +1196,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
     rp_desc.rasterizationEnabled = YES;
+    #if defined(SOKOL_METAL_MACOS)
     rp_desc.inputPrimitiveTopology = _sg_mtl_primitive_topology_class(prim_type);
+    #endif
     rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     for (int i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_SHADERSTAGE_BUFFERS); i++) {
