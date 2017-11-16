@@ -973,9 +973,9 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rs_desc.FillMode = D3D11_FILL_SOLID;
     rs_desc.CullMode = _sg_d3d11_cull_mode(_sg_def(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
     rs_desc.FrontCounterClockwise = _sg_def(desc->rasterizer.face_winding, SG_FACEWINDING_CW) == SG_FACEWINDING_CCW;
-    rs_desc.DepthBias = 0;
-    rs_desc.DepthBiasClamp = 0.0f;
-    rs_desc.SlopeScaledDepthBias = 0.0f;
+    rs_desc.DepthBias = desc->rasterizer.depth_bias;
+    rs_desc.DepthBiasClamp = desc->rasterizer.depth_bias_clamp;
+    rs_desc.SlopeScaledDepthBias = desc->rasterizer.depth_bias_slope_scale;
     rs_desc.DepthClipEnable = TRUE;
     rs_desc.ScissorEnable = TRUE;
     rs_desc.MultisampleEnable = _sg_def(desc->rasterizer.sample_count, 1) > 1;
