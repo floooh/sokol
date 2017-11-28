@@ -17,7 +17,7 @@
     uint64_t stm_now();
         Get current point in time in unspecified 'ticks'. The value that
         is returned has no relation to the 'wall-clock' time and is
-        not in a specified time unit, it is only useful to compute
+        not in a specific time unit, it is only useful to compute
         time differences.
 
     uint64_t stm_diff(uint64_t new, uint64_t old);
