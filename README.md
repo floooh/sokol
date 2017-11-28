@@ -159,7 +159,7 @@ double milliseconds = stm_ms(elapsed);
 double microseconds = stm_us(elapsed);
 double nanoseconds = stm_ns(elapsed);
 
-/* differene between 2 time stamps */
+/* difference between 2 time stamps */
 uint64_t start = stm_now();
 ...
 uint64_t end = stm_now();
