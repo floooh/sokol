@@ -15,9 +15,10 @@
         (this calls for instance QueryPerformanceFrequency on Windows)
 
     uint64_t stm_now();
-        Get current point in time in unspecified ticks. The value that
-        is returned has no relation to some absolute time or time unit, 
-        it is only useful to compute time differences.
+        Get current point in time in unspecified 'ticks'. The value that
+        is returned has no relation to the 'wall-clock' time and is
+        not in a specified time unit, it is only useful to compute
+        time differences.
 
     uint64_t stm_diff(uint64_t new, uint64_t old);
         Computes the time difference between new and old. This will always
@@ -28,15 +29,21 @@
         (this is a shortcut for "stm_diff(stm_now(), start)")
 
     uint64_t stm_laptime(uint64_t* last_time);
-        Takes the current time, returns the time since last_time,
-        and stores current time in last_time. If last_time is 0, the
-        return value will be 0!
+        This is useful for measuring frame time and other recurring
+        events. It takes the current time, returns the time difference
+        to the value in last_time, and stores the current time in
+        last_time for the next call. If the value in last_time is 0,
+        the return value will be zero (this usually happens on the
+        very first call).
+
+    Use the following functions to convert a duration in ticks into
+    useful time units:
 
     double stm_sec(uint64_t ticks);
     double stm_ms(uint64_t ticks);
     double stm_us(uint64_t ticks);
     double stm_ns(uint64_t ticks);
-        Convert a tick value into seconds, milliseconds, microseconds
+        Converts a tick value into seconds, milliseconds, microseconds
         or nanoseconds. Note that not all platforms will have nanosecond
         or even microsecond precision.
 
