@@ -6,7 +6,7 @@ bird of prey than the Eagle (Орёл, Oryol)
 Minimalistic header-only platform abstraction libs in C:
 
 - sokol\_gfx.h
-- sokol\_input.h
+- sokol\_time.h
 - ...???
 
 These are the internal parts of the Oryol C++ framework 
@@ -28,6 +28,44 @@ the Sokol headers are intended to be low-level building blocks.
 Eventually Oryol will just be a thin C++ layer over Sokol.
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
+
+# sokol_time.h:
+
+Simple cross-platform time measurement:
+
+```c
+#include "sokol_time.h"
+...
+/* initialize sokol_time */
+stm_setup();
+
+/* take start timestamp */
+uint64_t start = stm_now();
+
+...some code to measure...
+
+/* compute elapsed time */
+uint64_t elapsed = stm_since(start);
+
+/* convert to time units */
+double seconds = stm_sec(elapsed);
+double milliseconds = stm_ms(elapsed);
+double microseconds = stm_us(elapsed);
+double nanoseconds = stm_ns(elapsed);
+
+/* differene between 2 time stamps */
+uint64_t start = stm_now();
+...
+uint64_t end = stm_now();
+uint64_t elapsed = stm_diff(end, start);
+
+/* compute a 'lap time' (e.g. for fps) */
+uint64_t last_time = 0;
+while (!done) {
+    ...render something...
+    double frame_time_ms = stm_ms(stm_laptime(&last_time));
+}
+```
 
 # sokol_gfx.h:
 
