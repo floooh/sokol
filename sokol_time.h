@@ -125,7 +125,7 @@ void stm_setup() {
         QueryPerformanceCounter(&_stm_win_start);
     #elif defined(__APPLE__) && defined(__MACH__)
         mach_timebase_info(&_stm_osx_timebase);
-        _stm_osx_start = mach_absolute_time();
+        _stm_osx_start = (mach_absolute_time()*_stm_osx_timebase.numer)/_stm_osx_timebase.denom;
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -141,7 +141,7 @@ uint64_t stm_now() {
         QueryPerformanceCounter(&qpc_t);
         now = ((qpc_t.QuadPart - _stm_win_start.QuadPart) * 1000000000) / _stm_win_freq.QuadPart;
     #elif defined(__APPLE__) && defined(__MACH__)
-        now = mach_absolute_time() - _stm_osx_start;
+        now = ((mach_absolute_time()*_stm_osx_timebase.numer)/_stm_osx_timebase.denom) - _stm_osx_start;
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
