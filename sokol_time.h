@@ -106,15 +106,15 @@ static int _stm_initialized;
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-LARGE_INTEGER _stm_win_freq;
-LARGE_INTEGER _stm_win_start;
+static LARGE_INTEGER _stm_win_freq;
+static LARGE_INTEGER _stm_win_start;
 #elif defined(__APPLE__) && defined(__MACH__)
 #include <mach/mach_time.h>
-mach_timebase_info_data_t _stm_osx_timebase;
-uint64_t _stm_osx_start;
+static mach_timebase_info_data_t _stm_osx_timebase;
+static uint64_t _stm_osx_start;
 #else /* anything else, this will need more care for non-Linux platforms */
 #include <time.h>
-uint64_t _stm_posix_start;
+static uint64_t _stm_posix_start;
 #endif
 
 void stm_setup() {
