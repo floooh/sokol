@@ -5,10 +5,18 @@
 #error "Please do not include *.impl.h files directly"
 #endif
 
+#ifndef D3D11_NO_HELPERS
 #define D3D11_NO_HELPERS
+#endif
+#ifndef CINTERFACE
 #define CINTERFACE
+#endif
+#ifndef COBJMACROS
 #define COBJMACROS
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <d3d11.h>
 

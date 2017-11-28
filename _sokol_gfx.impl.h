@@ -43,10 +43,12 @@
 #error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL_MACOS or SOKOL_METAL_IOS"
 #endif
 
-#if defined(__GNUC__)
-#define _SOKOL_PRIVATE __attribute__((unused)) static
-#else
-#define _SOKOL_PRIVATE static
+#ifndef _SOKOL_PRIVATE
+    #if defined(__GNUC__)
+        #define _SOKOL_PRIVATE __attribute__((unused)) static
+    #else
+        #define _SOKOL_PRIVATE static
+    #endif
 #endif
 
 /* default clear values */
