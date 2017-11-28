@@ -40,7 +40,7 @@
         or nanoseconds. Note that not all platforms will have nanosecond
         or even microsecond precision.
 
-    Use the following time measurement functions:
+    Uses the following time measurement functions under the hood:
 
     Windows:        QueryPerformanceFrequency() / QueryPerformanceCounter()
     MacOS/iOS:      mach_absolute_time()
