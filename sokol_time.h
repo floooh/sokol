@@ -133,7 +133,6 @@ uint64_t stm_now() {
         LARGE_INTEGER qpc_t;
         QueryPerformanceCounter(&qpc_t);
         now = ((qpc_t.QuadPart - _stm_win_start.QuadPart) * 1000000000) / _stm_win_freq.QuadPart;
-        return 
     #elif defined(__APPLE__) && defined(__MACH__)
         now = mach_absolute_time() - _stm_osx_start;
     #else
