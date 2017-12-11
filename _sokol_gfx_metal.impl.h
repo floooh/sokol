@@ -1201,12 +1201,14 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     #endif
     rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
+    /* FIXME: this only works on macOS 10.13!
     for (int i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_SHADERSTAGE_BUFFERS); i++) {
         rp_desc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
         rp_desc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
     }
+    */
     const int att_count = _sg_def(desc->blend.color_attachment_count, 1);
     for (int i = 0; i < att_count; i++) {
         rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
