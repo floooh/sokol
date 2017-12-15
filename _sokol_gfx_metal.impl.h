@@ -82,24 +82,6 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
     }
 }
 
-#if defined(SOKOL_METAL_MACOS)
-_SOKOL_PRIVATE MTLPrimitiveTopologyClass _sg_mtl_primitive_topology_class(sg_primitive_type t) {
-    switch (t) {
-        case SG_PRIMITIVETYPE_POINTS:
-            return MTLPrimitiveTopologyClassPoint;
-        case SG_PRIMITIVETYPE_LINES:
-        case SG_PRIMITIVETYPE_LINE_STRIP:
-            return MTLPrimitiveTopologyClassLine;
-        case SG_PRIMITIVETYPE_TRIANGLES:
-        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:
-            return MTLPrimitiveTopologyClassTriangle;
-        default:
-            SOKOL_UNREACHABLE;
-            return 0;
-    }
-}
-#endif
-
 _SOKOL_PRIVATE MTLPrimitiveType _sg_mtl_primitive_type(sg_primitive_type t) {
     switch (t) {
         case SG_PRIMITIVETYPE_POINTS:           return MTLPrimitiveTypePoint;
@@ -1196,9 +1178,6 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
     rp_desc.rasterizationEnabled = YES;
-    #if defined(SOKOL_METAL_MACOS)
-    rp_desc.inputPrimitiveTopology = _sg_mtl_primitive_topology_class(prim_type);
-    #endif
     rp_desc.depthAttachmentPixelFormat = _sg_mtl_rendertarget_depth_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     rp_desc.stencilAttachmentPixelFormat = _sg_mtl_rendertarget_stencil_format(_sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL));
     /* FIXME: this only works on macOS 10.13!
