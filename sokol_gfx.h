@@ -55,7 +55,7 @@
 
     sokol_gfx DOES NOT:
     ===================
-    - create a window or the 3D-API contex/device, you must do this
+    - create a window or the 3D-API context/device, you must do this
       before sokol_gfx is initialized, and pass any required information
       (like 3D device pointers) to the sokol_gfx initialization call
 
