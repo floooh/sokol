@@ -2113,6 +2113,11 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache() {
+    #if !defined(SOKOL_GLES2)
+    if (!_sg_gl_gles2) {
+        glBindVertexArray(_sg_gl.vao);
+    }
+    #endif
     _sg_gl_reset_state_cache(&_sg_gl.cache);
 }
 
