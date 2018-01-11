@@ -697,6 +697,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     glDisable(GL_POLYGON_OFFSET_FILL);
     #if defined(SOKOL_GLCORE33)
         glEnable(GL_MULTISAMPLE);
+        glEnable(GL_PROGRAM_POINT_SIZE);
     #endif
 }
 
