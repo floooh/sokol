@@ -1345,6 +1345,10 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
                 gl_attr->type = _sg_gl_vertexformat_type(fmt);
                 gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
             }
+            else {
+                SOKOL_LOG("Vertex attribute not found in shader: ");
+                SOKOL_LOG(attr_desc->name);
+            }
         }
     }
     pip->slot.state = SG_RESOURCESTATE_VALID;
