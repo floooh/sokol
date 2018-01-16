@@ -34,7 +34,7 @@ _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
         case SG_ACTION_CLEAR:       return MTLLoadActionClear;
         case SG_ACTION_LOAD:        return MTLLoadActionLoad;
         case SG_ACTION_DONTCARE:    return MTLLoadActionDontCare;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLLoadAction)0;
     }
 }
 
@@ -59,7 +59,7 @@ _SOKOL_PRIVATE MTLVertexStepFunction _sg_mtl_step_function(sg_vertex_step step) 
     switch (step) {
         case SG_VERTEXSTEP_PER_VERTEX:      return MTLVertexStepFunctionPerVertex;
         case SG_VERTEXSTEP_PER_INSTANCE:    return MTLVertexStepFunctionPerInstance;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLVertexStepFunction)0;
     }
 }
 
@@ -78,7 +78,7 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:    return MTLVertexFormatShort4;
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLVertexFormat)0;
     }
 }
 
@@ -89,7 +89,7 @@ _SOKOL_PRIVATE MTLPrimitiveType _sg_mtl_primitive_type(sg_primitive_type t) {
         case SG_PRIMITIVETYPE_LINE_STRIP:       return MTLPrimitiveTypeLineStrip;
         case SG_PRIMITIVETYPE_TRIANGLES:        return MTLPrimitiveTypeTriangle;
         case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return MTLPrimitiveTypeTriangleStrip;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLPrimitiveType)0;
     }
 }
 
@@ -171,7 +171,7 @@ _SOKOL_PRIVATE MTLBlendOperation _sg_mtl_blend_op(sg_blend_op op) {
         case SG_BLENDOP_ADD:                return MTLBlendOperationAdd;
         case SG_BLENDOP_SUBTRACT:           return MTLBlendOperationSubtract;
         case SG_BLENDOP_REVERSE_SUBTRACT:   return MTLBlendOperationReverseSubtract;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLBlendOperation)0;
     }
 }
 
@@ -192,7 +192,7 @@ _SOKOL_PRIVATE MTLBlendFactor _sg_mtl_blend_factor(sg_blend_factor f) {
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return MTLBlendFactorOneMinusBlendColor;
         case SG_BLENDFACTOR_BLEND_ALPHA:            return MTLBlendFactorBlendAlpha;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return MTLBlendFactorOneMinusBlendAlpha;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLBlendFactor)0;
     }
 }
 
@@ -206,7 +206,7 @@ _SOKOL_PRIVATE MTLCompareFunction _sg_mtl_compare_func(sg_compare_func f) {
         case SG_COMPAREFUNC_NOT_EQUAL:      return MTLCompareFunctionNotEqual;
         case SG_COMPAREFUNC_GREATER_EQUAL:  return MTLCompareFunctionGreaterEqual;
         case SG_COMPAREFUNC_ALWAYS:         return MTLCompareFunctionAlways;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLCompareFunction)0;
     }
 }
 
@@ -220,7 +220,7 @@ _SOKOL_PRIVATE MTLStencilOperation _sg_mtl_stencil_op(sg_stencil_op op) {
         case SG_STENCILOP_INVERT:       return MTLStencilOperationInvert;
         case SG_STENCILOP_INCR_WRAP:    return MTLStencilOperationIncrementWrap;
         case SG_STENCILOP_DECR_WRAP:    return MTLStencilOperationDecrementWrap;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLStencilOperation)0;
     }
 }
 
@@ -229,7 +229,7 @@ _SOKOL_PRIVATE MTLCullMode _sg_mtl_cull_mode(sg_cull_mode m) {
         case SG_CULLMODE_NONE:  return MTLCullModeNone;
         case SG_CULLMODE_FRONT: return MTLCullModeFront;
         case SG_CULLMODE_BACK:  return MTLCullModeBack;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLCullMode)0;
     }
 }
 
@@ -237,7 +237,7 @@ _SOKOL_PRIVATE MTLWinding _sg_mtl_winding(sg_face_winding w) {
     switch (w) {
         case SG_FACEWINDING_CW:     return MTLWindingClockwise;
         case SG_FACEWINDING_CCW:    return MTLWindingCounterClockwise;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLWinding)0;
     }
 }
 
@@ -245,7 +245,7 @@ _SOKOL_PRIVATE MTLIndexType _sg_mtl_index_type(sg_index_type t) {
     switch (t) {
         case SG_INDEXTYPE_UINT16:   return MTLIndexTypeUInt16;
         case SG_INDEXTYPE_UINT32:   return MTLIndexTypeUInt32;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLIndexType)0;
     }
 }
 
@@ -264,7 +264,7 @@ _SOKOL_PRIVATE MTLTextureType _sg_mtl_texture_type(sg_image_type t) {
         case SG_IMAGETYPE_CUBE:     return MTLTextureTypeCube;
         case SG_IMAGETYPE_3D:       return MTLTextureType3D;
         case SG_IMAGETYPE_ARRAY:    return MTLTextureType2DArray;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLTextureType)0;
     }
 }
 
@@ -285,7 +285,7 @@ _SOKOL_PRIVATE MTLSamplerAddressMode _sg_mtl_address_mode(sg_wrap w) {
         case SG_WRAP_REPEAT:            return MTLSamplerAddressModeRepeat;
         case SG_WRAP_CLAMP_TO_EDGE:     return MTLSamplerAddressModeClampToEdge;
         case SG_WRAP_MIRRORED_REPEAT:   return MTLSamplerAddressModeMirrorRepeat;
-        default: SOKOL_UNREACHABLE; return 0;
+        default: SOKOL_UNREACHABLE; return (MTLSamplerAddressMode)0;
     }
 }
 
@@ -300,7 +300,7 @@ _SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
         case SG_FILTER_LINEAR_MIPMAP_LINEAR:
             return MTLSamplerMinMagFilterLinear;
         default:
-            SOKOL_UNREACHABLE; return 0;
+            SOKOL_UNREACHABLE; return (MTLSamplerMinMagFilter)0;
     }
 }
 
@@ -316,7 +316,7 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
         case SG_FILTER_LINEAR_MIPMAP_LINEAR:
             return MTLSamplerMipFilterLinear;
         default:
-            SOKOL_UNREACHABLE; return 0;
+            SOKOL_UNREACHABLE; return (MTLSamplerMipFilter)0;
     }
 }
 
@@ -348,7 +348,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     SOKOL_ASSERT([_sg_mtl_pool count] == _sg_mtl_pool_size);
     /* a queue of currently free slot indices */
     _sg_mtl_free_queue_top = 0;
-    _sg_mtl_free_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(uint32_t));
+    _sg_mtl_free_queue = (uint32_t*)SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(uint32_t));
     for (int i = _sg_mtl_pool_size-1; i >= 0; i--) {
         _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = (uint32_t)i;
     }
@@ -358,7 +358,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     */
     _sg_mtl_release_queue_front = 0;
     _sg_mtl_release_queue_back = 0;
-    _sg_mtl_release_queue = SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(_sg_mtl_release_item));
+    _sg_mtl_release_queue = (_sg_mtl_release_item*)SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(_sg_mtl_release_item));
     for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
         _sg_mtl_release_queue[i].frame_index = 0;
         _sg_mtl_release_queue[i].pool_index = _SG_MTL_INVALID_POOL_INDEX;
@@ -456,7 +456,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
     _sg_mtl_sampler_cache_capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
     _sg_mtl_sampler_cache_size = 0;
     const int size = _sg_mtl_sampler_cache_capacity * sizeof(_sg_mtl_sampler_cache_item);
-    _sg_mtl_sampler_cache = SOKOL_MALLOC(size);
+    _sg_mtl_sampler_cache = (_sg_mtl_sampler_cache_item*)SOKOL_MALLOC(size);
     memset(_sg_mtl_sampler_cache, 0, size);
 }
 
@@ -829,7 +829,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_un
         for (int mip_index = 0; mip_index < img->num_mipmaps; mip_index++) {
             SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
-            const uint8_t* data_ptr = content->subimage[face_index][mip_index].ptr;
+            const uint8_t* data_ptr = (const uint8_t*)content->subimage[face_index][mip_index].ptr;
             const int mip_width = _sg_max(img->width >> mip_index, 1);
             const int mip_height = _sg_max(img->height >> mip_index, 1);
             /* special case PVRTC formats: bytePerRow must be 0 */
@@ -1191,7 +1191,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     const int att_count = _sg_def(desc->blend.color_attachment_count, 1);
     for (int i = 0; i < att_count; i++) {
         rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_rendertarget_color_format(_sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8));
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(_sg_def(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask((sg_color_mask)_sg_def(desc->blend.color_write_mask, SG_COLORMASK_RGBA));
         rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
         rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(_sg_def(desc->blend.op_alpha, SG_BLENDOP_ADD));
         rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(_sg_def(desc->blend.op_rgb, SG_BLENDOP_ADD));
