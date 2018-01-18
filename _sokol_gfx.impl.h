@@ -1153,7 +1153,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
                 /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
                 const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, ds->vertex_buffers[i].id);
                 SOKOL_ASSERT(buf);
-                SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+                if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+                    SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+                }
             }
             else {
                 /* vertex buffer provided in a slot which has no vertex layout in pipeline */
@@ -1174,7 +1176,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
             /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_VERTEXBUFFER */
             const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, ds->index_buffer.id);
             SOKOL_ASSERT(buf);
-            SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+            if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+                SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+            }
         }
 
         /* has expected vertex shader images */
@@ -1184,7 +1188,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ADS_VS_IMGS);
                 const _sg_image* img = _sg_lookup_image(&_sg.pools, ds->vs_images[i].id);
                 SOKOL_ASSERT(img);
-                SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ADS_VS_IMG_TYPES);
+                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                    SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ADS_VS_IMG_TYPES);
+                }
             }
             else {
                 SOKOL_VALIDATE(i >= stage->num_images, _SG_VALIDATE_ADS_VS_IMGS);
@@ -1198,7 +1204,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ADS_FS_IMGS);
                 const _sg_image* img = _sg_lookup_image(&_sg.pools, ds->fs_images[i].id);
                 SOKOL_ASSERT(img);
-                SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ADS_FS_IMG_TYPES);
+                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                    SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ADS_FS_IMG_TYPES);
+                }
             }
             else {
                 SOKOL_VALIDATE(i >= stage->num_images, _SG_VALIDATE_ADS_FS_IMGS);
