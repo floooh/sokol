@@ -1466,6 +1466,42 @@ void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED)); 
 }
 
+/*-- set allocated resource to failed state ----------------------------------*/
+void sg_fail_buffer(sg_buffer buf_id) {
+    SOKOL_ASSERT(buf_id.id != SG_INVALID_ID);
+    _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    buf->slot.state = SG_RESOURCESTATE_FAILED;
+}
+
+void sg_fail_image(sg_image img_id) {
+    SOKOL_ASSERT(img_id.id != SG_INVALID_ID);
+    _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
+    img->slot.state = SG_RESOURCESTATE_FAILED;
+}
+
+void sg_fail_shader(sg_shader shd_id) {
+    SOKOL_ASSERT(shd_id.id != SG_INVALID_ID);
+    _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    shd->slot.state = SG_RESOURCESTATE_FAILED;
+}
+
+void sg_fail_pipeline(sg_pipeline pip_id) {
+    SOKOL_ASSERT(pip_id.id != SG_INVALID_ID);
+    _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    pip->slot.state = SG_RESOURCESTATE_FAILED;
+}
+
+void sg_fail_pass(sg_pass pass_id) {
+    SOKOL_ASSERT(pass_id.id != SG_INVALID_ID);
+    _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
+    pass->slot.state = SG_RESOURCESTATE_FAILED;
+}
+
 /*-- allocate and initialize resource ----------------------------------------*/
 sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);

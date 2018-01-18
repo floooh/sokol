@@ -244,7 +244,10 @@
                 }
             };
 
-    
+    TODO:
+    ====
+    - talk about asynchronous resource creation
+
     MIT License
 
     Copyright (c) 2017 Andre Weissflog
@@ -1421,6 +1424,11 @@ extern void sg_init_image(sg_image img_id, const sg_image_desc* desc);
 extern void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
 extern void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
 extern void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
+extern void sg_fail_buffer(sg_buffer buf_id);
+extern void sg_fail_image(sg_image img_id);
+extern void sg_fail_shader(sg_shader shd_id);
+extern void sg_fail_pipeline(sg_pipeline pip_id);
+extern void sg_fail_pass(sg_pass pass_id);
 
 /* struct setup helper methods (useful for C++) */
 extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format);
