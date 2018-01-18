@@ -217,7 +217,7 @@
             };
 
     --- on D3D11 you need to provide a semantic name and semantic index in the
-        vertex attribute definition instead (see the D3D11 documentaion on
+        vertex attribute definition instead (see the D3D11 documentation on
         D3D11_INPUT_ELEMENT_DESC for details):
 
             sg_pipeline_desc desc = {
