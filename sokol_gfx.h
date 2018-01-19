@@ -363,12 +363,16 @@ typedef enum {
     initialized by the user application. If a resource which is not
     in the VALID state is attempted to be used for rendering, rendering
     operations will silently be dropped.
+
+    The special INVALID state is returned in sg_query_xxx_state() if no
+    resource object exists for the provided resource id.
 */
 typedef enum {
     SG_RESOURCESTATE_INITIAL,
     SG_RESOURCESTATE_ALLOC,
     SG_RESOURCESTATE_VALID,
     SG_RESOURCESTATE_FAILED,
+    SG_RESOURCESTATE_INVALID
 } sg_resource_state;
 
 /*
@@ -1388,6 +1392,7 @@ extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 extern void sg_reset_state_cache();
 
+
 /* resource creation, destruction and updating */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 extern sg_image sg_make_image(const sg_image_desc* desc);
@@ -1401,6 +1406,13 @@ extern void sg_destroy_pipeline(sg_pipeline pip);
 extern void sg_destroy_pass(sg_pass pass);
 extern void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
 extern void sg_update_image(sg_image img, const sg_image_content* data); 
+
+/* get resource state (initial, alloc, valid, failed) */
+extern sg_resource_state sg_query_buffer_state(sg_buffer buf);
+extern sg_resource_state sg_query_image_state(sg_image img);
+extern sg_resource_state sg_query_shader_state(sg_shader shd);
+extern sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
+extern sg_resource_state sg_query_pass_state(sg_pass pass);
 
 /* rendering functions */
 extern void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);

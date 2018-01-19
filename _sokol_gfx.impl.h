@@ -1510,6 +1510,57 @@ void sg_fail_pass(sg_pass pass_id) {
     pass->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
+/*-- get resource state */
+sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
+    if (buf_id.id != SG_INVALID_ID) {
+        _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            return buf->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
+}
+
+sg_resource_state sg_query_image_state(sg_image img_id) {
+    if (img_id.id != SG_INVALID_ID) {
+        _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            return img->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
+}
+
+sg_resource_state sg_query_shader_state(sg_shader shd_id) {
+    if (shd_id.id != SG_INVALID_ID) {
+        _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            return shd->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
+}
+
+sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
+    if (pip_id.id != SG_INVALID_ID) {
+        _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            return pip->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
+}
+
+sg_resource_state sg_query_pass_state(sg_pass pass_id) {
+    if (pass_id.id != SG_INVALID_ID) {
+        _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            return pass->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
+}
+
 /*-- allocate and initialize resource ----------------------------------------*/
 sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);
