@@ -328,7 +328,7 @@ static uint32_t* _sg_mtl_free_queue;
 static uint32_t _sg_mtl_release_queue_front;
 static uint32_t _sg_mtl_release_queue_back;
 typedef struct {
-    uint32_t frame_index;
+    uint32_t frame_index;   /* frame index at which it is safe to release this resource */
     uint32_t pool_index;
 } _sg_mtl_release_item;
 static _sg_mtl_release_item* _sg_mtl_release_queue;
@@ -371,16 +371,28 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_pool() {
     _sg_mtl_pool = nil;
 }
 
+/* get a new free resource pool slot */
+_SOKOL_PRIVATE uint32_t _sg_mtl_alloc_pool_slot() {
+    SOKOL_ASSERT(_sg_mtl_free_queue_top > 0);
+    const uint32_t pool_index = _sg_mtl_free_queue[--_sg_mtl_free_queue_top];
+    return pool_index;
+}
+
+/* put a free resource pool slot back into the free-queue */
+_SOKOL_PRIVATE void _sg_mtl_free_pool_slot(uint32_t pool_index) {
+    SOKOL_ASSERT(_sg_mtl_free_queue_top < _sg_mtl_pool_size);
+    _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = pool_index;
+}
+
 /*  add an MTLResource to the pool, return pool index or 0xFFFFFFFF if input was 'nil' */
 _SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
     if (nil == res) {
         return _SG_MTL_INVALID_POOL_INDEX;
     }
-    SOKOL_ASSERT(_sg_mtl_free_queue_top > 0);
-    const uint32_t slot_index = _sg_mtl_free_queue[--_sg_mtl_free_queue_top];
-    SOKOL_ASSERT([NSNull null] == _sg_mtl_pool[slot_index]);
-    _sg_mtl_pool[slot_index] = res;
-    return slot_index;
+    const uint32_t pool_index = _sg_mtl_alloc_pool_slot();
+    SOKOL_ASSERT([NSNull null] == _sg_mtl_pool[pool_index]);
+    _sg_mtl_pool[pool_index] = res;
+    return pool_index;
 }
 
 /*  mark an MTLResource for release, this will put the resource into the
@@ -402,15 +414,15 @@ _SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t pool
     /* release queue full? */
     SOKOL_ASSERT(_sg_mtl_release_queue_front != _sg_mtl_release_queue_back);
     SOKOL_ASSERT(0 == _sg_mtl_release_queue[slot_index].frame_index);
-    _sg_mtl_release_queue[slot_index].frame_index = frame_index;
+    const uint32_t safe_to_release_frame_index = frame_index + SG_NUM_INFLIGHT_FRAMES + 1;
+    _sg_mtl_release_queue[slot_index].frame_index = safe_to_release_frame_index;
     _sg_mtl_release_queue[slot_index].pool_index = pool_index;
 }
 
 /* run garbage-collection pass on all resources in the release-queue */
 _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
-    const uint32_t safe_release_frame_index = frame_index + SG_NUM_INFLIGHT_FRAMES + 1;
     while (_sg_mtl_release_queue_back != _sg_mtl_release_queue_front) {
-        if (_sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index < safe_release_frame_index) {
+        if (frame_index < _sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index) {
             /* don't need to check further, release-items past this are too young */
             break;
         }
@@ -419,6 +431,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
         SOKOL_ASSERT(pool_index < _sg_mtl_pool_size);
         SOKOL_ASSERT(_sg_mtl_pool[pool_index] != [NSNull null]);
         _sg_mtl_pool[pool_index] = [NSNull null];
+        /* put the now free pool index back on the free queue */
+        _sg_mtl_free_pool_slot(pool_index);
         /* reset the release queue slot and advance the back index */
         _sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index = 0;
         _sg_mtl_release_queue[_sg_mtl_release_queue_back].pool_index = _SG_MTL_INVALID_POOL_INDEX;
