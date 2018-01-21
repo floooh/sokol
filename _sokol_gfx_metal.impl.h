@@ -1648,7 +1648,7 @@ _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(_sg_mtl_cur_pipeline->slot.id == _sg_mtl_cur_pipeline_id.id);
     SOKOL_ASSERT(_sg_mtl_cur_pipeline->shader->slot.id == _sg_mtl_cur_pipeline->shader_id.id);
     SOKOL_ASSERT(ub_index < _sg_mtl_cur_pipeline->shader->stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(num_bytes == _sg_mtl_cur_pipeline->shader->stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(num_bytes <= _sg_mtl_cur_pipeline->shader->stage[stage_index].uniform_blocks[ub_index].size);
 
     /* copy to global uniform buffer, record offset into cmd encoder, and advance offset */
     uint8_t* dst = &_sg_mtl_cur_ub_base_ptr[_sg_mtl_cur_ub_offset];

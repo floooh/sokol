@@ -776,7 +776,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         /* sg_apply_uniform_block */
         case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniform_block: must be called after sg_apply_draw_state()";
         case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
-        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size doesn't match uniform block declaration";
+        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size exceeds declared uniform block size";
 
         /* sg_update_buffer */
         case _SG_VALIDATE_UPDBUF_USAGE:     return "sg_update_buffer: cannot update immutable buffer";
@@ -1254,8 +1254,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index
         const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
         SOKOL_VALIDATE(ub_index < stage->num_uniform_blocks, _SG_VALIDATE_AUB_NO_UB_AT_SLOT);
 
-        /* check that the provided data size matches the uniform block size */
-        SOKOL_VALIDATE(num_bytes == stage->uniform_blocks[ub_index].size, _SG_VALIDATE_AUB_SIZE);
+        /* check that the provided data size doesn't exceed the uniform block size */
+        SOKOL_VALIDATE(num_bytes <= stage->uniform_blocks[ub_index].size, _SG_VALIDATE_AUB_SIZE);
 
         return SOKOL_VALIDATE_END();
     #endif
