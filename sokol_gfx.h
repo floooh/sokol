@@ -109,7 +109,7 @@
 
     --- kick off a draw call with:
     
-            sg_draw(int base_element, int num_elements, int num_instaces) 
+            sg_draw(int base_element, int num_elements, int num_instances)
 
     --- finish the current rendering pass with:
             
@@ -176,7 +176,7 @@
                 float offset2[2];
             } params_t;
              
-            // uniform block structure and texture image defintion in sg_shader_desc:
+            // uniform block structure and texture image definition in sg_shader_desc:
             sg_shader_desc desc = {
                 // uniform block description (size and internal structure)
                 .vs.uniform_blocks[0] = {
@@ -964,13 +964,13 @@ typedef struct {
         current frame when rendering to the default framebuffer, will be called
         in sg_begin_default_pass()
     .mtl_drawable_cb
-        a C callback function to obtain a MTLDrawable for the the current
+        a C callback function to obtain a MTLDrawable for the current
         frame when rendering to the default framebuffer, will be called in
         sg_end_pass() of the default pass
     .mtl_global_uniform_buffer_size
         the size of the global uniform buffer in bytes, this must be big
         enough to hold all uniform block updates for a single frame,
-        the default vale is 4 MByte (4 * 1024 * 1024) 
+        the default value is 4 MByte (4 * 1024 * 1024)
     .mtl_sampler_cache_size
         the number of slots in the sampler cache, the Metal backend
         will share texture samplers with the same state in this 
@@ -988,7 +988,7 @@ typedef struct {
         this function will be called in sg_begin_pass() when rendering
         to the default framebuffer
     .d3d11_depth_stencil_view_cb
-        a C callback fnction to obtain a pointer to the current
+        a C callback function to obtain a pointer to the current
         ID3D11DepthStencilView object of the default framebuffer,
         this function will be called in sg_begin_pass() when rendering
         to the default framebuffer
@@ -1269,9 +1269,9 @@ typedef struct {
         .op_rgb:                SG_BLENDOP_ADD
         .src_factor_alpha:      SG_BLENDFACTOR_ONE
         .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
-        .op_rgb:                SG_BLENDOP_ADD
+        .op_alpha:              SG_BLENDOP_ADD
         .color_write_mask:      SG_COLORMASK_RGBA
-        .color_attchment_count  1
+        .color_attachment_count 1
         .color_format           SG_PIXELFORMAT_RGBA8
         .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
         .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
@@ -1367,7 +1367,7 @@ typedef struct {
     if the image is a cubemap, array-texture or 3D-texture, the
     face-index, array-layer or depth-slice.
 
-    Pass images must fullfill the following requirements:
+    Pass images must fulfill the following requirements:
 
     All images must have:
     - been created as render target (sg_image_desc.render_target = true)
