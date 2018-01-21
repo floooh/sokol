@@ -1180,13 +1180,11 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             int mtl_attr_index = -1;
             if (attr_desc->name) {
                 id<MTLFunction> mtl_vs_func = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
-                int i = 0;
                 for (MTLVertexAttribute* mtl_attr in mtl_vs_func.vertexAttributes) {
                     if (0 == strcmp(mtl_attr.name.UTF8String, attr_desc->name)) {
-                        mtl_attr_index = i;
+                        mtl_attr_index = mtl_attr.attributeIndex;
                         break;
                     }
-                    i++;
                 }
                 if (-1 == mtl_attr_index) {
                     SOKOL_LOG("Named vertex attribute not found in shader: ");
