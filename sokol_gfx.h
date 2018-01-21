@@ -247,6 +247,15 @@
     TODO:
     ====
     - talk about asynchronous resource creation
+    
+    FIXME:
+    ======
+    - The vertex attribute declaration in sg_pipeline_desc without names 
+      doesn't work well with multiple input layouts, because it assumes
+      that the attribute locations across input layouts matches the
+      order of vertex attributes in the the shader. Metal solves this
+      cleanly by having a single vertex attribute array where each
+      attribute defines the buffer bind slot.
 
     MIT License
 

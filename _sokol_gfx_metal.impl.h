@@ -1157,7 +1157,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
 
     /* create vertex-descriptor */
     MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
-    int mtl_attr_index = 0;
+    int auto_mtl_attr_index = 0;
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
         if (layout_desc->stride == 0) {
@@ -1173,11 +1173,35 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
                 break;
             }
-            SOKOL_ASSERT(mtl_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
-            vtx_desc.attributes[mtl_attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
-            vtx_desc.attributes[mtl_attr_index].offset = attr_desc->offset;
-            vtx_desc.attributes[mtl_attr_index].bufferIndex = mtl_vb_slot;
-            mtl_attr_index++;
+            SOKOL_ASSERT(auto_mtl_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
+            /* if an attribute name is provided, lookup the Metal attribute index,
+               otherwise use the implicit location
+            */
+            int mtl_attr_index = -1;
+            if (attr_desc->name) {
+                id<MTLFunction> mtl_vs_func = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
+                int i = 0;
+                for (MTLVertexAttribute* mtl_attr in mtl_vs_func.vertexAttributes) {
+                    if (0 == strcmp(mtl_attr.name.UTF8String, attr_desc->name)) {
+                        mtl_attr_index = i;
+                        break;
+                    }
+                    i++;
+                }
+                if (-1 == mtl_attr_index) {
+                    SOKOL_LOG("Named vertex attribute not found in shader: ");
+                    SOKOL_LOG(attr_desc->name);
+                }
+            }
+            else {
+                mtl_attr_index = auto_mtl_attr_index;
+            }
+            if (mtl_attr_index != -1) {
+                vtx_desc.attributes[mtl_attr_index].format = _sg_mtl_vertex_format(attr_desc->format);
+                vtx_desc.attributes[mtl_attr_index].offset = attr_desc->offset;
+                vtx_desc.attributes[mtl_attr_index].bufferIndex = mtl_vb_slot;
+            }
+            auto_mtl_attr_index++;
         }
     }
 
