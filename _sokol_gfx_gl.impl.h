@@ -1766,8 +1766,6 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 (new_ds->stencil_ref != cache_ds->stencil_ref))
             {
                 cache_ss->compare_func = new_ss->compare_func;
-                cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
-                cache_ds->stencil_ref = new_ds->stencil_ref;
                 glStencilFuncSeparate(gl_face, 
                     _sg_gl_compare_func(new_ss->compare_func), 
                     new_ds->stencil_ref, 
@@ -1786,6 +1784,8 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                     _sg_gl_stencil_op(new_ss->pass_op));
             }
         }
+        cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
+        cache_ds->stencil_ref = new_ds->stencil_ref;
 
         /* update blend state */
         const sg_blend_state* new_b = &pip->blend;
