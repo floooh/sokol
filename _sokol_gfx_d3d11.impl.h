@@ -872,8 +872,8 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11_fs);
 
         /* need to store the vertex shader byte code, this is needed later in sg_create_pipeline */
-        shd->d3d11_vs_blob_length = vs_length;
-        shd->d3d11_vs_blob = SOKOL_MALLOC(vs_length);
+        shd->d3d11_vs_blob_length = (int)vs_length;
+        shd->d3d11_vs_blob = SOKOL_MALLOC((int)vs_length);
         SOKOL_ASSERT(shd->d3d11_vs_blob);
         memcpy(shd->d3d11_vs_blob, vs_ptr, vs_length);
 
@@ -981,7 +981,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     rs_desc.FillMode = D3D11_FILL_SOLID;
     rs_desc.CullMode = _sg_d3d11_cull_mode(_sg_def(desc->rasterizer.cull_mode, SG_CULLMODE_NONE));
     rs_desc.FrontCounterClockwise = _sg_def(desc->rasterizer.face_winding, SG_FACEWINDING_CW) == SG_FACEWINDING_CCW;
-    rs_desc.DepthBias = desc->rasterizer.depth_bias;
+    rs_desc.DepthBias = (INT) desc->rasterizer.depth_bias;
     rs_desc.DepthBiasClamp = desc->rasterizer.depth_bias_clamp;
     rs_desc.SlopeScaledDepthBias = desc->rasterizer.depth_bias_slope_scale;
     rs_desc.DepthClipEnable = TRUE;
@@ -1206,8 +1206,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     /* set viewport and scissor rect to cover whole screen */
     D3D11_VIEWPORT vp;
     memset(&vp, 0, sizeof(vp));
-    vp.Width = w;
-    vp.Height = h;
+    vp.Width = (FLOAT) w;
+    vp.Height = (FLOAT) h;
     vp.MaxDepth = 1.0f;
     ID3D11DeviceContext_RSSetViewports(_sg_d3d11.ctx, 1, &vp);
     D3D11_RECT rect;
