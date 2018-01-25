@@ -1308,48 +1308,63 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     _sg_gl_load_rasterizer(&desc->rasterizer, &pip->rast);
 
     /* resolve vertex attributes */
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        pip->gl_attrs[i].vb_index = -1;
-    }
+    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
-        if (layout_desc->stride == 0) {
+        auto_offset[layout_index] = 0;
+    }
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        pip->gl_attrs[attr_index].vb_index = -1;
+    }
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
+        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        pip->vertex_layout_valid[layout_index] = true;
-        const sg_vertex_step step_func = _sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
-        const int step_rate = _sg_def(layout_desc->step_rate, 1);
-        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
-            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
-                break;
-            }
-            GLint attr_loc = attr_index;
-            if (attr_desc->name) {
-                attr_loc = glGetAttribLocation(pip->shader->gl_prog, attr_desc->name);
-            }
-            SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
-            if (attr_loc != -1) {
-                _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
-                SOKOL_ASSERT(gl_attr->vb_index == -1);
-                gl_attr->vb_index = layout_index;
-                if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
-                    gl_attr->divisor = 0;
-                }
-                else {
-                    gl_attr->divisor = step_rate;
-                }
-                gl_attr->stride = layout_desc->stride;
-                gl_attr->offset = attr_desc->offset;
-                const sg_vertex_format fmt = attr_desc->format;
-                gl_attr->size = _sg_gl_vertexformat_size(fmt);
-                gl_attr->type = _sg_gl_vertexformat_type(fmt);
-                gl_attr->normalized = _sg_gl_vertexformat_normalized(fmt);
+        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
+        const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
+        const sg_vertex_step step_func = _sg_def(l_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+        const int step_rate = _sg_def(l_desc->step_rate, 1);
+        if (a_desc->offset > 0) {
+            auto_offset[a_desc->buffer_index] = a_desc->offset;
+        }
+        GLint attr_loc = attr_index;
+        if (a_desc->name) {
+            attr_loc = glGetAttribLocation(pip->shader->gl_prog, a_desc->name);
+        }
+        SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
+        if (attr_loc != -1) {
+            _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
+            SOKOL_ASSERT(gl_attr->vb_index == -1);
+            gl_attr->vb_index = a_desc->buffer_index;
+            if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
+                gl_attr->divisor = 0;
             }
             else {
-                SOKOL_LOG("Vertex attribute not found in shader: ");
-                SOKOL_LOG(attr_desc->name);
+                gl_attr->divisor = step_rate;
             }
+            gl_attr->stride = l_desc->stride;
+            gl_attr->offset = auto_offset[a_desc->buffer_index];
+            gl_attr->size = _sg_gl_vertexformat_size(a_desc->format);
+            gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
+            gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
+        }
+        else {
+            SOKOL_LOG("Vertex attribute not found in shader: ");
+            SOKOL_LOG(a_desc->name);
+        }
+        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
+    }
+    /* fill computed vertex strides that haven't been explicitely provided */
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_index];
+        if ((gl_attr->vb_index != -1) && (0 == gl_attr->stride)) {
+            gl_attr->stride = auto_offset[gl_attr->vb_index];
+        }
+    }
+    /* mark valid input buffer slots, for validation of sg_apply_draw_state() */
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        if (auto_offset[layout_index] > 0) {
+            pip->vertex_layout_valid[layout_index] = true;
         }
     }
     pip->slot.state = SG_RESOURCESTATE_VALID;

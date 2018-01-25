@@ -1237,16 +1237,18 @@ typedef struct {
 
     The default configuration is as follows:
 
-    .vertex_layouts[]:
-        .stride:        0 (must be initialized to > 0)
-        .step_func      SG_VERTEXSTEP_PER_VERTEX
-        .step_rate      1
-        .attrs[]:
-            .name       0 (GLES2 requires an attribute name here)
-            .sem_name   0 (D3D11 requires a semantic name here)
-            .sem_index  0 (D3D11 requires a semantic index here)
-            .offset     0
-            .format     SG_VERTEXFORMAT_INVALID (must be initialized!)
+    .layout:
+        .buffers[]:         vertex buffer layouts
+            .stride:        0 (must be initialized to > 0)
+            .step_func      SG_VERTEXSTEP_PER_VERTEX
+            .step_rate      1
+        .attrs[]:           vertex attribute declarations
+            .buffer_index   0 the vertex buffer bind slot  
+            .offset         0 the byte offset in the vertex
+            .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
+            .name           0 (GLES2 requires an attribute name here)
+            .sem_name       0 (D3D11 requires a semantic name here)
+            .sem_index      0 (D3D11 requires a semantic index here)
     .shader:            0 (must be intilized with a valid sg_shader id!)
     .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
     .index_type:        SG_INDEXTYPE_NONE
@@ -1285,19 +1287,24 @@ typedef struct {
         .depth_bias_clamp:              0.0f
 */
 typedef struct {
+    int stride;
+    sg_vertex_step step_func;
+    int step_rate;
+} sg_buffer_layout_desc;
+
+typedef struct {
     const char* name;
     const char* sem_name;
     int sem_index;
+    int buffer_index;
     int offset;
     sg_vertex_format format;
 } sg_vertex_attr_desc;
 
 typedef struct {
-    int stride;
-    sg_vertex_step step_func;
-    int step_rate;
+    sg_buffer_layout_desc buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-} sg_vertex_layout_desc;
+} sg_layout_desc;
 
 typedef struct {
     sg_stencil_op fail_op;
@@ -1344,7 +1351,7 @@ typedef struct {
 
 typedef struct {
     uint32_t _start_canary;
-    sg_vertex_layout_desc vertex_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_layout_desc layout;
     sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
@@ -1401,7 +1408,6 @@ extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 extern void sg_reset_state_cache();
 
-
 /* resource creation, destruction and updating */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 extern sg_image sg_make_image(const sg_image_desc* desc);
@@ -1452,8 +1458,8 @@ extern void sg_fail_pipeline(sg_pipeline pip_id);
 extern void sg_fail_pass(sg_pass pass_id);
 
 /* struct setup helper methods (useful for C++) */
-extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format);
-extern sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format);
+extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format, int buffer_index);
+extern sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format, int buffer_index);
 extern sg_shader_uniform_desc sg_named_uniform(const char* name, sg_uniform_type type, int array_count);
 extern sg_shader_image_desc sg_named_image(const char* name, sg_image_type type);
 
