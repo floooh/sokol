@@ -396,7 +396,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
 }
 
 /*  mark an MTLResource for release, this will put the resource into the
-    deferred-release queue, and the resource will then be releases N frames later,
+    deferred-release queue, and the resource will then be released N frames later,
     the special pool index 0xFFFFFFFF will be ignored (this means that a nil
     value was provided to _sg_mtl_add_resource()
 */
