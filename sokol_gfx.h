@@ -1457,12 +1457,6 @@ extern void sg_fail_shader(sg_shader shd_id);
 extern void sg_fail_pipeline(sg_pipeline pip_id);
 extern void sg_fail_pass(sg_pass pass_id);
 
-/* struct setup helper methods (useful for C++) */
-extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format, int buffer_index);
-extern sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format, int buffer_index);
-extern sg_shader_uniform_desc sg_named_uniform(const char* name, sg_uniform_type type, int array_count);
-extern sg_shader_image_desc sg_named_image(const char* name, sg_image_type type);
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
