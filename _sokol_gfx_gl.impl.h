@@ -1347,6 +1347,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
             gl_attr->size = _sg_gl_vertexformat_size(a_desc->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
+            pip->vertex_layout_valid[a_desc->buffer_index] = true;
         }
         else {
             SOKOL_LOG("Vertex attribute not found in shader: ");
@@ -1359,12 +1360,6 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_index];
         if ((gl_attr->vb_index != -1) && (0 == gl_attr->stride)) {
             gl_attr->stride = auto_offset[gl_attr->vb_index];
-        }
-    }
-    /* mark valid input buffer slots, for validation of sg_apply_draw_state() */
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        if (auto_offset[layout_index] > 0) {
-            pip->vertex_layout_valid[layout_index] = true;
         }
     }
     pip->slot.state = SG_RESOURCESTATE_VALID;
