@@ -1161,17 +1161,22 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         auto_offset[layout_index] = 0;
     }
+    /* to use computed offsets, *all* attr offsets must be 0 */
+    bool use_auto_offset = true;
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        if (desc->layout.attrs[attr_index].offset != 0) {
+            use_auto_offset = false;
+            break;
+        }
+    }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
         if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
         SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
-        if (a_desc->offset > 0) {
-            auto_offset[a_desc->buffer_index] = a_desc->offset;
-        }
         vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_desc->format);
-        vtx_desc.attributes[attr_index].offset = auto_offset[a_desc->buffer_index];
+        vtx_desc.attributes[attr_index].offset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
         vtx_desc.attributes[attr_index].bufferIndex = a_desc->buffer_index + SG_MAX_SHADERSTAGE_UBS;
         auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
         pip->vertex_layout_valid[a_desc->buffer_index] = true;

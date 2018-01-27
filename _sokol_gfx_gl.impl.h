@@ -1312,8 +1312,13 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         auto_offset[layout_index] = 0;
     }
+    bool use_auto_offset = true;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         pip->gl_attrs[attr_index].vb_index = -1;
+        /* to use computed offsets, *all* attr offsets must be 0 */
+        if (desc->layout.attrs[attr_index].offset != 0) {
+            use_auto_offset = false;
+        }
     }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
@@ -1324,9 +1329,6 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
         const sg_vertex_step step_func = _sg_def(l_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
         const int step_rate = _sg_def(l_desc->step_rate, 1);
-        if (a_desc->offset > 0) {
-            auto_offset[a_desc->buffer_index] = a_desc->offset;
-        }
         GLint attr_loc = attr_index;
         if (a_desc->name) {
             attr_loc = glGetAttribLocation(pip->shader->gl_prog, a_desc->name);
@@ -1343,7 +1345,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
                 gl_attr->divisor = step_rate;
             }
             gl_attr->stride = l_desc->stride;
-            gl_attr->offset = auto_offset[a_desc->buffer_index];
+            gl_attr->offset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
             gl_attr->size = _sg_gl_vertexformat_size(a_desc->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
