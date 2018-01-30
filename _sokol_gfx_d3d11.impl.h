@@ -938,38 +938,56 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     pip->d3d11_stencil_ref = desc->depth_stencil.stencil_ref;
 
     /* create input layout object */
+    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        auto_offset[layout_index] = 0;
+    }
+    bool use_auto_offset = true;
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        /* to use computed offsets, all attr offsets must be 0 */
+        if (desc->layout.attrs[attr_index].offset != 0) {
+            use_auto_offset = false;
+        }
+    }
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     memset(d3d11_comps, 0, sizeof(d3d11_comps));
-    int d3d11_attr_index = 0;
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        const sg_vertex_layout_desc* layout_desc = &desc->vertex_layouts[layout_index];
-        if (layout_desc->stride == 0) {
+    int attr_index = 0;
+    for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
+        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
             break;
         }
-        pip->vertex_layout_valid[layout_index] = true;
-        pip->d3d11_vb_strides[layout_index] = layout_desc->stride;
-        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-            const sg_vertex_attr_desc* attr_desc = &layout_desc->attrs[attr_index];
-            if (attr_desc->format == SG_VERTEXFORMAT_INVALID) {
-                break;
-            }
-            SOKOL_ASSERT(d3d11_attr_index < SG_MAX_VERTEX_ATTRIBUTES);
-            D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[d3d11_attr_index++];
-            d3d11_comp->SemanticName = attr_desc->sem_name;
-            d3d11_comp->SemanticIndex = attr_desc->sem_index;
-            d3d11_comp->Format = _sg_d3d11_vertex_format(attr_desc->format);
-            d3d11_comp->InputSlot = layout_index;
-            d3d11_comp->AlignedByteOffset = attr_desc->offset;
-            const sg_vertex_step step_func = _sg_def(layout_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
-            d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
-            if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
-                d3d11_comp->InstanceDataStepRate = _sg_def(layout_desc->step_rate, 1);
-            }
+        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
+        const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
+        const sg_vertex_step step_func = _sg_def(l_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+        const int step_rate = _sg_def(l_desc->step_rate, 1);
+        D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[attr_index];
+        d3d11_comp->SemanticName = a_desc->sem_name;
+        d3d11_comp->SemanticIndex = a_desc->sem_index;
+        d3d11_comp->Format = _sg_d3d11_vertex_format(a_desc->format);
+        d3d11_comp->InputSlot = a_desc->buffer_index;
+        d3d11_comp->AlignedByteOffset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
+        d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
+        if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
+            d3d11_comp->InstanceDataStepRate = step_rate;
+        }
+        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
+        pip->vertex_layout_valid[a_desc->buffer_index] = true;
+    }
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        if (pip->vertex_layout_valid[layout_index]) {
+            const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
+            const int stride = l_desc->stride ? l_desc->stride : auto_offset[layout_index];
+            SOKOL_ASSERT(stride > 0);
+            pip->d3d11_vb_strides[layout_index] = stride;
+        }
+        else {
+            pip->d3d11_vb_strides[layout_index] = 0;
         }
     }
     hr = ID3D11Device_CreateInputLayout(_sg_d3d11.dev,
         d3d11_comps,                /* pInputElementDesc */
-        d3d11_attr_index,           /* NumElements */
+        attr_index,                 /* NumElements */
         shd->d3d11_vs_blob,         /* pShaderByteCodeWithInputSignature */
         shd->d3d11_vs_blob_length,  /* BytecodeLength */
         &pip->d3d11_il);
