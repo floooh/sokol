@@ -29,6 +29,7 @@ Eventually Oryol will just be a thin C++ layer over Sokol.
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
+
 # sokol_gfx.h:
 
 - simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
@@ -97,11 +98,10 @@ int main() {
     /* a pipeline state object (default render states are fine for triangle) */
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
-        .vertex_layouts[0] = {
-            .stride = 28,
+        .layout = {
             .attrs = {
-                [0] = { .name="position", .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                [1] = { .name="color0", .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                [0] = { .name="position", .format=SG_VERTEXFORMAT_FLOAT3 },
+                [1] = { .name="color0", .format=SG_VERTEXFORMAT_FLOAT4 }
             }
         }
     });
@@ -174,5 +174,93 @@ while (!done) {
 ```
 
 See https://github.com/floooh/sokol-samples for more samples.
+
+# Updates
+
+- **31-Jan-2018**: The vertex layout declaration in sg\_pipeline\_desc had
+some fairly subtle flaws and has been changed to work like Metal or Vulkan.
+The gist is that the vertex-buffer-layout properties (vertex stride, and
+vertex-step-rate and -step-function for instancing) is now defined in a
+separate array from the vertex attributes. This removes some brittle backend
+code which tries to guess the right vertex attribute slot if no attribute
+names are given, and which was wrong for shader-code-generation pipelines
+which reorder the vertex attributes (I stumbled over this when porting the
+Oryol Gfx module over to sokol-gfx). Some code samples:
+
+```cpp
+// a complete vertex layout declaration with a single input buffer:
+sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+    .layout = {
+        .buffers = {
+            [0] = { 
+                .stride = 20,
+                .step_func = SG_VERTEXSTEP_PER_VERTEX,
+                .step_rate = 1 
+        },
+        .attrs = {
+            [0] = { 
+                .name = "pos", 
+                .offset = 0, 
+                .format = SG_VERTEXFORMAT_FLOAT3,
+                .buffer_index = 0 
+            },
+            [1] = {
+                .name = "uv",
+                .offset = 12,
+                .format = SG_VERTEX_FORMAT_FLOAT2,
+                .buffer_index = 0
+            }
+        }
+    },
+    ...
+});
+
+// if the vertex layout has no gaps, we can get rid of the strides and offsets:
+sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+    .layout = {
+        .buffers = {
+            [0] = { 
+                .step_func = SG_VERTEXSTEP_PER_VERTEX,
+                .step_rate=1 
+        },
+        .attrs = {
+            [0] = { 
+                .name = "pos", 
+                .format = SG_VERTEXFORMAT_FLOAT3,
+                .buffer_index = 0 
+            },
+            [1] = {
+                .name = "uv",
+                .format = SG_VERTEX_FORMAT_FLOAT2,
+                .buffer_index = 0
+            }
+        }
+    },
+    ...
+});
+
+// we can also get rid of the other default-values, which leaves buffers[0]
+// in as all-defaults, so it can disappear completely:
+sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+    .layout = {
+        .attrs = {
+            [0] = { .name = "pos", .format = SG_VERTEXFORMAT_FLOAT3 },
+            [1] = { .name = "uv", .format = SG_VERTEX_FORMAT_FLOAT2 }
+        }
+    },
+    ...
+});
+
+// and finally on GL3.3, Metal and D3D11 we don't need the attribute names:
+sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+    .layout = {
+        .attrs = {
+            [0] = { .format = SG_VERTEXFORMAT_FLOAT3 },
+            [1] = { .format = SG_VERTEX_FORMAT_FLOAT2 }
+        }
+    },
+    ...
+});
+```
 
 Enjoy!

@@ -163,7 +163,6 @@
 
         ...before calling sokol_gfx functions again
 
-
     BACKEND-SPECIFIC TOPICS:
     ========================
     --- the GL backends need to know about the internal structure of uniform 
@@ -207,11 +206,10 @@
         layouts:
 
             sg_pipeline_desc desc = {
-                .vertex_layouts[0] = {
-                    .stride = 28,
+                .layout = {
                     .attrs = {
-                        [0] = { .name="position", .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .name="color1", .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                        [0] = { .name="position", .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .name="color1", .format=SG_VERTEXFORMAT_FLOAT4 }
                     }
                 }
             };
@@ -221,11 +219,10 @@
         D3D11_INPUT_ELEMENT_DESC for details):
 
             sg_pipeline_desc desc = {
-                .vertex_layouts[0] = {
-                    .stride = 28,
+                .layout = {
                     .attrs = {
-                        [0] = { .sem_name="POSITION", .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .sem_name="COLOR", .sem_index=1, .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                        [0] = { .sem_name="POSITION", .sem_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .sem_name="COLOR", .sem_index=1, .format=SG_VERTEXFORMAT_FLOAT4 }
                     }
                 }
             };
@@ -235,11 +232,10 @@
         (this is mandatory in Metal, and optional in GL):
 
             sg_pipeline_desc desc = {
-                .vertex_layouts[0] = {
-                    .stride = 28,
+                .layout = {
                     .attrs = {
-                        [0] = { .offset=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .offset=12, .format=SG_VERTEXFORMAT_FLOAT4 }
+                        [0] = { .format=SG_VERTEXFORMAT_FLOAT3 },
+                        [1] = { .format=SG_VERTEXFORMAT_FLOAT4 }
                     }
                 }
             };
@@ -248,15 +244,6 @@
     ====
     - talk about asynchronous resource creation
     
-    FIXME:
-    ======
-    - The vertex attribute declaration in sg_pipeline_desc without names 
-      doesn't work well with multiple input layouts, because it assumes
-      that the attribute locations across input layouts matches the
-      order of vertex attributes in the the shader. Metal solves this
-      cleanly by having a single vertex attribute array where each
-      attribute defines the buffer bind slot.
-
     MIT License
 
     Copyright (c) 2017 Andre Weissflog
@@ -1235,18 +1222,27 @@ typedef struct {
     - alpha-blending state
     - rasterizer state
 
+    If the vertex data has no gaps between vertex components, you can omit
+    the .layout.buffers[].stride and layout.attrs[].offset items (leave them 
+    default-initialized to 0), sokol will then compute the offsets and strides
+    from the vertex component formats (.layout.attrs[].offset). Please note
+    that ALL vertex attribute offsets must be 0 in order for the the
+    automatic offset computation to kick in.
+
     The default configuration is as follows:
 
-    .vertex_layouts[]:
-        .stride:        0 (must be initialized to > 0)
-        .step_func      SG_VERTEXSTEP_PER_VERTEX
-        .step_rate      1
-        .attrs[]:
-            .name       0 (GLES2 requires an attribute name here)
-            .sem_name   0 (D3D11 requires a semantic name here)
-            .sem_index  0 (D3D11 requires a semantic index here)
-            .offset     0
-            .format     SG_VERTEXFORMAT_INVALID (must be initialized!)
+    .layout:
+        .buffers[]:         vertex buffer layouts
+            .stride:        0 (if no stride is given it will be computed)
+            .step_func      SG_VERTEXSTEP_PER_VERTEX
+            .step_rate      1
+        .attrs[]:           vertex attribute declarations
+            .buffer_index   0 the vertex buffer bind slot  
+            .offset         0 (offsets can be omitted if the vertex layout has no gaps)
+            .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
+            .name           0 (GLES2 requires an attribute name here)
+            .sem_name       0 (D3D11 requires a semantic name here)
+            .sem_index      0 (D3D11 requires a semantic index here)
     .shader:            0 (must be intilized with a valid sg_shader id!)
     .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
     .index_type:        SG_INDEXTYPE_NONE
@@ -1285,19 +1281,24 @@ typedef struct {
         .depth_bias_clamp:              0.0f
 */
 typedef struct {
+    int stride;
+    sg_vertex_step step_func;
+    int step_rate;
+} sg_buffer_layout_desc;
+
+typedef struct {
     const char* name;
     const char* sem_name;
     int sem_index;
+    int buffer_index;
     int offset;
     sg_vertex_format format;
 } sg_vertex_attr_desc;
 
 typedef struct {
-    int stride;
-    sg_vertex_step step_func;
-    int step_rate;
+    sg_buffer_layout_desc buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-} sg_vertex_layout_desc;
+} sg_layout_desc;
 
 typedef struct {
     sg_stencil_op fail_op;
@@ -1344,7 +1345,7 @@ typedef struct {
 
 typedef struct {
     uint32_t _start_canary;
-    sg_vertex_layout_desc vertex_layouts[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_layout_desc layout;
     sg_shader shader;
     sg_primitive_type primitive_type;
     sg_index_type index_type;
@@ -1401,7 +1402,6 @@ extern bool sg_isvalid();
 extern bool sg_query_feature(sg_feature feature);
 extern void sg_reset_state_cache();
 
-
 /* resource creation, destruction and updating */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 extern sg_image sg_make_image(const sg_image_desc* desc);
@@ -1450,12 +1450,6 @@ extern void sg_fail_image(sg_image img_id);
 extern void sg_fail_shader(sg_shader shd_id);
 extern void sg_fail_pipeline(sg_pipeline pip_id);
 extern void sg_fail_pass(sg_pass pass_id);
-
-/* struct setup helper methods (useful for C++) */
-extern sg_vertex_attr_desc sg_named_attr(const char* name, int offset, sg_vertex_format format);
-extern sg_vertex_attr_desc sg_sem_attr(const char* sem_name, int sem_index, int offset, sg_vertex_format format);
-extern sg_shader_uniform_desc sg_named_uniform(const char* name, sg_uniform_type type, int array_count);
-extern sg_shader_image_desc sg_named_image(const char* name, sg_image_type type);
 
 #ifdef __cplusplus
 } /* extern "C" */
