@@ -179,7 +179,7 @@ See https://github.com/floooh/sokol-samples for more samples.
 
 - **31-Jan-2018**: The vertex layout declaration in sg\_pipeline\_desc had
 some fairly subtle flaws and has been changed to work like Metal or Vulkan.
-The gist is that the vertex-buffer-layout properties (vertex stride, and
+The gist is that the vertex-buffer-layout properties (vertex stride, 
 vertex-step-rate and -step-function for instancing) is now defined in a
 separate array from the vertex attributes. This removes some brittle backend
 code which tries to guess the right vertex attribute slot if no attribute
@@ -240,7 +240,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
 });
 
 // we can also get rid of the other default-values, which leaves buffers[0]
-// in as all-defaults, so it can disappear completely:
+// as all-defaults, so it can disappear completely:
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .attrs = {
@@ -262,5 +262,8 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     ...
 });
 ```
+
+Please check the sample code in https://github.com/floooh/sokol-samples for
+more examples!
 
 Enjoy!
