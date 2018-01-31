@@ -1223,9 +1223,11 @@ typedef struct {
     - rasterizer state
 
     If the vertex data has no gaps between vertex components, you can omit
-    the .layout.buffers[].stride and layout.attrs[].offset items (leave them default-initialized
-    to 0), sokol will then compute the offsets and strides from the vertex 
-    component formats (.layout.attrs[].offset).
+    the .layout.buffers[].stride and layout.attrs[].offset items (leave them 
+    default-initialized to 0), sokol will then compute the offsets and strides
+    from the vertex component formats (.layout.attrs[].offset). Please note
+    that ALL vertex attribute offsets must be 0 in order for the the
+    automatic offset computation to kick in.
 
     The default configuration is as follows:
 
