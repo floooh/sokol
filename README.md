@@ -188,7 +188,8 @@ which reorder the vertex attributes (I stumbled over this when porting the
 Oryol Gfx module over to sokol-gfx). Some code samples:
 
 ```cpp
-// a complete vertex layout declaration with a single input buffer:
+// a complete vertex layout declaration with a single input buffer
+// with two vertex attributes
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .buffers = {
