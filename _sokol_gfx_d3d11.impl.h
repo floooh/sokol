@@ -61,11 +61,15 @@ _SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_format(sg_pixel_format fmt) {
+    /*
+        NOTE: the following pixel formats are only supported on D3D11.1 
+        (we're running on D3D11.0):
+            DXGI_FORMAT_B4G4R4A4_UNORM
+            DXGI_FORMAT_B5G6R5_UNORM
+            DXGI_FORMAT_B5G5R5A1_UNORM
+    */
     switch (fmt) {
         case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case SG_PIXELFORMAT_RGBA4:          return DXGI_FORMAT_B4G4R4A4_UNORM;
-        case SG_PIXELFORMAT_R5G6B5:         return DXGI_FORMAT_B5G6R5_UNORM;
-        case SG_PIXELFORMAT_R5G5B5A1:       return DXGI_FORMAT_B5G5R5A1_UNORM;
         case SG_PIXELFORMAT_R10G10B10A2:    return DXGI_FORMAT_R10G10B10A2_UNORM;
         case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
         case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -592,6 +596,12 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         /* create only a depth-texture */
         SOKOL_ASSERT(!injected);
         img->d3d11_format = _sg_d3d11_rendertarget_depth_format(img->pixel_format);
+        if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
+            /* trying to create a texture format that's not supported by D3D */
+            SOKOL_LOG("trying to create a D3D11 depth-texture with unsupported pixel format\n");
+            img->slot.state = SG_RESOURCESTATE_FAILED;
+            return;
+        }
         D3D11_TEXTURE2D_DESC d3d11_desc;
         memset(&d3d11_desc, 0, sizeof(d3d11_desc));
         d3d11_desc.Width = img->width;
@@ -643,6 +653,12 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
+            }
+            if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
+                /* trying to create a texture format that's not supported by D3D */
+                SOKOL_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
+                img->slot.state = SG_RESOURCESTATE_FAILED;
+                return;
             }
             d3d11_tex_desc.SampleDesc.Count = 1;
             d3d11_tex_desc.SampleDesc.Quality = 0;
@@ -711,6 +727,12 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
             }
+            if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
+                /* trying to create a texture format that's not supported by D3D */
+                SOKOL_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
+                img->slot.state = SG_RESOURCESTATE_FAILED;
+                return;
+            }
             if (injected) {
                 img->d3d11_tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
                 ID3D11Texture3D_AddRef(img->d3d11_tex3d);
@@ -744,7 +766,6 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         hr = ID3D11Device_CreateSamplerState(_sg_d3d11.dev, &d3d11_smp_desc, &img->d3d11_smp);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_smp);
     }
-    SOKOL_ASSERT(img->d3d11_format != DXGI_FORMAT_UNKNOWN);
     img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
