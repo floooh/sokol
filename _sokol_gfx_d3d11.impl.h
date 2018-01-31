@@ -1248,7 +1248,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     if (action->stencil.action == SG_ACTION_CLEAR) {
         ds_flags |= D3D11_CLEAR_STENCIL;
     }
-    if (0 != ds_flags) {
+    if ((0 != ds_flags) && _sg_d3d11.cur_dsv) {
         ID3D11DeviceContext_ClearDepthStencilView(_sg_d3d11.ctx, _sg_d3d11.cur_dsv, ds_flags, action->depth.val, action->stencil.val);
     }
 }
