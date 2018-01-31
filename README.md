@@ -254,7 +254,8 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     ...
 });
 
-// and finally on GL3.3, Metal and D3D11 we don't need the attribute names:
+// and finally on GL3.3 and Metal and we don't need the attribute names
+// (on D3D11, a semantic name and index must be provided though)
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .attrs = {
