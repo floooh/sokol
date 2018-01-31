@@ -187,7 +187,7 @@ names are given, and which was wrong for shader-code-generation pipelines
 which reorder the vertex attributes (I stumbled over this when porting the
 Oryol Gfx module over to sokol-gfx). Some code samples:
 
-```cpp
+```c
 // a complete vertex layout declaration with a single input buffer
 // with two vertex attributes
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
@@ -197,6 +197,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
                 .stride = 20,
                 .step_func = SG_VERTEXSTEP_PER_VERTEX,
                 .step_rate = 1 
+            }
         },
         .attrs = {
             [0] = { 
@@ -222,7 +223,8 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .buffers = {
             [0] = { 
                 .step_func = SG_VERTEXSTEP_PER_VERTEX,
-                .step_rate=1 
+                .step_rate=1
+            }
         },
         .attrs = {
             [0] = { 
