@@ -208,7 +208,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
             [1] = {
                 .name = "uv",
                 .offset = 12,
-                .format = SG_VERTEX_FORMAT_FLOAT2,
+                .format = SG_VERTEXFORMAT_FLOAT2,
                 .buffer_index = 0
             }
         }
@@ -232,7 +232,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
             },
             [1] = {
                 .name = "uv",
-                .format = SG_VERTEX_FORMAT_FLOAT2,
+                .format = SG_VERTEXFORMAT_FLOAT2,
                 .buffer_index = 0
             }
         }
@@ -246,7 +246,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .attrs = {
             [0] = { .name = "pos", .format = SG_VERTEXFORMAT_FLOAT3 },
-            [1] = { .name = "uv", .format = SG_VERTEX_FORMAT_FLOAT2 }
+            [1] = { .name = "uv", .format = SG_VERTEXFORMAT_FLOAT2 }
         }
     },
     ...
@@ -257,7 +257,7 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .attrs = {
             [0] = { .format = SG_VERTEXFORMAT_FLOAT3 },
-            [1] = { .format = SG_VERTEX_FORMAT_FLOAT2 }
+            [1] = { .format = SG_VERTEXFORMAT_FLOAT2 }
         }
     },
     ...
