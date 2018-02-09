@@ -368,7 +368,8 @@ typedef enum {
     SG_RESOURCESTATE_ALLOC,
     SG_RESOURCESTATE_VALID,
     SG_RESOURCESTATE_FAILED,
-    SG_RESOURCESTATE_INVALID
+    SG_RESOURCESTATE_INVALID,
+    _SG_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sg_resource_state;
 
 /*
@@ -409,6 +410,7 @@ typedef enum {
     SG_USAGE_DYNAMIC,
     SG_USAGE_STREAM,
     _SG_USAGE_NUM,
+    _SG_USAGE_FORCE_U32 = 0x7FFFFFFF
 } sg_usage;
 
 /*
@@ -424,6 +426,7 @@ typedef enum {
     SG_BUFFERTYPE_VERTEXBUFFER,
     SG_BUFFERTYPE_INDEXBUFFER,
     _SG_BUFFERTYPE_NUM,
+    _SG_BUFFERTYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_buffer_type;
 
 /*
@@ -442,6 +445,7 @@ typedef enum {
     SG_INDEXTYPE_UINT16,
     SG_INDEXTYPE_UINT32,
     _SG_INDEXTYPE_NUM,
+    _SG_INDEXTYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_index_type;
 
 /*
@@ -461,6 +465,7 @@ typedef enum {
     SG_IMAGETYPE_3D,
     SG_IMAGETYPE_ARRAY,
     _SG_IMAGETYPE_NUM,
+    _SG_IMAGETYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_image_type;
 
 /*
@@ -476,7 +481,8 @@ typedef enum {
     SG_CUBEFACE_NEG_Y,
     SG_CUBEFACE_POS_Z,
     SG_CUBEFACE_NEG_Z,
-    SG_CUBEFACE_NUM
+    SG_CUBEFACE_NUM,
+    _SG_CUBEFACE_FORCE_U32 = 0x7FFFFFFF
 } sg_cube_face;
 
 /*
@@ -493,6 +499,7 @@ typedef enum {
 typedef enum {
     SG_SHADERSTAGE_VS,
     SG_SHADERSTAGE_FS,
+    _SG_SHADERSTAGE_FORCE_U32 = 0x7FFFFFFF
 } sg_shader_stage;
 
 /*
@@ -530,6 +537,7 @@ typedef enum {
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
     _SG_PIXELFORMAT_NUM,
+    _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_pixel_format;
 
 /*
@@ -549,6 +557,7 @@ typedef enum {
     SG_PRIMITIVETYPE_TRIANGLES,
     SG_PRIMITIVETYPE_TRIANGLE_STRIP,
     _SG_PRIMITIVETYPE_NUM,
+    _SG_PRIMITIVETYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_primitive_type;
 
 /*
@@ -569,6 +578,7 @@ typedef enum {
     SG_FILTER_LINEAR_MIPMAP_NEAREST,
     SG_FILTER_LINEAR_MIPMAP_LINEAR,
     _SG_FILTER_NUM,
+    _SG_FILTER_FORCE_U32 = 0x7FFFFFFF
 } sg_filter;
 
 /*
@@ -586,6 +596,7 @@ typedef enum {
     SG_WRAP_CLAMP_TO_EDGE,
     SG_WRAP_MIRRORED_REPEAT,
     _SG_WRAP_NUM,
+    _SG_WRAP_FORCE_U32 = 0x7FFFFFFF
 } sg_wrap;
 
 /*
@@ -610,6 +621,7 @@ typedef enum {
     SG_VERTEXFORMAT_SHORT4N,
     SG_VERTEXFORMAT_UINT10_N2,
     _SG_VERTEXFORMAT_NUM,
+    _SG_VERTEXFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_vertex_format;
 
 /*
@@ -628,6 +640,7 @@ typedef enum {
     SG_VERTEXSTEP_PER_VERTEX,
     SG_VERTEXSTEP_PER_INSTANCE,
     _SG_VERTEXSTEP_NUM,
+    _SG_VERTEXSTEP_FORCE_U32 = 0x7FFFFFFF
 } sg_vertex_step;
 
 /*
@@ -645,6 +658,7 @@ typedef enum {
     SG_UNIFORMTYPE_FLOAT4,
     SG_UNIFORMTYPE_MAT4,
     _SG_UNIFORMTYPE_NUM,
+    _SG_UNIFORMTYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_uniform_type;
 
 /*
@@ -662,6 +676,7 @@ typedef enum {
     SG_CULLMODE_FRONT,
     SG_CULLMODE_BACK,
     _SG_CULLMODE_NUM,
+    _SG_CULLMODE_FORCE_U32 = 0x7FFFFFFF
 } sg_cull_mode;
 
 /*
@@ -678,6 +693,7 @@ typedef enum {
     SG_FACEWINDING_CCW,
     SG_FACEWINDING_CW,
     _SG_FACEWINDING_NUM,
+    _SG_FACEWINDING_FORCE_U32 = 0x7FFFFFFF
 } sg_face_winding;
 
 /*
@@ -706,6 +722,7 @@ typedef enum {
     SG_COMPAREFUNC_GREATER_EQUAL,
     SG_COMPAREFUNC_ALWAYS,
     _SG_COMPAREFUNC_NUM,
+    _SG_COMPAREFUNC_FORCE_U32 = 0x7FFFFFFF
 } sg_compare_func;
 
 /*
@@ -739,6 +756,7 @@ typedef enum {
     SG_STENCILOP_INCR_WRAP,
     SG_STENCILOP_DECR_WRAP,
     _SG_STENCILOP_NUM,
+    _SG_STENCILOP_FORCE_U32 = 0x7FFFFFFF
 } sg_stencil_op;
 
 /*
@@ -775,6 +793,7 @@ typedef enum {
     SG_BLENDFACTOR_BLEND_ALPHA,
     SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA,
     _SG_BLENDFACTOR_NUM,
+    _SG_BLENDFACTOR_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_factor;
 
 /*
@@ -797,6 +816,7 @@ typedef enum {
     SG_BLENDOP_SUBTRACT,
     SG_BLENDOP_REVERSE_SUBTRACT,
     _SG_BLENDOP_NUM,
+    _SG_BLENDOP_FORCE_U32 = 0x7FFFFFFF
 } sg_blend_op;
 
 /*
@@ -817,6 +837,7 @@ typedef enum {
     SG_COLORMASK_A = (1<<3),
     SG_COLORMASK_RGB = 0x7,
     SG_COLORMASK_RGBA = 0xF,
+    _SG_COLORMASK_FORCE_U32 = 0x7FFFFFFF
 } sg_color_mask;
 
 /*
@@ -842,7 +863,8 @@ typedef enum {
     SG_ACTION_CLEAR,
     SG_ACTION_LOAD,
     SG_ACTION_DONTCARE,
-    _SG_ACTION_NUM
+    _SG_ACTION_NUM,
+    _SG_ACTION_FORCE_U32 = 0x7FFFFFFF
 } sg_action;
 
 /*
