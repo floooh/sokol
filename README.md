@@ -16,6 +16,8 @@ Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
 asm.js/wasm live demos: https://floooh.github.io/sokol-html5/index.html
 
+* Nim bindings (WIP): https://github.com/floooh/sokol-nim
+
 ### Why C:
 
 - easier integration with other languages
