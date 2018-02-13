@@ -7977,11 +7977,11 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
             SOKOL_VALIDATE(ds->index_buffer.id != SG_INVALID_ID, _SG_VALIDATE_ADS_NO_IB);
         }
         if (ds->index_buffer.id != SG_INVALID_ID) {
-            /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_VERTEXBUFFER */
+            /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER */
             const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, ds->index_buffer.id);
             SOKOL_ASSERT(buf);
             if (buf->slot.state == SG_RESOURCESTATE_VALID) {
-                SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+                SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_IB_TYPE);
             }
         }
 
