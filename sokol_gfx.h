@@ -7765,7 +7765,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                         const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                         if (u_desc->type != SG_UNIFORMTYPE_INVALID) {
                             SOKOL_VALIDATE(uniforms_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS);
-                            #if defined(SOKOL_GLES2)
+                            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
                             SOKOL_VALIDATE(u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = _sg_def(u_desc->array_count, 1);
