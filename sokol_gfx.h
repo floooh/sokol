@@ -3389,6 +3389,11 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         _sg_gl.cache.ds.depth_write_enabled = true;
         glDepthMask(GL_TRUE);
     }
+    if (_sg_gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
+        need_pip_cache_flush = true;
+        _sg_gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+        glDepthFunc(GL_ALWAYS);
+    }
     if (_sg_gl.cache.ds.stencil_write_mask != 0xFF) {
         need_pip_cache_flush = true;
         _sg_gl.cache.ds.stencil_write_mask = 0xFF;
