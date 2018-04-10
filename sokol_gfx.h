@@ -6125,8 +6125,10 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
 static const _sg_pipeline* _sg_mtl_cur_pipeline;
 static sg_pipeline _sg_mtl_cur_pipeline_id;
 static const _sg_buffer* _sg_mtl_cur_indexbuffer;
+static uint32_t _sg_mtl_cur_indexbuffer_offset;
 static sg_buffer _sg_mtl_cur_indexbuffer_id;
 static const _sg_buffer* _sg_mtl_cur_vertexbuffers[SG_MAX_SHADERSTAGE_BUFFERS];
+static uint32_t _sg_mtl_cur_vertexbuffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
 static sg_buffer _sg_mtl_cur_vertexbuffer_ids[SG_MAX_SHADERSTAGE_BUFFERS];
 static const _sg_image* _sg_mtl_cur_vs_images[SG_MAX_SHADERSTAGE_IMAGES];
 static sg_image _sg_mtl_cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
@@ -6137,9 +6139,11 @@ _SOKOL_PRIVATE void _sg_mtl_clear_state_cache() {
     _sg_mtl_cur_pipeline = 0;
     _sg_mtl_cur_pipeline_id.id = SG_INVALID_ID;
     _sg_mtl_cur_indexbuffer = 0;
+    _sg_mtl_cur_indexbuffer_offset = 0;
     _sg_mtl_cur_indexbuffer_id.id = SG_INVALID_ID;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         _sg_mtl_cur_vertexbuffers[i] = 0;
+        _sg_mtl_cur_vertexbuffer_offsets[i] = 0;
         _sg_mtl_cur_vertexbuffer_ids[i].id = SG_INVALID_ID;
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
@@ -6992,7 +6996,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
+    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
+    _sg_buffer* ib, uint32_t ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -7006,6 +7011,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 
     /* store index buffer binding, this will be needed later in sg_draw() */
     _sg_mtl_cur_indexbuffer = ib;
+    _sg_mtl_cur_indexbuffer_offset = ib_offset;
     if (ib) {
         SOKOL_ASSERT(pip->index_type != SG_INDEXTYPE_NONE);
         _sg_mtl_cur_indexbuffer_id.id = ib->slot.id;
@@ -7036,12 +7042,18 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     int slot;
     for (slot = 0; slot < num_vbs; slot++) {
         const _sg_buffer* vb = vbs[slot];
-        if ((_sg_mtl_cur_vertexbuffers[slot] != vb) || (_sg_mtl_cur_vertexbuffer_ids[slot].id != vb->slot.id)) {
+        if ((_sg_mtl_cur_vertexbuffers[slot] != vb) ||
+            (_sg_mtl_cur_vertexbuffer_offsets[slot] != vb_offsets[slot]) ||
+            (_sg_mtl_cur_vertexbuffer_ids[slot].id != vb->slot.id))
+        {
             _sg_mtl_cur_vertexbuffers[slot] = vb;
+            _sg_mtl_cur_vertexbuffer_offsets[slot] = vb_offsets[slot];
             _sg_mtl_cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
             SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] offset:0 atIndex:mtl_slot];
+            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] 
+                offset:vb_offsets[slot]
+                atIndex:mtl_slot];
         }
     }
 
@@ -7115,7 +7127,8 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
         SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_indexbuffer_id.id));
         const _sg_buffer* ib = _sg_mtl_cur_indexbuffer;
         SOKOL_ASSERT(ib->mtl_buf[ib->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-        const NSUInteger index_buffer_offset = base_element * _sg_mtl_cur_pipeline->mtl_index_size;
+        const NSUInteger index_buffer_offset = _sg_mtl_cur_indexbuffer_offset + 
+            base_element * _sg_mtl_cur_pipeline->mtl_index_size;
         [_sg_mtl_cmd_encoder drawIndexedPrimitives:_sg_mtl_cur_pipeline->mtl_prim_type
             indexCount:num_elements
             indexType:_sg_mtl_cur_pipeline->mtl_index_type
