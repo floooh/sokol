@@ -921,19 +921,26 @@ typedef struct {
 
     - 1 pipeline object
     - 1..N vertex buffers
+    - 0..N vertex buffer offsets
     - 0..1 index buffers
+    - 0..1 index buffer offsets
     - 0..N vertex shader stage images
     - 0..N fragment shader stage images
 
     The max number of vertex buffer and shader stage images
     are defined by the SG_MAX_SHADERSTAGE_BUFFERS and
     SG_MAX_SHADERSTAGE_IMAGES configuration constants.
+
+    The optional buffer offsets can be used to group different chunks
+    of vertex- and/or index-data into the same buffer objects.
 */
 typedef struct {
     uint32_t _start_canary;
     sg_pipeline pipeline;
     sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    uint32_t vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_buffer index_buffer;
+    uint32_t index_buffer_offset;
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t _end_canary;
@@ -2310,7 +2317,7 @@ typedef struct {
     uint8_t stride;
     uint8_t size;
     uint8_t normalized;
-    uint8_t offset;
+    uint32_t offset;
     GLenum type;
 } _sg_gl_attr;
 
@@ -2427,6 +2434,7 @@ typedef struct {
     bool polygon_offset_enabled;
     _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint cur_gl_ib;
+    uint32_t cur_ib_offset;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline* cur_pipeline;
@@ -2444,6 +2452,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
         glDisableVertexAttribArray(i);
     }
     cache->cur_gl_ib = 0;
+    cache->cur_ib_offset = 0;
     cache->cur_primitive_type = GL_TRIANGLES;
     cache->cur_index_type = 0;
 
@@ -3525,7 +3534,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state( 
     _sg_pipeline* pip, 
-    _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
+    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
+    _sg_buffer* ib, uint32_t ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -3722,6 +3732,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         _sg_gl.cache.cur_gl_ib = gl_ib;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     }
+    _sg_gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
     GLuint gl_vb = 0;
@@ -3729,17 +3740,19 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
         _sg_gl_cache_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
+        uint32_t vb_offset = 0;
         if (attr->vb_index >= 0) {
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer* vb = vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
+            vb_offset = vb_offsets[attr->vb_index] + attr->offset;
             if ((vb->gl_buf[vb->active_slot] != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
                 (attr->type != cache_attr->gl_attr.type) ||
                 (attr->normalized != cache_attr->gl_attr.normalized) ||
                 (attr->stride != cache_attr->gl_attr.stride) ||
-                (attr->offset != cache_attr->gl_attr.offset))
+                (vb_offset != cache_attr->gl_attr.offset))
             {
                 if (gl_vb != vb->gl_buf[vb->active_slot]) {
                     gl_vb = vb->gl_buf[vb->active_slot];
@@ -3747,7 +3760,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 }
                 glVertexAttribPointer(attr_index, attr->size, attr->type, 
                     attr->normalized, attr->stride, 
-                    (const GLvoid*)(GLintptr)attr->offset);
+                    (const GLvoid*)(GLintptr)vb_offset);
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
@@ -3770,6 +3783,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         }
         if (cache_attr_dirty) {
             cache_attr->gl_attr = *attr;
+            cache_attr->gl_attr.offset = vb_offset;
             cache_attr->gl_vbuf = gl_vb;
         }
     }
@@ -3824,7 +3838,8 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     if (0 != i_type) {
         /* indexed rendering */
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
-        const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size);
+        const uint32_t ib_offset = _sg_gl.cache.cur_ib_offset;
+        const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (num_instances == 1) {
             glDrawElements(p_type, num_elements, i_type, indices);
         }
@@ -8581,7 +8596,9 @@ void sg_apply_draw_state(const sg_draw_state* ds) {
         }
     }
     if (_sg.next_draw_valid) {
-        _sg_apply_draw_state(pip, vbs, num_vbs, ib, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+        const uint32_t* vb_offsets = ds->vertex_buffer_offsets;
+        uint32_t ib_offset = ds->index_buffer_offset;
+        _sg_apply_draw_state(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
     }
 }
 
