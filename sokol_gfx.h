@@ -5285,7 +5285,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, int num_vbs, _sg_buffer* ib,
+    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs, 
+    _sg_buffer* ib, uint32_t ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -5311,7 +5312,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     for (i = 0; i < num_vbs; i++) {
         SOKOL_ASSERT(vbs[i]->d3d11_buf);
         d3d11_vbs[i] = vbs[i]->d3d11_buf;
-        d3d11_vb_offsets[i] = 0;
+        d3d11_vb_offsets[i] = vb_offsets[i];
     }
     for (; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         d3d11_vbs[i] = 0; 
@@ -5345,7 +5346,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 
     ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_vb_offsets);
     ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
-    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, 0); 
+    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, ib_offset); 
     ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
     
     ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
