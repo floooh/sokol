@@ -242,6 +242,7 @@
 
     TODO:
     ====
+    - talk about rendering with multiple contexts
     - talk about asynchronous resource creation
     
     zlib/libpng license
@@ -300,6 +301,7 @@ typedef struct { uint32_t id; } sg_image;
 typedef struct { uint32_t id; } sg_shader;
 typedef struct { uint32_t id; } sg_pipeline;
 typedef struct { uint32_t id; } sg_pass;
+typedef struct { uint32_t id; } sg_context;
 
 /* 
     various compile-time constants
@@ -959,6 +961,7 @@ typedef struct {
     .shader_pool_size:      32
     .pipeline_pool_size:    64
     .pass_pool_size:        16 
+    .context_pool_size:     16
     
     GL specific:
     .gl_force_gles2
@@ -1017,6 +1020,7 @@ typedef struct {
     int shader_pool_size;
     int pipeline_pool_size;
     int pass_pool_size;
+    int context_pool_size;
     /* GL specific */
     bool gl_force_gles2;
     /* Metal-specific */
@@ -1481,6 +1485,11 @@ extern void sg_fail_shader(sg_shader shd_id);
 extern void sg_fail_pipeline(sg_pipeline pip_id);
 extern void sg_fail_pass(sg_pass pass_id);
 
+/* rendering contexts (optional) */
+extern sg_context sg_setup_context();
+extern void sg_activate_context(sg_context ctx_id);
+extern void sg_discard_context(sg_context ctx_id);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -1567,6 +1576,7 @@ enum {
     _SG_DEFAULT_SHADER_POOL_SIZE = 32,
     _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
+    _SG_DEFAULT_CONTEXT_POOL_SIZE = 16
 };
 
 /* helper macros */
@@ -1786,6 +1796,7 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 typedef struct {
     uint32_t id;
     sg_resource_state state;
+    sg_context ctx;
 } _sg_slot;
 
 _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
@@ -2374,6 +2385,19 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     memset(pass, 0, sizeof(_sg_pass));
 }
 
+typedef struct {
+    _sg_slot slot;
+    #if !defined(SOKOL_GLES2)
+    GLuint vao; 
+    #endif
+    GLuint default_framebuffer;
+} _sg_context;
+
+_SOKOL_PRIVATE void _sg_init_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    memset(ctx, 0, sizeof(_sg_context));
+}
+
 _SOKOL_PRIVATE void _sg_gl_init_stencil_state(sg_stencil_state* s) {
     SOKOL_ASSERT(s);
     s->fail_op = SG_STENCILOP_KEEP;
@@ -2421,7 +2445,6 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 }
 
 /*-- state cache implementation ----------------------------------------------*/
-/*-- state cache and backend structs -----------------------------------------*/
 typedef struct {
     _sg_gl_attr gl_attr;
     GLuint gl_vbuf;
@@ -2443,13 +2466,15 @@ typedef struct {
 
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
-    
+    _SG_GL_CHECK_ERROR();
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    _SG_GL_CHECK_ERROR();
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_gl_init_attr(&cache->attrs[i].gl_attr);
         cache->attrs[i].gl_vbuf = 0;
         glDisableVertexAttribArray(i);
+        _SG_GL_CHECK_ERROR();
     }
     cache->cur_gl_ib = 0;
     cache->cur_ib_offset = 0;
@@ -2500,18 +2525,15 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 typedef struct {
     bool valid;
     bool in_pass;
-    GLuint default_framebuffer;
     int cur_pass_width;
     int cur_pass_height;
+    _sg_context* cur_context;
     _sg_pass* cur_pass;
     sg_pass cur_pass_id;
     _sg_state_cache cache;
     bool features[SG_NUM_FEATURES];
     bool ext_anisotropic;
     GLint max_anisotropy;
-    #if !defined(SOKOL_GLES2)
-    GLuint vao; 
-    #endif
 } _sg_backend;
 
 static _sg_backend _sg_gl;
@@ -2521,18 +2543,10 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     memset(&_sg_gl, 0, sizeof(_sg_gl));
     _sg_gl.valid = true;
     _sg_gl.in_pass = false;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&_sg_gl.default_framebuffer);
     _sg_gl.cur_pass_width = 0;
     _sg_gl.cur_pass_height = 0;
     _sg_gl.cur_pass = 0;
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
-    #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2) {
-        glGenVertexArrays(1, &_sg_gl.vao);
-        glBindVertexArray(_sg_gl.vao);
-    }
-    #endif
-    _sg_gl_reset_state_cache(&_sg_gl.cache);
     
     /* initialize feature flags */
     for (int i = 0; i < SG_NUM_FEATURES; i++) {
@@ -2610,13 +2624,45 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_discard_backend() {
     SOKOL_ASSERT(_sg_gl.valid);
+    _sg_gl.valid = false;
+}
+
+_SOKOL_PRIVATE void _sg_reset_state_cache() {
+    SOKOL_ASSERT(_sg_gl.cur_context);
     #if !defined(SOKOL_GLES2)
     if (!_sg_gl_gles2) {
-        glDeleteVertexArrays(1, &_sg_gl.vao);
-        _sg_gl.vao = 0;
+        _SG_GL_CHECK_ERROR();
+        glBindVertexArray(_sg_gl.cur_context->vao);
+        _SG_GL_CHECK_ERROR();
     }
     #endif
-    _sg_gl.valid = false;
+    _sg_gl_reset_state_cache(&_sg_gl.cache);
+}
+
+_SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
+    SOKOL_ASSERT(_sg_gl.valid);
+    /* NOTE: ctx can be 0 to unset the current context */
+    _sg_gl.cur_context = ctx;
+    if (ctx) {
+        _sg_reset_state_cache();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_setup_context(_sg_context* ctx) {
+    SOKOL_ASSERT(_sg_gl.valid);
+    SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(0 == ctx->vao);
+    SOKOL_ASSERT(0 == ctx->default_framebuffer);
+    _SG_GL_CHECK_ERROR();
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
+    _SG_GL_CHECK_ERROR();
+    #if !defined(SOKOL_GLES2)
+    if (!_sg_gl_gles2) {
+        glGenVertexArrays(1, &ctx->vao);
+        glBindVertexArray(ctx->vao);
+        _SG_GL_CHECK_ERROR();
+    }
+    #endif
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -3383,7 +3429,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     }
     else {
         /* default pass */
-        glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
+        SOKOL_ASSERT(_sg_gl.cur_context);
+        glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.cur_context->default_framebuffer);
     }
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
@@ -3515,7 +3562,8 @@ _SOKOL_PRIVATE void _sg_end_pass() {
     _sg_gl.cur_pass_width = 0;
     _sg_gl.cur_pass_height = 0;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.default_framebuffer);
+    SOKOL_ASSERT(_sg_gl.cur_context);
+    glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.cur_context->default_framebuffer);
     _sg_gl.in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
@@ -3935,14 +3983,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
-_SOKOL_PRIVATE void _sg_reset_state_cache() {
-    #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2) {
-        glBindVertexArray(_sg_gl.vao);
-    }
-    #endif
-    _sg_gl_reset_state_cache(&_sg_gl.cache);
-}
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -7250,11 +7290,13 @@ typedef struct {
     _sg_pool shader_pool;
     _sg_pool pipeline_pool;
     _sg_pool pass_pool;
+    _sg_pool context_pool;
     _sg_buffer* buffers;
     _sg_image* images;
     _sg_shader* shaders;
     _sg_pipeline* pipelines;
     _sg_pass* passes;
+    _sg_context* contexts;
 } _sg_pools;
 
 _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
@@ -7300,15 +7342,25 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     for (int i = 0; i < p->pass_pool.size; i++) {
         _sg_init_pass(&p->passes[i]);
     }
+
+    SOKOL_ASSERT((desc->context_pool_size >= 0) && (desc->context_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->context_pool, _sg_def(desc->context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE));
+    p->contexts = (_sg_context*) SOKOL_MALLOC(sizeof(_sg_context) * p->context_pool.size);
+    SOKOL_ASSERT(p->contexts);
+    for (int i = 0; i < p->context_pool.size; i++) {
+        _sg_init_context(&p->contexts[i]);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_discard_pools(_sg_pools* p) {
     SOKOL_ASSERT(p);
+    SOKOL_FREE(p->contexts);    p->contexts = 0;
     SOKOL_FREE(p->passes);      p->passes = 0;
     SOKOL_FREE(p->pipelines);   p->pipelines = 0;
     SOKOL_FREE(p->shaders);     p->shaders = 0;
     SOKOL_FREE(p->images);      p->images = 0;
     SOKOL_FREE(p->buffers);     p->buffers = 0;
+    _sg_discard_pool(&p->context_pool);
     _sg_discard_pool(&p->pass_pool);
     _sg_discard_pool(&p->pipeline_pool);
     _sg_discard_pool(&p->shader_pool);
@@ -7350,6 +7402,13 @@ _SOKOL_PRIVATE _sg_pass* _sg_pass_at(const _sg_pools* p, uint32_t pass_id) {
     int slot_index = _sg_slot_index(pass_id);
     SOKOL_ASSERT((slot_index >= 0) && (slot_index < p->pass_pool.size));
     return &p->passes[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_context* _sg_context_at(const _sg_pools* p, uint32_t context_id) {
+    SOKOL_ASSERT(p && SG_INVALID_ID != context_id);
+    int slot_index = _sg_slot_index(context_id);
+    SOKOL_ASSERT((slot_index >= 0) && (slot_index < p->context_pool.size));
+    return &p->contexts[slot_index];
 }
 
 /* returns pointer to resource with matching id check, may return 0 */
@@ -7406,34 +7465,44 @@ _SOKOL_PRIVATE _sg_pass* _sg_lookup_pass(const _sg_pools* p, uint32_t pass_id) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p) {
+_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, sg_context ctx) {
     /*  this is a bit dumb since it loops over all pool slots to
         find the occupied slots, on the other hand it is only ever
         executed at shutdown
     */
     for (int i = 0; i < p->buffer_pool.size; i++) {
         if (p->buffers[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_buffer(&p->buffers[i]);
+            if (p->buffers[i].slot.ctx.id == ctx.id) {
+                _sg_destroy_buffer(&p->buffers[i]);
+            }
         }
     }
     for (int i = 0; i < p->image_pool.size; i++) {
         if (p->images[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_image(&p->images[i]);
+            if (p->images[i].slot.ctx.id == ctx.id) {
+                _sg_destroy_image(&p->images[i]);
+            }
         }
     }
     for (int i = 0; i < p->shader_pool.size; i++) {
         if (p->shaders[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_shader(&p->shaders[i]);
+            if (p->shaders[i].slot.ctx.id == ctx.id) {
+                _sg_destroy_shader(&p->shaders[i]);
+            }
         }
     }
     for (int i = 0; i < p->pipeline_pool.size; i++) {
         if (p->pipelines[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_pipeline(&p->pipelines[i]);
+            if (p->pipelines[i].slot.ctx.id == ctx.id) {
+                _sg_destroy_pipeline(&p->pipelines[i]);
+            }
         }
     }
     for (int i = 0; i < p->pass_pool.size; i++) {
         if (p->passes[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_pass(&p->passes[i]);
+            if (p->passes[i].slot.ctx.id == ctx.id) {
+                _sg_destroy_pass(&p->passes[i]);
+            }
         }
     }
 }
@@ -7647,6 +7716,7 @@ typedef struct {
     _sg_pools pools;
     bool valid;
     uint32_t frame_index;
+    sg_context active_context;
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
     bool pass_valid;
@@ -8145,11 +8215,12 @@ void sg_setup(const sg_desc* desc) {
     _sg.frame_index = 1;
     _sg.next_draw_valid = false;
     _sg_setup_backend(desc);
+    sg_setup_context();
     _sg.valid = true;
 }
 
 void sg_shutdown() {
-    _sg_destroy_all_resources(&_sg.pools);
+    _sg_destroy_all_resources(&_sg.pools, _sg.active_context);
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
     _sg.valid = false;
@@ -8161,6 +8232,32 @@ bool sg_isvalid() {
 
 bool sg_query_feature(sg_feature f) {
     return _sg_query_feature(f);
+}
+
+sg_context sg_setup_context() {
+    sg_context res;
+    res.id = _sg_pool_alloc_id(&_sg.pools.context_pool);
+    if (res.id != SG_INVALID_ID) {
+        _sg_context* ctx = _sg_context_at(&_sg.pools, res.id);
+        ctx->slot.id = res.id;
+        ctx->slot.state = SG_RESOURCESTATE_ALLOC;
+        _sg_setup_context(ctx);
+        _sg_activate_context(ctx);
+    }
+    _sg.active_context = res;
+    return res;
+}
+
+void sg_discard_context(sg_context ctx_id) {
+    _sg_destroy_all_resources(&_sg.pools, ctx_id);
+    _sg.active_context.id = SG_INVALID_ID;
+    _sg_activate_context(0);
+}
+
+void sg_activate_context(sg_context ctx_id) {
+    _sg.active_context = ctx_id;
+    _sg_context* ctx = _sg_context_at(&_sg.pools, ctx_id.id);
+    _sg_activate_context(ctx);
 }
 
 /*-- allocate resource id ----------------------------------------------------*/
@@ -8231,6 +8328,7 @@ void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_buffer_desc(desc)) {
         _sg_create_buffer(buf, desc);
+        buf->slot.ctx = _sg.active_context;
     }
     else {
         buf->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8244,6 +8342,7 @@ void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_image_desc(desc)) {
         _sg_create_image(img, desc);
+        img->slot.ctx = _sg.active_context;
     }
     else {
         img->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8257,6 +8356,7 @@ void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_shader_desc(desc)) {
         _sg_create_shader(shd, desc);
+        shd->slot.ctx = _sg.active_context;
     }
     else {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8272,6 +8372,7 @@ void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
         _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
         _sg_create_pipeline(pip, shd, desc);
+        pip->slot.ctx = _sg.active_context;
     }
     else {
         pip->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8304,6 +8405,7 @@ void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
             att_imgs[ds_att_index] = 0;
         }
         _sg_create_pass(pass, att_imgs, desc);
+        pass->slot.ctx = _sg.active_context;
     }
     else {
         pass->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8463,40 +8565,65 @@ sg_pass sg_make_pass(const sg_pass_desc* desc) {
 void sg_destroy_buffer(sg_buffer buf_id) {
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
-        _sg_destroy_buffer(buf);
-        _sg_pool_free_id(&_sg.pools.buffer_pool, buf_id.id);
+        if (buf->slot.ctx.id == _sg.active_context.id) {
+            _sg_destroy_buffer(buf);
+            _sg_pool_free_id(&_sg.pools.buffer_pool, buf_id.id);
+        }
+        else {
+            SOKOL_LOG("sg_destroy_buffer: active context mismatch (must be same as for creation)");
+        }
     }
 }
 
 void sg_destroy_image(sg_image img_id) {
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
-        _sg_destroy_image(img);
-        _sg_pool_free_id(&_sg.pools.image_pool, img_id.id);
+        if (img->slot.ctx.id == _sg.active_context.id) {
+            _sg_destroy_image(img);
+            _sg_pool_free_id(&_sg.pools.image_pool, img_id.id);
+        }
+        else {
+            SOKOL_LOG("sg_destroy_image: active context mismatch (must be same as for creation)");
+        }
     }
 }
 
 void sg_destroy_shader(sg_shader shd_id) {
     _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     if (shd) {
-        _sg_destroy_shader(shd);
-        _sg_pool_free_id(&_sg.pools.shader_pool, shd_id.id);
+        if (shd->slot.ctx.id == _sg.active_context.id) {
+            _sg_destroy_shader(shd);
+            _sg_pool_free_id(&_sg.pools.shader_pool, shd_id.id);
+        }
+        else {
+            SOKOL_LOG("sg_destroy_shader: active context mismatch (must be same as for creation)");
+        }
     }
 }
 
 void sg_destroy_pipeline(sg_pipeline pip_id) {
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     if (pip) {
-        _sg_destroy_pipeline(pip);
-        _sg_pool_free_id(&_sg.pools.pipeline_pool, pip_id.id);
+        if (pip->slot.ctx.id == _sg.active_context.id) {
+            _sg_destroy_pipeline(pip);
+            _sg_pool_free_id(&_sg.pools.pipeline_pool, pip_id.id);
+        }
+        else {
+            SOKOL_LOG("sg_destroy_pipeline: active context mismatch (must be same as for creation)");
+        }
     }
 }
 
 void sg_destroy_pass(sg_pass pass_id) {
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     if (pass) {
-        _sg_destroy_pass(pass);
-        _sg_pool_free_id(&_sg.pools.pass_pool, pass_id.id);
+        if (pass->slot.ctx.id == _sg.active_context.id) {
+            _sg_destroy_pass(pass);
+            _sg_pool_free_id(&_sg.pools.pass_pool, pass_id.id);
+        }
+        else {
+            SOKOL_LOG("sg_destroy_pass: active context mismatch (must be same as for creation)");
+        }
     }
 }
 
