@@ -1795,8 +1795,8 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 /*-- resource pool slots (must be defined before rendering backend) ----------*/
 typedef struct {
     uint32_t id;
+    uint32_t ctx_id;
     sg_resource_state state;
-    sg_context ctx;
 } _sg_slot;
 
 _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
@@ -2663,6 +2663,19 @@ _SOKOL_PRIVATE void _sg_setup_context(_sg_context* ctx) {
         _SG_GL_CHECK_ERROR();
     }
     #endif
+}
+
+_SOKOL_PRIVATE void _sg_discard_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    #if !defined(SOKOL_GLES2)
+    if (!_sg_gl_gles2) {
+        if (ctx->vao) {
+            glDeleteVertexArrays(1, &ctx->vao);
+        }
+        _SG_GL_CHECK_ERROR();
+    }
+    #endif
+    _sg_init_context(ctx);
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -7465,42 +7478,53 @@ _SOKOL_PRIVATE _sg_pass* _sg_lookup_pass(const _sg_pools* p, uint32_t pass_id) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, sg_context ctx) {
+_SOKOL_PRIVATE _sg_context* _sg_lookup_context(const _sg_pools* p, uint32_t ctx_id) {
+    SOKOL_ASSERT(p);
+    if (SG_INVALID_ID != ctx_id) {
+        _sg_context* ctx = _sg_context_at(p, ctx_id);
+        if (ctx->slot.id == ctx_id) {
+            return ctx;
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
     /*  this is a bit dumb since it loops over all pool slots to
         find the occupied slots, on the other hand it is only ever
         executed at shutdown
     */
     for (int i = 0; i < p->buffer_pool.size; i++) {
         if (p->buffers[i].slot.state == SG_RESOURCESTATE_VALID) {
-            if (p->buffers[i].slot.ctx.id == ctx.id) {
+            if (p->buffers[i].slot.ctx_id == ctx_id) {
                 _sg_destroy_buffer(&p->buffers[i]);
             }
         }
     }
     for (int i = 0; i < p->image_pool.size; i++) {
         if (p->images[i].slot.state == SG_RESOURCESTATE_VALID) {
-            if (p->images[i].slot.ctx.id == ctx.id) {
+            if (p->images[i].slot.ctx_id == ctx_id) {
                 _sg_destroy_image(&p->images[i]);
             }
         }
     }
     for (int i = 0; i < p->shader_pool.size; i++) {
         if (p->shaders[i].slot.state == SG_RESOURCESTATE_VALID) {
-            if (p->shaders[i].slot.ctx.id == ctx.id) {
+            if (p->shaders[i].slot.ctx_id == ctx_id) {
                 _sg_destroy_shader(&p->shaders[i]);
             }
         }
     }
     for (int i = 0; i < p->pipeline_pool.size; i++) {
         if (p->pipelines[i].slot.state == SG_RESOURCESTATE_VALID) {
-            if (p->pipelines[i].slot.ctx.id == ctx.id) {
+            if (p->pipelines[i].slot.ctx_id == ctx_id) {
                 _sg_destroy_pipeline(&p->pipelines[i]);
             }
         }
     }
     for (int i = 0; i < p->pass_pool.size; i++) {
         if (p->passes[i].slot.state == SG_RESOURCESTATE_VALID) {
-            if (p->passes[i].slot.ctx.id == ctx.id) {
+            if (p->passes[i].slot.ctx_id == ctx_id) {
                 _sg_destroy_pass(&p->passes[i]);
             }
         }
@@ -8220,7 +8244,13 @@ void sg_setup(const sg_desc* desc) {
 }
 
 void sg_shutdown() {
-    _sg_destroy_all_resources(&_sg.pools, _sg.active_context);
+    /* delete all left-over contexts and their resources */
+    for (int i = 0; i < _sg.pools.context_pool.size; i++) {
+        if (_sg.pools.contexts[i].slot.state == SG_RESOURCESTATE_VALID) {
+            _sg_destroy_all_resources(&_sg.pools, _sg.pools.contexts[i].slot.id);
+            _sg_discard_context(&_sg.pools.contexts[i]);
+        }
+    }
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
     _sg.valid = false;
@@ -8242,6 +8272,7 @@ sg_context sg_setup_context() {
         ctx->slot.id = res.id;
         ctx->slot.state = SG_RESOURCESTATE_ALLOC;
         _sg_setup_context(ctx);
+        ctx->slot.state = SG_RESOURCESTATE_VALID;
         _sg_activate_context(ctx);
     }
     _sg.active_context = res;
@@ -8249,14 +8280,20 @@ sg_context sg_setup_context() {
 }
 
 void sg_discard_context(sg_context ctx_id) {
-    _sg_destroy_all_resources(&_sg.pools, ctx_id);
+    _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
+    _sg_context* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
+    if (ctx) {
+        _sg_discard_context(ctx);
+        _sg_pool_free_id(&_sg.pools.context_pool, ctx_id.id);
+    }
     _sg.active_context.id = SG_INVALID_ID;
     _sg_activate_context(0);
 }
 
 void sg_activate_context(sg_context ctx_id) {
     _sg.active_context = ctx_id;
-    _sg_context* ctx = _sg_context_at(&_sg.pools, ctx_id.id);
+    _sg_context* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
+    /* NOTE: ctx can be 0 here if the context is no longer valid */
     _sg_activate_context(ctx);
 }
 
@@ -8328,7 +8365,7 @@ void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_buffer_desc(desc)) {
         _sg_create_buffer(buf, desc);
-        buf->slot.ctx = _sg.active_context;
+        buf->slot.ctx_id = _sg.active_context.id;
     }
     else {
         buf->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8342,7 +8379,7 @@ void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_image_desc(desc)) {
         _sg_create_image(img, desc);
-        img->slot.ctx = _sg.active_context;
+        img->slot.ctx_id = _sg.active_context.id;
     }
     else {
         img->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8356,7 +8393,7 @@ void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_shader_desc(desc)) {
         _sg_create_shader(shd, desc);
-        shd->slot.ctx = _sg.active_context;
+        shd->slot.ctx_id = _sg.active_context.id;
     }
     else {
         shd->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8372,7 +8409,7 @@ void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
         _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
         _sg_create_pipeline(pip, shd, desc);
-        pip->slot.ctx = _sg.active_context;
+        pip->slot.ctx_id = _sg.active_context.id;
     }
     else {
         pip->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8405,7 +8442,7 @@ void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
             att_imgs[ds_att_index] = 0;
         }
         _sg_create_pass(pass, att_imgs, desc);
-        pass->slot.ctx = _sg.active_context;
+        pass->slot.ctx_id = _sg.active_context.id;
     }
     else {
         pass->slot.state = SG_RESOURCESTATE_FAILED;
@@ -8565,7 +8602,7 @@ sg_pass sg_make_pass(const sg_pass_desc* desc) {
 void sg_destroy_buffer(sg_buffer buf_id) {
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
-        if (buf->slot.ctx.id == _sg.active_context.id) {
+        if (buf->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_buffer(buf);
             _sg_pool_free_id(&_sg.pools.buffer_pool, buf_id.id);
         }
@@ -8578,7 +8615,7 @@ void sg_destroy_buffer(sg_buffer buf_id) {
 void sg_destroy_image(sg_image img_id) {
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
-        if (img->slot.ctx.id == _sg.active_context.id) {
+        if (img->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_image(img);
             _sg_pool_free_id(&_sg.pools.image_pool, img_id.id);
         }
@@ -8591,7 +8628,7 @@ void sg_destroy_image(sg_image img_id) {
 void sg_destroy_shader(sg_shader shd_id) {
     _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     if (shd) {
-        if (shd->slot.ctx.id == _sg.active_context.id) {
+        if (shd->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_shader(shd);
             _sg_pool_free_id(&_sg.pools.shader_pool, shd_id.id);
         }
@@ -8604,7 +8641,7 @@ void sg_destroy_shader(sg_shader shd_id) {
 void sg_destroy_pipeline(sg_pipeline pip_id) {
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     if (pip) {
-        if (pip->slot.ctx.id == _sg.active_context.id) {
+        if (pip->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_pipeline(pip);
             _sg_pool_free_id(&_sg.pools.pipeline_pool, pip_id.id);
         }
@@ -8617,7 +8654,7 @@ void sg_destroy_pipeline(sg_pipeline pip_id) {
 void sg_destroy_pass(sg_pass pass_id) {
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     if (pass) {
-        if (pass->slot.ctx.id == _sg.active_context.id) {
+        if (pass->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_pass(pass);
             _sg_pool_free_id(&_sg.pools.pass_pool, pass_id.id);
         }
