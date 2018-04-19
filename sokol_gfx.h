@@ -283,6 +283,7 @@ extern "C" {
     sg_shader:      vertex- and fragment-shaders, uniform blocks
     sg_pipeline:    associated shader and vertex-layouts, and render states
     sg_pass:        a bundle of render targets and actions on them
+    sg_context:     a 'context handle' for switching between 3D-API contexts
 
     Instead of pointers, resource creation functions return a 32-bit
     number which uniquely identifies the resource object.
@@ -2628,29 +2629,34 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache() {
-    SOKOL_ASSERT(_sg_gl.cur_context);
-    #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2) {
-        _SG_GL_CHECK_ERROR();
-        glBindVertexArray(_sg_gl.cur_context->vao);
-        _SG_GL_CHECK_ERROR();
+    if (_sg_gl.cur_context) {
+        #if !defined(SOKOL_GLES2)
+        if (!_sg_gl_gles2) {
+            _SG_GL_CHECK_ERROR();
+            glBindVertexArray(_sg_gl.cur_context->vao);
+            _SG_GL_CHECK_ERROR();
+        }
+        #endif
+        _sg_gl_reset_state_cache(&_sg_gl.cache);
     }
-    #endif
-    _sg_gl_reset_state_cache(&_sg_gl.cache);
+}
+
+_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
+    SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
+    return _sg_gl.features[f];
 }
 
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
     SOKOL_ASSERT(_sg_gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
     _sg_gl.cur_context = ctx;
-    if (ctx) {
-        _sg_reset_state_cache();
-    }
+    _sg_reset_state_cache();
 }
 
-_SOKOL_PRIVATE void _sg_setup_context(_sg_context* ctx) {
-    SOKOL_ASSERT(_sg_gl.valid);
+/*-- GL backend resource creation and destruction ----------------------------*/
+_SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(0 == ctx->vao);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
@@ -2663,9 +2669,10 @@ _SOKOL_PRIVATE void _sg_setup_context(_sg_context* ctx) {
         _SG_GL_CHECK_ERROR();
     }
     #endif
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_discard_context(_sg_context* ctx) {
+_SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
     #if !defined(SOKOL_GLES2)
     if (!_sg_gl_gles2) {
@@ -2678,12 +2685,6 @@ _SOKOL_PRIVATE void _sg_discard_context(_sg_context* ctx) {
     _sg_init_context(ctx);
 }
 
-_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
-    return _sg_gl.features[f];
-}
-
-/*-- GL backend resource creation and destruction ----------------------------*/
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
@@ -8244,11 +8245,15 @@ void sg_setup(const sg_desc* desc) {
 }
 
 void sg_shutdown() {
-    /* delete all left-over contexts and their resources */
-    for (int i = 0; i < _sg.pools.context_pool.size; i++) {
-        if (_sg.pools.contexts[i].slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_destroy_all_resources(&_sg.pools, _sg.pools.contexts[i].slot.id);
-            _sg_discard_context(&_sg.pools.contexts[i]);
+    /* can only delete resources for the currently set context here, if multiple
+    contexts are used, the app code must take care of properly releasing them
+    (since only the app code can switch between 3D-API contexts)
+    */
+    if (_sg.active_context.id != SG_INVALID_ID) {
+        _sg_context* ctx = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
+        if (ctx) {
+            _sg_destroy_all_resources(&_sg.pools, _sg.active_context.id);
+            _sg_destroy_context(ctx);
         }
     }
     _sg_discard_backend();
@@ -8269,10 +8274,11 @@ sg_context sg_setup_context() {
     res.id = _sg_pool_alloc_id(&_sg.pools.context_pool);
     if (res.id != SG_INVALID_ID) {
         _sg_context* ctx = _sg_context_at(&_sg.pools, res.id);
+        SOKOL_ASSERT(ctx);
         ctx->slot.id = res.id;
         ctx->slot.state = SG_RESOURCESTATE_ALLOC;
-        _sg_setup_context(ctx);
-        ctx->slot.state = SG_RESOURCESTATE_VALID;
+        _sg_create_context(ctx);
+        SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
         _sg_activate_context(ctx);
     }
     _sg.active_context = res;
@@ -8283,7 +8289,7 @@ void sg_discard_context(sg_context ctx_id) {
     _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
     _sg_context* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
     if (ctx) {
-        _sg_discard_context(ctx);
+        _sg_destroy_context(ctx);
         _sg_pool_free_id(&_sg.pools.context_pool, ctx_id.id);
     }
     _sg.active_context.id = SG_INVALID_ID;
