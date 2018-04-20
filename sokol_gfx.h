@@ -240,9 +240,51 @@
                 }
             };
 
+    WORKING WITH CONTEXTS
+    =====================
+    sokol-gfx allows to switch between different rendering contexts and
+    associate resource objects with contexts. This is useful to
+    create GL applications that render into multiple windows.
+
+    A rendering context keeps track of all resources created while
+    the context is active. When the context is destroyed, all resources
+    "belonging to the context" are destroyed as well.
+
+    A default context will be created and activated implicitely in
+    sg_setup(), and destroyed in sg_shutdown(). So for a typical application
+    which *doesn't* use multiple contexts, nothing changes, and calling
+    the context functions isn't necessary.
+
+    Three functions have been added to work with contexts:
+
+    --- sg_context sg_setup_context():
+        This must be called once after a GL context has been created and 
+        made active.
+
+    --- void sg_activate_context(sg_context ctx)
+        This must be called after making a different GL context active.
+        Apart from 3D-API-specific actions, the call to sg_activate_context() 
+        will internally call sg_reset_state_cache().
+
+    --- void sg_discard_context(sg_context ctx)
+        This must be called right before a GL context is destroyed and
+        will destroy all resources associated with the context (that
+        have been created while the context was active) The GL context must be 
+        active at the time sg_discard_context(sg_context ctx) is called. 
+
+    Also note that resources (buffers, images, shaders and pipelines) must
+    only be used or destroyed while the same GL context is active that
+    was also active while the resource was created (an exception is
+    resource sharing on GL, such resources can be used while
+    another context is active, but must still be destroyed under
+    the same context that was active during creation).
+
+    For more information, check out the the multiwindow-glfw sample:
+
+    https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c
+
     TODO:
     ====
-    - talk about rendering with multiple contexts
     - talk about asynchronous resource creation
     
     zlib/libpng license
