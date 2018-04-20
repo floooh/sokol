@@ -4407,6 +4407,15 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     memset(pass, 0, sizeof(_sg_pass));
 } 
 
+typedef struct {
+    _sg_slot slot;
+} _sg_context;
+
+_SOKOL_PRIVATE void _sg_init_context(_sg_context* context) {
+    SOKOL_ASSERT(context);
+    memset(context, 0, sizeof(_sg_context));
+}
+
 /*-- main D3D11 backend state and functions ----------------------------------*/
 typedef struct {
     bool valid;
@@ -4492,6 +4501,26 @@ _SOKOL_PRIVATE void _sg_d3d11_clear_state() {
     ID3D11DeviceContext_PSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_srvs);
     ID3D11DeviceContext_VSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_smps);
     ID3D11DeviceContext_PSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg_d3d11.zero_smps);
+}
+
+_SOKOL_PRIVATE void _sg_reset_state_cache() {
+    /* just clear the d3d11 device context state */
+    _sg_d3d11_clear_state();
+}
+
+_SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
+    _sg_reset_state_cache();
+}
+
+_SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    _sg_init_context(ctx);
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
@@ -5497,11 +5526,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
             }
         }
     }
-}
-
-_SOKOL_PRIVATE void _sg_reset_state_cache() {
-    /* just clear the d3d11 device context state */
-    _sg_d3d11_clear_state();
 }
 
 #ifdef __cplusplus
