@@ -6200,6 +6200,15 @@ _SOKOL_PRIVATE void _sg_init_pass(_sg_pass* pass) {
     memset(pass, 0, sizeof(_sg_pass));
 }
 
+typedef struct {
+    _sg_slot slot;
+} _sg_context;
+
+_SOKOL_PRIVATE void _sg_init_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    memset(ctx, 0, sizeof(_sg_context));
+}
+
 /*-- a simple state cache for the resource bindings --------------------------*/
 static const _sg_pipeline* _sg_mtl_cur_pipeline;
 static sg_pipeline _sg_mtl_cur_pipeline_id;
@@ -6327,6 +6336,25 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
+}
+
+_SOKOL_PRIVATE void _sg_reset_state_cache() {
+    _sg_mtl_clear_state_cache();
+}
+
+_SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    _sg_init_context(ctx);
+}
+
+_SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
+    _sg_reset_state_cache();
 }
 
 _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
@@ -7244,10 +7272,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_pool[img->mtl_tex[img->active_slot]];
     _sg_mtl_copy_image_content(img, mtl_tex, data);
-}
-
-_SOKOL_PRIVATE void _sg_reset_state_cache() {
-    _sg_mtl_clear_state_cache();
 }
 
 #ifdef __cplusplus
