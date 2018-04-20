@@ -181,6 +181,12 @@ See https://github.com/floooh/sokol-samples for more samples.
 
 # Updates
 
+- **20-Apr-2018**: 3 new context-switching functions have been added
+to make it possible to use sokol together with applications that
+use multiple GL contexts. On D3D11 and Metal, the functions are currently
+empty. See the new section ```WORKING WITH CONTEXTS``` in the sokol_gfx.h
+header documentation, and the new sample [multiwindow-glfw](https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c)
+
 - **31-Jan-2018**: The vertex layout declaration in sg\_pipeline\_desc had
 some fairly subtle flaws and has been changed to work like Metal or Vulkan.
 The gist is that the vertex-buffer-layout properties (vertex stride, 
