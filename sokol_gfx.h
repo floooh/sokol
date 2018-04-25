@@ -7718,7 +7718,7 @@ typedef enum {
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
     _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
-    _SG_VALIDATE_UPDIMG_SIZEMISMATCH,
+    _SG_VALIDATE_UPDIMG_SIZE,
     _SG_VALIDATE_UPDIMG_COMPRESSED,
     _SG_VALIDATE_UPDIMG_ONCE
 
@@ -7817,7 +7817,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
         case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
-        case _SG_VALIDATE_UPDIMG_SIZEMISMATCH:  return "sg_update_image: subimage data size mismatch";
+        case _SG_VALIDATE_UPDIMG_SIZE:          return "sg_update_image: provided subimage data size too big";
         case _SG_VALIDATE_UPDIMG_COMPRESSED:    return "sg_update_image: cannot update images with compressed format";
         case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
 
@@ -8314,7 +8314,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image* img, const sg_ima
                 const int mip_height = _sg_max(img->height >> mip_index, 1);
                 const int bytes_per_slice = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
                 const int expected_size = bytes_per_slice * img->depth;
-                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size == expected_size, _SG_VALIDATE_UPDIMG_SIZEMISMATCH);
+                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= expected_size, _SG_VALIDATE_UPDIMG_SIZE);
             }
         }
         return SOKOL_VALIDATE_END();
