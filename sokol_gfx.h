@@ -3856,7 +3856,8 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 (attr->type != cache_attr->gl_attr.type) ||
                 (attr->normalized != cache_attr->gl_attr.normalized) ||
                 (attr->stride != cache_attr->gl_attr.stride) ||
-                (vb_offset != cache_attr->gl_attr.offset))
+                (vb_offset != cache_attr->gl_attr.offset) ||
+                (cache_attr->gl_attr.divisor != attr->divisor))
             {
                 if (gl_vb != vb->gl_buf[vb->active_slot]) {
                     gl_vb = vb->gl_buf[vb->active_slot];
@@ -3865,17 +3866,14 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 glVertexAttribPointer(attr_index, attr->size, attr->type, 
                     attr->normalized, attr->stride, 
                     (const GLvoid*)(GLintptr)vb_offset);
+                if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
+                    glVertexAttribDivisor(attr_index, attr->divisor);
+                }
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
                 glEnableVertexAttribArray(attr_index);
                 cache_attr_dirty = true;
-            }
-            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
-                if (cache_attr->gl_attr.divisor != attr->divisor) {
-                    glVertexAttribDivisor(attr_index, attr->divisor);
-                    cache_attr_dirty = true;
-                }
             }
         }
         else {
