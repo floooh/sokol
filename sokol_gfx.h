@@ -1907,6 +1907,9 @@ extern "C" {
 #ifndef GL_DEPTH_STENCIL
 #define GL_DEPTH_STENCIL 0x84F9
 #endif
+#ifndef GL_LUMINANCE
+#define GL_LUMINANCE 0x1909
+#endif
 #ifdef SOKOL_GLES2
 #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
 #define glDrawArraysInstanced(mode, first, count, instancecount) glDrawArraysInstancedEXT(mode, first, count, instancecount)
@@ -2162,7 +2165,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             #if defined(SOKOL_GLES2)
             return GL_LUMINANCE;
             #else
-            return GL_RED;
+            if (_sg_gl_gles2) {
+                return GL_LUMINANCE;
+            }
+            else {
+                return GL_RED;
+            }
             #endif
         case SG_PIXELFORMAT_DEPTH:
             return GL_DEPTH_COMPONENT;
@@ -2620,16 +2628,22 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             }
         }
     #elif defined(SOKOL_GLES3)
-        _sg_gl.features[SG_FEATURE_INSTANCING] = true;
-        _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
-        _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
-        _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
-        _sg_gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
-        _sg_gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
-        _sg_gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
-        _sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        _sg_gl.ext_anisotropic = strstr(ext, "_texture_filter_anisotropic");
+        if (!_sg_gl_gles2) {
+            _sg_gl.features[SG_FEATURE_INSTANCING] = true;
+            _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
+            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+            _sg_gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
+            _sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
+            _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+            _sg_gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+            _sg_gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        }
+        else {
+            _sg_gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
+            _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
+            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+        }
         _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
             strstr(ext, "_texture_compression_s3tc") ||
             strstr(ext, "_compressed_texture_s3tc") ||
@@ -2639,6 +2653,8 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             strstr(ext, "_compressed_texture_pvrtc");
         _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
             strstr(ext, "_compressed_texture_atc");
+        _sg_gl.ext_anisotropic =
+            strstr(ext, "_texture_filter_anisotropic");
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
         _sg_gl.features[SG_FEATURE_INSTANCING] =
@@ -2853,7 +2869,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
         GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->pixel_format);
         #if !defined(SOKOL_GLES2)
-        if (msaa) {
+        if (!_sg_gl_gles2 && msaa) {
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
         }
         else
@@ -2869,7 +2885,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
 
         /* if this is a MSAA render target, need to create a separate render buffer */
         #if !defined(SOKOL_GLES2)
-        if (img->render_target && msaa) {
+        if (!_sg_gl_gles2 && img->render_target && msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
