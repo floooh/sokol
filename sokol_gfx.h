@@ -13,8 +13,7 @@
         #define SOKOL_GLES2
         #define SOKOL_GLES3
         #define SOKOL_D3D11
-        #define SOKOL_METAL_MACOS
-        #define SOKOL_METAL_IOS
+        #define SOKOL_METAL
 
     I.e. for the GL 3.3 Core Profile it should look like this:
 
@@ -1574,8 +1573,8 @@ extern void sg_discard_context(sg_context ctx_id);
         #define SOKOL_LOG(s)
     #endif
 #endif
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL_MACOS)||defined(SOKOL_METAL_IOS))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL_MACOS or SOKOL_METAL_IOS"
+#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL))
+#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL"
 #endif
 
 #ifndef _SOKOL_PRIVATE
@@ -5589,7 +5588,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #endif
 
 /*== METAL BACKEND ===========================================================*/
-#elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS)
+#elif defined(SOKOL_METAL)
 
 #if !__has_feature(objc_arc)
 #error "Please enable ARC when using the Metal backend"
@@ -5597,6 +5596,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 
 /* memset() */
 #include <string.h>
+#include <TargetConditionals.h>
 #import <Metal/Metal.h>
 
 #ifdef __cplusplus
@@ -5605,7 +5605,7 @@ extern "C" {
     
 enum {
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    #if defined(SOKOL_METAL_MACOS)
+    #if !TARGET_OS_IPHONE
     _SG_MTL_UB_ALIGN = 256,
     #else
     _SG_MTL_UB_ALIGN = 16,
@@ -5630,7 +5630,7 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
             return MTLResourceStorageModeShared;
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
-            #if defined(SOKOL_METAL_MACOS)
+            #if !TARGET_OS_IPHONE
             return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
             #else
             return MTLCPUCacheModeWriteCombined;
@@ -5688,7 +5688,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_texture_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R32F:           return MTLPixelFormatR32Float;
         case SG_PIXELFORMAT_R16F:           return MTLPixelFormatR16Float;
         case SG_PIXELFORMAT_L8:             return MTLPixelFormatR8Unorm;
-        #if defined(SOKOL_METAL_MACOS)
+        #if !TARGET_OS_IPHONE
         case SG_PIXELFORMAT_DXT1:           return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_DXT3:           return MTLPixelFormatBC2_RGBA;
         case SG_PIXELFORMAT_DXT5:           return MTLPixelFormatBC3_RGBA;
@@ -6342,7 +6342,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if defined(SOKOL_METAL_MACOS)
+    #if !TARGET_OS_IPHONE
     res_opts |= MTLResourceStorageModeManaged;
     #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -6375,7 +6375,7 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
-        #if defined(SOKOL_METAL_MACOS)
+        #if !TARGET_OS_IPHONE 
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
         #else
         case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
@@ -7089,7 +7089,7 @@ _SOKOL_PRIVATE void _sg_commit() {
     SOKOL_ASSERT(nil == _sg_mtl_cmd_encoder);
     SOKOL_ASSERT(nil != _sg_mtl_cmd_buffer);
 
-    #if defined(SOKOL_METAL_MACOS)
+    #if !TARGET_OS_IPHONE
     [_sg_mtl_uniform_buffers[_sg_mtl_cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg_mtl_cur_ub_offset)];
     #endif
 
@@ -7316,7 +7316,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data, data_size);
-    #if defined(SOKOL_METAL_MACOS)
+    #if !TARGET_OS_IPHONE
     [mtl_buf didModifyRange:NSMakeRange(0, data_size)];
     #endif
 }
@@ -7968,7 +7968,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             /* on GL, must provide shader source code */
             SOKOL_VALIDATE(0 != desc->vs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
             SOKOL_VALIDATE(0 != desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
-        #elif defined(SOKOL_METAL_MACOS) || defined(SOKOL_METAL_IOS) || defined(SOKOL_D3D11_SHADER_COMPILER)
+        #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11_SHADER_COMPILER)
             /* on Metal or D3D with shader compiler, must provide shader source code or byte code */
             SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);

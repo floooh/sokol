@@ -181,6 +181,12 @@ See https://github.com/floooh/sokol-samples for more samples.
 
 # Updates
 
+- **11-May-2018**: sokol_gfx.h now autodetects iOS vs MacOS in the Metal
+backend during compilation using the standard define TARGET_OS_IPHONE defined
+in the TargetConditionals.h system header, please replace the old
+backend-selection defines SOKOL_METAL_MACOS and SOKOL_METAL_IOS with
+**SOKOL_METAL**
+
 - **20-Apr-2018**: 3 new context-switching functions have been added
 to make it possible to use sokol together with applications that
 use multiple GL contexts. On D3D11 and Metal, the functions are currently
