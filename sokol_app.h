@@ -117,13 +117,21 @@ typedef struct {
 typedef void (*sapp_event_callback)(const sapp_event*);
 
 /* user-provided functions */
-extern void sokol_enter();
+extern void sokol_init();
 extern void sokol_frame();
-extern int sokol_exit();
+extern void sokol_shutdown();
 
+/* sokol_app API functions */
 extern void sapp_setup(const sapp_desc* desc);
 extern void sapp_shutdown();
 extern bool sapp_isvalid();
+extern int sapp_width();
+extern int sapp_height();
+
+/* Metal specific functions */
+extern const void* sapp_metal_get_device();
+extern const void* sapp_metal_get_renderpass_descriptor();
+extern const void* sapp_metal_get_drawable(); 
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -177,7 +185,7 @@ typedef struct {
 } _sapp_state;
 static _sapp_state _sapp;
 
-/*== MacOS ===================================================================*/
+/*== MacOS/iOS ===============================================================*/
 
 #if defined(__APPLE__)
 
@@ -186,39 +194,47 @@ static _sapp_state _sapp;
 #endif
 
 #include <TargetConditionals.h>
+
+/*== MacOS ===================================================================*/
 #if !TARGET_OS_IPHONE
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
+#if defined(SOKOL_METAL)
+#import <Metal/Metal.h>
+#import <MetalKit/MetalKit.h>
+#endif
 
-static id _sapp_window;
-static id _sapp_win_dlg;
-static id _sapp_app_dlg;
+static id _sapp_window_obj;
+static id _sapp_win_dlg_obj;
+static id _sapp_app_dlg_obj;
+static id _sapp_mtk_view_dlg_obj;
+static id _sapp_mtk_view_obj;
+static id _sapp_mtl_device_obj;
+static id _sapp_mtk_view_ctrl_obj;
 
 @interface _sapp_app_delegate : NSObject<NSApplicationDelegate>
 @end
 @interface _sapp_window_delegate : NSObject<NSWindowDelegate>
-@end 
+@end
+@interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
+@end
+@interface _sapp_mtk_view : MTKView;
+@end
+
+/* MacOS entry function */
+int main() {
+    [NSApplication sharedApplication];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
+    [NSApp setDelegate:_sapp_app_dlg_obj];
+    [NSApp activateIgnoringOtherApps:YES];
+    [NSApp run];
+    return 0;
+}
 
 @implementation _sapp_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
-    const NSUInteger style =
-        NSWindowStyleMaskTitled |
-        NSWindowStyleMaskClosable |
-        NSWindowStyleMaskMiniaturizable |
-        NSWindowStyleMaskResizable;
-    _sapp_window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, _sapp.width, _sapp.height)
-        styleMask:style
-        backing:NSBackingStoreBuffered
-        defer:NO];
-    [_sapp_window setTitle:[NSString stringWithUTF8String:_sapp.window_title]];
-    [_sapp_window setAcceptsMouseMovedEvents:YES];
-    [_sapp_window center];
-    [_sapp_window setRestorable:YES];
-    _sapp_win_dlg = [[_sapp_window_delegate alloc] init];
-    [_sapp_window setDelegate:_sapp_win_dlg];
-
-    [_sapp_window makeKeyAndOrderFront:nil];
+    sokol_init();
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     return YES;
@@ -227,7 +243,7 @@ static id _sapp_app_dlg;
 
 @implementation _sapp_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    sokol_exit();
+    sokol_shutdown();
     return YES;
 }
 
@@ -256,39 +272,125 @@ static id _sapp_app_dlg;
 }
 @end
 
+@implementation _sapp_mtk_view_dlg
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* FIXME */
+}
+
+- (void)drawInMTKView:(MTKView*)view {
+    @autoreleasepool {
+        sokol_frame();
+    }
+}
+@end
+
+@implementation _sapp_mtk_view
+- (BOOL)isOpaque {
+    return YES;
+}
+- (BOOL)canBecomeKey {
+    return YES;
+}
+- (BOOL)acceptsFirstResponder {
+    return YES;
+}
+- (void)mouseDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseDragged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseMoved:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseDragged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)keyDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)flagsChanged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)keyUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)scrollWheel:(NSEvent*)event {
+    /* FIXME */
+}
+@end
+
 _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     _sapp.width = _sapp_def(desc->width, 640);
     _sapp.height = _sapp_def(desc->height, 480);
     _sapp.sample_count = _sapp_def(desc->sample_count, 1);
     strncpy(_sapp.window_title, desc->window_title, sizeof(_sapp.window_title));
     _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
-    [NSApplication sharedApplication];
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-    _sapp_app_dlg = [[_sapp_app_delegate alloc] init];
-    [NSApp setDelegate:_sapp_app_dlg];
-    [NSApp activateIgnoringOtherApps:YES];
-}
 
-_SOKOL_PRIVATE void _sapp_run() {
-    SOKOL_ASSERT(_sapp.valid);
-    [NSApp run];
+    const NSUInteger style =
+        NSWindowStyleMaskTitled |
+        NSWindowStyleMaskClosable |
+        NSWindowStyleMaskMiniaturizable |
+        NSWindowStyleMaskResizable;
+    _sapp_window_obj = [[NSWindow alloc]
+        initWithContentRect:NSMakeRect(0, 0, _sapp.width, _sapp.height)
+        styleMask:style
+        backing:NSBackingStoreBuffered
+        defer:NO];
+    [_sapp_window_obj setTitle:[NSString stringWithUTF8String:_sapp.window_title]];
+    [_sapp_window_obj setAcceptsMouseMovedEvents:YES];
+    [_sapp_window_obj center];
+    [_sapp_window_obj setRestorable:YES];
+    _sapp_win_dlg_obj = [[_sapp_window_delegate alloc] init];
+    [_sapp_window_obj setDelegate:_sapp_win_dlg_obj];
+
+    #if defined(SOKOL_METAL)
+        _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
+        _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
+        _sapp_mtk_view_obj = [[_sapp_mtk_view alloc] init];
+        [_sapp_mtk_view_obj setPreferredFramesPerSecond:60];
+        [_sapp_mtk_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
+        [_sapp_mtk_view_obj setDevice:_sapp_mtl_device_obj];
+        [_sapp_mtk_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+        [_sapp_mtk_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
+        [_sapp_mtk_view_obj setSampleCount:_sapp.sample_count];
+        /* FIXME: HighDPI */
+        [_sapp_window_obj setContentView:_sapp_mtk_view_obj];
+        CGSize drawable_size = { (CGFloat) _sapp.width, (CGFloat) _sapp.height };
+        [_sapp_mtk_view_obj setDrawableSize:drawable_size];
+        [[_sapp_mtk_view_obj layer] setMagnificationFilter:kCAFilterNearest];
+    #else
+    #error "FIXME: GLKView initialization"
+    #endif
+
+    [_sapp_window_obj makeKeyAndOrderFront:nil];
 }
 
 _SOKOL_PRIVATE void _sapp_shutdown() {
     /* FIXME */
+}
+
+_SOKOL_PRIVATE int _sapp_width() {
+    return (int) [_sapp_mtk_view_obj drawableSize].width;
+}
+
+_SOKOL_PRIVATE int _sapp_height() {
+    return (int) [_sapp_mtk_view_obj drawableSize].height;
 }
 #endif
 
 #if TARGET_OS_IPHONE
 
 #endif
-
-/* OSX/iOS entry function */
-int main() {
-    sokol_enter();
-    _sapp_run();
-    return 0;
-}
 
 #else
 #error "sokol_app.h: Unknown OS"
@@ -309,6 +411,47 @@ bool sapp_isvalid() {
 void sapp_shutdown() {
     _sapp_shutdown();
     _sapp.valid = false;
+}
+
+int sapp_width() {
+    return _sapp_width();
+}
+
+int sapp_height() {
+    return _sapp_height();
+}
+
+const void* sapp_metal_get_device() {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        const void* obj = (__bridge const void*) _sapp_mtl_device_obj;
+        SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_metal_get_renderpass_descriptor() {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        const void* obj =  (__bridge const void*) [_sapp_mtk_view_obj currentRenderPassDescriptor];
+        SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_metal_get_drawable() {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        const void* obj = (__bridge const void*) [_sapp_mtk_view_obj currentDrawable];
+        SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
 }
 
 #undef _sapp_def
