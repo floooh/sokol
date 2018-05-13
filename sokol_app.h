@@ -197,29 +197,49 @@ static _sapp_state _sapp;
 
 /*== MacOS ===================================================================*/
 #if !TARGET_OS_IPHONE
+#if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
+#error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
+#endif
+
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
+#elif defined(SOKOL_GLCORE33)
+#import <GLKit/GLKit.h>
+#import <QuartzCore/CoreAnimation.h>
 #endif
-
-static id _sapp_window_obj;
-static id _sapp_win_dlg_obj;
-static id _sapp_app_dlg_obj;
-static id _sapp_mtk_view_dlg_obj;
-static id _sapp_mtk_view_obj;
-static id _sapp_mtl_device_obj;
-static id _sapp_mtk_view_ctrl_obj;
 
 @interface _sapp_app_delegate : NSObject<NSApplicationDelegate>
 @end
 @interface _sapp_window_delegate : NSObject<NSWindowDelegate>
 @end
+#if defined(SOKOL_METAL)
 @interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
 @interface _sapp_mtk_view : MTKView;
 @end
+#else
+@interface _sapp_gl_view : NSOpenGLView
+{
+    CVDisplayLinkRef display_link;
+}
+- (CVReturn) getFrameForTime:(const CVTimeStamp*)outputTime;
+@end
+#endif
+
+static NSWindow* _sapp_window_obj;
+static _sapp_window_delegate* _sapp_win_dlg_obj;
+static _sapp_app_delegate* _sapp_app_dlg_obj;
+#if defined(SOKOL_METAL)
+static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
+static _sapp_mtk_view* _sapp_mtk_view_obj;
+static id<MTLDevice> _sapp_mtl_device_obj;
+#elif defined(SOKOL_GLCORE33)
+static NSOpenGLPixelFormat* _sapp_nsglpixelformat_obj;
+static _sapp_gl_view* _sapp_gl_view_obj;
+#endif
 
 /* MacOS entry function */
 int main() {
@@ -272,6 +292,7 @@ int main() {
 }
 @end
 
+#if defined(SOKOL_METAL)
 @implementation _sapp_mtk_view_dlg
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
     /* FIXME */
@@ -328,6 +349,48 @@ int main() {
     /* FIXME */
 }
 @end
+#else
+static CVReturn _sapp_displaylink_cb(CVDisplayLinkRef displayLink,
+    const CVTimeStamp* now,
+    const CVTimeStamp* output_time,
+    CVOptionFlags flags_in,
+    CVOptionFlags* flags_out,
+    void* display_link_context)
+{
+    CVReturn result = [(__bridge _sapp_gl_view*)display_link_context getFrameForTime:output_time];
+    return result;
+}
+
+@implementation _sapp_gl_view
+- (void) prepareOpenGL {
+    GLint swapInt = 1;
+    [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
+    CVDisplayLinkCreateWithActiveCGDisplays(&display_link);
+    CVDisplayLinkSetOutputCallback(display_link, &_sapp_displaylink_cb, (__bridge void*) self);
+    CGLContextObj cglContext = [[self openGLContext] CGLContextObj];
+    CGLPixelFormatObj cglPixelFormat = [[self pixelFormat] CGLPixelFormatObj];
+    CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(display_link, cglContext, cglPixelFormat);
+    CVDisplayLinkStart(display_link);
+}
+
+- (CVReturn) getFrameForTime:(const CVTimeStamp*)outputTime {
+    /* FIXME: this won't work, since this function is called from a
+       different thread :/
+    */
+
+    sokol_frame();
+    glFlush();
+    return kCVReturnSuccess;
+}
+
+/*
+- (void) drawRect:(NSRect)bound {
+    sokol_frame();
+    glFlush();
+}
+*/
+@end
+#endif
 
 _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     _sapp.width = _sapp_def(desc->width, 640);
@@ -365,11 +428,33 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         [_sapp_mtk_view_obj setSampleCount:_sapp.sample_count];
         /* FIXME: HighDPI */
         [_sapp_window_obj setContentView:_sapp_mtk_view_obj];
+        [_sapp_window_obj makeFirstResponder:_sapp_mtk_view_obj];
         CGSize drawable_size = { (CGFloat) _sapp.width, (CGFloat) _sapp.height };
         [_sapp_mtk_view_obj setDrawableSize:drawable_size];
         [[_sapp_mtk_view_obj layer] setMagnificationFilter:kCAFilterNearest];
-    #else
-    #error "FIXME: GLKView initialization"
+    #elif defined(SOKOL_GLCORE33)
+        NSOpenGLPixelFormatAttribute attrs[32];
+        int i = 0;
+        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
+        attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
+        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
+        if (_sapp.sample_count > 1) {
+            attrs[i++] = NSOpenGLPFAMultisample;
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.sample_count;
+        }
+        else {
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
+        }
+        attrs[i++] = 0;
+        _sapp_nsglpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        _sapp_gl_view_obj = [[_sapp_gl_view alloc]
+            initWithFrame:NSMakeRect(0, 0, _sapp.width, _sapp.height)
+            pixelFormat:_sapp_nsglpixelformat_obj];
+        [_sapp_window_obj setContentView:_sapp_gl_view_obj];
+        [_sapp_window_obj makeFirstResponder:_sapp_gl_view_obj];
     #endif
 
     [_sapp_window_obj makeKeyAndOrderFront:nil];
@@ -380,11 +465,21 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 }
 
 _SOKOL_PRIVATE int _sapp_width() {
+    #if defined(SOKOL_METAL)
     return (int) [_sapp_mtk_view_obj drawableSize].width;
+    #else
+    const NSRect r = [_sapp_gl_view_obj convertRectToBacking:[_sapp_gl_view_obj frame]];
+    return (int) r.size.width;
+    #endif
 }
 
 _SOKOL_PRIVATE int _sapp_height() {
+    #if defined(SOKOL_METAL)
     return (int) [_sapp_mtk_view_obj drawableSize].height;
+    #else
+    const NSRect r = [_sapp_gl_view_obj convertRectToBacking:[_sapp_gl_view_obj frame]];
+    return (int) r.size.height;
+    #endif
 }
 #endif
 
