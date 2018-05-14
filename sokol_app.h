@@ -264,11 +264,11 @@ int main() {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
-    /* FIXME */
+    [_sapp_glcontext_obj update];
 }
 
 - (void)windowDidMove:(NSNotification*)notification {
-    /* FIXME */
+    [_sapp_glcontext_obj update];
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
@@ -403,6 +403,7 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
         attrs[i++] = NSOpenGLPFAAccelerated;
+        attrs[i++] = NSOpenGLPFADoubleBuffer;
         attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
