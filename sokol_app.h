@@ -1,6 +1,6 @@
 #pragma once
 /*
-    sokol_app.h -- cross-platform application wrapper
+    sokol_app.h -- cross-platform app model wrapper
 
     WORK IN PROGRESS!
 
@@ -219,10 +219,7 @@ static _sapp_state _sapp;
 @interface _sapp_view : MTKView;
 @end
 #else
-@interface _sapp_view : NSOpenGLView
-{
-    NSTimer* timer;
-}
+@interface _sapp_view : NSView
 - (void)timerFired:(id)sender;
 @end
 #endif
@@ -235,7 +232,9 @@ static _sapp_view* _sapp_view_obj;
 static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 #elif defined(SOKOL_GLCORE33)
-static NSOpenGLPixelFormat* _sapp_nsglpixelformat_obj;
+static NSOpenGLPixelFormat* _sapp_glpixelformat_obj;
+static NSOpenGLContext* _sapp_glcontext_obj;
+static NSTimer* _sapp_timer_obj;
 #endif
 
 /* MacOS entry function */
@@ -347,25 +346,15 @@ int main() {
     /* FIXME */
 }
 #if !defined(SOKOL_METAL)
-- (void) prepareOpenGL {
-    GLint swapInt = 1;
-    [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
-    timer = [NSTimer timerWithTimeInterval:0.001
-        target:self
-        selector:@selector(timerFired:)
-        userInfo:nil
-        repeats:YES];
-    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSDefaultRunLoopMode];
-    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSEventTrackingRunLoopMode];
-}
-
 - (void)timerFired:(id)sender {
     [self setNeedsDisplay:YES];
 }
 
 - (void) drawRect:(NSRect)bound {
+    [_sapp_glcontext_obj makeCurrentContext];
     sokol_frame();
     glFlush();
+    [_sapp_glcontext_obj flushBuffer];
 }
 #endif
 @end
@@ -413,6 +402,7 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
+        attrs[i++] = NSOpenGLPFAAccelerated;
         attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
@@ -427,14 +417,27 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
         }
         attrs[i++] = 0;
-        _sapp_nsglpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        _sapp_view_obj = [[_sapp_view alloc]
-            initWithFrame:NSMakeRect(0, 0, _sapp.width, _sapp.height)
-            pixelFormat:_sapp_nsglpixelformat_obj];
+        _sapp_glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        SOKOL_ASSERT(_sapp_glpixelformat_obj != nil);
+        _sapp_glcontext_obj = [[NSOpenGLContext alloc] initWithFormat:_sapp_glpixelformat_obj shareContext:NULL];
+        SOKOL_ASSERT(_sapp_glcontext_obj != nil);
+        _sapp_view_obj = [[_sapp_view alloc] init];
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
-    #endif
+        // FIXME HighDPI: [_sapp_view_obj setWantsBestRsolutionOpenGLSurface:YES];
+        [_sapp_glcontext_obj setView:_sapp_view_obj];
+        [_sapp_glcontext_obj makeCurrentContext];
 
+        GLint swapInt = 1;
+        [_sapp_glcontext_obj setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
+        _sapp_timer_obj = [NSTimer timerWithTimeInterval:0.001
+            target:_sapp_view_obj
+            selector:@selector(timerFired:)
+            userInfo:nil
+            repeats:YES];
+        [[NSRunLoop currentRunLoop] addTimer:_sapp_timer_obj forMode:NSDefaultRunLoopMode];
+        [[NSRunLoop currentRunLoop] addTimer:_sapp_timer_obj forMode:NSEventTrackingRunLoopMode];
+    #endif
     [_sapp_window_obj makeKeyAndOrderFront:nil];
 }
 
