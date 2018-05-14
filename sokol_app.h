@@ -202,13 +202,11 @@ static _sapp_state _sapp;
 #endif
 
 #import <Cocoa/Cocoa.h>
-#import <QuartzCore/QuartzCore.h>
 #if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
-#elif defined(SOKOL_GLCORE33)
-#import <GLKit/GLKit.h>
-#import <QuartzCore/CoreAnimation.h>
+#else
+#include <OpenGL/gl3.h>
 #endif
 
 @interface _sapp_app_delegate : NSObject<NSApplicationDelegate>
@@ -218,27 +216,26 @@ static _sapp_state _sapp;
 #if defined(SOKOL_METAL)
 @interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
-@interface _sapp_mtk_view : MTKView;
+@interface _sapp_view : MTKView;
 @end
 #else
-@interface _sapp_gl_view : NSOpenGLView
+@interface _sapp_view : NSOpenGLView
 {
-    CVDisplayLinkRef display_link;
+    NSTimer* timer;
 }
-- (CVReturn) getFrameForTime:(const CVTimeStamp*)outputTime;
+- (void)timerFired:(id)sender;
 @end
 #endif
 
 static NSWindow* _sapp_window_obj;
 static _sapp_window_delegate* _sapp_win_dlg_obj;
 static _sapp_app_delegate* _sapp_app_dlg_obj;
+static _sapp_view* _sapp_view_obj;
 #if defined(SOKOL_METAL)
 static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
-static _sapp_mtk_view* _sapp_mtk_view_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 #elif defined(SOKOL_GLCORE33)
 static NSOpenGLPixelFormat* _sapp_nsglpixelformat_obj;
-static _sapp_gl_view* _sapp_gl_view_obj;
 #endif
 
 /* MacOS entry function */
@@ -304,8 +301,9 @@ int main() {
     }
 }
 @end
+#endif
 
-@implementation _sapp_mtk_view
+@implementation _sapp_view
 - (BOOL)isOpaque {
     return YES;
 }
@@ -348,49 +346,29 @@ int main() {
 - (void)scrollWheel:(NSEvent*)event {
     /* FIXME */
 }
-@end
-#else
-static CVReturn _sapp_displaylink_cb(CVDisplayLinkRef displayLink,
-    const CVTimeStamp* now,
-    const CVTimeStamp* output_time,
-    CVOptionFlags flags_in,
-    CVOptionFlags* flags_out,
-    void* display_link_context)
-{
-    CVReturn result = [(__bridge _sapp_gl_view*)display_link_context getFrameForTime:output_time];
-    return result;
-}
-
-@implementation _sapp_gl_view
+#if !defined(SOKOL_METAL)
 - (void) prepareOpenGL {
     GLint swapInt = 1;
     [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
-    CVDisplayLinkCreateWithActiveCGDisplays(&display_link);
-    CVDisplayLinkSetOutputCallback(display_link, &_sapp_displaylink_cb, (__bridge void*) self);
-    CGLContextObj cglContext = [[self openGLContext] CGLContextObj];
-    CGLPixelFormatObj cglPixelFormat = [[self pixelFormat] CGLPixelFormatObj];
-    CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(display_link, cglContext, cglPixelFormat);
-    CVDisplayLinkStart(display_link);
+    timer = [NSTimer timerWithTimeInterval:0.001
+        target:self
+        selector:@selector(timerFired:)
+        userInfo:nil
+        repeats:YES];
+    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSDefaultRunLoopMode];
+    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSEventTrackingRunLoopMode];
 }
 
-- (CVReturn) getFrameForTime:(const CVTimeStamp*)outputTime {
-    /* FIXME: this won't work, since this function is called from a
-       different thread :/
-    */
-
-    sokol_frame();
-    glFlush();
-    return kCVReturnSuccess;
+- (void)timerFired:(id)sender {
+    [self setNeedsDisplay:YES];
 }
 
-/*
 - (void) drawRect:(NSRect)bound {
     sokol_frame();
     glFlush();
 }
-*/
-@end
 #endif
+@end
 
 _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     _sapp.width = _sapp_def(desc->width, 640);
@@ -419,19 +397,19 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     #if defined(SOKOL_METAL)
         _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
         _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
-        _sapp_mtk_view_obj = [[_sapp_mtk_view alloc] init];
-        [_sapp_mtk_view_obj setPreferredFramesPerSecond:60];
-        [_sapp_mtk_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
-        [_sapp_mtk_view_obj setDevice:_sapp_mtl_device_obj];
-        [_sapp_mtk_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
-        [_sapp_mtk_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_mtk_view_obj setSampleCount:_sapp.sample_count];
+        _sapp_view_obj = [[_sapp_view alloc] init];
+        [_sapp_view_obj setPreferredFramesPerSecond:60];
+        [_sapp_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
+        [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
+        [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+        [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
+        [_sapp_view_obj setSampleCount:_sapp.sample_count];
         /* FIXME: HighDPI */
-        [_sapp_window_obj setContentView:_sapp_mtk_view_obj];
-        [_sapp_window_obj makeFirstResponder:_sapp_mtk_view_obj];
+        [_sapp_window_obj setContentView:_sapp_view_obj];
+        [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
         CGSize drawable_size = { (CGFloat) _sapp.width, (CGFloat) _sapp.height };
-        [_sapp_mtk_view_obj setDrawableSize:drawable_size];
-        [[_sapp_mtk_view_obj layer] setMagnificationFilter:kCAFilterNearest];
+        [_sapp_view_obj setDrawableSize:drawable_size];
+        [[_sapp_view_obj layer] setMagnificationFilter:kCAFilterNearest];
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
@@ -450,11 +428,11 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         }
         attrs[i++] = 0;
         _sapp_nsglpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        _sapp_gl_view_obj = [[_sapp_gl_view alloc]
+        _sapp_view_obj = [[_sapp_view alloc]
             initWithFrame:NSMakeRect(0, 0, _sapp.width, _sapp.height)
             pixelFormat:_sapp_nsglpixelformat_obj];
-        [_sapp_window_obj setContentView:_sapp_gl_view_obj];
-        [_sapp_window_obj makeFirstResponder:_sapp_gl_view_obj];
+        [_sapp_window_obj setContentView:_sapp_view_obj];
+        [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
     #endif
 
     [_sapp_window_obj makeKeyAndOrderFront:nil];
@@ -466,18 +444,18 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 
 _SOKOL_PRIVATE int _sapp_width() {
     #if defined(SOKOL_METAL)
-    return (int) [_sapp_mtk_view_obj drawableSize].width;
+    return (int) [_sapp_view_obj drawableSize].width;
     #else
-    const NSRect r = [_sapp_gl_view_obj convertRectToBacking:[_sapp_gl_view_obj frame]];
+    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
     return (int) r.size.width;
     #endif
 }
 
 _SOKOL_PRIVATE int _sapp_height() {
     #if defined(SOKOL_METAL)
-    return (int) [_sapp_mtk_view_obj drawableSize].height;
+    return (int) [_sapp_view_obj drawableSize].height;
     #else
-    const NSRect r = [_sapp_gl_view_obj convertRectToBacking:[_sapp_gl_view_obj frame]];
+    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
     return (int) r.size.height;
     #endif
 }
@@ -530,7 +508,7 @@ const void* sapp_metal_get_device() {
 const void* sapp_metal_get_renderpass_descriptor() {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj =  (__bridge const void*) [_sapp_mtk_view_obj currentRenderPassDescriptor];
+        const void* obj =  (__bridge const void*) [_sapp_view_obj currentRenderPassDescriptor];
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -541,7 +519,7 @@ const void* sapp_metal_get_renderpass_descriptor() {
 const void* sapp_metal_get_drawable() {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj = (__bridge const void*) [_sapp_mtk_view_obj currentDrawable];
+        const void* obj = (__bridge const void*) [_sapp_view_obj currentDrawable];
         SOKOL_ASSERT(obj);
         return obj;
     #else
