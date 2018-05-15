@@ -455,21 +455,121 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
 _SOKOL_PRIVATE void _sapp_shutdown() {
     /* FIXME */
 }
-
-_SOKOL_PRIVATE int _sapp_width() {
-    return _sapp.width;
-}
-
-_SOKOL_PRIVATE int _sapp_height() {
-    return _sapp.height;
-}
 #endif
 
+/*== MacOS ===================================================================*/
 #if TARGET_OS_IPHONE
-
+#if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
+#error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
 #endif
 
+#import <UIKit/UIKit.h>
+#if defined(SOKOL_METAL)
+#import <Metal/Metal.h>
+#import <MetalKit/MetalKit.h>
 #else
+#import <GLKit/GLKit.h>
+#endif
+
+@interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
+@end
+#if defined(SOKOL_METAL)
+@interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
+@end
+@interface _sapp_view : MTKView;
+@end
+#else
+#error "FIXME: iOS GL"
+#endif
+
+static UIWindow* _sapp_window_obj;
+static _sapp_view* _sapp_view_obj;
+#if defined(SOKOL_METAL)
+static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
+static UIViewController<MTKViewDelegate>* _sapp_mtk_view_ctrl_obj;
+static id<MTLDevice> _sapp_mtl_device_obj;
+#else
+#error "FIXME: iOS GL"
+#endif
+
+/* iOS entry function */
+int main(int argc, char** argv) {
+    @autoreleasepool {
+        UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+    }
+    return 0;
+}
+
+@implementation _sapp_app_delegate
+- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+    sokol_init();
+    return YES;
+}
+@end
+
+#if defined(SOKOL_METAL)
+@implementation _sapp_mtk_view_dlg
+- (void)drawInMTKView:(MTKView*)view {
+    @autoreleasepool {
+        const CGSize size = [_sapp_view_obj drawableSize];
+        _sapp.width = size.width;
+        _sapp.height = size.height;
+        sokol_frame();
+    }
+}
+
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* this is required by the protocol, but we can't do anything useful here */
+}
+@end
+#endif
+
+@implementation _sapp_view
+- (BOOL) isOpaque {
+    return YES;
+}
+@end
+
+_SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
+    _sapp.width = _sapp_def(desc->width, 640);
+    _sapp.height = _sapp_def(desc->height, 480);
+    _sapp.sample_count = _sapp_def(desc->sample_count, 1);
+    strncpy(_sapp.window_title, desc->window_title, sizeof(_sapp.window_title));
+    _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
+
+    CGRect screen_rect = [[UIScreen mainScreen] bounds];
+    _sapp_window_obj = [[UIWindow alloc] initWithFrame:screen_rect];
+
+    #if defined(SOKOL_METAL)
+        _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
+        _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
+        _sapp_view_obj = [[_sapp_view alloc] init];
+        [_sapp_view_obj setPreferredFramesPerSecond:60];
+        [_sapp_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
+        [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
+        [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+        [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
+        [_sapp_view_obj setSampleCount:_sapp.sample_count];
+        /* FIXME: HighDPI */
+        [_sapp_view_obj setContentScaleFactor:1.0];
+        [_sapp_view_obj setUserInteractionEnabled:YES];
+        [_sapp_view_obj setMultipleTouchEnabled:YES];
+        [_sapp_window_obj addSubview:_sapp_view_obj];
+        _sapp_mtk_view_ctrl_obj = [[UIViewController<MTKViewDelegate> alloc] init];
+        [_sapp_mtk_view_ctrl_obj setView:_sapp_view_obj];
+        [_sapp_window_obj setRootViewController:_sapp_mtk_view_ctrl_obj];
+    #else
+    #error "FIXME: iOS GL"
+    #endif
+    [_sapp_window_obj makeKeyAndVisible];
+}
+
+_SOKOL_PRIVATE void _sapp_shutdown() {
+    /* FIXME */
+}
+#endif /* TARGET_OS_IPHONE */
+
+#else /* __APPLE */
 #error "sokol_app.h: Unknown OS"
 #endif
 
@@ -491,11 +591,11 @@ void sapp_shutdown() {
 }
 
 int sapp_width() {
-    return _sapp_width();
+    return _sapp.width;
 }
 
 int sapp_height() {
-    return _sapp_height();
+    return _sapp.height;
 }
 
 const void* sapp_metal_get_device() {
