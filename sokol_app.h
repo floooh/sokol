@@ -264,11 +264,15 @@ int main() {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
+    #if !defined(SOKOL_METAL)
     [_sapp_glcontext_obj update];
+    #endif
 }
 
 - (void)windowDidMove:(NSNotification*)notification {
+    #if !defined(SOKOL_METAL)
     [_sapp_glcontext_obj update];
+    #endif
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
@@ -290,14 +294,17 @@ int main() {
 
 #if defined(SOKOL_METAL)
 @implementation _sapp_mtk_view_dlg
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    /* FIXME */
-}
-
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
+        const CGSize size = [_sapp_view_obj drawableSize];
+        _sapp.width = size.width;
+        _sapp.height = size.height;
         sokol_frame();
     }
+}
+
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* this is required by the protocol, but we can't do anything useful here */
 }
 @end
 #endif
@@ -351,6 +358,9 @@ int main() {
 }
 
 - (void) drawRect:(NSRect)bound {
+    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+    _sapp.width = r.size.width;
+    _sapp.height = r.size.height;
     [_sapp_glcontext_obj makeCurrentContext];
     sokol_frame();
     glFlush();
@@ -447,21 +457,11 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 }
 
 _SOKOL_PRIVATE int _sapp_width() {
-    #if defined(SOKOL_METAL)
-    return (int) [_sapp_view_obj drawableSize].width;
-    #else
-    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-    return (int) r.size.width;
-    #endif
+    return _sapp.width;
 }
 
 _SOKOL_PRIVATE int _sapp_height() {
-    #if defined(SOKOL_METAL)
-    return (int) [_sapp_view_obj drawableSize].height;
-    #else
-    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-    return (int) r.size.height;
-    #endif
+    return _sapp.height;
 }
 #endif
 
