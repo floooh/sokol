@@ -128,6 +128,9 @@ extern bool sapp_isvalid();
 extern int sapp_width();
 extern int sapp_height();
 
+/* GL/GLES specific functions */
+extern bool sapp_gles2_fallback();
+
 /* Metal specific functions */
 extern const void* sapp_metal_get_device();
 extern const void* sapp_metal_get_renderpass_descriptor();
@@ -181,6 +184,7 @@ typedef struct {
     int width;
     int height;
     int sample_count;
+    bool gles2_fallback;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
 } _sapp_state;
 static _sapp_state _sapp;
@@ -469,6 +473,8 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 #import <MetalKit/MetalKit.h>
 #else
 #import <GLKit/GLKit.h>
+#include <OpenGLES/ES3/gl.h>
+#include <OpenGLES/ES3/glext.h>
 #endif
 
 @interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
@@ -479,7 +485,10 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 @interface _sapp_view : MTKView;
 @end
 #else
-#error "FIXME: iOS GL"
+@interface _sapp_glk_view_dlg : NSObject<GLKViewDelegate>
+@end
+@interface _sapp_view : GLKView
+@end
 #endif
 
 static UIWindow* _sapp_window_obj;
@@ -489,7 +498,9 @@ static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
 static UIViewController<MTKViewDelegate>* _sapp_mtk_view_ctrl_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 #else
-#error "FIXME: iOS GL"
+static EAGLContext* _sapp_eagl_ctx_obj;
+static _sapp_glk_view_dlg* _sapp_glk_view_dlg_obj;
+static GLKViewController* _sapp_glk_view_ctrl_obj;
 #endif
 
 /* iOS entry function */
@@ -520,6 +531,18 @@ int main(int argc, char** argv) {
 
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
     /* this is required by the protocol, but we can't do anything useful here */
+}
+@end
+#else
+@implementation _sapp_glk_view_dlg
+- (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
+    @autoreleasepool {
+        _sapp.width = (int) [_sapp_view_obj drawableWidth];
+        _sapp.height = (int) [_sapp_view_obj drawableHeight];
+        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
+        sokol_frame();
+        glFlush();
+    }
 }
 @end
 #endif
@@ -559,7 +582,30 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         [_sapp_mtk_view_ctrl_obj setView:_sapp_view_obj];
         [_sapp_window_obj setRootViewController:_sapp_mtk_view_ctrl_obj];
     #else
-    #error "FIXME: iOS GL"
+        _sapp_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+        if (_sapp_eagl_ctx_obj == nil) {
+            _sapp_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+            _sapp.gles2_fallback = true;
+        }
+        _sapp_glk_view_dlg_obj = [[_sapp_glk_view_dlg alloc] init];
+        _sapp_view_obj = [[_sapp_view alloc] initWithFrame:screen_rect];
+        [_sapp_view_obj setDrawableColorFormat:GLKViewDrawableColorFormatRGBA8888];
+        [_sapp_view_obj setDrawableDepthFormat:GLKViewDrawableDepthFormat24];
+        [_sapp_view_obj setDrawableStencilFormat:GLKViewDrawableStencilFormatNone];
+        [_sapp_view_obj setDrawableMultisample:GLKViewDrawableMultisampleNone]; /* FIXME */
+        [_sapp_view_obj setContext:_sapp_eagl_ctx_obj];
+        [_sapp_view_obj setDelegate:_sapp_glk_view_dlg_obj];
+        [_sapp_view_obj setEnableSetNeedsDisplay:NO];
+        [_sapp_view_obj setUserInteractionEnabled:YES];
+        [_sapp_view_obj setMultipleTouchEnabled:YES];
+        /* FIXME: HighDPI */
+        [_sapp_view_obj setContentScaleFactor:1.0];
+        [_sapp_window_obj addSubview:_sapp_view_obj];
+        _sapp_glk_view_ctrl_obj = [[GLKViewController alloc] init];
+        [_sapp_glk_view_ctrl_obj setView:_sapp_view_obj];
+        [_sapp_glk_view_ctrl_obj setPreferredFramesPerSecond:60];
+        [_sapp_window_obj setRootViewController:_sapp_glk_view_ctrl_obj];
+        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
     #endif
     [_sapp_window_obj makeKeyAndVisible];
 }
@@ -596,6 +642,10 @@ int sapp_width() {
 
 int sapp_height() {
     return _sapp.height;
+}
+
+bool sapp_gles2_fallback() {
+    return _sapp.gles2_fallback;
 }
 
 const void* sapp_metal_get_device() {
