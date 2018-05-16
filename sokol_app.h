@@ -582,7 +582,6 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         [_sapp_glk_view_ctrl_obj setView:_sapp_view_obj];
         [_sapp_glk_view_ctrl_obj setPreferredFramesPerSecond:60];
         [_sapp_window_obj setRootViewController:_sapp_glk_view_ctrl_obj];
-        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
     #endif
     [_sapp_window_obj makeKeyAndVisible];
 }
@@ -620,13 +619,11 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     @autoreleasepool {
         _sapp.width = (int) [_sapp_view_obj drawableWidth];
         _sapp.height = (int) [_sapp_view_obj drawableHeight];
-        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
         if (_sapp.first_frame) {
             _sapp.first_frame = false;
             sokol_init();
         }
         sokol_frame();
-        glFlush();
     }
 }
 @end
