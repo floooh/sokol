@@ -117,13 +117,12 @@ typedef struct {
 typedef void (*sapp_event_callback)(const sapp_event*);
 
 /* user-provided functions */
+extern sapp_desc sokol_main(int argc, char* argv[]);
 extern void sokol_init();
 extern void sokol_frame();
 extern void sokol_shutdown();
 
 /* sokol_app API functions */
-extern void sapp_setup(const sapp_desc* desc);
-extern void sapp_shutdown();
 extern bool sapp_isvalid();
 extern int sapp_width();
 extern int sapp_height();
@@ -185,7 +184,11 @@ typedef struct {
     int height;
     int sample_count;
     bool gles2_fallback;
+    bool first_frame;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
+    sapp_desc desc;
+    int argc;
+    char** argv;
 } _sapp_state;
 static _sapp_state _sapp;
 
@@ -242,7 +245,11 @@ static NSTimer* _sapp_timer_obj;
 #endif
 
 /* MacOS entry function */
-int main() {
+int main(int argc, char* argv[]) {
+    memset(&_sapp, 0, sizeof(_sapp));
+    _sapp.argc = argc;
+    _sapp.argv = argv;
+    _sapp.desc = sokol_main(argc, argv);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
@@ -252,128 +259,8 @@ int main() {
     return 0;
 }
 
-@implementation _sapp_app_delegate
-- (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
-    sokol_init();
-}
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
-    return YES;
-}
-@end
-
-@implementation _sapp_window_delegate
-- (BOOL)windowShouldClose:(id)sender {
-    sokol_shutdown();
-    return YES;
-}
-
-- (void)windowDidResize:(NSNotification*)notification {
-    #if !defined(SOKOL_METAL)
-    [_sapp_glcontext_obj update];
-    #endif
-}
-
-- (void)windowDidMove:(NSNotification*)notification {
-    #if !defined(SOKOL_METAL)
-    [_sapp_glcontext_obj update];
-    #endif
-}
-
-- (void)windowDidMiniaturize:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidDeminiaturize:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidBecomeKey:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidResignKey:(NSNotification*)notification {
-    /* FIXME */
-}
-@end
-
-#if defined(SOKOL_METAL)
-@implementation _sapp_mtk_view_dlg
-- (void)drawInMTKView:(MTKView*)view {
-    @autoreleasepool {
-        const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.width = size.width;
-        _sapp.height = size.height;
-        sokol_frame();
-    }
-}
-
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    /* this is required by the protocol, but we can't do anything useful here */
-}
-@end
-#endif
-
-@implementation _sapp_view
-- (BOOL)isOpaque {
-    return YES;
-}
-- (BOOL)canBecomeKey {
-    return YES;
-}
-- (BOOL)acceptsFirstResponder {
-    return YES;
-}
-- (void)mouseDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)mouseDragged:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)mouseUp:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)mouseMoved:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)rightMouseDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)rightMouseDragged:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)rightMouseUp:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)keyDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)flagsChanged:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)keyUp:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)scrollWheel:(NSEvent*)event {
-    /* FIXME */
-}
-#if !defined(SOKOL_METAL)
-- (void)timerFired:(id)sender {
-    [self setNeedsDisplay:YES];
-}
-
-- (void) drawRect:(NSRect)bound {
-    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-    _sapp.width = r.size.width;
-    _sapp.height = r.size.height;
-    [_sapp_glcontext_obj makeCurrentContext];
-    sokol_frame();
-    glFlush();
-    [_sapp_glcontext_obj flushBuffer];
-}
-#endif
-@end
-
 _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
+    _sapp.first_frame = true;
     _sapp.width = _sapp_def(desc->width, 640);
     _sapp.height = _sapp_def(desc->height, 480);
     _sapp.sample_count = _sapp_def(desc->sample_count, 1);
@@ -456,9 +343,136 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     [_sapp_window_obj makeKeyAndOrderFront:nil];
 }
 
-_SOKOL_PRIVATE void _sapp_shutdown() {
+@implementation _sapp_app_delegate
+- (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
+    _sapp_setup(&_sapp.desc);
+    _sapp.valid = true;
+}
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
+    return YES;
+}
+@end
+
+@implementation _sapp_window_delegate
+- (BOOL)windowShouldClose:(id)sender {
+    sokol_shutdown();
+    return YES;
+}
+
+- (void)windowDidResize:(NSNotification*)notification {
+    #if !defined(SOKOL_METAL)
+    [_sapp_glcontext_obj update];
+    #endif
+}
+
+- (void)windowDidMove:(NSNotification*)notification {
+    #if !defined(SOKOL_METAL)
+    [_sapp_glcontext_obj update];
+    #endif
+}
+
+- (void)windowDidMiniaturize:(NSNotification*)notification {
     /* FIXME */
 }
+
+- (void)windowDidDeminiaturize:(NSNotification*)notification {
+    /* FIXME */
+}
+
+- (void)windowDidBecomeKey:(NSNotification*)notification {
+    /* FIXME */
+}
+
+- (void)windowDidResignKey:(NSNotification*)notification {
+    /* FIXME */
+}
+@end
+
+#if defined(SOKOL_METAL)
+@implementation _sapp_mtk_view_dlg
+- (void)drawInMTKView:(MTKView*)view {
+    @autoreleasepool {
+        const CGSize size = [_sapp_view_obj drawableSize];
+        _sapp.width = size.width;
+        _sapp.height = size.height;
+        if (_sapp.first_frame) {
+            _sapp.first_frame = false;
+            sokol_init();
+        }
+        sokol_frame();
+    }
+}
+
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* this is required by the protocol, but we can't do anything useful here */
+}
+@end
+#endif
+
+@implementation _sapp_view
+- (BOOL)isOpaque {
+    return YES;
+}
+- (BOOL)canBecomeKey {
+    return YES;
+}
+- (BOOL)acceptsFirstResponder {
+    return YES;
+}
+- (void)mouseDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseDragged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)mouseMoved:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseDragged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)rightMouseUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)keyDown:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)flagsChanged:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)keyUp:(NSEvent*)event {
+    /* FIXME */
+}
+- (void)scrollWheel:(NSEvent*)event {
+    /* FIXME */
+}
+#if !defined(SOKOL_METAL)
+- (void)timerFired:(id)sender {
+    [self setNeedsDisplay:YES];
+}
+
+- (void) drawRect:(NSRect)bound {
+    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+    _sapp.width = r.size.width;
+    _sapp.height = r.size.height;
+    [_sapp_glcontext_obj makeCurrentContext];
+    if (_sapp.first_frame) {
+        _sapp.first_frame = false;
+        sokol_init();
+    }
+    sokol_frame();
+    glFlush();
+    [_sapp_glcontext_obj flushBuffer];
+}
+#endif
+@end
+
 #endif
 
 /*== MacOS ===================================================================*/
@@ -506,54 +520,17 @@ static GLKViewController* _sapp_glk_view_ctrl_obj;
 /* iOS entry function */
 int main(int argc, char** argv) {
     @autoreleasepool {
+        memset(&_sapp, 0, sizeof(_sapp));
+        _sapp.argc = argc;
+        _sapp.argv = argv;
+        _sapp.desc = sokol_main(argc, argv);
         UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
     }
     return 0;
 }
 
-@implementation _sapp_app_delegate
-- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
-    sokol_init();
-    return YES;
-}
-@end
-
-#if defined(SOKOL_METAL)
-@implementation _sapp_mtk_view_dlg
-- (void)drawInMTKView:(MTKView*)view {
-    @autoreleasepool {
-        const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.width = size.width;
-        _sapp.height = size.height;
-        sokol_frame();
-    }
-}
-
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    /* this is required by the protocol, but we can't do anything useful here */
-}
-@end
-#else
-@implementation _sapp_glk_view_dlg
-- (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
-    @autoreleasepool {
-        _sapp.width = (int) [_sapp_view_obj drawableWidth];
-        _sapp.height = (int) [_sapp_view_obj drawableHeight];
-        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
-        sokol_frame();
-        glFlush();
-    }
-}
-@end
-#endif
-
-@implementation _sapp_view
-- (BOOL) isOpaque {
-    return YES;
-}
-@end
-
 _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
+    _sapp.first_frame = true;
     _sapp.width = _sapp_def(desc->width, 640);
     _sapp.height = _sapp_def(desc->height, 480);
     _sapp.sample_count = _sapp_def(desc->sample_count, 1);
@@ -610,9 +587,56 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     [_sapp_window_obj makeKeyAndVisible];
 }
 
-_SOKOL_PRIVATE void _sapp_shutdown() {
-    /* FIXME */
+@implementation _sapp_app_delegate
+- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+    _sapp_setup(&_sapp.desc);
+    _sapp.valid = true;
+    return YES;
 }
+@end
+
+#if defined(SOKOL_METAL)
+@implementation _sapp_mtk_view_dlg
+- (void)drawInMTKView:(MTKView*)view {
+    @autoreleasepool {
+        const CGSize size = [_sapp_view_obj drawableSize];
+        _sapp.width = size.width;
+        _sapp.height = size.height;
+        if (_sapp.first_frame) {
+            _sapp.first_frame = false;
+            sokol_init();
+        }
+        sokol_frame();
+    }
+}
+
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* this is required by the protocol, but we can't do anything useful here */
+}
+@end
+#else
+@implementation _sapp_glk_view_dlg
+- (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
+    @autoreleasepool {
+        _sapp.width = (int) [_sapp_view_obj drawableWidth];
+        _sapp.height = (int) [_sapp_view_obj drawableHeight];
+        [EAGLContext setCurrentContext:_sapp_eagl_ctx_obj];
+        if (_sapp.first_frame) {
+            _sapp.first_frame = false;
+            sokol_init();
+        }
+        sokol_frame();
+        glFlush();
+    }
+}
+@end
+#endif
+
+@implementation _sapp_view
+- (BOOL) isOpaque {
+    return YES;
+}
+@end
 #endif /* TARGET_OS_IPHONE */
 
 #else /* __APPLE */
@@ -620,20 +644,8 @@ _SOKOL_PRIVATE void _sapp_shutdown() {
 #endif
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
-void sapp_setup(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc);
-    memset(&_sapp, 0, sizeof(_sapp));
-    _sapp_setup(desc);
-    _sapp.valid = true;
-}
-
 bool sapp_isvalid() {
     return _sapp.valid;
-}
-
-void sapp_shutdown() {
-    _sapp_shutdown();
-    _sapp.valid = false;
 }
 
 int sapp_width() {
