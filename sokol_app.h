@@ -62,11 +62,10 @@ typedef struct {
     int sample_count;
     bool fullscreen;
     bool alpha;
-    bool depth;
-    bool stencil;
     bool premultiplied_alpha;
     bool preserve_drawing_buffer;
     const char* window_title;
+    const char* html5_canvas_name;
 } sapp_desc;
 
 typedef enum {
@@ -142,6 +141,34 @@ extern const void* sapp_metal_get_drawable();
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 
+#include <string.h> /* memset */
+
+/* check if the config defines are alright */
+#if defined(__APPLE__)
+    #if !__has_feature(objc_arc)
+        #error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
+    #endif
+    #include <TargetConditionals.h>
+    #if TARGET_OS_IPHONE
+        /* iOS */
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
+        #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
+        #endif
+    #else
+        /* MacOS */
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
+        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
+        #endif
+    #endif
+#elif defined(__EMSCRIPTEN__)
+    /* emscripten (asm.js or wasm) */
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #endif
+#else
+#error "sokol_app.h: Unknown platform"
+#endif
+
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
         #define SOKOL_DEBUG (1)
@@ -185,6 +212,7 @@ typedef struct {
     int sample_count;
     bool gles2_fallback;
     bool first_frame;
+    const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
     sapp_desc desc;
     int argc;
@@ -192,22 +220,32 @@ typedef struct {
 } _sapp_state;
 static _sapp_state _sapp;
 
+_SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
+    memset(&_sapp, 0, sizeof(_sapp));
+    _sapp.argc = argc;
+    _sapp.argv = argv;
+    _sapp.desc = *desc;
+    _sapp.first_frame = true;
+    _sapp.width = _sapp_def(_sapp.desc.width, 640);
+    _sapp.height = _sapp_def(_sapp.desc.height, 480);
+    _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
+    _sapp.html5_canvas_name = _sapp_def(_sapp.html5_canvas_name, "#canvas");
+    if (_sapp.desc.window_title) {
+        strncpy(_sapp.window_title, _sapp.desc.window_title, sizeof(_sapp.window_title));
+    }
+    else {
+        static const char* default_title = "sokol_app";
+        strncpy(_sapp.window_title, default_title, sizeof(_sapp.window_title));
+    }
+    _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
+}
+
 /*== MacOS/iOS ===============================================================*/
 
 #if defined(__APPLE__)
 
-#if !__has_feature(objc_arc)
-#error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
-#endif
-
-#include <TargetConditionals.h>
-
 /*== MacOS ===================================================================*/
 #if !TARGET_OS_IPHONE
-#if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
-#error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
-#endif
-
 #import <Cocoa/Cocoa.h>
 #if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
@@ -246,10 +284,8 @@ static NSTimer* _sapp_timer_obj;
 
 /* MacOS entry function */
 int main(int argc, char* argv[]) {
-    memset(&_sapp, 0, sizeof(_sapp));
-    _sapp.argc = argc;
-    _sapp.argv = argv;
-    _sapp.desc = sokol_main(argc, argv);
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_init_state(&desc, argc, argv);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
@@ -259,14 +295,8 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
-    _sapp.first_frame = true;
-    _sapp.width = _sapp_def(desc->width, 640);
-    _sapp.height = _sapp_def(desc->height, 480);
-    _sapp.sample_count = _sapp_def(desc->sample_count, 1);
-    strncpy(_sapp.window_title, desc->window_title, sizeof(_sapp.window_title));
-    _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
-
+@implementation _sapp_app_delegate
+- (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
@@ -341,11 +371,6 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         [[NSRunLoop currentRunLoop] addTimer:_sapp_timer_obj forMode:NSEventTrackingRunLoopMode];
     #endif
     [_sapp_window_obj makeKeyAndOrderFront:nil];
-}
-
-@implementation _sapp_app_delegate
-- (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
-    _sapp_setup(&_sapp.desc);
     _sapp.valid = true;
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -407,7 +432,7 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     /* this is required by the protocol, but we can't do anything useful here */
 }
 @end
-#endif
+#endif /* SOKOL_METAL */
 
 @implementation _sapp_view
 - (BOOL)isOpaque {
@@ -470,17 +495,13 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
     glFlush();
     [_sapp_glcontext_obj flushBuffer];
 }
-#endif
+#endif /* !SOKOL_METAL */
 @end
 
-#endif
+#endif /* MacOS */
 
-/*== MacOS ===================================================================*/
+/*== iOS =====================================================================*/
 #if TARGET_OS_IPHONE
-#if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
-#error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
-#endif
-
 #import <UIKit/UIKit.h>
 #if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
@@ -520,23 +541,15 @@ static GLKViewController* _sapp_glk_view_ctrl_obj;
 /* iOS entry function */
 int main(int argc, char** argv) {
     @autoreleasepool {
-        memset(&_sapp, 0, sizeof(_sapp));
-        _sapp.argc = argc;
-        _sapp.argv = argv;
-        _sapp.desc = sokol_main(argc, argv);
+        sapp_desc desc = sokol_main(argc, argv);
+        _sapp_init_state(&desc, argc, argv);
         UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
     }
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
-    _sapp.first_frame = true;
-    _sapp.width = _sapp_def(desc->width, 640);
-    _sapp.height = _sapp_def(desc->height, 480);
-    _sapp.sample_count = _sapp_def(desc->sample_count, 1);
-    strncpy(_sapp.window_title, desc->window_title, sizeof(_sapp.window_title));
-    _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
-
+@implementation _sapp_app_delegate
+- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = [[UIScreen mainScreen] bounds];
     _sapp_window_obj = [[UIWindow alloc] initWithFrame:screen_rect];
 
@@ -584,11 +597,6 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
         [_sapp_window_obj setRootViewController:_sapp_glk_view_ctrl_obj];
     #endif
     [_sapp_window_obj makeKeyAndVisible];
-}
-
-@implementation _sapp_app_delegate
-- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
-    _sapp_setup(&_sapp.desc);
     _sapp.valid = true;
     return YES;
 }
@@ -636,9 +644,63 @@ _SOKOL_PRIVATE void _sapp_setup(const sapp_desc* desc) {
 @end
 #endif /* TARGET_OS_IPHONE */
 
-#else /* __APPLE */
-#error "sokol_app.h: Unknown OS"
+#endif /* __APPLE__ */
+
+/*== EMSCRIPTEN ==============================================================*/
+#if defined(__EMSCRIPTEN__)
+#if defined(SOKOL_GLES3)
+#include <GLES3/gl3.h>
+#else
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #endif
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
+    double w, h;
+    emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
+    _sapp.width = (int) w;
+    _sapp.height = (int) h;
+    return true;
+}
+
+int main() {
+    sapp_desc desc = sokol_main(0, 0);
+    _sapp_init_state(&desc, 0, 0);
+    double w, h;
+    emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
+    _sapp.width = (int) w;
+    _sapp.height = (int) h;
+    emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
+    EmscriptenWebGLContextAttributes attrs;
+    emscripten_webgl_init_context_attributes(&attrs);
+    attrs.alpha = _sapp.desc.alpha;
+    attrs.depth = true;
+    attrs.stencil = true;
+    attrs.antialias = _sapp.sample_count > 1;
+    attrs.premultipliedAlpha = _sapp.desc.premultiplied_alpha;
+    attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
+    attrs.enableExtensionsByDefault = true;
+    #if defined(SOKOL_GLES3)
+        attrs.majorVersion = 2;
+    #endif
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(0, &attrs);
+    if (!ctx) {
+        if (attrs.majorVersion == 2) {
+            _sapp.gles2_fallback = true;
+        }
+        attrs.majorVersion = 1;
+        ctx = emscripten_webgl_create_context(0, &attrs);
+    }
+    emscripten_webgl_make_context_current(ctx);
+    sokol_init();
+    emscripten_set_main_loop(sokol_frame, 0, 1);
+}
+
+#endif  /* __EMSCRIPTEN__ */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 bool sapp_isvalid() {
