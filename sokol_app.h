@@ -195,7 +195,7 @@ extern const void* sapp_metal_get_drawable();
 #endif
 
 #ifdef __cplusplus
-extern "C"
+extern "C" {
 #endif
 
 /* helper macros */
@@ -754,8 +754,9 @@ const void* sapp_metal_get_drawable() {
 
 #undef _sapp_def
 
-#endif /* SOKOL_IMPL */
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif /* SOKOL_IMPL */
+
