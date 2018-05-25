@@ -57,6 +57,10 @@ enum {
 };
 
 typedef struct {
+    void (*init_cb)();
+    void (*frame_cb)();
+    void (*shutdown_cb)();
+    void (*event_cb)();
     int width;
     int height;
     int sample_count;
@@ -117,9 +121,6 @@ typedef void (*sapp_event_callback)(const sapp_event*);
 
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
-extern void sokol_init();
-extern void sokol_frame();
-extern void sokol_shutdown();
 
 /* sokol_app API functions */
 extern bool sapp_isvalid();
@@ -221,6 +222,9 @@ typedef struct {
 static _sapp_state _sapp;
 
 _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
+    SOKOL_ASSERT(desc->init_cb);
+    SOKOL_ASSERT(desc->frame_cb);
+    SOKOL_ASSERT(desc->shutdown_cb);
     memset(&_sapp, 0, sizeof(_sapp));
     _sapp.argc = argc;
     _sapp.argv = argv;
@@ -380,7 +384,7 @@ int main(int argc, char* argv[]) {
 
 @implementation _sapp_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    sokol_shutdown();
+    _sapp.desc.shutdown_cb();
     return YES;
 }
 
@@ -422,9 +426,9 @@ int main(int argc, char* argv[]) {
         _sapp.height = size.height;
         if (_sapp.first_frame) {
             _sapp.first_frame = false;
-            sokol_init();
+            _sapp.desc.init_cb();
         }
-        sokol_frame();
+        _sapp.desc.frame_cb();
     }
 }
 
@@ -489,9 +493,9 @@ int main(int argc, char* argv[]) {
     [_sapp_glcontext_obj makeCurrentContext];
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
-        sokol_init();
+        _sapp.desc.init_cb();
     }
-    sokol_frame();
+    _sapp.desc.frame_cb();
     glFlush();
     [_sapp_glcontext_obj flushBuffer];
 }
@@ -611,9 +615,9 @@ int main(int argc, char** argv) {
         _sapp.height = size.height;
         if (_sapp.first_frame) {
             _sapp.first_frame = false;
-            sokol_init();
+            _sapp.desc.init_cb();
         }
-        sokol_frame();
+        _sapp.desc.frame_cb();
     }
 }
 
@@ -629,9 +633,9 @@ int main(int argc, char** argv) {
         _sapp.height = (int) [_sapp_view_obj drawableHeight];
         if (_sapp.first_frame) {
             _sapp.first_frame = false;
-            sokol_init();
+            _sapp.desc.init_cb();
         }
-        sokol_frame();
+        _sapp.desc.frame_cb();
     }
 }
 @end
@@ -696,8 +700,8 @@ int main() {
         ctx = emscripten_webgl_create_context(0, &attrs);
     }
     emscripten_webgl_make_context_current(ctx);
-    sokol_init();
-    emscripten_set_main_loop(sokol_frame, 0, 1);
+    _sapp.desc.init_cb();
+    emscripten_set_main_loop(_sapp.desc.frame_cb, 0, 1);
 }
 
 #endif  /* __EMSCRIPTEN__ */
