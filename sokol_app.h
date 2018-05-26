@@ -53,24 +53,9 @@ extern "C" {
 #endif
 
 enum {
-    SAPP_MAX_TOUCHPOINTS = 8,
+    SAPP_MAX_TOUCH_POINTS = 8,
+    SAPP_MAX_MOUSE_BUTTONS = 3,
 };
-
-typedef struct {
-    void (*init_cb)();
-    void (*frame_cb)();
-    void (*shutdown_cb)();
-    void (*event_cb)();
-    int width;
-    int height;
-    int sample_count;
-    bool fullscreen;
-    bool alpha;
-    bool premultiplied_alpha;
-    bool preserve_drawing_buffer;
-    const char* window_title;
-    const char* html5_canvas_name;
-} sapp_desc;
 
 typedef enum {
     SAPP_EVENTTYPE_INVALID,
@@ -107,17 +92,31 @@ typedef struct {
     uint32_t frame_count;
     uint32_t key_code;
     uint32_t char_code;
-    uint32_t mouse_button;
     uint32_t modifiers;
+    int mouse_button;
     float mouse_x;
     float mouse_y;
     float scroll_x;
     float scroll_y;
     int num_touches;
-    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];
+    sapp_touchpoint touches[SAPP_MAX_TOUCH_POINTS];
 } sapp_event;
 
-typedef void (*sapp_event_callback)(const sapp_event*);
+typedef struct {
+    void (*init_cb)();
+    void (*frame_cb)();
+    void (*shutdown_cb)();
+    void (*event_cb)(const sapp_event*);
+    int width;
+    int height;
+    int sample_count;
+    bool fullscreen;
+    bool alpha;
+    bool premultiplied_alpha;
+    bool preserve_drawing_buffer;
+    const char* window_title;
+    const char* html5_canvas_name;
+} sapp_desc;
 
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
@@ -215,6 +214,10 @@ typedef struct {
     bool first_frame;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
+    uint32_t frame_count;
+    float mouse_x;
+    float mouse_y;
+    sapp_event event;
     sapp_desc desc;
     int argc;
     char** argv;
@@ -242,6 +245,21 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
         strncpy(_sapp.window_title, default_title, sizeof(_sapp.window_title));
     }
     _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
+    memset(&_sapp.event, 0, sizeof(_sapp.event));
+    _sapp.event.type = type;
+    _sapp.event.frame_count = _sapp.frame_count;
+}
+
+_SOKOL_PRIVATE void _sapp_frame() {
+    if (_sapp.first_frame) {
+        _sapp.first_frame = false;
+        _sapp.desc.init_cb();
+    }
+    _sapp.desc.frame_cb();
+    _sapp.frame_count++;
 }
 
 /*== MacOS/iOS ===============================================================*/
@@ -297,6 +315,22 @@ int main(int argc, char* argv[]) {
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     return 0;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_frame() {
+    #if defined(SOKOL_METAL)
+        const CGSize size = [_sapp_view_obj drawableSize];
+        _sapp.width = size.width;
+        _sapp.height = size.height;
+    #else
+        const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        _sapp.width = r.size.width;
+        _sapp.height = r.size.height;
+    #endif
+    const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
+    _sapp.mouse_x = mouse_pos.x;
+    _sapp.mouse_y = _sapp.height - mouse_pos.y - 1;
+    _sapp_frame();
 }
 
 @implementation _sapp_app_delegate
@@ -421,14 +455,7 @@ int main(int argc, char* argv[]) {
 @implementation _sapp_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
-        const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.width = size.width;
-        _sapp.height = size.height;
-        if (_sapp.first_frame) {
-            _sapp.first_frame = false;
-            _sapp.desc.init_cb();
-        }
-        _sapp.desc.frame_cb();
+        _sapp_macos_frame();
     }
 }
 
@@ -437,6 +464,34 @@ int main(int argc, char* argv[]) {
 }
 @end
 #endif /* SOKOL_METAL */
+
+_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
+    uint32_t m = 0;
+    if (f & NSEventModifierFlagShift) {
+        m |= SAPP_MODIFIER_SHIFT;
+    }
+    if (f & NSEventModifierFlagControl) {
+        m |= SAPP_MODIFIER_CTRL;
+    }
+    if (f & NSEventModifierFlagOption) {
+        m |= SAPP_MODIFIER_ALT;
+    }
+    if (f & NSEventModifierFlagCommand) {
+        m |= SAPP_MODIFIER_SUPER;
+    }
+    return m;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint32_t mod) {
+    if (_sapp.desc.event_cb && (btn >= 0) && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
+        _sapp_init_event(type);
+        _sapp.event.mouse_button = btn;
+        _sapp.event.modifiers = mod;
+        _sapp.event.mouse_x = _sapp.mouse_x;
+        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
 
 @implementation _sapp_view
 - (BOOL)isOpaque {
@@ -449,25 +504,25 @@ int main(int argc, char* argv[]) {
     return YES;
 }
 - (void)mouseDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)mouseDragged:(NSEvent*)event {
-    /* FIXME */
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, 0, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseUp:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)mouseMoved:(NSEvent*)event {
-    /* FIXME */
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, 0, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)rightMouseDragged:(NSEvent*)event {
-    /* FIXME */
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, 1, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseUp:(NSEvent*)event {
-    /* FIXME */
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, 1, _sapp_macos_mod(event.modifierFlags));
+}
+- (void)mouseMoved:(NSEvent*)event {
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
+}
+- (void)mouseDragged:(NSEvent*)event {
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
+}
+- (void)rightMouseDragged:(NSEvent*)event {
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)keyDown:(NSEvent*)event {
     /* FIXME */
@@ -487,15 +542,7 @@ int main(int argc, char* argv[]) {
 }
 
 - (void) drawRect:(NSRect)bound {
-    const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-    _sapp.width = r.size.width;
-    _sapp.height = r.size.height;
-    [_sapp_glcontext_obj makeCurrentContext];
-    if (_sapp.first_frame) {
-        _sapp.first_frame = false;
-        _sapp.desc.init_cb();
-    }
-    _sapp.desc.frame_cb();
+    _sapp_macos_frame();
     glFlush();
     [_sapp_glcontext_obj flushBuffer];
 }
@@ -610,14 +657,8 @@ int main(int argc, char** argv) {
 @implementation _sapp_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
-        const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.width = size.width;
-        _sapp.height = size.height;
-        if (_sapp.first_frame) {
-            _sapp.first_frame = false;
-            _sapp.desc.init_cb();
-        }
-        _sapp.desc.frame_cb();
+        #error "FIXME"
+        _sapp_frame(size.width, size.height);
     }
 }
 
@@ -629,13 +670,10 @@ int main(int argc, char** argv) {
 @implementation _sapp_glk_view_dlg
 - (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
     @autoreleasepool {
-        _sapp.width = (int) [_sapp_view_obj drawableWidth];
-        _sapp.height = (int) [_sapp_view_obj drawableHeight];
-        if (_sapp.first_frame) {
-            _sapp.first_frame = false;
-            _sapp.desc.init_cb();
-        }
-        _sapp.desc.frame_cb();
+        #error "FIXME"
+        int w = (int) [_sapp_view_obj drawableWidth];
+        int h = (int) [_sapp_view_obj drawableHeight];
+        _sapp_frame(w, h);
     }
 }
 @end
@@ -670,6 +708,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     return true;
 }
 
+_SOKOL_PRIVATE void _sapp_emsc_frame() {
+    _sapp_frame();
+}
+
 int main() {
     sapp_desc desc = sokol_main(0, 0);
     _sapp_init_state(&desc, 0, 0);
@@ -701,7 +743,7 @@ int main() {
     }
     emscripten_webgl_make_context_current(ctx);
     _sapp.desc.init_cb();
-    emscripten_set_main_loop(_sapp.desc.frame_cb, 0, 1);
+    emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
 
 #endif  /* __EMSCRIPTEN__ */
