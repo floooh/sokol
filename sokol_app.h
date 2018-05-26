@@ -105,7 +105,7 @@ typedef struct {
 typedef struct {
     void (*init_cb)();
     void (*frame_cb)();
-    void (*shutdown_cb)();
+    void (*cleanup_cb)();
     void (*event_cb)(const sapp_event*);
     int width;
     int height;
@@ -116,6 +116,7 @@ typedef struct {
     bool preserve_drawing_buffer;
     const char* window_title;
     const char* html5_canvas_name;
+    bool html5_canvas_resize;
 } sapp_desc;
 
 /* user-provided functions */
@@ -213,6 +214,7 @@ typedef struct {
     int sample_count;
     bool gles2_fallback;
     bool first_frame;
+    bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
     uint32_t frame_count;
@@ -228,7 +230,7 @@ static _sapp_state _sapp;
 _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     SOKOL_ASSERT(desc->init_cb);
     SOKOL_ASSERT(desc->frame_cb);
-    SOKOL_ASSERT(desc->shutdown_cb);
+    SOKOL_ASSERT(desc->cleanup_cb);
     memset(&_sapp, 0, sizeof(_sapp));
     _sapp.argc = argc;
     _sapp.argv = argv;
@@ -237,7 +239,8 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.width = _sapp_def(_sapp.desc.width, 640);
     _sapp.height = _sapp_def(_sapp.desc.height, 480);
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
-    _sapp.html5_canvas_name = _sapp_def(_sapp.html5_canvas_name, "#canvas");
+    _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
+    _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
         strncpy(_sapp.window_title, _sapp.desc.window_title, sizeof(_sapp.window_title));
     }
@@ -395,7 +398,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         _sapp_view_obj = [[_sapp_view alloc] init];
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
-        // FIXME HighDPI: [_sapp_view_obj setWantsBestRsolutionOpenGLSurface:YES];
+        /* FIXME HighDPI: [_sapp_view_obj setWantsBestRsolutionOpenGLSurface:YES]; */
         [_sapp_glcontext_obj setView:_sapp_view_obj];
         [_sapp_glcontext_obj makeCurrentContext];
 
@@ -419,7 +422,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
 
 @implementation _sapp_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    _sapp.desc.shutdown_cb();
+    _sapp.desc.cleanup_cb();
     return YES;
 }
 
@@ -729,15 +732,85 @@ _SOKOL_PRIVATE void _sapp_emsc_frame() {
     _sapp_frame();
 }
 
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
+    _sapp.mouse_x = emsc_event->canvasX;
+    _sapp.mouse_y = emsc_event->canvasY;
+    if (_sapp.desc.event_cb && (emsc_event->button < SAPP_MAX_MOUSE_BUTTONS)) {
+        sapp_event_type type;
+        switch (emsc_type) {
+            case EMSCRIPTEN_EVENT_MOUSEDOWN:
+                type = SAPP_EVENTTYPE_MOUSE_DOWN;
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEUP:
+                type = SAPP_EVENTTYPE_MOUSE_UP;
+                break;
+            case EMSCRIPTEN_EVENT_MOUSEMOVE:
+                type = SAPP_EVENTTYPE_MOUSE_MOVE;
+                break;
+            default:
+                type = SAPP_EVENTTYPE_INVALID;
+                break;
+        }
+        if (type != SAPP_EVENTTYPE_INVALID) {
+            _sapp_init_event(type);
+            if (emsc_event->ctrlKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
+            }
+            if (emsc_event->shiftKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
+            }
+            if (emsc_event->altKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
+            }
+            if (emsc_event->metaKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
+            }
+            _sapp.event.mouse_button = emsc_event->button;
+            _sapp.event.mouse_x = _sapp.mouse_x;
+            _sapp.event.mouse_y = _sapp.mouse_y;
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
+    if (_sapp.desc.event_cb) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        if (emsc_event->mouse.ctrlKey) {
+            _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
+        }
+        if (emsc_event->mouse.shiftKey) {
+            _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
+        }
+        if (emsc_event->mouse.altKey) {
+            _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
+        }
+        if (emsc_event->mouse.metaKey) {
+            _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
+        }
+        _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
+        _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+    return true;
+}
+
 int main() {
     sapp_desc desc = sokol_main(0, 0);
     _sapp_init_state(&desc, 0, 0);
     double w, h;
-    emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+    if (_sapp.html5_canvas_resize) {
+        w = (double) desc.width;
+        h = (double) desc.height;
+    }
+    else {
+        emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+        emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
+    }
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     _sapp.width = (int) w;
     _sapp.height = (int) h;
-    emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     attrs.alpha = _sapp.desc.alpha;
@@ -759,6 +832,10 @@ int main() {
         ctx = emscripten_webgl_create_context(0, &attrs);
     }
     emscripten_webgl_make_context_current(ctx);
+    emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
     _sapp.desc.init_cb();
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
