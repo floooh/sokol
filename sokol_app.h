@@ -200,6 +200,7 @@ extern "C" {
 
 /* helper macros */
 #define _sapp_def(val, def) (((val) == 0) ? (def) : (val))
+#define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
 
 enum {
     _SAPP_MAX_TITLE_LENGTH = 128,
@@ -524,6 +525,25 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint3
 - (void)rightMouseDragged:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
 }
+- (void)scrollWheel:(NSEvent*)event {
+    if (_sapp.desc.event_cb) {
+        float dx = (float) event.scrollingDeltaX;
+        float dy = (float) event.scrollingDeltaY;
+        if (event.hasPreciseScrollingDeltas) {
+            dx *= 0.1;
+            dy *= 0.1;
+        }
+        if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
+            _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+            _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
+            _sapp.event.mouse_x = _sapp.mouse_x;
+            _sapp.event.mouse_y = _sapp.mouse_y;
+            _sapp.event.scroll_x = dx;
+            _sapp.event.scroll_y = dy;
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+    }
+}
 - (void)keyDown:(NSEvent*)event {
     /* FIXME */
 }
@@ -531,9 +551,6 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint3
     /* FIXME */
 }
 - (void)keyUp:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)scrollWheel:(NSEvent*)event {
     /* FIXME */
 }
 #if !defined(SOKOL_METAL)
