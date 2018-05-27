@@ -55,6 +55,7 @@ extern "C" {
 enum {
     SAPP_MAX_TOUCH_POINTS = 8,
     SAPP_MAX_MOUSE_BUTTONS = 3,
+    SAPP_MAX_KEYCODES = 512,
 };
 
 typedef enum {
@@ -73,6 +74,131 @@ typedef enum {
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
 
+/* key codes are the same names and values as GLFW */
+typedef enum {
+    SAPP_KEYCODE_INVALID          = 0,
+    SAPP_KEYCODE_SPACE            = 32,
+    SAPP_KEYCODE_APOSTROPHE       = 39,  /* ' */
+    SAPP_KEYCODE_COMMA            = 44,  /* , */
+    SAPP_KEYCODE_MINUS            = 45,  /* - */
+    SAPP_KEYCODE_PERIOD           = 46,  /* . */
+    SAPP_KEYCODE_SLASH            = 47,  /* / */
+    SAPP_KEYCODE_0                = 48,
+    SAPP_KEYCODE_1                = 49,
+    SAPP_KEYCODE_2                = 50,
+    SAPP_KEYCODE_3                = 51,
+    SAPP_KEYCODE_4                = 52,
+    SAPP_KEYCODE_5                = 53,
+    SAPP_KEYCODE_6                = 54,
+    SAPP_KEYCODE_7                = 55,
+    SAPP_KEYCODE_8                = 56,
+    SAPP_KEYCODE_9                = 57,
+    SAPP_KEYCODE_SEMICOLON        = 59,  /* ; */
+    SAPP_KEYCODE_EQUAL            = 61,  /* = */
+    SAPP_KEYCODE_A                = 65,
+    SAPP_KEYCODE_B                = 66,
+    SAPP_KEYCODE_C                = 67,
+    SAPP_KEYCODE_D                = 68,
+    SAPP_KEYCODE_E                = 69,
+    SAPP_KEYCODE_F                = 70,
+    SAPP_KEYCODE_G                = 71,
+    SAPP_KEYCODE_H                = 72,
+    SAPP_KEYCODE_I                = 73,
+    SAPP_KEYCODE_J                = 74,
+    SAPP_KEYCODE_K                = 75,
+    SAPP_KEYCODE_L                = 76,
+    SAPP_KEYCODE_M                = 77,
+    SAPP_KEYCODE_N                = 78,
+    SAPP_KEYCODE_O                = 79,
+    SAPP_KEYCODE_P                = 80,
+    SAPP_KEYCODE_Q                = 81,
+    SAPP_KEYCODE_R                = 82,
+    SAPP_KEYCODE_S                = 83,
+    SAPP_KEYCODE_T                = 84,
+    SAPP_KEYCODE_U                = 85,
+    SAPP_KEYCODE_V                = 86,
+    SAPP_KEYCODE_W                = 87,
+    SAPP_KEYCODE_X                = 88,
+    SAPP_KEYCODE_Y                = 89,
+    SAPP_KEYCODE_Z                = 90,
+    SAPP_KEYCODE_LEFT_BRACKET     = 91,  /* [ */
+    SAPP_KEYCODE_BACKSLASH        = 92,  /* \ */
+    SAPP_KEYCODE_RIGHT_BRACKET    = 93,  /* ] */
+    SAPP_KEYCODE_GRAVE_ACCENT     = 96,  /* ` */
+    SAPP_KEYCODE_WORLD_1          = 161, /* non-US #1 */
+    SAPP_KEYCODE_WORLD_2          = 162, /* non-US #2 */
+    SAPP_KEYCODE_ESCAPE           = 256,
+    SAPP_KEYCODE_ENTER            = 257,
+    SAPP_KEYCODE_TAB              = 258,
+    SAPP_KEYCODE_BACKSPACE        = 259,
+    SAPP_KEYCODE_INSERT           = 260,
+    SAPP_KEYCODE_DELETE           = 261,
+    SAPP_KEYCODE_RIGHT            = 262,
+    SAPP_KEYCODE_LEFT             = 263,
+    SAPP_KEYCODE_DOWN             = 264,
+    SAPP_KEYCODE_UP               = 265,
+    SAPP_KEYCODE_PAGE_UP          = 266,
+    SAPP_KEYCODE_PAGE_DOWN        = 267,
+    SAPP_KEYCODE_HOME             = 268,
+    SAPP_KEYCODE_END              = 269,
+    SAPP_KEYCODE_CAPS_LOCK        = 280,
+    SAPP_KEYCODE_SCROLL_LOCK      = 281,
+    SAPP_KEYCODE_NUM_LOCK         = 282,
+    SAPP_KEYCODE_PRINT_SCREEN     = 283,
+    SAPP_KEYCODE_PAUSE            = 284,
+    SAPP_KEYCODE_F1               = 290,
+    SAPP_KEYCODE_F2               = 291,
+    SAPP_KEYCODE_F3               = 292,
+    SAPP_KEYCODE_F4               = 293,
+    SAPP_KEYCODE_F5               = 294,
+    SAPP_KEYCODE_F6               = 295,
+    SAPP_KEYCODE_F7               = 296,
+    SAPP_KEYCODE_F8               = 297,
+    SAPP_KEYCODE_F9               = 298,
+    SAPP_KEYCODE_F10              = 299,
+    SAPP_KEYCODE_F11              = 300,
+    SAPP_KEYCODE_F12              = 301,
+    SAPP_KEYCODE_F13              = 302,
+    SAPP_KEYCODE_F14              = 303,
+    SAPP_KEYCODE_F15              = 304,
+    SAPP_KEYCODE_F16              = 305,
+    SAPP_KEYCODE_F17              = 306,
+    SAPP_KEYCODE_F18              = 307,
+    SAPP_KEYCODE_F19              = 308,
+    SAPP_KEYCODE_F20              = 309,
+    SAPP_KEYCODE_F21              = 310,
+    SAPP_KEYCODE_F22              = 311,
+    SAPP_KEYCODE_F23              = 312,
+    SAPP_KEYCODE_F24              = 313,
+    SAPP_KEYCODE_F25              = 314,
+    SAPP_KEYCODE_KP_0             = 320,
+    SAPP_KEYCODE_KP_1             = 321,
+    SAPP_KEYCODE_KP_2             = 322,
+    SAPP_KEYCODE_KP_3             = 323,
+    SAPP_KEYCODE_KP_4             = 324,
+    SAPP_KEYCODE_KP_5             = 325,
+    SAPP_KEYCODE_KP_6             = 326,
+    SAPP_KEYCODE_KP_7             = 327,
+    SAPP_KEYCODE_KP_8             = 328,
+    SAPP_KEYCODE_KP_9             = 329,
+    SAPP_KEYCODE_KP_DECIMAL       = 330,
+    SAPP_KEYCODE_KP_DIVIDE        = 331,
+    SAPP_KEYCODE_KP_MULTIPLY      = 332,
+    SAPP_KEYCODE_KP_SUBTRACT      = 333,
+    SAPP_KEYCODE_KP_ADD           = 334,
+    SAPP_KEYCODE_KP_ENTER         = 335,
+    SAPP_KEYCODE_KP_EQUAL         = 336,
+    SAPP_KEYCODE_LEFT_SHIFT       = 340,
+    SAPP_KEYCODE_LEFT_CONTROL     = 341,
+    SAPP_KEYCODE_LEFT_ALT         = 342,
+    SAPP_KEYCODE_LEFT_SUPER       = 343,
+    SAPP_KEYCODE_RIGHT_SHIFT      = 344,
+    SAPP_KEYCODE_RIGHT_CONTROL    = 345,
+    SAPP_KEYCODE_RIGHT_ALT        = 346,
+    SAPP_KEYCODE_RIGHT_SUPER      = 347,
+    SAPP_KEYCODE_MENU             = 348,
+} sapp_keycode; 
+
 typedef struct {
     uintptr_t id;
     float pos_x;
@@ -90,7 +216,7 @@ enum {
 typedef struct {
     sapp_event_type type;
     uint32_t frame_count;
-    uint32_t key_code;
+    sapp_keycode key_code;
     uint32_t char_code;
     uint32_t modifiers;
     int mouse_button;
@@ -224,6 +350,7 @@ typedef struct {
     sapp_desc desc;
     int argc;
     char** argv;
+    sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_state;
 static _sapp_state _sapp;
 
@@ -255,6 +382,15 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     memset(&_sapp.event, 0, sizeof(_sapp.event));
     _sapp.event.type = type;
     _sapp.event.frame_count = _sapp.frame_count;
+}
+
+_SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
+    if ((scan_code >= 0) && (scan_code < SAPP_MAX_KEYCODES)) {
+        return _sapp.keycodes[scan_code];
+    }
+    else {
+        return SAPP_KEYCODE_INVALID;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_frame() {
@@ -308,10 +444,125 @@ static NSOpenGLContext* _sapp_glcontext_obj;
 static NSTimer* _sapp_timer_obj;
 #endif
 
+_SOKOL_PRIVATE void _sapp_macos_init_keytable() {
+    _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
+    _sapp.keycodes[0x12] = SAPP_KEYCODE_1;
+    _sapp.keycodes[0x13] = SAPP_KEYCODE_2;
+    _sapp.keycodes[0x14] = SAPP_KEYCODE_3;
+    _sapp.keycodes[0x15] = SAPP_KEYCODE_4;
+    _sapp.keycodes[0x17] = SAPP_KEYCODE_5;
+    _sapp.keycodes[0x16] = SAPP_KEYCODE_6;
+    _sapp.keycodes[0x1A] = SAPP_KEYCODE_7;
+    _sapp.keycodes[0x1C] = SAPP_KEYCODE_8;
+    _sapp.keycodes[0x19] = SAPP_KEYCODE_9;
+    _sapp.keycodes[0x00] = SAPP_KEYCODE_A;
+    _sapp.keycodes[0x0B] = SAPP_KEYCODE_B;
+    _sapp.keycodes[0x08] = SAPP_KEYCODE_C;
+    _sapp.keycodes[0x02] = SAPP_KEYCODE_D;
+    _sapp.keycodes[0x0E] = SAPP_KEYCODE_E;
+    _sapp.keycodes[0x03] = SAPP_KEYCODE_F;
+    _sapp.keycodes[0x05] = SAPP_KEYCODE_G;
+    _sapp.keycodes[0x04] = SAPP_KEYCODE_H;
+    _sapp.keycodes[0x22] = SAPP_KEYCODE_I;
+    _sapp.keycodes[0x26] = SAPP_KEYCODE_J;
+    _sapp.keycodes[0x28] = SAPP_KEYCODE_K;
+    _sapp.keycodes[0x25] = SAPP_KEYCODE_L;
+    _sapp.keycodes[0x2E] = SAPP_KEYCODE_M;
+    _sapp.keycodes[0x2D] = SAPP_KEYCODE_N;
+    _sapp.keycodes[0x1F] = SAPP_KEYCODE_O;
+    _sapp.keycodes[0x23] = SAPP_KEYCODE_P;
+    _sapp.keycodes[0x0C] = SAPP_KEYCODE_Q;
+    _sapp.keycodes[0x0F] = SAPP_KEYCODE_R;
+    _sapp.keycodes[0x01] = SAPP_KEYCODE_S;
+    _sapp.keycodes[0x11] = SAPP_KEYCODE_T;
+    _sapp.keycodes[0x20] = SAPP_KEYCODE_U;
+    _sapp.keycodes[0x09] = SAPP_KEYCODE_V;
+    _sapp.keycodes[0x0D] = SAPP_KEYCODE_W;
+    _sapp.keycodes[0x07] = SAPP_KEYCODE_X;
+    _sapp.keycodes[0x10] = SAPP_KEYCODE_Y;
+    _sapp.keycodes[0x06] = SAPP_KEYCODE_Z;
+    _sapp.keycodes[0x27] = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[0x2A] = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[0x2B] = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[0x18] = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[0x32] = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[0x21] = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[0x1B] = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[0x2F] = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[0x1E] = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[0x29] = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[0x2C] = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[0x0A] = SAPP_KEYCODE_WORLD_1;
+    _sapp.keycodes[0x33] = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[0x39] = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[0x75] = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[0x7D] = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[0x77] = SAPP_KEYCODE_END;
+    _sapp.keycodes[0x24] = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[0x35] = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[0x7A] = SAPP_KEYCODE_F1;
+    _sapp.keycodes[0x78] = SAPP_KEYCODE_F2;
+    _sapp.keycodes[0x63] = SAPP_KEYCODE_F3;
+    _sapp.keycodes[0x76] = SAPP_KEYCODE_F4;
+    _sapp.keycodes[0x60] = SAPP_KEYCODE_F5;
+    _sapp.keycodes[0x61] = SAPP_KEYCODE_F6;
+    _sapp.keycodes[0x62] = SAPP_KEYCODE_F7;
+    _sapp.keycodes[0x64] = SAPP_KEYCODE_F8;
+    _sapp.keycodes[0x65] = SAPP_KEYCODE_F9;
+    _sapp.keycodes[0x6D] = SAPP_KEYCODE_F10;
+    _sapp.keycodes[0x67] = SAPP_KEYCODE_F11;
+    _sapp.keycodes[0x6F] = SAPP_KEYCODE_F12;
+    _sapp.keycodes[0x69] = SAPP_KEYCODE_F13;
+    _sapp.keycodes[0x6B] = SAPP_KEYCODE_F14;
+    _sapp.keycodes[0x71] = SAPP_KEYCODE_F15;
+    _sapp.keycodes[0x6A] = SAPP_KEYCODE_F16;
+    _sapp.keycodes[0x40] = SAPP_KEYCODE_F17;
+    _sapp.keycodes[0x4F] = SAPP_KEYCODE_F18;
+    _sapp.keycodes[0x50] = SAPP_KEYCODE_F19;
+    _sapp.keycodes[0x5A] = SAPP_KEYCODE_F20;
+    _sapp.keycodes[0x73] = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[0x72] = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[0x7B] = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[0x3A] = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[0x3B] = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[0x38] = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[0x37] = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[0x6E] = SAPP_KEYCODE_MENU;
+    _sapp.keycodes[0x47] = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[0x79] = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[0x74] = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[0x7C] = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[0x3D] = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[0x3E] = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[0x3C] = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[0x36] = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[0x31] = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[0x30] = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[0x7E] = SAPP_KEYCODE_UP;
+    _sapp.keycodes[0x52] = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[0x53] = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[0x54] = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[0x55] = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[0x56] = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[0x57] = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[0x58] = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[0x59] = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[0x5B] = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[0x5C] = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[0x45] = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[0x41] = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[0x4B] = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[0x4C] = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[0x51] = SAPP_KEYCODE_KP_EQUAL;
+    _sapp.keycodes[0x43] = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
+}
+
 /* MacOS entry function */
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_init_state(&desc, argc, argv);
+    _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
@@ -497,6 +748,15 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint3
     }
 }
 
+_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, uint32_t mod) {
+    if (_sapp.desc.event_cb) {
+        _sapp_init_event(type);
+        _sapp.event.key_code = key;
+        _sapp.event.modifiers = mod;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
 @implementation _sapp_view
 - (BOOL)isOpaque {
     return YES;
@@ -548,12 +808,16 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint3
     }
 }
 - (void)keyDown:(NSEvent*)event {
-    /* FIXME */
-}
-- (void)flagsChanged:(NSEvent*)event {
-    /* FIXME */
+    _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, 
+        _sapp_translate_key(event.keyCode), 
+        _sapp_macos_mod(event.modifierFlags));
 }
 - (void)keyUp:(NSEvent*)event {
+    _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, 
+        _sapp_translate_key(event.keyCode), 
+        _sapp_macos_mod(event.modifierFlags));
+}
+- (void)flagsChanged:(NSEvent*)event {
     /* FIXME */
 }
 #if !defined(SOKOL_METAL)
