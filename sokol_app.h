@@ -808,9 +808,24 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     }
 }
 - (void)keyDown:(NSEvent*)event {
-    _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, 
-        _sapp_translate_key(event.keyCode), 
-        _sapp_macos_mod(event.modifierFlags));
+    if (_sapp.desc.event_cb) {
+        const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), mods);
+        const NSString* chars = event.characters;
+        const NSUInteger len = chars.length;
+        if (len > 0) {
+            _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+            _sapp.event.modifiers = mods;
+            for (NSUInteger i = 0; i < len; i++) {
+                const unichar codepoint = [chars characterAtIndex:i];
+                if ((codepoint & 0xFF00) == 0xF700) {
+                    continue;
+                }
+                _sapp.event.char_code = codepoint;
+                _sapp.desc.event_cb(&_sapp.event);
+            }
+        }
+    }
 }
 - (void)keyUp:(NSEvent*)event {
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, 
