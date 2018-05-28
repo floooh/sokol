@@ -1075,9 +1075,160 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
     return true;
 }
 
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
+    bool retval = true;
+    if (_sapp.desc.event_cb) {
+        sapp_event_type type;
+        switch (emsc_type) {
+            case EMSCRIPTEN_EVENT_KEYDOWN:
+                type = SAPP_EVENTTYPE_KEY_DOWN;
+                break;
+            case EMSCRIPTEN_EVENT_KEYUP:
+                type = SAPP_EVENTTYPE_KEY_UP;
+                break;
+            case EMSCRIPTEN_EVENT_KEYPRESS:
+                type = SAPP_EVENTTYPE_CHAR;
+                break;
+            default:
+                type = SAPP_EVENTTYPE_INVALID;
+                break; 
+        }
+        if (type != SAPP_EVENTTYPE_INVALID) {
+            _sapp_init_event(type);
+            if (emsc_event->ctrlKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
+            }
+            if (emsc_event->shiftKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
+            }
+            if (emsc_event->altKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
+            }
+            if (emsc_event->metaKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
+            }
+            if (type == SAPP_EVENTTYPE_CHAR) {
+                _sapp.event.char_code = emsc_event->charCode;
+            }
+            else {
+                _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
+                retval = emsc_event->keyCode < 32;
+            }
+            _sapp.desc.event_cb(&_sapp.event);
+            /* only forward alpha-numeric keys to browser */
+        }
+    }
+    return retval;
+}
+
+_SOKOL_PRIVATE void _sapp_emsc_init_keytable() {
+    _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[13]  = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[16]  = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[17]  = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[18]  = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[19]  = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[27]  = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[32]  = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[33]  = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[34]  = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[35]  = SAPP_KEYCODE_END;
+    _sapp.keycodes[36]  = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[37]  = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[38]  = SAPP_KEYCODE_UP;
+    _sapp.keycodes[39]  = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[40]  = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[45]  = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[46]  = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[48]  = SAPP_KEYCODE_0;
+    _sapp.keycodes[49]  = SAPP_KEYCODE_1;
+    _sapp.keycodes[50]  = SAPP_KEYCODE_2;
+    _sapp.keycodes[51]  = SAPP_KEYCODE_3;
+    _sapp.keycodes[52]  = SAPP_KEYCODE_4;
+    _sapp.keycodes[53]  = SAPP_KEYCODE_5;
+    _sapp.keycodes[54]  = SAPP_KEYCODE_6;
+    _sapp.keycodes[55]  = SAPP_KEYCODE_7;
+    _sapp.keycodes[56]  = SAPP_KEYCODE_8;
+    _sapp.keycodes[57]  = SAPP_KEYCODE_9;
+    _sapp.keycodes[59]  = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[64]  = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[65]  = SAPP_KEYCODE_A;
+    _sapp.keycodes[66]  = SAPP_KEYCODE_B;
+    _sapp.keycodes[67]  = SAPP_KEYCODE_C;
+    _sapp.keycodes[68]  = SAPP_KEYCODE_D;
+    _sapp.keycodes[69]  = SAPP_KEYCODE_E;
+    _sapp.keycodes[70]  = SAPP_KEYCODE_F;
+    _sapp.keycodes[71]  = SAPP_KEYCODE_G;
+    _sapp.keycodes[72]  = SAPP_KEYCODE_H;
+    _sapp.keycodes[73]  = SAPP_KEYCODE_I;
+    _sapp.keycodes[74]  = SAPP_KEYCODE_J;
+    _sapp.keycodes[75]  = SAPP_KEYCODE_K;
+    _sapp.keycodes[76]  = SAPP_KEYCODE_L;
+    _sapp.keycodes[77]  = SAPP_KEYCODE_M;
+    _sapp.keycodes[78]  = SAPP_KEYCODE_N;
+    _sapp.keycodes[79]  = SAPP_KEYCODE_O;
+    _sapp.keycodes[80]  = SAPP_KEYCODE_P;
+    _sapp.keycodes[81]  = SAPP_KEYCODE_Q;
+    _sapp.keycodes[82]  = SAPP_KEYCODE_R;
+    _sapp.keycodes[83]  = SAPP_KEYCODE_S;
+    _sapp.keycodes[84]  = SAPP_KEYCODE_T;
+    _sapp.keycodes[85]  = SAPP_KEYCODE_U;
+    _sapp.keycodes[86]  = SAPP_KEYCODE_V;
+    _sapp.keycodes[87]  = SAPP_KEYCODE_W;
+    _sapp.keycodes[88]  = SAPP_KEYCODE_X;
+    _sapp.keycodes[89]  = SAPP_KEYCODE_Y;
+    _sapp.keycodes[90]  = SAPP_KEYCODE_Z;
+    _sapp.keycodes[91]  = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[93]  = SAPP_KEYCODE_MENU;
+    _sapp.keycodes[96]  = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[97]  = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[98]  = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[99]  = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[100] = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[101] = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[102] = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[103] = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[104] = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[105] = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[106] = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[107] = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[109] = SAPP_KEYCODE_KP_SUBTRACT;
+    _sapp.keycodes[110] = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[111] = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[112] = SAPP_KEYCODE_F1;
+    _sapp.keycodes[113] = SAPP_KEYCODE_F2;
+    _sapp.keycodes[114] = SAPP_KEYCODE_F3;
+    _sapp.keycodes[115] = SAPP_KEYCODE_F4;
+    _sapp.keycodes[116] = SAPP_KEYCODE_F5;
+    _sapp.keycodes[117] = SAPP_KEYCODE_F6;
+    _sapp.keycodes[118] = SAPP_KEYCODE_F7;
+    _sapp.keycodes[119] = SAPP_KEYCODE_F8;
+    _sapp.keycodes[120] = SAPP_KEYCODE_F9;
+    _sapp.keycodes[121] = SAPP_KEYCODE_F10;
+    _sapp.keycodes[122] = SAPP_KEYCODE_F11;
+    _sapp.keycodes[123] = SAPP_KEYCODE_F12;
+    _sapp.keycodes[144] = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[145] = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[173] = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[186] = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[187] = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[188] = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[189] = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[190] = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[191] = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[192] = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[219] = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[220] = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[221] = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[222] = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
+}
+
 int main() {
     sapp_desc desc = sokol_main(0, 0);
     _sapp_init_state(&desc, 0, 0);
+    _sapp_emsc_init_keytable();
     double w, h;
     if (_sapp.html5_canvas_resize) {
         w = (double) desc.width;
@@ -1115,6 +1266,9 @@ int main() {
     emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
+    emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keypress_callback(0, 0, true, _sapp_emsc_key_cb);
     _sapp.desc.init_cb();
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
