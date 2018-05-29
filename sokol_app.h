@@ -236,6 +236,7 @@ typedef struct {
     int width;
     int height;
     int sample_count;
+    bool high_dpi;
     bool fullscreen;
     bool alpha;
     bool premultiplied_alpha;
@@ -252,6 +253,8 @@ extern sapp_desc sokol_main(int argc, char* argv[]);
 extern bool sapp_isvalid();
 extern int sapp_width();
 extern int sapp_height();
+extern bool sapp_high_dpi();
+extern float sapp_dpi_scale();
 
 /* GL/GLES specific functions */
 extern bool sapp_gles2_fallback();
@@ -337,7 +340,7 @@ typedef struct {
     bool valid;
     int width;
     int height;
-    int sample_count;
+    float dpi_scale;
     bool gles2_fallback;
     bool first_frame;
     bool html5_canvas_resize;
@@ -365,7 +368,6 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.first_frame = true;
     _sapp.width = _sapp_def(_sapp.desc.width, 640);
     _sapp.height = _sapp_def(_sapp.desc.height, 480);
-    _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
@@ -376,6 +378,7 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
         strncpy(_sapp.window_title, default_title, sizeof(_sapp.window_title));
     }
     _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
+    _sapp.dpi_scale = 1.0f;
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -583,8 +586,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         _sapp.height = r.size.height;
     #endif
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
-    _sapp.mouse_x = mouse_pos.x;
-    _sapp.mouse_y = _sapp.height - mouse_pos.y - 1;
+    _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
+    _sapp.mouse_y = _sapp.height - (mouse_pos.y * _sapp.dpi_scale) - 1);
     _sapp_frame();
 }
 
@@ -616,7 +619,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_view_obj setSampleCount:_sapp.sample_count];
+        [_sapp_view_obj setSampleCount:_sapp.desc.sample_count];
         /* FIXME: HighDPI */
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
@@ -633,10 +636,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
         attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-        if (_sapp.sample_count > 1) {
+        if (_sapp.desc.sample_count > 1) {
             attrs[i++] = NSOpenGLPFAMultisample;
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.sample_count;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.desc.sample_count;
         }
         else {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
@@ -912,7 +915,7 @@ int main(int argc, char** argv) {
         [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_view_obj setSampleCount:_sapp.sample_count];
+        [_sapp_view_obj setSampleCount:_sapp.desc.sample_count];
         /* FIXME: HighDPI */
         [_sapp_view_obj setContentScaleFactor:1.0];
         [_sapp_view_obj setUserInteractionEnabled:YES];
@@ -1001,9 +1004,14 @@ int main(int argc, char** argv) {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     double w, h;
     emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
+        w *= _sapp.dpi_scale;
+        h *= _sapp.dpi_scale;
+    }
     _sapp.width = (int) w;
     _sapp.height = (int) h;
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     return true;
 }
 
@@ -1012,8 +1020,8 @@ _SOKOL_PRIVATE void _sapp_emsc_frame() {
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
-    _sapp.mouse_x = emsc_event->canvasX;
-    _sapp.mouse_y = emsc_event->canvasY;
+    _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
+    _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
     if (_sapp.desc.event_cb && (emsc_event->button < SAPP_MAX_MOUSE_BUTTONS)) {
         sapp_event_type type;
         switch (emsc_type) {
@@ -1238,6 +1246,11 @@ int main() {
         emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
         emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
     }
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
+        w *= _sapp.dpi_scale;
+        h *= _sapp.dpi_scale;
+    }
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     _sapp.width = (int) w;
     _sapp.height = (int) h;
@@ -1246,7 +1259,7 @@ int main() {
     attrs.alpha = _sapp.desc.alpha;
     attrs.depth = true;
     attrs.stencil = true;
-    attrs.antialias = _sapp.sample_count > 1;
+    attrs.antialias = _sapp.desc.sample_count > 1;
     attrs.premultipliedAlpha = _sapp.desc.premultiplied_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
@@ -1269,7 +1282,6 @@ int main() {
     emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keypress_callback(0, 0, true, _sapp_emsc_key_cb);
-    _sapp.desc.init_cb();
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
 
@@ -1286,6 +1298,14 @@ int sapp_width() {
 
 int sapp_height() {
     return _sapp.height;
+}
+
+bool sapp_high_dpi() {
+    return _sapp.desc.high_dpi && (_sapp.dpi_scale > 1.5f);
+}
+
+float sapp_dpi_scale() {
+    return _sapp.dpi_scale;
 }
 
 bool sapp_gles2_fallback() {
