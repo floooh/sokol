@@ -67,6 +67,8 @@ typedef enum {
     SAPP_EVENTTYPE_MOUSE_UP,
     SAPP_EVENTTYPE_MOUSE_SCROLL,
     SAPP_EVENTTYPE_MOUSE_MOVE,
+    SAPP_EVENTTYPE_MOUSE_ENTER,
+    SAPP_EVENTTYPE_MOUSE_LEAVE,
     SAPP_EVENTTYPE_TOUCH_BEGAN,
     SAPP_EVENTTYPE_TOUCH_ENDED,
     SAPP_EVENTTYPE_TOUCH_CANCELLED,
@@ -1034,6 +1036,12 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             case EMSCRIPTEN_EVENT_MOUSEMOVE:
                 type = SAPP_EVENTTYPE_MOUSE_MOVE;
                 break;
+            case EMSCRIPTEN_EVENT_MOUSEENTER:
+                type = SAPP_EVENTTYPE_MOUSE_ENTER;
+                break;
+            case EMSCRIPTEN_EVENT_MOUSELEAVE:
+                type = SAPP_EVENTTYPE_MOUSE_LEAVE;
+                break;
             default:
                 type = SAPP_EVENTTYPE_INVALID;
                 break;
@@ -1278,6 +1286,8 @@ int main() {
     emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
     emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
