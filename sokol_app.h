@@ -589,7 +589,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
     #endif
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
-    _sapp.mouse_y = _sapp.height - (mouse_pos.y * _sapp.dpi_scale) - 1);
+    _sapp.mouse_y = _sapp.height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
 }
 
