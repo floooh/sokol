@@ -606,6 +606,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         _sapp.framebuffer_width = r.size.width;
         _sapp.framebuffer_height = r.size.height;
     #endif
+    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / _sapp.window_width;
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
@@ -650,6 +652,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         CGSize drawable_size = _sapp_view_obj.drawableSize;
         _sapp.framebuffer_width = drawable_size.width;
         _sapp.framebuffer_height = drawable_size.height;
+        SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
         _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
         [[_sapp_view_obj layer] setMagnificationFilter:kCAFilterNearest];
     #elif defined(SOKOL_GLCORE33)
@@ -676,11 +679,18 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         _sapp_glcontext_obj = [[NSOpenGLContext alloc] initWithFormat:_sapp_glpixelformat_obj shareContext:NULL];
         SOKOL_ASSERT(_sapp_glcontext_obj != nil);
         _sapp_view_obj = [[_sapp_view alloc] init];
+        if (_sapp.desc.high_dpi) {
+            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
+        }
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
-        /* FIXME HighDPI: [_sapp_view_obj setWantsBestRsolutionOpenGLSurface:YES]; */
         [_sapp_glcontext_obj setView:_sapp_view_obj];
         [_sapp_glcontext_obj makeCurrentContext];
+        const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        _sapp.framebuffer_width = r.size.width;
+        _sapp.framebuffer_height = r.size.height;
+        SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
+        _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
 
         GLint swapInt = 1;
         [_sapp_glcontext_obj setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
@@ -1037,6 +1047,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     }
     _sapp.framebuffer_width = (int) w;
     _sapp.framebuffer_height = (int) h;
+    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     return true;
 }
