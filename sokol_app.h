@@ -342,9 +342,11 @@ typedef struct {
     bool valid;
     int width;
     int height;
+    int sample_count;
     float dpi_scale;
     bool gles2_fallback;
     bool first_frame;
+    bool init_called;
     bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];
@@ -370,6 +372,7 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.first_frame = true;
     _sapp.width = _sapp_def(_sapp.desc.width, 640);
     _sapp.height = _sapp_def(_sapp.desc.height, 480);
+    _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
@@ -389,6 +392,11 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.frame_count = _sapp.frame_count;
 }
 
+_SOKOL_PRIVATE bool _sapp_events_enabled() {
+    /* only send events when an event callback is set, and the init function was called */
+    return _sapp.desc.event_cb && _sapp.init_called;
+}
+
 _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
     if ((scan_code >= 0) && (scan_code < SAPP_MAX_KEYCODES)) {
         return _sapp.keycodes[scan_code];
@@ -402,6 +410,7 @@ _SOKOL_PRIVATE void _sapp_frame() {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp.desc.init_cb();
+        _sapp.init_called = true;
     }
     _sapp.desc.frame_cb();
     _sapp.frame_count++;
@@ -621,7 +630,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_view_obj setSampleCount:_sapp.desc.sample_count];
+        [_sapp_view_obj setSampleCount:_sapp.sample_count];
         /* FIXME: HighDPI */
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
@@ -638,10 +647,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
         attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-        if (_sapp.desc.sample_count > 1) {
+        if (_sapp.sample_count > 1) {
             attrs[i++] = NSOpenGLPFAMultisample;
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.desc.sample_count;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.sample_count;
         }
         else {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
@@ -743,7 +752,7 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint32_t mod) {
-    if (_sapp.desc.event_cb && (btn >= 0) && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
+    if (_sapp_events_enabled() && (btn >= 0) && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mod;
@@ -754,7 +763,7 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint3
 }
 
 _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, uint32_t mod) {
-    if (_sapp.desc.event_cb) {
+    if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mod;
@@ -794,7 +803,7 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
-    if (_sapp.desc.event_cb) {
+    if (_sapp_events_enabled()) {
         float dx = (float) event.scrollingDeltaX;
         float dy = (float) event.scrollingDeltaY;
         if (event.hasPreciseScrollingDeltas) {
@@ -813,7 +822,7 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     }
 }
 - (void)keyDown:(NSEvent*)event {
-    if (_sapp.desc.event_cb) {
+    if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
         _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), mods);
         const NSString* chars = event.characters;
@@ -917,7 +926,7 @@ int main(int argc, char** argv) {
         [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_view_obj setSampleCount:_sapp.desc.sample_count];
+        [_sapp_view_obj setSampleCount:_sapp.sample_count];
         /* FIXME: HighDPI */
         [_sapp_view_obj setContentScaleFactor:1.0];
         [_sapp_view_obj setUserInteractionEnabled:YES];
@@ -1024,7 +1033,7 @@ _SOKOL_PRIVATE void _sapp_emsc_frame() {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
     _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
-    if (_sapp.desc.event_cb && (emsc_event->button < SAPP_MAX_MOUSE_BUTTONS)) {
+    if (_sapp_events_enabled() && (emsc_event->button < SAPP_MAX_MOUSE_BUTTONS)) {
         sapp_event_type type;
         switch (emsc_type) {
             case EMSCRIPTEN_EVENT_MOUSEDOWN:
@@ -1070,7 +1079,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
-    if (_sapp.desc.event_cb) {
+    if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
         if (emsc_event->mouse.ctrlKey) {
             _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
@@ -1093,7 +1102,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
     bool retval = true;
-    if (_sapp.desc.event_cb) {
+    if (_sapp_events_enabled()) {
         sapp_event_type type;
         switch (emsc_type) {
             case EMSCRIPTEN_EVENT_KEYDOWN:
@@ -1267,7 +1276,7 @@ int main() {
     attrs.alpha = _sapp.desc.alpha;
     attrs.depth = true;
     attrs.stencil = true;
-    attrs.antialias = _sapp.desc.sample_count > 1;
+    attrs.antialias = _sapp.sample_count > 1;
     attrs.premultipliedAlpha = _sapp.desc.premultiplied_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
