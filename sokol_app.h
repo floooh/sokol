@@ -346,8 +346,10 @@ enum {
 
 typedef struct {
     bool valid;
-    int width;
-    int height;
+    int window_width;
+    int window_height;
+    int framebuffer_width;
+    int framebuffer_height;
     int sample_count;
     float dpi_scale;
     bool gles2_fallback;
@@ -376,8 +378,10 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.argv = argv;
     _sapp.desc = *desc;
     _sapp.first_frame = true;
-    _sapp.width = _sapp_def(_sapp.desc.width, 640);
-    _sapp.height = _sapp_def(_sapp.desc.height, 480);
+    _sapp.window_width = _sapp_def(_sapp.desc.width, 640);
+    _sapp.window_height = _sapp_def(_sapp.desc.height, 480);
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
@@ -595,16 +599,16 @@ int main(int argc, char* argv[]) {
 _SOKOL_PRIVATE void _sapp_macos_frame() {
     #if defined(SOKOL_METAL)
         const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.width = size.width;
-        _sapp.height = size.height;
+        _sapp.framebuffer_width = size.width;
+        _sapp.framebuffer_height = size.height;
     #else
         const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-        _sapp.width = r.size.width;
-        _sapp.height = r.size.height;
+        _sapp.framebuffer_width = r.size.width;
+        _sapp.framebuffer_height = r.size.height;
     #endif
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
-    _sapp.mouse_y = _sapp.height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+    _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
 }
 
@@ -616,7 +620,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
     _sapp_window_obj = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, _sapp.width, _sapp.height)
+        initWithContentRect:NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height)
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
@@ -637,11 +641,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame() {
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
         [_sapp_view_obj setSampleCount:_sapp.sample_count];
-        /* FIXME: HighDPI */
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
-        CGSize drawable_size = { (CGFloat) _sapp.width, (CGFloat) _sapp.height };
-        [_sapp_view_obj setDrawableSize:drawable_size];
+        if (!_sapp.desc.high_dpi) {
+            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+            [_sapp_view_obj setDrawableSize:drawable_size];
+        }
+        CGSize drawable_size = _sapp_view_obj.drawableSize;
+        _sapp.framebuffer_width = drawable_size.width;
+        _sapp.framebuffer_height = drawable_size.height;
+        _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
         [[_sapp_view_obj layer] setMagnificationFilter:kCAFilterNearest];
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
@@ -758,7 +767,7 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
-    if (_sapp_events_enabled() && (btn >= 0) && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
+    if (_sapp_events_enabled() && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mod;
@@ -977,7 +986,7 @@ int main(int argc, char** argv) {
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
         #error "FIXME"
-        _sapp_frame(size.width, size.height);
+        _sapp.desc.frame_cb();
     }
 }
 
@@ -1026,8 +1035,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
         w *= _sapp.dpi_scale;
         h *= _sapp.dpi_scale;
     }
-    _sapp.width = (int) w;
-    _sapp.height = (int) h;
+    _sapp.framebuffer_width = (int) w;
+    _sapp.framebuffer_height = (int) h;
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     return true;
 }
@@ -1280,8 +1289,8 @@ int main() {
         h *= _sapp.dpi_scale;
     }
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
-    _sapp.width = (int) w;
-    _sapp.height = (int) h;
+    _sapp.framebuffer_width = (int) w;
+    _sapp.framebuffer_height = (int) h;
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     attrs.alpha = _sapp.desc.alpha;
@@ -1323,11 +1332,11 @@ bool sapp_isvalid() {
 }
 
 int sapp_width() {
-    return _sapp.width;
+    return _sapp.framebuffer_width;
 }
 
 int sapp_height() {
-    return _sapp.height;
+    return _sapp.framebuffer_height;
 }
 
 bool sapp_high_dpi() {
