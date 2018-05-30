@@ -208,6 +208,12 @@ typedef struct {
     bool changed;
 } sapp_touchpoint;
 
+typedef enum {
+    SAPP_MOUSEBUTTON_LEFT = 0,
+    SAPP_MOUSEBUTTON_RIGHT = 1,
+    SAPP_MOUSEBUTTON_MIDDLE = 2,
+} sapp_mousebutton;
+
 enum {
     SAPP_MODIFIER_SHIFT = (1<<0),
     SAPP_MODIFIER_CTRL = (1<<1),
@@ -221,7 +227,7 @@ typedef struct {
     sapp_keycode key_code;
     uint32_t char_code;
     uint32_t modifiers;
-    int mouse_button;
+    sapp_mousebutton mouse_button;
     float mouse_x;
     float mouse_y;
     float scroll_x;
@@ -751,7 +757,7 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
     return m;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, int btn, uint32_t mod) {
+_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
     if (_sapp_events_enabled() && (btn >= 0) && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
@@ -782,16 +788,16 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     return YES;
 }
 - (void)mouseDown:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, 0, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseUp:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, 0, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDown:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, 1, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseUp:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, 1, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseMoved:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
@@ -1069,7 +1075,12 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             if (emsc_event->metaKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
             }
-            _sapp.event.mouse_button = emsc_event->button;
+            switch (emsc_event->button) {
+                case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
+                case 1: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_MIDDLE; break;
+                case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
+                default: _sapp.event.mouse_button = emsc_event->button; break;
+            }
             _sapp.event.mouse_x = _sapp.mouse_x;
             _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp.desc.event_cb(&_sapp.event);
