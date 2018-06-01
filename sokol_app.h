@@ -598,16 +598,22 @@ int main(int argc, char* argv[]) {
 
 _SOKOL_PRIVATE void _sapp_macos_frame() {
     #if defined(SOKOL_METAL)
-        const CGSize size = [_sapp_view_obj drawableSize];
-        _sapp.framebuffer_width = size.width;
-        _sapp.framebuffer_height = size.height;
+        const CGSize fb_size = [_sapp_view_obj drawableSize];
+        _sapp.framebuffer_width = fb_size.width;
+        _sapp.framebuffer_height = fb_size.height;
+        const NSRect bounds = [_sapp_view_obj bounds];
+        _sapp.window_width = bounds.size.width;
+        _sapp.window_height = bounds.size.height;
     #else
-        const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-        _sapp.framebuffer_width = r.size.width;
-        _sapp.framebuffer_height = r.size.height;
+        const NSRect fb_rect = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        _sapp.framebuffer_width = fb_rect.size.width;
+        _sapp.framebuffer_height = fb_rect.size.height;
+        const NSRect bounds = [_sapp_view_obj bounds];
+        _sapp.window_width = bounds.size.width;
+        _sapp.window_height = bounds.size.height;
     #endif
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / _sapp.window_width;
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
@@ -937,6 +943,21 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+_SOKOL_PRIVATE void _sapp_ios_frame() {
+    #if defined(SOKOL_METAL)
+        const CGSize fb_size = [_sapp_view_obj drawableSize];
+        _sapp.framebuffer_width = size.width;
+        _sapp.framebuffer_height = size.height;
+    #else
+        const NSRect fb_size = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        _sapp.framebuffer_width = fb_size.size.width;
+        _sapp.framebuffer_height = fb_size.size.height;
+    #endif
+    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+    _sapp_frame();
+}
+
 @implementation _sapp_app_delegate
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = [[UIScreen mainScreen] bounds];
@@ -995,8 +1016,7 @@ int main(int argc, char** argv) {
 @implementation _sapp_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
-        #error "FIXME"
-        _sapp.desc.frame_cb();
+        _sapp_ios_frame();
     }
 }
 
@@ -1008,10 +1028,7 @@ int main(int argc, char** argv) {
 @implementation _sapp_glk_view_dlg
 - (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
     @autoreleasepool {
-        #error "FIXME"
-        int w = (int) [_sapp_view_obj drawableWidth];
-        int h = (int) [_sapp_view_obj drawableHeight];
-        _sapp_frame(w, h);
+        _sapp_ios_frame();
     }
 }
 @end
@@ -1040,6 +1057,8 @@ int main(int argc, char** argv) {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     double w, h;
     emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+    _sapp.window_width = (int) w;
+    _sapp.window_height = (int) h;
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
         w *= _sapp.dpi_scale;
