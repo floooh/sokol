@@ -1473,10 +1473,10 @@ typedef struct {
 
 /* setup and misc functions */
 extern void sg_setup(const sg_desc* desc);
-extern void sg_shutdown();
-extern bool sg_isvalid();
+extern void sg_shutdown(void);
+extern bool sg_isvalid(void);
 extern bool sg_query_feature(sg_feature feature);
-extern void sg_reset_state_cache();
+extern void sg_reset_state_cache(void);
 
 /* resource creation, destruction and updating */
 extern sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
@@ -1507,15 +1507,15 @@ extern void sg_apply_scissor_rect(int x, int y, int width, int height, bool orig
 extern void sg_apply_draw_state(const sg_draw_state* ds);
 extern void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
 extern void sg_draw(int base_element, int num_elements, int num_instances);
-extern void sg_end_pass();
-extern void sg_commit();
+extern void sg_end_pass(void);
+extern void sg_commit(void);
 
 /* separate resource allocation and initialization (for async setup) */ 
-extern sg_buffer sg_alloc_buffer();
-extern sg_image sg_alloc_image();
-extern sg_shader sg_alloc_shader();
-extern sg_pipeline sg_alloc_pipeline();
-extern sg_pass sg_alloc_pass();
+extern sg_buffer sg_alloc_buffer(void);
+extern sg_image sg_alloc_image(void);
+extern sg_shader sg_alloc_shader(void);
+extern sg_pipeline sg_alloc_pipeline(void);
+extern sg_pass sg_alloc_pass(void);
 extern void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc);
 extern void sg_init_image(sg_image img_id, const sg_image_desc* desc);
 extern void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
@@ -1528,7 +1528,7 @@ extern void sg_fail_pipeline(sg_pipeline pip_id);
 extern void sg_fail_pass(sg_pass pass_id);
 
 /* rendering contexts (optional) */
-extern sg_context sg_setup_context();
+extern sg_context sg_setup_context(void);
 extern void sg_activate_context(sg_context ctx_id);
 extern void sg_discard_context(sg_context ctx_id);
 
@@ -8348,7 +8348,7 @@ void sg_setup(const sg_desc* desc) {
     _sg.valid = true;
 }
 
-void sg_shutdown() {
+void sg_shutdown(void) {
     /* can only delete resources for the currently set context here, if multiple
     contexts are used, the app code must take care of properly releasing them
     (since only the app code can switch between 3D-API contexts)
@@ -8365,7 +8365,7 @@ void sg_shutdown() {
     _sg.valid = false;
 }
 
-bool sg_isvalid() {
+bool sg_isvalid(void) {
     return _sg.valid;
 }
 
@@ -8373,7 +8373,7 @@ bool sg_query_feature(sg_feature f) {
     return _sg_query_feature(f);
 }
 
-sg_context sg_setup_context() {
+sg_context sg_setup_context(void) {
     sg_context res;
     res.id = _sg_pool_alloc_id(&_sg.pools.context_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8408,7 +8408,7 @@ void sg_activate_context(sg_context ctx_id) {
 }
 
 /*-- allocate resource id ----------------------------------------------------*/
-sg_buffer sg_alloc_buffer() {
+sg_buffer sg_alloc_buffer(void) {
     sg_buffer res;
     res.id = _sg_pool_alloc_id(&_sg.pools.buffer_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8420,7 +8420,7 @@ sg_buffer sg_alloc_buffer() {
     return res;
 }
 
-sg_image sg_alloc_image() {
+sg_image sg_alloc_image(void) {
     sg_image res;
     res.id = _sg_pool_alloc_id(&_sg.pools.image_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8432,7 +8432,7 @@ sg_image sg_alloc_image() {
     return res;
 }
 
-sg_shader sg_alloc_shader() {
+sg_shader sg_alloc_shader(void) {
     sg_shader res;
     res.id = _sg_pool_alloc_id(&_sg.pools.shader_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8444,7 +8444,7 @@ sg_shader sg_alloc_shader() {
     return res;
 }
 
-sg_pipeline sg_alloc_pipeline() {
+sg_pipeline sg_alloc_pipeline(void) {
     sg_pipeline res;
     res.id = _sg_pool_alloc_id(&_sg.pools.pipeline_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8456,7 +8456,7 @@ sg_pipeline sg_alloc_pipeline() {
     return res;
 }
 
-sg_pass sg_alloc_pass() {
+sg_pass sg_alloc_pass(void) {
     sg_pass res;
     res.id = _sg_pool_alloc_id(&_sg.pools.pass_pool);
     if (res.id != SG_INVALID_ID) {
@@ -8911,7 +8911,7 @@ void sg_draw(int base_element, int num_elements, int num_instances) {
     _sg_draw(base_element, num_elements, num_instances);
 }
 
-void sg_end_pass() {
+void sg_end_pass(void) {
     if (!_sg.pass_valid) {
         return;
     }
@@ -8926,7 +8926,7 @@ void sg_commit() {
     _sg.frame_index++;
 }
 
-void sg_reset_state_cache() {
+void sg_reset_state_cache(void) {
     _sg_reset_state_cache();
 }
 

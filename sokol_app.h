@@ -258,19 +258,19 @@ typedef struct {
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
 /* sokol_app API functions */
-extern bool sapp_isvalid();
-extern int sapp_width();
-extern int sapp_height();
-extern bool sapp_high_dpi();
-extern float sapp_dpi_scale();
+extern bool sapp_isvalid(void);
+extern int sapp_width(void);
+extern int sapp_height(void);
+extern bool sapp_high_dpi(void);
+extern float sapp_dpi_scale(void);
 
 /* GL/GLES specific functions */
-extern bool sapp_gles2_fallback();
+extern bool sapp_gles2_fallback(void);
 
 /* Metal specific functions */
-extern const void* sapp_metal_get_device();
-extern const void* sapp_metal_get_renderpass_descriptor();
-extern const void* sapp_metal_get_drawable(); 
+extern const void* sapp_metal_get_device(void);
+extern const void* sapp_metal_get_renderpass_descriptor(void);
+extern const void* sapp_metal_get_drawable(void); 
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -1357,31 +1357,31 @@ int main() {
 #endif  /* __EMSCRIPTEN__ */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
-bool sapp_isvalid() {
+bool sapp_isvalid(void) {
     return _sapp.valid;
 }
 
-int sapp_width() {
+int sapp_width(void) {
     return _sapp.framebuffer_width;
 }
 
-int sapp_height() {
+int sapp_height(void) {
     return _sapp.framebuffer_height;
 }
 
-bool sapp_high_dpi() {
+bool sapp_high_dpi(void) {
     return _sapp.desc.high_dpi && (_sapp.dpi_scale > 1.5f);
 }
 
-float sapp_dpi_scale() {
+float sapp_dpi_scale(void) {
     return _sapp.dpi_scale;
 }
 
-bool sapp_gles2_fallback() {
+bool sapp_gles2_fallback(void) {
     return _sapp.gles2_fallback;
 }
 
-const void* sapp_metal_get_device() {
+const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj = (__bridge const void*) _sapp_mtl_device_obj;
@@ -1392,7 +1392,7 @@ const void* sapp_metal_get_device() {
     #endif
 }
 
-const void* sapp_metal_get_renderpass_descriptor() {
+const void* sapp_metal_get_renderpass_descriptor(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj =  (__bridge const void*) [_sapp_view_obj currentRenderPassDescriptor];
@@ -1403,7 +1403,7 @@ const void* sapp_metal_get_renderpass_descriptor() {
     #endif
 }
 
-const void* sapp_metal_get_drawable() {
+const void* sapp_metal_get_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj = (__bridge const void*) [_sapp_view_obj currentDrawable];

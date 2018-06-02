@@ -83,8 +83,8 @@
 extern "C" {
 #endif
 
-extern void stm_setup();
-extern uint64_t stm_now();
+extern void stm_setup(void);
+extern uint64_t stm_now(void);
 extern uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
 extern uint64_t stm_since(uint64_t start_ticks);
 extern uint64_t stm_laptime(uint64_t* last_time);
@@ -117,7 +117,7 @@ static uint64_t _stm_osx_start;
 static uint64_t _stm_posix_start;
 #endif
 
-void stm_setup() {
+void stm_setup(void) {
     SOKOL_ASSERT(0 == _stm_initialized);
     _stm_initialized = 1;
     #if defined(_WIN32)
@@ -133,7 +133,7 @@ void stm_setup() {
     #endif
 }
 
-uint64_t stm_now() {
+uint64_t stm_now(void) {
     SOKOL_ASSERT(_stm_initialized);
     uint64_t now;
     #if defined(_WIN32)
