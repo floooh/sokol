@@ -237,9 +237,9 @@ typedef struct {
 } sapp_event;
 
 typedef struct {
-    void (*init_cb)();
-    void (*frame_cb)();
-    void (*cleanup_cb)();
+    void (*init_cb)(void);
+    void (*frame_cb)(void);
+    void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     int width;
     int height;
@@ -402,7 +402,7 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.frame_count = _sapp.frame_count;
 }
 
-_SOKOL_PRIVATE bool _sapp_events_enabled() {
+_SOKOL_PRIVATE bool _sapp_events_enabled(void) {
     /* only send events when an event callback is set, and the init function was called */
     return _sapp.desc.event_cb && _sapp.init_called;
 }
@@ -416,7 +416,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_frame() {
+_SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp.desc.init_cb();
@@ -468,7 +468,7 @@ static NSOpenGLContext* _sapp_glcontext_obj;
 static NSTimer* _sapp_timer_obj;
 #endif
 
-_SOKOL_PRIVATE void _sapp_macos_init_keytable() {
+_SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
     _sapp.keycodes[0x12] = SAPP_KEYCODE_1;
     _sapp.keycodes[0x13] = SAPP_KEYCODE_2;
@@ -596,7 +596,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame() {
+_SOKOL_PRIVATE void _sapp_macos_frame(void) {
     #if defined(SOKOL_METAL)
         const CGSize fb_size = [_sapp_view_obj drawableSize];
         _sapp.framebuffer_width = fb_size.width;
@@ -943,15 +943,17 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_ios_frame() {
+_SOKOL_PRIVATE void _sapp_ios_frame(void) {
+    CGRect screen_rect = [[UIScreen mainScreen] bounds];
+    _sapp.window_width = (int) screen_rect.size.width;
+    _sapp.window_height = (int) screen_rect.size.height;
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = [_sapp_view_obj drawableSize];
-        _sapp.framebuffer_width = size.width;
-        _sapp.framebuffer_height = size.height;
+        const CGSize fb_size = _sapp_view_obj.drawableSize;
+        _sapp.framebuffer_width = fb_size.width;
+        _sapp.framebuffer_height = fb_size.height;
     #else
-        const NSRect fb_size = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
-        _sapp.framebuffer_width = fb_size.size.width;
-        _sapp.framebuffer_height = fb_size.size.height;
+        _sapp.framebuffer_width = (int) _sapp_view_obj.drawableWidth;
+        _sapp.framebuffer_height = (int) _sapp_view_obj.drawableHeight;
     #endif
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
@@ -962,7 +964,17 @@ _SOKOL_PRIVATE void _sapp_ios_frame() {
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = [[UIScreen mainScreen] bounds];
     _sapp_window_obj = [[UIWindow alloc] initWithFrame:screen_rect];
-
+    _sapp.window_width = screen_rect.size.width;
+    _sapp.window_height = screen_rect.size.height;
+    if (_sapp.desc.high_dpi) {
+        _sapp.framebuffer_width = 2 * _sapp.window_width;
+        _sapp.framebuffer_height = 2 * _sapp.window_height;
+    }
+    else {
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+    }
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     #if defined(SOKOL_METAL)
         _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
         _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
@@ -973,8 +985,12 @@ _SOKOL_PRIVATE void _sapp_ios_frame() {
         [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
         [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
         [_sapp_view_obj setSampleCount:_sapp.sample_count];
-        /* FIXME: HighDPI */
-        [_sapp_view_obj setContentScaleFactor:1.0];
+        if (_sapp.desc.high_dpi) {
+            [_sapp_view_obj setContentScaleFactor:2.0];
+        }
+        else {
+            [_sapp_view_obj setContentScaleFactor:1.0];
+        }
         [_sapp_view_obj setUserInteractionEnabled:YES];
         [_sapp_view_obj setMultipleTouchEnabled:YES];
         [_sapp_window_obj addSubview:_sapp_view_obj];
@@ -998,8 +1014,12 @@ _SOKOL_PRIVATE void _sapp_ios_frame() {
         [_sapp_view_obj setEnableSetNeedsDisplay:NO];
         [_sapp_view_obj setUserInteractionEnabled:YES];
         [_sapp_view_obj setMultipleTouchEnabled:YES];
-        /* FIXME: HighDPI */
-        [_sapp_view_obj setContentScaleFactor:1.0];
+        if (_sapp.desc.high_dpi) {
+            [_sapp_view_obj setContentScaleFactor:2.0];
+        }
+        else {
+            [_sapp_view_obj setContentScaleFactor:1.0];
+        }
         [_sapp_window_obj addSubview:_sapp_view_obj];
         _sapp_glk_view_ctrl_obj = [[GLKViewController alloc] init];
         [_sapp_glk_view_ctrl_obj setView:_sapp_view_obj];
@@ -1071,7 +1091,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_frame() {
+_SOKOL_PRIVATE void _sapp_emsc_frame(void) {
     _sapp_frame();
 }
 
@@ -1196,7 +1216,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
     return retval;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_init_keytable() {
+_SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
     _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
     _sapp.keycodes[13]  = SAPP_KEYCODE_ENTER;
