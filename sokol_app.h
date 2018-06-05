@@ -69,9 +69,10 @@ typedef enum {
     SAPP_EVENTTYPE_MOUSE_MOVE,
     SAPP_EVENTTYPE_MOUSE_ENTER,
     SAPP_EVENTTYPE_MOUSE_LEAVE,
-    SAPP_EVENTTYPE_TOUCH_BEGAN,
-    SAPP_EVENTTYPE_TOUCH_ENDED,
-    SAPP_EVENTTYPE_TOUCH_CANCELLED,
+    SAPP_EVENTTYPE_TOUCHES_BEGAN,
+    SAPP_EVENTTYPE_TOUCHES_MOVED,
+    SAPP_EVENTTYPE_TOUCHES_ENDED,
+    SAPP_EVENTTYPE_TOUCHES_CANCELLED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
@@ -202,7 +203,7 @@ typedef enum {
 } sapp_keycode; 
 
 typedef struct {
-    uintptr_t id;
+    uintptr_t identifier;
     float pos_x;
     float pos_y;
     bool changed;
@@ -880,6 +881,7 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
 - (void)flagsChanged:(NSEvent*)event {
     /* FIXME */
 }
+
 #if !defined(SOKOL_METAL)
 - (void)timerFired:(id)sender {
     [self setNeedsDisplay:YES];
@@ -1054,9 +1056,42 @@ _SOKOL_PRIVATE void _sapp_ios_frame(void) {
 @end
 #endif
 
+_SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        NSEnumerator* enumerator = [[event allTouches] objectEnumerator];
+        UITouch* ios_touch;
+        while ((ios_touch = [enumerator nextObject])) {
+            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCH_POINTS) {
+                CGPoint ios_pos = [ios_touch locationInView:_sapp_view_obj];
+                sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
+                cur_point->identifier = (uintptr_t) ios_touch;
+                cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
+                cur_point->pos_y = ios_pos.y * _sapp.dpi_scale;
+                cur_point->changed = [touches containsObject:ios_touch];
+            }
+        }
+        if (_sapp.event.num_touches > 0) {
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+    }
+}
+
 @implementation _sapp_view
 - (BOOL) isOpaque {
     return YES;
+}
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
+    _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, touches, event);
+}
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
+    _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_MOVED, touches, event);
+}
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
+    _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_ENDED, touches, event);
+}
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
+    _sapp_ios_touch_event(SAPP_EVENTTYPE_TOUCHES_CANCELLED, touches, event);
 }
 @end
 #endif /* TARGET_OS_IPHONE */
