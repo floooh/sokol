@@ -281,7 +281,7 @@ extern bool sapp_high_dpi(void);
 extern float sapp_dpi_scale(void);
 
 /* GL/GLES specific functions */
-extern bool sapp_gles2_fallback(void);
+extern bool sapp_gles2(void);
 
 /* Metal specific functions */
 extern const void* sapp_metal_get_device(void);
@@ -1118,6 +1118,9 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
 #else
+#ifndef GL_EXT_PROTOTYPES 
+#define GL_GLEXT_PROTOTYPES
+#endif
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #endif
@@ -1285,6 +1288,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 break;
             default:
                 type = SAPP_EVENTTYPE_INVALID;
+                retval = false;
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
@@ -1307,10 +1311,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
             }
             for (int i = 0; i < _sapp.event.num_touches; i++) {
                 const EmscriptenTouchPoint* src = &emsc_event->touches[i];
-                sapp_touchpoint* dst = &_sapp.event.touches[_sapp.event.num_touches++];
+                sapp_touchpoint* dst = &_sapp.event.touches[i];
                 dst->identifier = src->identifier;
-                dst->pos_x = src->canvasX;
-                dst->pos_y = src->canvasY;
+                dst->pos_x = src->canvasX * _sapp.dpi_scale;
+                dst->pos_y = src->canvasY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
             _sapp.desc.event_cb(&_sapp.event);
@@ -1504,7 +1508,7 @@ float sapp_dpi_scale(void) {
     return _sapp.dpi_scale;
 }
 
-bool sapp_gles2_fallback(void) {
+bool sapp_gles2(void) {
     return _sapp.gles2_fallback;
 }
 
