@@ -1,8 +1,6 @@
 #pragma once
 /*
-    sokol_app.h -- cross-platform app model wrapper
-
-    WORK IN PROGRESS!
+    sokol_app.h -- cross-platform application wrapper
 
     Do this:
         #define SOKOL_IMPL
@@ -20,7 +18,24 @@
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 
-    TODO: documentation
+    FEATURE OVERVIEW
+    ================
+    sokol_app.h provides a simple cross-platform API which implements the
+    minimal 'application-wrapper' parts of a 3D application:
+
+    - a common entry function
+    - creates a window and 3D-API context/device with a 'default framebuffer'
+    - makes the rendered frame visible
+    - provides keyboard-, mouse- and low-level touch-events
+    - platforms: MacOS, iOS, HTML5, (Win32, Linux, Android, RaspberryPi)
+    - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
+
+    sokol_app.h is not a whole 3D-API wrapper, but also does not depend
+    on a specific 3D-API wrapper.
+
+    HOW TO USE
+    ==========
+    FIXME
 
     zlib/libpng license
 
