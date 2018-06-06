@@ -1242,10 +1242,63 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
             else {
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
+                /* only forward alpha-numeric keys to browser */
                 retval = emsc_event->keyCode < 32;
             }
             _sapp.desc.event_cb(&_sapp.event);
-            /* only forward alpha-numeric keys to browser */
+        }
+    }
+    return retval;
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
+    bool retval = true;
+    if (_sapp_events_enabled()) {
+        sapp_event_type type;
+        switch (emsc_type) {
+            case EMSCRIPTEN_EVENT_TOUCHSTART:
+                type = SAPP_EVENTTYPE_TOUCHES_BEGAN;
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHMOVE:
+                type = SAPP_EVENTTYPE_TOUCHES_MOVED;
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHEND:
+                type = SAPP_EVENTTYPE_TOUCHES_ENDED;
+                break;
+            case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+                type = SAPP_EVENTTYPE_TOUCHES_CANCELLED;
+                break;
+            default:
+                type = SAPP_EVENTTYPE_INVALID;
+                break;
+        }
+        if (type != SAPP_EVENTTYPE_INVALID) {
+            _sapp_init_event(type);
+            if (emsc_event->ctrlKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
+            }
+            if (emsc_event->shiftKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
+            }
+            if (emsc_event->altKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
+            }
+            if (emsc_event->metaKey) {
+                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
+            }
+            _sapp.event.num_touches = emsc_event->numTouches;
+            if (_sapp.event.num_touches > SAPP_MAX_TOUCH_POINTS) {
+                _sapp.event.num_touches = SAPP_MAX_TOUCH_POINTS;
+            }
+            for (int i = 0; i < _sapp.event.num_touches; i++) {
+                const EmscriptenTouchPoint* src = &emsc_event->touches[i];
+                sapp_touchpoint* dst = &_sapp.event.touches[_sapp.event.num_touches++];
+                dst->identifier = src->identifier;
+                dst->pos_x = src->canvasX;
+                dst->pos_y = src->canvasY;
+                dst->changed = src->isChanged;
+            }
+            _sapp.desc.event_cb(&_sapp.event);
         }
     }
     return retval;
@@ -1406,6 +1459,10 @@ int main() {
     emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keypress_callback(0, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
 
