@@ -319,6 +319,10 @@ extern const void* sapp_metal_get_drawable(void);
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
     #endif
+#elif defined(_WIN32) 
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
+    #endif
 #else
 #error "sokol_app.h: Unknown platform"
 #endif
@@ -385,6 +389,23 @@ typedef struct {
 } _sapp_state;
 static _sapp_state _sapp;
 
+_SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len > 0));
+    char* const end = &(dst[max_len-1]);
+    char c = 0;
+    for (int i = 0; i < max_len; i++) {
+        c = *src;
+        if (c != 0) {
+            src++;
+        }
+        *dst++ = c;
+    }
+    /* truncated? */
+    if (c != 0) {
+        *end = 0;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     SOKOL_ASSERT(desc->init_cb);
     SOKOL_ASSERT(desc->frame_cb);
@@ -402,11 +423,10 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
-        strncpy(_sapp.window_title, _sapp.desc.window_title, sizeof(_sapp.window_title));
+        _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     }
     else {
-        static const char* default_title = "sokol_app";
-        strncpy(_sapp.window_title, default_title, sizeof(_sapp.window_title));
+        _sapp_strcpy("sokol_app", _sapp.window_title, sizeof(_sapp.window_title));
     }
     _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
     _sapp.dpi_scale = 1.0f;
@@ -1427,8 +1447,8 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
-int main() {
-    sapp_desc desc = sokol_main(0, 0);
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
     _sapp_init_state(&desc, 0, 0);
     _sapp_emsc_init_keytable();
     double w, h;
@@ -1484,8 +1504,46 @@ int main() {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
 }
-
 #endif  /* __EMSCRIPTEN__ */
+
+/*== WINDOW ==================================================================*/
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <windowsx.h>
+
+#if defined(SOKOL_D3D11)
+#define COBJMACROS
+#include <d3d11.h>
+#include <dxgi.h>
+#else
+#error "FIXME: Win32 + GL"
+#endif
+
+static HWND _sapp_hwnd = 0;
+#if defined(SOKOL_D3D11)
+static ID3D11Device* _sapp_d3d11_device = 0;
+static ID3D11DeviceContext* _sapp_d3d11_device_context = 0;
+static DXGI_SWAP_CHAIN_DESC _sapp_dxgi_swap_chain_desc = { 0 };
+static ID3D11Texture2D* _sapp_d3d11_rt = 0;
+static ID3D11RenderTargetView* _sapp_d3d11_rtv = 0;
+static ID3D11Texture2D* _sapp_d3d11_ds = 0;
+static ID3D11DepthStencilView* _sapp_d3d11_dsv = 0;
+#else
+#error "FIXME: Win32 + GL"
+#endif
+
+#define SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
+
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    /* FIXME: CommandLineToArgvW (but we'd actually need ANSI args, or UTF-8) */
+    sapp_desc desc = sokol_main(0, 0);
+    _sapp_init_state(&desc, 0, 0);
+    /* FIXME... */
+    return 0;
+}
+ 
+#endif
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 bool sapp_isvalid(void) {
@@ -1552,4 +1610,3 @@ const void* sapp_metal_get_drawable(void) {
 #endif
 
 #endif /* SOKOL_IMPL */
-
