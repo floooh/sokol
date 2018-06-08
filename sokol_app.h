@@ -377,7 +377,8 @@ typedef struct {
     bool init_called;
     bool html5_canvas_resize;
     const char* html5_canvas_name;
-    char window_title[_SAPP_MAX_TITLE_LENGTH];
+    char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
+    wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
     uint32_t frame_count;
     float mouse_x;
     float mouse_y;
@@ -1520,26 +1521,138 @@ int main(int argc, char* argv[]) {
 #error "FIXME: Win32 + GL"
 #endif
 
-static HWND _sapp_hwnd = 0;
+static HWND _sapp_win32_hwnd;
+static bool _sapp_win32_in_create_window;
 #if defined(SOKOL_D3D11)
-static ID3D11Device* _sapp_d3d11_device = 0;
-static ID3D11DeviceContext* _sapp_d3d11_device_context = 0;
-static DXGI_SWAP_CHAIN_DESC _sapp_dxgi_swap_chain_desc = { 0 };
-static ID3D11Texture2D* _sapp_d3d11_rt = 0;
-static ID3D11RenderTargetView* _sapp_d3d11_rtv = 0;
-static ID3D11Texture2D* _sapp_d3d11_ds = 0;
-static ID3D11DepthStencilView* _sapp_d3d11_dsv = 0;
+static ID3D11Device* _sapp_d3d11_device;
+static ID3D11DeviceContext* _sapp_d3d11_device_context;
+static DXGI_SWAP_CHAIN_DESC _sapp_dxgi_swap_chain_desc;
+static ID3D11Texture2D* _sapp_d3d11_rt;
+static ID3D11RenderTargetView* _sapp_d3d11_rtv;
+static ID3D11Texture2D* _sapp_d3d11_ds;
+static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #else
 #error "FIXME: Win32 + GL"
 #endif
 
 #define SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
 
+_SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
+    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
+    memset(dst, 0, dst_num_bytes);
+    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
+    const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
+    if ((dst_needed > 0) && (dst_needed < dst_chars)) {
+        MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
+        return true;
+    }
+    else {
+        /* input string doesn't fit into destination buffer */
+        return false;
+    }
+}
+
+LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CLOSE:
+            PostQuitMessage(0);
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_LBUTTONDOWN:
+            break;
+        case WM_RBUTTONDOWN:
+            break;
+        case WM_LBUTTONUP:
+            break;
+        case WM_RBUTTONUP:
+            break;
+        case WM_MOUSEMOVE:
+            break;
+        case WM_MOUSEWHEEL:
+            break;
+        case WM_CHAR:
+            break;
+        case WM_KEYDOWN:
+            break;
+        case WM_KEYUP:
+            break;
+        default:
+            break;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     /* FIXME: CommandLineToArgvW (but we'd actually need ANSI args, or UTF-8) */
     sapp_desc desc = sokol_main(0, 0);
     _sapp_init_state(&desc, 0, 0);
-    /* FIXME... */
+    _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
+
+    WNDCLASSW wndclassw;
+    memset(&wndclassw, 0, sizeof(wndclassw));
+    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
+    wndclassw.hInstance = GetModuleHandleW(NULL);
+    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
+    wndclassw.lpszClassName = L"SOKOLAPP";
+    RegisterClassW(&wndclassw);
+
+    /* FIXME: HighDPI support */
+    const DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    RECT rect = { 0, 0, _sapp.window_width, _sapp.window_height };
+    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
+    const int win_width = rect.right - rect.left;
+    const int win_height = rect.bottom - rect.top;
+    _sapp_win32_in_create_window = true;
+    _sapp_win32_hwnd = CreateWindowExW(
+        win_ex_style,               /* dwExStyle */
+        L"SOKOLAPP",                /* lpClassName */
+        _sapp.window_title_wide,    /* lpWindowName */
+        win_style,                  /* dwStyle */
+        CW_USEDEFAULT,              /* X */
+        CW_USEDEFAULT,              /* Y */
+        win_width,                  /* nWidth */
+        win_height,                 /* nHeight */
+        NULL,                       /* hWndParent */
+        NULL,                       /* hMenu */
+        GetModuleHandle(NULL),      /* hInstance */
+        NULL);                      /* lParam */
+    ShowWindow(_sapp_win32_hwnd, SW_SHOW);
+    _sapp_win32_in_create_window = false;
+
+//    _sapp.desc.init_cb();
+    bool done = false;
+    while (!done) {
+        if (GetClientRect(_sapp_win32_hwnd, &rect)) {
+            const int cur_width = rect.right - rect.left;
+            const int cur_height = rect.bottom - rect.top;
+            if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
+                /* FIXME: HighDPI */
+                _sapp.window_width = _sapp.framebuffer_width = cur_width;
+                _sapp.window_height = _sapp.framebuffer_height = cur_height;
+                /* FIXME: reallocate render target */
+            }
+        }
+//        _sapp.desc.frame_cb();
+        /* FIXME: present result */
+        MSG msg;
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (WM_QUIT == msg.message) {
+                done = true;
+            }
+            else {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
+    }
+//    _sapp.desc.cleanup_cb();
+
+    DestroyWindow(_sapp_win32_hwnd);
+    UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
     return 0;
 }
  
