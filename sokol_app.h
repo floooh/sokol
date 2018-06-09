@@ -388,6 +388,7 @@ typedef struct {
     uint32_t frame_count;
     float mouse_x;
     float mouse_y;
+    bool win32_mouse_tracked;
     sapp_event event;
     sapp_desc desc;
     int argc;
@@ -1560,7 +1561,184 @@ _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int 
     }
 }
 
-LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+_SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
+    /* same as GLFW */
+    _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
+    _sapp.keycodes[0x002] = SAPP_KEYCODE_1;
+    _sapp.keycodes[0x003] = SAPP_KEYCODE_2;
+    _sapp.keycodes[0x004] = SAPP_KEYCODE_3;
+    _sapp.keycodes[0x005] = SAPP_KEYCODE_4;
+    _sapp.keycodes[0x006] = SAPP_KEYCODE_5;
+    _sapp.keycodes[0x007] = SAPP_KEYCODE_6;
+    _sapp.keycodes[0x008] = SAPP_KEYCODE_7;
+    _sapp.keycodes[0x009] = SAPP_KEYCODE_8;
+    _sapp.keycodes[0x00A] = SAPP_KEYCODE_9;
+    _sapp.keycodes[0x01E] = SAPP_KEYCODE_A;
+    _sapp.keycodes[0x030] = SAPP_KEYCODE_B;
+    _sapp.keycodes[0x02E] = SAPP_KEYCODE_C;
+    _sapp.keycodes[0x020] = SAPP_KEYCODE_D;
+    _sapp.keycodes[0x012] = SAPP_KEYCODE_E;
+    _sapp.keycodes[0x021] = SAPP_KEYCODE_F;
+    _sapp.keycodes[0x022] = SAPP_KEYCODE_G;
+    _sapp.keycodes[0x023] = SAPP_KEYCODE_H;
+    _sapp.keycodes[0x017] = SAPP_KEYCODE_I;
+    _sapp.keycodes[0x024] = SAPP_KEYCODE_J;
+    _sapp.keycodes[0x025] = SAPP_KEYCODE_K;
+    _sapp.keycodes[0x026] = SAPP_KEYCODE_L;
+    _sapp.keycodes[0x032] = SAPP_KEYCODE_M;
+    _sapp.keycodes[0x031] = SAPP_KEYCODE_N;
+    _sapp.keycodes[0x018] = SAPP_KEYCODE_O;
+    _sapp.keycodes[0x019] = SAPP_KEYCODE_P;
+    _sapp.keycodes[0x010] = SAPP_KEYCODE_Q;
+    _sapp.keycodes[0x013] = SAPP_KEYCODE_R;
+    _sapp.keycodes[0x01F] = SAPP_KEYCODE_S;
+    _sapp.keycodes[0x014] = SAPP_KEYCODE_T;
+    _sapp.keycodes[0x016] = SAPP_KEYCODE_U;
+    _sapp.keycodes[0x02F] = SAPP_KEYCODE_V;
+    _sapp.keycodes[0x011] = SAPP_KEYCODE_W;
+    _sapp.keycodes[0x02D] = SAPP_KEYCODE_X;
+    _sapp.keycodes[0x015] = SAPP_KEYCODE_Y;
+    _sapp.keycodes[0x02C] = SAPP_KEYCODE_Z;
+    _sapp.keycodes[0x028] = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[0x02B] = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[0x033] = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[0x00D] = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[0x029] = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[0x01A] = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[0x00C] = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[0x034] = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[0x01B] = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[0x027] = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[0x035] = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[0x056] = SAPP_KEYCODE_WORLD_2;
+    _sapp.keycodes[0x00E] = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[0x153] = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[0x14F] = SAPP_KEYCODE_END;
+    _sapp.keycodes[0x01C] = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[0x001] = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[0x147] = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[0x152] = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[0x15D] = SAPP_KEYCODE_MENU;
+    _sapp.keycodes[0x151] = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[0x149] = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[0x045] = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[0x146] = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[0x039] = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[0x00F] = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[0x03A] = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[0x145] = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[0x046] = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[0x03B] = SAPP_KEYCODE_F1;
+    _sapp.keycodes[0x03C] = SAPP_KEYCODE_F2;
+    _sapp.keycodes[0x03D] = SAPP_KEYCODE_F3;
+    _sapp.keycodes[0x03E] = SAPP_KEYCODE_F4;
+    _sapp.keycodes[0x03F] = SAPP_KEYCODE_F5;
+    _sapp.keycodes[0x040] = SAPP_KEYCODE_F6;
+    _sapp.keycodes[0x041] = SAPP_KEYCODE_F7;
+    _sapp.keycodes[0x042] = SAPP_KEYCODE_F8;
+    _sapp.keycodes[0x043] = SAPP_KEYCODE_F9;
+    _sapp.keycodes[0x044] = SAPP_KEYCODE_F10;
+    _sapp.keycodes[0x057] = SAPP_KEYCODE_F11;
+    _sapp.keycodes[0x058] = SAPP_KEYCODE_F12;
+    _sapp.keycodes[0x064] = SAPP_KEYCODE_F13;
+    _sapp.keycodes[0x065] = SAPP_KEYCODE_F14;
+    _sapp.keycodes[0x066] = SAPP_KEYCODE_F15;
+    _sapp.keycodes[0x067] = SAPP_KEYCODE_F16;
+    _sapp.keycodes[0x068] = SAPP_KEYCODE_F17;
+    _sapp.keycodes[0x069] = SAPP_KEYCODE_F18;
+    _sapp.keycodes[0x06A] = SAPP_KEYCODE_F19;
+    _sapp.keycodes[0x06B] = SAPP_KEYCODE_F20;
+    _sapp.keycodes[0x06C] = SAPP_KEYCODE_F21;
+    _sapp.keycodes[0x06D] = SAPP_KEYCODE_F22;
+    _sapp.keycodes[0x06E] = SAPP_KEYCODE_F23;
+    _sapp.keycodes[0x076] = SAPP_KEYCODE_F24;
+    _sapp.keycodes[0x038] = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[0x01D] = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[0x02A] = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[0x15B] = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[0x137] = SAPP_KEYCODE_PRINT_SCREEN;
+    _sapp.keycodes[0x138] = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[0x11D] = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[0x036] = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[0x15C] = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[0x150] = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[0x14B] = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[0x14D] = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[0x148] = SAPP_KEYCODE_UP;
+    _sapp.keycodes[0x052] = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[0x04F] = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[0x050] = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[0x051] = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[0x04B] = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[0x04C] = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[0x04D] = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[0x047] = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[0x048] = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[0x049] = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[0x04E] = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[0x053] = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[0x135] = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[0x11C] = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[0x037] = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[0x04A] = SAPP_KEYCODE_KP_SUBTRACT;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
+    uint32_t mods = 0;
+    if (GetKeyState(VK_SHIFT) & (1<<31)) {
+        mods |= SAPP_MODIFIER_SHIFT;
+    }
+    if (GetKeyState(VK_CONTROL) & (1<<31)) {
+        mods |= SAPP_MODIFIER_CTRL;
+    }
+    if (GetKeyState(VK_MENU) & (1<<31)) {
+        mods |= SAPP_MODIFIER_ALT;
+    }
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<31)) {
+        mods |= SAPP_MODIFIER_SUPER;
+    }
+    return mods;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutton btn) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.mouse_button = btn;
+        _sapp.event.mouse_x = _sapp.mouse_x;
+        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_scroll_event(float val) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.scroll_y = val / 30.0f;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
+    if (_sapp_events_enabled() && (vk < SAPP_MAX_KEYCODES)) {
+        _sapp_init_event(type);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.key_code = _sapp.keycodes[vk];
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.char_code = c;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_CLOSE:
             PostQuitMessage(0);
@@ -1568,22 +1746,53 @@ LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         case WM_ERASEBKGND:
             return 1;
         case WM_LBUTTONDOWN:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
             break;
         case WM_RBUTTONDOWN:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT);
+            break;
+        case WM_MBUTTONDOWN:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE);
             break;
         case WM_LBUTTONUP:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT);
             break;
         case WM_RBUTTONUP:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT);
+            break;
+        case WM_MBUTTONUP:
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
             break;
         case WM_MOUSEMOVE:
+            _sapp.mouse_x = (float) GET_X_LPARAM(lParam);
+            _sapp.mouse_y = (float) GET_Y_LPARAM(lParam);
+            if (!_sapp.win32_mouse_tracked) {
+                _sapp.win32_mouse_tracked = true;
+                TRACKMOUSEEVENT tme;
+                memset(&tme, 0, sizeof(tme));
+                tme.cbSize = sizeof(tme);
+                tme.dwFlags = TME_LEAVE;
+                tme.hwndTrack = _sapp_win32_hwnd;
+                TrackMouseEvent(&tme);
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, 0);
+            }
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0);
+            break;
+        case WM_MOUSELEAVE:
+            _sapp.win32_mouse_tracked = false;
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, 0);
             break;
         case WM_MOUSEWHEEL:
+            _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)));
             break;
         case WM_CHAR:
+            _sapp_win32_char_event((uint32_t)wParam);
             break;
         case WM_KEYDOWN:
+            _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
             break;
         case WM_KEYUP:
+            _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
             break;
         default:
             break;
@@ -1640,6 +1849,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     /* FIXME: CommandLineToArgvW (but we'd actually need ANSI args, or UTF-8) */
     sapp_desc desc = sokol_main(0, 0);
     _sapp_init_state(&desc, 0, 0);
+    _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
 
     WNDCLASSW wndclassw;
