@@ -288,6 +288,12 @@ extern const void* sapp_metal_get_device(void);
 extern const void* sapp_metal_get_renderpass_descriptor(void);
 extern const void* sapp_metal_get_drawable(void); 
 
+/* D3D11 specific functions */
+extern const void* sapp_d3d11_get_device(void);
+extern const void* sapp_d3d11_get_device_context(void);
+extern const void* sapp_d3d11_get_render_target_view(void);
+extern const void* sapp_d3d11_get_depth_stencil_view(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -1490,6 +1496,7 @@ int main(int argc, char* argv[]) {
         ctx = emscripten_webgl_create_context(0, &attrs);
     }
     emscripten_webgl_make_context_current(ctx);
+    _sapp.valid = true;
     emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
@@ -1527,6 +1534,7 @@ static bool _sapp_win32_in_create_window;
 static ID3D11Device* _sapp_d3d11_device;
 static ID3D11DeviceContext* _sapp_d3d11_device_context;
 static DXGI_SWAP_CHAIN_DESC _sapp_dxgi_swap_chain_desc;
+static IDXGISwapChain* _sapp_dxgi_swap_chain;
 static ID3D11Texture2D* _sapp_d3d11_rt;
 static ID3D11RenderTargetView* _sapp_d3d11_rtv;
 static ID3D11Texture2D* _sapp_d3d11_ds;
@@ -1535,7 +1543,7 @@ static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #error "FIXME: Win32 + GL"
 #endif
 
-#define SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
+#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
 
 _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
@@ -1583,6 +1591,51 @@ LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
+#if defined(SOKOL_D3D11)
+_SOKOL_PRIVATE _sapp_d3d11_create_default_render_target() {
+    HRESULT hr;
+    hr = IDXGISwapChain_GetBuffer(_sapp_dxgi_swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp_d3d11_rt);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rt);
+    hr = ID3D11Device_CreateRenderTargetView(_sapp_d3d11_device, (ID3D11Resource*)_sapp_d3d11_rt, NULL, &_sapp_d3d11_rtv);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rtv);
+    D3D11_TEXTURE2D_DESC ds_desc;
+    memset(&ds_desc, 0, sizeof(ds_desc));
+    ds_desc.Width = _sapp.framebuffer_width;
+    ds_desc.Height = _sapp.framebuffer_height;
+    ds_desc.MipLevels = 1;
+    ds_desc.ArraySize = 1;
+    ds_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    ds_desc.SampleDesc = _sapp_dxgi_swap_chain_desc.SampleDesc;
+    ds_desc.Usage = D3D11_USAGE_DEFAULT;
+    ds_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    hr = ID3D11Device_CreateTexture2D(_sapp_d3d11_device, &ds_desc, NULL, &_sapp_d3d11_ds);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_ds);
+    D3D11_DEPTH_STENCIL_VIEW_DESC dsv_desc;
+    memset(&dsv_desc, 0, sizeof(dsv_desc));
+    dsv_desc.Format = ds_desc.Format;
+    dsv_desc.ViewDimension = _sapp.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+    hr = ID3D11Device_CreateDepthStencilView(_sapp_d3d11_device, (ID3D11Resource*)_sapp_d3d11_ds, &dsv_desc, &_sapp_d3d11_dsv);
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_dsv);
+}
+
+_SOKOL_PRIVATE _sapp_d3d11_destroy_default_render_target() {
+    _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_rt);
+    _SAPP_SAFE_RELEASE(ID3D11RenderTargetView, _sapp_d3d11_rtv);
+    _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_ds);
+    _SAPP_SAFE_RELEASE(ID3D11DepthStencilView, _sapp_d3d11_dsv);
+}
+
+_SOKOL_PRIVATE _sapp_d3d11_resize_default_render_target() {
+    if (_sapp_dxgi_swap_chain) {
+        _sapp_d3d11_destroy_default_render_target();
+        IDXGISwapChain_ResizeBuffers(_sapp_dxgi_swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+        _sapp_d3d11_create_default_render_target();
+    }
+}
+#else
+#error "FIXME: Win32+GL"
+#endif
+
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     /* FIXME: CommandLineToArgvW (but we'd actually need ANSI args, or UTF-8) */
     sapp_desc desc = sokol_main(0, 0);
@@ -1623,7 +1676,46 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     ShowWindow(_sapp_win32_hwnd, SW_SHOW);
     _sapp_win32_in_create_window = false;
 
-//    _sapp.desc.init_cb();
+    #if defined(SOKOL_D3D11) 
+        /* D3D11 device and swapchain */
+        DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
+        sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
+        sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
+        sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        sc_desc->BufferDesc.RefreshRate.Numerator = 60;
+        sc_desc->BufferDesc.RefreshRate.Denominator = 1;
+        sc_desc->OutputWindow = _sapp_win32_hwnd;
+        sc_desc->Windowed = true;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        sc_desc->BufferCount = 1;
+        sc_desc->SampleDesc.Count = _sapp.sample_count;
+        sc_desc->SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+        sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
+        #if defined(SOKOL_DEBUG)
+            create_flags |= D3D11_CREATE_DEVICE_DEBUG;
+        #endif
+        D3D_FEATURE_LEVEL feature_level;
+        HRESULT hr = D3D11CreateDeviceAndSwapChain(
+            NULL,                           /* pAdapter (use default) */
+            D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
+            NULL,                           /* Software */
+            create_flags,                   /* Flags */
+            NULL,                           /* pFeatureLevels */
+            0,                              /* FeatureLevels */
+            D3D11_SDK_VERSION,              /* SDKVersion */
+            sc_desc,                        /* pSwapChainDesc */
+            &_sapp_dxgi_swap_chain,         /* ppSwapChain */
+            &_sapp_d3d11_device,            /* ppDevice */
+            &feature_level,                 /* pFeatureLevel */
+            &_sapp_d3d11_device_context);   /* ppImmediateContext */
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
+        _sapp_d3d11_create_default_render_target();
+    #else
+    #error "FIXME: Win32+GL"
+    #endif
+
+    _sapp.valid = true;
     bool done = false;
     while (!done) {
         if (GetClientRect(_sapp_win32_hwnd, &rect)) {
@@ -1633,11 +1725,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
                 /* FIXME: HighDPI */
                 _sapp.window_width = _sapp.framebuffer_width = cur_width;
                 _sapp.window_height = _sapp.framebuffer_height = cur_height;
-                /* FIXME: reallocate render target */
+                #if defined(SOKOL_D3D11)
+                _sapp_d3d11_resize_default_render_target();
+                #endif
             }
         }
-//        _sapp.desc.frame_cb();
-        /* FIXME: present result */
+        _sapp_frame();
+        #if defined(SOKOL_D3D11)
+        IDXGISwapChain_Present(_sapp_dxgi_swap_chain, 1, 0);
+        #endif
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -1649,13 +1745,20 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             }
         }
     }
-//    _sapp.desc.cleanup_cb();
+    _sapp.desc.cleanup_cb();
 
-    DestroyWindow(_sapp_win32_hwnd);
+    #if defined(SOKOL_D3D11)
+    _sapp_d3d11_destroy_default_render_target();
+    _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp_dxgi_swap_chain);
+    _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
+    _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
+    #endif
+    DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
     return 0;
 }
  
+#undef _SAPP_SAFE_RELEASE
 #endif
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
@@ -1711,6 +1814,42 @@ const void* sapp_metal_get_drawable(void) {
         const void* obj = (__bridge const void*) [_sapp_view_obj currentDrawable];
         SOKOL_ASSERT(obj);
         return obj;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_d3d11_get_device(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D11)
+        return _sapp_d3d11_device;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_d3d11_get_device_context(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D11)
+        return _sapp_d3d11_device_context;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_d3d11_get_render_target_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D11)
+        return _sapp_d3d11_rtv;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_d3d11_get_depth_stencil_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_D3D11)
+        return _sapp_d3d11_dsv;
     #else
         return 0;
     #endif
