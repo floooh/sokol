@@ -1525,8 +1525,6 @@ int main(int argc, char* argv[]) {
 #define COBJMACROS
 #include <d3d11.h>
 #include <dxgi.h>
-#else
-#error "FIXME: Win32 + GL"
 #endif
 
 static HWND _sapp_win32_hwnd;
@@ -1541,7 +1539,24 @@ static ID3D11RenderTargetView* _sapp_d3d11_rtv;
 static ID3D11Texture2D* _sapp_d3d11_ds;
 static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #else
-#error "FIXME: Win32 + GL"
+typedef BOOL (WINAPI * PFNWGLSWAPINTERVALEXTPROC)(int);
+typedef BOOL (WINAPI * PFNWGLGETPIXELFORMATATTRIBIVARBPROC)(HDC,int,int,UINT,const int*,int*);
+typedef const char* (WINAPI * PFNWGLGETEXTENSIONSSTRINGEXTPROC)(void);
+typedef const char* (WINAPI * PFNWGLGETEXTENSIONSSTRINGARBPROC)(HDC);
+typedef HGLRC (WINAPI * PFNWGLCREATECONTEXTATTRIBSARBPROC)(HDC,HGLRC,const int*);
+typedef HGLRC (WINAPI * PFN_wglCreateContext)(HDC);
+typedef BOOL (WINAPI * PFN_wglDeleteContext)(HGLRC);
+typedef PROC (WINAPI * PFN_wglGetProcAddress)(LPCSTR);
+typedef HDC (WINAPI * PFN_wglGetCurrentDC)(void);
+typedef BOOL (WINAPI * PFN_wglMakeCurrent)(HDC,HGLRC);
+static HINSTANCE _sapp_opengl32;
+static PFN_wglCreateContext _sapp_wglCreateContext;
+static PFN_wglDeleteContext _sapp_wglDeleteContext;
+static PFN_wglGetProcAddress _sapp_wglGetProcAddress;
+static PFN_wglGetCurrentDC _sapp_wglGetCurrentDC;
+static PFN_wglMakeCurrent _sapp_wglMakeCurrent;
+static bool _sapp_ext_swap_control;
+static PFNWGLSWAPINTERVALEXTPROC _sapp_SwapIntervalEXT;
 #endif
 
 #define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
@@ -1842,7 +1857,25 @@ _SOKOL_PRIVATE _sapp_d3d11_resize_default_render_target() {
     }
 }
 #else
-#error "FIXME: Win32+GL"
+_SOKOL_PRIVATE _sapp_init_wgl(void) {
+    _sapp_opengl32 = LoadLibraryA("opengl32.dll");
+    /* FIXME: this should be a proper error check */
+    SOKOL_ASSERT(_sapp_opengl32);
+    _sapp_wglCreateContext = (PFN_wglCreateContext) GetProcAddress(_sapp_opengl32, "wglCreateContext");
+    SOKOL_ASSERT(_sapp_wglCreateContext);
+    _sapp_wglDeleteContext = (PFN_wglDeleteContext) GetProcAddress(_sapp_opengl32, "wglDeleteContext");
+    SOKOL_ASSERT(_sapp_wglDeleteContext);
+    _sapp_wglGetProcAddress = (PFN_wglGetProcAddress) GetProcAddress(_sapp_opengl32, "wglGetProcAddress");
+    SOKOL_ASSERT(_sapp_wglGetProcAddress);
+    _sapp_wglGetCurrentDC = (PFN_wglGetCurrentDC) GetProcAddress(_sapp_opengl32, "wglGetCurrentDC");
+    SOKOL_ASSERT(_sapp_wglGetCurrentDC);
+    _sapp_wglMakeCurrent = (PFN_wglMakeCurrent) GetProcAddress(_sapp_opengl32, "wglMakeCurrent");
+}
+
+_SOKOL_PRIVATE _sapp_shutdown_wgl(void) {
+    SOKOL_ASSERT(_sapp_opengl32);
+    FreeLibrary(_sapp_opengl32); _sapp_opengl32 = 0;
+}
 #endif
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -1922,7 +1955,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
         _sapp_d3d11_create_default_render_target();
     #else
-    #error "FIXME: Win32+GL"
+    _sapp_init_wgl();
     #endif
 
     _sapp.valid = true;
@@ -1962,6 +1995,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp_dxgi_swap_chain);
     _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
     _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
+    #else
+    _sapp_shutdown_wgl();
     #endif
     DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
