@@ -2,6 +2,9 @@
 /*
     sokol_app.h -- cross-platform application wrapper
 
+    Portions of the OSX and Windows GL initialization and event code have been
+    taken from GLFW (http://www.glfw.org/)
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the 
@@ -12,11 +15,14 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
+    SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
 
     Optionally define the following to force debug checks and validations
     even in release mode:
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+
+    FIXME: ERROR HANDLING (this will need an error callback function)
 
     FEATURE OVERVIEW
     ================
@@ -257,6 +263,7 @@ typedef struct {
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
+    void (*fail_cb)(const char*);
     int width;
     int height;
     int sample_count;
@@ -350,6 +357,10 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
         #define SOKOL_LOG(s)
     #endif
 #endif
+#ifndef SOKOL_ABORT
+    #include <stdlib.h>
+    #define SOKOL_ABORT() abort()
+#endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
@@ -396,6 +407,16 @@ typedef struct {
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_state;
 static _sapp_state _sapp;
+
+_SOKOL_PRIVATE void _sapp_fail(const char* msg) {
+    if (_sapp.desc.fail_cb) {
+        _sapp.desc.fail_cb(msg);
+    }
+    else {
+        SOKOL_LOG(msg);
+    }
+    SOKOL_ABORT();
+}
 
 _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
     SOKOL_ASSERT(src && dst && (max_len > 0));
@@ -1528,6 +1549,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 static HWND _sapp_win32_hwnd;
+static HDC _sapp_win32_dc;
 static bool _sapp_win32_in_create_window;
 #if defined(SOKOL_D3D11)
 static ID3D11Device* _sapp_d3d11_device;
@@ -1538,7 +1560,54 @@ static ID3D11Texture2D* _sapp_d3d11_rt;
 static ID3D11RenderTargetView* _sapp_d3d11_rtv;
 static ID3D11Texture2D* _sapp_d3d11_ds;
 static ID3D11DepthStencilView* _sapp_d3d11_dsv;
-#else
+#endif
+#if defined(SOKOL_GLCORE33)
+#define WGL_NUMBER_PIXEL_FORMATS_ARB 0x2000
+#define WGL_SUPPORT_OPENGL_ARB 0x2010
+#define WGL_DRAW_TO_WINDOW_ARB 0x2001
+#define WGL_PIXEL_TYPE_ARB 0x2013
+#define WGL_TYPE_RGBA_ARB 0x202b
+#define WGL_ACCELERATION_ARB 0x2003
+#define WGL_NO_ACCELERATION_ARB 0x2025
+#define WGL_RED_BITS_ARB 0x2015
+#define WGL_RED_SHIFT_ARB 0x2016
+#define WGL_GREEN_BITS_ARB 0x2017
+#define WGL_GREEN_SHIFT_ARB 0x2018
+#define WGL_BLUE_BITS_ARB 0x2019
+#define WGL_BLUE_SHIFT_ARB 0x201a
+#define WGL_ALPHA_BITS_ARB 0x201b
+#define WGL_ALPHA_SHIFT_ARB 0x201c
+#define WGL_ACCUM_BITS_ARB 0x201d
+#define WGL_ACCUM_RED_BITS_ARB 0x201e
+#define WGL_ACCUM_GREEN_BITS_ARB 0x201f
+#define WGL_ACCUM_BLUE_BITS_ARB 0x2020
+#define WGL_ACCUM_ALPHA_BITS_ARB 0x2021
+#define WGL_DEPTH_BITS_ARB 0x2022
+#define WGL_STENCIL_BITS_ARB 0x2023
+#define WGL_AUX_BUFFERS_ARB 0x2024
+#define WGL_STEREO_ARB 0x2012
+#define WGL_DOUBLE_BUFFER_ARB 0x2011
+#define WGL_SAMPLES_ARB 0x2042
+#define WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20a9
+#define WGL_CONTEXT_DEBUG_BIT_ARB 0x00000001
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
+#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#define WGL_CONTEXT_FLAGS_ARB 0x2094
+#define WGL_CONTEXT_ES2_PROFILE_BIT_EXT 0x00000004
+#define WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
+#define WGL_LOSE_CONTEXT_ON_RESET_ARB 0x8252
+#define WGL_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#define WGL_NO_RESET_NOTIFICATION_ARB 0x8261
+#define WGL_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
+#define WGL_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
+#define WGL_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
+#define WGL_CONTEXT_OPENGL_NO_ERROR_ARB 0x31b3
+#define WGL_COLORSPACE_EXT 0x309d
+#define WGL_COLORSPACE_SRGB_EXT 0x3089
 typedef BOOL (WINAPI * PFNWGLSWAPINTERVALEXTPROC)(int);
 typedef BOOL (WINAPI * PFNWGLGETPIXELFORMATATTRIBIVARBPROC)(HDC,int,int,UINT,const int*,int*);
 typedef const char* (WINAPI * PFNWGLGETEXTENSIONSSTRINGEXTPROC)(void);
@@ -1555,8 +1624,16 @@ static PFN_wglDeleteContext _sapp_wglDeleteContext;
 static PFN_wglGetProcAddress _sapp_wglGetProcAddress;
 static PFN_wglGetCurrentDC _sapp_wglGetCurrentDC;
 static PFN_wglMakeCurrent _sapp_wglMakeCurrent;
-static bool _sapp_ext_swap_control;
 static PFNWGLSWAPINTERVALEXTPROC _sapp_SwapIntervalEXT;
+static PFNWGLGETPIXELFORMATATTRIBIVARBPROC _sapp_GetPixelFormatAttribivARB;
+static PFNWGLGETEXTENSIONSSTRINGEXTPROC _sapp_GetExtensionsStringEXT;
+static PFNWGLGETEXTENSIONSSTRINGARBPROC _sapp_GetExtensionsStringARB;
+static PFNWGLCREATECONTEXTATTRIBSARBPROC _sapp_CreateContextAttribsARB;
+static bool _sapp_ext_swap_control;
+static bool _sapp_arb_multisample;
+static bool _sapp_arb_pixel_format;
+static bool _sapp_arb_create_context;
+static bool _sapp_arb_create_context_profile;
 #endif
 
 #define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
@@ -1816,7 +1893,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
 }
 
 #if defined(SOKOL_D3D11)
-_SOKOL_PRIVATE _sapp_d3d11_create_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target() {
     HRESULT hr;
     hr = IDXGISwapChain_GetBuffer(_sapp_dxgi_swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp_d3d11_rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rt);
@@ -1842,24 +1919,28 @@ _SOKOL_PRIVATE _sapp_d3d11_create_default_render_target() {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_dsv);
 }
 
-_SOKOL_PRIVATE _sapp_d3d11_destroy_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target() {
     _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_rt);
     _SAPP_SAFE_RELEASE(ID3D11RenderTargetView, _sapp_d3d11_rtv);
     _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_ds);
     _SAPP_SAFE_RELEASE(ID3D11DepthStencilView, _sapp_d3d11_dsv);
 }
 
-_SOKOL_PRIVATE _sapp_d3d11_resize_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target() {
     if (_sapp_dxgi_swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
         IDXGISwapChain_ResizeBuffers(_sapp_dxgi_swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
         _sapp_d3d11_create_default_render_target();
     }
 }
-#else
-_SOKOL_PRIVATE _sapp_init_wgl(void) {
+#endif
+
+#if defined(SOKOL_GLCORE33)
+_SOKOL_PRIVATE void _sapp_wgl_init(void) {
     _sapp_opengl32 = LoadLibraryA("opengl32.dll");
-    /* FIXME: this should be a proper error check */
+    if (!_sapp_opengl32) {
+        _sapp_fail("Failed to load opengl32.dll\n");
+    }
     SOKOL_ASSERT(_sapp_opengl32);
     _sapp_wglCreateContext = (PFN_wglCreateContext) GetProcAddress(_sapp_opengl32, "wglCreateContext");
     SOKOL_ASSERT(_sapp_wglCreateContext);
@@ -1870,11 +1951,138 @@ _SOKOL_PRIVATE _sapp_init_wgl(void) {
     _sapp_wglGetCurrentDC = (PFN_wglGetCurrentDC) GetProcAddress(_sapp_opengl32, "wglGetCurrentDC");
     SOKOL_ASSERT(_sapp_wglGetCurrentDC);
     _sapp_wglMakeCurrent = (PFN_wglMakeCurrent) GetProcAddress(_sapp_opengl32, "wglMakeCurrent");
+    SOKOL_ASSERT(_sapp_wglMakeCurrent);
 }
 
-_SOKOL_PRIVATE _sapp_shutdown_wgl(void) {
+_SOKOL_PRIVATE void _sapp_wgl_shutdown(void) {
     SOKOL_ASSERT(_sapp_opengl32);
     FreeLibrary(_sapp_opengl32); _sapp_opengl32 = 0;
+}
+
+_SOKOL_PRIVATE bool _sapp_wgl_has_ext(const char* ext, const char* extensions) {
+    SOKOL_ASSERT(ext && extensions);
+    const char* start = extensions;
+    while (true) {
+        const char* where = strstr(start, ext);
+        if (!where) {
+            return false;
+        }
+        const char* terminator = where + strlen(ext);
+        if ((where == start) || (*(where - 1) == ' ')) {
+            if (*terminator == ' ' || *terminator == '\0') {
+                break;
+            }
+        }
+        start = terminator;
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sapp_wgl_ext_supported(const char* ext) {
+    SOKOL_ASSERT(ext);
+    if (_sapp_GetExtensionsStringEXT) {
+        const char* extensions = _sapp_GetExtensionsStringEXT();
+        if (extensions) {
+            if (_sapp_wgl_has_ext(ext, extensions)) {
+                return true;
+            }
+        }
+    }
+    if (_sapp_GetExtensionsStringARB) {
+        const char* extensions = _sapp_GetExtensionsStringARB(_sapp_wglGetCurrentDC());
+        if (extensions) {
+            if (_sapp_wgl_has_ext(ext, extensions)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
+    SOKOL_ASSERT(_sapp_win32_hwnd && _sapp_win32_dc);
+    PIXELFORMATDESCRIPTOR pfd;
+    memset(&pfd, 0, sizeof(pfd));
+    pfd.nSize = sizeof(pfd);
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 24;
+    if (!SetPixelFormat(_sapp_win32_dc, ChoosePixelFormat(_sapp_win32_dc, &pfd), &pfd)) {
+        _sapp_fail("WGL: failed to set pixel format for dummy context\n");
+    }
+    HGLRC rc = _sapp_wglCreateContext(_sapp_win32_dc);
+    if (!rc) {
+        _sapp_fail("WGL: Failed to create dummy context\n");
+    }
+    if (!_sapp_wglMakeCurrent(_sapp_win32_dc, rc)) {
+        _sapp_fail("WGL: Failed to make context current\n");
+    }
+    _sapp_GetExtensionsStringEXT = (PFNWGLGETEXTENSIONSSTRINGEXTPROC) _sapp_wglGetProcAddress("wglGetExtensionsStringEXT");
+    _sapp_GetExtensionsStringARB = (PFNWGLGETEXTENSIONSSTRINGARBPROC) _sapp_wglGetProcAddress("wglGetExtensionsStringARB");
+    _sapp_CreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC) _sapp_wglGetProcAddress("wglCreateContextAttribsARB");
+    _sapp_SwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC) _sapp_wglGetProcAddress("wglSwapIntervalEXT");
+    _sapp_GetPixelFormatAttribivARB = (PFNWGLGETPIXELFORMATATTRIBIVARBPROC) _sapp_wglGetProcAddress("wglGetPixelFormatAttribivARB");
+    _sapp_arb_multisample = _sapp_wgl_ext_supported("WGL_ARB_multisample");
+    _sapp_arb_create_context = _sapp_wgl_ext_supported("WGL_ARB_create_context");
+    _sapp_arb_create_context_profile = _sapp_wgl_ext_supported("WGL_ARB_create_context_profile");
+    _sapp_ext_swap_control = _sapp_wgl_ext_supported("WGL_EXT_swap_control");
+    _sapp_arb_pixel_format = _sapp_wgl_ext_supported("WGL_ARB_pixel_format");
+    _sapp_wglMakeCurrent(_sapp_win32_dc, 0);
+    _sapp_wglDeleteContext(rc);
+}
+
+_SOKOL_PRIVATE int _sapp_wgl_attrib(int pixel_format, int attrib) {
+    SOKOL_ASSERT(_sapp_arb_pixel_format);
+    int value = 0;
+    if (!_sapp_GetPixelFormatAttribivARB(_sapp_win32_dc, pixel_format, 0, 1, &attrib, &value)) {
+        _sapp_fail("WGL: Failed to retrieve pixel format attribute\n");
+    }
+    return value;
+}
+
+_SOKOL_PRIVATE int _sapp_wgl_find_pixel_format() {
+    SOKOL_ASSERT(_sapp_win32_dc);
+    SOKOL_ASSERT(_sapp_arb_pixel_format);
+    int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
+    for (int i = 0; i < native_count; i++) {
+        const int pf = i + 1;
+        if (_sapp_arb_pixel_format) {
+            if (!_sapp_wgl_attrib(pf, WGL_SUPPORT_OPENGL_ARB) || !_sapp_wgl_attrib(pf, WGL_DRAW_TO_WINDOW_ARB)) {
+                continue;
+            }
+            if (_sapp_wgl_attrib(pf, WGL_PIXEL_TYPE_ARB) != WGL_TYPE_RGBA_ARB) {
+                continue;
+            }
+            if (_sapp_wgl_attrib(pf, WGL_ACCELERATION_ARB) == WGL_NO_ACCELERATION_ARB) {
+                continue;
+            }
+            if ((_sapp_wgl_attrib(pf, WGL_RED_BITS_ARB) == 8) &&
+                (_sapp_wgl_attrib(pf, WGL_GREEN_BITS_ARB) == 8) &&
+                (_sapp_wgl_attrib(pf, WGL_BLUE_BITS_ARB) == 8) &&
+                (_sapp_wgl_attrib(pf, WGL_ALPHA_BITS_ARB) == 8) &&
+                (_sapp_wgl_attrib(pf, WGL_DEPTH_BITS_ARB) == 24) &&
+                (_sapp_wgl_attrib(pf, WGL_STENCIL_BITS_ARB) == 8) &&
+                (_sapp_wgl_attrib(pf, WGL_DOUBLE_BUFFER_ARB) != 0))
+            {
+                if ((_sapp.sample_count > 1) && _sapp_arb_multisample) {
+                    if (_sapp_wgl_attrib(pf, WGL_SAMPLES_ARB) != _sapp.sample_count) {
+                        continue;
+                    }
+                }
+                return pf;
+            }
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
+    int pixel_format = _sapp_wgl_find_pixel_format();
+    if (0 == pixel_format) {
+        _sapp_fail("WGL: Didn't find matching pixel format.\n");
+    }
+
 }
 #endif
 
@@ -1918,6 +2126,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         NULL);                      /* lParam */
     ShowWindow(_sapp_win32_hwnd, SW_SHOW);
     _sapp_win32_in_create_window = false;
+    _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
+    SOKOL_ASSERT(_sapp_win32_dc);
 
     #if defined(SOKOL_D3D11) 
         /* D3D11 device and swapchain */
@@ -1954,8 +2164,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             &_sapp_d3d11_device_context);   /* ppImmediateContext */
         SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
         _sapp_d3d11_create_default_render_target();
-    #else
-    _sapp_init_wgl();
+    #endif
+    #if SOKOL_GLCORE33
+        _sapp_wgl_init();
+        _sapp_wgl_load_extensions();
+        _sapp_wgl_create_context();
     #endif
 
     _sapp.valid = true;
@@ -1996,7 +2209,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
     _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
     #else
-    _sapp_shutdown_wgl();
+    _sapp_wgl_shutdown();
     #endif
     DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
