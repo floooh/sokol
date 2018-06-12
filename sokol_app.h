@@ -1638,6 +1638,8 @@ static bool _sapp_arb_multisample;
 static bool _sapp_arb_pixel_format;
 static bool _sapp_arb_create_context;
 static bool _sapp_arb_create_context_profile;
+static HWND _sapp_win32_msg_hwnd;
+static HDC _sapp_win32_msg_dc;
 #endif
 
 #define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
@@ -1896,8 +1898,92 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_create_window(void) {
+    WNDCLASSW wndclassw;
+    memset(&wndclassw, 0, sizeof(wndclassw));
+    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
+    wndclassw.hInstance = GetModuleHandleW(NULL);
+    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
+    wndclassw.lpszClassName = L"SOKOLAPP";
+    RegisterClassW(&wndclassw);
+
+    /* FIXME: HighDPI support */
+    const DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    RECT rect = { 0, 0, _sapp.window_width, _sapp.window_height };
+    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
+    const int win_width = rect.right - rect.left;
+    const int win_height = rect.bottom - rect.top;
+    _sapp_win32_in_create_window = true;
+    _sapp_win32_hwnd = CreateWindowExW(
+        win_ex_style,               /* dwExStyle */
+        L"SOKOLAPP",                /* lpClassName */
+        _sapp.window_title_wide,    /* lpWindowName */
+        win_style,                  /* dwStyle */
+        CW_USEDEFAULT,              /* X */
+        CW_USEDEFAULT,              /* Y */
+        win_width,                  /* nWidth */
+        win_height,                 /* nHeight */
+        NULL,                       /* hWndParent */
+        NULL,                       /* hMenu */
+        GetModuleHandle(NULL),      /* hInstance */
+        NULL);                      /* lParam */
+    ShowWindow(_sapp_win32_hwnd, SW_SHOW);
+    _sapp_win32_in_create_window = false;
+    _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
+    SOKOL_ASSERT(_sapp_win32_dc);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
+    DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
+    UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
+}
+
 #if defined(SOKOL_D3D11)
-_SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
+    DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
+    sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
+    sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
+    sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sc_desc->BufferDesc.RefreshRate.Numerator = 60;
+    sc_desc->BufferDesc.RefreshRate.Denominator = 1;
+    sc_desc->OutputWindow = _sapp_win32_hwnd;
+    sc_desc->Windowed = true;
+    sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    sc_desc->BufferCount = 1;
+    sc_desc->SampleDesc.Count = _sapp.sample_count;
+    sc_desc->SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+    sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
+    #if defined(SOKOL_DEBUG)
+        create_flags |= D3D11_CREATE_DEVICE_DEBUG;
+    #endif
+    D3D_FEATURE_LEVEL feature_level;
+    HRESULT hr = D3D11CreateDeviceAndSwapChain(
+        NULL,                           /* pAdapter (use default) */
+        D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
+        NULL,                           /* Software */
+        create_flags,                   /* Flags */
+        NULL,                           /* pFeatureLevels */
+        0,                              /* FeatureLevels */
+        D3D11_SDK_VERSION,              /* SDKVersion */
+        sc_desc,                        /* pSwapChainDesc */
+        &_sapp_dxgi_swap_chain,         /* ppSwapChain */
+        &_sapp_d3d11_device,            /* ppDevice */
+        &feature_level,                 /* pFeatureLevel */
+        &_sapp_d3d11_device_context);   /* ppImmediateContext */
+    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
+}
+
+_SOKOL_PRIVATE _sapp_d3d11_destroy_device_and_swapchain(void) {
+    _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp_dxgi_swap_chain);
+    _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
+    _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
+}
+
+_SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     HRESULT hr;
     hr = IDXGISwapChain_GetBuffer(_sapp_dxgi_swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp_d3d11_rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rt);
@@ -1923,14 +2009,14 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target() {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_dsv);
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
     _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_rt);
     _SAPP_SAFE_RELEASE(ID3D11RenderTargetView, _sapp_d3d11_rtv);
     _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp_d3d11_ds);
     _SAPP_SAFE_RELEASE(ID3D11DepthStencilView, _sapp_d3d11_dsv);
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target() {
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp_dxgi_swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
         IDXGISwapChain_ResizeBuffers(_sapp_dxgi_swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
@@ -1956,10 +2042,33 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     SOKOL_ASSERT(_sapp_wglGetCurrentDC);
     _sapp_wglMakeCurrent = (PFN_wglMakeCurrent) GetProcAddress(_sapp_opengl32, "wglMakeCurrent");
     SOKOL_ASSERT(_sapp_wglMakeCurrent);
+
+    _sapp_win32_msg_hwnd = CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
+        L"SOKOLAPP",
+        L"sokol-app message window",
+        WS_CLIPSIBLINGS|WS_CLIPCHILDREN,
+        0, 0, 1, 1,
+        NULL, NULL,
+        GetModuleHandleW(NULL),
+        NULL);
+    if (!_sapp_win32_msg_hwnd) {
+        _sapp_fail("Win32: failed to create helper window!\n");
+    }
+    ShowWindow(_sapp_win32_msg_hwnd, SW_HIDE);
+    MSG msg;
+    while (PeekMessageW(&msg, _sapp_win32_msg_hwnd, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    _sapp_win32_msg_dc = GetDC(_sapp_win32_msg_hwnd);
+    if (!_sapp_win32_msg_dc) {
+        _sapp_fail("Win32: failed to obtain helper window DC!\n");
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_shutdown(void) {
-    SOKOL_ASSERT(_sapp_opengl32);
+    SOKOL_ASSERT(_sapp_opengl32 && _sapp_win32_msg_hwnd);
+    DestroyWindow(_sapp_win32_msg_hwnd); _sapp_win32_msg_hwnd = 0;
     FreeLibrary(_sapp_opengl32); _sapp_opengl32 = 0;
 }
 
@@ -2004,7 +2113,7 @@ _SOKOL_PRIVATE bool _sapp_wgl_ext_supported(const char* ext) {
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
-    SOKOL_ASSERT(_sapp_win32_hwnd && _sapp_win32_dc);
+    SOKOL_ASSERT(_sapp_win32_msg_dc);
     PIXELFORMATDESCRIPTOR pfd;
     memset(&pfd, 0, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
@@ -2012,14 +2121,14 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.cColorBits = 24;
-    if (!SetPixelFormat(_sapp_win32_dc, ChoosePixelFormat(_sapp_win32_dc, &pfd), &pfd)) {
+    if (!SetPixelFormat(_sapp_win32_msg_dc, ChoosePixelFormat(_sapp_win32_msg_dc, &pfd), &pfd)) {
         _sapp_fail("WGL: failed to set pixel format for dummy context\n");
     }
-    HGLRC rc = _sapp_wglCreateContext(_sapp_win32_dc);
+    HGLRC rc = _sapp_wglCreateContext(_sapp_win32_msg_dc);
     if (!rc) {
         _sapp_fail("WGL: Failed to create dummy context\n");
     }
-    if (!_sapp_wglMakeCurrent(_sapp_win32_dc, rc)) {
+    if (!_sapp_wglMakeCurrent(_sapp_win32_msg_dc, rc)) {
         _sapp_fail("WGL: Failed to make context current\n");
     }
     _sapp_GetExtensionsStringEXT = (PFNWGLGETEXTENSIONSSTRINGEXTPROC) _sapp_wglGetProcAddress("wglGetExtensionsStringEXT");
@@ -2032,7 +2141,7 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     _sapp_arb_create_context_profile = _sapp_wgl_ext_supported("WGL_ARB_create_context_profile");
     _sapp_ext_swap_control = _sapp_wgl_ext_supported("WGL_EXT_swap_control");
     _sapp_arb_pixel_format = _sapp_wgl_ext_supported("WGL_ARB_pixel_format");
-    _sapp_wglMakeCurrent(_sapp_win32_dc, 0);
+    _sapp_wglMakeCurrent(_sapp_win32_msg_dc, 0);
     _sapp_wglDeleteContext(rc);
 }
 
@@ -2045,7 +2154,7 @@ _SOKOL_PRIVATE int _sapp_wgl_attrib(int pixel_format, int attrib) {
     return value;
 }
 
-_SOKOL_PRIVATE int _sapp_wgl_find_pixel_format() {
+_SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     SOKOL_ASSERT(_sapp_win32_dc);
     SOKOL_ASSERT(_sapp_arb_pixel_format);
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
@@ -2148,77 +2257,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp_init_state(&desc, 0, 0);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
-
-    WNDCLASSW wndclassw;
-    memset(&wndclassw, 0, sizeof(wndclassw));
-    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
-    wndclassw.hInstance = GetModuleHandleW(NULL);
-    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
-    wndclassw.lpszClassName = L"SOKOLAPP";
-    RegisterClassW(&wndclassw);
-
-    /* FIXME: HighDPI support */
-    const DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
-    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-    RECT rect = { 0, 0, _sapp.window_width, _sapp.window_height };
-    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
-    const int win_width = rect.right - rect.left;
-    const int win_height = rect.bottom - rect.top;
-    _sapp_win32_in_create_window = true;
-    _sapp_win32_hwnd = CreateWindowExW(
-        win_ex_style,               /* dwExStyle */
-        L"SOKOLAPP",                /* lpClassName */
-        _sapp.window_title_wide,    /* lpWindowName */
-        win_style,                  /* dwStyle */
-        CW_USEDEFAULT,              /* X */
-        CW_USEDEFAULT,              /* Y */
-        win_width,                  /* nWidth */
-        win_height,                 /* nHeight */
-        NULL,                       /* hWndParent */
-        NULL,                       /* hMenu */
-        GetModuleHandle(NULL),      /* hInstance */
-        NULL);                      /* lParam */
-    ShowWindow(_sapp_win32_hwnd, SW_SHOW);
-    _sapp_win32_in_create_window = false;
-    _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
-    SOKOL_ASSERT(_sapp_win32_dc);
-
+    _sapp_win32_create_window();
     #if defined(SOKOL_D3D11) 
-        /* D3D11 device and swapchain */
-        DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
-        sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
-        sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
-        sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        sc_desc->BufferDesc.RefreshRate.Numerator = 60;
-        sc_desc->BufferDesc.RefreshRate.Denominator = 1;
-        sc_desc->OutputWindow = _sapp_win32_hwnd;
-        sc_desc->Windowed = true;
-        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-        sc_desc->BufferCount = 1;
-        sc_desc->SampleDesc.Count = _sapp.sample_count;
-        sc_desc->SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
-        sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
-        #if defined(SOKOL_DEBUG)
-            create_flags |= D3D11_CREATE_DEVICE_DEBUG;
-        #endif
-        D3D_FEATURE_LEVEL feature_level;
-        HRESULT hr = D3D11CreateDeviceAndSwapChain(
-            NULL,                           /* pAdapter (use default) */
-            D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
-            NULL,                           /* Software */
-            create_flags,                   /* Flags */
-            NULL,                           /* pFeatureLevels */
-            0,                              /* FeatureLevels */
-            D3D11_SDK_VERSION,              /* SDKVersion */
-            sc_desc,                        /* pSwapChainDesc */
-            &_sapp_dxgi_swap_chain,         /* ppSwapChain */
-            &_sapp_d3d11_device,            /* ppDevice */
-            &feature_level,                 /* pFeatureLevel */
-            &_sapp_d3d11_device_context);   /* ppImmediateContext */
-        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
+        _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
     #endif
     #if SOKOL_GLCORE33
@@ -2226,9 +2267,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
     #endif
-
     _sapp.valid = true;
+
     bool done = false;
+    RECT rect;
     while (!done) {
         if (GetClientRect(_sapp_win32_hwnd, &rect)) {
             const int cur_width = rect.right - rect.left;
@@ -2264,15 +2306,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
-        _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp_dxgi_swap_chain);
-        _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
-        _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
+        _sapp_d3d11_destroy_device_and_swapchain();
     #else
         _sapp_wgl_destroy_context();
         _sapp_wgl_shutdown();
     #endif
-    DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
-    UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
+    _sapp_win32_destroy_window();
     return 0;
 }
  
