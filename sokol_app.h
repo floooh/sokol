@@ -515,7 +515,7 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 @interface _sapp_view : MTKView;
 @end
 #else
-@interface _sapp_view : NSView
+@interface _sapp_view : NSOpenGLView
 - (void)timerFired:(id)sender;
 @end
 #endif
@@ -529,7 +529,6 @@ static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 #elif defined(SOKOL_GLCORE33)
 static NSOpenGLPixelFormat* _sapp_glpixelformat_obj;
-static NSOpenGLContext* _sapp_glcontext_obj;
 static NSTimer* _sapp_timer_obj;
 #endif
 
@@ -747,24 +746,20 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         attrs[i++] = 0;
         _sapp_glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
         SOKOL_ASSERT(_sapp_glpixelformat_obj != nil);
-        _sapp_glcontext_obj = [[NSOpenGLContext alloc] initWithFormat:_sapp_glpixelformat_obj shareContext:NULL];
-        SOKOL_ASSERT(_sapp_glcontext_obj != nil);
-        _sapp_view_obj = [[_sapp_view alloc] init];
+        _sapp_view_obj = [[_sapp_view alloc]
+            initWithFrame:NSMakeRect(0, 0, _sapp.framebuffer_width, _sapp.framebuffer_height)
+            pixelFormat:_sapp_glpixelformat_obj];
         if (_sapp.desc.high_dpi) {
             [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
         }
         [_sapp_window_obj setContentView:_sapp_view_obj];
         [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
-        [_sapp_glcontext_obj setView:_sapp_view_obj];
-        [_sapp_glcontext_obj makeCurrentContext];
         const NSRect r = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
         _sapp.framebuffer_width = r.size.width;
         _sapp.framebuffer_height = r.size.height;
         SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
         _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
 
-        GLint swapInt = 1;
-        [_sapp_glcontext_obj setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
         _sapp_timer_obj = [NSTimer timerWithTimeInterval:0.001
             target:_sapp_view_obj
             selector:@selector(timerFired:)
@@ -776,6 +771,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [_sapp_window_obj makeKeyAndOrderFront:nil];
     _sapp.valid = true;
 }
+
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     return YES;
 }
@@ -789,13 +785,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)windowDidResize:(NSNotification*)notification {
     #if !defined(SOKOL_METAL)
-    [_sapp_glcontext_obj update];
     #endif
 }
 
 - (void)windowDidMove:(NSNotification*)notification {
     #if !defined(SOKOL_METAL)
-    [_sapp_glcontext_obj update];
     #endif
 }
 
@@ -951,10 +945,16 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     [self setNeedsDisplay:YES];
 }
 
+- (void) prepareOpenGL {
+    [[self openGLContext] makeCurrentContext];
+    GLint swapInt = 1;
+    [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+}
+
 - (void) drawRect:(NSRect)bound {
+    [[self openGLContext] makeCurrentContext];
     _sapp_macos_frame();
-    glFlush();
-    [_sapp_glcontext_obj flushBuffer];
+    [[self openGLContext] flushBuffer];
 }
 #endif /* !SOKOL_METAL */
 @end
