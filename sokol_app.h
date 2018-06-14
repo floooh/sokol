@@ -2152,9 +2152,8 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 #endif
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    /* FIXME: CommandLineToArgvW (but we'd actually need ANSI args, or UTF-8) */
-    sapp_desc desc = sokol_main(0, 0);
-    _sapp_init_state(&desc, 0, 0);
+    sapp_desc desc = sokol_main(__argc, __argv);
+    _sapp_init_state(&desc, __argc, __argv);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_create_window();
