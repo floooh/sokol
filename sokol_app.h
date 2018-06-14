@@ -1438,7 +1438,9 @@ int main(int argc, char* argv[]) {
 
 /*== WINDOW ==================================================================*/
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <windowsx.h>
 
@@ -2161,7 +2163,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
     #endif
-    #if SOKOL_GLCORE33
+    #if defined(SOKOL_GLCORE33)
         _sapp_wgl_init();
         _sapp_wgl_load_extensions();
         _sapp_wgl_create_context();
