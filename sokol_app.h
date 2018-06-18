@@ -1469,8 +1469,8 @@ static HWND _sapp_win32_hwnd;
 static HDC _sapp_win32_dc;
 static bool _sapp_win32_in_create_window;
 static bool _sapp_win32_dpi_aware;
-static float _sapp_win32_content_scale;
-static float _sapp_win32_window_scale;
+static int _sapp_win32_content_scale;
+static int _sapp_win32_window_scale;
 typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
 typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
 typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
@@ -1788,8 +1788,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
             break;
         case WM_MOUSEMOVE:
-            _sapp.mouse_x = (float) GET_X_LPARAM(lParam);
-            _sapp.mouse_y = (float) GET_Y_LPARAM(lParam);
+            _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.dpi_scale;
+            _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.dpi_scale;
             if (!_sapp.win32_mouse_tracked) {
                 _sapp.win32_mouse_tracked = true;
                 TRACKMOUSEEVENT tme;
@@ -1838,7 +1838,10 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     /* FIXME: HighDPI support */
     const DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-    RECT rect = { 0, 0, _sapp.window_width, _sapp.window_height };
+    RECT rect = { 0, 0, 
+        (int) (_sapp.window_width * _sapp_win32_window_scale),
+        (int) (_sapp.window_height * _sapp_win32_window_scale)
+    };
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
     const int win_height = rect.bottom - rect.top;
@@ -1860,6 +1863,13 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     _sapp_win32_in_create_window = false;
     _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
     SOKOL_ASSERT(_sapp_win32_dc);
+        
+    if (GetClientRect(_sapp_win32_hwnd, &rect)) {
+        _sapp.window_width = (rect.right - rect.left) / _sapp_win32_window_scale;
+        _sapp.window_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
+        _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
+        _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
@@ -1895,18 +1905,19 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         UINT dpix, dpiy;
         HRESULT hr = _sapp_win32_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
         SOKOL_ASSERT(SUCCEEDED(hr));
-        _sapp_win32_window_scale = (float)dpix / 96.0f;
+        /* clamp window scale to an integer factor */
+        _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
     }
     else {
-        _sapp_win32_window_scale = 1.0f;
+        _sapp_win32_window_scale = 1;
     }
     if (_sapp.desc.high_dpi) {
         _sapp_win32_content_scale = _sapp_win32_window_scale;
     }
     else {
-        _sapp_win32_content_scale = 1.0f;
+        _sapp_win32_content_scale = 1;
     }
-    // FIXME: dpi_scale?
+    _sapp.dpi_scale = (float) _sapp_win32_window_scale;
     if (user32) {
         FreeLibrary(user32);
     }
@@ -2247,12 +2258,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     RECT rect;
     while (!done) {
         if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-            const int cur_width = rect.right - rect.left;
-            const int cur_height = rect.bottom - rect.top;
+            const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
+            const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
             if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
                 /* FIXME: HighDPI */
-                _sapp.window_width = _sapp.framebuffer_width = cur_width;
-                _sapp.window_height = _sapp.framebuffer_height = cur_height;
+                _sapp.window_width = cur_width;
+                _sapp.window_height = cur_height;
+                _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
+                _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
                 #if defined(SOKOL_D3D11)
                 _sapp_d3d11_resize_default_render_target();
                 #endif
