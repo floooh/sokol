@@ -1450,9 +1450,33 @@ int main(int argc, char* argv[]) {
 #include <dxgi.h>
 #endif
 
+#ifndef DPI_ENUMS_DECLARED
+typedef enum PROCESS_DPI_AWARENESS
+{
+    PROCESS_DPI_UNAWARE = 0,
+    PROCESS_SYSTEM_DPI_AWARE = 1,
+    PROCESS_PER_MONITOR_DPI_AWARE = 2
+} PROCESS_DPI_AWARENESS;
+typedef enum MONITOR_DPI_TYPE {
+    MDT_EFFECTIVE_DPI = 0,
+    MDT_ANGULAR_DPI = 1,
+    MDT_RAW_DPI = 2,
+    MDT_DEFAULT = MDT_EFFECTIVE_DPI
+} MONITOR_DPI_TYPE;
+#endif /*DPI_ENUMS_DECLARED*/
+
 static HWND _sapp_win32_hwnd;
 static HDC _sapp_win32_dc;
 static bool _sapp_win32_in_create_window;
+static bool _sapp_win32_dpi_aware;
+static float _sapp_win32_content_scale;
+static float _sapp_win32_window_scale;
+typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
+typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
+typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+static SETPROCESSDPIAWARE_T _sapp_win32_setprocessdpiaware;
+static SETPROCESSDPIAWARENESS_T _sapp_win32_setprocessdpiawareness;
+static GETDPIFORMONITOR_T _sapp_win32_getdpiformonitor;
 #if defined(SOKOL_D3D11)
 static ID3D11Device* _sapp_d3d11_device;
 static ID3D11DeviceContext* _sapp_d3d11_device_context;
@@ -1843,6 +1867,54 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
 }
 
+_SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
+    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiaware);
+    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiawareness);
+    SOKOL_ASSERT(0 == _sapp_win32_getdpiformonitor);
+    HINSTANCE user32 = LoadLibraryA("user32.dll");
+    if (user32) {
+        _sapp_win32_setprocessdpiaware = (SETPROCESSDPIAWARE_T) GetProcAddress(user32, "SetProcessDPIAware");
+    }
+    HINSTANCE shcore = LoadLibraryA("shcore.dll");
+    if (shcore) {
+        _sapp_win32_setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T) GetProcAddress(shcore, "SetProcessDpiAwareness");
+        _sapp_win32_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
+    }
+    if (_sapp_win32_setprocessdpiawareness) {
+        _sapp_win32_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
+        _sapp_win32_dpi_aware = true;
+    }
+    else if (_sapp_win32_setprocessdpiaware) {
+        _sapp_win32_setprocessdpiaware();
+        _sapp_win32_dpi_aware = true;
+    }
+    /* get dpi scale factor for main monitor */
+    if (_sapp_win32_getdpiformonitor) {
+        POINT pt = { 1, 1 };
+        HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        UINT dpix, dpiy;
+        HRESULT hr = _sapp_win32_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
+        SOKOL_ASSERT(SUCCEEDED(hr));
+        _sapp_win32_window_scale = (float)dpix / 96.0f;
+    }
+    else {
+        _sapp_win32_window_scale = 1.0f;
+    }
+    if (_sapp.desc.high_dpi) {
+        _sapp_win32_content_scale = _sapp_win32_window_scale;
+    }
+    else {
+        _sapp_win32_content_scale = 1.0f;
+    }
+    // FIXME: dpi_scale?
+    if (user32) {
+        FreeLibrary(user32);
+    }
+    if (shcore) {
+        FreeLibrary(shcore);
+    }
+}
+
 #if defined(SOKOL_D3D11)
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
@@ -2158,6 +2230,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp_init_state(&desc, __argc, __argv);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
+    _sapp_win32_init_dpi();
     _sapp_win32_create_window();
     #if defined(SOKOL_D3D11) 
         _sapp_d3d11_create_device_and_swapchain();
