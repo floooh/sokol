@@ -2714,13 +2714,13 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
 _SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
-    SOKOL_ASSERT(0 == ctx->vao);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
     #if !defined(SOKOL_GLES2)
     if (!_sg_gl_gles2) {
+        SOKOL_ASSERT(0 == ctx->vao);
         glGenVertexArrays(1, &ctx->vao);
         glBindVertexArray(ctx->vao);
         _SG_GL_CHECK_ERROR();
