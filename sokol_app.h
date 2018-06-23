@@ -1471,6 +1471,7 @@ static bool _sapp_win32_in_create_window;
 static bool _sapp_win32_dpi_aware;
 static int _sapp_win32_content_scale;
 static int _sapp_win32_window_scale;
+static float _sapp_win32_mouse_scale;
 typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
 typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
 typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
@@ -1788,8 +1789,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
             break;
         case WM_MOUSEMOVE:
-            _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.dpi_scale;
-            _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.dpi_scale;
+            _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp_win32_mouse_scale;
+            _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp_win32_mouse_scale;
             if (!_sapp.win32_mouse_tracked) {
                 _sapp.win32_mouse_tracked = true;
                 TRACKMOUSEEVENT tme;
@@ -1917,7 +1918,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     else {
         _sapp_win32_content_scale = 1;
     }
-    _sapp.dpi_scale = (float) _sapp_win32_window_scale;
+    _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
+    _sapp.dpi_scale = (float) _sapp_win32_content_scale;
     if (user32) {
         FreeLibrary(user32);
     }
