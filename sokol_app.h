@@ -1914,11 +1914,12 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     }
     if (_sapp.desc.high_dpi) {
         _sapp_win32_content_scale = _sapp_win32_window_scale;
+        _sapp_win32_mouse_scale = 1.0f;
     }
     else {
         _sapp_win32_content_scale = 1;
+        _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
     }
-    _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
     _sapp.dpi_scale = (float) _sapp_win32_content_scale;
     if (user32) {
         FreeLibrary(user32);
