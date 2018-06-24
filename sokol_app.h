@@ -1892,17 +1892,13 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         _sapp_win32_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
     }
     if (_sapp_win32_setprocessdpiawareness) {
-        /* for OpenGL, if the application isn't explicitely requesting HighDPI mode, 
-           set the DPI awareness to 'unaware', and let Windows do the scaling
-        */
+        /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
         PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
         _sapp_win32_dpi_aware = true;
-        #if defined(SOKOL_GLCORE33)
         if (!_sapp.desc.high_dpi) {
             process_dpi_awareness = PROCESS_DPI_UNAWARE;
             _sapp_win32_dpi_aware = false;
         }
-        #endif
         _sapp_win32_setprocessdpiawareness(process_dpi_awareness);
     }
     else if (_sapp_win32_setprocessdpiaware) {
