@@ -1892,15 +1892,25 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         _sapp_win32_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
     }
     if (_sapp_win32_setprocessdpiawareness) {
-        _sapp_win32_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
+        /* for OpenGL, if the application isn't explicitely requesting HighDPI mode, 
+           set the DPI awareness to 'unaware', and let Windows do the scaling
+        */
+        PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
         _sapp_win32_dpi_aware = true;
+        #if defined(SOKOL_GLCORE33)
+        if (!_sapp.desc.high_dpi) {
+            process_dpi_awareness = PROCESS_DPI_UNAWARE;
+            _sapp_win32_dpi_aware = false;
+        }
+        #endif
+        _sapp_win32_setprocessdpiawareness(process_dpi_awareness);
     }
     else if (_sapp_win32_setprocessdpiaware) {
         _sapp_win32_setprocessdpiaware();
         _sapp_win32_dpi_aware = true;
     }
     /* get dpi scale factor for main monitor */
-    if (_sapp_win32_getdpiformonitor) {
+    if (_sapp_win32_getdpiformonitor && _sapp_win32_dpi_aware) {
         POINT pt = { 1, 1 };
         HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         UINT dpix, dpiy;
@@ -2264,7 +2274,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
             const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
             if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
-                /* FIXME: HighDPI */
                 _sapp.window_width = cur_width;
                 _sapp.window_height = cur_height;
                 _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
