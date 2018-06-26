@@ -669,6 +669,20 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 @implementation _sapp_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
+    if (_sapp.desc.fullscreen) {
+        NSRect screen_rect = [[NSScreen mainScreen] frame];
+        _sapp.window_width = screen_rect.size.width;
+        _sapp.window_height = screen_rect.size.height;
+        if (_sapp.desc.high_dpi) {
+            _sapp.framebuffer_width = 2 * _sapp.window_width;
+            _sapp.framebuffer_height = 2 * _sapp.window_height;
+        }
+        else {
+            _sapp.framebuffer_width = _sapp.window_width;
+            _sapp.framebuffer_height = _sapp.window_height;
+        }
+        _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+    }
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
@@ -681,7 +695,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         defer:NO];
     [_sapp_window_obj setTitle:[NSString stringWithUTF8String:_sapp.window_title]];
     [_sapp_window_obj setAcceptsMouseMovedEvents:YES];
-    [_sapp_window_obj center];
     [_sapp_window_obj setRestorable:YES];
     _sapp_win_dlg_obj = [[_sapp_window_delegate alloc] init];
     [_sapp_window_obj setDelegate:_sapp_win_dlg_obj];
@@ -706,6 +719,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
     [[_sapp_view_obj layer] setMagnificationFilter:kCAFilterNearest];
+    if (_sapp.desc.fullscreen) {
+        [_sapp_window_obj toggleFullScreen:self];
+    }
+    else {
+        [_sapp_window_obj center];
+    }
     [_sapp_window_obj makeKeyAndOrderFront:nil];
     _sapp.valid = true;
 }
