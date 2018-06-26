@@ -10,11 +10,6 @@
     before you include this file in *one* C or C++ file to create the 
     implementation.
 
-    If you use sokol_app.h together with sokol_gfx.h, include both headers
-    in the implementation source file, and include sokol_app.h before
-    sokol_gfx.h since sokol_app.h will also include the required 3D-API 
-    headers.
-
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
@@ -29,30 +24,31 @@
 
     FIXME: ERROR HANDLING (this will need an error callback function)
 
-    On Windows, a minimal 'GL header' and function loader is integrated which contains
-    just enough of GL for sokol_gfx.h. If you want to use your own GL
-    header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
-    before including the implementation part of sokol_app.h.
+    If you use sokol_app.h together with sokol_gfx.h, include both headers
+    in the implementation source file, and include sokol_app.h before
+    sokol_gfx.h since sokol_app.h will also include the required 3D-API 
+    headers.
 
+    On Windows, a minimal 'GL header' and function loader is integrated which
+    contains just enough of GL for sokol_gfx.h. If you want to use your own
+    GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
+    before including the implementation part of sokol_app.h.
 
     FEATURE OVERVIEW
     ================
-    sokol_app.h provides a simple cross-platform API which implements the
-    minimal 'application-wrapper' parts of a 3D application:
+    sokol_app.h provides an a minimalistic cross-platform API which
+    implements the 'application-wrapper' parts of a 3D application:
 
-    - a common entry function
+    - a common application entry function
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, (Win32, Linux, Android, RaspberryPi)
+    - platforms: MacOS, iOS, HTML5, Win32 (planned: Linux, Android, RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
-
-    sokol_app.h is not a whole 3D-API wrapper, but also does not depend
-    on a specific 3D-API wrapper.
 
     HOW TO USE
     ==========
-    FIXME
+    FIXME!
 
     zlib/libpng license
 
