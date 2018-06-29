@@ -504,7 +504,6 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 
 /*== MacOS ===================================================================*/
 #if !TARGET_OS_IPHONE
-#import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 
