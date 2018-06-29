@@ -5576,13 +5576,27 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
                 const int mip_width = ((img->width>>mip_index)>0) ? img->width>>mip_index : 1;
                 const int mip_height = ((img->height>>mip_index)>0) ? img->height>>mip_index : 1;
+                const int src_pitch = _sg_row_pitch(img->pixel_format, mip_width);
                 const sg_subimage_content* subimg_content = &(data->subimage[face_index][mip_index]);
                 const int slice_size = subimg_content->size / num_slices;
                 const int slice_offset = slice_size * slice_index;
                 const uint8_t* slice_ptr = ((const uint8_t*)subimg_content->ptr) + slice_offset;
                 hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, d3d11_res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
                 SOKOL_ASSERT(SUCCEEDED(hr));
-                memcpy(d3d11_msr.pData, slice_ptr, slice_size);
+                /* FIXME: need to handle difference in depth-pitch for 3D textures as well! */
+                if (src_pitch == d3d11_msr.RowPitch) {
+                    memcpy(d3d11_msr.pData, slice_ptr, slice_size);
+                }
+                else {
+                    SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
+                    const uint8_t* src_ptr = slice_ptr;
+                    uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
+                    for (int row_index = 0; row_index < mip_height; row_index++) {
+                        memcpy(dst_ptr, src_ptr, src_pitch);
+                        src_ptr += src_pitch;
+                        dst_ptr += d3d11_msr.RowPitch;
+                    }
+                }
                 ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, d3d11_res, subres_index);
             }
         }
