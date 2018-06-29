@@ -2918,11 +2918,67 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 /*== LINUX ==================================================================*/
 #if defined(linux)
 #define GL_GLEXT_PROTOTYPES
+#include <X11/X.h>
+#include <X11/Xlib.h>
+#include <X11/Xresource.h>
+#include <X11/extensions/Xrandr.h>
 #include <GL/glcorearb.h>
+
+
+static Display* _sapp_x11_display;
+static int _sapp_x11_screen;
+static Window _sapp_x11_root;
+static XrmQuark _sapp_x11_context;
+static float _sapp_x11_dpi;
+
+_SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
+    /* from GLFW:
+
+       NOTE: Default to the display-wide DPI as we don't currently have a policy
+             for which monitor a window is considered to be on
+    _sapp_x11_dpi = DisplayWidth(_sapp_x11_display, _sapp_x11_screen) *
+        25.4f / DisplayWidthMM(_sapp_x11_display, _sapp_x11_screen);
+
+       NOTE: Basing the scale on Xft.dpi where available should provide the most
+             consistent user experience (matches Qt, Gtk, etc), although not
+             always the most accurate one
+    */
+    char* rms = XResourceManagerString(_sapp_x11_display);
+    if (rms) {
+        XrmDatabase db = XrmGetStringDatabase(rms);
+        if (db) {
+            XrmValue value;
+            char* type = NULL;
+            if (XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &value)) {
+                if (type && strcmp(type, "String") == 0) {
+                    _sapp_x11_dpi = atof(value.addr);
+                }
+            }
+            XrmDestroyDatabase(db);
+        }
+    }
+}
+
 
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_init_state(&desc, argc, argv);
+
+    XInitThreads();
+    XrmInitialize();
+    _sapp_x11_display = XOpenDisplay(NULL);
+    if (!_sapp_x11_display) {
+        _sapp_fail("XOpenDisplay() failed!\n");
+    }
+    _sapp_x11_screen = DefaultScreen(_sapp_x11_display);
+    _sapp_x11_root = DefaultRootWindow(_sapp_x11_display);
+    _sapp_x11_context = XUniqueContext();
+    _sapp_x11_query_system_dpi();
+    _sapp.dpi_scale = _sapp_x11_dpi / 96.0f; 
+
+    // FIXME: query extensions
+
+    XCloseDisplay(_sapp_x11_display);
     return 0;
 }
 
