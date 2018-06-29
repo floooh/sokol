@@ -339,9 +339,14 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
     #endif
-#elif defined(_WIN32) 
+#elif defined(_WIN32)
+    /* Windows (D3D11 or GL) */
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
+    #endif
+#elif defined(linux)
+    #if !defined(SOKOL_GLCORE33)
+    #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -464,7 +469,6 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     else {
         _sapp_strcpy("sokol_app", _sapp.window_title, sizeof(_sapp.window_title));
     }
-    _sapp.window_title[_SAPP_MAX_TITLE_LENGTH-1] = 0;
     _sapp.dpi_scale = 1.0f;
 }
 
@@ -1458,6 +1462,7 @@ int main(int argc, char* argv[]) {
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
+    return 0;
 }
 #endif  /* __EMSCRIPTEN__ */
 
@@ -2908,7 +2913,20 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 }
  
 #undef _SAPP_SAFE_RELEASE
-#endif
+#endif /* WINDOWS */
+
+/*== LINUX ==================================================================*/
+#if defined(linux)
+#define GL_GLEXT_PROTOTYPES
+#include <GL/glcorearb.h>
+
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_init_state(&desc, argc, argv);
+    return 0;
+}
+
+#endif /* LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 bool sapp_isvalid(void) {
