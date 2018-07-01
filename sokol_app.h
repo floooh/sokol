@@ -238,9 +238,10 @@ typedef struct {
 } sapp_touchpoint;
 
 typedef enum {
-    SAPP_MOUSEBUTTON_LEFT = 0,
-    SAPP_MOUSEBUTTON_RIGHT = 1,
-    SAPP_MOUSEBUTTON_MIDDLE = 2,
+    SAPP_MOUSEBUTTON_NONE = 0,
+    SAPP_MOUSEBUTTON_LEFT = 1,
+    SAPP_MOUSEBUTTON_RIGHT = 2,
+    SAPP_MOUSEBUTTON_MIDDLE = 3,
 } sapp_mousebutton;
 
 enum {
@@ -831,13 +832,13 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseMoved:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
     if (_sapp_events_enabled()) {
@@ -2398,13 +2399,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 tme.dwFlags = TME_LEAVE;
                 tme.hwndTrack = _sapp_win32_hwnd;
                 TrackMouseEvent(&tme);
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, 0);
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_NONE);
             }
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, 0);
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_NONE);
             break;
         case WM_MOUSELEAVE:
             _sapp.win32_mouse_tracked = false;
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, 0);
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_NONE);
             break;
         case WM_MOUSEWHEEL:
             _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)));
