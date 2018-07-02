@@ -81,8 +81,8 @@ extern "C" {
 #endif
 
 enum {
-    SAPP_MAX_TOUCH_POINTS = 8,
-    SAPP_MAX_MOUSE_BUTTONS = 3,
+    SAPP_MAX_TOUCHPOINTS = 8,
+    SAPP_MAX_MOUSEBUTTONS = 3,
     SAPP_MAX_KEYCODES = 512,
 };
 
@@ -238,10 +238,10 @@ typedef struct {
 } sapp_touchpoint;
 
 typedef enum {
-    SAPP_MOUSEBUTTON_NONE = 0,
-    SAPP_MOUSEBUTTON_LEFT = 1,
-    SAPP_MOUSEBUTTON_RIGHT = 2,
-    SAPP_MOUSEBUTTON_MIDDLE = 3,
+    SAPP_MOUSEBUTTON_INVALID = -1,
+    SAPP_MOUSEBUTTON_LEFT = 0,
+    SAPP_MOUSEBUTTON_RIGHT = 1,
+    SAPP_MOUSEBUTTON_MIDDLE = 2,
 } sapp_mousebutton;
 
 enum {
@@ -263,7 +263,7 @@ typedef struct {
     float scroll_x;
     float scroll_y;
     int num_touches;
-    sapp_touchpoint touches[SAPP_MAX_TOUCH_POINTS];
+    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];
 } sapp_event;
 
 typedef struct {
@@ -477,6 +477,7 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     memset(&_sapp.event, 0, sizeof(_sapp.event));
     _sapp.event.type = type;
     _sapp.event.frame_count = _sapp.frame_count;
+    _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
 }
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
@@ -790,7 +791,7 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
-    if (_sapp_events_enabled() && (btn < SAPP_MAX_MOUSE_BUTTONS)) {
+    if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mod;
@@ -832,13 +833,13 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseMoved:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_NONE, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
     if (_sapp_events_enabled()) {
@@ -1056,7 +1057,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
         NSEnumerator* enumerator = [[event allTouches] objectEnumerator];
         UITouch* ios_touch;
         while ((ios_touch = [enumerator nextObject])) {
-            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCH_POINTS) {
+            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
                 CGPoint ios_pos = [ios_touch locationInView:_sapp_view_obj];
                 sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
                 cur_point->identifier = (uintptr_t) ios_touch;
@@ -1130,14 +1131,17 @@ _SOKOL_PRIVATE void _sapp_emsc_frame(void) {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
     _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
-    if (_sapp_events_enabled() && (emsc_event->button < SAPP_MAX_MOUSE_BUTTONS)) {
+    if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
+        bool is_button_event = false;
         switch (emsc_type) {
             case EMSCRIPTEN_EVENT_MOUSEDOWN:
                 type = SAPP_EVENTTYPE_MOUSE_DOWN;
+                is_button_event = true;
                 break;
             case EMSCRIPTEN_EVENT_MOUSEUP:
                 type = SAPP_EVENTTYPE_MOUSE_UP;
+                is_button_event = true;
                 break;
             case EMSCRIPTEN_EVENT_MOUSEMOVE:
                 type = SAPP_EVENTTYPE_MOUSE_MOVE;
@@ -1166,11 +1170,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             if (emsc_event->metaKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
             }
-            switch (emsc_event->button) {
-                case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
-                case 1: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_MIDDLE; break;
-                case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
-                default: _sapp.event.mouse_button = emsc_event->button; break;
+            if (is_button_event) {
+                switch (emsc_event->button) {
+                    case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
+                    case 1: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_MIDDLE; break;
+                    case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
+                    default: _sapp.event.mouse_button = emsc_event->button; break;
+                }
+            }
+            else {
+                _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
             _sapp.event.mouse_x = _sapp.mouse_x;
             _sapp.event.mouse_y = _sapp.mouse_y;
@@ -1285,8 +1294,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
             }
             _sapp.event.num_touches = emsc_event->numTouches;
-            if (_sapp.event.num_touches > SAPP_MAX_TOUCH_POINTS) {
-                _sapp.event.num_touches = SAPP_MAX_TOUCH_POINTS;
+            if (_sapp.event.num_touches > SAPP_MAX_TOUCHPOINTS) {
+                _sapp.event.num_touches = SAPP_MAX_TOUCHPOINTS;
             }
             for (int i = 0; i < _sapp.event.num_touches; i++) {
                 const EmscriptenTouchPoint* src = &emsc_event->touches[i];
@@ -2399,13 +2408,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 tme.dwFlags = TME_LEAVE;
                 tme.hwndTrack = _sapp_win32_hwnd;
                 TrackMouseEvent(&tme);
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_NONE);
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
             }
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_NONE);
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
             break;
         case WM_MOUSELEAVE:
             _sapp.win32_mouse_tracked = false;
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_NONE);
+            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
             break;
         case WM_MOUSEWHEEL:
             _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)));
