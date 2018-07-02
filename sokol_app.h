@@ -2,7 +2,7 @@
 /*
     sokol_app.h -- cross-platform application wrapper
 
-    Portions of the OSX and Windows GL initialization and event code have been
+    Portions of the Windows and Linux GL initialization and event code have been
     taken from GLFW (http://www.glfw.org/)
 
     Do this:
@@ -1564,7 +1564,6 @@ static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
 #define WGL_CONTEXT_FLAGS_ARB 0x2094
-#define WGL_CONTEXT_ES2_PROFILE_BIT_EXT 0x00000004
 #define WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
 #define WGL_LOSE_CONTEXT_ON_RESET_ARB 0x8252
 #define WGL_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
@@ -1572,7 +1571,6 @@ static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #define WGL_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
 #define WGL_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
 #define WGL_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
-#define WGL_CONTEXT_OPENGL_NO_ERROR_ARB 0x31b3
 #define WGL_COLORSPACE_EXT 0x309d
 #define WGL_COLORSPACE_SRGB_EXT 0x3089
 #define ERROR_INVALID_VERSION_ARB 0x2095
@@ -2933,13 +2931,110 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <X11/Xresource.h>
 #include <X11/extensions/Xrandr.h>
 #include <GL/glcorearb.h>
+#include <dlfcn.h> /* dlopen, dlsym, dlclose */
 
+#define GLX_VENDOR 1
+#define GLX_RGBA_BIT 0x00000001
+#define GLX_WINDOW_BIT 0x00000001
+#define GLX_DRAWABLE_TYPE 0x8010
+#define GLX_RENDER_TYPE	0x8011
+#define GLX_RGBA_TYPE 0x8014
+#define GLX_DOUBLEBUFFER 5
+#define GLX_STEREO 6
+#define GLX_AUX_BUFFERS	7
+#define GLX_RED_SIZE 8
+#define GLX_GREEN_SIZE 9
+#define GLX_BLUE_SIZE 10
+#define GLX_ALPHA_SIZE 11
+#define GLX_DEPTH_SIZE 12
+#define GLX_STENCIL_SIZE 13
+#define GLX_ACCUM_RED_SIZE 14
+#define GLX_ACCUM_GREEN_SIZE 15
+#define GLX_ACCUM_BLUE_SIZE	16
+#define GLX_ACCUM_ALPHA_SIZE 17
+#define GLX_SAMPLES 0x186a1
+#define GLX_VISUAL_ID 0x800b
+
+#define GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20b2
+#define GLX_CONTEXT_DEBUG_BIT_ARB 0x00000001
+#define GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+#define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
+#define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
+#define GLX_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
+#define GLX_CONTEXT_FLAGS_ARB 0x2094
+#define GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
+#define GLX_LOSE_CONTEXT_ON_RESET_ARB 0x8252
+#define GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#define GLX_NO_RESET_NOTIFICATION_ARB 0x8261
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
+#define GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
+
+typedef XID GLXWindow;
+typedef XID GLXDrawable;
+typedef struct __GLXFBConfig* GLXFBConfig;
+typedef struct __GLXcontext* GLXContext;
+typedef void (*__GLXextproc)(void);
+
+typedef int (*PFNGLXGETFBCONFIGATTRIBPROC)(Display*,GLXFBConfig,int,int*);
+typedef const char* (*PFNGLXGETCLIENTSTRINGPROC)(Display*,int);
+typedef Bool (*PFNGLXQUERYEXTENSIONPROC)(Display*,int*,int*);
+typedef Bool (*PFNGLXQUERYVERSIONPROC)(Display*,int*,int*);
+typedef void (*PFNGLXDESTROYCONTEXTPROC)(Display*,GLXContext);
+typedef Bool (*PFNGLXMAKECURRENTPROC)(Display*,GLXDrawable,GLXContext);
+typedef void (*PFNGLXSWAPBUFFERSPROC)(Display*,GLXDrawable);
+typedef const char* (*PFNGLXQUERYEXTENSIONSSTRINGPROC)(Display*,int);
+typedef GLXFBConfig* (*PFNGLXGETFBCONFIGSPROC)(Display*,int,int*);
+typedef GLXContext (*PFNGLXCREATENEWCONTEXTPROC)(Display*,GLXFBConfig,int,GLXContext,Bool);
+typedef __GLXextproc (* PFNGLXGETPROCADDRESSPROC)(const GLubyte *procName);
+typedef void (*PFNGLXSWAPINTERVALEXTPROC)(Display*,GLXDrawable,int);
+typedef XVisualInfo* (*PFNGLXGETVISUALFROMFBCONFIGPROC)(Display*,GLXFBConfig);
+typedef GLXWindow (*PFNGLXCREATEWINDOWPROC)(Display*,GLXFBConfig,Window,const int*);
+typedef void (*PFNGLXDESTROYWINDOWPROC)(Display*,GLXWindow);
+
+typedef int (*PFNGLXSWAPINTERVALMESAPROC)(int);
+typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display*,GLXFBConfig,GLXContext,Bool,const int*);
 
 static Display* _sapp_x11_display;
 static int _sapp_x11_screen;
 static Window _sapp_x11_root;
 static XrmQuark _sapp_x11_context;
 static float _sapp_x11_dpi;
+static void* _sapp_glx_libgl;
+static int _sapp_glx_major;
+static int _sapp_glx_minor;
+static int _sapp_glx_eventbase;
+static int _sapp_glx_errorbase;
+// GLX 1.3 functions
+static PFNGLXGETFBCONFIGSPROC              _sapp_glx_GetFBConfigs;
+static PFNGLXGETFBCONFIGATTRIBPROC         _sapp_glx_GetFBConfigAttrib;
+static PFNGLXGETCLIENTSTRINGPROC           _sapp_glx_GetClientString;
+static PFNGLXQUERYEXTENSIONPROC            _sapp_glx_QueryExtension;
+static PFNGLXQUERYVERSIONPROC              _sapp_glx_QueryVersion;
+static PFNGLXDESTROYCONTEXTPROC            _sapp_glx_DestroyContext;
+static PFNGLXMAKECURRENTPROC               _sapp_glx_MakeCurrent;
+static PFNGLXSWAPBUFFERSPROC               _sapp_glx_SwapBuffers;
+static PFNGLXQUERYEXTENSIONSSTRINGPROC     _sapp_glx_QueryExtensionsString;
+static PFNGLXCREATENEWCONTEXTPROC          _sapp_glx_CreateNewContext;
+static PFNGLXGETVISUALFROMFBCONFIGPROC     _sapp_glx_GetVisualFromFBConfig;
+static PFNGLXCREATEWINDOWPROC              _sapp_glx_CreateWindow;
+static PFNGLXDESTROYWINDOWPROC             _sapp_glx_DestroyWindow;
+
+// GLX 1.4 and extension functions
+static PFNGLXGETPROCADDRESSPROC            _sapp_glx_GetProcAddress;
+static PFNGLXGETPROCADDRESSPROC            _sapp_glx_GetProcAddressARB;
+static PFNGLXSWAPINTERVALEXTPROC           _sapp_glx_SwapIntervalEXT;
+static PFNGLXSWAPINTERVALMESAPROC          _sapp_glx_SwapIntervalMESA;
+static PFNGLXCREATECONTEXTATTRIBSARBPROC   _sapp_glx_CreateContextAttribsARB;
+static bool        _sapp_glx_EXT_swap_control;
+static bool        _sapp_glx_MESA_swap_control;
+static bool        _sapp_glx_ARB_multisample;
+static bool        _sapp_glx_ARB_framebuffer_sRGB;
+static bool        _sapp_glx_EXT_framebuffer_sRGB;
+static bool        _sapp_glx_ARB_create_context;
+static bool        _sapp_glx_ARB_create_context_profile;
 
 _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     /* from GLFW:
@@ -2969,6 +3064,123 @@ _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     }
 }
 
+_SOKOL_PRIVATE bool _sapp_glx_has_ext(const char* ext, const char* extensions) {
+    SOKOL_ASSERT(ext);
+    const char* start = extensions;
+    while (true) {
+        const char* where = strstr(start, ext);
+        if (!where) {
+            return false;
+        }
+        const char* terminator = where + strlen(ext);
+        if ((where == start) || (*(where - 1) == ' ')) {
+            if (*terminator == ' ' || *terminator == '\0') {
+                break;
+            }
+        }
+        start = terminator;
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sapp_glx_extsupported(const char* ext, const char* extensions) {
+    if (extensions) {
+        return _sapp_glx_has_ext(ext, extensions);
+    }
+    else {
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
+{
+    if (_sapp_glx_GetProcAddress) {
+        return _sapp_glx_GetProcAddress((const GLubyte*) procname);
+    }
+    else if (_sapp_glx_GetProcAddressARB) {
+        return _sapp_glx_GetProcAddressARB((const GLubyte*) procname);
+    }
+    else {
+        return dlsym(_sapp_glx_libgl, procname);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_glx_init() {
+    const char* sonames[] = { "libGL.so.1", "libGL.so", 0 };
+    for (int i = 0; sonames[i]; i++) {
+        _sapp_glx_libgl = dlopen(sonames[i], RTLD_LAZY|RTLD_GLOBAL);
+        if (_sapp_glx_libgl) {
+            break;
+        }
+    }
+    if (!_sapp_glx_libgl) {
+        _sapp_fail("GLX: failed to load libGL");
+    }
+    _sapp_glx_GetFBConfigs          = dlsym(_sapp_glx_libgl, "glXGetFBConfigs");
+    _sapp_glx_GetFBConfigAttrib     = dlsym(_sapp_glx_libgl, "glXGetFBConfigAttrib");
+    _sapp_glx_GetClientString       = dlsym(_sapp_glx_libgl, "glXGetClientString");
+    _sapp_glx_QueryExtension        = dlsym(_sapp_glx_libgl, "glXQueryExtension");
+    _sapp_glx_QueryVersion          = dlsym(_sapp_glx_libgl, "glXQueryVersion");
+    _sapp_glx_DestroyContext        = dlsym(_sapp_glx_libgl, "glXDestroyContext");
+    _sapp_glx_MakeCurrent           = dlsym(_sapp_glx_libgl, "glXMakeCurrent");
+    _sapp_glx_SwapBuffers           = dlsym(_sapp_glx_libgl, "glXSwapBuffers");
+    _sapp_glx_QueryExtensionsString = dlsym(_sapp_glx_libgl, "glXQueryExtensionsString");
+    _sapp_glx_CreateNewContext      = dlsym(_sapp_glx_libgl, "glXCreateNewContext");
+    _sapp_glx_CreateWindow          = dlsym(_sapp_glx_libgl, "glXCreateWindow");
+    _sapp_glx_DestroyWindow         = dlsym(_sapp_glx_libgl, "glXDestroyWindow");
+    _sapp_glx_GetProcAddress        = dlsym(_sapp_glx_libgl, "glXGetProcAddress");
+    _sapp_glx_GetProcAddressARB     = dlsym(_sapp_glx_libgl, "glXGetProcAddressARB");
+    _sapp_glx_GetVisualFromFBConfig = dlsym(_sapp_glx_libgl, "glXGetVisualFromFBConfig");
+    if (!_sapp_glx_GetFBConfigs ||
+        !_sapp_glx_GetFBConfigAttrib ||
+        !_sapp_glx_GetClientString ||
+        !_sapp_glx_QueryExtension ||
+        !_sapp_glx_QueryVersion ||
+        !_sapp_glx_DestroyContext ||
+        !_sapp_glx_MakeCurrent ||
+        !_sapp_glx_SwapBuffers ||
+        !_sapp_glx_QueryExtensionsString ||
+        !_sapp_glx_CreateNewContext ||
+        !_sapp_glx_CreateWindow ||
+        !_sapp_glx_DestroyWindow ||
+        !_sapp_glx_GetProcAddress ||
+        !_sapp_glx_GetProcAddressARB ||
+        !_sapp_glx_GetVisualFromFBConfig)
+    {
+        _sapp_fail("GLX: failed to load required entry points");
+    }
+
+    if (!_sapp_glx_QueryExtension(_sapp_x11_display,
+                           &_sapp_glx_errorbase,
+                           &_sapp_glx_eventbase))
+    {
+        _sapp_fail("GLX: GLX extension not found");
+    }
+    if (!_sapp_glx_QueryVersion(_sapp_x11_display, &_sapp_glx_major, &_sapp_glx_minor)) {
+        _sapp_fail("GLX: Failed to query GLX version");
+    }
+    if (_sapp_glx_major == 1 && _sapp_glx_minor < 3) {
+        _sapp_fail("GLX: GLX version 1.3 is required");
+    }
+    const char* exts = _sapp_glx_QueryExtensionsString(_sapp_x11_display, _sapp_x11_screen);
+    if (_sapp_glx_extsupported("GLX_EXT_swap_control", exts)) {
+        _sapp_glx_SwapIntervalEXT = (PFNGLXSWAPINTERVALEXTPROC) _sapp_glx_getprocaddr("glXSwapIntervalEXT");
+        _sapp_glx_EXT_swap_control = 0 != _sapp_glx_SwapIntervalEXT;
+    }
+    if (_sapp_glx_extsupported("GLX_MESA_swap_control", exts)) {
+        _sapp_glx_SwapIntervalMESA = (PFNGLXSWAPINTERVALMESAPROC) _sapp_glx_getprocaddr("glXSwapIntervalMESA");
+        _sapp_glx_MESA_swap_control = 0 != _sapp_glx_SwapIntervalMESA;
+    }
+    _sapp_glx_ARB_multisample = _sapp_glx_extsupported("GLX_ARB_multisample", exts);
+    _sapp_glx_ARB_framebuffer_sRGB = _sapp_glx_extsupported("GLX_ARB_framebuffer_sRGB", exts);
+    _sapp_glx_EXT_framebuffer_sRGB = _sapp_glx_extsupported("GLX_EXT_framebuffer_sRGB", exts);
+    if (_sapp_glx_extsupported("GLX_ARB_create_context", exts)) {
+        _sapp_glx_CreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC) _sapp_glx_getprocaddr("glXCreateContextAttribsARB");
+        _sapp_glx_ARB_create_context = 0 != _sapp_glx_CreateContextAttribsARB;
+    }
+    _sapp_glx_ARB_create_context_profile = _sapp_glx_extsupported("GLX_ARB_create_context_profile", exts);
+}
+
 
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
@@ -2987,6 +3199,10 @@ int main(int argc, char* argv[]) {
     _sapp.dpi_scale = _sapp_x11_dpi / 96.0f; 
 
     // FIXME: query extensions
+
+    _sapp_glx_init();
+
+
 
     XCloseDisplay(_sapp_x11_display);
     return 0;
