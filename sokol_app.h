@@ -2,9 +2,6 @@
 /*
     sokol_app.h -- cross-platform application wrapper
 
-    Portions of the Windows and Linux GL initialization and event code have been
-    taken from GLFW (http://www.glfw.org/)
-
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the 
@@ -21,6 +18,11 @@
     even in release mode:
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+
+    Portions of the Windows and Linux GL initialization and event code have been
+    taken from GLFW (http://www.glfw.org/)
+
+    iOS onscreen keyboard support 'inspired' by libgfx.
 
     FIXME: ERROR HANDLING (this will need an error callback function)
 
@@ -228,7 +230,7 @@ typedef enum {
     SAPP_KEYCODE_RIGHT_ALT        = 346,
     SAPP_KEYCODE_RIGHT_SUPER      = 347,
     SAPP_KEYCODE_MENU             = 348,
-} sapp_keycode; 
+} sapp_keycode;
 
 typedef struct {
     uintptr_t identifier;
@@ -283,6 +285,7 @@ typedef struct {
     const char* window_title;
     const char* html5_canvas_name;
     bool html5_canvas_resize;
+    bool ios_keyboard_resizes_canvas;
 } sapp_desc;
 
 /* user-provided functions */
@@ -294,6 +297,8 @@ extern int sapp_width(void);
 extern int sapp_height(void);
 extern bool sapp_high_dpi(void);
 extern float sapp_dpi_scale(void);
+extern void sapp_show_keyboard(bool visible);
+extern bool sapp_keyboard_shown(void);
 
 /* GL/GLES specific functions */
 extern bool sapp_gles2(void);
@@ -413,6 +418,7 @@ typedef struct {
     float mouse_x;
     float mouse_y;
     bool win32_mouse_tracked;
+    bool onscreen_keyboard_shown;
     sapp_event event;
     sapp_desc desc;
     int argc;
@@ -906,6 +912,11 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
 
 @interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
 @end
+@interface _sapp_textfield_dlg : NSObject<UITextFieldDelegate>
+- (void)keyboardWasShown:(NSNotification*)notif;
+- (void)keyboardWillBeHidden:(NSNotification*)notif;
+- (void)keyboardDidChangeFrame:(NSNotification*)notif;
+@end
 #if defined(SOKOL_METAL)
 @interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
@@ -920,14 +931,16 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
 
 static UIWindow* _sapp_window_obj;
 static _sapp_view* _sapp_view_obj;
+static UITextField* _sapp_textfield_obj;
+static _sapp_textfield_dlg* _sapp_textfield_dlg_obj;
 #if defined(SOKOL_METAL)
 static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
-static UIViewController<MTKViewDelegate>* _sapp_mtk_view_ctrl_obj;
+static UIViewController<MTKViewDelegate>* _sapp_view_ctrl_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 #else
 static EAGLContext* _sapp_eagl_ctx_obj;
 static _sapp_glk_view_dlg* _sapp_glk_view_dlg_obj;
-static GLKViewController* _sapp_glk_view_ctrl_obj;
+static GLKViewController* _sapp_view_ctrl_obj;
 #endif
 
 /* iOS entry function */
@@ -955,6 +968,40 @@ _SOKOL_PRIVATE void _sapp_ios_frame(void) {
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     _sapp_frame();
+}
+
+_SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
+    /* if not happened yet, create an invisible text field */
+    if (nil == _sapp_textfield_obj) {
+        _sapp_textfield_dlg_obj = [[_sapp_textfield_dlg alloc] init];
+        _sapp_textfield_obj = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, 100, 50)];
+        _sapp_textfield_obj.keyboardType = UIKeyboardTypeDefault;
+        _sapp_textfield_obj.returnKeyType = UIReturnKeyDefault;
+        _sapp_textfield_obj.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        _sapp_textfield_obj.autocorrectionType = UITextAutocorrectionTypeNo;
+        _sapp_textfield_obj.spellCheckingType = UITextSpellCheckingTypeNo;
+        _sapp_textfield_obj.hidden = YES;
+        _sapp_textfield_obj.text = @"x";
+        _sapp_textfield_obj.delegate = _sapp_textfield_dlg_obj;
+        [_sapp_view_ctrl_obj.view addSubview:_sapp_textfield_obj];
+
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp_textfield_dlg_obj
+            selector:@selector(keyboardWasShown:)
+            name:UIKeyboardDidShowNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp_textfield_dlg_obj
+            selector:@selector(keyboardWillBeHidden:)
+            name:UIKeyboardWillHideNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp_textfield_dlg_obj
+            selector:@selector(keyboardDidChangeFrame:)
+            name:UIKeyboardDidChangeFrameNotification object:nil];
+    }
+    if (shown) {
+        /* setting the text field as first responder brings up the onscreen keyboard */
+        [_sapp_textfield_obj becomeFirstResponder];
+    }
+    else {
+        [_sapp_textfield_obj resignFirstResponder];
+    }
 }
 
 @implementation _sapp_app_delegate
@@ -991,9 +1038,9 @@ _SOKOL_PRIVATE void _sapp_ios_frame(void) {
         [_sapp_view_obj setUserInteractionEnabled:YES];
         [_sapp_view_obj setMultipleTouchEnabled:YES];
         [_sapp_window_obj addSubview:_sapp_view_obj];
-        _sapp_mtk_view_ctrl_obj = [[UIViewController<MTKViewDelegate> alloc] init];
-        [_sapp_mtk_view_ctrl_obj setView:_sapp_view_obj];
-        [_sapp_window_obj setRootViewController:_sapp_mtk_view_ctrl_obj];
+        _sapp_view_ctrl_obj = [[UIViewController<MTKViewDelegate> alloc] init];
+        [_sapp_view_ctrl_obj setView:_sapp_view_obj];
+        [_sapp_window_obj setRootViewController:_sapp_view_ctrl_obj];
     #else
         _sapp_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
         if (_sapp_eagl_ctx_obj == nil) {
@@ -1018,14 +1065,89 @@ _SOKOL_PRIVATE void _sapp_ios_frame(void) {
             [_sapp_view_obj setContentScaleFactor:1.0];
         }
         [_sapp_window_obj addSubview:_sapp_view_obj];
-        _sapp_glk_view_ctrl_obj = [[GLKViewController alloc] init];
-        [_sapp_glk_view_ctrl_obj setView:_sapp_view_obj];
-        [_sapp_glk_view_ctrl_obj setPreferredFramesPerSecond:60];
-        [_sapp_window_obj setRootViewController:_sapp_glk_view_ctrl_obj];
+        _sapp_view_ctrl_obj = [[GLKViewController alloc] init];
+        [_sapp_view_ctrl_obj setView:_sapp_view_obj];
+        [_sapp_view_ctrl_obj setPreferredFramesPerSecond:60];
+        [_sapp_window_obj setRootViewController:_sapp_view_ctrl_obj];
     #endif
     [_sapp_window_obj makeKeyAndVisible];
+
     _sapp.valid = true;
     return YES;
+}
+@end
+
+@implementation _sapp_textfield_dlg
+- (void)keyboardWasShown:(NSNotification*)notif {
+    _sapp.onscreen_keyboard_shown = true;
+    /* query the keyboard's size, and modify the content view's size */
+    if (_sapp.desc.ios_keyboard_resizes_canvas) {
+        NSDictionary* info = [notif userInfo];
+        CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
+        CGRect view_frame = [[UIScreen mainScreen] bounds];
+        view_frame.size.height -= kbd_h;
+        _sapp_view_obj.frame = view_frame;
+    }
+}
+- (void)keyboardWillBeHidden:(NSNotification*)notif {
+    _sapp.onscreen_keyboard_shown = false;
+    if (_sapp.desc.ios_keyboard_resizes_canvas) {
+        _sapp_view_obj.frame = [[UIScreen mainScreen] bounds];
+    }
+}
+- (void)keyboardDidChangeFrame:(NSNotification*)notif {
+    /* this is for the case when the screen rotation changes while the keyboard is open */
+    if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
+        NSDictionary* info = [notif userInfo];
+        CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
+        CGRect view_frame = [[UIScreen mainScreen] bounds];
+        view_frame.size.height -= kbd_h;
+        _sapp_view_obj.frame = view_frame;
+    }
+}
+- (BOOL)textField:(UITextField*)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString*)string {
+    if (_sapp_events_enabled()) {
+        const NSUInteger len = string.length;
+        if (len > 0) {
+            for (NSUInteger i = 0; i < len; i++) {
+                unichar c = [string characterAtIndex:i];
+                if (c >= 32) {
+                    /* ignore surrogats for now */
+                    if ((c < 0xD800) || (c > 0xDFFF)) {
+                        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+                        _sapp.event.char_code = c;
+                        _sapp.desc.event_cb(&_sapp.event);
+                    }
+                }
+                if (c <= 32) {
+                    sapp_keycode k = SAPP_KEYCODE_INVALID;
+                    switch (c) {
+                        case 10: k = SAPP_KEYCODE_ENTER; break;
+                        case 32: k = SAPP_KEYCODE_SPACE; break;
+                        default: break;
+                    }
+                    if (k != SAPP_KEYCODE_INVALID) {
+                        _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+                        _sapp.event.key_code = k;
+                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+                        _sapp.event.key_code = k;
+                        _sapp.desc.event_cb(&_sapp.event);
+                    }
+                }
+            }
+        }
+        else {
+            /* this was a backspace */
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+            _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
+            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+            _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+    }
+    return NO;
 }
 @end
 
@@ -3233,6 +3355,16 @@ float sapp_dpi_scale(void) {
 
 bool sapp_gles2(void) {
     return _sapp.gles2_fallback;
+}
+
+void sapp_show_keyboard(bool shown) {
+    #if TARGET_OS_IPHONE
+    _sapp_ios_show_keyboard(shown);
+    #endif
+}
+
+bool sapp_keyboard_shown(void) {
+    return _sapp.onscreen_keyboard_shown;
 }
 
 const void* sapp_metal_get_device(void) {
