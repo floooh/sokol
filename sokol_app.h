@@ -36,6 +36,19 @@
     GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
     before including the implementation part of sokol_app.h.
 
+    TEMP NOTE DUMP
+    ==============
+    - need callbacks for application suspend/resume, these would
+      also be used for WebGL context lost (?)
+    - need a way to quit application programmatically (sapp_request_quit())
+    - need a way to intercept a pending quit via UI close button (could be
+      done via frame_cb return value, and a sapp_quit_requested() function)
+    - onscreen keyboard support on Android requires Java :(, should we even bother?
+    - sapp_desc needs a bool whether to initialize depth-stencil surface
+    - GL context initialization needs more control (at least what GL version to initialize)
+    - application icon
+    - mouse pointer visibility(?)
+
     FEATURE OVERVIEW
     ================
     sokol_app.h provides an a minimalistic cross-platform API which
