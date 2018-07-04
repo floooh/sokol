@@ -3159,7 +3159,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>
 #include <X11/extensions/Xrandr.h>
-#include <GL/glcorearb.h>
+#include <GL/gl.h>
 #include <dlfcn.h> /* dlopen, dlsym, dlclose */
 
 #define GLX_VENDOR 1
