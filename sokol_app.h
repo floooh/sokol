@@ -3002,12 +3002,18 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
                 (_sapp_wgl_attrib(pf, WGL_STENCIL_BITS_ARB) == 8) &&
                 (_sapp_wgl_attrib(pf, WGL_DOUBLE_BUFFER_ARB) != 0))
             {
-                if ((_sapp.sample_count > 1) && _sapp_arb_multisample) {
-                    if (_sapp_wgl_attrib(pf, WGL_SAMPLES_ARB) != _sapp.sample_count) {
+                if (_sapp_arb_multisample) {
+                    int wgl_samples = _sapp_wgl_attrib(pf, WGL_SAMPLES_ARB);
+                    if (wgl_samples = 0) {
+                        wgl_samples = 1;
+                    }
+                    if (wgl_samples != _sapp.sample_count) {
                         continue;
                     }
                 }
-                return pf;
+                else {
+                    return pf;
+                }
             }
         }
     }
@@ -3404,6 +3410,89 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
     _sapp_glx_ARB_create_context_profile = _sapp_glx_extsupported("GLX_ARB_create_context_profile", exts);
 }
 
+_SOKOL_PRIVATE int _sapp_glx_attrib(GLXFBConfig fbconfig, int attrib) {
+    int value;
+    _sapp_glx_GetFBConfigAttrib(_sapp_x11_display, fbconfig, attrib, &value);
+    return value;
+}
+
+_SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
+    GLXFBConfig result = 0;
+
+    /* HACK: This is a (hopefully temporary) workaround for Chromium
+             (VirtualBox GL) not setting the window bit on any GLXFBConfigs
+    */
+    const char* vendor = _sapp_glx_GetClientString(_sapp_x11_display, GLX_VENDOR);
+    bool trust_window_bit = true;
+    if (vendor && strcmp(vendor, "Chromium") == 0) {
+        trust_window_bit = false;
+    }
+
+    int native_count = 0;
+    GLXFBConfig* native_configs = _sapp_glx_GetFBConfigs(_sapp_x11_display, _sapp_x11_screen, &native_count);
+    if (!native_configs || !native_count) {
+        _sapp_fail("GLX: No GLXFBConfigs returned");
+    }
+
+    result = 0;
+    for (int i = 0;  i < native_count;  i++) {
+        const GLXFBConfig n = native_configs[i];
+
+        /* Only consider RGBA GLXFBConfigs */
+        if (!(_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT)) {
+            continue;
+        }
+
+        /* Only consider window GLXFBConfigs */
+        if (!(_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT)) {
+            if (trust_window_bit) {
+                continue;
+            }
+        }
+
+        if ((8 == _sapp_glx_attrib(n, GLX_RED_SIZE)) &&
+            (8 == _sapp_glx_attrib(n, GLX_GREEN_SIZE)) &&
+            (8 == _sapp_glx_attrib(n, GLX_BLUE_SIZE)) &&
+            (8 == _sapp_glx_attrib(n, GLX_ALPHA_SIZE)) && 
+            (24 == _sapp_glx_attrib(n, GLX_DEPTH_SIZE)) &&
+            (8 == _sapp_glx_attrib(n, GLX_STENCIL_SIZE)) &&
+            (0 != _sapp_glx_attrib(n, GLX_DOUBLEBUFFER)))
+        {
+            if (_sapp_glx_ARB_multisample) {
+                int glx_samples = _sapp_glx_attrib(n, GLX_SAMPLES);
+                if (glx_samples == 0) {
+                    glx_samples = 1;
+                }
+                if (_sapp.sample_count == glx_samples) {
+                    result = n;
+                    break;
+                }
+            }
+            else {
+                result = n;
+                break;
+            }
+        }
+    }
+    XFree(native_configs);
+    return result;
+} 
+
+
+_SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
+    GLXFBConfig native = _sapp_glx_find_fbconfig();
+    if (0 == native) {
+        _sapp_fail("GLX: Failed to find a suitable GLXFBConfig");
+    }
+    XVisualInfo* result = _sapp_glx_GetVisualFromFBConfig(_sapp_x11_display, native);
+    if (!result) {
+        _sapp_fail("GLX: Failed to retrieve Visual for GLXFBConfig");
+    }
+    *visual = result->visual;
+    *depth = result->depth;
+    XFree(result);
+    return true;
+}
 
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
@@ -3424,8 +3513,11 @@ int main(int argc, char* argv[]) {
     // FIXME: query extensions
 
     _sapp_glx_init();
+    Visual* visual = 0;
+    int depth = 0;
+    _sapp_glx_choose_visual(&visual, &depth);
 
-
+    // FIXME: create window
 
     XCloseDisplay(_sapp_x11_display);
     return 0;
