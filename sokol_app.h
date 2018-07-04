@@ -48,9 +48,97 @@
     - platforms: MacOS, iOS, HTML5, Win32 (planned: Linux, Android, RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
-    HOW TO USE
-    ==========
-    FIXME!
+    STEP BY STEP
+    ============
+    --- Add a sokol_main() to your code which returns a sapp_desc structure
+        with initialization parameters and callback function pointers. This
+        function is called very early, usually at the start of the 
+        platform's entry function (e.g. main or WinMain). You should do as
+        little as possible here, since the rest of your code might be called
+        from another thread (this depends on the platform):
+
+            sapp_desc sokol_main(int argc, char* argv[]) {
+                return (sapp_desc) {
+                    .width = 640,
+                    .height = 480,
+                    .init_cb = my_init_func,
+                    .frame_cb = my_frame_func,
+                    .cleanup_cb = my_cleanup_func,
+                    .event_cb = my_event_func,
+                    ...
+                };
+            }
+
+        There are many more setup parameters, but these are the most important.
+        For a complete list search for the sapp_desc structure declaration
+        below.
+
+        DO NOT call any sokol-app function from inside sokol_main(), since
+        sokol-app will not be initialized at this point. 
+
+        The .width and .height parameters are the preferred size of the 3D
+        rendering canvas. The actual size may differ from this depending on
+        platform and other circumstances. Also the canvas size may change at
+        any time (for instance when the user resizes the application window,
+        or rotates the mobile device).
+
+        All provided function callbacks will be called from the same thread,
+        but this may be different from the thread where sokol_main() was called.
+
+        .init_cb (void (init_cb*)(void))
+            This function is called once after the application window,
+            3D rendering context and swap chain have been created. The
+            function takes no arguments and has no return value.
+        .frame_cb (void (frame_cb*)(void))
+            This is the per-frame callback, which is usually called 60
+            times per second. This is where your application would update
+            most of its state and perform all rendering.
+        .cleanup_cb (void (cleanup_cb*)(void))
+            The cleanup callback is called once right before the application
+            quits.
+        .event_cb (void (event-cb*)(const sapp_event* event))
+            The event callback is mainly for input handling, but in the
+            future may also be used to communicate other types of events
+            to the application. Keep the event_cb struct member zero-initialized
+            if your application doesn't require event handling.
+                      
+    --- Implement the initialization callback function, this is called once
+        after the rendering surface, 3D API and swap chain have been
+        initialized by sokol_app. All sokol-app functions can be called
+        from inside the initialization callback, the most useful functions
+        at this point are:
+
+        int sapp_width(void)
+            Returns the current width of the default framebuffer, this may change
+            from one frame to the next.
+        int sapp_height(void)
+            Likewise, returns the current height of the default framebuffer.
+        
+        bool sapp_gles2(void)
+            Returns true if as GLES2 or WebGL2 context had been created (for
+            instance because GLES3/WebGL2 isn't available on the device)
+
+        const void* sapp_metal_get_device(void);
+        const void* sapp_metal_get_renderpass_descriptor(void)
+        const void* sapp_metal_get_drawable(void)
+            If the Metal backend has been selected, these functions return pointers
+            to various Metal API objects required for rendering, otherwise
+            they return a null pointer. Note that the returned pointers
+            to the renderpass-descriptor and drawable may change from one
+            frame to the next!
+
+        const void* sapp_d3d11_get_device(void);
+        const void* sapp_d3d11_get_device_context(void);
+        const void* sapp_d3d11_get_render_target_view(void);
+        const void* sapp_d3d11_get_depth_stencil_view(void);
+            Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
+            return pointers to D3D11 API objects required for rendering, 
+            only if the D3D11 backend has been selected. Otherwise they
+            return a null pointer. Note that the returned pointers to thr
+            render-target-view and depth-stencil-view may change from one
+            frame to the next!
+
+    --- ...
 
     zlib/libpng license
 
