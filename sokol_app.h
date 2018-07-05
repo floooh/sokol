@@ -3226,16 +3226,26 @@ typedef void (*PFNGLXDESTROYWINDOWPROC)(Display*,GLXWindow);
 typedef int (*PFNGLXSWAPINTERVALMESAPROC)(int);
 typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display*,GLXFBConfig,GLXContext,Bool,const int*);
 
+static bool _sapp_x11_quit_requested;
 static Display* _sapp_x11_display;
 static int _sapp_x11_screen;
 static Window _sapp_x11_root;
-static XrmQuark _sapp_x11_context;
+static Colormap _sapp_x11_colormap;
+static Window _sapp_x11_window;
 static float _sapp_x11_dpi;
+static unsigned char _sapp_x11_error_code;
 static void* _sapp_glx_libgl;
 static int _sapp_glx_major;
 static int _sapp_glx_minor;
 static int _sapp_glx_eventbase;
 static int _sapp_glx_errorbase;
+static Atom _sapp_x11_NULL;
+static Atom _sapp_x11_UTF8_STRING;
+static Atom _sapp_x11_ATOM_PAIR;
+static Atom _sapp_x11_WM_PROTOCOLS;
+static Atom _sapp_x11_WM_DELETE_WINDOW;
+static Atom _sapp_x11_NET_WM_NAME;
+static Atom _sapp_x11_NET_WM_ICON_NAME;
 // GLX 1.3 functions
 static PFNGLXGETFBCONFIGSPROC              _sapp_glx_GetFBConfigs;
 static PFNGLXGETFBCONFIGATTRIBPROC         _sapp_glx_GetFBConfigAttrib;
@@ -3257,13 +3267,38 @@ static PFNGLXGETPROCADDRESSPROC            _sapp_glx_GetProcAddressARB;
 static PFNGLXSWAPINTERVALEXTPROC           _sapp_glx_SwapIntervalEXT;
 static PFNGLXSWAPINTERVALMESAPROC          _sapp_glx_SwapIntervalMESA;
 static PFNGLXCREATECONTEXTATTRIBSARBPROC   _sapp_glx_CreateContextAttribsARB;
-static bool        _sapp_glx_EXT_swap_control;
-static bool        _sapp_glx_MESA_swap_control;
-static bool        _sapp_glx_ARB_multisample;
-static bool        _sapp_glx_ARB_framebuffer_sRGB;
-static bool        _sapp_glx_EXT_framebuffer_sRGB;
-static bool        _sapp_glx_ARB_create_context;
-static bool        _sapp_glx_ARB_create_context_profile;
+static bool _sapp_glx_EXT_swap_control;
+static bool _sapp_glx_MESA_swap_control;
+static bool _sapp_glx_ARB_multisample;
+static bool _sapp_glx_ARB_framebuffer_sRGB;
+static bool _sapp_glx_EXT_framebuffer_sRGB;
+static bool _sapp_glx_ARB_create_context;
+static bool _sapp_glx_ARB_create_context_profile;
+
+_SOKOL_PRIVATE int _sapp_x11_error_handler(Display* display, XErrorEvent* event) {
+    _sapp_x11_error_code = event->error_code;
+    return 0;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_grab_error_handler(void) {
+    _sapp_x11_error_code = Success;
+    XSetErrorHandler(_sapp_x11_error_handler);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_release_error_handler(void) {
+    XSync(_sapp_x11_display, False);
+    XSetErrorHandler(NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
+    _sapp_x11_NULL              = XInternAtom(_sapp_x11_display, "NULL", False);
+    _sapp_x11_UTF8_STRING       = XInternAtom(_sapp_x11_display, "UTF8_STRING", False);
+    _sapp_x11_ATOM_PAIR         = XInternAtom(_sapp_x11_display, "ATOM_PAIR", False);
+    _sapp_x11_WM_PROTOCOLS      = XInternAtom(_sapp_x11_display, "WM_PROTOCOLS", False);
+    _sapp_x11_WM_DELETE_WINDOW  = XInternAtom(_sapp_x11_display, "WM_DELETE_WINDOW", False);
+    _sapp_x11_NET_WM_NAME    = XInternAtom(_sapp_x11_display, "_NET_WM_NAME", False);
+    _sapp_x11_NET_WM_ICON_NAME = XInternAtom(_sapp_x11_display, "_NET_WM_ICON_NAME", False);
+}
 
 _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
     /* from GLFW:
@@ -3433,7 +3468,6 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
     if (!native_configs || !native_count) {
         _sapp_fail("GLX: No GLXFBConfigs returned");
     }
-
     result = 0;
     for (int i = 0;  i < native_count;  i++) {
         const GLXFBConfig n = native_configs[i];
@@ -3480,6 +3514,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
 
 
 _SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
+    /* FIXME: use glxChooseVisual instead? */
     GLXFBConfig native = _sapp_glx_find_fbconfig();
     if (0 == native) {
         _sapp_fail("GLX: Failed to find a suitable GLXFBConfig");
@@ -3494,9 +3529,154 @@ _SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
     return true;
 }
 
+_SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
+    Xutf8SetWMProperties(_sapp_x11_display,
+        _sapp_x11_window,
+        _sapp.window_title, _sapp.window_title,
+        NULL, 0, NULL, NULL, NULL);
+    XChangeProperty(_sapp_x11_display, _sapp_x11_window,
+        _sapp_x11_NET_WM_NAME, _sapp_x11_UTF8_STRING, 8,
+        PropModeReplace,
+        (unsigned char*)_sapp.window_title,
+        strlen(_sapp.window_title));
+    XChangeProperty(_sapp_x11_display, _sapp_x11_window,
+        _sapp_x11_NET_WM_ICON_NAME, _sapp_x11_UTF8_STRING, 8,
+        PropModeReplace,
+        (unsigned char*)_sapp.window_title,
+        strlen(_sapp.window_title));
+    XFlush(_sapp_x11_display);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
+    XWindowAttributes attribs;
+    XGetWindowAttributes(_sapp_x11_display, _sapp_x11_window, &attribs);
+    _sapp.window_width = attribs.width;
+    _sapp.window_height = attribs.height;
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.framebuffer_height;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
+    _sapp_x11_colormap = XCreateColormap(_sapp_x11_display, _sapp_x11_root, visual, AllocNone);
+    XSetWindowAttributes wa;
+    memset(&wa, 0, sizeof(wa));
+    const uint32_t wamask = CWBorderPixel | CWColormap | CWEventMask;
+    wa.colormap = _sapp_x11_colormap;
+    wa.border_pixel = 0;
+    wa.event_mask = StructureNotifyMask | KeyPressMask | KeyReleaseMask |
+                    PointerMotionMask | ButtonPressMask | ButtonReleaseMask |
+                    ExposureMask | FocusChangeMask | VisibilityChangeMask |
+                    EnterWindowMask | LeaveWindowMask | PropertyChangeMask;
+    _sapp_x11_grab_error_handler();
+    _sapp_x11_window = XCreateWindow(_sapp_x11_display,
+                                     _sapp_x11_root,
+                                     0, 0,
+                                     _sapp.window_width,
+                                     _sapp.window_height,
+                                     0,     /* border width */
+                                     depth, /* color depth */
+                                     InputOutput,
+                                     visual,
+                                     wamask,
+                                     &wa);
+    _sapp_x11_release_error_handler();
+    if (!_sapp_x11_window) {
+        _sapp_fail("X11: Failed to create window");
+    }
+
+    Atom protocols[] = {
+        _sapp_x11_WM_DELETE_WINDOW
+    };
+    XSetWMProtocols(_sapp_x11_display, _sapp_x11_window, protocols, 1);
+
+    XSizeHints* hints = XAllocSizeHints();
+    hints->flags |= PWinGravity;
+    hints->win_gravity = StaticGravity;
+    XSetWMNormalHints(_sapp_x11_display, _sapp_x11_window, hints);
+    XFree(hints);
+
+    _sapp_x11_update_window_title();
+    _sapp_x11_query_window_size();
+}
+
+_SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
+    if (_sapp_x11_window) {
+        XUnmapWindow(_sapp_x11_display, _sapp_x11_window);
+        XDestroyWindow(_sapp_x11_display, _sapp_x11_window);
+        _sapp_x11_window = 0;
+    }
+    if (_sapp_x11_colormap) {
+        XFreeColormap(_sapp_x11_display, _sapp_x11_colormap);
+        _sapp_x11_colormap = 0;
+    }
+    XFlush(_sapp_x11_display);
+}
+
+_SOKOL_PRIVATE bool _sapp_x11_window_visible(void) {
+    XWindowAttributes wa;
+    XGetWindowAttributes(_sapp_x11_display, _sapp_x11_window, &wa);
+    return wa.map_state == IsViewable;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_show_window(void) {
+    if (!_sapp_x11_window_visible()) {
+        XMapWindow(_sapp_x11_display, _sapp_x11_window);
+        XRaiseWindow(_sapp_x11_display, _sapp_x11_window);
+        XFlush(_sapp_x11_display);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_hide_window(void) {
+    XUnmapWindow(_sapp_x11_display, _sapp_x11_window);
+    XFlush(_sapp_x11_display);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
+    switch (event->type) {
+        case KeyPress:
+            // FIXME!
+            break;
+        case KeyRelease:
+            // FIXME!
+            break;
+        case ButtonPress:
+            // FIXME!
+            break;
+        case ButtonRelease:
+            // FIXME!
+            break;
+        case EnterNotify:
+            // FIXME!
+            break;
+        case LeaveNotify:
+            // FIXME!
+            break;
+        case MotionNotify:
+            // FIXME!
+            break;
+        case ConfigureNotify:
+            _sapp.window_width = event->xconfigure.width;
+            _sapp.window_height = event->xconfigure.height;
+            _sapp.framebuffer_width = _sapp.window_width;
+            _sapp.framebuffer_height = _sapp.window_height;
+            break;
+        case ClientMessage:
+            if (event->xclient.message_type == _sapp_x11_WM_PROTOCOLS) {
+                const Atom protocol = event->xclient.data.l[0];
+                if (protocol == _sapp_x11_WM_DELETE_WINDOW) {
+                    _sapp_x11_quit_requested = true;
+                }
+            }
+            break;
+        case DestroyNotify:
+            break;
+    }
+}
+
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_init_state(&desc, argc, argv);
+    _sapp_x11_quit_requested = false;
 
     XInitThreads();
     XrmInitialize();
@@ -3506,19 +3686,25 @@ int main(int argc, char* argv[]) {
     }
     _sapp_x11_screen = DefaultScreen(_sapp_x11_display);
     _sapp_x11_root = DefaultRootWindow(_sapp_x11_display);
-    _sapp_x11_context = XUniqueContext();
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp_x11_dpi / 96.0f; 
-
-    // FIXME: query extensions
-
+    _sapp_x11_init_extensions();
     _sapp_glx_init();
     Visual* visual = 0;
     int depth = 0;
     _sapp_glx_choose_visual(&visual, &depth);
-
-    // FIXME: create window
-
+    _sapp_x11_create_window(visual, depth);
+    _sapp_x11_show_window();
+    while (!_sapp_x11_quit_requested) {
+        int count = XPending(_sapp_x11_display);
+        while (count--) {
+            XEvent event;
+            XNextEvent(_sapp_x11_display, &event);
+            _sapp_x11_process_event(&event);
+        }
+        XFlush(_sapp_x11_display);
+    }
+    _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
     return 0;
 }
