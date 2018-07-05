@@ -3239,6 +3239,8 @@ static int _sapp_glx_major;
 static int _sapp_glx_minor;
 static int _sapp_glx_eventbase;
 static int _sapp_glx_errorbase;
+static GLXContext _sapp_glx_ctx;
+static GLXWindow _sapp_glx_window;
 static Atom _sapp_x11_NULL;
 static Atom _sapp_x11_UTF8_STRING;
 static Atom _sapp_x11_ATOM_PAIR;
@@ -3512,7 +3514,6 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
     return result;
 } 
 
-
 _SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
     /* FIXME: use glxChooseVisual instead? */
     GLXFBConfig native = _sapp_glx_find_fbconfig();
@@ -3527,6 +3528,61 @@ _SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
     *depth = result->depth;
     XFree(result);
     return true;
+}
+
+_SOKOL_PRIVATE void _sapp_glx_create_context(void) {
+    GLXFBConfig native = _sapp_glx_find_fbconfig();
+    if (0 == native) {
+        _sapp_fail("GLX: Failed to find a suitable GLXFBConfig (2)");
+    }
+    if (!(_sapp_glx_ARB_create_context && _sapp_glx_ARB_create_context_profile)) {
+        _sapp_fail("GLX: ARB_create_context and ARB_create_context_profile required");
+    }
+    _sapp_x11_grab_error_handler();
+    const int attribs[] = {
+        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+        GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+        GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+        0, 0
+    };
+    _sapp_glx_ctx = _sapp_glx_CreateContextAttribsARB(_sapp_x11_display, native, NULL, True, attribs);
+    if (!_sapp_glx_ctx) {
+        _sapp_fail("GLX: failed to create GL context");
+    }
+    _sapp_x11_release_error_handler();
+    _sapp_glx_window = _sapp_glx_CreateWindow(_sapp_x11_display, native, _sapp_x11_window, NULL);
+    if (!_sapp_glx_window) {
+        _sapp_fail("GLX: failed to create window");
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_glx_destroy_context(void) {
+    if (_sapp_glx_window) {
+        _sapp_glx_DestroyWindow(_sapp_x11_display, _sapp_glx_window);
+        _sapp_glx_window = 0;
+    }
+    if (_sapp_glx_ctx) {
+        _sapp_glx_DestroyContext(_sapp_x11_display, _sapp_glx_ctx);
+        _sapp_glx_ctx = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_glx_make_current(void) {
+    _sapp_glx_MakeCurrent(_sapp_x11_display, _sapp_glx_window, _sapp_glx_ctx);
+}
+
+_SOKOL_PRIVATE void _sapp_glx_swap_buffers(void) {
+    _sapp_glx_SwapBuffers(_sapp_x11_display, _sapp_glx_window);
+}
+
+_SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
+    if (_sapp_glx_EXT_swap_control) {
+        _sapp_glx_SwapIntervalEXT(_sapp_x11_display, _sapp_glx_window, interval);
+    }
+    else if (_sapp_glx_MESA_swap_control) {
+        _sapp_glx_SwapIntervalMESA(interval);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
@@ -3694,16 +3750,24 @@ int main(int argc, char* argv[]) {
     int depth = 0;
     _sapp_glx_choose_visual(&visual, &depth);
     _sapp_x11_create_window(visual, depth);
+    _sapp_glx_create_context();
+    _sapp.valid = true;
+    _sapp_glx_swapinterval(1);
     _sapp_x11_show_window();
+    XFlush(_sapp_x11_display);
     while (!_sapp_x11_quit_requested) {
+        _sapp_glx_make_current();
         int count = XPending(_sapp_x11_display);
         while (count--) {
             XEvent event;
             XNextEvent(_sapp_x11_display, &event);
             _sapp_x11_process_event(&event);
         }
+        _sapp_frame();
+        _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
     }
+    _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
     return 0;
