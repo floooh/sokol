@@ -3712,6 +3712,7 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
 }
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
+    sapp_mousebutton btn = SAPP_MOUSEBUTTON_INVALID;
     switch (event->type) {
         case KeyPress:
             // FIXME!
@@ -3720,10 +3721,24 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             // FIXME!
             break;
         case ButtonPress:
-            //printf("FIXME: Left Mouse Button!\n");
+            switch (event->xbutton.button) {
+                case Button1: btn = SAPP_MOUSEBUTTON_LEFT; break;
+                case Button2: btn = SAPP_MOUSEBUTTON_MIDDLE; break;
+                case Button3: btn = SAPP_MOUSEBUTTON_RIGHT; break;
+            }
+            if (btn != SAPP_MOUSEBUTTON_INVALID) {
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, _sapp_x11_mod(event->xbutton.state));
+            }
             break;
         case ButtonRelease:
-            //printf("FIXME: Right Mouse Button!\n");
+            switch (event->xbutton.button) {
+                case Button1: btn = SAPP_MOUSEBUTTON_LEFT; break;
+                case Button2: btn = SAPP_MOUSEBUTTON_MIDDLE; break;
+                case Button3: btn = SAPP_MOUSEBUTTON_RIGHT; break;
+            }
+            if (btn != SAPP_MOUSEBUTTON_INVALID) {
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, _sapp_x11_mod(event->xbutton.state));
+            }
             break;
         case EnterNotify:
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state)); 
