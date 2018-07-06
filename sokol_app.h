@@ -756,9 +756,9 @@ int main(int argc, char* argv[]) {
     _sapp_init_state(&desc, argc, argv);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
-    [NSApp setDelegate:_sapp_app_dlg_obj];
+    NSApp.delegate = _sapp_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     return 0;
@@ -805,32 +805,32 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
-    [_sapp_window_obj setTitle:[NSString stringWithUTF8String:_sapp.window_title]];
-    [_sapp_window_obj setAcceptsMouseMovedEvents:YES];
-    [_sapp_window_obj setRestorable:YES];
+    _sapp_window_obj.title = [NSString stringWithUTF8String:_sapp.window_title];
+    _sapp_window_obj.acceptsMouseMovedEvents = YES;
+    _sapp_window_obj.restorable = YES;
     _sapp_win_dlg_obj = [[_sapp_window_delegate alloc] init];
-    [_sapp_window_obj setDelegate:_sapp_win_dlg_obj];
+    _sapp_window_obj.delegate = _sapp_win_dlg_obj;
     _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
     _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
     _sapp_view_obj = [[_sapp_view alloc] init];
-    [_sapp_view_obj setPreferredFramesPerSecond:60];
-    [_sapp_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
-    [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
-    [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
-    [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-    [_sapp_view_obj setSampleCount:_sapp.sample_count];
-    [_sapp_window_obj setContentView:_sapp_view_obj];
+    _sapp_view_obj.preferredFramesPerSecond = 60;
+    _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
+    _sapp_view_obj.device = _sapp_mtl_device_obj;
+    _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    _sapp_view_obj.sampleCount = _sapp.sample_count;
+    _sapp_window_obj.contentView = _sapp_view_obj;
     [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
     if (!_sapp.desc.high_dpi) {
         CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-        [_sapp_view_obj setDrawableSize:drawable_size];
+        _sapp_view_obj.drawableSize = drawable_size;
     }
     CGSize drawable_size = _sapp_view_obj.drawableSize;
     _sapp.framebuffer_width = drawable_size.width;
     _sapp.framebuffer_height = drawable_size.height;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
-    [[_sapp_view_obj layer] setMagnificationFilter:kCAFilterNearest];
+    _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
     if (_sapp.desc.fullscreen) {
         [_sapp_window_obj toggleFullScreen:self];
     }
