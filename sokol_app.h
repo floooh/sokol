@@ -3683,6 +3683,34 @@ _SOKOL_PRIVATE void _sapp_x11_hide_window(void) {
     XFlush(_sapp_x11_display);
 }
 
+_SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
+    uint32_t mods = 0;
+    if (x11_mods & ShiftMask) {
+        mods |= SAPP_MODIFIER_SHIFT;
+    }
+    if (x11_mods & ControlMask) {
+        mods |= SAPP_MODIFIER_CTRL;
+    }
+    if (x11_mods & Mod1Mask) {
+        mods |= SAPP_MODIFIER_ALT;
+    }
+    if (x11_mods & Mod4Mask) {
+        mods |= SAPP_MODIFIER_SUPER;
+    }
+    return mods;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mods) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.mouse_button = btn;
+        _sapp.event.modifiers = mods;
+        _sapp.event.mouse_x = _sapp.mouse_x;
+        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
         case KeyPress:
@@ -3692,19 +3720,21 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             // FIXME!
             break;
         case ButtonPress:
-            // FIXME!
+            //printf("FIXME: Left Mouse Button!\n");
             break;
         case ButtonRelease:
-            // FIXME!
+            //printf("FIXME: Right Mouse Button!\n");
             break;
         case EnterNotify:
-            // FIXME!
+            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state)); 
             break;
         case LeaveNotify:
-            // FIXME!
+            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
             break;
         case MotionNotify:
-            // FIXME!
+            _sapp.mouse_x = event->xmotion.x;
+            _sapp.mouse_y = event->xmotion.y;
+            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
             break;
         case ConfigureNotify:
             _sapp.window_width = event->xconfigure.width;
