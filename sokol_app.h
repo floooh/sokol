@@ -782,7 +782,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     if (_sapp.desc.fullscreen) {
-        NSRect screen_rect = [[NSScreen mainScreen] frame];
+        NSRect screen_rect = NSScreen.mainScreen.frame;
         _sapp.window_width = screen_rect.size.width;
         _sapp.window_height = screen_rect.size.height;
         if (_sapp.desc.high_dpi) {
@@ -1055,7 +1055,7 @@ int main(int argc, char** argv) {
 }
 
 _SOKOL_PRIVATE void _sapp_ios_frame(void) {
-    CGRect screen_rect = [[UIScreen mainScreen] bounds];
+    CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.window_width = (int) screen_rect.size.width;
     _sapp.window_height = (int) screen_rect.size.height;
     #if defined(SOKOL_METAL)
@@ -1107,7 +1107,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 @implementation _sapp_app_delegate
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
-    CGRect screen_rect = [[UIScreen mainScreen] bounds];
+    CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp_window_obj = [[UIWindow alloc] initWithFrame:screen_rect];
     _sapp.window_width = screen_rect.size.width;
     _sapp.window_height = screen_rect.size.height;
@@ -1124,24 +1124,24 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
         _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
         _sapp_view_obj = [[_sapp_view alloc] init];
-        [_sapp_view_obj setPreferredFramesPerSecond:60];
-        [_sapp_view_obj setDelegate:_sapp_mtk_view_dlg_obj];
-        [_sapp_view_obj setDevice:_sapp_mtl_device_obj];
-        [_sapp_view_obj setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
-        [_sapp_view_obj setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-        [_sapp_view_obj setSampleCount:_sapp.sample_count];
+        _sapp_view_obj.preferredFramesPerSecond = 60;
+        _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
+        _sapp_view_obj.device = _sapp_mtl_device_obj;
+        _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        _sapp_view_obj.sampleCount = _sapp.sample_count;
         if (_sapp.desc.high_dpi) {
-            [_sapp_view_obj setContentScaleFactor:2.0];
+            _sapp_view_obj.contentScaleFactor = 2.0;
         }
         else {
-            [_sapp_view_obj setContentScaleFactor:1.0];
+            _sapp_view_obj.contentScaleFactor = 1.0;
         }
-        [_sapp_view_obj setUserInteractionEnabled:YES];
-        [_sapp_view_obj setMultipleTouchEnabled:YES];
+        _sapp_view_obj.userInteractionEnabled = YES;
+        _sapp_view_obj.multipleTouchEnabled = YES;
         [_sapp_window_obj addSubview:_sapp_view_obj];
         _sapp_view_ctrl_obj = [[UIViewController<MTKViewDelegate> alloc] init];
-        [_sapp_view_ctrl_obj setView:_sapp_view_obj];
-        [_sapp_window_obj setRootViewController:_sapp_view_ctrl_obj];
+        _sapp_view_ctrl_obj.view = _sapp_view_obj;
+        _sapp_window_obj.rootViewController = _sapp_view_ctrl_obj;
     #else
         _sapp_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
         if (_sapp_eagl_ctx_obj == nil) {
@@ -1150,26 +1150,26 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         _sapp_glk_view_dlg_obj = [[_sapp_glk_view_dlg alloc] init];
         _sapp_view_obj = [[_sapp_view alloc] initWithFrame:screen_rect];
-        [_sapp_view_obj setDrawableColorFormat:GLKViewDrawableColorFormatRGBA8888];
-        [_sapp_view_obj setDrawableDepthFormat:GLKViewDrawableDepthFormat24];
-        [_sapp_view_obj setDrawableStencilFormat:GLKViewDrawableStencilFormatNone];
-        [_sapp_view_obj setDrawableMultisample:GLKViewDrawableMultisampleNone]; /* FIXME */
-        [_sapp_view_obj setContext:_sapp_eagl_ctx_obj];
-        [_sapp_view_obj setDelegate:_sapp_glk_view_dlg_obj];
-        [_sapp_view_obj setEnableSetNeedsDisplay:NO];
-        [_sapp_view_obj setUserInteractionEnabled:YES];
-        [_sapp_view_obj setMultipleTouchEnabled:YES];
+        _sapp_view_obj.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
+        _sapp_view_obj.drawableDepthFormat = GLKViewDrawableDepthFormat24;
+        _sapp_view_obj.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
+        _sapp_view_obj.drawableMultisample = GLKViewDrawableMultisampleNone; /* FIXME */
+        _sapp_view_obj.context = _sapp_eagl_ctx_obj;
+        _sapp_view_obj.delegate = _sapp_glk_view_dlg_obj;
+        _sapp_view_obj.enableSetNeedsDisplay = NO;
+        _sapp_view_obj.userInteractionEnabled = YES;
+        _sapp_view_obj.multipleTouchEnabled = YES;
         if (_sapp.desc.high_dpi) {
-            [_sapp_view_obj setContentScaleFactor:2.0];
+            _sapp_view_obj.contentScaleFactor = 2.0;
         }
         else {
-            [_sapp_view_obj setContentScaleFactor:1.0];
+            _sapp_view_obj.contentScaleFactor = 1.0;
         }
         [_sapp_window_obj addSubview:_sapp_view_obj];
         _sapp_view_ctrl_obj = [[GLKViewController alloc] init];
-        [_sapp_view_ctrl_obj setView:_sapp_view_obj];
-        [_sapp_view_ctrl_obj setPreferredFramesPerSecond:60];
-        [_sapp_window_obj setRootViewController:_sapp_view_ctrl_obj];
+        _sapp_view_ctrl_obj.view = _sapp_view_obj;
+        _sapp_view_ctrl_obj.preferredFramesPerSecond = 60;
+        _sapp_window_obj.rootViewController = _sapp_view_ctrl_obj;
     #endif
     [_sapp_window_obj makeKeyAndVisible];
 
@@ -1183,9 +1183,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     _sapp.onscreen_keyboard_shown = true;
     /* query the keyboard's size, and modify the content view's size */
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
-        NSDictionary* info = [notif userInfo];
+        NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = [[UIScreen mainScreen] bounds];
+        CGRect view_frame = UIScreen.mainScreen.bounds;
         view_frame.size.height -= kbd_h;
         _sapp_view_obj.frame = view_frame;
     }
@@ -1193,15 +1193,15 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
-        _sapp_view_obj.frame = [[UIScreen mainScreen] bounds];
+        _sapp_view_obj.frame = UIScreen.mainScreen.bounds;
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
     /* this is for the case when the screen rotation changes while the keyboard is open */
     if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios_keyboard_resizes_canvas) {
-        NSDictionary* info = [notif userInfo];
+        NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = [[UIScreen mainScreen] bounds];
+        CGRect view_frame = UIScreen.mainScreen.bounds;
         view_frame.size.height -= kbd_h;
         _sapp_view_obj.frame = view_frame;
     }
@@ -1277,7 +1277,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        NSEnumerator* enumerator = [[event allTouches] objectEnumerator];
+        NSEnumerator* enumerator = event.allTouches.objectEnumerator;
         UITouch* ios_touch;
         while ((ios_touch = [enumerator nextObject])) {
             if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
