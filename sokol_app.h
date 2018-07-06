@@ -3494,15 +3494,11 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
             (8 == _sapp_glx_attrib(n, GLX_STENCIL_SIZE)) &&
             (0 != _sapp_glx_attrib(n, GLX_DOUBLEBUFFER)))
         {
-            if (_sapp_glx_ARB_multisample) {
-                int glx_samples = _sapp_glx_attrib(n, GLX_SAMPLES);
-                if (glx_samples == 0) {
-                    glx_samples = 1;
-                }
-                if (_sapp.sample_count == glx_samples) {
-                    result = n;
-                    break;
-                }
+            if (_sapp_glx_ARB_multisample && (_sapp.sample_count > 1) && 
+                (_sapp_glx_attrib(n, GLX_SAMPLES) == _sapp.sample_count)) 
+            {
+                result = n;
+                break;
             }
             else {
                 result = n;
