@@ -3241,9 +3241,7 @@ static int _sapp_glx_eventbase;
 static int _sapp_glx_errorbase;
 static GLXContext _sapp_glx_ctx;
 static GLXWindow _sapp_glx_window;
-static Atom _sapp_x11_NULL;
 static Atom _sapp_x11_UTF8_STRING;
-static Atom _sapp_x11_ATOM_PAIR;
 static Atom _sapp_x11_WM_PROTOCOLS;
 static Atom _sapp_x11_WM_DELETE_WINDOW;
 static Atom _sapp_x11_NET_WM_NAME;
@@ -4128,9 +4126,7 @@ _SOKOL_PRIVATE void _sapp_x11_release_error_handler(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
-    _sapp_x11_NULL              = XInternAtom(_sapp_x11_display, "NULL", False);
     _sapp_x11_UTF8_STRING       = XInternAtom(_sapp_x11_display, "UTF8_STRING", False);
-    _sapp_x11_ATOM_PAIR         = XInternAtom(_sapp_x11_display, "ATOM_PAIR", False);
     _sapp_x11_WM_PROTOCOLS      = XInternAtom(_sapp_x11_display, "WM_PROTOCOLS", False);
     _sapp_x11_WM_DELETE_WINDOW  = XInternAtom(_sapp_x11_display, "WM_DELETE_WINDOW", False);
     _sapp_x11_NET_WM_NAME    = XInternAtom(_sapp_x11_display, "_NET_WM_NAME", False);
