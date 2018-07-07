@@ -3003,12 +3003,12 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
                 (_sapp_wgl_attrib(pf, WGL_DOUBLE_BUFFER_ARB) != 0))
             {
                 if (_sapp_arb_multisample) {
-                    int wgl_samples = _sapp_wgl_attrib(pf, WGL_SAMPLES_ARB);
-                    if (wgl_samples = 0) {
-                        wgl_samples = 1;
+                    int wgl_sample_count = _sapp_wgl_attrib(pf, WGL_SAMPLES_ARB);
+                    if (wgl_sample_count == 0) {
+                        wgl_sample_count = 1;
                     }
-                    if (wgl_samples != _sapp.sample_count) {
-                        continue;
+                    if (wgl_sample_count == _sapp.sample_count) {
+                        return pf;
                     }
                 }
                 else {
