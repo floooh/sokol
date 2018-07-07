@@ -468,6 +468,15 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
+#if !defined(SOKOL_CALLOC) && !defined(SOKOL_FREE)
+    #include <stdlib.h>
+#endif
+#if !defined(SOKOL_CALLOC)
+    #define SOKOL_CALLOC(n,s) calloc(n,s)
+#endif
+#if !defined(SOKOL_FREE)
+    #define SOKOL_FREE(p) free(p)
+#endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG 
         #include <stdio.h>
@@ -1699,7 +1708,117 @@ int main(int argc, char* argv[]) {
 }
 #endif  /* __EMSCRIPTEN__ */
 
-/*== WINDOW ==================================================================*/
+/*== MISC GL SUPPORT FUNCTIONS ================================================*/
+#if defined(SOKOL_GLCORE33)
+typedef struct {
+    int         red_bits;
+    int         green_bits;
+    int         blue_bits;
+    int         alpha_bits;
+    int         depth_bits;
+    int         stencil_bits;
+    int         samples;
+    bool        doublebuffer;
+    uintptr_t   handle;
+} _sapp_gl_fbconfig;
+
+_SOKOL_PRIVATE void _sapp_gl_init_fbconfig(_sapp_gl_fbconfig* fbconfig) {
+    memset(fbconfig, 0, sizeof(_sapp_gl_fbconfig));
+    /* -1 means "don't care" */
+    fbconfig->red_bits = -1;
+    fbconfig->green_bits = -1;
+    fbconfig->blue_bits = -1;
+    fbconfig->alpha_bits = -1;
+    fbconfig->depth_bits = -1;
+    fbconfig->stencil_bits = -1;
+    fbconfig->samples = -1;
+}
+
+_SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_fbconfig* desired, const _sapp_gl_fbconfig* alternatives, unsigned int count) {
+    unsigned int i;
+    unsigned int missing, least_missing = 1000000;
+    unsigned int color_diff, least_color_diff = 10000000;
+    unsigned int extra_diff, least_extra_diff = 10000000;
+    const _sapp_gl_fbconfig* current;
+    const _sapp_gl_fbconfig* closest = NULL;
+    for (i = 0;  i < count;  i++) {
+        current = alternatives + i;
+        if (desired->doublebuffer != current->doublebuffer) {
+            continue;
+        }
+        missing = 0;
+        if (desired->alpha_bits > 0 && current->alpha_bits == 0) {
+            missing++;
+        }
+        if (desired->depth_bits > 0 && current->depth_bits == 0) {
+            missing++;
+        }
+        if (desired->stencil_bits > 0 && current->stencil_bits == 0) {
+            missing++;
+        }
+        if (desired->samples > 0 && current->samples == 0) {
+            /* Technically, several multisampling buffers could be
+                involved, but that's a lower level implementation detail and
+                not important to us here, so we count them as one
+            */
+            missing++;
+        }
+
+        /* These polynomials make many small channel size differences matter
+            less than one large channel size difference
+            Calculate color channel size difference value
+        */
+        color_diff = 0;
+        if (desired->red_bits != -1) {
+            color_diff += (desired->red_bits - current->red_bits) * (desired->red_bits - current->red_bits);
+        }
+        if (desired->green_bits != -1) {
+            color_diff += (desired->green_bits - current->green_bits) * (desired->green_bits - current->green_bits);
+        }
+        if (desired->blue_bits != -1) {
+            color_diff += (desired->blue_bits - current->blue_bits) * (desired->blue_bits - current->blue_bits);
+        }
+
+        /* Calculate non-color channel size difference value */
+        extra_diff = 0;
+        if (desired->alpha_bits != -1) {
+            extra_diff += (desired->alpha_bits - current->alpha_bits) * (desired->alpha_bits - current->alpha_bits);
+        }
+        if (desired->depth_bits != -1) {
+            extra_diff += (desired->depth_bits - current->depth_bits) * (desired->depth_bits - current->depth_bits);
+        }
+        if (desired->stencil_bits != -1) {
+            extra_diff += (desired->stencil_bits - current->stencil_bits) * (desired->stencil_bits - current->stencil_bits);
+        }
+        if (desired->samples != -1) {
+            extra_diff += (desired->samples - current->samples) * (desired->samples - current->samples);
+        }
+
+        /* Figure out if the current one is better than the best one found so far
+            Least number of missing buffers is the most important heuristic,
+            then color buffer size match and lastly size match for other buffers
+        */
+        if (missing < least_missing) {
+            closest = current;
+        }
+        else if (missing == least_missing) {
+            if ((color_diff < least_color_diff) ||
+                (color_diff == least_color_diff && extra_diff < least_extra_diff))
+            {
+                closest = current;
+            }
+        }
+        if (current == closest) {
+            least_missing = missing;
+            least_color_diff = color_diff;
+            least_extra_diff = extra_diff;
+        }
+    }
+    return closest;
+}
+#endif
+
+/*== WINDOWS ==================================================================*/
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -4284,66 +4403,81 @@ _SOKOL_PRIVATE int _sapp_glx_attrib(GLXFBConfig fbconfig, int attrib) {
     return value;
 }
 
-_SOKOL_PRIVATE GLXFBConfig _sapp_glx_find_fbconfig() {
-    GLXFBConfig result = 0;
+_SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
+    GLXFBConfig* native_configs;
+    _sapp_gl_fbconfig* usable_configs;
+    const _sapp_gl_fbconfig* closest;
+    int i, native_count, usable_count;
+    const char* vendor;
+    bool trust_window_bit = true;
 
     /* HACK: This is a (hopefully temporary) workaround for Chromium
-             (VirtualBox GL) not setting the window bit on any GLXFBConfigs
+           (VirtualBox GL) not setting the window bit on any GLXFBConfigs
     */
-    const char* vendor = _sapp_glx_GetClientString(_sapp_x11_display, GLX_VENDOR);
-    bool trust_window_bit = true;
+    vendor = _sapp_glx_GetClientString(_sapp_x11_display, GLX_VENDOR);
     if (vendor && strcmp(vendor, "Chromium") == 0) {
         trust_window_bit = false;
     }
 
-    int native_count = 0;
-    GLXFBConfig* native_configs = _sapp_glx_GetFBConfigs(_sapp_x11_display, _sapp_x11_screen, &native_count);
+    native_configs = _sapp_glx_GetFBConfigs(_sapp_x11_display, _sapp_x11_screen, &native_count);
     if (!native_configs || !native_count) {
         _sapp_fail("GLX: No GLXFBConfigs returned");
     }
-    result = 0;
-    for (int i = 0;  i < native_count;  i++) {
+
+    usable_configs = SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    usable_count = 0;
+    for (i = 0;  i < native_count;  i++) {
         const GLXFBConfig n = native_configs[i];
+        _sapp_gl_fbconfig* u = usable_configs + usable_count;
+        _sapp_gl_init_fbconfig(u);
 
         /* Only consider RGBA GLXFBConfigs */
-        if (!(_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT)) {
+        if (!_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT) {
             continue;
         }
-
         /* Only consider window GLXFBConfigs */
-        if (!(_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT)) {
+        if (!_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT) {
             if (trust_window_bit) {
                 continue;
             }
         }
-
-        if ((8 == _sapp_glx_attrib(n, GLX_RED_SIZE)) &&
-            (8 == _sapp_glx_attrib(n, GLX_GREEN_SIZE)) &&
-            (8 == _sapp_glx_attrib(n, GLX_BLUE_SIZE)) &&
-            (8 == _sapp_glx_attrib(n, GLX_ALPHA_SIZE)) && 
-            (24 == _sapp_glx_attrib(n, GLX_DEPTH_SIZE)) &&
-            (8 == _sapp_glx_attrib(n, GLX_STENCIL_SIZE)) &&
-            (0 != _sapp_glx_attrib(n, GLX_DOUBLEBUFFER)))
-        {
-            if (_sapp_glx_ARB_multisample && (_sapp.sample_count > 1) && 
-                (_sapp_glx_attrib(n, GLX_SAMPLES) == _sapp.sample_count)) 
-            {
-                result = n;
-                break;
-            }
-            else {
-                result = n;
-                break;
-            }
+        u->red_bits = _sapp_glx_attrib(n, GLX_RED_SIZE);
+        u->green_bits = _sapp_glx_attrib(n, GLX_GREEN_SIZE);
+        u->blue_bits = _sapp_glx_attrib(n, GLX_BLUE_SIZE);
+        u->alpha_bits = _sapp_glx_attrib(n, GLX_ALPHA_SIZE);
+        u->depth_bits = _sapp_glx_attrib(n, GLX_DEPTH_SIZE);
+        u->stencil_bits = _sapp_glx_attrib(n, GLX_STENCIL_SIZE);
+        if (_sapp_glx_attrib(n, GLX_DOUBLEBUFFER)) {
+            u->doublebuffer = true;
         }
+        if (_sapp_glx_ARB_multisample) {
+            u->samples = _sapp_glx_attrib(n, GLX_SAMPLES);
+        }
+        u->handle = (uintptr_t) n;
+        usable_count++;
+    }
+    _sapp_gl_fbconfig desired;
+    _sapp_gl_init_fbconfig(&desired);
+    desired.red_bits = 8;
+    desired.green_bits = 8;
+    desired.blue_bits = 8;
+    desired.alpha_bits = 8;
+    desired.depth_bits = 24;
+    desired.stencil_bits = 8;
+    desired.doublebuffer = true;
+    desired.samples = _sapp.sample_count > 1 ? _sapp.sample_count : 0;
+    closest = _sapp_gl_choose_fbconfig(&desired, usable_configs, usable_count);
+    GLXFBConfig result = 0;
+    if (closest) {
+        result = (GLXFBConfig) closest->handle;
     }
     XFree(native_configs);
+    SOKOL_FREE(usable_configs);
     return result;
-} 
+}
 
-_SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
-    /* FIXME: use glxChooseVisual instead? */
-    GLXFBConfig native = _sapp_glx_find_fbconfig();
+_SOKOL_PRIVATE void _sapp_glx_choose_visual(Visual** visual, int* depth) {
+    GLXFBConfig native = _sapp_glx_choosefbconfig();
     if (0 == native) {
         _sapp_fail("GLX: Failed to find a suitable GLXFBConfig");
     }
@@ -4354,12 +4488,11 @@ _SOKOL_PRIVATE bool _sapp_glx_choose_visual(Visual** visual, int* depth) {
     *visual = result->visual;
     *depth = result->depth;
     XFree(result);
-    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
-    GLXFBConfig native = _sapp_glx_find_fbconfig();
-    if (0 == native) {
+    GLXFBConfig native = _sapp_glx_choosefbconfig();
+    if (0 == native){
         _sapp_fail("GLX: Failed to find a suitable GLXFBConfig (2)");
     }
     if (!(_sapp_glx_ARB_create_context && _sapp_glx_ARB_create_context_profile)) {
