@@ -3100,43 +3100,57 @@ _SOKOL_PRIVATE int _sapp_wgl_attrib(int pixel_format, int attrib) {
 _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     SOKOL_ASSERT(_sapp_win32_dc);
     SOKOL_ASSERT(_sapp_arb_pixel_format);
+    const _sapp_gl_fbconfig* closest;
+
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
+    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    int usable_count = 0;
     for (int i = 0; i < native_count; i++) {
-        const int pf = i + 1;
-        if (_sapp_arb_pixel_format) {
-            if (!_sapp_wgl_attrib(pf, WGL_SUPPORT_OPENGL_ARB) || !_sapp_wgl_attrib(pf, WGL_DRAW_TO_WINDOW_ARB)) {
-                continue;
-            }
-            if (_sapp_wgl_attrib(pf, WGL_PIXEL_TYPE_ARB) != WGL_TYPE_RGBA_ARB) {
-                continue;
-            }
-            if (_sapp_wgl_attrib(pf, WGL_ACCELERATION_ARB) == WGL_NO_ACCELERATION_ARB) {
-                continue;
-            }
-            if ((_sapp_wgl_attrib(pf, WGL_RED_BITS_ARB) == 8) &&
-                (_sapp_wgl_attrib(pf, WGL_GREEN_BITS_ARB) == 8) &&
-                (_sapp_wgl_attrib(pf, WGL_BLUE_BITS_ARB) == 8) &&
-                (_sapp_wgl_attrib(pf, WGL_ALPHA_BITS_ARB) == 8) &&
-                (_sapp_wgl_attrib(pf, WGL_DEPTH_BITS_ARB) == 24) &&
-                (_sapp_wgl_attrib(pf, WGL_STENCIL_BITS_ARB) == 8) &&
-                (_sapp_wgl_attrib(pf, WGL_DOUBLE_BUFFER_ARB) != 0))
-            {
-                if (_sapp_arb_multisample) {
-                    int wgl_sample_count = _sapp_wgl_attrib(pf, WGL_SAMPLES_ARB);
-                    if (wgl_sample_count == 0) {
-                        wgl_sample_count = 1;
-                    }
-                    if (wgl_sample_count == _sapp.sample_count) {
-                        return pf;
-                    }
-                }
-                else {
-                    return pf;
-                }
-            }
+        const int n = i + 1;
+        _sapp_gl_fbconfig* u = usable_configs + usable_count;
+        _sapp_gl_init_fbconfig(u);
+        if (!_sapp_wgl_attrib(n, WGL_SUPPORT_OPENGL_ARB) || !_sapp_wgl_attrib(n, WGL_DRAW_TO_WINDOW_ARB)) {
+            continue;
         }
+        if (_sapp_wgl_attrib(n, WGL_PIXEL_TYPE_ARB) != WGL_TYPE_RGBA_ARB) {
+            continue;
+        }
+        if (_sapp_wgl_attrib(n, WGL_ACCELERATION_ARB) == WGL_NO_ACCELERATION_ARB) {
+            continue;
+        }
+        u->red_bits     = _sapp_wgl_attrib(n, WGL_RED_BITS_ARB);
+        u->green_bits   = _sapp_wgl_attrib(n, WGL_GREEN_BITS_ARB);
+        u->blue_bits    = _sapp_wgl_attrib(n, WGL_BLUE_BITS_ARB);
+        u->alpha_bits   = _sapp_wgl_attrib(n, WGL_ALPHA_BITS_ARB);
+        u->depth_bits   = _sapp_wgl_attrib(n, WGL_DEPTH_BITS_ARB);
+        u->stencil_bits = _sapp_wgl_attrib(n, WGL_STENCIL_BITS_ARB);
+        if (_sapp_wgl_attrib(n, WGL_DOUBLE_BUFFER_ARB)) {
+            u->doublebuffer = true;
+        }
+        if (_sapp_arb_multisample) {
+            u->samples = _sapp_wgl_attrib(n, WGL_SAMPLES_ARB);
+        }
+        u->handle = n;
+        usable_count++;
     }
-    return 0;
+    SOKOL_ASSERT(usable_count > 0);
+    _sapp_gl_fbconfig desired;
+    _sapp_gl_init_fbconfig(&desired);
+    desired.red_bits = 8;
+    desired.green_bits = 8;
+    desired.blue_bits = 8;
+    desired.alpha_bits = 8;
+    desired.depth_bits = 24;
+    desired.stencil_bits = 8;
+    desired.doublebuffer = true;
+    desired.samples = _sapp.sample_count > 1 ? _sapp.sample_count : 0;
+    closest = _sapp_gl_choose_fbconfig(&desired, usable_configs, usable_count);
+    int pixel_format = 0;
+    if (closest) {
+        pixel_format = (int) closest->handle;
+    }
+    SOKOL_FREE(usable_configs);
+    return pixel_format;
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
@@ -4424,7 +4438,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_fail("GLX: No GLXFBConfigs returned");
     }
 
-    usable_configs = SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
     usable_count = 0;
     for (i = 0;  i < native_count;  i++) {
         const GLXFBConfig n = native_configs[i];
