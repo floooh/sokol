@@ -133,13 +133,24 @@ void stm_setup(void) {
     #endif
 }
 
+/* prevent 64-bit overflow with QPC/QPF
+    see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
+*/
+#if defined(_WIN32)
+static int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
+    int64_t q = value / denom;
+    int64_t r = value % denom;
+    return q * numer + r * numer / denom;
+}
+#endif
+
 uint64_t stm_now(void) {
     SOKOL_ASSERT(_stm_initialized);
     uint64_t now;
     #if defined(_WIN32)
         LARGE_INTEGER qpc_t;
         QueryPerformanceCounter(&qpc_t);
-        now = ((qpc_t.QuadPart - _stm_win_start.QuadPart) * 1000000000) / _stm_win_freq.QuadPart;
+        now = int64_muldiv(qpc_t.QuadPart - _stm_win_start.QuadPart, 1000000000, _stm_win_freq.QuadPart);
     #elif defined(__APPLE__) && defined(__MACH__)
         now = ((mach_absolute_time()*_stm_osx_timebase.numer)/_stm_osx_timebase.denom) - _stm_osx_start;
     #else
