@@ -4555,6 +4555,16 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
     }
 }
 
+_SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp.event.modifiers = mods;
+        _sapp.event.scroll_x = x;
+        _sapp.event.scroll_y = y;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, uint32_t mods) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -4773,8 +4783,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case ButtonPress:
             {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
+                const uint32_t mods = _sapp_x11_mod(event->xbutton.state);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
-                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, _sapp_x11_mod(event->xbutton.state));
+                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
+                }
+                else {
+                    /* might be a scroll event */
+                    switch (event->xbutton.button) {
+                        case 4: _sapp_x11_scroll_event(0.0f, 1.0f, mods); break;
+                        case 5: _sapp_x11_scroll_event(0.0f, -1.0f, mods); break;
+                        case 6: _sapp_x11_scroll_event(1.0f, 0.0f, mods); break;
+                        case 7: _sapp_x11_scroll_event(-1.0f, 0.0f, mods); break;
+                    }
                 }
             }
             break;
