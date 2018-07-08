@@ -61,6 +61,31 @@
     - platforms: MacOS, iOS, HTML5, Win32 (planned: Linux, Android, RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
+    FEATURE/PLATFORM MATRIX
+    =======================
+                    | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
+    ----------------+---------+-------+-------+-------+---------+-------+-------
+    gl 3.x          | YES     | ---   | YES   | ---   | ---     | ---   | ---
+    gles2/webgl     | ---     | ---   | ---   | YES   | TODO    | TODO  | YES
+    gles3/webgl2    | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    metal           | ---     | YES   | ---   | YES   | ---     | ---   | ---
+    d3d11           | YES     | ---   | ---   | ---   | ---     | ---   | ---
+    key up/down     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    char input      | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    IME             | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
+    mouse buttons   | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    mouse move      | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    mouse wheel     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    touch input     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    windowed        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    fullscreen      | TODO    | YES   | TODO  | YES   | TODO    | TODO  | ---
+    pointer lock    | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
+    screen keyboard | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
+    swap interval   | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
+    high-dpi        | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
+
+    - what about bluetooth keyboard / mouse on mobile platforms?
+
     STEP BY STEP
     ============
     --- Add a sokol_main() to your code which returns a sapp_desc structure
