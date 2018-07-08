@@ -176,7 +176,106 @@
             render-target-view and depth-stencil-view may change from one
             frame to the next!
 
-    --- ...
+    --- Implement the frame-callback function, this function will be called
+        on the same thread as the init callback, but might be on a different
+        thread than the sokol_main() function. Note that the size of
+        the rendering framebuffer might have change since the frame callback
+        was called last. Call the functions sapp_width() and sapp_height()
+        to get the current size.
+
+    --- Optionally implement the event-callback to handle input events.
+        sokol-app provides the following type of input events:
+            - a 'virtual key' was pressed down or released
+            - a single text character was entered (provided as UTF-32 code point)
+            - a mouse button was pressed down or released (left, right, middle)
+            - mouse-wheel or 2D scrolling events
+            - the mouse was moved
+            - the mouse has entered or left the application window boundaries
+            - low-level, portable multi-touch events (began, moved, ended, cancelled)
+        More types of events will be added in the future (like window
+        minimized, maximized, application life cycle events, etc...)
+
+    --- Implement the cleanup-callback function, this is called once
+        after the user quits the application (currently there's now way
+        to quite the application programmatically)
+
+
+    HIGH-DPI RENDERING
+    ==================
+    You can set the sapp_desc.high_dpi flag during initialization to request
+    a full-resolution framebuffer on HighDPI displays. The default behaviour
+    is sapp_desc.high_dpi=false, this means that the application will
+    render to a lower-resolution framebuffer on HighDPI displays and the
+    rendered content will be upscaled by the window system composer.
+
+    In a HighDPI scenario, you still request the same window size during
+    sokol_main(), but the framebuffer sizes returned by sapp_width()
+    and sapp_height() will be scaled up according to the DPI scaling
+    ratio. You can also get a DPI scaling factor with the function
+    sapp_dpi_scale().
+
+    Here's an example on a Mac with Retina display:
+
+    sapp_desc sokol_main() {
+        return (sapp_desc) {
+            .width = 640,
+            .height = 480,
+            .high_dpi = true,
+            ...
+        };
+    }
+
+    The functions sapp_width(), sapp_height() and sapp_dpi_scale() will
+    return the following values:
+
+    sapp_width      -> 1280
+    sapp_height     -> 960
+    sapp_dpi_scale  -> 2.0
+
+    If the high_dpi flag is false, or you're not running on a Retina display,
+    the values would be:
+
+    sapp_width      -> 640
+    sapp_height     -> 480
+    sapp_dpi_scale  -> 1.0
+
+    FULLSCREEN
+    ==========
+    If the sapp_desc.fullscreen flag is true, sokol-app will try to create
+    a fullscreen window on platforms with a 'proper' window system 
+    (mobile devices will always use fullscreen). The implementation details
+    depend on the target platform, in general sokol-app will use a
+    'soft approach' which doesn't interfer too much with the platform's
+    window system (for instance borderless fullscreen window instead of
+    a 'real' fullscreen mode). Such details might change over time
+    as sokol-app is adapted for different needs.
+
+    The most important effect of fullscreen mode to keep in mind is that
+    the requested canvas width and heigth will be ignored for the initial
+    window size, calling sapp_width() and sapp_height() will instead return
+    the resolution of the fullscreen canvas (however the provided size
+    might still be used for the non-fullscreen window, in case the user can
+    switch back from fullscreen- to windowed-mode).
+
+    ONSCREEN KEYBOARD
+    =================
+    On some platforms which don't provide a physical keyboard, sokol-app
+    can display the platform's integrated oncscreen keyboard for text
+    input. To request that the onscreen keyboard is shown, call
+
+        sapp_show_keyboard(true);
+
+    Likewise, to hide the keyboard call:
+
+        sapp_show_keyboard(false);
+
+    Note that on the web platform, the keyboard can only be shown from
+    inside an input handler. On such platforms, sapp_show_keyboard()
+    will only work as expected when it is called from inside the
+    sokol-app event callback function. When called from other places,
+    an internal flag will be set, and the onscreen keyboard will be
+    called at the next 'legal' opportunity (when the next input event
+    is handled).
 
     zlib/libpng license
 
