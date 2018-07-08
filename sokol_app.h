@@ -1463,6 +1463,23 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
+static bool _sapp_emsc_input_created;
+
+/* FIXME: currently this must be called from inside event handler */
+_SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
+    /* create HTML text input field if not happened yet */
+    if (_sapp_emsc_input_created) {
+        _sapp_emsc_input_created = true;
+        /* FIXME: actually create the text input field */
+    }
+    if (show) {
+        /* FIXME: focus the text input field, this will bring up the keyboard */
+    }
+    else {
+        /* FIXME: unfocus the text input field */
+    }
+}
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     double w, h;
     emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
@@ -5177,6 +5194,8 @@ bool sapp_gles2(void) {
 void sapp_show_keyboard(bool shown) {
     #if TARGET_OS_IPHONE
     _sapp_ios_show_keyboard(shown);
+    #elif __EMSCRIPTEN__
+    _sapp_emsc_show_keyboard(shown);
     #endif
 }
 
