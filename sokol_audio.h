@@ -14,6 +14,18 @@
     try to get a PR into SoLoud instead of the current 
     SDL-static backend (which has a fairly big JS shim).
 
+    Two ways to provide audio data:
+
+    - low-level: streaming callback, will be called when audio backend needs
+      data, may be called from a separate thread
+    - push: application enqueues new data into a queue-buffer from main thread,
+      sokol_audio streams from this
+
+    Both methods to provide audio data are mutually exclusive.
+
+    The push model needs a way to keep track of how many samples have been
+    processed, to prevent the audio playback from starving.
+
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -44,19 +56,32 @@ extern "C" {
 #endif
 
 typedef struct {
-    int sample_rate;
-    int buffer_size;
-    bool stereo;
-    /* the audio-data callback, might be called on a separate thread */
-    void (*stream_cb)(float* buffer, int num_samples);
+    uint32_t sample_rate;
+    uint32_t audio_buffer_size; /* smaller buffer size means less latency */
+    uint32_t queue_buffer_size; /* only used if no stream_cb is provided */
+    bool stereo;                /* default false */
+    /* optional low-level callback to provide samples */
+    void (*stream_cb)(float* buffer, uint32_t num_samples);
 } saudio_desc;
 
 extern void saudio_setup(const saudio_desc* desc);
 extern void saudio_shutdown(void);
+/* true between setup and shutdown */
 extern bool saudio_isvalid(void);
-extern int saudio_sample_rate(void);    /* actual sample rate */
-extern int saudio_buffer_size(void);    /* actual buffer size */
-extern bool saudio_stereo(void);        /* did we actually get stereo? */
+/* actual sample rate */
+extern int saudio_sample_rate(void);
+/* actual backend buffer size */
+extern int saudio_buffer_size(void);
+/* did we actually get a stereo buffer? */
+extern bool saudio_stereo(void);
+/* push samples to queue buffer (main-thread alternative to stream_cb) */
+extern void saudio_enqueue(const float* samples, uint32_t num_samples);
+/* overall number of samples written to the audio backend */
+extern uint64_t saudio_samples_written(void);
+/* overall number of samples enqueued */
+extern uint64_t saudio_samples_enqueued(void);
+/* enqueued samples waiting to be written */
+extern uint64_t saudio_samples_pending(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
