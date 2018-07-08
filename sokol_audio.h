@@ -43,12 +43,11 @@
 extern "C" {
 #endif
 
-
-
 typedef struct {
     int sample_rate;
     int buffer_size;
-    int num_channels;   /* 1 or 2 */
+    bool stereo;
+    /* the audio-data callback, might be called on a separate thread */
     void (*stream_cb)(float* buffer, int num_samples);
 } saudio_desc;
 
@@ -57,7 +56,7 @@ extern void saudio_shutdown(void);
 extern bool saudio_isvalid(void);
 extern int saudio_sample_rate(void);    /* actual sample rate */
 extern int saudio_buffer_size(void);    /* actual buffer size */
-extern int saudio_num_channels(void);   /* actual number of channels */
+extern bool saudio_stereo(void);        /* did we actually get stereo? */
 
 #ifdef __cplusplus
 } /* extern "C" */
