@@ -4756,6 +4756,7 @@ _SOKOL_PRIVATE void _sapp_glx_swap_buffers(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
+    _sapp_glx_make_current();
     if (_sapp_glx_EXT_swap_control) {
         _sapp_glx_SwapIntervalEXT(_sapp_x11_display, _sapp_glx_window, interval);
     }
@@ -5207,8 +5208,8 @@ int main(int argc, char* argv[]) {
     _sapp_x11_create_window(visual, depth);
     _sapp_glx_create_context();
     _sapp.valid = true;
-    _sapp_glx_swapinterval(_sapp.swap_interval);
     _sapp_x11_show_window();
+    _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp_x11_display);
     while (!_sapp_x11_quit_requested) {
         _sapp_glx_make_current();
