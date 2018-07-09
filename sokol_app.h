@@ -1479,6 +1479,7 @@ EM_JS(void, _sapp_js_create_textfield, (), {
     var x = document.createElement("INPUT");
     x.type = "text";
     x.id = "_sokol_app_input_element";
+    x.autocapitalize = "none";
     x.addEventListener("focusout", function(e) {
         __sapp_emsc_notify_keyboard_hidden()
 
