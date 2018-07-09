@@ -80,8 +80,8 @@
     windowed        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen      | TODO    | YES   | TODO  | YES   | TODO    | TODO  | ---
     pointer lock    | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
-    screen keyboard | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
-    swap interval   | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
+    screen keyboard | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    swap interval   | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi        | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
@@ -502,6 +502,7 @@ typedef struct {
     int width;
     int height;
     int sample_count;
+    int swap_interval;
     bool high_dpi;
     bool fullscreen;
     bool alpha;
@@ -640,6 +641,7 @@ typedef struct {
     int framebuffer_width;
     int framebuffer_height;
     int sample_count;
+    int swap_interval;
     float dpi_scale;
     bool gles2_fallback;
     bool first_frame;
@@ -702,6 +704,7 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.framebuffer_width = _sapp.window_width;
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
+    _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
@@ -946,7 +949,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
     _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
     _sapp_view_obj = [[_sapp_view alloc] init];
-    _sapp_view_obj.preferredFramesPerSecond = 60;
+    _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
     _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
     _sapp_view_obj.device = _sapp_mtl_device_obj;
     _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
@@ -1257,7 +1260,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
         _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
         _sapp_view_obj = [[_sapp_view alloc] init];
-        _sapp_view_obj.preferredFramesPerSecond = 60;
+        _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
         _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
         _sapp_view_obj.device = _sapp_mtl_device_obj;
         _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
@@ -1301,7 +1304,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         [_sapp_window_obj addSubview:_sapp_view_obj];
         _sapp_view_ctrl_obj = [[GLKViewController alloc] init];
         _sapp_view_ctrl_obj.view = _sapp_view_obj;
-        _sapp_view_ctrl_obj.preferredFramesPerSecond = 60;
+        _sapp_view_ctrl_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
         _sapp_window_obj.rootViewController = _sapp_view_ctrl_obj;
     #endif
     [_sapp_window_obj makeKeyAndVisible];
@@ -1552,6 +1555,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_frame(void) {
+    if (_sapp.first_frame) {
+        emscripten_set_main_loop_timing(EM_TIMING_RAF, _sapp.swap_interval);
+    }
     _sapp_frame();
 }
 
@@ -3089,7 +3095,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
     sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sc_desc->BufferDesc.RefreshRate.Numerator = 60;
+    sc_desc->BufferDesc.RefreshRate.Numerator = 60 / _sapp.swap_interval;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp_win32_hwnd;
     sc_desc->Windowed = true;
@@ -3396,7 +3402,7 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
     _sapp_wglMakeCurrent(_sapp_win32_dc, _sapp_gl_ctx);
     if (_sapp_ext_swap_control) {
         /* FIXME: DwmIsCompositionEnabled() (see GLFW) */
-        _sapp_SwapIntervalEXT(1);
+        _sapp_SwapIntervalEXT(_sapp.swap_interval);
     }
 }
 
@@ -5201,7 +5207,7 @@ int main(int argc, char* argv[]) {
     _sapp_x11_create_window(visual, depth);
     _sapp_glx_create_context();
     _sapp.valid = true;
-    _sapp_glx_swapinterval(1);
+    _sapp_glx_swapinterval(_sapp.swap_interval);
     _sapp_x11_show_window();
     XFlush(_sapp_x11_display);
     while (!_sapp_x11_quit_requested) {
