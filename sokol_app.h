@@ -2909,7 +2909,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
-    if (_sapp_events_enabled()) {
+    if (_sapp_events_enabled() && (c >= 32)) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
