@@ -5230,11 +5230,11 @@ bool sapp_isvalid(void) {
 }
 
 int sapp_width(void) {
-    return _sapp.framebuffer_width;
+    return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
 int sapp_height(void) {
-    return _sapp.framebuffer_height;
+    return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
 
 bool sapp_high_dpi(void) {
