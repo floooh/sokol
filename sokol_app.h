@@ -3095,7 +3095,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
     sc_desc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sc_desc->BufferDesc.RefreshRate.Numerator = 60 / _sapp.swap_interval;
+    sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp_win32_hwnd;
     sc_desc->Windowed = true;
@@ -3458,7 +3458,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         }
         _sapp_frame();
         #if defined(SOKOL_D3D11)
-            IDXGISwapChain_Present(_sapp_dxgi_swap_chain, 1, 0);
+            IDXGISwapChain_Present(_sapp_dxgi_swap_chain, _sapp.swap_interval, 0);
         #endif
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_swap_buffers();
