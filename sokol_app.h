@@ -1464,19 +1464,72 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #include <emscripten/html5.h>
 
 static bool _sapp_emsc_input_created;
+static bool _sapp_emsc_wants_show_keyboard;
+static bool _sapp_emsc_wants_hide_keyboard;
 
-/* FIXME: currently this must be called from inside event handler */
-_SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
-    /* create HTML text input field if not happened yet */
-    if (_sapp_emsc_input_created) {
-        _sapp_emsc_input_created = true;
-        /* FIXME: actually create the text input field */
+/* this function is called from a JS event handler when the user hides
+    the onscreen keyboard pressing the 'dismiss keyboard key'
+*/
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
+    _sapp.onscreen_keyboard_shown = false;
+}
+
+/* Javascript helper functions for mobile virtual keyboard input */
+EM_JS(void, _sapp_js_create_textfield, (), {
+    var x = document.createElement("INPUT");
+    x.type = "text";
+    x.id = "_sokol_app_input_element";
+    x.addEventListener("focusout", function(e) {
+        __sapp_emsc_notify_keyboard_hidden()
+
+    });
+    document.body.append(x);
+});
+
+EM_JS(void, _sapp_js_focus_textfield, (), {
+    document.getElementById("_sokol_app_input_element").focus();
+});
+
+EM_JS(void, _sapp_js_unfocus_textfield, (), {
+    document.getElementById("_sokol_app_input_element").blur();
+});
+
+/* called from the emscripten event handler to update the keyboard visibility
+    state, this must happen from an JS input event handler, otherwise
+    the request will be ignored by the browser
+*/
+_SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
+    if (_sapp_emsc_wants_show_keyboard) {
+        /* create input text field on demand */
+        if (!_sapp_emsc_input_created) {
+            _sapp_emsc_input_created = true;
+            _sapp_js_create_textfield();
+        }
+        /* focus the text input field, this will bring up the keyboard */
+        _sapp.onscreen_keyboard_shown = true;
+        _sapp_emsc_wants_show_keyboard = false;
+        _sapp_js_focus_textfield();
     }
+    if (_sapp_emsc_wants_hide_keyboard) {
+        /* unfocus the text input field */
+        if (_sapp_emsc_input_created) {
+            _sapp.onscreen_keyboard_shown = false;
+            _sapp_emsc_wants_hide_keyboard = false;
+            _sapp_js_unfocus_textfield();
+        }
+    }
+}
+
+/* actually showing the onscreen keyboard must be initiated from a JS
+    input event handler, so we'll just keep track of the desired
+    state, and the actual state change will happen with the next input event
+*/
+_SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     if (show) {
-        /* FIXME: focus the text input field, this will bring up the keyboard */
+        _sapp_emsc_wants_show_keyboard = true;
     }
     else {
-        /* FIXME: unfocus the text input field */
+        _sapp_emsc_wants_hide_keyboard = true;
     }
 }
 
@@ -1559,6 +1612,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             _sapp.desc.event_cb(&_sapp.event);
         }
     }
+    _sapp_emsc_update_keyboard_state();
     return true;
 }
 
@@ -1581,6 +1635,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
         _sapp.desc.event_cb(&_sapp.event);
     }
+    _sapp_emsc_update_keyboard_state();
     return true;
 }
 
@@ -1627,6 +1682,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             _sapp.desc.event_cb(&_sapp.event);
         }
     }
+    _sapp_emsc_update_keyboard_state();
     return retval;
 }
 
@@ -1681,6 +1737,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
             _sapp.desc.event_cb(&_sapp.event);
         }
     }
+    _sapp_emsc_update_keyboard_state();
     return retval;
 }
 
