@@ -78,7 +78,7 @@
     mouse wheel     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     touch input     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     windowed        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen      | TODO    | YES   | TODO  | YES   | TODO    | TODO  | ---
+    fullscreen      | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
     pointer lock    | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval   | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
@@ -2990,13 +2990,19 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     wndclassw.lpszClassName = L"SOKOLAPP";
     RegisterClassW(&wndclassw);
 
-    /* FIXME: HighDPI support */
-    const DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+    DWORD win_style;
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-    RECT rect = { 0, 0, 
-        (int) (_sapp.window_width * _sapp_win32_window_scale),
-        (int) (_sapp.window_height * _sapp_win32_window_scale)
-    };
+    RECT rect = { 0, 0, 0, 0 };
+    if (_sapp.desc.fullscreen) {
+        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
+        rect.right = GetSystemMetrics(SM_CXSCREEN);
+        rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+    else {
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+        rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
+        rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
+    }
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
     const int win_height = rect.bottom - rect.top;
