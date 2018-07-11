@@ -195,7 +195,7 @@ A minimal cross-platform application-wrapper library:
 - supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES2/WebGL, GLES3/WebGL2
 
 A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
-separate implementation sokol.c/.m implementation file which is necessary
+separate sokol.c/.m implementation file which is necessary
 to split the Objective-C code from the C code of the sample):
 
 ```cpp
