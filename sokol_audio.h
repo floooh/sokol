@@ -133,6 +133,7 @@ extern "C" {
 
 typedef struct {
     bool valid;
+    void (*stream_cb)(float* buffer, int num_samples);
     int requested_sample_rate;
     int requested_audio_buffer_size;
     int push_buffer_size;
@@ -149,9 +150,16 @@ static _saudio_state _saudio;
 
 static AudioQueueRef _saudio_ca_audio_queue;
 
+/* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
-    memset(buffer->mAudioData, 0, buffer->mAudioDataByteSize);
+    if (_saudio.stream_cb) {
+        _saudio.stream_cb((float*)buffer->mAudioData, buffer->mAudioDataByteSize / 4);
+    }
+    else {
+        // FIXME: push model, pull audio samples from push buffer
+    }
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+    // FIXME: update the 'play cursor position'
 }
 
 _SOKOL_PRIVATE void _saudio_init(void) {
@@ -159,22 +167,23 @@ _SOKOL_PRIVATE void _saudio_init(void) {
 
     _saudio.actual_sample_rate = _saudio.requested_sample_rate;
     _saudio.actual_audio_buffer_size = _saudio.requested_audio_buffer_size;
-    _saudio.actual_stereo = true;
+    _saudio.actual_stereo = false;
 
+    /* create an audio queue with fp32 samples */
     AudioStreamBasicDescription fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.mSampleRate = (Float64) _saudio.requested_sample_rate;
     fmt.mFormatID = kAudioFormatLinearPCM;
-    /* FIXME: use float sample data? */
-    fmt.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     fmt.mBytesPerPacket = 4;
     fmt.mFramesPerPacket = 1;
     fmt.mBytesPerFrame = 4;
-    fmt.mChannelsPerFrame = 2;
-    fmt.mBitsPerChannel = 16;
+    fmt.mChannelsPerFrame = 1;
+    fmt.mBitsPerChannel = 32;
     OSStatus res = AudioQueueNewOutput(&fmt, _sapp_ca_callback, 0, NULL, NULL, 0, &_saudio_ca_audio_queue);
     SOKOL_ASSERT((res == 0) && _saudio_ca_audio_queue);
 
+    /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         AudioQueueBufferRef buf = NULL;
         const uint32_t buf_byte_size = _saudio.requested_audio_buffer_size * fmt.mBytesPerPacket;
@@ -185,6 +194,7 @@ _SOKOL_PRIVATE void _saudio_init(void) {
         AudioQueueEnqueueBuffer(_saudio_ca_audio_queue, buf, 0, NULL);
     }
 
+    /* ...and start playback */
     res = AudioQueueStart(_saudio_ca_audio_queue, NULL);
     SOKOL_ASSERT(0 == res);
 }
@@ -206,9 +216,10 @@ void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(desc);
     memset(&_saudio, 0, sizeof(_saudio));
     _saudio.desc = *desc;
+    _saudio.stream_cb = desc->stream_cb;
     _saudio.requested_sample_rate = _saudio_def(desc->sample_rate, 44100);
     _saudio.requested_audio_buffer_size = _saudio_def(desc->audio_buffer_size, 4096);
-    if (desc->stream_cb) {
+    if (_saudio.stream_cb) {
         SOKOL_ASSERT(0 == desc->push_buffer_size);
         _saudio.push_buffer_size = 0;
     }
