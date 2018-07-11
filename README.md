@@ -5,16 +5,16 @@ bird of prey than the Eagle (Орёл, Oryol)
 
 Minimalistic header-only cross-platform libs in C:
 
-- sokol\_gfx.h: 3D-API wrapper (GL + Metal + D3D11)
-- sokol\_time.h: time measurement
-- sokol\_app.h: app framework wrapper (entry + window + 3D-context + input)
-- sokol\_audio.h: (WIP!) minimal buffer-streaming audio playback
+- **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
+- **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
+- **sokol\_time.h**: time measurement
+- **sokol\_audio.h**: (WIP!) minimal buffer-streaming audio playback
 - ...???
 
 These are the internal parts of the Oryol C++ framework 
 rewritten in pure C as standalone header-only libs.
 
-All headers are standalone and can be used indepedendently from each other (there may be a sokol_integration.h header later which glues the various header together).
+All headers are standalone and can be used indepedendently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
