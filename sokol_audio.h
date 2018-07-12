@@ -57,10 +57,10 @@ extern "C" {
 #endif
 
 typedef struct {
-    int sample_rate;
-    int audio_buffer_size;      /* smaller buffer size means less latency */
-    int push_buffer_size;       /* only used if no stream_cb is provided */
-    bool stereo;                /* default false */
+    int sample_rate;        /* requested sample rate */
+    int buffer_size;        /* number of samples in streaming buffer */
+    int num_push_buffers;   /* number of push buffers available for queueing audio data */
+    bool stereo;            /* default: false */
     /* optional low-level callback to provide samples */
     void (*stream_cb)(float* buffer, int num_samples);
 } saudio_desc;
@@ -77,14 +77,8 @@ extern int saudio_sample_rate(void);
 extern int saudio_buffer_size(void);
 /* did we actually get a stereo buffer? */
 extern bool saudio_stereo(void);
-/* push samples to queue buffer (main-thread alternative to stream_cb) */
-extern void saudio_push(const float* samples, int num_samples);
-/* overall number of samples written to the audio backend */
-extern uint64_t saudio_samples_written(void);
-/* overall number of samples enqueued */
-extern uint64_t saudio_samples_pushed(void);
-/* pushed samples still waiting to be written */
-extern uint64_t saudio_samples_pending(void);
+/* push sample from main-thread, returns false if no room for new data */
+extern bool saudio_push(const float* samples, int num_samples);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -131,16 +125,79 @@ extern "C" {
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
 #define _saudio_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
 
+/*--- implementation-private structures --------------------------------------*/
+#define _SAUDIO_RING_SLOTS (8) /* MUST BE 2^N */
+#define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
+#define _SAUDIO_DEFAULT_BUFFER_SIZE (1024)
+#define _SAUDIO_DEFAULT_PUSH_BUFFERS (4)
+
+/*--- a ring-buffer queue implementation -------------------------------------*/
+typedef struct {
+    uint16_t head;  /* next slot to write to */
+    uint16_t tail;  /* next slot to read from */
+    int queue[_SAUDIO_RING_SLOTS];
+} _saudio_ring;
+
+_SOKOL_PRIVATE uint16_t _saudio_ring_idx(uint16_t i) {
+    return i & (_SAUDIO_RING_SLOTS - 1);
+}
+
+_SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring* ring) {
+    ring->head = 0;
+    ring->tail = 0;
+    memset(ring->queue, 0, sizeof(ring->queue));
+}
+
+_SOKOL_PRIVATE bool _saudio_ring_full(_saudio_ring* ring) {
+    return _saudio_ring_idx(ring->head + 1) == ring->tail;
+}
+
+_SOKOL_PRIVATE bool _saudio_ring_empty(_saudio_ring* ring) {
+    return ring->head == ring->tail;
+}
+
+_SOKOL_PRIVATE void _saudio_ring_enqueue(_saudio_ring* ring, int val) {
+    SOKOL_ASSERT(!_saudio_ring_full(ring));
+    ring->queue[ring->head] = val;
+    ring->head = _saudio_ring_idx(ring->head + 1);
+}
+
+_SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring* ring) {
+    SOKOL_ASSERT(!_saudio_ring_empty(ring));
+    int val = ring->queue[ring->tail];
+    ring->tail = _saudio_ring_idx(ring->tail + 1);
+    return val;
+}
+
+/*---  a buffer fifo for queueing audio data from main thread ----------------*/
+typedef struct {
+    int buffer_size;            /* size of a single push-buffer in bytes */
+    _saudio_ring read_queue;    /* buffers with data, ready to be streamed */
+    _saudio_ring write_queue;   /* empty buffers, ready to be pushed to */
+} _saudio_fifo;
+
+_SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int buffer_size, int num_buffers) {
+    fifo->buffer_size = buffer_size;
+    _saudio_ring_init(&fifo->read_queue);
+    _saudio_ring_init(&fifo->write_queue);
+    for (int i = 0; i < (_SAUDIO_RING_SLOTS-1); i++) {
+        _saudio_ring_enqueue(&fifo->write_queue, i);
+    }
+    SOKOL_ASSERT(_saudio_ring_full(&fifo->write_queue));
+    SOKOL_ASSERT(_saudio_ring_empty(&fifo->read_queue));
+}
+
+
+/* the main system state */
 typedef struct {
     bool valid;
     void (*stream_cb)(float* buffer, int num_samples);
-    int requested_sample_rate;
-    int requested_audio_buffer_size;
-    int push_buffer_size;
-    int actual_sample_rate;
-    int actual_audio_buffer_size;
-    bool actual_stereo;
+    int sample_rate;            /* actual sample rate */
+    int buffer_size;            /* actual buffer size in number of samples */
+    int num_push_buffers;       /* number of push buffers for audio queuing */
+    bool stereo;                /* actual mono/stereo state */
     saudio_desc desc;
+    _saudio_fifo fifo;
 } _saudio_state;
 static _saudio_state _saudio;
 
@@ -165,14 +222,10 @@ _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, Audi
 _SOKOL_PRIVATE void _saudio_init(void) {
     SOKOL_ASSERT(0 == _saudio_ca_audio_queue);
 
-    _saudio.actual_sample_rate = _saudio.requested_sample_rate;
-    _saudio.actual_audio_buffer_size = _saudio.requested_audio_buffer_size;
-    _saudio.actual_stereo = false;
-
     /* create an audio queue with fp32 samples */
     AudioStreamBasicDescription fmt;
     memset(&fmt, 0, sizeof(fmt));
-    fmt.mSampleRate = (Float64) _saudio.requested_sample_rate;
+    fmt.mSampleRate = (Float64) _saudio.sample_rate;
     fmt.mFormatID = kAudioFormatLinearPCM;
     fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     fmt.mBytesPerPacket = 4;
@@ -186,7 +239,7 @@ _SOKOL_PRIVATE void _saudio_init(void) {
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         AudioQueueBufferRef buf = NULL;
-        const uint32_t buf_byte_size = _saudio.requested_audio_buffer_size * fmt.mBytesPerPacket;
+        const uint32_t buf_byte_size = _saudio.buffer_size * fmt.mBytesPerPacket;
         res = AudioQueueAllocateBuffer(_saudio_ca_audio_queue, buf_byte_size, &buf);
         SOKOL_ASSERT((res == 0) && buf);
         buf->mAudioDataByteSize = buf_byte_size;
@@ -217,18 +270,12 @@ void saudio_setup(const saudio_desc* desc) {
     memset(&_saudio, 0, sizeof(_saudio));
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;
-    _saudio.requested_sample_rate = _saudio_def(desc->sample_rate, 44100);
-    _saudio.requested_audio_buffer_size = _saudio_def(desc->audio_buffer_size, 4096);
-    if (_saudio.stream_cb) {
-        SOKOL_ASSERT(0 == desc->push_buffer_size);
-        _saudio.push_buffer_size = 0;
-    }
-    else {
-        _saudio.push_buffer_size = _saudio_def(desc->push_buffer_size, 8192);
-    }
+    _saudio.sample_rate = _saudio_def(_saudio.desc.sample_rate, _SAUDIO_DEFAULT_SAMPLE_RATE);
+    _saudio.buffer_size = _saudio_def(_saudio.desc.buffer_size, _SAUDIO_DEFAULT_BUFFER_SIZE);
+    _saudio.num_push_buffers = _saudio_def(_saudio.desc.num_push_buffers, _SAUDIO_DEFAULT_PUSH_BUFFERS);
+    _saudio.stereo = false; // FIXME!
+    _saudio_fifo_init(&_saudio.fifo, _saudio.buffer_size, _saudio.num_push_buffers);
     _saudio_init();
-    SOKOL_ASSERT(_saudio.actual_sample_rate > 0);
-    SOKOL_ASSERT(_saudio.actual_audio_buffer_size > 0);
     _saudio.valid = true;
 }
 
@@ -243,15 +290,15 @@ bool saudio_isvalid(void) {
 }
 
 int saudio_sample_rate(void) {
-    return _saudio.actual_sample_rate;
+    return _saudio.sample_rate;
 }
 
 int saudio_buffer_size(void) {
-    return _saudio.actual_audio_buffer_size;
+    return _saudio.buffer_size;
 }
 
 bool saudio_stereo(void) {
-    return _saudio.actual_stereo;
+    return _saudio.stereo;
 }
 #undef _saudio_def
 #undef _saudio_def_flt
