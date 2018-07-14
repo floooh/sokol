@@ -26,37 +26,60 @@
     The push model needs a way to keep track of how many samples have been
     processed, to prevent the audio playback from starving.
 
-    Streaming Buffer vs Push Buffers
-    ================================
-    Streaming buffers are created by and under control of the native audio
-    backend, and they are populated by the streaming callback (which may
-    be running on a separate thread). The size of the streaming buffer
-    defines the 'low-level-latency' (the smaller the streaming buffer, the
-    lower the latency).
+    Glossary:
+    =========
+    stream buffer:
+        A chunk of memory managed by the audio backend to be filled with
+        new audio data by the stream callback. The size of the stream buffer
+        defines the 'primary latency' between audio data written in the
+        stream callback, and audible playback of the audio data.
 
-    Push Buffers are smaller 'packet-size buffer' managed by sokol-audio. 
-    They are used in a buffer queue where audio data coming from the 
-    application main thread (via saudio_push()) is stored until consumed
-    by the audio backend streaming callback. The size of push buffers
-    must be smaller or equal to the size of the streaming buffer, and the
-    streaming buffer size must be a multiple of the push buffer size.
+    stream callback:
+        A user-provided function which fills the stream buffer with new audio
+        data. Depending on the audio backend, this may run in a separate thread.
+        Providing a stream-callback function is the lowest-level and
+        lowest-latency way to provide audio data.
 
-    Whenever a complete push buffer has been filled with sample data, it
-    will be moved from an internal "write queue" to another internal
-    "read queue", where it is waiting to be pulled by the streaming callback.
+    channel:
+        A discrete track of audio, currently only 1-channel (mono) and
+        2-channel (stereo) is supported.
 
-    Whenever the streaming callback is called, it will pull push buffers
-    from the read queue until the streaming buffer is completely filled.
-    If there are not enough push buffers waiting to fill a complete streaming
-    buffer, there's a "starving situation". The streaming callback will 
-    fill the remaing stream buffer with silence, and communicate back to the
-    main thread how much data was missing (this can be queried with 
-    saudio_query_push_state()). After a starving situation, the streaming callback
-    will wait until there's enough data in the read queue to fill a complete
-    streaming buffer until 'resuming normal operation'. The opposite of
-    starving is when the push buffer queue is full and cannot accept new
-    data, this is happens when the main thread is providing new audio faster
-    then the streaming callback consumes the data.
+    sample:
+        The magnitude of an audio signal on one channel at a given time.
+        In sokol-audio, samples are 32-bit floating numbers in the range
+        -1.0 to +1.0.
+
+    frame:
+        The tightly packed set of samples for all channels at a given time.
+        For mono 1 frame is 1 sample. For stereo, 1 frame is 2 samples.
+
+    packet:
+        In sokol-audio, a small chunk of audio data that is moved from the
+        main thread to the audio streaming thread in order to decouple the
+        rate at which the main thread provides new audio data, and the
+        streaming thread consuming audio data. When the main thread
+        'pushes' data to sokol-audio, the data will be copied into
+        intermediate packets and queued up for the streaming callback. When
+        the streaming callback is called, it will pull packets from the
+        queue and copy the data into the stream buffer. If there are not
+        enough packets waiting to be streamed, streaming will 'starve'
+        and the stream buffer will be filled with silence until enough
+        packets are queued up again the fill the entire buffer (this will lead
+        to audible artefacts like crackling). The opposite is that the main
+        thread provides data faster then is streamed, in this case the packet
+        queue will run full,
+        and data written by the main thread will be discarded. This will also
+        lead to crackling. To provide glitch-free playback, the main thread
+        should always push as much data required to fill up the packet
+        queue (this can be queried via saudio_expect()).
+
+    WebAudio Backend:
+    =================
+    The first implementation will use ScriptProcessorNode, later, Audio Worklets
+    will be used:
+
+    https://developers.google.com/web/updates/2017/12/audio-worklet
+    https://developers.google.com/web/updates/2018/06/audio-worklet-design-pattern
 
     zlib/libpng license
 
@@ -91,19 +114,12 @@ extern "C" {
 
 typedef struct {
     int sample_rate;        /* requested sample rate */
-    int stream_buffer_size; /* number of samples in streaming buffer */
-    int push_buffer_size;   /* size of a push buffer, must be a multiple of buffer_size */
-    int num_push_buffers;   /* number of push buffers available for queueing audio data */
-    bool stereo;            /* default: false */
-    /* optional low-level callback to provide samples */
-    void (*stream_cb)(float* buffer, int num_samples);
+    int buffer_frames;      /* number of frames in streaming buffer */
+    int packet_frames;      /* number of frames in a packet */
+    int num_packets;        /* number of packets in packet queue */
+    int num_channels;       /* number of channels, default: 1 (mono) */
+    void (*stream_cb)(float* buffer, int num_samples);  /* optional streaming callback */
 } saudio_desc;
-
-typedef enum {
-    SAUDIO_PUSHSTATE_STARVING,        /* audio thread is starving and had to include silence */
-    SAUDIO_PUSHSTATE_OK,              /* all ok */
-    SAUDIO_PUSHSTATE_FULL,            /* push buffer queue is full */
-} saudio_push_state;
 
 /* setup sokol-audio */
 extern void saudio_setup(const saudio_desc* desc);
@@ -115,14 +131,12 @@ extern bool saudio_isvalid(void);
 extern int saudio_sample_rate(void);
 /* actual backend buffer size */
 extern int saudio_buffer_size(void);
-/* did we actually get a stereo buffer? */
-extern bool saudio_stereo(void);
-/* push sample from main-thread, returns false if no room for new data */
-extern bool saudio_push(const float* samples, int num_samples);
-/* get number of samples that can be pushed */
-extern int saudio_pushable_samples(void);
-/* query current state of push buffer queue */
-extern saudio_push_state saudio_query_push_state(void);
+/* actual number of channels */
+extern int saudio_channels(void);
+/* get current number of frames to fill packet queue */
+extern int saudio_expect(void);
+/* push sample frames from main thread, returns number of frames actually pushed */
+extern int saudio_push(const float* frames, int num_frames);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -171,13 +185,12 @@ extern "C" {
 
 /*--- implementation-private structures --------------------------------------*/
 #define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
-#define _SAUDIO_DEFAULT_STREAM_BUFFER_SIZE (512)
-#define _SAUDIO_DEFAULT_PUSH_BUFFER_SIZE (64)
-#define _SAUDIO_DEFAULT_NUM_PUSH_BUFFERS (32)
+#define _SAUDIO_DEFAULT_BUFFER_FRAMES (512)
+#define _SAUDIO_DEFAULT_PACKET_FRAMES (64)
+#define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*3)
 #define _SAUDIO_RING_MAX_SLOTS (64)
 
 /*--- mutex wrappers ---------------------------------------------------------*/
-/* FIXME: we should probably allow to override the lock/unlock functions via macro */
 #if defined(__APPLE__) || defined(linux)
 #include "pthread.h"
 static pthread_mutex_t _saudio_mutex;
@@ -261,84 +274,91 @@ _SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring* ring) {
     return val;
 }
 
-/*---  a buffer fifo for queueing audio data from main thread ----------------*/
+/*---  a packet fifo for queueing audio data from main thread ----------------*/
 typedef struct {
-    int buffer_size;            /* size of a single push-buffer in bytes */
-    int num_buffers;            /* number of push buffers in fifo */
-    uint8_t* buffer_base;       /* push buffers base pointer (dynamically allocated) */
-    int cur_buffer;             /* current write-buffer */
-    int cur_offset;             /* current byte-offset into current write buffer */
+    int packet_size;            /* size of a single packets in bytes(!) */
+    int num_packets;            /* number of packet in fifo */
+    uint8_t* base_ptr;          /* packet memory chunk base pointer (dynamically allocated) */
+    int cur_packet;             /* current write-packet */
+    int cur_offset;             /* current byte-offset into current write packet */
     _saudio_ring read_queue;    /* buffers with data, ready to be streamed */
     _saudio_ring write_queue;   /* empty buffers, ready to be pushed to */
 } _saudio_fifo;
 
-_SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int buffer_size, int num_buffers) {
-    SOKOL_ASSERT((buffer_size > 0) && (num_buffers > 0));
-    fifo->buffer_size = buffer_size;
-    fifo->num_buffers = num_buffers;
-    fifo->buffer_base = SOKOL_MALLOC(buffer_size * num_buffers);
-    SOKOL_ASSERT(fifo->buffer_base);
-    fifo->cur_buffer = -1;
+_SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int packet_size, int num_packets) {
+    SOKOL_ASSERT((packet_size > 0) && (num_packets > 0));
+    fifo->packet_size = packet_size;
+    fifo->num_packets = num_packets;
+    fifo->base_ptr = SOKOL_MALLOC(packet_size * num_packets);
+    SOKOL_ASSERT(fifo->base_ptr);
+    fifo->cur_packet = -1;
     fifo->cur_offset = 0;
-    _saudio_ring_init(&fifo->read_queue, num_buffers);
-    _saudio_ring_init(&fifo->write_queue, num_buffers);
-    for (int i = 0; i < num_buffers; i++) {
+    _saudio_ring_init(&fifo->read_queue, num_packets);
+    _saudio_ring_init(&fifo->write_queue, num_packets);
+    for (int i = 0; i < num_packets; i++) {
         _saudio_ring_enqueue(&fifo->write_queue, i);
     }
     SOKOL_ASSERT(_saudio_ring_full(&fifo->write_queue));
-    SOKOL_ASSERT(_saudio_ring_count(&fifo->write_queue) == num_buffers);
+    SOKOL_ASSERT(_saudio_ring_count(&fifo->write_queue) == num_packets);
     SOKOL_ASSERT(_saudio_ring_empty(&fifo->read_queue));
     SOKOL_ASSERT(_saudio_ring_count(&fifo->read_queue) == 0);
 }
 
 _SOKOL_PRIVATE void _saudio_fifo_shutdown(_saudio_fifo* fifo) {
-    SOKOL_ASSERT(fifo->buffer_base);
-    SOKOL_FREE(fifo->buffer_base);
-    fifo->buffer_base = 0;
+    SOKOL_ASSERT(fifo->base_ptr);
+    SOKOL_FREE(fifo->base_ptr);
+    fifo->base_ptr = 0;
 }
 
 _SOKOL_PRIVATE int _saudio_fifo_writable_bytes(_saudio_fifo* fifo) {
     _saudio_mutex_lock();
-    int num_bytes = _saudio_ring_count(&fifo->write_queue) * fifo->buffer_size;
+    int num_bytes = (_saudio_ring_count(&fifo->write_queue) * fifo->packet_size);
+    if (fifo->cur_packet != -1) {
+        num_bytes += fifo->packet_size - fifo->cur_offset;
+    }
     _saudio_mutex_unlock();
+    SOKOL_ASSERT((num_bytes >= 0) && (num_bytes <= (fifo->num_packets * fifo->packet_size)));
     return num_bytes;
 }
 
+/* write new data to the write queue, this is called from main thread */
 _SOKOL_PRIVATE int _saudio_fifo_write(_saudio_fifo* fifo, const uint8_t* ptr, int num_bytes) {
     /* returns the number of bytes written, this will be smaller then requested
         if the write queue runs full
     */
     int all_to_copy = num_bytes;
     while (all_to_copy > 0) {
-        if ((fifo->cur_buffer == -1) || (fifo->cur_offset == fifo->buffer_size)) {
+        /* no current write packet, or the write packet is full */
+        if ((fifo->cur_packet == -1) || (fifo->cur_offset == fifo->packet_size)) {
             _saudio_mutex_lock();
-            if (fifo->cur_buffer != -1) {
+            if (fifo->cur_packet != -1) {
                 /* current buffer is full, transfer to read queue */
-                _saudio_ring_enqueue(&fifo->read_queue, fifo->cur_buffer);
+                _saudio_ring_enqueue(&fifo->read_queue, fifo->cur_packet);
             }
             /* grab next buffer from write queue */
             if (!_saudio_ring_empty(&fifo->write_queue)) {
-                fifo->cur_buffer = _saudio_ring_dequeue(&fifo->write_queue);
+                fifo->cur_packet = _saudio_ring_dequeue(&fifo->write_queue);
             }
             else {
                 /* write queue is empty, we're starving */
-                fifo->cur_buffer = -1;
+                fifo->cur_packet = -1;
             }
             _saudio_mutex_unlock();
             fifo->cur_offset = 0;
         }
-        if (fifo->cur_buffer != -1) {
+        /* append data to current write packet */
+        if (fifo->cur_packet != -1) {
             int to_copy = all_to_copy;
-            const int max_copy = fifo->buffer_size - fifo->cur_offset;
+            const int max_copy = fifo->packet_size - fifo->cur_offset;
             if (to_copy > max_copy) {
                 to_copy = max_copy;
             }
-            uint8_t* dst = fifo->buffer_base + fifo->cur_buffer*fifo->buffer_size + fifo->cur_offset;
+            uint8_t* dst = fifo->base_ptr + fifo->cur_packet * fifo->packet_size + fifo->cur_offset;
             memcpy(dst, ptr, to_copy);
             ptr += to_copy;
             fifo->cur_offset += to_copy;
             all_to_copy -= to_copy;
-            SOKOL_ASSERT(fifo->cur_offset <= fifo->buffer_size);
+            SOKOL_ASSERT(fifo->cur_offset <= fifo->packet_size);
             SOKOL_ASSERT(all_to_copy >= 0);
         }
         else {
@@ -352,21 +372,23 @@ _SOKOL_PRIVATE int _saudio_fifo_write(_saudio_fifo* fifo, const uint8_t* ptr, in
     return num_bytes;
 }
 
+/* read queued data, this is called form the stream callback (maybe separate thread) */
 _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo* fifo, uint8_t* ptr, int num_bytes) {
-    SOKOL_ASSERT(0 == num_bytes % fifo->buffer_size);
-    SOKOL_ASSERT(num_bytes <= (fifo->buffer_size * fifo->num_buffers));
-    const int num_push_buffers_needed = num_bytes / fifo->buffer_size;
+    SOKOL_ASSERT(0 == (num_bytes % fifo->packet_size));
+    SOKOL_ASSERT(num_bytes <= (fifo->packet_size * fifo->num_packets));
+    const int num_packets_needed = num_bytes / fifo->packet_size;
     int num_bytes_copied = 0;
     uint8_t* dst = ptr;
+    /* either pull a full buffer worth of data, or nothing */
     _saudio_mutex_lock();
-    if (_saudio_ring_count(&fifo->read_queue) >= num_push_buffers_needed) {
-        for (int i = 0; i < num_push_buffers_needed; i++) {
-            int buf = _saudio_ring_dequeue(&fifo->read_queue);
-            _saudio_ring_enqueue(&fifo->write_queue, buf);
-            const uint8_t* src = fifo->buffer_base + buf*fifo->buffer_size;
-            memcpy(dst, src, fifo->buffer_size);
-            dst += fifo->buffer_size;
-            num_bytes_copied += fifo->buffer_size;
+    if (_saudio_ring_count(&fifo->read_queue) >= num_packets_needed) {
+        for (int i = 0; i < num_packets_needed; i++) {
+            int packet_index = _saudio_ring_dequeue(&fifo->read_queue);
+            _saudio_ring_enqueue(&fifo->write_queue, packet_index);
+            const uint8_t* src = fifo->base_ptr + packet_index * fifo->packet_size;
+            memcpy(dst, src, fifo->packet_size);
+            dst += fifo->packet_size;
+            num_bytes_copied += fifo->packet_size;
         }
         SOKOL_ASSERT(num_bytes == num_bytes_copied);
     }
@@ -374,19 +396,18 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo* fifo, uint8_t* ptr, int num_b
     return num_bytes_copied;
 }
 
-/* the main system state */
+/* sokol-audio state */
 typedef struct {
     bool valid;
     void (*stream_cb)(float* buffer, int num_samples);
     int sample_rate;            /* sample rate */
-    int stream_buffer_size;     /* buffer size in number of samples */
-    int bytes_per_sample;       /* filled by backend */
-    int push_buffer_size;       /* push buffer size in number of samples */
-    int num_push_buffers;
-    bool stereo;                /* actual mono/stereo state */
+    int buffer_frames;          /* number of frames in streaming buffer */
+    int bytes_per_frame;        /* filled by backend */
+    int packet_frames;          /* number of frames in a packet */
+    int num_packets;            /* number of packets in packet queue */
+    int num_channels;           /* actual number of channels */
     saudio_desc desc;
     _saudio_fifo fifo;
-    saudio_push_state push_state;   /* starving, ok or full */
 } _saudio_state;
 static _saudio_state _saudio;
 
@@ -412,7 +433,7 @@ _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, Audi
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
 }
 
-_SOKOL_PRIVATE void _saudio_backend_init(void) {
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio_ca_audio_queue);
 
     /* create an audio queue with fp32 samples */
@@ -432,7 +453,7 @@ _SOKOL_PRIVATE void _saudio_backend_init(void) {
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         AudioQueueBufferRef buf = NULL;
-        const uint32_t buf_byte_size = _saudio.stream_buffer_size * fmt.mBytesPerPacket;
+        const uint32_t buf_byte_size = _saudio.buffer_frames * fmt.mBytesPerFrame;
         res = AudioQueueAllocateBuffer(_saudio_ca_audio_queue, buf_byte_size, &buf);
         SOKOL_ASSERT((res == 0) && buf);
         buf->mAudioDataByteSize = buf_byte_size;
@@ -445,7 +466,8 @@ _SOKOL_PRIVATE void _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == res);
 
     /* init or modify actual playback parameters */
-    _saudio.bytes_per_sample = 4;
+    _saudio.bytes_per_frame = fmt.mBytesPerFrame;
+    return true;
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
@@ -455,7 +477,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 #else /* __APPLE__ */
-void _saudio_backend_init(void) { };
+bool _saudio_backend_init(void) { return false; };
 void _saudio_backend_shutdown(void) { };
 #endif
 
@@ -467,25 +489,26 @@ void saudio_setup(const saudio_desc* desc) {
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;
     _saudio.sample_rate = _saudio_def(_saudio.desc.sample_rate, _SAUDIO_DEFAULT_SAMPLE_RATE);
-    _saudio.stream_buffer_size = _saudio_def(_saudio.desc.stream_buffer_size, _SAUDIO_DEFAULT_STREAM_BUFFER_SIZE);
-    _saudio.push_buffer_size = _saudio_def(_saudio.desc.push_buffer_size, _SAUDIO_DEFAULT_PUSH_BUFFER_SIZE);
-    _saudio.num_push_buffers = _saudio_def(_saudio.desc.num_push_buffers, _SAUDIO_DEFAULT_NUM_PUSH_BUFFERS);
-    _saudio.stereo = false; // FIXME!
-    _saudio.push_state = SAUDIO_PUSHSTATE_STARVING;
+    _saudio.buffer_frames = _saudio_def(_saudio.desc.buffer_frames, _SAUDIO_DEFAULT_BUFFER_FRAMES);
+    _saudio.packet_frames = _saudio_def(_saudio.desc.packet_frames, _SAUDIO_DEFAULT_PACKET_FRAMES);
+    _saudio.num_packets = _saudio_def(_saudio.desc.num_packets, _SAUDIO_DEFAULT_NUM_PACKETS);
+    _saudio.num_channels = _saudio_def(_saudio.desc.num_channels, 1);
     _saudio_mutex_init();
-    _saudio_backend_init();
-    SOKOL_ASSERT(0 == (_saudio.stream_buffer_size % _saudio.push_buffer_size));
-    SOKOL_ASSERT(_saudio.bytes_per_sample > 0);
-    _saudio_fifo_init(&_saudio.fifo, _saudio.push_buffer_size * _saudio.bytes_per_sample, _saudio.num_push_buffers);
-    _saudio.valid = true;
+    if (_saudio_backend_init()) {
+        SOKOL_ASSERT(0 == (_saudio.buffer_frames % _saudio.packet_frames));
+        SOKOL_ASSERT(_saudio.bytes_per_frame > 0);
+        _saudio_fifo_init(&_saudio.fifo, _saudio.packet_frames * _saudio.bytes_per_frame, _saudio.num_packets);
+        _saudio.valid = true;
+    }
 }
 
 void saudio_shutdown(void) {
-    SOKOL_ASSERT(_saudio.valid);
-    _saudio_backend_shutdown();
-    _saudio_fifo_shutdown(&_saudio.fifo);
+    if (_saudio.valid) {
+        _saudio_backend_shutdown();
+        _saudio_fifo_shutdown(&_saudio.fifo);
+        _saudio.valid = false;
+    }
     _saudio_mutex_destroy();
-    _saudio.valid = false;
 }
 
 bool saudio_isvalid(void) {
@@ -496,24 +519,24 @@ int saudio_sample_rate(void) {
     return _saudio.sample_rate;
 }
 
-int saudio_stream_buffer_size(void) {
-    return _saudio.stream_buffer_size;
+int saudio_buffer_frames(void) {
+    return _saudio.buffer_frames;
 }
 
-bool saudio_stereo(void) {
-    return _saudio.stereo;
+int saudio_channels(void) {
+    return _saudio.num_channels;
 }
 
-bool saudio_push(const float* samples, int num_samples) {
-    SOKOL_ASSERT(samples && (num_samples > 0));
-    const int num_bytes = num_samples * _saudio.bytes_per_sample;
-    const int num_written = _saudio_fifo_write(&_saudio.fifo, (const uint8_t*)samples, num_bytes);
-    return num_written == num_bytes;
+int saudio_expect(void) {
+    const int num_frames = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_frame;
+    return num_frames;
 }
 
-int saudio_pushable_samples(void) {
-    const int num_samples = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_sample;
-    return num_samples;
+int saudio_push(const float* frames, int num_frames) {
+    SOKOL_ASSERT(frames && (num_frames > 0));
+    const int num_bytes = num_frames * _saudio.bytes_per_frame;
+    const int num_written = _saudio_fifo_write(&_saudio.fifo, (const uint8_t*)frames, num_bytes);
+    return num_written / _saudio.bytes_per_frame;
 }
 
 #undef _saudio_def
