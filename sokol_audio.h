@@ -186,8 +186,8 @@ extern "C" {
 /*--- implementation-private structures --------------------------------------*/
 #define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
 #define _SAUDIO_DEFAULT_BUFFER_FRAMES (512)
-#define _SAUDIO_DEFAULT_PACKET_FRAMES (64)
-#define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*3)
+#define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
+#define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*4)
 #define _SAUDIO_RING_MAX_SLOTS (64)
 
 /*--- mutex wrappers ---------------------------------------------------------*/
@@ -528,15 +528,25 @@ int saudio_channels(void) {
 }
 
 int saudio_expect(void) {
-    const int num_frames = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_frame;
-    return num_frames;
+    if (_saudio.valid) {
+        const int num_frames = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_frame;
+        return num_frames;
+    }
+    else {
+        return 0;
+    }
 }
 
 int saudio_push(const float* frames, int num_frames) {
     SOKOL_ASSERT(frames && (num_frames > 0));
-    const int num_bytes = num_frames * _saudio.bytes_per_frame;
-    const int num_written = _saudio_fifo_write(&_saudio.fifo, (const uint8_t*)frames, num_bytes);
-    return num_written / _saudio.bytes_per_frame;
+    if (_saudio.valid) {
+        const int num_bytes = num_frames * _saudio.bytes_per_frame;
+        const int num_written = _saudio_fifo_write(&_saudio.fifo, (const uint8_t*)frames, num_bytes);
+        return num_written / _saudio.bytes_per_frame;
+    }
+    else {
+        return 0;
+    }
 }
 
 #undef _saudio_def
