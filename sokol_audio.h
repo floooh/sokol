@@ -328,23 +328,14 @@ _SOKOL_PRIVATE int _saudio_fifo_write(_saudio_fifo* fifo, const uint8_t* ptr, in
     */
     int all_to_copy = num_bytes;
     while (all_to_copy > 0) {
-        /* no current write packet, or the write packet is full */
-        if ((fifo->cur_packet == -1) || (fifo->cur_offset == fifo->packet_size)) {
+        /* need to grab a new packet? */
+        if (fifo->cur_packet == -1) {
             _saudio_mutex_lock();
-            if (fifo->cur_packet != -1) {
-                /* current buffer is full, transfer to read queue */
-                _saudio_ring_enqueue(&fifo->read_queue, fifo->cur_packet);
-            }
-            /* grab next buffer from write queue */
             if (!_saudio_ring_empty(&fifo->write_queue)) {
                 fifo->cur_packet = _saudio_ring_dequeue(&fifo->write_queue);
             }
-            else {
-                /* write queue is empty, we're starving */
-                fifo->cur_packet = -1;
-            }
             _saudio_mutex_unlock();
-            fifo->cur_offset = 0;
+            SOKOL_ASSERT(fifo->cur_offset == 0);
         }
         /* append data to current write packet */
         if (fifo->cur_packet != -1) {
@@ -362,10 +353,18 @@ _SOKOL_PRIVATE int _saudio_fifo_write(_saudio_fifo* fifo, const uint8_t* ptr, in
             SOKOL_ASSERT(all_to_copy >= 0);
         }
         else {
-            /* early out if starving */
+            /* early out if we're starving */
             int bytes_copied = num_bytes - all_to_copy;
             SOKOL_ASSERT((bytes_copied >= 0) && (bytes_copied < num_bytes));
             return bytes_copied;
+        }
+        /* if write packet is full, push to read queue */
+        if (fifo->cur_offset == fifo->packet_size) {
+            _saudio_mutex_lock();
+            _saudio_ring_enqueue(&fifo->read_queue, fifo->cur_packet);
+            _saudio_mutex_unlock();
+            fifo->cur_packet = -1;
+            fifo->cur_offset = 0;
         }
     }
     SOKOL_ASSERT(all_to_copy == 0);
