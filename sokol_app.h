@@ -63,26 +63,27 @@
 
     FEATURE/PLATFORM MATRIX
     =======================
-                    | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
-    ----------------+---------+-------+-------+-------+---------+-------+-------
-    gl 3.x          | YES     | ---   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl     | ---     | ---   | ---   | YES   | TODO    | TODO  | YES
-    gles3/webgl2    | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    metal           | ---     | YES   | ---   | YES   | ---     | ---   | ---
-    d3d11           | YES     | ---   | ---   | ---   | ---     | ---   | ---
-    key up/down     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    char input      | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    IME             | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
-    mouse buttons   | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    mouse move      | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    mouse wheel     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    touch input     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    windowed        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen      | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
-    pointer lock    | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
-    screen keyboard | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    swap interval   | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    high-dpi        | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
+                        | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
+    --------------------+---------+-------+-------+-------+---------+-------+-------
+    gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
+    gles2/webgl         | ---     | ---   | ---   | YES   | TODO    | TODO  | YES
+    gles3/webgl2        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
+    d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
+    key events          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    char events         | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    mouse events        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    touch events        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    window events       | TODO    | TODO  | TODO  | ---   | ---     | ---   | TODO
+    framebuffer events  | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
+    application events  | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
+    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
+    windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
+    pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
+    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
@@ -328,6 +329,15 @@ typedef enum {
     SAPP_EVENTTYPE_TOUCHES_MOVED,
     SAPP_EVENTTYPE_TOUCHES_ENDED,
     SAPP_EVENTTYPE_TOUCHES_CANCELLED,
+    /* FIXME NOT IMPLEMENTED YET: */
+    SAPP_EVENTTYPE_WINDOW_POS,
+    SAPP_EVENTTYPE_WINDOW_SIZE,
+    SAPP_EVENTTYPE_WINDOW_MINIMIZED,
+    SAPP_EVENTTYPE_WINDOW_MAXIMIZED,
+    SAPP_EVENTTYPE_WINDOW_RESTORED,
+    SAPP_EVENTTYPE_FRAMEBUFFER_SIZE,
+    SAPP_EVENTTYPE_APPLICATION_SUSPEND,
+    SAPP_EVENTTYPE_APPLICATION_RESUME,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
