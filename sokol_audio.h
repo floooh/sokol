@@ -475,7 +475,118 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio_ca_audio_queue = NULL;
 }
 
-#else /* __APPLE__ */
+/*=== EMSCRIPTEN BACKEND =====================================================*/
+
+/* FIXME: resume WebAudio context on user interaction */
+
+#elif defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+
+static uint8_t* _saudio_emsc_buffer;
+
+EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
+    SOKOL_ASSERT(_saudio_emsc_buffer);
+    if (num_frames == _saudio.buffer_frames) {
+        const int num_bytes = num_frames * _saudio.bytes_per_frame;
+        if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio_emsc_buffer, num_bytes)) {
+            /* not enough read data available, fill the entire buffer with silence */
+            memset(_saudio_emsc_buffer, 0, num_bytes);
+        }
+        int res = (int) _saudio_emsc_buffer;
+        return res;
+    }
+    else {
+        return 0;
+    }
+}
+
+/* setup the WebAudio context and attach a ScriptProcessorNode */
+EM_JS(int, _saudio_js_init, (int sample_rate, int buffer_size), {
+    Module._saudio_context = null;
+    Module._saudio_node = null;
+    if (typeof AudioContext !== 'undefined') {
+        Module._saudio_context = new AudioContext({
+            sampleRate: sample_rate,
+            latencyHint: 'interactive',
+        });
+        console.log('sokol_audio.h: created AudioContext');
+    }
+    else if (typeof webkitAudioContext !== 'undefined') {
+        Module._saudio_context = new webkitAudioContext({
+            sampleRate: sample_rate,
+            latencyHint: 'interactive',
+        });
+        console.log('sokol_audio.h: created webkitAudioContext');
+    }
+    else {
+        Module._saudio_context = null;
+        console.log('sokol_audio.h: no WebAudio support');
+    }
+    if (Module._saudio_context) {
+        console.log('sokol_audio.h: sample rate ', Module._saudio_context.sampleRate);
+        Module._saudio_node = Module._saudio_context.createScriptProcessor(buffer_size, 0, 1);
+        Module._saudio_node.onaudioprocess = function pump_audio(event) {
+            var buf_size = event.outputBuffer.length;
+            var ptr = Module.ccall('_saudio_emsc_pull', 'number', ['number'], [buf_size]);
+            if (ptr) {
+                var chan = event.outputBuffer.getChannelData(0);
+                for (var i = 0; i < buf_size; i++) {
+                    var heap_index = (ptr>>2) + i;
+                    chan[i] = HEAPF32[heap_index];
+                }
+            }
+        };
+        Module._saudio_node.connect(Module._saudio_context.destination);
+        console.log('sokol_audio.h: ScriptProcessNode buffer size ', Module._saudio_node.bufferSize);
+        return 1;
+    }
+    else {
+        return 0;
+    }
+});
+
+/* get the actual sample rate back from the WebAudio context */
+EM_JS(int, _saudio_js_sample_rate, (), {
+    if (Module._saudio_context) {
+        return Module._saudio_context.sampleRate;
+    }
+    else {
+        return 0;
+    }
+});
+
+/* get the actual buffer size in number of frames */
+EM_JS(int, _saudio_js_buffer_frames, (), {
+    if (Module._saudio_node) {
+        return Module._saudio_node.bufferSize;
+    }
+    else {
+        return 0;
+    }
+});
+
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    if (_saudio_js_init(_saudio.sample_rate, _saudio.buffer_frames)) {
+        _saudio.num_channels = 1;
+        _saudio.bytes_per_frame = 4;
+        _saudio.sample_rate = _saudio_js_sample_rate();
+        _saudio.buffer_frames = _saudio_js_buffer_frames();
+        const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+        _saudio_emsc_buffer = SOKOL_MALLOC(buf_size);
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    /* on HTML5, there's always a 'hard exit' without warning,
+        so nothing useful to do here
+    */
+}
+
+#else /* dummy backend */
 bool _saudio_backend_init(void) { return false; };
 void _saudio_backend_shutdown(void) { };
 #endif
