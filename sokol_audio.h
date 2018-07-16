@@ -13,6 +13,10 @@
           may happen when attaching/removing a playback device)
         - MAYBE: implement some sort of sample-rate limiting if the 
           actual sample rate is very high?
+        - if the actual sample rate is a lot different than what was
+          requested, the other requested parameters (most notably the
+          stream buffer size and number of packets) might not be sufficient
+          for glitch-free audioplayback... maybe need to do a 2-step setup?
 
     In the beginning this is mainly a testbed to get the simplest possible
     glitch-free audio solution for WASM/asm.js, and to have that simplest-
@@ -134,7 +138,7 @@ typedef struct {
 extern void saudio_setup(const saudio_desc* desc);
 /* shutdown sokol-audio */
 extern void saudio_shutdown(void);
-/* true between setup and shutdown */
+/* true after setup if audio backend was successfully initialized */
 extern bool saudio_isvalid(void);
 /* actual sample rate */
 extern int saudio_sample_rate(void);
