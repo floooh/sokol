@@ -5,6 +5,15 @@
     THIS IS HIGHLY EXPERIMENTAL AND WON'T BE FINISHED FOR A WHILE, 
     DON'T USE!
 
+    TODO:
+        - stereo support
+        - Windows + Linux backends
+        - write tests for the helper classes (ring queue, packet fifo)
+        - need a callback when sample rate in the backend changes (this
+          may happen when attaching/removing a playback device)
+        - MAYBE: implement some sort of sample-rate limiting if the 
+          actual sample rate is very high?
+
     In the beginning this is mainly a testbed to get the simplest possible
     glitch-free audio solution for WASM/asm.js, and to have that simplest-
     possible API for other platforms too.
