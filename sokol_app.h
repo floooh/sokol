@@ -74,9 +74,8 @@
     char events         | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     mouse events        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     touch events        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    window events       | TODO    | TODO  | TODO  | ---   | ---     | ---   | TODO
-    framebuffer events  | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
-    application events  | TODO    | TODO  | TODO  | TODO  | TODO    | TODO  | TODO
+    window events       | TODO    | YES   | TODO  | ---   | ---     | ---   | TODO
+    lifecycle events    | ---     | ---   | ---   | TODO  | TODO    | TODO  | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
@@ -329,15 +328,11 @@ typedef enum {
     SAPP_EVENTTYPE_TOUCHES_MOVED,
     SAPP_EVENTTYPE_TOUCHES_ENDED,
     SAPP_EVENTTYPE_TOUCHES_CANCELLED,
-    /* FIXME NOT IMPLEMENTED YET: */
-    SAPP_EVENTTYPE_WINDOW_POS,
-    SAPP_EVENTTYPE_WINDOW_SIZE,
-    SAPP_EVENTTYPE_WINDOW_MINIMIZED,
-    SAPP_EVENTTYPE_WINDOW_MAXIMIZED,
-    SAPP_EVENTTYPE_WINDOW_RESTORED,
-    SAPP_EVENTTYPE_FRAMEBUFFER_SIZE,
-    SAPP_EVENTTYPE_APP_SUSPEND,
-    SAPP_EVENTTYPE_APP_RESUME,
+    SAPP_EVENTTYPE_RESIZED,
+    SAPP_EVENTTYPE_ICONIFIED,
+    SAPP_EVENTTYPE_RESTORED,
+    SAPP_EVENTTYPE_SUSPENDED,
+    SAPP_EVENTTYPE_RESUMED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
@@ -501,6 +496,10 @@ typedef struct {
     float scroll_y;
     int num_touches;
     sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];
+    int window_width;
+    int window_height;
+    int framebuffer_width;
+    int framebuffer_height;
 } sapp_event;
 
 typedef struct {
@@ -731,6 +730,10 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.type = type;
     _sapp.event.frame_count = _sapp.frame_count;
     _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
+    _sapp.event.window_width = _sapp.window_width;
+    _sapp.event.window_height = _sapp.window_height;
+    _sapp.event.framebuffer_width = _sapp.framebuffer_width;
+    _sapp.event.framebuffer_height = _sapp.framebuffer_height;
 }
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
@@ -913,7 +916,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
+_SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     const CGSize fb_size = [_sapp_view_obj drawableSize];
     _sapp.framebuffer_width = fb_size.width;
     _sapp.framebuffer_height = fb_size.height;
@@ -922,6 +925,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.window_height = bounds.size.height;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_frame(void) {
     const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
@@ -975,11 +981,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp_view_obj.drawableSize = drawable_size;
     }
-    CGSize drawable_size = _sapp_view_obj.drawableSize;
-    _sapp.framebuffer_width = drawable_size.width;
-    _sapp.framebuffer_height = drawable_size.height;
-    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
+    _sapp_macos_update_dimensions();
     _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
     if (_sapp.desc.fullscreen) {
         [_sapp_window_obj toggleFullScreen:self];
@@ -993,40 +995,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     return YES;
-}
-@end
-
-@implementation _sapp_window_delegate
-- (BOOL)windowShouldClose:(id)sender {
-    _sapp.desc.cleanup_cb();
-    return YES;
-}
-
-- (void)windowDidMiniaturize:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidDeminiaturize:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidBecomeKey:(NSNotification*)notification {
-    /* FIXME */
-}
-
-- (void)windowDidResignKey:(NSNotification*)notification {
-    /* FIXME */
-}
-@end
-
-@implementation _sapp_mtk_view_dlg
-- (void)drawInMTKView:(MTKView*)view {
-    @autoreleasepool {
-        _sapp_macos_frame();
-    }
-}
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    /* this is required by the protocol, but we can't do anything useful here */
 }
 @end
 
@@ -1066,6 +1034,44 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
         _sapp.desc.event_cb(&_sapp.event);
     }
 }
+
+_SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+@implementation _sapp_window_delegate
+- (BOOL)windowShouldClose:(id)sender {
+    _sapp.desc.cleanup_cb();
+    return YES;
+}
+
+- (void)windowDidResize:(NSNotification*)notification {
+    _sapp_macos_update_dimensions();
+    _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
+}
+
+- (void)windowDidMiniaturize:(NSNotification*)notification {
+    _sapp_macos_app_event(SAPP_EVENTTYPE_ICONIFIED);
+}
+
+- (void)windowDidDeminiaturize:(NSNotification*)notification {
+    _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
+}
+@end
+
+@implementation _sapp_mtk_view_dlg
+- (void)drawInMTKView:(MTKView*)view {
+    @autoreleasepool {
+        _sapp_macos_frame();
+    }
+}
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    /* this is required by the protocol, but we can't do anything useful here */
+}
+@end
 
 @implementation _sapp_view
 - (BOOL)isOpaque {
@@ -1514,11 +1520,11 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 
 /* Javascript helper functions for mobile virtual keyboard input */
 EM_JS(void, _sapp_js_create_textfield, (), {
-    var x = document.createElement("INPUT");
-    x.type = "text";
-    x.id = "_sokol_app_input_element";
-    x.autocapitalize = "none";
-    x.addEventListener("focusout", function(e) {
+    var inp = document.createElement("input");
+    inp.type = "text";
+    inp.id = "_sokol_app_input_element";
+    inp.autocapitalize = "none";
+    inp.addEventListener("focusout", function(e) {
         __sapp_emsc_notify_keyboard_hidden()
 
     });
