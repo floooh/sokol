@@ -772,7 +772,10 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 @end
 @interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
-@interface _sapp_view : MTKView;
+@interface _sapp_view : MTKView
+{
+    NSTrackingArea* trackingArea;
+}
 @end
 
 static NSWindow* _sapp_window_obj;
@@ -959,6 +962,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
     _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
     _sapp_view_obj = [[_sapp_view alloc] init];
+    [_sapp_view_obj updateTrackingAreas];
     _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
     _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
     _sapp_view_obj.device = _sapp_mtl_device_obj;
@@ -1072,6 +1076,27 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
 }
 - (BOOL)acceptsFirstResponder {
     return YES;
+}
+- (void)updateTrackingAreas {
+    if (trackingArea != nil) {
+        [self removeTrackingArea:trackingArea];
+        trackingArea = nil;
+    }
+    const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
+                                          NSTrackingActiveInKeyWindow |
+                                          NSTrackingEnabledDuringMouseDrag |
+                                          NSTrackingCursorUpdate |
+                                          NSTrackingInVisibleRect |
+                                          NSTrackingAssumeInside;
+    trackingArea = [[NSTrackingArea alloc] initWithRect:[self bounds] options:options owner:self userInfo:nil];
+    [self addTrackingArea:trackingArea];
+    [super updateTrackingAreas];
+}
+- (void)mouseEntered:(NSEvent*)event {
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+}
+- (void)mouseExited:(NSEvent*)event {
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDown:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
