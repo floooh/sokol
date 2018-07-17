@@ -75,7 +75,7 @@
     char events         | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     mouse events        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     touch events        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    window events       | TODO    | YES   | TODO  | ---   | ---     | ---   | TODO
+    window events       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     lifecycle events    | ---     | ---   | ---   | TODO  | TODO    | TODO  | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
