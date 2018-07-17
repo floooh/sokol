@@ -13,6 +13,7 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
+    SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -2100,6 +2101,7 @@ static bool _sapp_win32_dpi_aware;
 static int _sapp_win32_content_scale;
 static int _sapp_win32_window_scale;
 static float _sapp_win32_mouse_scale;
+static bool _sapp_win32_iconified;
 typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
 typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
 typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
@@ -2764,383 +2766,8 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
 
 #endif /* SOKOL_GLCORE33 */
 
-#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
-
-_SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
-    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, dst_num_bytes);
-    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
-    const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
-    if ((dst_needed > 0) && (dst_needed < dst_chars)) {
-        MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
-        return true;
-    }
-    else {
-        /* input string doesn't fit into destination buffer */
-        return false;
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
-    /* same as GLFW */
-    _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
-    _sapp.keycodes[0x002] = SAPP_KEYCODE_1;
-    _sapp.keycodes[0x003] = SAPP_KEYCODE_2;
-    _sapp.keycodes[0x004] = SAPP_KEYCODE_3;
-    _sapp.keycodes[0x005] = SAPP_KEYCODE_4;
-    _sapp.keycodes[0x006] = SAPP_KEYCODE_5;
-    _sapp.keycodes[0x007] = SAPP_KEYCODE_6;
-    _sapp.keycodes[0x008] = SAPP_KEYCODE_7;
-    _sapp.keycodes[0x009] = SAPP_KEYCODE_8;
-    _sapp.keycodes[0x00A] = SAPP_KEYCODE_9;
-    _sapp.keycodes[0x01E] = SAPP_KEYCODE_A;
-    _sapp.keycodes[0x030] = SAPP_KEYCODE_B;
-    _sapp.keycodes[0x02E] = SAPP_KEYCODE_C;
-    _sapp.keycodes[0x020] = SAPP_KEYCODE_D;
-    _sapp.keycodes[0x012] = SAPP_KEYCODE_E;
-    _sapp.keycodes[0x021] = SAPP_KEYCODE_F;
-    _sapp.keycodes[0x022] = SAPP_KEYCODE_G;
-    _sapp.keycodes[0x023] = SAPP_KEYCODE_H;
-    _sapp.keycodes[0x017] = SAPP_KEYCODE_I;
-    _sapp.keycodes[0x024] = SAPP_KEYCODE_J;
-    _sapp.keycodes[0x025] = SAPP_KEYCODE_K;
-    _sapp.keycodes[0x026] = SAPP_KEYCODE_L;
-    _sapp.keycodes[0x032] = SAPP_KEYCODE_M;
-    _sapp.keycodes[0x031] = SAPP_KEYCODE_N;
-    _sapp.keycodes[0x018] = SAPP_KEYCODE_O;
-    _sapp.keycodes[0x019] = SAPP_KEYCODE_P;
-    _sapp.keycodes[0x010] = SAPP_KEYCODE_Q;
-    _sapp.keycodes[0x013] = SAPP_KEYCODE_R;
-    _sapp.keycodes[0x01F] = SAPP_KEYCODE_S;
-    _sapp.keycodes[0x014] = SAPP_KEYCODE_T;
-    _sapp.keycodes[0x016] = SAPP_KEYCODE_U;
-    _sapp.keycodes[0x02F] = SAPP_KEYCODE_V;
-    _sapp.keycodes[0x011] = SAPP_KEYCODE_W;
-    _sapp.keycodes[0x02D] = SAPP_KEYCODE_X;
-    _sapp.keycodes[0x015] = SAPP_KEYCODE_Y;
-    _sapp.keycodes[0x02C] = SAPP_KEYCODE_Z;
-    _sapp.keycodes[0x028] = SAPP_KEYCODE_APOSTROPHE;
-    _sapp.keycodes[0x02B] = SAPP_KEYCODE_BACKSLASH;
-    _sapp.keycodes[0x033] = SAPP_KEYCODE_COMMA;
-    _sapp.keycodes[0x00D] = SAPP_KEYCODE_EQUAL;
-    _sapp.keycodes[0x029] = SAPP_KEYCODE_GRAVE_ACCENT;
-    _sapp.keycodes[0x01A] = SAPP_KEYCODE_LEFT_BRACKET;
-    _sapp.keycodes[0x00C] = SAPP_KEYCODE_MINUS;
-    _sapp.keycodes[0x034] = SAPP_KEYCODE_PERIOD;
-    _sapp.keycodes[0x01B] = SAPP_KEYCODE_RIGHT_BRACKET;
-    _sapp.keycodes[0x027] = SAPP_KEYCODE_SEMICOLON;
-    _sapp.keycodes[0x035] = SAPP_KEYCODE_SLASH;
-    _sapp.keycodes[0x056] = SAPP_KEYCODE_WORLD_2;
-    _sapp.keycodes[0x00E] = SAPP_KEYCODE_BACKSPACE;
-    _sapp.keycodes[0x153] = SAPP_KEYCODE_DELETE;
-    _sapp.keycodes[0x14F] = SAPP_KEYCODE_END;
-    _sapp.keycodes[0x01C] = SAPP_KEYCODE_ENTER;
-    _sapp.keycodes[0x001] = SAPP_KEYCODE_ESCAPE;
-    _sapp.keycodes[0x147] = SAPP_KEYCODE_HOME;
-    _sapp.keycodes[0x152] = SAPP_KEYCODE_INSERT;
-    _sapp.keycodes[0x15D] = SAPP_KEYCODE_MENU;
-    _sapp.keycodes[0x151] = SAPP_KEYCODE_PAGE_DOWN;
-    _sapp.keycodes[0x149] = SAPP_KEYCODE_PAGE_UP;
-    _sapp.keycodes[0x045] = SAPP_KEYCODE_PAUSE;
-    _sapp.keycodes[0x146] = SAPP_KEYCODE_PAUSE;
-    _sapp.keycodes[0x039] = SAPP_KEYCODE_SPACE;
-    _sapp.keycodes[0x00F] = SAPP_KEYCODE_TAB;
-    _sapp.keycodes[0x03A] = SAPP_KEYCODE_CAPS_LOCK;
-    _sapp.keycodes[0x145] = SAPP_KEYCODE_NUM_LOCK;
-    _sapp.keycodes[0x046] = SAPP_KEYCODE_SCROLL_LOCK;
-    _sapp.keycodes[0x03B] = SAPP_KEYCODE_F1;
-    _sapp.keycodes[0x03C] = SAPP_KEYCODE_F2;
-    _sapp.keycodes[0x03D] = SAPP_KEYCODE_F3;
-    _sapp.keycodes[0x03E] = SAPP_KEYCODE_F4;
-    _sapp.keycodes[0x03F] = SAPP_KEYCODE_F5;
-    _sapp.keycodes[0x040] = SAPP_KEYCODE_F6;
-    _sapp.keycodes[0x041] = SAPP_KEYCODE_F7;
-    _sapp.keycodes[0x042] = SAPP_KEYCODE_F8;
-    _sapp.keycodes[0x043] = SAPP_KEYCODE_F9;
-    _sapp.keycodes[0x044] = SAPP_KEYCODE_F10;
-    _sapp.keycodes[0x057] = SAPP_KEYCODE_F11;
-    _sapp.keycodes[0x058] = SAPP_KEYCODE_F12;
-    _sapp.keycodes[0x064] = SAPP_KEYCODE_F13;
-    _sapp.keycodes[0x065] = SAPP_KEYCODE_F14;
-    _sapp.keycodes[0x066] = SAPP_KEYCODE_F15;
-    _sapp.keycodes[0x067] = SAPP_KEYCODE_F16;
-    _sapp.keycodes[0x068] = SAPP_KEYCODE_F17;
-    _sapp.keycodes[0x069] = SAPP_KEYCODE_F18;
-    _sapp.keycodes[0x06A] = SAPP_KEYCODE_F19;
-    _sapp.keycodes[0x06B] = SAPP_KEYCODE_F20;
-    _sapp.keycodes[0x06C] = SAPP_KEYCODE_F21;
-    _sapp.keycodes[0x06D] = SAPP_KEYCODE_F22;
-    _sapp.keycodes[0x06E] = SAPP_KEYCODE_F23;
-    _sapp.keycodes[0x076] = SAPP_KEYCODE_F24;
-    _sapp.keycodes[0x038] = SAPP_KEYCODE_LEFT_ALT;
-    _sapp.keycodes[0x01D] = SAPP_KEYCODE_LEFT_CONTROL;
-    _sapp.keycodes[0x02A] = SAPP_KEYCODE_LEFT_SHIFT;
-    _sapp.keycodes[0x15B] = SAPP_KEYCODE_LEFT_SUPER;
-    _sapp.keycodes[0x137] = SAPP_KEYCODE_PRINT_SCREEN;
-    _sapp.keycodes[0x138] = SAPP_KEYCODE_RIGHT_ALT;
-    _sapp.keycodes[0x11D] = SAPP_KEYCODE_RIGHT_CONTROL;
-    _sapp.keycodes[0x036] = SAPP_KEYCODE_RIGHT_SHIFT;
-    _sapp.keycodes[0x15C] = SAPP_KEYCODE_RIGHT_SUPER;
-    _sapp.keycodes[0x150] = SAPP_KEYCODE_DOWN;
-    _sapp.keycodes[0x14B] = SAPP_KEYCODE_LEFT;
-    _sapp.keycodes[0x14D] = SAPP_KEYCODE_RIGHT;
-    _sapp.keycodes[0x148] = SAPP_KEYCODE_UP;
-    _sapp.keycodes[0x052] = SAPP_KEYCODE_KP_0;
-    _sapp.keycodes[0x04F] = SAPP_KEYCODE_KP_1;
-    _sapp.keycodes[0x050] = SAPP_KEYCODE_KP_2;
-    _sapp.keycodes[0x051] = SAPP_KEYCODE_KP_3;
-    _sapp.keycodes[0x04B] = SAPP_KEYCODE_KP_4;
-    _sapp.keycodes[0x04C] = SAPP_KEYCODE_KP_5;
-    _sapp.keycodes[0x04D] = SAPP_KEYCODE_KP_6;
-    _sapp.keycodes[0x047] = SAPP_KEYCODE_KP_7;
-    _sapp.keycodes[0x048] = SAPP_KEYCODE_KP_8;
-    _sapp.keycodes[0x049] = SAPP_KEYCODE_KP_9;
-    _sapp.keycodes[0x04E] = SAPP_KEYCODE_KP_ADD;
-    _sapp.keycodes[0x053] = SAPP_KEYCODE_KP_DECIMAL;
-    _sapp.keycodes[0x135] = SAPP_KEYCODE_KP_DIVIDE;
-    _sapp.keycodes[0x11C] = SAPP_KEYCODE_KP_ENTER;
-    _sapp.keycodes[0x037] = SAPP_KEYCODE_KP_MULTIPLY;
-    _sapp.keycodes[0x04A] = SAPP_KEYCODE_KP_SUBTRACT;
-}
-
-_SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
-    uint32_t mods = 0;
-    if (GetKeyState(VK_SHIFT) & (1<<31)) {
-        mods |= SAPP_MODIFIER_SHIFT;
-    }
-    if (GetKeyState(VK_CONTROL) & (1<<31)) {
-        mods |= SAPP_MODIFIER_CTRL;
-    }
-    if (GetKeyState(VK_MENU) & (1<<31)) {
-        mods |= SAPP_MODIFIER_ALT;
-    }
-    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<31)) {
-        mods |= SAPP_MODIFIER_SUPER;
-    }
-    return mods;
-}
-
-_SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutton btn) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_win32_mods();
-        _sapp.event.mouse_button = btn;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-        _sapp.event.modifiers = _sapp_win32_mods();
-        _sapp.event.scroll_x = -x / 30.0f;
-        _sapp.event.scroll_y = y / 30.0f;
-        _sapp.desc.event_cb(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
-    if (_sapp_events_enabled() && (vk < SAPP_MAX_KEYCODES)) {
-        _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_win32_mods();
-        _sapp.event.key_code = _sapp.keycodes[vk];
-        _sapp.desc.event_cb(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
-    if (_sapp_events_enabled() && (c >= 32)) {
-        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-        _sapp.event.modifiers = _sapp_win32_mods();
-        _sapp.event.char_code = c;
-        _sapp.desc.event_cb(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        case WM_CLOSE:
-            PostQuitMessage(0);
-            return 0;
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_LBUTTONDOWN:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
-            break;
-        case WM_RBUTTONDOWN:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT);
-            break;
-        case WM_MBUTTONDOWN:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE);
-            break;
-        case WM_LBUTTONUP:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT);
-            break;
-        case WM_RBUTTONUP:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT);
-            break;
-        case WM_MBUTTONUP:
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
-            break;
-        case WM_MOUSEMOVE:
-            _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp_win32_mouse_scale;
-            _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp_win32_mouse_scale;
-            if (!_sapp.win32_mouse_tracked) {
-                _sapp.win32_mouse_tracked = true;
-                TRACKMOUSEEVENT tme;
-                memset(&tme, 0, sizeof(tme));
-                tme.cbSize = sizeof(tme);
-                tme.dwFlags = TME_LEAVE;
-                tme.hwndTrack = _sapp_win32_hwnd;
-                TrackMouseEvent(&tme);
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
-            }
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
-            break;
-        case WM_MOUSELEAVE:
-            _sapp.win32_mouse_tracked = false;
-            _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
-            break;
-        case WM_MOUSEWHEEL:
-            _sapp_win32_scroll_event(0.0f, (float)((SHORT)HIWORD(wParam)));
-            break;
-        case WM_MOUSEHWHEEL:
-            _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)), 0.0f);
-            break;
-        case WM_CHAR:
-            _sapp_win32_char_event((uint32_t)wParam);
-            break;
-        case WM_KEYDOWN:
-            _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
-            break;
-        case WM_KEYUP:
-            _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
-            break;
-        default:
-            break;
-    }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-}
-
-_SOKOL_PRIVATE void _sapp_win32_create_window(void) {
-    WNDCLASSW wndclassw;
-    memset(&wndclassw, 0, sizeof(wndclassw));
-    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
-    wndclassw.hInstance = GetModuleHandleW(NULL);
-    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
-    wndclassw.lpszClassName = L"SOKOLAPP";
-    RegisterClassW(&wndclassw);
-
-    DWORD win_style;
-    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-    RECT rect = { 0, 0, 0, 0 };
-    if (_sapp.desc.fullscreen) {
-        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = GetSystemMetrics(SM_CXSCREEN);
-        rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-    }
-    else {
-        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
-        rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
-        rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
-    }
-    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
-    const int win_width = rect.right - rect.left;
-    const int win_height = rect.bottom - rect.top;
-    _sapp_win32_in_create_window = true;
-    _sapp_win32_hwnd = CreateWindowExW(
-        win_ex_style,               /* dwExStyle */
-        L"SOKOLAPP",                /* lpClassName */
-        _sapp.window_title_wide,    /* lpWindowName */
-        win_style,                  /* dwStyle */
-        CW_USEDEFAULT,              /* X */
-        CW_USEDEFAULT,              /* Y */
-        win_width,                  /* nWidth */
-        win_height,                 /* nHeight */
-        NULL,                       /* hWndParent */
-        NULL,                       /* hMenu */
-        GetModuleHandle(NULL),      /* hInstance */
-        NULL);                      /* lParam */
-    ShowWindow(_sapp_win32_hwnd, SW_SHOW);
-    _sapp_win32_in_create_window = false;
-    _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
-    SOKOL_ASSERT(_sapp_win32_dc);
-        
-    if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-        _sapp.window_width = (rect.right - rect.left) / _sapp_win32_window_scale;
-        _sapp.window_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
-        _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
-        _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
-    DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
-    UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
-}
-
-_SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
-    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiaware);
-    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiawareness);
-    SOKOL_ASSERT(0 == _sapp_win32_getdpiformonitor);
-    HINSTANCE user32 = LoadLibraryA("user32.dll");
-    if (user32) {
-        _sapp_win32_setprocessdpiaware = (SETPROCESSDPIAWARE_T) GetProcAddress(user32, "SetProcessDPIAware");
-    }
-    HINSTANCE shcore = LoadLibraryA("shcore.dll");
-    if (shcore) {
-        _sapp_win32_setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T) GetProcAddress(shcore, "SetProcessDpiAwareness");
-        _sapp_win32_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
-    }
-    if (_sapp_win32_setprocessdpiawareness) {
-        /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
-        PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
-        _sapp_win32_dpi_aware = true;
-        if (!_sapp.desc.high_dpi) {
-            process_dpi_awareness = PROCESS_DPI_UNAWARE;
-            _sapp_win32_dpi_aware = false;
-        }
-        _sapp_win32_setprocessdpiawareness(process_dpi_awareness);
-    }
-    else if (_sapp_win32_setprocessdpiaware) {
-        _sapp_win32_setprocessdpiaware();
-        _sapp_win32_dpi_aware = true;
-    }
-    /* get dpi scale factor for main monitor */
-    if (_sapp_win32_getdpiformonitor && _sapp_win32_dpi_aware) {
-        POINT pt = { 1, 1 };
-        HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        UINT dpix, dpiy;
-        HRESULT hr = _sapp_win32_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
-        SOKOL_ASSERT(SUCCEEDED(hr));
-        /* clamp window scale to an integer factor */
-        _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
-    }
-    else {
-        _sapp_win32_window_scale = 1;
-    }
-    if (_sapp.desc.high_dpi) {
-        _sapp_win32_content_scale = _sapp_win32_window_scale;
-        _sapp_win32_mouse_scale = 1.0f;
-    }
-    else {
-        _sapp_win32_content_scale = 1;
-        _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
-    }
-    _sapp.dpi_scale = (float) _sapp_win32_content_scale;
-    if (user32) {
-        FreeLibrary(user32);
-    }
-    if (shcore) {
-        FreeLibrary(shcore);
-    }
-}
-
 #if defined(SOKOL_D3D11)
+#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
     sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
@@ -3470,7 +3097,435 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 }
 #endif
 
+_SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
+    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
+    memset(dst, 0, dst_num_bytes);
+    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
+    const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
+    if ((dst_needed > 0) && (dst_needed < dst_chars)) {
+        MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
+        return true;
+    }
+    else {
+        /* input string doesn't fit into destination buffer */
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
+    /* same as GLFW */
+    _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
+    _sapp.keycodes[0x002] = SAPP_KEYCODE_1;
+    _sapp.keycodes[0x003] = SAPP_KEYCODE_2;
+    _sapp.keycodes[0x004] = SAPP_KEYCODE_3;
+    _sapp.keycodes[0x005] = SAPP_KEYCODE_4;
+    _sapp.keycodes[0x006] = SAPP_KEYCODE_5;
+    _sapp.keycodes[0x007] = SAPP_KEYCODE_6;
+    _sapp.keycodes[0x008] = SAPP_KEYCODE_7;
+    _sapp.keycodes[0x009] = SAPP_KEYCODE_8;
+    _sapp.keycodes[0x00A] = SAPP_KEYCODE_9;
+    _sapp.keycodes[0x01E] = SAPP_KEYCODE_A;
+    _sapp.keycodes[0x030] = SAPP_KEYCODE_B;
+    _sapp.keycodes[0x02E] = SAPP_KEYCODE_C;
+    _sapp.keycodes[0x020] = SAPP_KEYCODE_D;
+    _sapp.keycodes[0x012] = SAPP_KEYCODE_E;
+    _sapp.keycodes[0x021] = SAPP_KEYCODE_F;
+    _sapp.keycodes[0x022] = SAPP_KEYCODE_G;
+    _sapp.keycodes[0x023] = SAPP_KEYCODE_H;
+    _sapp.keycodes[0x017] = SAPP_KEYCODE_I;
+    _sapp.keycodes[0x024] = SAPP_KEYCODE_J;
+    _sapp.keycodes[0x025] = SAPP_KEYCODE_K;
+    _sapp.keycodes[0x026] = SAPP_KEYCODE_L;
+    _sapp.keycodes[0x032] = SAPP_KEYCODE_M;
+    _sapp.keycodes[0x031] = SAPP_KEYCODE_N;
+    _sapp.keycodes[0x018] = SAPP_KEYCODE_O;
+    _sapp.keycodes[0x019] = SAPP_KEYCODE_P;
+    _sapp.keycodes[0x010] = SAPP_KEYCODE_Q;
+    _sapp.keycodes[0x013] = SAPP_KEYCODE_R;
+    _sapp.keycodes[0x01F] = SAPP_KEYCODE_S;
+    _sapp.keycodes[0x014] = SAPP_KEYCODE_T;
+    _sapp.keycodes[0x016] = SAPP_KEYCODE_U;
+    _sapp.keycodes[0x02F] = SAPP_KEYCODE_V;
+    _sapp.keycodes[0x011] = SAPP_KEYCODE_W;
+    _sapp.keycodes[0x02D] = SAPP_KEYCODE_X;
+    _sapp.keycodes[0x015] = SAPP_KEYCODE_Y;
+    _sapp.keycodes[0x02C] = SAPP_KEYCODE_Z;
+    _sapp.keycodes[0x028] = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[0x02B] = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[0x033] = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[0x00D] = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[0x029] = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[0x01A] = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[0x00C] = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[0x034] = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[0x01B] = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[0x027] = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[0x035] = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[0x056] = SAPP_KEYCODE_WORLD_2;
+    _sapp.keycodes[0x00E] = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[0x153] = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[0x14F] = SAPP_KEYCODE_END;
+    _sapp.keycodes[0x01C] = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[0x001] = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[0x147] = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[0x152] = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[0x15D] = SAPP_KEYCODE_MENU;
+    _sapp.keycodes[0x151] = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[0x149] = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[0x045] = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[0x146] = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[0x039] = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[0x00F] = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[0x03A] = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[0x145] = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[0x046] = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[0x03B] = SAPP_KEYCODE_F1;
+    _sapp.keycodes[0x03C] = SAPP_KEYCODE_F2;
+    _sapp.keycodes[0x03D] = SAPP_KEYCODE_F3;
+    _sapp.keycodes[0x03E] = SAPP_KEYCODE_F4;
+    _sapp.keycodes[0x03F] = SAPP_KEYCODE_F5;
+    _sapp.keycodes[0x040] = SAPP_KEYCODE_F6;
+    _sapp.keycodes[0x041] = SAPP_KEYCODE_F7;
+    _sapp.keycodes[0x042] = SAPP_KEYCODE_F8;
+    _sapp.keycodes[0x043] = SAPP_KEYCODE_F9;
+    _sapp.keycodes[0x044] = SAPP_KEYCODE_F10;
+    _sapp.keycodes[0x057] = SAPP_KEYCODE_F11;
+    _sapp.keycodes[0x058] = SAPP_KEYCODE_F12;
+    _sapp.keycodes[0x064] = SAPP_KEYCODE_F13;
+    _sapp.keycodes[0x065] = SAPP_KEYCODE_F14;
+    _sapp.keycodes[0x066] = SAPP_KEYCODE_F15;
+    _sapp.keycodes[0x067] = SAPP_KEYCODE_F16;
+    _sapp.keycodes[0x068] = SAPP_KEYCODE_F17;
+    _sapp.keycodes[0x069] = SAPP_KEYCODE_F18;
+    _sapp.keycodes[0x06A] = SAPP_KEYCODE_F19;
+    _sapp.keycodes[0x06B] = SAPP_KEYCODE_F20;
+    _sapp.keycodes[0x06C] = SAPP_KEYCODE_F21;
+    _sapp.keycodes[0x06D] = SAPP_KEYCODE_F22;
+    _sapp.keycodes[0x06E] = SAPP_KEYCODE_F23;
+    _sapp.keycodes[0x076] = SAPP_KEYCODE_F24;
+    _sapp.keycodes[0x038] = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[0x01D] = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[0x02A] = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[0x15B] = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[0x137] = SAPP_KEYCODE_PRINT_SCREEN;
+    _sapp.keycodes[0x138] = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[0x11D] = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[0x036] = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[0x15C] = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[0x150] = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[0x14B] = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[0x14D] = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[0x148] = SAPP_KEYCODE_UP;
+    _sapp.keycodes[0x052] = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[0x04F] = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[0x050] = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[0x051] = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[0x04B] = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[0x04C] = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[0x04D] = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[0x047] = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[0x048] = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[0x049] = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[0x04E] = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[0x053] = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[0x135] = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[0x11C] = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[0x037] = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[0x04A] = SAPP_KEYCODE_KP_SUBTRACT;
+}
+
+/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
+_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
+    RECT rect;
+    if (GetClientRect(_sapp_win32_hwnd, &rect)) {
+        const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
+        const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
+        if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
+            _sapp.window_width = cur_width;
+            _sapp.window_height = cur_height;
+            _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
+            _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
+            /* prevent a framebuffer size of 0 when window is minimized */
+            if (_sapp.framebuffer_width == 0) {
+                _sapp.framebuffer_width = 1;
+            }
+            if (_sapp.framebuffer_height == 0) {
+                _sapp.framebuffer_height = 1;
+            }
+            return true;
+        }
+    }
+    else {
+        _sapp.window_width = _sapp.window_height = 1;
+        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
+    uint32_t mods = 0;
+    if (GetKeyState(VK_SHIFT) & (1<<31)) {
+        mods |= SAPP_MODIFIER_SHIFT;
+    }
+    if (GetKeyState(VK_CONTROL) & (1<<31)) {
+        mods |= SAPP_MODIFIER_CTRL;
+    }
+    if (GetKeyState(VK_MENU) & (1<<31)) {
+        mods |= SAPP_MODIFIER_ALT;
+    }
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<31)) {
+        mods |= SAPP_MODIFIER_SUPER;
+    }
+    return mods;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutton btn) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.mouse_button = btn;
+        _sapp.event.mouse_x = _sapp.mouse_x;
+        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.scroll_x = -x / 30.0f;
+        _sapp.event.scroll_y = y / 30.0f;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
+    if (_sapp_events_enabled() && (vk < SAPP_MAX_KEYCODES)) {
+        _sapp_init_event(type);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.key_code = _sapp.keycodes[vk];
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
+    if (_sapp_events_enabled() && (c >= 32)) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp.event.modifiers = _sapp_win32_mods();
+        _sapp.event.char_code = c;
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    /* FIXME: refresh rendering during resize with a WM_TIMER event */
+    if (!_sapp_win32_in_create_window) {
+        switch (uMsg) {
+            case WM_CLOSE:
+                PostQuitMessage(0);
+                return 0;
+            case WM_ERASEBKGND:
+                return 1;
+            case WM_SIZE:
+                const bool iconified = wParam == SIZE_MINIMIZED;
+                if (iconified != _sapp_win32_iconified) {
+                    _sapp_win32_iconified = iconified;
+                    if (iconified) {
+                        _sapp_win32_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                    }
+                    else {
+                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
+                    }
+                }
+                if (_sapp_win32_update_dimensions()) {
+                    #if defined(SOKOL_D3D11)
+                    _sapp_d3d11_resize_default_render_target();
+                    #endif
+                    _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+                }
+                break;
+            case WM_LBUTTONDOWN:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
+                break;
+            case WM_RBUTTONDOWN:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT);
+                break;
+            case WM_MBUTTONDOWN:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE);
+                break;
+            case WM_LBUTTONUP:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT);
+                break;
+            case WM_RBUTTONUP:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT);
+                break;
+            case WM_MBUTTONUP:
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
+                break;
+            case WM_MOUSEMOVE:
+                _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp_win32_mouse_scale;
+                _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp_win32_mouse_scale;
+                if (!_sapp.win32_mouse_tracked) {
+                    _sapp.win32_mouse_tracked = true;
+                    TRACKMOUSEEVENT tme;
+                    memset(&tme, 0, sizeof(tme));
+                    tme.cbSize = sizeof(tme);
+                    tme.dwFlags = TME_LEAVE;
+                    tme.hwndTrack = _sapp_win32_hwnd;
+                    TrackMouseEvent(&tme);
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
+                }
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
+                break;
+            case WM_MOUSELEAVE:
+                _sapp.win32_mouse_tracked = false;
+                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
+                break;
+            case WM_MOUSEWHEEL:
+                _sapp_win32_scroll_event(0.0f, (float)((SHORT)HIWORD(wParam)));
+                break;
+            case WM_MOUSEHWHEEL:
+                _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)), 0.0f);
+                break;
+            case WM_CHAR:
+                _sapp_win32_char_event((uint32_t)wParam);
+                break;
+            case WM_KEYDOWN:
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
+                break;
+            case WM_KEYUP:
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
+                break;
+            default:
+                break;
+        }
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_create_window(void) {
+    WNDCLASSW wndclassw;
+    memset(&wndclassw, 0, sizeof(wndclassw));
+    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
+    wndclassw.hInstance = GetModuleHandleW(NULL);
+    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
+    wndclassw.lpszClassName = L"SOKOLAPP";
+    RegisterClassW(&wndclassw);
+
+    DWORD win_style;
+    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    RECT rect = { 0, 0, 0, 0 };
+    if (_sapp.desc.fullscreen) {
+        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
+        rect.right = GetSystemMetrics(SM_CXSCREEN);
+        rect.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+    else {
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+        rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
+        rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
+    }
+    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
+    const int win_width = rect.right - rect.left;
+    const int win_height = rect.bottom - rect.top;
+    _sapp_win32_in_create_window = true;
+    _sapp_win32_hwnd = CreateWindowExW(
+        win_ex_style,               /* dwExStyle */
+        L"SOKOLAPP",                /* lpClassName */
+        _sapp.window_title_wide,    /* lpWindowName */
+        win_style,                  /* dwStyle */
+        CW_USEDEFAULT,              /* X */
+        CW_USEDEFAULT,              /* Y */
+        win_width,                  /* nWidth */
+        win_height,                 /* nHeight */
+        NULL,                       /* hWndParent */
+        NULL,                       /* hMenu */
+        GetModuleHandle(NULL),      /* hInstance */
+        NULL);                      /* lParam */
+    ShowWindow(_sapp_win32_hwnd, SW_SHOW);
+    _sapp_win32_in_create_window = false;
+    _sapp_win32_dc = GetDC(_sapp_win32_hwnd);
+    SOKOL_ASSERT(_sapp_win32_dc);
+    _sapp_win32_update_dimensions();
+}
+
+_SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
+    DestroyWindow(_sapp_win32_hwnd); _sapp_win32_hwnd = 0;
+    UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
+}
+
+_SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
+    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiaware);
+    SOKOL_ASSERT(0 == _sapp_win32_setprocessdpiawareness);
+    SOKOL_ASSERT(0 == _sapp_win32_getdpiformonitor);
+    HINSTANCE user32 = LoadLibraryA("user32.dll");
+    if (user32) {
+        _sapp_win32_setprocessdpiaware = (SETPROCESSDPIAWARE_T) GetProcAddress(user32, "SetProcessDPIAware");
+    }
+    HINSTANCE shcore = LoadLibraryA("shcore.dll");
+    if (shcore) {
+        _sapp_win32_setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T) GetProcAddress(shcore, "SetProcessDpiAwareness");
+        _sapp_win32_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
+    }
+    if (_sapp_win32_setprocessdpiawareness) {
+        /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
+        PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
+        _sapp_win32_dpi_aware = true;
+        if (!_sapp.desc.high_dpi) {
+            process_dpi_awareness = PROCESS_DPI_UNAWARE;
+            _sapp_win32_dpi_aware = false;
+        }
+        _sapp_win32_setprocessdpiawareness(process_dpi_awareness);
+    }
+    else if (_sapp_win32_setprocessdpiaware) {
+        _sapp_win32_setprocessdpiaware();
+        _sapp_win32_dpi_aware = true;
+    }
+    /* get dpi scale factor for main monitor */
+    if (_sapp_win32_getdpiformonitor && _sapp_win32_dpi_aware) {
+        POINT pt = { 1, 1 };
+        HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        UINT dpix, dpiy;
+        HRESULT hr = _sapp_win32_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
+        SOKOL_ASSERT(SUCCEEDED(hr));
+        /* clamp window scale to an integer factor */
+        _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
+    }
+    else {
+        _sapp_win32_window_scale = 1;
+    }
+    if (_sapp.desc.high_dpi) {
+        _sapp_win32_content_scale = _sapp_win32_window_scale;
+        _sapp_win32_mouse_scale = 1.0f;
+    }
+    else {
+        _sapp_win32_content_scale = 1;
+        _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
+    }
+    _sapp.dpi_scale = (float) _sapp_win32_content_scale;
+    if (user32) {
+        FreeLibrary(user32);
+    }
+    if (shcore) {
+        FreeLibrary(shcore);
+    }
+}
+
+#if defined(SOKOL_WIN32_FORCE_MAIN)
+int main(int argc, const char** argv) {
+#else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+#endif
     sapp_desc desc = sokol_main(__argc, __argv);
     _sapp_init_state(&desc, __argc, __argv);
     _sapp_win32_init_keytable();
@@ -3492,28 +3547,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp.valid = true;
 
     bool done = false;
-    RECT rect;
     while (!done) {
-        if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-            const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
-            const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
-            if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
-                _sapp.window_width = cur_width;
-                _sapp.window_height = cur_height;
-                _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
-                _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
-                #if defined(SOKOL_D3D11)
-                _sapp_d3d11_resize_default_render_target();
-                #endif
-            }
-        }
-        _sapp_frame();
-        #if defined(SOKOL_D3D11)
-            IDXGISwapChain_Present(_sapp_dxgi_swap_chain, _sapp.swap_interval, 0);
-        #endif
-        #if defined(SOKOL_GLCORE33)
-            _sapp_wgl_swap_buffers();
-        #endif
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -3524,6 +3558,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
                 DispatchMessage(&msg);
             }
         }
+        _sapp_frame();
+        #if defined(SOKOL_D3D11)
+            IDXGISwapChain_Present(_sapp_dxgi_swap_chain, _sapp.swap_interval, 0);
+        #endif
+        #if defined(SOKOL_GLCORE33)
+            _sapp_wgl_swap_buffers();
+        #endif
     }
     _sapp.desc.cleanup_cb();
 
