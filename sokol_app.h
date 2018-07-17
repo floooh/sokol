@@ -3335,21 +3335,23 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_ERASEBKGND:
                 return 1;
             case WM_SIZE:
-                const bool iconified = wParam == SIZE_MINIMIZED;
-                if (iconified != _sapp_win32_iconified) {
-                    _sapp_win32_iconified = iconified;
-                    if (iconified) {
-                        _sapp_win32_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                {
+                    const bool iconified = wParam == SIZE_MINIMIZED;
+                    if (iconified != _sapp_win32_iconified) {
+                        _sapp_win32_iconified = iconified;
+                        if (iconified) {
+                            _sapp_win32_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                        }
+                        else {
+                            _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
+                        }
                     }
-                    else {
-                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
+                    if (_sapp_win32_update_dimensions()) {
+                        #if defined(SOKOL_D3D11)
+                        _sapp_d3d11_resize_default_render_target();
+                        #endif
+                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                     }
-                }
-                if (_sapp_win32_update_dimensions()) {
-                    #if defined(SOKOL_D3D11)
-                    _sapp_d3d11_resize_default_render_target();
-                    #endif
-                    _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
                 break;
             case WM_LBUTTONDOWN:
