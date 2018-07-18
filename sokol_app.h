@@ -770,23 +770,23 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 
-@interface _sapp_app_delegate : NSObject<NSApplicationDelegate>
+@interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
-@interface _sapp_window_delegate : NSObject<NSWindowDelegate>
+@interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
-@interface _sapp_mtk_view_dlg : NSObject<MTKViewDelegate>
+@interface _sapp_macos_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
-@interface _sapp_view : MTKView
+@interface _sapp_macos_view : MTKView
 {
     NSTrackingArea* trackingArea;
 }
 @end
 
-static NSWindow* _sapp_window_obj;
-static _sapp_window_delegate* _sapp_win_dlg_obj;
-static _sapp_app_delegate* _sapp_app_dlg_obj;
-static _sapp_view* _sapp_view_obj;
-static _sapp_mtk_view_dlg* _sapp_mtk_view_dlg_obj;
+static NSWindow* _sapp_macos_window_obj;
+static _sapp_macos_window_delegate* _sapp_macos_win_dlg_obj;
+static _sapp_macos_app_delegate* _sapp_macos_app_dlg_obj;
+static _sapp_macos_view* _sapp_view_obj;
+static _sapp_macos_mtk_view_dlg* _sapp_macos_mtk_view_dlg_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
@@ -910,8 +910,8 @@ int main(int argc, char* argv[]) {
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
-    _sapp_app_dlg_obj = [[_sapp_app_delegate alloc] init];
-    NSApp.delegate = _sapp_app_dlg_obj;
+    _sapp_macos_app_dlg_obj = [[_sapp_macos_app_delegate alloc] init];
+    NSApp.delegate = _sapp_macos_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     return 0;
@@ -929,13 +929,13 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    const NSPoint mouse_pos = [_sapp_window_obj mouseLocationOutsideOfEventStream];
+    const NSPoint mouse_pos = [_sapp_macos_window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
 }
 
-@implementation _sapp_app_delegate
+@implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     if (_sapp.desc.fullscreen) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
@@ -956,28 +956,28 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSWindowStyleMaskClosable |
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
-    _sapp_window_obj = [[NSWindow alloc]
+    _sapp_macos_window_obj = [[NSWindow alloc]
         initWithContentRect:NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height)
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
-    _sapp_window_obj.title = [NSString stringWithUTF8String:_sapp.window_title];
-    _sapp_window_obj.acceptsMouseMovedEvents = YES;
-    _sapp_window_obj.restorable = YES;
-    _sapp_win_dlg_obj = [[_sapp_window_delegate alloc] init];
-    _sapp_window_obj.delegate = _sapp_win_dlg_obj;
+    _sapp_macos_window_obj.title = [NSString stringWithUTF8String:_sapp.window_title];
+    _sapp_macos_window_obj.acceptsMouseMovedEvents = YES;
+    _sapp_macos_window_obj.restorable = YES;
+    _sapp_macos_win_dlg_obj = [[_sapp_macos_window_delegate alloc] init];
+    _sapp_macos_window_obj.delegate = _sapp_macos_win_dlg_obj;
     _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
-    _sapp_mtk_view_dlg_obj = [[_sapp_mtk_view_dlg alloc] init];
-    _sapp_view_obj = [[_sapp_view alloc] init];
+    _sapp_macos_mtk_view_dlg_obj = [[_sapp_macos_mtk_view_dlg alloc] init];
+    _sapp_view_obj = [[_sapp_macos_view alloc] init];
     [_sapp_view_obj updateTrackingAreas];
     _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-    _sapp_view_obj.delegate = _sapp_mtk_view_dlg_obj;
+    _sapp_view_obj.delegate = _sapp_macos_mtk_view_dlg_obj;
     _sapp_view_obj.device = _sapp_mtl_device_obj;
     _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
     _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
     _sapp_view_obj.sampleCount = _sapp.sample_count;
-    _sapp_window_obj.contentView = _sapp_view_obj;
-    [_sapp_window_obj makeFirstResponder:_sapp_view_obj];
+    _sapp_macos_window_obj.contentView = _sapp_view_obj;
+    [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
     if (!_sapp.desc.high_dpi) {
         CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
         _sapp_view_obj.drawableSize = drawable_size;
@@ -985,12 +985,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_update_dimensions();
     _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
     if (_sapp.desc.fullscreen) {
-        [_sapp_window_obj toggleFullScreen:self];
+        [_sapp_macos_window_obj toggleFullScreen:self];
     }
     else {
-        [_sapp_window_obj center];
+        [_sapp_macos_window_obj center];
     }
-    [_sapp_window_obj makeKeyAndOrderFront:nil];
+    [_sapp_macos_window_obj makeKeyAndOrderFront:nil];
     _sapp.valid = true;
 }
 
@@ -1043,7 +1043,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
-@implementation _sapp_window_delegate
+@implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
     _sapp.desc.cleanup_cb();
     return YES;
@@ -1063,7 +1063,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
-@implementation _sapp_mtk_view_dlg
+@implementation _sapp_macos_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
         _sapp_macos_frame();
@@ -1074,7 +1074,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
-@implementation _sapp_view
+@implementation _sapp_macos_view
 - (BOOL)isOpaque {
     return YES;
 }
