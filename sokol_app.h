@@ -1232,20 +1232,40 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _sapp_ios_frame(void) {
+_SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.window_width = (int) screen_rect.size.width;
     _sapp.window_height = (int) screen_rect.size.height;
+    int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
         const CGSize fb_size = _sapp_view_obj.drawableSize;
-        _sapp.framebuffer_width = fb_size.width;
-        _sapp.framebuffer_height = fb_size.height;
+        cur_fb_width = (int) fb_size.width;
+        cur_fb_height = (int) fb_size.height;
     #else
-        _sapp.framebuffer_width = (int) _sapp_view_obj.drawableWidth;
-        _sapp.framebuffer_height = (int) _sapp_view_obj.drawableHeight;
+        new_fb_width = (int) _sapp_view_obj.drawableWidth;
+        new_fb_height = (int) _sapp_view_obj.drawableHeight;
     #endif
+    const bool dim_changed =
+        (_sapp.framebuffer_width != cur_fb_width) ||
+        (_sapp.framebuffer_height != cur_fb_height);
+    _sapp.framebuffer_width = cur_fb_width;
+    _sapp.framebuffer_height = cur_fb_height;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+    if (dim_changed) {
+        _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_ios_frame(void) {
+    _sapp_ios_update_dimensions();
     _sapp_frame();
 }
 
