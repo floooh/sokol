@@ -550,7 +550,6 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int buffer_size), {
             }
         };
         Module._saudio_node.connect(Module._saudio_context.destination);
-        console.log('sokol_audio.h: ScriptProcessNode buffer size ', Module._saudio_node.bufferSize);
         return 1;
     }
     else {
