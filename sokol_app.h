@@ -1654,6 +1654,20 @@ _SOKOL_PRIVATE void _sapp_emsc_frame(void) {
     _sapp_frame();
 }
 
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved, void* user_data) {
+    sapp_event_type type;
+    switch (emsc_type) {
+        case EMSCRIPTEN_EVENT_WEBGLCONTEXTLOST:     type = SAPP_EVENTTYPE_SUSPENDED; break;
+        case EMSCRIPTEN_EVENT_WEBGLCONTEXTRESTORED: type = SAPP_EVENTTYPE_RESUMED; break;
+        default:                                    type = SAPP_EVENTTYPE_INVALID; break;
+    }
+    if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
+        _sapp_init_event(type);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+    return true;
+}
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
     _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
@@ -2001,6 +2015,8 @@ int main(int argc, char* argv[]) {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
+    emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
     return 0;
 }
