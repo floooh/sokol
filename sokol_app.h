@@ -1628,6 +1628,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     _sapp.framebuffer_height = (int) h;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
     return true;
 }
 
