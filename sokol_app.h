@@ -71,12 +71,24 @@
     gles3/webgl2        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
-    key events          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    char events         | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    mouse events        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    touch events        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    window events       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
-    lifecycle events    | ---     | ---   | ---   | TODO  | TODO    | TODO  | TODO
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
+    CHAR                | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    RESIZED             | YES     | YES   | TODO  | YES   | TODO    | ---   | YES
+    ICONIFIED           | YES     | YES   | TODO  | ---   | ---     | ---   | ---
+    RESTORED            | YES     | YES   | TODO  | ---   | ---     | ---   | ---
+    SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
+    RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
