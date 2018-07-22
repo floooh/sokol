@@ -2870,7 +2870,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
 }
 
-_SOKOL_PRIVATE _sapp_d3d11_destroy_device_and_swapchain(void) {
+_SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
     _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp_dxgi_swap_chain);
     _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp_d3d11_device_context);
     _SAPP_SAFE_RELEASE(ID3D11Device, _sapp_d3d11_device);
