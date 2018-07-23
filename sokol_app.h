@@ -808,6 +808,7 @@ static _sapp_macos_app_delegate* _sapp_macos_app_dlg_obj;
 static _sapp_macos_view* _sapp_view_obj;
 static _sapp_macos_mtk_view_dlg* _sapp_macos_mtk_view_dlg_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
+static uint32_t _sapp_macos_flags_changed_store;
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
@@ -1191,7 +1192,32 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         _sapp_macos_mod(event.modifierFlags));
 }
 - (void)flagsChanged:(NSEvent*)event {
-    /* FIXME */
+    const uint32_t old_f = _sapp_macos_flags_changed_store;
+    const uint32_t new_f = event.modifierFlags;
+    _sapp_macos_flags_changed_store = new_f;
+    sapp_keycode key_code = SAPP_KEYCODE_INVALID;
+    bool down = false;
+    if ((new_f ^ old_f) & NSEventModifierFlagShift) {
+        key_code = SAPP_KEYCODE_LEFT_SHIFT;
+        down = 0 != (new_f & NSEventModifierFlagShift);
+    }
+    if ((new_f ^ old_f) & NSEventModifierFlagControl) {
+        key_code = SAPP_KEYCODE_LEFT_CONTROL;
+        down = 0 != (new_f & NSEventModifierFlagControl);
+    }
+    if ((new_f ^ old_f) & NSEventModifierFlagOption) {
+        key_code = SAPP_KEYCODE_LEFT_ALT;
+        down = 0 != (new_f & NSEventModifierFlagOption);
+    }
+    if ((new_f ^ old_f) & NSEventModifierFlagCommand) {
+        key_code = SAPP_KEYCODE_LEFT_SUPER;
+        down = 0 != (new_f & NSEventModifierFlagCommand);
+    }
+    if (key_code != SAPP_KEYCODE_INVALID) {
+        _sapp_macos_key_event(down ? SAPP_EVENTTYPE_KEY_DOWN : SAPP_EVENTTYPE_KEY_UP,
+            key_code,
+            _sapp_macos_mod(event.modifierFlags));
+    }
 }
 @end
 
