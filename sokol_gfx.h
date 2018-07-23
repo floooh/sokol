@@ -4080,9 +4080,11 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
 #pragma warning(disable:4115)   /* named type definition in parentheses */
+#endif
 #include <d3d11.h>
 #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "WindowsApp.lib")
@@ -4098,7 +4100,9 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #pragma comment (lib, "d3dcompiler.lib")
 #endif
 #endif
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 #ifdef __cplusplus
 extern "C" {

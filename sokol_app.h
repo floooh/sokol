@@ -2146,12 +2146,16 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(SOKOL_D3D11)
 #define COBJMACROS
 #include <windows.h>
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
 #pragma warning(disable:4115)   /* named type definition in parentheses */
+#endif
 #include <d3d11.h>
 #include <dxgi.h>
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
@@ -2193,7 +2197,6 @@ static ID3D11RenderTargetView* _sapp_d3d11_rtv;
 static ID3D11Texture2D* _sapp_d3d11_ds;
 static ID3D11DepthStencilView* _sapp_d3d11_dsv;
 #endif
-#if defined(SOKOL_GLCORE33)
 #define WGL_NUMBER_PIXEL_FORMATS_ARB 0x2000
 #define WGL_SUPPORT_OPENGL_ARB 0x2010
 #define WGL_DRAW_TO_WINDOW_ARB 0x2001
@@ -2275,6 +2278,12 @@ static HDC _sapp_win32_msg_dc;
 more, you'll need to use you own gl header-generator/loader
 */
 #if !defined(SOKOL_WIN32_NO_GL_LOADER)
+#if defined(SOKOL_GLCORE33)
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4054)   /* 'type cast': from function pointer */
+#pragma warning(disable:4055)   /* 'type cast': from data pointer */
+#endif
 #define __gl_h_ 1
 #define __gl32_h_ 1
 #define __gl31_h_ 1
@@ -2837,6 +2846,9 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
 #define glFrontFace _sapp_glFrontFace
 #define glCullFace _sapp_glCullFace
 
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 #endif /* SOKOL_WIN32_NO_GL_LOADER */
 
 #endif /* SOKOL_GLCORE33 */
