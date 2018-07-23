@@ -3105,8 +3105,8 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
                 }
                 _sg_uniform* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
-                u->count = _sg_def(u_desc->array_count, 1);
-                u->offset = cur_uniform_offset;
+                u->count = (uint8_t) _sg_def(u_desc->array_count, 1);
+                u->offset = (uint16_t) cur_uniform_offset;
                 cur_uniform_offset += _sg_uniform_size(u->type, u->count);
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
@@ -3257,16 +3257,16 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
         if (attr_loc != -1) {
             _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_loc];
             SOKOL_ASSERT(gl_attr->vb_index == -1);
-            gl_attr->vb_index = a_desc->buffer_index;
+            gl_attr->vb_index = (int8_t) a_desc->buffer_index;
             if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
                 gl_attr->divisor = 0;
             }
             else {
-                gl_attr->divisor = step_rate;
+                gl_attr->divisor = (int8_t) step_rate;
             }
-            gl_attr->stride = l_desc->stride;
+            gl_attr->stride = (uint8_t) l_desc->stride;
             gl_attr->offset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
-            gl_attr->size = _sg_gl_vertexformat_size(a_desc->format);
+            gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_desc->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
             pip->vertex_layout_valid[a_desc->buffer_index] = true;
@@ -3281,7 +3281,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* gl_attr = &pip->gl_attrs[attr_index];
         if ((gl_attr->vb_index != -1) && (0 == gl_attr->stride)) {
-            gl_attr->stride = auto_offset[gl_attr->vb_index];
+            gl_attr->stride = (uint8_t) auto_offset[gl_attr->vb_index];
         }
     }
     pip->slot.state = SG_RESOURCESTATE_VALID;
@@ -3406,7 +3406,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
     /* create MSAA resolve framebuffers if necessary */
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg_attachment* att = &pass->color_atts[i];
+            att = &pass->color_atts[i];
             if (att->image) {
                 SOKOL_ASSERT(0 == att->gl_msaa_resolve_buffer);
                 glGenFramebuffers(1, &att->gl_msaa_resolve_buffer);
