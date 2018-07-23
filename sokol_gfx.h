@@ -1593,6 +1593,10 @@ extern void sg_discard_context(sg_context ctx_id);
     #endif
 #endif
 
+#ifndef _SOKOL_UNUSED
+    #define _SOKOL_UNUSED(x) (void)(x)
+#endif
+
 /* default clear values */
 #ifndef SG_DEFAULT_CLEAR_RED
 #define SG_DEFAULT_CLEAR_RED (0.5f)
