@@ -194,10 +194,6 @@ extern int saudio_push(const float* frames, int num_frames);
     #endif
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
 #define _saudio_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
 
@@ -678,10 +674,6 @@ int saudio_push(const float* frames, int num_frames) {
 
 #undef _saudio_def
 #undef _saudio_def_flt
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)

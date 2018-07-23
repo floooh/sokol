@@ -93,6 +93,10 @@ extern double stm_ms(uint64_t ticks);
 extern double stm_us(uint64_t ticks);
 extern double stm_ns(uint64_t ticks);
 
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 #ifndef SOKOL_ASSERT
@@ -205,6 +209,3 @@ double stm_ns(uint64_t ticks) {
 }
 #endif /* SOKOL_IMPL */
 
-#ifdef __cplusplus
-} /* extern "C" */
-#endif

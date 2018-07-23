@@ -656,10 +656,6 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* helper macros */
 #define _sapp_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
@@ -5520,10 +5516,6 @@ const void* sapp_d3d11_get_depth_stencil_view(void) {
 }
 
 #undef _sapp_def
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)

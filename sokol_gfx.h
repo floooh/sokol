@@ -1624,10 +1624,6 @@ extern void sg_discard_context(sg_context ctx_id);
 #define SG_DEFAULT_CLEAR_STENCIL (0)
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 enum {
     _SG_SLOT_SHIFT = 16,
     _SG_SLOT_MASK = (1<<_SG_SLOT_SHIFT)-1,
@@ -1864,18 +1860,10 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
     return id & _SG_SLOT_MASK;
 }
 
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
-
 /*== GL BACKEND ==============================================================*/
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 /* strstr(), memset() */
 #include <string.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
 #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
@@ -4080,10 +4068,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
-
 /*== D3D11 BACKEND ===========================================================*/
 #elif defined(SOKOL_D3D11)
 
@@ -4114,10 +4098,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #if !(defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "d3dcompiler.lib")
 #endif
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /*-- enum translation functions ----------------------------------------------*/
@@ -5636,10 +5616,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
-
 /*== METAL BACKEND ===========================================================*/
 #elif defined(SOKOL_METAL)
 
@@ -5652,10 +5628,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #include <TargetConditionals.h>
 #import <Metal/Metal.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-    
 enum {
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     #if !TARGET_OS_IPHONE
@@ -7383,17 +7355,9 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
-
 #else
 #error "No rendering backend selected"
 #endif
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*== RESOURCE POOLS ==========================================================*/
 typedef struct {
     int size;
@@ -9025,10 +8989,6 @@ void sg_update_image(sg_image img_id, const sg_image_content* data) {
         img->upd_frame_index = _sg.frame_index;
     }
 }
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
-
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
