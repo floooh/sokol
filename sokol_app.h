@@ -3451,6 +3451,20 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_CLOSE:
                 PostQuitMessage(0);
                 return 0;
+            case WM_SYSCOMMAND:
+                switch (wParam & 0xFFF0) {
+                    case SC_SCREENSAVE:
+                    case SC_MONITORPOWER:
+                        if (_sapp.desc.fullscreen) {
+                            /* disable screen saver and blanking in fullscreen mode */
+                            return 0;
+                        }
+                        break;
+                    case SC_KEYMENU:
+                        /* user trying to access menu via ALT */
+                        return 0;
+                }
+                break;
             case WM_ERASEBKGND:
                 return 1;
             case WM_SIZE:
@@ -3520,9 +3534,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_char_event((uint32_t)wParam);
                 break;
             case WM_KEYDOWN:
+            case WM_SYSKEYDOWN:
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
                 break;
             case WM_KEYUP:
+            case WM_SYSKEYUP:
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
                 break;
             default:
