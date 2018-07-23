@@ -2610,6 +2610,11 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.cur_pass = 0;
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
     
+    /* clear initial GL error state */
+    #if defined(SOKOL_DEBUG)
+        while (glGetError() != GL_NO_ERROR);
+    #endif
+
     /* initialize feature flags */
     for (int i = 0; i < SG_NUM_FEATURES; i++) {
         _sg_gl.features[i] = false;
