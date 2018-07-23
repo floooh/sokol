@@ -643,6 +643,9 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
         #define _SOKOL_PRIVATE static
     #endif
 #endif
+#ifndef _SOKOL_UNUSED
+    #define _SOKOL_UNUSED(x) (void)(x)
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -2142,8 +2145,13 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 
 #if defined(SOKOL_D3D11)
 #define COBJMACROS
+#include <windows.h>
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
 #include <d3d11.h>
 #include <dxgi.h>
+#pragma warning(pop)
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
@@ -2867,6 +2875,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         &_sapp_d3d11_device,            /* ppDevice */
         &feature_level,                 /* pFeatureLevel */
         &_sapp_d3d11_device_context);   /* ppImmediateContext */
+    _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_dxgi_swap_chain && _sapp_d3d11_device && _sapp_d3d11_device_context);
 }
 
@@ -3566,6 +3575,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         UINT dpix, dpiy;
         HRESULT hr = _sapp_win32_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
+        _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
         /* clamp window scale to an integer factor */
         _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
@@ -3595,6 +3605,10 @@ int main(int argc, const char** argv) {
 #else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
 #endif
+    _SOKOL_UNUSED(hInstance);
+    _SOKOL_UNUSED(hPrevInstance);
+    _SOKOL_UNUSED(lpCmdLine);
+    _SOKOL_UNUSED(nCmdShow);
     sapp_desc desc = sokol_main(__argc, __argv);
     _sapp_init_state(&desc, __argc, __argv);
     _sapp_win32_init_keytable();
@@ -5422,6 +5436,8 @@ void sapp_show_keyboard(bool shown) {
     _sapp_ios_show_keyboard(shown);
     #elif __EMSCRIPTEN__
     _sapp_emsc_show_keyboard(shown);
+    #else
+    _SOKOL_UNUSED(shown);
     #endif
 }
 

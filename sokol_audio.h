@@ -242,7 +242,7 @@ typedef struct {
 } _saudio_ring;
 
 _SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring* ring, int i) {
-    return i % ring->num;
+    return (uint16_t) (i % ring->num);
 }
 
 _SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring* ring, int num_slots) {

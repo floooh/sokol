@@ -316,6 +316,11 @@
 extern "C" {
 #endif
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#endif
+
 /* 
     Resource id typedefs:
 
@@ -1532,6 +1537,9 @@ extern sg_context sg_setup_context(void);
 extern void sg_activate_context(sg_context ctx_id);
 extern void sg_discard_context(sg_context ctx_id);
 
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -1552,7 +1560,7 @@ extern void sg_discard_context(sg_context ctx_id);
     #define SOKOL_VALIDATE_BEGIN() _sg_validate_begin()
 #endif
 #ifndef SOKOL_VALIDATE
-    #define SOKOL_VALIDATE(cond, err) _sg_validate(cond, err)
+    #define SOKOL_VALIDATE(cond, err) _sg_validate((cond), err)
 #endif
 #ifndef SOKOL_VALIDATE_END
     #define SOKOL_VALIDATE_END() _sg_validate_end()
@@ -4072,8 +4080,10 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
 #include <d3d11.h>
-
 #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "WindowsApp.lib")
 #else
@@ -4088,6 +4098,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #pragma comment (lib, "d3dcompiler.lib")
 #endif
 #endif
+#pragma warning(pop)
 
 #ifdef __cplusplus
 extern "C" {
@@ -4376,7 +4387,7 @@ typedef struct {
     sg_wrap wrap_v;
     sg_wrap wrap_w;
     uint32_t max_anisotropy;
-    int upd_frame_index;
+    uint32_t upd_frame_index;
     DXGI_FORMAT d3d11_format;
     ID3D11Texture2D* d3d11_tex2d;
     ID3D11Texture3D* d3d11_tex3d;
@@ -4570,6 +4581,7 @@ _SOKOL_PRIVATE void _sg_reset_state_cache() {
 }
 
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
+    _SOKOL_UNUSED(ctx);
     _sg_reset_state_cache();
 }
 
@@ -4613,6 +4625,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
             init_data_ptr = &init_data;
         }
         HRESULT hr = ID3D11Device_CreateBuffer(_sg_d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11_buf);
+        _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11_buf);
     }
     buf->slot.state = SG_RESOURCESTATE_VALID;
@@ -4644,7 +4657,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image* img, const sg_im
                 subres_data->pSysMem = ptr + slice_offset;
                 subres_data->SysMemPitch = _sg_row_pitch(img->pixel_format, mip_width);
                 if (img->type == SG_IMAGETYPE_3D) {
-                    const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1;
+                    /* FIXME? const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1; */
                     subres_data->SysMemSlicePitch = _sg_surface_pitch(img->pixel_format, mip_width, mip_height);
                 }
                 else {
@@ -4765,7 +4778,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             if (img->sample_count > 1) {
                 d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
                 d3d11_tex_desc.SampleDesc.Count = img->sample_count;
-                d3d11_tex_desc.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
+                d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
                 hr = ID3D11Device_CreateTexture2D(_sg_d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11_texmsaa);
                 SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texmsaa);
             }
@@ -4885,7 +4898,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
 _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* stage_desc, const char* target) {
     ID3DBlob* output = NULL;
     ID3DBlob* errors = NULL;
-    HRESULT hr = D3DCompile(
+    D3DCompile(
         stage_desc->source,             /* pSrcData */
         strlen(stage_desc->source),     /* SrcDataSize */
         NULL,                           /* pSourceName */
@@ -5247,6 +5260,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
             }
             SOKOL_ASSERT(d3d11_res);
             HRESULT hr = ID3D11Device_CreateRenderTargetView(_sg_d3d11.dev, d3d11_res, &d3d11_rtv_desc, &pass->d3d11_rtvs[i]);
+            _SOKOL_UNUSED(hr);
             SOKOL_ASSERT(SUCCEEDED(hr) && pass->d3d11_rtvs[i]);
         }
     }
@@ -5280,6 +5294,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         ID3D11Resource* d3d11_res = (ID3D11Resource*) att->image->d3d11_texds;
         SOKOL_ASSERT(d3d11_res);
         HRESULT hr = ID3D11Device_CreateDepthStencilView(_sg_d3d11.dev, d3d11_res, &d3d11_dsv_desc, &pass->d3d11_dsv);
+        _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr) && pass->d3d11_dsv);
     }
     pass->slot.state = SG_RESOURCESTATE_VALID;
@@ -5505,6 +5520,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 }
 
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(_sg_d3d11.ctx && _sg_d3d11.in_pass);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && (stage_index < SG_NUM_SHADER_STAGES));
@@ -5548,6 +5564,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     SOKOL_ASSERT(buf->d3d11_buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
+    _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr));
     memcpy(d3d11_msr.pData, data_ptr, data_size);
     ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0);
@@ -5584,7 +5601,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
                 hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, d3d11_res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
                 SOKOL_ASSERT(SUCCEEDED(hr));
                 /* FIXME: need to handle difference in depth-pitch for 3D textures as well! */
-                if (src_pitch == d3d11_msr.RowPitch) {
+                if (src_pitch == (int)d3d11_msr.RowPitch) {
                     memcpy(d3d11_msr.pData, slice_ptr, slice_size);
                 }
                 else {
@@ -7905,6 +7922,7 @@ _SOKOL_PRIVATE bool _sg_validate_end() {
 
 _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
         return true;
     #else
         SOKOL_ASSERT(desc);
@@ -7925,6 +7943,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
 
 _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
         return true;
     #else
         SOKOL_ASSERT(desc);
@@ -7978,6 +7997,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
 
 _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
         return true;
     #else
         SOKOL_ASSERT(desc);
@@ -8058,6 +8078,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
 
 _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
         return true;
     #else
         SOKOL_ASSERT(desc);
@@ -8098,6 +8119,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
 
 _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(desc);
         return true;
     #else
         SOKOL_ASSERT(desc);
@@ -8168,6 +8190,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
 
 _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(pass);
         return true;
     #else
         SOKOL_VALIDATE_BEGIN();
@@ -8190,6 +8213,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
 
 _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(ds);
         return true;
     #else
         SOKOL_VALIDATE_BEGIN();
@@ -8295,7 +8319,11 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
 }
 
 _SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    _SOKOL_UNUSED(data);
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(stage_index);
+        _SOKOL_UNUSED(ub_index);
+        _SOKOL_UNUSED(num_bytes);
         return true;
     #else
         SOKOL_ASSERT((stage_index == SG_SHADERSTAGE_VS) || (stage_index == SG_SHADERSTAGE_FS));
@@ -8319,6 +8347,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index
 
 _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer* buf, const void* data, int size) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(size);
         return true;
     #else
         SOKOL_ASSERT(buf && data);
@@ -8332,6 +8363,8 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer* buf, const void
 
 _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image* img, const sg_image_content* data) {
     #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(img);
+        _SOKOL_UNUSED(data);
         return true;
     #else
         SOKOL_ASSERT(img && data);
