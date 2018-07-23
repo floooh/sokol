@@ -158,6 +158,11 @@ extern int saudio_push(const float* frames, int num_frames);
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
         #define SOKOL_DEBUG (1)
@@ -302,7 +307,7 @@ _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int packet_size, int n
     SOKOL_ASSERT((packet_size > 0) && (num_packets > 0));
     fifo->packet_size = packet_size;
     fifo->num_packets = num_packets;
-    fifo->base_ptr = SOKOL_MALLOC(packet_size * num_packets);
+    fifo->base_ptr = (uint8_t*) SOKOL_MALLOC(packet_size * num_packets);
     SOKOL_ASSERT(fifo->base_ptr);
     fifo->cur_packet = -1;
     fifo->cur_offset = 0;
@@ -676,6 +681,10 @@ int saudio_push(const float* frames, int num_frames) {
 
 #ifdef __cplusplus
 } /* extern "C" */
+#endif
+
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 #endif /* SOKOL_IMPL */

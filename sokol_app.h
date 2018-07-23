@@ -569,6 +569,15 @@ extern const void* sapp_d3d11_get_depth_stencil_view(void);
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
+#pragma warning(disable:4054)   /* 'type cast': from function pointer */
+#pragma warning(disable:4055)   /* 'type cast': from data pointer */
+#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
 #include <string.h> /* memset */
 
 /* check if the config defines are alright */
@@ -2146,16 +2155,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(SOKOL_D3D11)
 #define COBJMACROS
 #include <windows.h>
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-#pragma warning(disable:4115)   /* named type definition in parentheses */
-#endif
 #include <d3d11.h>
 #include <dxgi.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
@@ -2279,11 +2280,6 @@ more, you'll need to use you own gl header-generator/loader
 */
 #if !defined(SOKOL_WIN32_NO_GL_LOADER)
 #if defined(SOKOL_GLCORE33)
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4054)   /* 'type cast': from function pointer */
-#pragma warning(disable:4055)   /* 'type cast': from data pointer */
-#endif
 #define __gl_h_ 1
 #define __gl32_h_ 1
 #define __gl31_h_ 1
@@ -2846,9 +2842,6 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
 #define glFrontFace _sapp_glFrontFace
 #define glCullFace _sapp_glCullFace
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #endif /* SOKOL_WIN32_NO_GL_LOADER */
 
 #endif /* SOKOL_GLCORE33 */
@@ -5530,6 +5523,10 @@ const void* sapp_d3d11_get_depth_stencil_view(void) {
 
 #ifdef __cplusplus
 } /* extern "C" */
+#endif
+
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 #endif /* SOKOL_IMPL */

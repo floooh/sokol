@@ -1547,6 +1547,13 @@ extern void sg_discard_context(sg_context ctx_id);
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
+#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
         #define SOKOL_DEBUG (1)
@@ -3201,7 +3208,7 @@ _SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state*
         dst->color_write_mask = 0;
     }
     else {
-        dst->color_write_mask = _sg_def((sg_color_mask)src->color_write_mask, SG_COLORMASK_RGBA);
+        dst->color_write_mask = (uint8_t) _sg_def((sg_color_mask)src->color_write_mask, SG_COLORMASK_RGBA);
     }
     for (int i = 0; i < 4; i++) {
         dst->blend_color[i] = src->blend_color[i];
@@ -4093,11 +4100,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-#pragma warning(disable:4115)   /* named type definition in parentheses */
-#endif
 #include <d3d11.h>
 #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "WindowsApp.lib")
@@ -4112,9 +4114,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #if !(defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "d3dcompiler.lib")
 #endif
-#endif
-#ifdef _MSC_VER
-#pragma warning(pop)
 #endif
 
 #ifdef __cplusplus
@@ -9028,6 +9027,10 @@ void sg_update_image(sg_image img_id, const sg_image_content* data) {
 }
 #ifdef __cplusplus
 } /* extern "C" */
+#endif
+
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 #endif /* SOKOL_IMPL */
