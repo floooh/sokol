@@ -2149,10 +2149,26 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <windowsx.h>
 
 #if defined(SOKOL_D3D11)
+#ifndef D3D11_NO_HELPERS
+#define D3D11_NO_HELPERS
+#endif
+#ifndef CINTERFACE
+#define CINTERFACE
+#endif
+#ifndef COBJMACROS
 #define COBJMACROS
+#endif
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
+#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+#pragma comment (lib, "WindowsApp.lib")
+#else
+#pragma comment (lib, "user32.lib")
+#pragma comment (lib, "dxgi.lib")
+#pragma comment (lib, "d3d11.lib")
+#pragma comment (lib, "dxguid.lib")
+#endif
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
