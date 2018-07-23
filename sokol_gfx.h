@@ -3672,6 +3672,9 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
+    _SOKOL_UNUSED(num_fs_imgs);
+    _SOKOL_UNUSED(num_vs_imgs);
+    _SOKOL_UNUSED(num_vbs);
     _SG_GL_CHECK_ERROR();
 
     /* need to apply pipeline state? */
@@ -3920,6 +3923,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 }
 
 _SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT(_sg_gl.cache.cur_pipeline);
