@@ -2930,7 +2930,11 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     HRESULT hr;
+    #ifdef __cplusplus
+    hr = IDXGISwapChain_GetBuffer(_sapp_dxgi_swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp_d3d11_rt);
+    #else
     hr = IDXGISwapChain_GetBuffer(_sapp_dxgi_swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp_d3d11_rt);
+    #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rt);
     hr = ID3D11Device_CreateRenderTargetView(_sapp_d3d11_device, (ID3D11Resource*)_sapp_d3d11_rt, NULL, &_sapp_d3d11_rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp_d3d11_rtv);
