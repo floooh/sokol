@@ -1663,8 +1663,38 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     double w, h;
     emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-    _sapp.window_width = (int) w;
-    _sapp.window_height = (int) h;
+    /* The above method might report zero when toggling HTML5 fullscreen,
+       in that case use the window's inner width reported by the
+       emscripten event. This works ok when toggling *into* fullscreen
+       but doesn't properly restore the previous canvas size when switching
+       back from fullscreen.
+
+       In general, due to the HTML5's fullscreen API's flaky nature it is
+       recommended to use 'soft fullscreen' (stretching the WebGL canvas
+       over the browser window's client rect) with a CSS definition like this:
+
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            margin: 0px;
+            border: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: block;
+    */
+    if (w < 1.0) {
+        w = ui_event->windowInnerWidth;
+    }
+    else {
+        _sapp.window_width = (int) w;
+    }
+    if (h < 1.0) {
+        h = ui_event->windowInnerHeight;
+    }
+    else {
+        _sapp.window_height = (int) h;
+    }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
         w *= _sapp.dpi_scale;
