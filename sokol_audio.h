@@ -289,6 +289,7 @@ _SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring* ring) {
 
 /*---  a packet fifo for queueing audio data from main thread ----------------*/
 typedef struct {
+    bool valid;
     int packet_size;            /* size of a single packets in bytes(!) */
     int num_packets;            /* number of packet in fifo */
     uint8_t* base_ptr;          /* packet memory chunk base pointer (dynamically allocated) */
@@ -299,7 +300,13 @@ typedef struct {
 } _saudio_fifo;
 
 _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int packet_size, int num_packets) {
+    /* NOTE: there's a chicken-egg situation during the init phase where the
+        the streaming thread must be started before the fifo is actually initialized,
+        thus the fifo init must already be protected from access by the fifo_read() func.
+    */
+    _saudio_mutex_lock();
     SOKOL_ASSERT((packet_size > 0) && (num_packets > 0));
+    memset(fifo, 0, sizeof(_saudio_fifo));
     fifo->packet_size = packet_size;
     fifo->num_packets = num_packets;
     fifo->base_ptr = (uint8_t*) SOKOL_MALLOC(packet_size * num_packets);
@@ -315,12 +322,15 @@ _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int packet_size, int n
     SOKOL_ASSERT(_saudio_ring_count(&fifo->write_queue) == num_packets);
     SOKOL_ASSERT(_saudio_ring_empty(&fifo->read_queue));
     SOKOL_ASSERT(_saudio_ring_count(&fifo->read_queue) == 0);
+    fifo->valid = true;
+    _saudio_mutex_unlock();
 }
 
 _SOKOL_PRIVATE void _saudio_fifo_shutdown(_saudio_fifo* fifo) {
     SOKOL_ASSERT(fifo->base_ptr);
     SOKOL_FREE(fifo->base_ptr);
     fifo->base_ptr = 0;
+    fifo->valid = false;
 }
 
 _SOKOL_PRIVATE int _saudio_fifo_writable_bytes(_saudio_fifo* fifo) {
@@ -386,23 +396,26 @@ _SOKOL_PRIVATE int _saudio_fifo_write(_saudio_fifo* fifo, const uint8_t* ptr, in
 
 /* read queued data, this is called form the stream callback (maybe separate thread) */
 _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo* fifo, uint8_t* ptr, int num_bytes) {
-    SOKOL_ASSERT(0 == (num_bytes % fifo->packet_size));
-    SOKOL_ASSERT(num_bytes <= (fifo->packet_size * fifo->num_packets));
-    const int num_packets_needed = num_bytes / fifo->packet_size;
-    int num_bytes_copied = 0;
-    uint8_t* dst = ptr;
-    /* either pull a full buffer worth of data, or nothing */
+    /* NOTE: fifo_read might be called before the fifo is properly initialized */
     _saudio_mutex_lock();
-    if (_saudio_ring_count(&fifo->read_queue) >= num_packets_needed) {
-        for (int i = 0; i < num_packets_needed; i++) {
-            int packet_index = _saudio_ring_dequeue(&fifo->read_queue);
-            _saudio_ring_enqueue(&fifo->write_queue, packet_index);
-            const uint8_t* src = fifo->base_ptr + packet_index * fifo->packet_size;
-            memcpy(dst, src, fifo->packet_size);
-            dst += fifo->packet_size;
-            num_bytes_copied += fifo->packet_size;
+    int num_bytes_copied = 0;
+    if (fifo->valid) {
+        SOKOL_ASSERT(0 == (num_bytes % fifo->packet_size));
+        SOKOL_ASSERT(num_bytes <= (fifo->packet_size * fifo->num_packets));
+        const int num_packets_needed = num_bytes / fifo->packet_size;
+        uint8_t* dst = ptr;
+        /* either pull a full buffer worth of data, or nothing */
+        if (_saudio_ring_count(&fifo->read_queue) >= num_packets_needed) {
+            for (int i = 0; i < num_packets_needed; i++) {
+                int packet_index = _saudio_ring_dequeue(&fifo->read_queue);
+                _saudio_ring_enqueue(&fifo->write_queue, packet_index);
+                const uint8_t* src = fifo->base_ptr + packet_index * fifo->packet_size;
+                memcpy(dst, src, fifo->packet_size);
+                dst += fifo->packet_size;
+                num_bytes_copied += fifo->packet_size;
+            }
+            SOKOL_ASSERT(num_bytes == num_bytes_copied);
         }
-        SOKOL_ASSERT(num_bytes == num_bytes_copied);
     }
     _saudio_mutex_unlock();
     return num_bytes_copied;
@@ -496,9 +509,37 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 typedef struct {
     snd_pcm_t* device;
     float* buffer;
+    int buffer_byte_size;
+    int buffer_frames;
     pthread_t thread;
+    bool thread_stop;
 } _saudio_alsa_state;
 _saudio_alsa_state _saudio_alsa;
+
+/* the streaming callback runs in a separate thread */
+_SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
+    while (!_saudio_alsa.thread_stop) {
+        /* snd_pcm_writei() will be blocking until it needs data */
+        int write_res = snd_pcm_writei(_saudio_alsa.device, _saudio_alsa.buffer, _saudio_alsa.buffer_frames);
+        if (write_res < 0) {
+            /* underrun occured */
+            snd_pcm_prepare(_saudio_alsa.device);
+        }
+        else {
+            /* fill the streaming buffer with new data */
+            if (_saudio.stream_cb) {
+                _saudio.stream_cb(_saudio_alsa.buffer, _saudio_alsa.buffer_frames);
+            }
+            else {
+                if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_alsa.buffer, _saudio_alsa.buffer_byte_size)) {
+                    /* not enough read data available, fill the entire buffer with silence */
+                    memset(_saudio_alsa.buffer, 0, _saudio_alsa.buffer_byte_size);
+                }
+            }
+        }
+    }
+    return 0;
+}
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     memset(&_saudio_alsa, 0, sizeof(_saudio_alsa));
@@ -534,7 +575,16 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.num_channels = val;
     _saudio.bytes_per_frame = 4;
 
-    /* FIXME: allocate sample buffer, and start thread */
+    /* allocate the streaming buffer */
+    _saudio_alsa.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+    _saudio_alsa.buffer_frames = _saudio.buffer_frames;
+    _saudio_alsa.buffer = (float*) SOKOL_MALLOC(_saudio_alsa.buffer_byte_size);
+    memset(_saudio_alsa.buffer, 0, _saudio_alsa.buffer_byte_size);
+
+    /* create the buffer-streaming start thread */
+    if (0 != pthread_create(&_saudio_alsa.thread, 0, _saudio_alsa_cb, 0)) {
+        goto error;
+    }
 
     return true;
 error:
@@ -547,10 +597,11 @@ error:
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     SOKOL_ASSERT(_saudio_alsa.device);
-    /* FIXME: wait for and stop thread */
+    _saudio_alsa.thread_stop = true;
+    pthread_join(_saudio_alsa.thread, 0);
     snd_pcm_drain(_saudio_alsa.device);
     snd_pcm_close(_saudio_alsa.device);
-    /* FIXME: free sample buffer */
+    SOKOL_FREE(_saudio_alsa.buffer);
 };
 
 /*=== EMSCRIPTEN BACKEND =====================================================*/
