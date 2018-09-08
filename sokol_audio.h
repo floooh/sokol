@@ -227,7 +227,6 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(void) {
     pthread_mutex_unlock(&_saudio_mutex);
 }
 #else
-// FIXME!
 _SOKOL_PRIVATE void _saudio_mutex_init(void) { }
 _SOKOL_PRIVATE void _saudio_mutex_destroy(void) { }
 _SOKOL_PRIVATE void _saudio_mutex_lock(void) { }
@@ -489,6 +488,71 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio_ca_audio_queue = NULL;
 }
 
+/*=== ALSA BACKEND ===========================================================*/
+#elif defined(linux)
+#define ALSA_PCM_NEW_HW_PARAMS_API
+#include <alsa/asoundlib.h>
+
+typedef struct {
+    snd_pcm_t* device;
+    float* buffer;
+    pthread_t thread;
+} _saudio_alsa_state;
+_saudio_alsa_state _saudio_alsa;
+
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    memset(&_saudio_alsa, 0, sizeof(_saudio_alsa));
+    int rc = snd_pcm_open(&_saudio_alsa.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
+    if (rc < 0) {
+        return false;
+    }
+    snd_pcm_hw_params_t* params = 0;
+    snd_pcm_hw_params_alloca(&params);
+    snd_pcm_hw_params_any(_saudio_alsa.device, params);
+    snd_pcm_hw_params_set_access(_saudio_alsa.device, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    snd_pcm_hw_params_set_channels(_saudio_alsa.device, params, 1);
+    snd_pcm_hw_params_set_buffer_size(_saudio_alsa.device, params, _saudio.buffer_frames);
+    if (0 > snd_pcm_hw_params_test_format(_saudio_alsa.device, params, SND_PCM_FORMAT_FLOAT_LE)) {
+        goto error;
+    }
+    else {
+        snd_pcm_hw_params_set_format(_saudio_alsa.device, params, SND_PCM_FORMAT_FLOAT_LE);
+    }
+    unsigned int val = _saudio.sample_rate;
+    int dir = 0;
+    if (0 > snd_pcm_hw_params_set_rate_near(_saudio_alsa.device, params, &val, &dir)) {
+        goto error;
+    }
+    if (0 > snd_pcm_hw_params(_saudio_alsa.device, params)) {
+        goto error;
+    }
+
+    /* read back actual sample rate and channels */
+    snd_pcm_hw_params_get_rate(params, &val, &dir);
+    _saudio.sample_rate = val;
+    snd_pcm_hw_params_get_channels(params, &val);
+    _saudio.num_channels = val;
+    _saudio.bytes_per_frame = 4;
+
+    /* FIXME: allocate sample buffer, and start thread */
+
+    return true;
+error:
+    if (_saudio_alsa.device) {
+        snd_pcm_close(_saudio_alsa.device);
+        _saudio_alsa.device = 0;
+    }
+    return false;
+};
+
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    SOKOL_ASSERT(_saudio_alsa.device);
+    /* FIXME: wait for and stop thread */
+    snd_pcm_drain(_saudio_alsa.device);
+    snd_pcm_close(_saudio_alsa.device);
+    /* FIXME: free sample buffer */
+};
+
 /*=== EMSCRIPTEN BACKEND =====================================================*/
 
 /* FIXME: resume WebAudio context on user interaction */
@@ -600,8 +664,8 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 #else /* dummy backend */
-bool _saudio_backend_init(void) { return false; };
-void _saudio_backend_shutdown(void) { };
+_SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 #endif
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
