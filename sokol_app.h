@@ -5558,6 +5558,7 @@ int main(int argc, char* argv[]) {
         _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
     }
+    _sapp.desc.cleanup_cb();
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
