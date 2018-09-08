@@ -119,7 +119,6 @@
 */
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h> /* memset, memcpy */
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,6 +156,7 @@ extern int saudio_push(const float* frames, int num_frames);
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#include <string.h> /* memset, memcpy */
 
 #ifdef _MSC_VER
 #pragma warning(push)
