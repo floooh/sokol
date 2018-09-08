@@ -5152,6 +5152,13 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
     return mods;
 }
 
+_SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE sapp_mousebutton _sapp_x11_translate_button(const XEvent* event) {
     switch (event->xbutton.button) {
         case Button1: return SAPP_MOUSEBUTTON_LEFT;
@@ -5435,10 +5442,13 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
             break;
         case ConfigureNotify:
-            _sapp.window_width = event->xconfigure.width;
-            _sapp.window_height = event->xconfigure.height;
-            _sapp.framebuffer_width = _sapp.window_width;
-            _sapp.framebuffer_height = _sapp.window_height;
+            if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
+                _sapp.window_width = event->xconfigure.width;
+                _sapp.window_height = event->xconfigure.height;
+                _sapp.framebuffer_width = _sapp.window_width;
+                _sapp.framebuffer_height = _sapp.window_height;
+                _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
+            }
             break;
         case ClientMessage:
             if (event->xclient.message_type == _sapp_x11_WM_PROTOCOLS) {
