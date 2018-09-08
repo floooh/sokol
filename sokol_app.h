@@ -84,9 +84,9 @@
     TOUCHES_MOVED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     TOUCHES_ENDED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    RESIZED             | YES     | YES   | TODO  | YES   | TODO    | ---   | YES
-    ICONIFIED           | YES     | YES   | TODO  | ---   | ---     | ---   | ---
-    RESTORED            | YES     | YES   | TODO  | ---   | ---     | ---   | ---
+    RESIZED             | YES     | YES   | YES   | YES   | TODO    | ---   | YES
+    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | ---   | ---
+    RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
@@ -3765,8 +3765,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>
 #include <X11/extensions/Xrandr.h>
+#include <X11/Xmd.h> /* CARD32 */
 #include <GL/gl.h>
 #include <dlfcn.h> /* dlopen, dlsym, dlclose */
+#include <limits.h> /* LONG_MAX */
 
 #define GLX_VENDOR 1
 #define GLX_RGBA_BIT 0x00000001
@@ -3839,6 +3841,7 @@ static Window _sapp_x11_root;
 static Colormap _sapp_x11_colormap;
 static Window _sapp_x11_window;
 static float _sapp_x11_dpi;
+static int _sapp_x11_window_state;
 static unsigned char _sapp_x11_error_code;
 static void* _sapp_glx_libgl;
 static int _sapp_glx_major;
@@ -3850,6 +3853,7 @@ static GLXWindow _sapp_glx_window;
 static Atom _sapp_x11_UTF8_STRING;
 static Atom _sapp_x11_WM_PROTOCOLS;
 static Atom _sapp_x11_WM_DELETE_WINDOW;
+static Atom _sapp_x11_WM_STATE;
 static Atom _sapp_x11_NET_WM_NAME;
 static Atom _sapp_x11_NET_WM_ICON_NAME;
 // GLX 1.3 functions
@@ -4735,6 +4739,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp_x11_UTF8_STRING       = XInternAtom(_sapp_x11_display, "UTF8_STRING", False);
     _sapp_x11_WM_PROTOCOLS      = XInternAtom(_sapp_x11_display, "WM_PROTOCOLS", False);
     _sapp_x11_WM_DELETE_WINDOW  = XInternAtom(_sapp_x11_display, "WM_DELETE_WINDOW", False);
+    _sapp_x11_WM_STATE          = XInternAtom(_sapp_x11_display, "WM_STATE", False);
     _sapp_x11_NET_WM_NAME    = XInternAtom(_sapp_x11_display, "_NET_WM_NAME", False);
     _sapp_x11_NET_WM_ICON_NAME = XInternAtom(_sapp_x11_display, "_NET_WM_ICON_NAME", False);
 }
@@ -5135,6 +5140,41 @@ _SOKOL_PRIVATE void _sapp_x11_hide_window(void) {
     XFlush(_sapp_x11_display);
 }
 
+_SOKOL_PRIVATE unsigned long _sapp_x11_get_window_property(Atom property, Atom type, unsigned char** value) {
+    Atom actualType;
+    int actualFormat;
+    unsigned long itemCount, bytesAfter;
+    XGetWindowProperty(_sapp_x11_display,
+                       _sapp_x11_window,
+                       property,
+                       0,
+                       LONG_MAX,
+                       False,
+                       type,
+                       &actualType,
+                       &actualFormat,
+                       &itemCount,
+                       &bytesAfter,
+                       value);
+    return itemCount;
+}
+
+_SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
+    int result = WithdrawnState;
+    struct {
+        CARD32 state;
+        Window icon;
+    } *state = NULL;
+
+    if (_sapp_x11_get_window_property(_sapp_x11_WM_STATE, _sapp_x11_WM_STATE, (unsigned char**)&state) >= 2) {
+        result = state->state;
+    }
+    if (state) {
+        XFree(state);
+    }
+    return result;
+}
+
 _SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
     uint32_t mods = 0;
     if (x11_mods & ShiftMask) {
@@ -5450,6 +5490,22 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 _sapp_x11_app_event(SAPP_EVENTTYPE_RESIZED);
             }
             break;
+        case PropertyNotify:
+            if (event->xproperty.state == PropertyNewValue) {
+                if (event->xproperty.atom == _sapp_x11_WM_STATE) {
+                    const int state = _sapp_x11_get_window_state();
+                    if (state != _sapp_x11_window_state) {
+                        _sapp_x11_window_state = state;
+                        if (state == IconicState) {
+                            _sapp_x11_app_event(SAPP_EVENTTYPE_ICONIFIED);
+                        }
+                        else if (state == NormalState) {
+                            _sapp_x11_app_event(SAPP_EVENTTYPE_RESTORED);
+                        }
+                    }
+                }
+            }
+            break;
         case ClientMessage:
             if (event->xclient.message_type == _sapp_x11_WM_PROTOCOLS) {
                 const Atom protocol = event->xclient.data.l[0];
@@ -5467,6 +5523,7 @@ int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_init_state(&desc, argc, argv);
     _sapp_x11_quit_requested = false;
+    _sapp_x11_window_state = NormalState;
 
     XInitThreads();
     XrmInitialize();
