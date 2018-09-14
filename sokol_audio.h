@@ -7,7 +7,7 @@
 
     TODO:
         - stereo support
-        - Windows + Linux backends
+        - Windows backend
         - write tests for the helper classes (ring queue, packet fifo)
         - need a callback when sample rate in the backend changes (this
           may happen when attaching/removing a playback device)
@@ -606,8 +606,6 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
 /*=== EMSCRIPTEN BACKEND =====================================================*/
 
-/* FIXME: resume WebAudio context on user interaction */
-
 #elif defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
 
@@ -666,6 +664,18 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int buffer_size), {
             }
         };
         Module._saudio_node.connect(Module._saudio_context.destination);
+
+        // in some browsers, WebAudio needs to be activated on a user action
+        var resume_webaudio = function() {
+            if (Module._saudio_context) {
+                if (Module._saudio_context.state === 'suspended') {
+                    Module._saudio_context.resume();
+                }
+            }
+        };
+        document.addEventListener('click', resume_webaudio, {once:true});
+        document.addEventListener('touchstart', resume_webaudio, {once:true});
+        document.addEventListener('keydown', resume_webaudio, {once:true});
         return 1;
     }
     else {
