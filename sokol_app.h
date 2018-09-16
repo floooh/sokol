@@ -1854,8 +1854,70 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
             else {
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
-                /* only forward alpha-numeric keys to browser */
-                retval = emsc_event->keyCode < 32;
+                /* only forward a certain key ranges to the browser */
+                switch (_sapp.event.key_code) {
+                    case SAPP_KEYCODE_WORLD_1:
+                    case SAPP_KEYCODE_WORLD_2:
+                    case SAPP_KEYCODE_ESCAPE:
+                    case SAPP_KEYCODE_ENTER:
+                    case SAPP_KEYCODE_TAB:
+                    case SAPP_KEYCODE_BACKSPACE:
+                    case SAPP_KEYCODE_INSERT:
+                    case SAPP_KEYCODE_DELETE:
+                    case SAPP_KEYCODE_RIGHT:
+                    case SAPP_KEYCODE_LEFT:
+                    case SAPP_KEYCODE_DOWN:
+                    case SAPP_KEYCODE_UP:
+                    case SAPP_KEYCODE_PAGE_UP:
+                    case SAPP_KEYCODE_PAGE_DOWN:
+                    case SAPP_KEYCODE_HOME:
+                    case SAPP_KEYCODE_END:
+                    case SAPP_KEYCODE_CAPS_LOCK:
+                    case SAPP_KEYCODE_SCROLL_LOCK:
+                    case SAPP_KEYCODE_NUM_LOCK:
+                    case SAPP_KEYCODE_PRINT_SCREEN:
+                    case SAPP_KEYCODE_PAUSE:
+                    case SAPP_KEYCODE_F1:
+                    case SAPP_KEYCODE_F2:
+                    case SAPP_KEYCODE_F3:
+                    case SAPP_KEYCODE_F4:
+                    case SAPP_KEYCODE_F5:
+                    case SAPP_KEYCODE_F6:
+                    case SAPP_KEYCODE_F7:
+                    case SAPP_KEYCODE_F8:
+                    case SAPP_KEYCODE_F9:
+                    case SAPP_KEYCODE_F10:
+                    case SAPP_KEYCODE_F11:
+                    case SAPP_KEYCODE_F12:
+                    case SAPP_KEYCODE_F13:
+                    case SAPP_KEYCODE_F14:
+                    case SAPP_KEYCODE_F15:
+                    case SAPP_KEYCODE_F16:
+                    case SAPP_KEYCODE_F17:
+                    case SAPP_KEYCODE_F18:
+                    case SAPP_KEYCODE_F19:
+                    case SAPP_KEYCODE_F20:
+                    case SAPP_KEYCODE_F21:
+                    case SAPP_KEYCODE_F22:
+                    case SAPP_KEYCODE_F23:
+                    case SAPP_KEYCODE_F24:
+                    case SAPP_KEYCODE_F25:
+                    case SAPP_KEYCODE_LEFT_SHIFT:
+                    case SAPP_KEYCODE_LEFT_CONTROL:
+                    case SAPP_KEYCODE_LEFT_ALT:
+                    case SAPP_KEYCODE_LEFT_SUPER:
+                    case SAPP_KEYCODE_RIGHT_SHIFT:
+                    case SAPP_KEYCODE_RIGHT_CONTROL:
+                    case SAPP_KEYCODE_RIGHT_ALT:
+                    case SAPP_KEYCODE_RIGHT_SUPER:
+                    case SAPP_KEYCODE_MENU:
+                        /* consume the event */
+                        break;
+                    default:
+                        /* forward key to browser */
+                        retval = false;
+                        break;
+                }
             }
             _sapp.desc.event_cb(&_sapp.event);
         }
