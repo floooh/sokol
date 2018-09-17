@@ -226,6 +226,27 @@ _SOKOL_PRIVATE void _saudio_mutex_lock(void) {
 _SOKOL_PRIVATE void _saudio_mutex_unlock(void) {
     pthread_mutex_unlock(&_saudio_mutex);
 }
+#elif defined(_WIN32)
+#include "synchapi.h"
+#pragma comment (lib, "kernel32.lib")
+
+CRITICAL_SECTION _saudio_crit;
+
+_SOKOL_PRIVATE void _saudio_mutex_init(void) {
+    InitializeCriticalSection(&_saudio_crit);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_destroy(void) {
+    DeleteCriticalSection(&_saudio_crit);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_lock(void) {
+    EnterCriticalSection(&_saudio_crit);
+}
+
+_SOKOL_PRIVATE void _saudio_mutex_unlock(void) {
+    LeaveCriticalSection(&_saudio_crit);
+}
 #else
 _SOKOL_PRIVATE void _saudio_mutex_init(void) { }
 _SOKOL_PRIVATE void _saudio_mutex_destroy(void) { }
@@ -514,7 +535,7 @@ typedef struct {
     pthread_t thread;
     bool thread_stop;
 } _saudio_alsa_state;
-_saudio_alsa_state _saudio_alsa;
+static _saudio_alsa_state _saudio_alsa;
 
 /* the streaming callback runs in a separate thread */
 _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
@@ -603,6 +624,103 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     snd_pcm_close(_saudio_alsa.device);
     SOKOL_FREE(_saudio_alsa.buffer);
 };
+
+/*=== WASAPI BACKEND =========================================================*/
+#elif defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef INITGUID
+#define INITGUID
+#endif
+#ifndef CINTERFACE
+#define CINTERFACE
+#endif
+#ifndef COBJMACROS
+#define COBJMACROS
+#endif
+#ifndef CONST_VTABLE
+#define CONST_VTABLE
+#endif
+#include <windows.h>
+#include <mmsystem.h>
+#include <mmreg.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
+
+/*
+CoreAudio headers seem to have incomplete C support, see
+https://github.com/andrewrk/libsoundio/blob/master/src/wasapi.c
+and
+https://github.com/mojofunk/portaudio/blob/master/src/hostapi/wasapi/pa_win_wasapi.c
+*/
+#ifndef GUID_SECT
+#define GUID_SECT
+#endif
+#define _SAUDIO__DEFINE_GUID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const GUID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
+#define _SAUDIO__DEFINE_IID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const IID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
+#define _SAUDIO__DEFINE_CLSID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const CLSID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
+
+#define _SAUDIO_DEFINE_CLSID(className, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
+    _SAUDIO__DEFINE_CLSID(_saudio_CLSID_##className, 0x##l, 0x##w1, 0x##w2, 0x##b1, 0x##b2, 0x##b3, 0x##b4, 0x##b5, 0x##b6, 0x##b7, 0x##b8)
+#define _SAUDIO_DEFINE_IID(interfaceName, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
+    _SAUDIO__DEFINE_IID(_saudio_IID_##interfaceName, 0x##l, 0x##w1, 0x##w2, 0x##b1, 0x##b2, 0x##b3, 0x##b4, 0x##b5, 0x##b6, 0x##b7, 0x##b8)    
+
+/* "1CB9AD4C-DBFA-4c32-B178-C2F568A703B2" */
+_SAUDIO_DEFINE_IID(IAudioClient,         1cb9ad4c, dbfa, 4c32, b1, 78, c2, f5, 68, a7, 03, b2);
+/* "A95664D2-9614-4F35-A746-DE8DB63617E6" */
+_SAUDIO_DEFINE_IID(IMMDeviceEnumerator,  a95664d2, 9614, 4f35, a7, 46, de, 8d, b6, 36, 17, e6);
+/* "BCDE0395-E52F-467C-8E3D-C4579291692E" */
+_SAUDIO_DEFINE_CLSID(IMMDeviceEnumerator,bcde0395, e52f, 467c, 8e, 3d, c4, 57, 92, 91, 69, 2e);
+
+typedef struct {
+    IMMDeviceEnumerator* device_enumerator;
+    IMMDevice* device;
+    HANDLE buffer_end_event;
+    HANDLE thread_stop_event;
+} _saudio_wasapi_state;
+static _saudio_wasapi_state _saudio_wasapi;
+
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    memset(&_saudio_wasapi, 0, sizeof(_saudio_wasapi));
+    if (FAILED(CoInitializeEx(0, COINIT_MULTITHREADED))) {
+        return false;
+    }
+    _saudio_wasapi.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
+    if (0 == _saudio_wasapi.buffer_end_event) {
+        goto error;
+    }
+    _saudio_wasapi.thread_stop_event = CreateEvent(0,FALSE, FALSE, 0);
+    if (0 == _saudio_wasapi.thread_stop_event) {
+        goto error;
+    }
+    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator, 0, CLSCTX_ALL, &_saudio_IID_IMMDeviceEnumerator, (void**)&_saudio_wasapi.device_enumerator))) {
+        goto error;
+    }
+
+    // FIXME
+    _saudio.bytes_per_frame = 4;
+
+    return true;
+
+error:
+    if (0 != _saudio_wasapi.buffer_end_event) {
+        CloseHandle(_saudio_wasapi.buffer_end_event);
+        _saudio_wasapi.buffer_end_event = 0;
+    }
+    if (0 != _saudio_wasapi.thread_stop_event) {
+        CloseHandle(_saudio_wasapi.thread_stop_event);
+        _saudio_wasapi.thread_stop_event = 0;
+    }
+    if (_saudio_wasapi.device_enumerator) {
+        IMMDeviceEnumerator_Release(_saudio_wasapi.device_enumerator);
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+
+}
 
 /*=== EMSCRIPTEN BACKEND =====================================================*/
 
