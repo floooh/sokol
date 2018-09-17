@@ -630,48 +630,18 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#ifndef INITGUID
-#define INITGUID
-#endif
 #ifndef CINTERFACE
 #define CINTERFACE
 #endif
 #ifndef COBJMACROS
 #define COBJMACROS
 #endif
-#ifndef CONST_VTABLE
-#define CONST_VTABLE
-#endif
-#include <windows.h>
-#include <mmsystem.h>
-#include <mmreg.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 
-/*
-CoreAudio headers seem to have incomplete C support, see
-https://github.com/andrewrk/libsoundio/blob/master/src/wasapi.c
-and
-https://github.com/mojofunk/portaudio/blob/master/src/hostapi/wasapi/pa_win_wasapi.c
-*/
-#ifndef GUID_SECT
-#define GUID_SECT
-#endif
-#define _SAUDIO__DEFINE_GUID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const GUID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
-#define _SAUDIO__DEFINE_IID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const IID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
-#define _SAUDIO__DEFINE_CLSID(n,l,w1,w2,b1,b2,b3,b4,b5,b6,b7,b8) static const CLSID n GUID_SECT = {l,w1,w2,{b1,b2,b3,b4,b5,b6,b7,b8}}
-
-#define _SAUDIO_DEFINE_CLSID(className, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
-    _SAUDIO__DEFINE_CLSID(_saudio_CLSID_##className, 0x##l, 0x##w1, 0x##w2, 0x##b1, 0x##b2, 0x##b3, 0x##b4, 0x##b5, 0x##b6, 0x##b7, 0x##b8)
-#define _SAUDIO_DEFINE_IID(interfaceName, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
-    _SAUDIO__DEFINE_IID(_saudio_IID_##interfaceName, 0x##l, 0x##w1, 0x##w2, 0x##b1, 0x##b2, 0x##b3, 0x##b4, 0x##b5, 0x##b6, 0x##b7, 0x##b8)    
-
-/* "1CB9AD4C-DBFA-4c32-B178-C2F568A703B2" */
-_SAUDIO_DEFINE_IID(IAudioClient,         1cb9ad4c, dbfa, 4c32, b1, 78, c2, f5, 68, a7, 03, b2);
-/* "A95664D2-9614-4F35-A746-DE8DB63617E6" */
-_SAUDIO_DEFINE_IID(IMMDeviceEnumerator,  a95664d2, 9614, 4f35, a7, 46, de, 8d, b6, 36, 17, e6);
-/* "BCDE0395-E52F-467C-8E3D-C4579291692E" */
-_SAUDIO_DEFINE_CLSID(IMMDeviceEnumerator,bcde0395, e52f, 467c, 8e, 3d, c4, 57, 92, 91, 69, 2e);
+static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2 } };
+static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
+static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
 
 typedef struct {
     IMMDeviceEnumerator* device_enumerator;
