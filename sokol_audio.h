@@ -636,6 +636,9 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 #ifndef COBJMACROS
 #define COBJMACROS
 #endif
+#ifndef CONST_VTABLE
+#define CONST_VTABLE
+#endif
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 
@@ -646,10 +649,34 @@ static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x4
 typedef struct {
     IMMDeviceEnumerator* device_enumerator;
     IMMDevice* device;
+    IAudioClient* audio_client;
     HANDLE buffer_end_event;
     HANDLE thread_stop_event;
 } _saudio_wasapi_state;
 static _saudio_wasapi_state _saudio_wasapi;
+
+_SOKOL_PRIVATE void _saudio_wasapi_release(void) {
+    if (_saudio_wasapi.audio_client) {
+        IAudioClient_Release(_saudio_wasapi.audio_client);
+        _saudio_wasapi.audio_client = 0;
+    }
+    if (_saudio_wasapi.device) {
+        IMMDevice_Release(_saudio_wasapi.device);
+        _saudio_wasapi.device = 0;
+    }
+    if (_saudio_wasapi.device_enumerator) {
+        IMMDeviceEnumerator_Release(_saudio_wasapi.device_enumerator);
+        _saudio_wasapi.device_enumerator = 0;
+    }
+    if (0 != _saudio_wasapi.thread_stop_event) {
+        CloseHandle(_saudio_wasapi.thread_stop_event);
+        _saudio_wasapi.thread_stop_event = 0;
+    }
+    if (0 != _saudio_wasapi.buffer_end_event) {
+        CloseHandle(_saudio_wasapi.buffer_end_event);
+        _saudio_wasapi.buffer_end_event = 0;
+    }
+}
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     memset(&_saudio_wasapi, 0, sizeof(_saudio_wasapi));
@@ -664,7 +691,41 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     if (0 == _saudio_wasapi.thread_stop_event) {
         goto error;
     }
-    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator, 0, CLSCTX_ALL, &_saudio_IID_IMMDeviceEnumerator, (void**)&_saudio_wasapi.device_enumerator))) {
+    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator, 
+        0, CLSCTX_ALL, 
+        &_saudio_IID_IMMDeviceEnumerator, 
+        (void**)&_saudio_wasapi.device_enumerator))) 
+    {
+        goto error;
+    }
+    if (FAILED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(_saudio_wasapi.device_enumerator,
+        eRender, eConsole, 
+        &_saudio_wasapi.device))) 
+    {
+        goto error;
+    } 
+    if (FAILED(IMMDevice_Activate(_saudio_wasapi.device,
+        &_saudio_IID_IAudioClient,
+        CLSCTX_ALL, 0,
+        (void**)&_saudio_wasapi.audio_client))) 
+    {
+        goto error;
+    }
+    WAVEFORMATEX fmt;
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.nChannels = 1;
+    fmt.nSamplesPerSec = _saudio.sample_rate;
+    fmt.wFormatTag = WAVE_FORMAT_PCM;
+    fmt.wBitsPerSample = 16;        /* FIXME: how to use float samples directly? */
+    fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
+    fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
+    REFERENCE_TIME dur = (REFERENCE_TIME)
+        (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
+    if (FAILED(IAudioClient_Initialize(_saudio_wasapi.audio_client,
+        AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+        dur, 0, &fmt, 0)))
+    {
         goto error;
     }
 
@@ -674,22 +735,12 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     return true;
 
 error:
-    if (0 != _saudio_wasapi.buffer_end_event) {
-        CloseHandle(_saudio_wasapi.buffer_end_event);
-        _saudio_wasapi.buffer_end_event = 0;
-    }
-    if (0 != _saudio_wasapi.thread_stop_event) {
-        CloseHandle(_saudio_wasapi.thread_stop_event);
-        _saudio_wasapi.thread_stop_event = 0;
-    }
-    if (_saudio_wasapi.device_enumerator) {
-        IMMDeviceEnumerator_Release(_saudio_wasapi.device_enumerator);
-    }
+    _saudio_wasapi_release();
     return false;
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
-
+    _saudio_wasapi_release();
 }
 
 /*=== EMSCRIPTEN BACKEND =====================================================*/
