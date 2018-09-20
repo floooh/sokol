@@ -249,7 +249,7 @@
     the context is active. When the context is destroyed, all resources
     "belonging to the context" are destroyed as well.
 
-    A default context will be created and activated implicitely in
+    A default context will be created and activated implicitly in
     sg_setup(), and destroyed in sg_shutdown(). So for a typical application
     which *doesn't* use multiple contexts, nothing changes, and calling
     the context functions isn't necessary.
@@ -278,7 +278,7 @@
     another context is active, but must still be destroyed under
     the same context that was active during creation).
 
-    For more information, check out the the multiwindow-glfw sample:
+    For more information, check out the multiwindow-glfw sample:
 
     https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c
 
@@ -6998,7 +6998,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         _sg_mtl_pass_valid = true;
     }
     else {
-        /* default pass descriptor will not be valid if window is minized,
+        /* default pass descriptor will not be valid if window is minimized,
            don't do any rendering in this case */
         _sg_mtl_pass_valid = false;
         return;
@@ -8863,7 +8863,7 @@ void sg_apply_draw_state(const sg_draw_state* ds) {
     _sg.cur_pipeline = ds->pipeline;
 
     /* lookup resource pointers, resources which are not in SG_RESOURCESTATE_VALID
-       are not a fatal error, but supress the following drawcalls, this is to
+       are not a fatal error, but suppress the following drawcalls, this is to
        allow for simple asynchronous resource setup
     */
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, ds->pipeline.id);
