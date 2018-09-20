@@ -322,7 +322,7 @@ typedef struct {
 
 _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo* fifo, int packet_size, int num_packets) {
     /* NOTE: there's a chicken-egg situation during the init phase where the
-        the streaming thread must be started before the fifo is actually initialized,
+        streaming thread must be started before the fifo is actually initialized,
         thus the fifo init must already be protected from access by the fifo_read() func.
     */
     _saudio_mutex_lock();
@@ -543,7 +543,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
         /* snd_pcm_writei() will be blocking until it needs data */
         int write_res = snd_pcm_writei(_saudio_alsa.device, _saudio_alsa.buffer, _saudio_alsa.buffer_frames);
         if (write_res < 0) {
-            /* underrun occured */
+            /* underrun occurred */
             snd_pcm_prepare(_saudio_alsa.device);
         }
         else {

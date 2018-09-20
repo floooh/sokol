@@ -52,7 +52,7 @@
 
     FEATURE OVERVIEW
     ================
-    sokol_app.h provides an a minimalistic cross-platform API which
+    sokol_app.h provides a minimalistic cross-platform API which
     implements the 'application-wrapper' parts of a 3D application:
 
     - a common application entry function
@@ -185,7 +185,7 @@
             Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
             return pointers to D3D11 API objects required for rendering, 
             only if the D3D11 backend has been selected. Otherwise they
-            return a null pointer. Note that the returned pointers to thr
+            return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
 
@@ -258,13 +258,13 @@
     a fullscreen window on platforms with a 'proper' window system 
     (mobile devices will always use fullscreen). The implementation details
     depend on the target platform, in general sokol-app will use a
-    'soft approach' which doesn't interfer too much with the platform's
+    'soft approach' which doesn't interfere too much with the platform's
     window system (for instance borderless fullscreen window instead of
     a 'real' fullscreen mode). Such details might change over time
     as sokol-app is adapted for different needs.
 
     The most important effect of fullscreen mode to keep in mind is that
-    the requested canvas width and heigth will be ignored for the initial
+    the requested canvas width and height will be ignored for the initial
     window size, calling sapp_width() and sapp_height() will instead return
     the resolution of the fullscreen canvas (however the provided size
     might still be used for the non-fullscreen window, in case the user can
@@ -273,7 +273,7 @@
     ONSCREEN KEYBOARD
     =================
     On some platforms which don't provide a physical keyboard, sokol-app
-    can display the platform's integrated oncscreen keyboard for text
+    can display the platform's integrated onscreen keyboard for text
     input. To request that the onscreen keyboard is shown, call
 
         sapp_show_keyboard(true);
@@ -1472,7 +1472,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             for (NSUInteger i = 0; i < len; i++) {
                 unichar c = [string characterAtIndex:i];
                 if (c >= 32) {
-                    /* ignore surrogats for now */
+                    /* ignore surrogates for now */
                     if ((c < 0xD800) || (c > 0xDFFF)) {
                         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
                         _sapp.event.char_code = c;
