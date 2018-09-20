@@ -199,7 +199,7 @@ extern int saudio_push(const float* frames, int num_frames);
 
 /*--- implementation-private structures --------------------------------------*/
 #define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
-#define _SAUDIO_DEFAULT_BUFFER_FRAMES (512)
+#define _SAUDIO_DEFAULT_BUFFER_FRAMES (1024)
 #define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
 #define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*4)
 #define _SAUDIO_RING_MAX_SLOTS (64)
@@ -645,13 +645,15 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2 } };
 static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
 static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
+static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
 
 typedef struct {
     IMMDeviceEnumerator* device_enumerator;
     IMMDevice* device;
     IAudioClient* audio_client;
+    IAudioRenderClient* render_client;
     HANDLE buffer_end_event;
-    HANDLE thread_stop_event;
+    bool thread_stop;
 } _saudio_wasapi_state;
 static _saudio_wasapi_state _saudio_wasapi;
 
@@ -668,10 +670,6 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
         IMMDeviceEnumerator_Release(_saudio_wasapi.device_enumerator);
         _saudio_wasapi.device_enumerator = 0;
     }
-    if (0 != _saudio_wasapi.thread_stop_event) {
-        CloseHandle(_saudio_wasapi.thread_stop_event);
-        _saudio_wasapi.thread_stop_event = 0;
-    }
     if (0 != _saudio_wasapi.buffer_end_event) {
         CloseHandle(_saudio_wasapi.buffer_end_event);
         _saudio_wasapi.buffer_end_event = 0;
@@ -681,14 +679,12 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     memset(&_saudio_wasapi, 0, sizeof(_saudio_wasapi));
     if (FAILED(CoInitializeEx(0, COINIT_MULTITHREADED))) {
+        SOKOL_LOG("sokol_audio wasapi: CoInitializeEx failed")
         return false;
     }
     _saudio_wasapi.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio_wasapi.buffer_end_event) {
-        goto error;
-    }
-    _saudio_wasapi.thread_stop_event = CreateEvent(0,FALSE, FALSE, 0);
-    if (0 == _saudio_wasapi.thread_stop_event) {
+        SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
     if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator, 
@@ -696,12 +692,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         &_saudio_IID_IMMDeviceEnumerator, 
         (void**)&_saudio_wasapi.device_enumerator))) 
     {
+        SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
         goto error;
     }
     if (FAILED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(_saudio_wasapi.device_enumerator,
         eRender, eConsole, 
         &_saudio_wasapi.device))) 
     {
+        SOKOL_LOG("sokol_audio wasapi: GetDefaultAudioEndPoint failed");
         goto error;
     } 
     if (FAILED(IMMDevice_Activate(_saudio_wasapi.device,
@@ -709,6 +707,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         CLSCTX_ALL, 0,
         (void**)&_saudio_wasapi.audio_client))) 
     {
+        SOKOL_LOG("sokol_audio wasapi: device activate failed");
         goto error;
     }
     WAVEFORMATEX fmt;
@@ -726,12 +725,33 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
         dur, 0, &fmt, 0)))
     {
+        SOKOL_LOG("sokol_audio wasapi: audio client initialize failed");
+        goto error;
+    }
+    UINT32 buffer_frames = 0;
+    if (FAILED(IAudioClient_GetBufferSize(_saudio_wasapi.audio_client, &buffer_frames))) {
+        SOKOL_LOG("sokol_audio wasapi: audio client get buffer size failed");
+        goto error;
+    }
+    if (buffer_frames != (UINT32)_saudio.buffer_frames) {
+        SOKOL_LOG("sokol_audio wasapi: buffer frames mismatch");
+        goto error;
+    }
+    if (FAILED(IAudioClient_GetService(_saudio_wasapi.audio_client, 
+        &_saudio_IID_IAudioRenderClient,
+        (void**)&_saudio_wasapi.render_client)))
+    {
+        SOKOL_LOG("sokol_audio wasapi: audio client GetService failed");
+        goto error;
+    }
+    if (FAILED(IAudioClient_SetEventHandle(_saudio_wasapi.audio_client, _saudio_wasapi.buffer_end_event))) {
+        SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
 
-    // FIXME
-    _saudio.bytes_per_frame = 4;
+    // FIXME: create thread
 
+    _saudio.bytes_per_frame = 4;
     return true;
 
 error:
@@ -740,7 +760,16 @@ error:
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    _saudio_wasapi.thread_stop = true;
+    SetEvent(_saudio_wasapi.buffer_end_event);
+    // FIXME: wait for thread to stop and destroy thread
+
+    CloseHandle(_saudio_wasapi.buffer_end_event);
+    if (_saudio_wasapi.audio_client) {
+        IAudioClient_Stop(_saudio_wasapi.audio_client);
+    }
     _saudio_wasapi_release();
+    CoUninitialize();
 }
 
 /*=== EMSCRIPTEN BACKEND =====================================================*/
