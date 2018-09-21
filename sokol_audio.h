@@ -652,12 +652,43 @@ typedef struct {
     IMMDevice* device;
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
+    HANDLE thread;
     HANDLE buffer_end_event;
+    int bytes_per_frame;
     bool thread_stop;
 } _saudio_wasapi_state;
 static _saudio_wasapi_state _saudio_wasapi;
 
+_SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(UINT32 num_frames) {
+    BYTE* buffer = 0;
+    if (FAILED(IAudioRenderClient_GetBuffer(_saudio_wasapi.render_client, num_frames, &buffer))) {
+        return;
+    }
+    memset(buffer, 0, num_frames * _saudio_wasapi.bytes_per_frame);
+    IAudioRenderClient_ReleaseBuffer(_saudio_wasapi.render_client, num_frames, 0);
+}
+
+_SOKOL_PRIVATE DWORD _saudio_wasapi_thread_fn(LPVOID param) {
+    (void)param;
+    _saudio_wasapi_submit_buffer(_saudio.buffer_frames);
+    IAudioClient_Start(_saudio_wasapi.audio_client);
+    while (!_saudio_wasapi.thread_stop) {
+        WaitForSingleObject(_saudio_wasapi.buffer_end_event, INFINITE);
+        UINT32 padding = 0;
+        if (FAILED(IAudioClient_GetCurrentPadding(_saudio_wasapi.audio_client, &padding))) {
+            continue;
+        }
+        UINT32 num_frames = _saudio.buffer_frames - padding;
+        _saudio_wasapi_submit_buffer(num_frames);
+    }
+    return 0;
+}
+
 _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
+    if (_saudio_wasapi.render_client) {
+        IAudioRenderClient_Release(_saudio_wasapi.render_client);
+        _saudio_wasapi.render_client = 0;
+    }
     if (_saudio_wasapi.audio_client) {
         IAudioClient_Release(_saudio_wasapi.audio_client);
         _saudio_wasapi.audio_client = 0;
@@ -715,7 +746,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.nChannels = 1;
     fmt.nSamplesPerSec = _saudio.sample_rate;
     fmt.wFormatTag = WAVE_FORMAT_PCM;
-    fmt.wBitsPerSample = 16;        /* FIXME: how to use float samples directly? */
+    fmt.wBitsPerSample = 16;
     fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
     REFERENCE_TIME dur = (REFERENCE_TIME)
@@ -748,8 +779,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
+    _saudio_wasapi.bytes_per_frame = _saudio.num_channels * sizeof(int16_t); 
 
-    // FIXME: create thread
+    /* create streaming thread */
+    _saudio_wasapi.thread = CreateThread(NULL, 0, _saudio_wasapi_thread_fn, 0, 0, 0);
+    if (0 == _saudio_wasapi.thread) {
+        SOKOL_LOG("sokol_audio wasapi: CreateThread failed");
+        goto error;
+    }
 
     _saudio.bytes_per_frame = 4;
     return true;
@@ -760,11 +797,13 @@ error:
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
-    _saudio_wasapi.thread_stop = true;
-    SetEvent(_saudio_wasapi.buffer_end_event);
-    // FIXME: wait for thread to stop and destroy thread
-
-    CloseHandle(_saudio_wasapi.buffer_end_event);
+    if (_saudio_wasapi.thread) {
+        _saudio_wasapi.thread_stop = true;
+        SetEvent(_saudio_wasapi.buffer_end_event);
+        WaitForSingleObject(_saudio_wasapi.thread, INFINITE);
+        CloseHandle(_saudio_wasapi.thread);
+        _saudio_wasapi.thread = 0;
+    }
     if (_saudio_wasapi.audio_client) {
         IAudioClient_Stop(_saudio_wasapi.audio_client);
     }
