@@ -594,7 +594,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.sample_rate = val;
     snd_pcm_hw_params_get_channels(params, &val);
     _saudio.num_channels = val;
-    _saudio.bytes_per_frame = 4;
+    _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
 
     /* allocate the streaming buffer */
     _saudio_alsa.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
@@ -648,43 +648,91 @@ static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x4
 static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
 
 typedef struct {
+    HANDLE thread_handle;
+    HANDLE buffer_end_event;
+    bool stop;
+    int buffer_frames;
+    int buffer_byte_size;
+    int buffer_pos;
+    float* buffer;
+} _saudio_wasapi_thread_data;
+
+typedef struct {
     IMMDeviceEnumerator* device_enumerator;
     IMMDevice* device;
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
-    HANDLE thread;
-    HANDLE buffer_end_event;
     int bytes_per_frame;
-    bool thread_stop;
+    _saudio_wasapi_thread_data thread;
 } _saudio_wasapi_state;
 static _saudio_wasapi_state _saudio_wasapi;
 
+/* fill intermediate buffer with new data and reset buffer_pos */ 
+_SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
+    if (_saudio.stream_cb) {
+        _saudio.stream_cb(_saudio_wasapi.thread.buffer, _saudio_wasapi.thread.buffer_frames);
+    }
+    else {
+        if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_wasapi.thread.buffer, _saudio_wasapi.thread.buffer_byte_size)) {
+            /* not enough read data available, fill the entire buffer with silence */
+            memset(_saudio_wasapi.thread.buffer, 0, _saudio_wasapi.thread.buffer_byte_size);
+        }
+    }
+    _saudio_wasapi.thread.buffer_pos = 0;
+}
+
 _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(UINT32 num_frames) {
-    BYTE* buffer = 0;
-    if (FAILED(IAudioRenderClient_GetBuffer(_saudio_wasapi.render_client, num_frames, &buffer))) {
+    BYTE* wasapi_buffer = 0;
+    if (FAILED(IAudioRenderClient_GetBuffer(_saudio_wasapi.render_client, num_frames, &wasapi_buffer))) {
         return;
     }
-    memset(buffer, 0, num_frames * _saudio_wasapi.bytes_per_frame);
+    SOKOL_ASSERT(wasapi_buffer);
+
+    /* convert float samples to int16_t, refill float buffer if needed */
+    const int num_samples = num_frames * _saudio.num_channels;
+    int16_t* dst = (int16_t*) wasapi_buffer;
+    uint32_t buffer_pos = _saudio_wasapi.thread.buffer_pos;
+    const uint32_t buffer_float_size = _saudio_wasapi.thread.buffer_byte_size / sizeof(float);
+    const float* src = _saudio_wasapi.thread.buffer + buffer_pos;
+    for (int i = 0; i < num_samples; i++) {
+        if (0 == buffer_pos) {
+            _saudio_wasapi_fill_buffer();
+        }
+        dst[i] = (int16_t) (src[buffer_pos] * 32767.0f);
+        buffer_pos += 1;
+        if (buffer_pos == buffer_float_size) {
+            buffer_pos = 0;
+        }
+    }
+    _saudio_wasapi.thread.buffer_pos = buffer_pos;
+
     IAudioRenderClient_ReleaseBuffer(_saudio_wasapi.render_client, num_frames, 0);
 }
 
 _SOKOL_PRIVATE DWORD _saudio_wasapi_thread_fn(LPVOID param) {
     (void)param;
-    _saudio_wasapi_submit_buffer(_saudio.buffer_frames);
+    _saudio_wasapi_submit_buffer(_saudio_wasapi.thread.buffer_frames);
     IAudioClient_Start(_saudio_wasapi.audio_client);
-    while (!_saudio_wasapi.thread_stop) {
-        WaitForSingleObject(_saudio_wasapi.buffer_end_event, INFINITE);
+    while (!_saudio_wasapi.thread.stop) {
+        WaitForSingleObject(_saudio_wasapi.thread.buffer_end_event, INFINITE);
         UINT32 padding = 0;
         if (FAILED(IAudioClient_GetCurrentPadding(_saudio_wasapi.audio_client, &padding))) {
             continue;
         }
-        UINT32 num_frames = _saudio.buffer_frames - padding;
-        _saudio_wasapi_submit_buffer(num_frames);
+        SOKOL_ASSERT(_saudio_wasapi.thread.buffer_frames >= (int)padding);
+        UINT32 num_frames = _saudio_wasapi.thread.buffer_frames - padding;
+        if (num_frames > 0) {
+            _saudio_wasapi_submit_buffer(num_frames);
+        }
     }
     return 0;
 }
 
 _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
+    if (_saudio_wasapi.thread.buffer) {
+        SOKOL_FREE(_saudio_wasapi.thread.buffer);
+        _saudio_wasapi.thread.buffer = 0;
+    }
     if (_saudio_wasapi.render_client) {
         IAudioRenderClient_Release(_saudio_wasapi.render_client);
         _saudio_wasapi.render_client = 0;
@@ -701,20 +749,20 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
         IMMDeviceEnumerator_Release(_saudio_wasapi.device_enumerator);
         _saudio_wasapi.device_enumerator = 0;
     }
-    if (0 != _saudio_wasapi.buffer_end_event) {
-        CloseHandle(_saudio_wasapi.buffer_end_event);
-        _saudio_wasapi.buffer_end_event = 0;
+    if (0 != _saudio_wasapi.thread.buffer_end_event) {
+        CloseHandle(_saudio_wasapi.thread.buffer_end_event);
+        _saudio_wasapi.thread.buffer_end_event = 0;
     }
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     memset(&_saudio_wasapi, 0, sizeof(_saudio_wasapi));
     if (FAILED(CoInitializeEx(0, COINIT_MULTITHREADED))) {
-        SOKOL_LOG("sokol_audio wasapi: CoInitializeEx failed")
+        SOKOL_LOG("sokol_audio wasapi: CoInitializeEx failed");
         return false;
     }
-    _saudio_wasapi.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
-    if (0 == _saudio_wasapi.buffer_end_event) {
+    _saudio_wasapi.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
+    if (0 == _saudio_wasapi.thread.buffer_end_event) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
@@ -743,7 +791,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     }
     WAVEFORMATEX fmt;
     memset(&fmt, 0, sizeof(fmt));
-    fmt.nChannels = 1;
+    fmt.nChannels = (WORD) _saudio.num_channels;
     fmt.nSamplesPerSec = _saudio.sample_rate;
     fmt.wFormatTag = WAVE_FORMAT_PCM;
     fmt.wBitsPerSample = 16;
@@ -775,20 +823,26 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client GetService failed");
         goto error;
     }
-    if (FAILED(IAudioClient_SetEventHandle(_saudio_wasapi.audio_client, _saudio_wasapi.buffer_end_event))) {
+    if (FAILED(IAudioClient_SetEventHandle(_saudio_wasapi.audio_client, _saudio_wasapi.thread.buffer_end_event))) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
     _saudio_wasapi.bytes_per_frame = _saudio.num_channels * sizeof(int16_t); 
+    _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
+    _saudio_wasapi.thread.buffer_frames = _saudio.buffer_frames;
+    _saudio_wasapi.thread.buffer_byte_size = _saudio_wasapi.thread.buffer_frames * _saudio.bytes_per_frame;
+
+    /* allocate an intermediate buffer for sample format conversion */
+    _saudio_wasapi.thread.buffer = (float*) SOKOL_MALLOC(_saudio_wasapi.thread.buffer_byte_size);
+    SOKOL_ASSERT(_saudio_wasapi.thread.buffer);
 
     /* create streaming thread */
-    _saudio_wasapi.thread = CreateThread(NULL, 0, _saudio_wasapi_thread_fn, 0, 0, 0);
-    if (0 == _saudio_wasapi.thread) {
+    _saudio_wasapi.thread.thread_handle = CreateThread(NULL, 0, _saudio_wasapi_thread_fn, 0, 0, 0);
+    if (0 == _saudio_wasapi.thread.thread_handle) {
         SOKOL_LOG("sokol_audio wasapi: CreateThread failed");
         goto error;
     }
 
-    _saudio.bytes_per_frame = 4;
     return true;
 
 error:
@@ -797,12 +851,12 @@ error:
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
-    if (_saudio_wasapi.thread) {
-        _saudio_wasapi.thread_stop = true;
-        SetEvent(_saudio_wasapi.buffer_end_event);
-        WaitForSingleObject(_saudio_wasapi.thread, INFINITE);
-        CloseHandle(_saudio_wasapi.thread);
-        _saudio_wasapi.thread = 0;
+    if (_saudio_wasapi.thread.thread_handle) {
+        _saudio_wasapi.thread.stop = true;
+        SetEvent(_saudio_wasapi.thread.buffer_end_event);
+        WaitForSingleObject(_saudio_wasapi.thread.thread_handle, INFINITE);
+        CloseHandle(_saudio_wasapi.thread.thread_handle);
+        _saudio_wasapi.thread.thread_handle = 0;
     }
     if (_saudio_wasapi.audio_client) {
         IAudioClient_Stop(_saudio_wasapi.audio_client);
