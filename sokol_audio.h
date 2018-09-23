@@ -488,10 +488,10 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.mSampleRate = (Float64) _saudio.sample_rate;
     fmt.mFormatID = kAudioFormatLinearPCM;
     fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
-    fmt.mBytesPerPacket = 4;
     fmt.mFramesPerPacket = 1;
-    fmt.mBytesPerFrame = 4;
-    fmt.mChannelsPerFrame = 1;
+    fmt.mChannelsPerFrame = _saudio.num_channels;
+    fmt.mBytesPerFrame = sizeof(float) * _saudio.num_channels;
+    fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
     OSStatus res = AudioQueueNewOutput(&fmt, _sapp_ca_callback, 0, NULL, NULL, 0, &_saudio_ca_audio_queue);
     SOKOL_ASSERT((res == 0) && _saudio_ca_audio_queue);
