@@ -549,7 +549,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
         else {
             /* fill the streaming buffer with new data */
             if (_saudio.stream_cb) {
-                _saudio.stream_cb(_saudio_alsa.buffer, _saudio_alsa.buffer_frames);
+                _saudio.stream_cb(_saudio_alsa.buffer, _saudio_alsa.buffer_byte_size / sizeof(float));
             }
             else {
                 if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_alsa.buffer, _saudio_alsa.buffer_byte_size)) {
@@ -671,7 +671,7 @@ static _saudio_wasapi_state _saudio_wasapi;
 /* fill intermediate buffer with new data and reset buffer_pos */ 
 _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     if (_saudio.stream_cb) {
-        _saudio.stream_cb(_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_frames);
+        _saudio.stream_cb(_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_byte_size / sizeof(float));
     }
     else {
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_byte_size)) {
@@ -870,9 +870,14 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio_emsc_buffer);
     if (num_frames == _saudio.buffer_frames) {
         const int num_bytes = num_frames * _saudio.bytes_per_frame;
-        if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio_emsc_buffer, num_bytes)) {
-            /* not enough read data available, fill the entire buffer with silence */
-            memset(_saudio_emsc_buffer, 0, num_bytes);
+        if (_saudio.stream_cb) {
+            _saudio.stream_cb((float*)_saudio_emsc_buffer, num_bytes / sizeof(float));
+        }
+        else {
+            if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio_emsc_buffer, num_bytes)) {
+                /* not enough read data available, fill the entire buffer with silence */
+                memset(_saudio_emsc_buffer, 0, num_bytes);
+            }
         }
         int res = (int) _saudio_emsc_buffer;
         return res;
