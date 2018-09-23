@@ -572,7 +572,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     snd_pcm_hw_params_alloca(&params);
     snd_pcm_hw_params_any(_saudio_alsa.device, params);
     snd_pcm_hw_params_set_access(_saudio_alsa.device, params, SND_PCM_ACCESS_RW_INTERLEAVED);
-    snd_pcm_hw_params_set_channels(_saudio_alsa.device, params, 1);
+    snd_pcm_hw_params_set_channels(_saudio_alsa.device, params, _saudio.num_channels);
     snd_pcm_hw_params_set_buffer_size(_saudio_alsa.device, params, _saudio.buffer_frames);
     if (0 > snd_pcm_hw_params_test_format(_saudio_alsa.device, params, SND_PCM_FORMAT_FLOAT_LE)) {
         goto error;
@@ -593,7 +593,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     snd_pcm_hw_params_get_rate(params, &val, &dir);
     _saudio.sample_rate = val;
     snd_pcm_hw_params_get_channels(params, &val);
-    _saudio.num_channels = val;
+    SOKOL_ASSERT(val == _saudio.num_channels);
     _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
 
     /* allocate the streaming buffer */
@@ -888,7 +888,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
 }
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
-EM_JS(int, _saudio_js_init, (int sample_rate, int buffer_size), {
+EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
     Module._saudio_context = null;
     Module._saudio_node = null;
     if (typeof AudioContext !== 'undefined') {
@@ -911,15 +911,17 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int buffer_size), {
     }
     if (Module._saudio_context) {
         console.log('sokol_audio.h: sample rate ', Module._saudio_context.sampleRate);
-        Module._saudio_node = Module._saudio_context.createScriptProcessor(buffer_size, 0, 1);
+        Module._saudio_node = Module._saudio_context.createScriptProcessor(buffer_size, 0, num_channels);
         Module._saudio_node.onaudioprocess = function pump_audio(event) {
-            var buf_size = event.outputBuffer.length;
-            var ptr = Module.ccall('_saudio_emsc_pull', 'number', ['number'], [buf_size]);
+            var num_frames = event.outputBuffer.length;
+            var ptr = Module.ccall('_saudio_emsc_pull', 'number', ['number'], [num_frames]);
             if (ptr) {
-                var chan = event.outputBuffer.getChannelData(0);
-                for (var i = 0; i < buf_size; i++) {
-                    var heap_index = (ptr>>2) + i;
-                    chan[i] = HEAPF32[heap_index];
+                var num_channels = event.outputBuffer.numberOfChannels;
+                for (var chn = 0; chn < num_channels; chn++) {
+                    var chan = event.outputBuffer.getChannelData(chn);
+                    for (var i = 0; i < num_frames; i++) {
+                        chan[i] = HEAPF32[(ptr>>2) + ((num_channels*i)+chn)]
+                    }
                 }
             }
         };
@@ -964,9 +966,8 @@ EM_JS(int, _saudio_js_buffer_frames, (), {
 });
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    if (_saudio_js_init(_saudio.sample_rate, _saudio.buffer_frames)) {
-        _saudio.num_channels = 1;
-        _saudio.bytes_per_frame = 4;
+    if (_saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
+        _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
         _saudio.sample_rate = _saudio_js_sample_rate();
         _saudio.buffer_frames = _saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
