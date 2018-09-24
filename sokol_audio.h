@@ -593,7 +593,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     snd_pcm_hw_params_get_rate(params, &val, &dir);
     _saudio.sample_rate = val;
     snd_pcm_hw_params_get_channels(params, &val);
-    SOKOL_ASSERT(val == _saudio.num_channels);
+    SOKOL_ASSERT((int)val == _saudio.num_channels);
     _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
 
     /* allocate the streaming buffer */
