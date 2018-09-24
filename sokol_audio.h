@@ -721,8 +721,9 @@ _SOKOL_PRIVATE DWORD _saudio_wasapi_thread_fn(LPVOID param) {
         }
         SOKOL_ASSERT(_saudio_wasapi.thread.dst_buffer_frames >= (int)padding);
         UINT32 num_frames = _saudio_wasapi.thread.dst_buffer_frames - padding;
-        SOKOL_ASSERT(num_frames > 0);
-        _saudio_wasapi_submit_buffer(num_frames);
+        if (num_frames > 0) {
+            _saudio_wasapi_submit_buffer(num_frames);
+        }
     }
     return 0;
 }
