@@ -95,9 +95,9 @@
     a good balance between low-latency and glitch-free playback
     on all audio backends.
 
-    If you want to use the callback-model, you need to provide a
-    stream callback function (otherwise keep the stream_cb member
-    initialized to zero).
+    If you want to use the callback-model, you need to provide a stream
+    callback function in stream_cb, otherwise keep the stream_cb member
+    initialized to zero.
 
     Use push model and default playback parameters:
 
