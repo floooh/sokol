@@ -6,8 +6,6 @@
     DON'T USE!
 
     TODO:
-        - stereo support
-        - Windows backend
         - write tests for the helper classes (ring queue, packet fifo)
         - need a callback when sample rate in the backend changes (this
           may happen when attaching/removing a playback device)
@@ -130,7 +128,7 @@ typedef struct {
     int packet_frames;      /* number of frames in a packet */
     int num_packets;        /* number of packets in packet queue */
     int num_channels;       /* number of channels, default: 1 (mono) */
-    void (*stream_cb)(float* buffer, int num_samples);  /* optional streaming callback */
+    void (*stream_cb)(float* buffer, int num_frames, int num_channels);  /* optional streaming callback */
 } saudio_desc;
 
 /* setup sokol-audio */
@@ -445,7 +443,7 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo* fifo, uint8_t* ptr, int num_b
 /* sokol-audio state */
 typedef struct {
     bool valid;
-    void (*stream_cb)(float* buffer, int num_samples);
+    void (*stream_cb)(float* buffer, int num_frames, int num_channels);
     int sample_rate;            /* sample rate */
     int buffer_frames;          /* number of frames in streaming buffer */
     int bytes_per_frame;        /* filled by backend */
@@ -466,7 +464,9 @@ static AudioQueueRef _saudio_ca_audio_queue;
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     if (_saudio.stream_cb) {
-        _saudio.stream_cb((float*)buffer->mAudioData, buffer->mAudioDataByteSize / 4);
+        const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
+        const int num_channels = _saudio.num_channels;
+        _saudio.stream_cb((float*)buffer->mAudioData, num_frames, num_channels);
     }
     else {
         uint8_t* ptr = (uint8_t*)buffer->mAudioData;
@@ -507,12 +507,13 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         AudioQueueEnqueueBuffer(_saudio_ca_audio_queue, buf, 0, NULL);
     }
 
+    /* init or modify actual playback parameters */
+    _saudio.bytes_per_frame = fmt.mBytesPerFrame;
+    
     /* ...and start playback */
     res = AudioQueueStart(_saudio_ca_audio_queue, NULL);
     SOKOL_ASSERT(0 == res);
 
-    /* init or modify actual playback parameters */
-    _saudio.bytes_per_frame = fmt.mBytesPerFrame;
     return true;
 }
 
@@ -549,7 +550,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
         else {
             /* fill the streaming buffer with new data */
             if (_saudio.stream_cb) {
-                _saudio.stream_cb(_saudio_alsa.buffer, _saudio_alsa.buffer_byte_size / sizeof(float));
+                _saudio.stream_cb(_saudio_alsa.buffer, _saudio_alsa.buffer_frames, _saudio.num_channels);
             }
             else {
                 if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_alsa.buffer, _saudio_alsa.buffer_byte_size)) {
@@ -671,7 +672,7 @@ static _saudio_wasapi_state _saudio_wasapi;
 /* fill intermediate buffer with new data and reset buffer_pos */ 
 _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     if (_saudio.stream_cb) {
-        _saudio.stream_cb(_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_byte_size / sizeof(float));
+        _saudio.stream_cb(_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_frames, _saudio.num_channels);
     }
     else {
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_byte_size)) {
@@ -870,11 +871,11 @@ static uint8_t* _saudio_emsc_buffer;
 EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio_emsc_buffer);
     if (num_frames == _saudio.buffer_frames) {
-        const int num_bytes = num_frames * _saudio.bytes_per_frame;
         if (_saudio.stream_cb) {
-            _saudio.stream_cb((float*)_saudio_emsc_buffer, num_bytes / sizeof(float));
+            _saudio.stream_cb((float*)_saudio_emsc_buffer, num_frames, _saudio.num_channels);
         }
         else {
+            const int num_bytes = num_frames * _saudio.bytes_per_frame;
             if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio_emsc_buffer, num_bytes)) {
                 /* not enough read data available, fill the entire buffer with silence */
                 memset(_saudio_emsc_buffer, 0, num_bytes);
