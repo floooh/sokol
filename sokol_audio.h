@@ -255,6 +255,8 @@
     https://developers.google.com/web/updates/2017/12/audio-worklet
     https://developers.google.com/web/updates/2018/06/audio-worklet-design-pattern
 
+    "Blob URLs": https://www.html5rocks.com/en/tutorials/workers/basics/
+
     THE COREAUDIO BACKEND
     =====================
     (TODO)
