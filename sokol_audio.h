@@ -1,96 +1,274 @@
 #pragma once
 /*
-    sokol_audio.h   -- minimalist cross-platform buffer-streaming audio API
+    sokol_audio.h -- cross-platform audio-streaming API
 
-    THIS IS HIGHLY EXPERIMENTAL AND WON'T BE FINISHED FOR A WHILE, 
-    DON'T USE!
+    Do this:
+        #define SOKOL_IMPL
+    before you include this file in *one* C or C++ file to create the 
+    implementation.
 
-    TODO:
-        - write tests for the helper classes (ring queue, packet fifo)
-        - need a callback when sample rate in the backend changes (this
-          may happen when attaching/removing a playback device)
-        - MAYBE: implement some sort of sample-rate limiting if the 
-          actual sample rate is very high?
-        - if the actual sample rate is a lot different than what was
-          requested, the other requested parameters (most notably the
-          stream buffer size and number of packets) might not be sufficient
-          for glitch-free audioplayback... maybe need to do a 2-step setup?
+    Optionally provide the following defines with your own implementations:
 
-    In the beginning this is mainly a testbed to get the simplest possible
-    glitch-free audio solution for WASM/asm.js, and to have that simplest-
-    possible API for other platforms too.
+    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
+    SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
+    SOKOL_FREE(p)       - your own free() implementation (default: free(p))
 
-    On non-emscripten platforms, essentially use the SoLoud backend
-    code. If the minimal emscripten buffer-streaming works well,
-    try to get a PR into SoLoud instead of the current 
-    SDL-static backend (which has a fairly big JS shim).
+    FEATURE OVERVIEW
+    ================
+    You provide a mono- or stereo-stream of 32-bit float samples, which
+    Sokol Audio feeds into platform-specific audio backends:
 
-    Two ways to provide audio data:
+    - Windows: WASAPI
+    - Linux: ALSA (link with asound)
+    - macOS/iOS: CoreAudio (link with AudioToolbox)
+    - emscripten: WebAudio with ScriptProcessorNode
 
-    - low-level: streaming callback, will be called when audio backend needs
-      data, may be called from a separate thread
-    - push: application enqueues new data into a queue-buffer from main thread,
-      sokol_audio streams from this
+    Sokol Audio will not do any buffer mixing or volume control, if you have
+    multiple independent input streams of sample data you need to perform the
+    mixing yourself before forwarding the data to Sokol Audio.
 
-    Both methods to provide audio data are mutually exclusive.
+    There are two mutually exclusive ways to provide the sample data:
 
-    The push model needs a way to keep track of how many samples have been
-    processed, to prevent the audio playback from starving.
+    1. Callback model: You provide a callback function, which will be called
+       when Sokol Audio needs new samples. On all platforms except emscripten,
+       this function is called from a separate thread.
+    2. Push model: Your code pushes small blocks of sample data from your
+       main loop or a thread you created. The pushed data is stored in
+       a ring buffer where it is pulled by the backend code when
+       needed.
 
-    Glossary:
-    =========
-    stream buffer:
-        A chunk of memory managed by the audio backend to be filled with
-        new audio data by the stream callback. The size of the stream buffer
-        defines the 'primary latency' between audio data written in the
-        stream callback, and audible playback of the audio data.
+    The callback model is preferred because it is the most direct way to
+    feed sample data into the audio backends and also has less moving parts
+    (there is no ring buffer between your code and the audio backend). 
+    
+    Sometimes it is not possible to generate the audio stream directly in a
+    callback function running in a separate thread, for such cases Sokol Audio
+    provides the push-model as a convenience.
 
-    stream callback:
-        A user-provided function which fills the stream buffer with new audio
-        data. Depending on the audio backend, this may run in a separate thread.
-        Providing a stream-callback function is the lowest-level and
-        lowest-latency way to provide audio data.
+    SOKOL AUDIO AND SOLOUD
+    ======================
+    The WASAPI, ALSA and CoreAudio backend code has been taken from the
+    SoLoud library (with some modifications, so any bugs in there are most
+    likely my fault). If you need a more fully-featured audio solution, check
+    out SoLoud, it's excellent:
 
-    channel:
-        A discrete track of audio, currently only 1-channel (mono) and
-        2-channel (stereo) is supported.
+        https://github.com/jarikomppa/soloud
 
-    sample:
-        The magnitude of an audio signal on one channel at a given time.
-        In sokol-audio, samples are 32-bit floating numbers in the range
-        -1.0 to +1.0.
+    GLOSSARY
+    ========
+    - stream buffer:
+        The internal audio data buffer, usually provided by the backend API. The
+        size of the stream buffer defines the base latency, smaller buffers have
+        lower latency but may cause audio glitches. Bigger buffers reduce or
+        eliminate glitches, but have a higher base latency.
 
-    frame:
+    - stream callback:
+        Optional callback function which is called by Sokol Audio when it
+        needs new samples. On Windows, macOS/iOS and Linux, this is called in
+        a separate thread, on WebAudio, this is called per-frame in the
+        browser thread.
+
+    - channel: 
+        A discrete track of audio data, currently 1-channel (mono) and
+        2-channel (stereo) is supported and tested.
+
+    - sample:
+        The magnitude of an audio signal on one channel at a given time. In
+        Sokol Audio, samples are 32-bit floating numbers in the range -1.0 to
+        +1.0.
+
+    - frame:
         The tightly packed set of samples for all channels at a given time.
         For mono 1 frame is 1 sample. For stereo, 1 frame is 2 samples.
 
-    packet:
-        In sokol-audio, a small chunk of audio data that is moved from the
+    - packet:
+        In Sokol Audio, a small chunk of audio data that is moved from the
         main thread to the audio streaming thread in order to decouple the
         rate at which the main thread provides new audio data, and the
-        streaming thread consuming audio data. When the main thread
-        'pushes' data to sokol-audio, the data will be copied into
-        intermediate packets and queued up for the streaming callback. When
-        the streaming callback is called, it will pull packets from the
-        queue and copy the data into the stream buffer. If there are not
-        enough packets waiting to be streamed, streaming will 'starve'
-        and the stream buffer will be filled with silence until enough
-        packets are queued up again the fill the entire buffer (this will lead
-        to audible artefacts like crackling). The opposite is that the main
-        thread provides data faster then is streamed, in this case the packet
-        queue will run full,
-        and data written by the main thread will be discarded. This will also
-        lead to crackling. To provide glitch-free playback, the main thread
-        should always push as much data required to fill up the packet
-        queue (this can be queried via saudio_expect()).
+        streaming thread consuming audio data.
 
-    WebAudio Backend:
-    =================
-    The first implementation will use ScriptProcessorNode, later, Audio Worklets
-    will be used:
+    WORKING WITH SOKOL AUDIO
+    ========================
+    First call saudio_init() with your preferred audio playback options.
+    In most cases you can stick with the default values, these provide
+    a good balance between low-latency and glitch-free playback
+    on all audio backends.
 
+    If you want to use the callback-model, you need to provide a
+    stream callback function (otherwise keep the stream_cb member
+    initialized to zero).
+
+    Use push model and default playback parameters:
+
+        saudio_init(&(saudio_desc){0});
+
+    Use stream callback model and default playback parameters:
+
+        saudio_init(&(saudio_desc){
+            .stream_cb = my_stream_callback
+        });
+
+    The following playback parameters can be provided through the
+    saudio_desc struct:
+
+    General parameters (both for stream-callback and push-model):
+
+        int sample_rate     -- the sample rate in Hz, default: 44100
+        int num_channels    -- number of channels, default: 1 (mono)
+        int buffer_frames   -- number of frames in streaming buffer, default: 2048
+
+    Stream callback parameters:
+
+        void (*stream_cb)(float* buffer, int num_frames, int num_channels)
+            Function pointer to the user-provide stream callback.
+
+    Push-model parameters:
+
+        int packet_frames   -- number of frames in a packet, default: 128
+        int num_packets     -- number of packets in ring buffer, default: 64
+
+    The sample_rate and num_channels parameters are only hints for the audio
+    backend, it isn't guaranteed that those are the values used for actual
+    playback.
+
+    To get the actual parameters, call the following functions after
+    saudio_init():
+
+        int saudio_sample_rate(void)
+        int saudio_channels(void);
+
+    It's unlikely that the number of channels will be different than requested,
+    but a different sample rate isn't uncommon.
+
+    (NOTE: there's an yet unsolved issue when an audio backend might switch
+    to a different sample rate when switching output devices, for instance
+    plugging in a bluetooth headset, this case is currently not handled in
+    Sokol Audio).
+
+    You can check if audio initialization was successfull with
+    saudio_isvalid(). If backend initialization failed for some reason
+    (for instance when there's no audio device in the machine), this
+    will return false. Not checking for success won't do any harm, all
+    Sokol Audio function will silently fail when called after initialization
+    has failed, so apart from missing audio output, nothing bad will happen.
+
+    Before your application exits, you should call
+
+        saudio_shutdown();
+
+    This stops the audio thread (on Linux, Windows and macOS/iOS) and
+    properly shuts down the audio backend.
+
+    THE STREAM CALLBACK MODEL
+    =========================
+    To use Sokol Audio in stream-callback-mode, provide a callback function
+    like this in the saudio_desc struct when calling saudio_init():
+
+    void stream_cb(float* buffer, int num_frames, int num_channels) { ... }
+
+    The job of the callback function is to fill the *buffer* with 32-bit
+    float sample values.
+
+    To output silence, fill the buffer with zeros:
+
+        void stream_cb(float* buffer, int num_frames, int num_channels) {
+            const int num_samples = num_frames * num_channels;
+            for (int i = 0; i < num_samples; i++) {
+                buffer[i] = 0.0f;
+            }
+        }
+
+    For stereo output (num_channels == 2), the samples for the left
+    and right channel are interleaved:
+
+        void stream_cb(float* buffer, int num_frames, int num_channels) {
+            assert(2 == num_channels);
+            for (int i = 0; i < num_frames; i++) {
+                buffer[2*i + 0] = ...;  // left channel
+                buffer[2*i + 1] = ...;  // right channel
+            }
+        }
+
+    Please keep in mind that the stream callback function is running in a
+    separate thread, if you need to share data with the main thread you need
+    to take care yourself to make the access to the shared data thread-safe!
+
+    THE PUSH MODEL
+    ==============
+    To use the push-model for providing audio data, simply don't set (keep
+    zero-initialized) the stream_cb field in the saudio_desc struct when
+    calling saudio_init().
+
+    To provide sample data with the push model, call the saudio_push()
+    function at regular intervals (for instance once per frame). You can 
+    call the saudio_expect() function to ask Sokol Audio how much room is
+    in the ring buffer, but if you provide a continuous stream of data
+    at the right sample rate, saudio_expect() isn't required (it's a simple
+    way to sync/throttle your sample generation code with the playback
+    rate though).
+
+    With saudio_push() you may need to maintain your own intermediate sample
+    buffer, since pushing individual sample values isn't very efficient.
+    The following example is from the MOD player sample in 
+    sokol-samples (https://github.com/floooh/sokol-samples):
+
+        const int num_frames = saudio_expect();
+        if (num_frames > 0) {
+            const int num_samples = num_frames * saudio_channels();
+            read_samples(flt_buf, num_samples);
+            saudio_push(flt_buf, num_frames);
+        }
+
+    Another option is to ignore saudio_expect(), and just push samples as they
+    are generated in small batches. In this case you *need* to generate the
+    samples at the right sample rate:
+
+    The following example is taken from the Tiny Emulators project
+    (https://github.com/floooh/chips-test), this is for mono playback,
+    so (num_samples == num_frames):
+
+        // tick the sound generator
+        if (ay38910_tick(&sys->psg)) {
+            // new sample is ready
+            sys->sample_buffer[sys->sample_pos++] = sys->psg.sample;
+            if (sys->sample_pos == sys->num_samples) {
+                // new sample packet is ready
+                saudio_push(sys->sample_buffer, sys->num_samples);
+                sys->sample_pos = 0;
+            }
+        }
+
+    THE WEBAUDIO BACKEND
+    ====================
+    The WebAudio backend is currently using a ScriptProcessorNode callback to
+    feed the sample data into WebAudio. ScriptProcessorNode has been
+    deprecated for a while because it is running from the main thread, with
+    the default initialization parameters it works 'pretty well' though.
+    Ultimately Sokol Audio will use Audio Worklets, but this requires a few
+    more things to fall into place (Audio Worklets implemented everywhere,
+    SharedArrayBuffers enabled again, and I need to figure out a 'low-cost'
+    solution in terms of implementation effort, since Audio Worklets are
+    a lot more complex than ScriptProcessorNode if the audio data needs to come
+    from the main thread).
+    
     https://developers.google.com/web/updates/2017/12/audio-worklet
     https://developers.google.com/web/updates/2018/06/audio-worklet-design-pattern
+
+    THE COREAUDIO BACKEND
+    =====================
+    (TODO)
+
+    THE WASAPI BACKEND
+    ==================
+    (TODO)
+
+    THE ALSA BACKEND
+    ================
+    (TODO)
+
+    LICENSE
+    =======
 
     zlib/libpng license
 
@@ -124,10 +302,10 @@ extern "C" {
 
 typedef struct {
     int sample_rate;        /* requested sample rate */
+    int num_channels;       /* number of channels, default: 1 (mono) */
     int buffer_frames;      /* number of frames in streaming buffer */
     int packet_frames;      /* number of frames in a packet */
     int num_packets;        /* number of packets in packet queue */
-    int num_channels;       /* number of channels, default: 1 (mono) */
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);  /* optional streaming callback */
 } saudio_desc;
 
