@@ -75,7 +75,7 @@
 
     - sample:
         The magnitude of an audio signal on one channel at a given time. In
-        Sokol Audio, samples are 32-bit floating numbers in the range -1.0 to
+        Sokol Audio, samples are 32-bit float numbers in the range -1.0 to
         +1.0.
 
     - frame:
@@ -251,6 +251,9 @@
     solution in terms of implementation effort, since Audio Worklets are
     a lot more complex than ScriptProcessorNode if the audio data needs to come
     from the main thread).
+
+    The WebAudio backend is automatically selected when compiling for
+    emscripten (__EMSCRIPTEN__ define exists).
     
     https://developers.google.com/web/updates/2017/12/audio-worklet
     https://developers.google.com/web/updates/2018/06/audio-worklet-design-pattern
@@ -259,15 +262,47 @@
 
     THE COREAUDIO BACKEND
     =====================
-    (TODO)
+    The CoreAudio backend is selected on macOS and iOS (__APPLE__ is defined).
+    Since the CoreAudio API is implemented in C (not Objective-C) the
+    implementation part of Sokol Audio can be included into a C source file.
+
+    For thread synchronisation, the CoreAudio backend will use the
+    pthread_mutex_* functions.
+
+    The incoming floating point samples will be directly forwarded to
+    CoreAudio without further conversion.
+
+    macOS and iOS applications that use Sokol Audio need to link with
+    the AudioToolbox framework.
 
     THE WASAPI BACKEND
     ==================
-    (TODO)
+    The WASAPI backend is automatically selected when compiling on Windows
+    (_WIN32 is defined).
+
+    For thread synchronisation a Win32 critical section is used.
+
+    WASAPI may use a different size for its own streaming buffer then requested,
+    so the base latency may be slightly bigger. The current backend implementation
+    convertes the incoming floating point sample values to signed 16-bit
+    integers.
+
+    WASAPI is implemented as COM API, so you need to link with ole32.dll,
+    but don't need to link with WASAPI specific DLLs.
 
     THE ALSA BACKEND
     ================
-    (TODO)
+    The ALSA backend is automatically selected when compiling on Linux
+    ('linux' is defined).
+
+    For thread synchronisation, the pthread_mutex_* functions are used.
+
+    Samples are directly forwarded to ALSA in 32-bit float format, no
+    further conversion is taking place.
+
+    You need to link with the 'asound' library, and the <alsa/asoundlib.h>
+    header must be present (usually both are installed with some sort
+    of ALSA development package).
 
     LICENSE
     =======
