@@ -8,11 +8,15 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
-- **sokol\_audio.h**: (WIP!) minimal buffer-streaming audio playback
+- **sokol\_audio.h**: minimal buffer-streaming audio playback
 - ...???
 
 These are the internal parts of the Oryol C++ framework 
 rewritten in pure C as standalone header-only libs.
+
+WebAssembly is a 'first-class citizen', one important motivation for the
+Sokol headers was to provide a collection of cross-platform APIs with a
+minimal foot-print on the web-platform while still being useful.
 
 All headers are standalone and can be used indepedendently from each other.
 
@@ -243,7 +247,88 @@ sapp_desc sokol_main(int argc, char* argv[]) {
 }
 ```
 
+# sokol_audio.h
+
+A minimal audio-streaming API:
+
+- you provide a mono- or stereo-stream of 32-bit float samples which sokol_audio.h forwards into platform-specific backends
+- two ways to provide the data:
+    1. directly fill backend audio buffer from your callback function running in the audio thread
+    2. alternative push small packets of audio data from your main loop,
+    or a separate thread created by you
+- platform backends:
+    - Windows: WASAPI
+    - macOS/iOS: CoreAudio
+    - Linux: ALSA
+    - emscripten: WebAudio + ScriptProcessorNode (doesn't use the emscripten-provided OpenAL or SDL Audio wrappers)
+
+A simple mono square-wave generator using the callback model:
+
+```cpp
+// the sample callback, running in audio thread
+static void stream_cb(float* buffer, int num_frames, int num_channels) {
+    assert(1 == num_channels);
+    static uint32_t count = 0;
+    for (int i = 0; i < num_frames; i++) {
+        buffer[i] = (count++ & (1<<3)) ? 0.5f : -0.5f;
+    }
+}
+
+int main() {
+    // init sokol-audio with default params
+    saudio_setup(&(saudio_desc){
+        .stream_cb = stream_cb
+    });
+
+    // run main loop
+    ...
+
+    // shutdown sokol-audio
+    saudio_shutdown();
+    return 0;
+```
+
+The same code using the push-model
+
+```cpp
+#define BUF_SIZE (32)
+int main() {
+    // init sokol-audio with default params, no callback
+    saudio_setup(&(saudio_desc){0});
+    assert(saudio_channels() == 1);
+
+    // a small intermediate buffer so we don't need to push
+    // individual samples, which would be quite inefficient
+    float buf[BUF_SIZE];
+    int buf_pos = 0;
+    uint32_t smp_count = 0;
+
+    // push samples from main loop
+    bool done = false;
+    while (!done) {
+        // generate and push audio samples...
+        int num_frames = saudio_expect();
+        for (int i = 0; i < num_frames; i++) {
+            // simple square wave generator
+            buf[buf_pos++] = (count++ & (1<<3)) ? 0.5f : -0.5f;
+            if (buf_pos == BUF_SIZE) {
+                buf_pos = 0;
+                saudio_push(buf, BUF_SIZE);
+            }
+        }
+        // handle other per-frame stuff...
+        ...
+    }
+
+    // shutdown sokol-audio
+    saudio_shutdown();
+    return 0;
+}
+```
+
 # Updates
+
+- **26-Sep-2018**: sokol_audio.h ready for prime time :)
 
 - **11-May-2018**: sokol_gfx.h now autodetects iOS vs MacOS in the Metal
 backend during compilation using the standard define TARGET_OS_IPHONE defined
