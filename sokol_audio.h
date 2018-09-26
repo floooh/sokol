@@ -90,7 +90,7 @@
 
     WORKING WITH SOKOL AUDIO
     ========================
-    First call saudio_init() with your preferred audio playback options.
+    First call saudio_setup() with your preferred audio playback options.
     In most cases you can stick with the default values, these provide
     a good balance between low-latency and glitch-free playback
     on all audio backends.
@@ -101,11 +101,11 @@
 
     Use push model and default playback parameters:
 
-        saudio_init(&(saudio_desc){0});
+        saudio_setup(&(saudio_desc){0});
 
     Use stream callback model and default playback parameters:
 
-        saudio_init(&(saudio_desc){
+        saudio_setup(&(saudio_desc){
             .stream_cb = my_stream_callback
         });
 
@@ -133,7 +133,7 @@
     playback.
 
     To get the actual parameters, call the following functions after
-    saudio_init():
+    saudio_setup():
 
         int saudio_sample_rate(void)
         int saudio_channels(void);
@@ -163,7 +163,7 @@
     THE STREAM CALLBACK MODEL
     =========================
     To use Sokol Audio in stream-callback-mode, provide a callback function
-    like this in the saudio_desc struct when calling saudio_init():
+    like this in the saudio_desc struct when calling saudio_setup():
 
     void stream_cb(float* buffer, int num_frames, int num_channels) { ... }
 
@@ -198,7 +198,7 @@
     ==============
     To use the push-model for providing audio data, simply don't set (keep
     zero-initialized) the stream_cb field in the saudio_desc struct when
-    calling saudio_init().
+    calling saudio_setup().
 
     To provide sample data with the push model, call the saudio_push()
     function at regular intervals (for instance once per frame). You can 
