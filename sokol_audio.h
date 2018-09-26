@@ -287,8 +287,9 @@
     convertes the incoming floating point sample values to signed 16-bit
     integers.
 
-    WASAPI is implemented as COM API, so you need to link with ole32.dll,
-    but don't need to link with WASAPI specific DLLs.
+    The required Windows system DLLs are linked with #pragma comment(lib, ...),
+    so you shouldn't need to add additional linker libs in the build process
+    (otherwise this is a bug which should be fixed in sokol_audio.h).
 
     THE ALSA BACKEND
     ================
@@ -442,6 +443,7 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(void) {
 #elif defined(_WIN32)
 #include "synchapi.h"
 #pragma comment (lib, "kernel32.lib")
+#pragma comment (lib, "ole32.lib")
 
 CRITICAL_SECTION _saudio_crit;
 
