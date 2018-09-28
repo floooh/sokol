@@ -927,7 +927,7 @@ _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(UINT32 num_frames) {
     IAudioRenderClient_ReleaseBuffer(_saudio_wasapi.render_client, num_frames, 0);
 }
 
-_SOKOL_PRIVATE DWORD _saudio_wasapi_thread_fn(LPVOID param) {
+_SOKOL_PRIVATE DWORD WINAPI _saudio_wasapi_thread_fn(LPVOID param) {
     (void)param;
     _saudio_wasapi_submit_buffer(_saudio_wasapi.thread.src_buffer_frames);
     IAudioClient_Start(_saudio_wasapi.audio_client);
