@@ -15,8 +15,8 @@ These are the internal parts of the Oryol C++ framework
 rewritten in pure C as standalone header-only libs.
 
 WebAssembly is a 'first-class citizen', one important motivation for the
-Sokol headers was to provide a collection of cross-platform APIs with a
-minimal foot-print on the web-platform while still being useful.
+Sokol headers is to provide a collection of cross-platform APIs with a
+minimal footprint on the web platform while still being useful.
 
 All headers are standalone and can be used indepedendently from each other.
 
