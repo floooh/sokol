@@ -23,7 +23,7 @@
     Portions of the Windows and Linux GL initialization and event code have been
     taken from GLFW (http://www.glfw.org/)
 
-    iOS onscreen keyboard support 'inspired' by libgfx.
+    iOS onscreen keyboard support 'inspired' by libgdx.
 
     FIXME: ERROR HANDLING (this will need an error callback function)
 
