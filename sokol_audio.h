@@ -1141,7 +1141,7 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size)
         Module._saudio_node = Module._saudio_context.createScriptProcessor(buffer_size, 0, num_channels);
         Module._saudio_node.onaudioprocess = function pump_audio(event) {
             var num_frames = event.outputBuffer.length;
-            var ptr = Module.ccall('_saudio_emsc_pull', 'number', ['number'], [num_frames]);
+            var ptr = __saudio_emsc_pull(num_frames);
             if (ptr) {
                 var num_channels = event.outputBuffer.numberOfChannels;
                 for (var chn = 0; chn < num_channels; chn++) {
