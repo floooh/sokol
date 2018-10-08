@@ -9,6 +9,7 @@
 
     Optionally provide the following defines with your own implementations:
 
+    SOKOL_AUDIO_NO_BACKEND  - use a dummy backend
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
@@ -672,8 +673,13 @@ typedef struct {
 } _saudio_state;
 static _saudio_state _saudio;
 
+/*=== DUMMY BACKEND ==========================================================*/
+#if defined(SOKOL_AUDIO_NO_BACKEND)
+_SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
+
 /*=== COREAUDIO BACKEND ======================================================*/
-#if defined(__APPLE__)
+#elif defined(__APPLE__)
 #include <AudioToolbox/AudioToolbox.h>
 
 static AudioQueueRef _saudio_ca_audio_queue;
