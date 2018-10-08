@@ -442,7 +442,11 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(void) {
     pthread_mutex_unlock(&_saudio_mutex);
 }
 #elif defined(_WIN32)
-#include "synchapi.h"
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <synchapi.h>
 #pragma comment (lib, "kernel32.lib")
 #pragma comment (lib, "ole32.lib")
 
