@@ -4,7 +4,7 @@
 
     Do this:
         #define SOKOL_IMPL
-    before you include this file in *one* C or C++ file to create the 
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
     In the same place define one of the following to select the rendering
@@ -26,7 +26,7 @@
     To enable shader compilation support in the D3D11 backend:
         #define SOKOL_D3D11_SHADER_COMPILER
 
-    If SOKOL_D3D11_SHADER_COMPILER is enabled, the executable will link against 
+    If SOKOL_D3D11_SHADER_COMPILER is enabled, the executable will link against
     d3dcompiler.lib (d3dcompiler_47.dll).
 
     Optionally provide the following defines with your own implementations:
@@ -40,7 +40,7 @@
     API usage validation macros:
 
     SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
-    SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err)) 
+    SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err))
     SOKOL_VALIDATE_END()        - end a validation block, return true if all checks in block passed (default: bool _sg_validate())
 
     If you don't want validation errors to be fatal, define SOKOL_VALIDATE_NON_FATAL,
@@ -71,10 +71,10 @@
 
     STEP BY STEP
     ============
-    --- to initialize sokol_gfx, after creating a window and a 3D-API 
+    --- to initialize sokol_gfx, after creating a window and a 3D-API
         context/device, call:
 
-            sg_setup(const sg_desc*) 
+            sg_setup(const sg_desc*)
 
     --- create resource objects (at least buffers, shaders and pipelines,
         and optionally images and passes):
@@ -93,11 +93,11 @@
 
             sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
 
-    --- fill an sg_draw_state struct with the resource bindings for the next 
+    --- fill an sg_draw_state struct with the resource bindings for the next
         draw call (one pipeline object, 1..N vertex buffers, 0 or 1
-        index buffer, 0..N image objects to use as textures each on 
+        index buffer, 0..N image objects to use as textures each on
         the vertex-shader- and fragment-shader-stage and then call
-            
+
             sg_apply_draw_state(const sg_draw_state* draw_state)
 
         to update the resource bindings
@@ -107,11 +107,11 @@
             sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
 
     --- kick off a draw call with:
-    
+
             sg_draw(int base_element, int num_elements, int num_instances)
 
     --- finish the current rendering pass with:
-            
+
             sg_end_pass()
 
     --- when done with the current frame, call
@@ -121,7 +121,7 @@
     --- at the end of your program, shutdown sokol_gfx with:
 
             sg_shutdown()
-    
+
     --- if you need to destroy resources before sg_shutdown(), call:
 
             sg_destroy_buffer(sg_buffer buf)
@@ -140,20 +140,20 @@
 
         both sg_apply_viewport() and sg_apply_scissor_rect() must be called
         inside a rendering pass
-        
-        beginning a pass will reset the viewport to the size of the framebuffer used 
-        in the new pass, 
+
+        beginning a pass will reset the viewport to the size of the framebuffer used
+        in the new pass,
 
     --- to update the content of buffer and image resources, call:
 
             sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
             sg_update_image(sg_image img, const sg_image_content* content)
-        
-        buffers and images to be updated must have been created with 
+
+        buffers and images to be updated must have been created with
         SG_USAGE_DYNAMIC or SG_USAGE_STREAM
-        
+
     --- to check for support of optional features:
-        
+
             bool sg_query_feature(sg_feature feature)
 
     --- if you need to call into the underlying 3D-API directly, you must call:
@@ -164,7 +164,7 @@
 
     BACKEND-SPECIFIC TOPICS:
     ========================
-    --- the GL backends need to know about the internal structure of uniform 
+    --- the GL backends need to know about the internal structure of uniform
         blocks, and the texture sampler-name and -type:
 
             typedef struct {
@@ -173,7 +173,7 @@
                 float offset1[2];
                 float offset2[2];
             } params_t;
-             
+
             // uniform block structure and texture image definition in sg_shader_desc:
             sg_shader_desc desc = {
                 // uniform block description (size and internal structure)
@@ -190,7 +190,7 @@
                 ...
             };
 
-    --- the Metal and D3D11 backends only need to know the size of uniform blocks, 
+    --- the Metal and D3D11 backends only need to know the size of uniform blocks,
         not their internal member structure, and they only need to know
         the type of a texture sampler, not its name:
 
@@ -201,7 +201,7 @@
             };
 
     --- when creating a pipeline object, GLES2/WebGL need to know the vertex
-        attribute names as used in the vertex shader when describing vertex 
+        attribute names as used in the vertex shader when describing vertex
         layouts:
 
             sg_pipeline_desc desc = {
@@ -226,7 +226,7 @@
                 }
             };
 
-    --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute 
+    --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute
         name or semantic name, since vertex attributes can be bound by their slot index
         (this is mandatory in Metal, and optional in GL):
 
@@ -257,19 +257,19 @@
     Three functions have been added to work with contexts:
 
     --- sg_context sg_setup_context():
-        This must be called once after a GL context has been created and 
+        This must be called once after a GL context has been created and
         made active.
 
     --- void sg_activate_context(sg_context ctx)
         This must be called after making a different GL context active.
-        Apart from 3D-API-specific actions, the call to sg_activate_context() 
+        Apart from 3D-API-specific actions, the call to sg_activate_context()
         will internally call sg_reset_state_cache().
 
     --- void sg_discard_context(sg_context ctx)
         This must be called right before a GL context is destroyed and
         will destroy all resources associated with the context (that
-        have been created while the context was active) The GL context must be 
-        active at the time sg_discard_context(sg_context ctx) is called. 
+        have been created while the context was active) The GL context must be
+        active at the time sg_discard_context(sg_context ctx) is called.
 
     Also note that resources (buffers, images, shaders and pipelines) must
     only be used or destroyed while the same GL context is active that
@@ -285,7 +285,7 @@
     TODO:
     ====
     - talk about asynchronous resource creation
-    
+
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -321,7 +321,7 @@ extern "C" {
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
 #endif
 
-/* 
+/*
     Resource id typedefs:
 
     sg_buffer:      vertex- and index-buffers
@@ -334,7 +334,7 @@ extern "C" {
     Instead of pointers, resource creation functions return a 32-bit
     number which uniquely identifies the resource object.
 
-    The 32-bit resource id is split into a 16-bit pool index in the lower bits, 
+    The 32-bit resource id is split into a 16-bit pool index in the lower bits,
     and a 16-bit 'unique counter' in the upper bits. The index allows fast
     pool lookups, and combined with the unique-mask it allows to detect
     'dangling accesses' (trying to use an object which no longer exists, and
@@ -350,7 +350,7 @@ typedef struct { uint32_t id; } sg_pipeline;
 typedef struct { uint32_t id; } sg_pass;
 typedef struct { uint32_t id; } sg_context;
 
-/* 
+/*
     various compile-time constants
 
     FIXME: it may make sense to convert some of those into defines so
@@ -399,7 +399,7 @@ typedef enum {
     sg_resource_state
 
     The current state of a resource in its resource pool.
-    Resources start in the INITIAL state, which means the 
+    Resources start in the INITIAL state, which means the
     pool slot is unoccupied and can be allocated. When a resource is
     created, first an id is allocated, and the resource pool slot
     is set to state ALLOC. After allocation, the resource is
@@ -696,7 +696,7 @@ typedef enum {
 /*
     sg_uniform_type
 
-    The data type of a uniform block member. This is used to 
+    The data type of a uniform block member. This is used to
     describe the internal layout of uniform blocks when creating
     a shader object.
 */
@@ -715,7 +715,7 @@ typedef enum {
     sg_cull_mode
 
     The face-culling mode, this is used in the
-    sg_pipeline_desc.rasterizer.cull_mode member when creating a 
+    sg_pipeline_desc.rasterizer.cull_mode member when creating a
     pipeline object.
 
     The default cull mode is SG_CULLMODE_NONE
@@ -751,7 +751,7 @@ typedef enum {
 
     The compare-function for depth- and stencil-ref tests.
     This is used when creating pipeline objects in the members:
-   
+
     sg_pipeline_desc
         .depth_stencil
             .depth_compare_func
@@ -899,8 +899,8 @@ typedef enum {
     SG_ACTION_LOAD:     load the previous content of the render target image
     SG_ACTION_DONTCARE: leave the render target image content undefined
 
-    This is used in the sg_pass_action structure. 
-    
+    This is used in the sg_pass_action structure.
+
     The default action for all pass attachments is SG_ACTION_CLEAR, with the
     clear color rgba = {0.5f, 0.5f, 0.5f, 1.0f], depth=1.0 and stencil=0.
 
@@ -1007,13 +1007,13 @@ typedef struct {
     .image_pool_size:       128
     .shader_pool_size:      32
     .pipeline_pool_size:    64
-    .pass_pool_size:        16 
+    .pass_pool_size:        16
     .context_pool_size:     16
-    
+
     GL specific:
     .gl_force_gles2
         if this is true the GL backend will act in "GLES2 fallback mode" even
-        when compiled with SOKOL_GLES3, this is useful to fall back 
+        when compiled with SOKOL_GLES3, this is useful to fall back
         to traditional WebGL if a browser doesn't support a WebGL2 context
 
     Metal specific:
@@ -1021,13 +1021,13 @@ typedef struct {
         a bridged (const void*) to sokol_gfx, which will use a unretained
         bridged cast (__bridged id<xxx>) to retrieve the Objective-C
         references back. Since the bridge cast is unretained, the caller
-        must hold a strong reference to the Objective-C object for the 
+        must hold a strong reference to the Objective-C object for the
         duration of the sokol_gfx call!
 
-    .mtl_device     
+    .mtl_device
         a pointer to the MTLDevice object
     .mtl_renderpass_descriptor_cb
-        a C callback function to obtain the MTLRenderPassDescriptor for the 
+        a C callback function to obtain the MTLRenderPassDescriptor for the
         current frame when rendering to the default framebuffer, will be called
         in sg_begin_default_pass()
     .mtl_drawable_cb
@@ -1040,12 +1040,12 @@ typedef struct {
         the default value is 4 MByte (4 * 1024 * 1024)
     .mtl_sampler_cache_size
         the number of slots in the sampler cache, the Metal backend
-        will share texture samplers with the same state in this 
+        will share texture samplers with the same state in this
         cache, the default value is 64
 
     D3D11 specific:
     .d3d11_device
-        a pointer to the ID3D11Device object, this must have been created 
+        a pointer to the ID3D11Device object, this must have been created
         before sg_setup() is called
     .d3d11_device_context
         a pointer to the ID3D11DeviceContext object
@@ -1105,7 +1105,7 @@ typedef struct {
 
     The following struct members allow to inject your own GL, Metal
     or D3D11 buffers into sokol_gfx:
-    
+
     .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
     .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_buffer
@@ -1171,7 +1171,7 @@ typedef struct {
 /*
     sg_image_desc
 
-    Creation parameters for sg_image objects, used in the 
+    Creation parameters for sg_image objects, used in the
     sg_make_image() call.
 
     The default configuration is:
@@ -1193,7 +1193,7 @@ typedef struct {
     .max_anisotropy     1 (must be 1..16)
     .min_lod            0.0f
     .max_lod            FLT_MAX
-    .content            an sg_image_content struct to define the initial content 
+    .content            an sg_image_content struct to define the initial content
 
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
     WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
@@ -1203,12 +1203,12 @@ typedef struct {
     Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
     providing a valid .content member which points to
     initialization data.
-    
+
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
     The following struct members allow to inject your own GL, Metal
     or D3D11 textures into sokol_gfx:
-    
+
     .gl_textures[SG_NUM_INFLIGHT_FRAMES]
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
@@ -1259,7 +1259,7 @@ typedef struct {
 typedef struct {
     const char* name;
     sg_uniform_type type;
-    int array_count; 
+    int array_count;
 } sg_shader_uniform_desc;
 
 typedef struct {
@@ -1304,7 +1304,7 @@ typedef struct {
     - rasterizer state
 
     If the vertex data has no gaps between vertex components, you can omit
-    the .layout.buffers[].stride and layout.attrs[].offset items (leave them 
+    the .layout.buffers[].stride and layout.attrs[].offset items (leave them
     default-initialized to 0), sokol will then compute the offsets and strides
     from the vertex component formats (.layout.attrs[].offset). Please note
     that ALL vertex attribute offsets must be 0 in order for the the
@@ -1318,7 +1318,7 @@ typedef struct {
             .step_func      SG_VERTEXSTEP_PER_VERTEX
             .step_rate      1
         .attrs[]:           vertex attribute declarations
-            .buffer_index   0 the vertex buffer bind slot  
+            .buffer_index   0 the vertex buffer bind slot
             .offset         0 (offsets can be omitted if the vertex layout has no gaps)
             .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
             .name           0 (GLES2 requires an attribute name here)
@@ -1455,7 +1455,7 @@ typedef struct {
     - been created as render target (sg_image_desc.render_target = true)
     - the same size
     - the same sample count
-    
+
     In addition, all color-attachment images must have the same
     pixel format.
 */
@@ -1495,7 +1495,7 @@ extern void sg_destroy_shader(sg_shader shd);
 extern void sg_destroy_pipeline(sg_pipeline pip);
 extern void sg_destroy_pass(sg_pass pass);
 extern void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
-extern void sg_update_image(sg_image img, const sg_image_content* data); 
+extern void sg_update_image(sg_image img, const sg_image_content* data);
 
 /* get resource state (initial, alloc, valid, failed) */
 extern sg_resource_state sg_query_buffer_state(sg_buffer buf);
@@ -1515,7 +1515,7 @@ extern void sg_draw(int base_element, int num_elements, int num_instances);
 extern void sg_end_pass(void);
 extern void sg_commit(void);
 
-/* separate resource allocation and initialization (for async setup) */ 
+/* separate resource allocation and initialization (for async setup) */
 extern sg_buffer sg_alloc_buffer(void);
 extern sg_image sg_alloc_image(void);
 extern sg_shader sg_alloc_shader(void);
@@ -1581,7 +1581,7 @@ extern void sg_discard_context(sg_context ctx_id);
     #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG 
+    #ifdef SOKOL_DEBUG
         #include <stdio.h>
         #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
     #else
@@ -1917,11 +1917,27 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
 #define GL_LUMINANCE 0x1909
 #endif
 #ifdef SOKOL_GLES2
-#define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-#define glDrawArraysInstanced(mode, first, count, instancecount) glDrawArraysInstancedEXT(mode, first, count, instancecount)
-#define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+#   ifdef GL_ANGLE_instanced_arrays
+#       define SOKOL_INSTANCING_ENABLED 1
+#       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
+#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
+#       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
+#   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
+#       define SOKOL_INSTANCING_ENABLED 1
+#       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
+#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+#       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+#   else
+#       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
+#       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+#       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+#   endif
+#else
+#   define SOKOL_INSTANCING_ENABLED 1
 #endif
-#define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); } 
+
+#define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
 
 /* true if runnin in GLES2-fallback mode */
 static bool _sg_gl_gles2;
@@ -2191,7 +2207,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_PVRTC2_RGB:
             return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC4_RGB:
-            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
+            return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC2_RGBA:
             return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
         case SG_PIXELFORMAT_PVRTC4_RGBA:
@@ -2256,7 +2272,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_PVRTC2_RGB:
                 return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
             case SG_PIXELFORMAT_PVRTC4_RGB:
-                return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG; 
+                return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
             case SG_PIXELFORMAT_PVRTC2_RGBA:
                 return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
             case SG_PIXELFORMAT_PVRTC4_RGBA:
@@ -2445,7 +2461,7 @@ _SOKOL_PRIVATE void _sg_init_pass_slot(_sg_pass* pass) {
 typedef struct {
     _sg_slot slot;
     #if !defined(SOKOL_GLES2)
-    GLuint vao; 
+    GLuint vao;
     #endif
     GLuint default_framebuffer;
 } _sg_context;
@@ -2518,7 +2534,7 @@ typedef struct {
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline* cur_pipeline;
-    sg_pipeline cur_pipeline_id; 
+    sg_pipeline cur_pipeline_id;
 } _sg_state_cache;
 
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
@@ -2604,7 +2620,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_gl.cur_pass_height = 0;
     _sg_gl.cur_pass = 0;
     _sg_gl.cur_pass_id.id = SG_INVALID_ID;
-    
+
     /* clear initial GL error state */
     #if defined(SOKOL_DEBUG)
         while (glGetError() != GL_NO_ERROR);
@@ -2683,7 +2699,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             strstr(ext, "_compressed_texture_pvrtc");
         _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
             strstr(ext, "_compressed_texture_atc");
-        _sg_gl.ext_anisotropic = 
+        _sg_gl.ext_anisotropic =
             strstr(ext, "_texture_filter_anisotropic");
     #endif
     _sg_gl.max_anisotropy = 1;
@@ -2871,7 +2887,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
     }
     #endif
-    
+
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
         /* special case depth-stencil-buffer? */
         SOKOL_ASSERT((img->usage == SG_USAGE_IMMUTABLE) && (img->num_slots == 1));
@@ -2908,7 +2924,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
             for (int slot = 0; slot < img->num_slots; slot++) {
                 SOKOL_ASSERT(desc->gl_textures[slot]);
                 img->gl_tex[slot] = desc->gl_textures[slot];
-            } 
+            }
         }
         else {
             /* create our own GL texture(s) */
@@ -3181,7 +3197,7 @@ _SOKOL_PRIVATE void _sg_gl_load_depth_stencil(const sg_depth_stencil_state* src,
     dst->stencil_enabled = src->stencil_enabled;
     dst->stencil_read_mask = src->stencil_read_mask;
     dst->stencil_write_mask = src->stencil_write_mask;
-    dst->stencil_ref = src->stencil_ref; 
+    dst->stencil_ref = src->stencil_ref;
 }
 
 _SOKOL_PRIVATE void _sg_gl_load_blend(const sg_blend_state* src, sg_blend_state* dst) {
@@ -3406,7 +3422,7 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
         pass->slot.state = SG_RESOURCESTATE_FAILED;
         return;
     }
-    
+
     /* create MSAA resolve framebuffers if necessary */
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -3419,11 +3435,11 @@ _SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, cons
                 SOKOL_ASSERT(gl_tex);
                 switch (att->image->type) {
                     case SG_IMAGETYPE_2D:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                             GL_TEXTURE_2D, gl_tex, att->mip_level);
                         break;
                     case SG_IMAGETYPE_CUBE:
-                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                             _sg_gl_cubeface_target(att->slice), gl_tex, att->mip_level);
                         break;
                     default:
@@ -3539,7 +3555,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         glStencilMask(0xFF);
     }
     if (need_pip_cache_flush) {
-        /* we messed with the state cache directly, need to clear cached 
+        /* we messed with the state cache directly, need to clear cached
            pipeline to force re-evaluation in next sg_apply_draw_state() */
         _sg_gl.cache.cur_pipeline = 0;
         _sg_gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
@@ -3609,7 +3625,7 @@ _SOKOL_PRIVATE void _sg_end_pass() {
     SOKOL_ASSERT(_sg_gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
-    /* if this was an offscreen pass, and MSAA rendering was used, need 
+    /* if this was an offscreen pass, and MSAA rendering was used, need
        to resolve into the pass images */
     #if !defined(SOKOL_GLES2)
     if (!_sg_gl_gles2 && _sg_gl.cur_pass) {
@@ -3663,8 +3679,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     glScissor(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state( 
-    _sg_pipeline* pip, 
+_SOKOL_PRIVATE void _sg_apply_draw_state(
+    _sg_pipeline* pip,
     _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
     _sg_buffer* ib, uint32_t ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
@@ -3697,7 +3713,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         }
         if (new_ds->stencil_enabled != cache_ds->stencil_enabled) {
             cache_ds->stencil_enabled = new_ds->stencil_enabled;
-            if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST); 
+            if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST);
             else glDisable(GL_STENCIL_TEST);
         }
         if (new_ds->stencil_write_mask != cache_ds->stencil_write_mask) {
@@ -3713,9 +3729,9 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 (new_ds->stencil_ref != cache_ds->stencil_ref))
             {
                 cache_ss->compare_func = new_ss->compare_func;
-                glStencilFuncSeparate(gl_face, 
-                    _sg_gl_compare_func(new_ss->compare_func), 
-                    new_ds->stencil_ref, 
+                glStencilFuncSeparate(gl_face,
+                    _sg_gl_compare_func(new_ss->compare_func),
+                    new_ds->stencil_ref,
                     new_ds->stencil_read_mask);
             }
             if ((new_ss->fail_op != cache_ss->fail_op) ||
@@ -3893,12 +3909,14 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                     gl_vb = vb->gl_buf[vb->active_slot];
                     glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
                 }
-                glVertexAttribPointer(attr_index, attr->size, attr->type, 
-                    attr->normalized, attr->stride, 
+                glVertexAttribPointer(attr_index, attr->size, attr->type,
+                    attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
+#ifdef SOKOL_INSTANCING_ENABLED
                 if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
                     glVertexAttribDivisor(attr_index, attr->divisor);
                 }
+#endif
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
@@ -4103,7 +4121,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
     switch (usg) {
-        case SG_USAGE_IMMUTABLE:    
+        case SG_USAGE_IMMUTABLE:
             return D3D11_USAGE_IMMUTABLE;
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
@@ -4129,7 +4147,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_format(sg_pixel_format fmt) {
     /*
-        NOTE: the following pixel formats are only supported on D3D11.1 
+        NOTE: the following pixel formats are only supported on D3D11.1
         (we're running on D3D11.0):
             DXGI_FORMAT_B4G4R4A4_UNORM
             DXGI_FORMAT_B5G6R5_UNORM
@@ -4473,7 +4491,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sg_init_pass_slot(_sg_pass* pass) {
     SOKOL_ASSERT(pass);
     memset(pass, 0, sizeof(_sg_pass));
-} 
+}
 
 typedef struct {
     _sg_slot slot;
@@ -4502,7 +4520,7 @@ typedef struct {
     sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
-    /* the following arrays are used for unbinding resources, they will always contain zeroes */ 
+    /* the following arrays are used for unbinding resources, they will always contain zeroes */
     ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
     UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -4559,7 +4577,7 @@ _SOKOL_PRIVATE void _sg_d3d11_clear_state() {
     ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, NULL, 0);
     ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, NULL, NULL, 0xFFFFFFFF);
     ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, _sg_d3d11.zero_vbs, _sg_d3d11.zero_vb_strides, _sg_d3d11.zero_vb_offsets);
-    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0); 
+    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0);
     ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, NULL);
     ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, NULL, NULL, 0);
     ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, NULL, NULL, 0);
@@ -4670,7 +4688,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     SOKOL_ASSERT(!img->d3d11_tex2d && !img->d3d11_tex3d && !img->d3d11_texds && !img->d3d11_texmsaa);
     SOKOL_ASSERT(!img->d3d11_srv && !img->d3d11_smp);
     HRESULT hr;
-    
+
     img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
@@ -5149,7 +5167,7 @@ _SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, cons
     dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(_sg_def(sb->compare_func, SG_COMPAREFUNC_ALWAYS));
     hr = ID3D11Device_CreateDepthStencilState(_sg_d3d11.dev, &dss_desc, &pip->d3d11_dss);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_dss);
-    
+
     /* create blend state */
     D3D11_BLEND_DESC bs_desc;
     memset(&bs_desc, 0, sizeof(bs_desc));
@@ -5440,7 +5458,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs, 
+    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
     _sg_buffer* ib, uint32_t ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
@@ -5470,7 +5488,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         d3d11_vb_offsets[i] = vb_offsets[i];
     }
     for (; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        d3d11_vbs[i] = 0; 
+        d3d11_vbs[i] = 0;
         d3d11_vb_offsets[i] = 0;
     }
     for (i = 0; i < num_vs_imgs; i++) {
@@ -5501,14 +5519,14 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 
     ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_vb_offsets);
     ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
-    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, ib_offset); 
+    ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, ib_offset);
     ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
-    
+
     ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
     ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_VS].d3d11_cbs);
     ID3D11DeviceContext_VSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
     ID3D11DeviceContext_VSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_smps);
-    
+
     ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
     ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_FS].d3d11_cbs);
     ID3D11DeviceContext_PSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
@@ -6097,7 +6115,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
     _sg_mtl_sampler_cache_capacity = 0;
 }
 
-/* 
+/*
     create and add an MTLSamplerStateObject and return its resource pool index,
     reuse identical sampler state if one exists
 */
@@ -6400,7 +6418,7 @@ _SOKOL_PRIVATE void _sg_discard_backend() {
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
-        #if !TARGET_OS_IPHONE 
+        #if !TARGET_OS_IPHONE
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
         #else
         case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
@@ -7239,7 +7257,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
             _sg_mtl_cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
             SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]] 
+            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]]
                 offset:vb_offsets[slot]
                 atIndex:mtl_slot];
         }
@@ -7315,7 +7333,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
         SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_indexbuffer_id.id));
         const _sg_buffer* ib = _sg_mtl_cur_indexbuffer;
         SOKOL_ASSERT(ib->mtl_buf[ib->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-        const NSUInteger index_buffer_offset = _sg_mtl_cur_indexbuffer_offset + 
+        const NSUInteger index_buffer_offset = _sg_mtl_cur_indexbuffer_offset +
             base_element * _sg_mtl_cur_pipeline->mtl_index_size;
         [_sg_mtl_cmd_encoder drawIndexedPrimitives:_sg_mtl_cur_pipeline->mtl_prim_type
             indexCount:num_elements
@@ -7559,7 +7577,7 @@ _SOKOL_PRIVATE _sg_buffer* _sg_lookup_buffer(const _sg_pools* p, uint32_t buf_id
 
 _SOKOL_PRIVATE _sg_image* _sg_lookup_image(const _sg_pools* p, uint32_t img_id) {
     if (SG_INVALID_ID != img_id) {
-        _sg_image* img = _sg_image_at(p, img_id); 
+        _sg_image* img = _sg_image_at(p, img_id);
         if (img->slot.id == img_id) {
             return img;
         }
@@ -7740,12 +7758,12 @@ typedef enum {
     _SG_VALIDATE_AUB_NO_PIPELINE,
     _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
     _SG_VALIDATE_AUB_SIZE,
-        
+
     /* sg_update_buffer validation */
     _SG_VALIDATE_UPDBUF_USAGE,
     _SG_VALIDATE_UPDBUF_SIZE,
     _SG_VALIDATE_UPDBUF_ONCE,
-    
+
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
     _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
@@ -7790,7 +7808,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH:      return "size of uniform block members doesn't match uniform block size";
         case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:          return "shader images must occupy continuous slots";
         case _SG_VALIDATE_SHADERDESC_IMG_NAME:              return "GL backend requires uniform block member names";
-        
+
         /* pipeline creation */
         case _SG_VALIDATE_PIPELINEDESC_CANARY:          return "sg_pipeline_desc not initialized";
         case _SG_VALIDATE_PIPELINEDESC_SHADER:          return "sg_pipeline_desc.shader missing or invalid";
@@ -7857,7 +7875,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
 }
 #endif /* defined(SOKOL_DEBUG) */
 
-/*-- generic backend state ---------------------------------------------------*/ 
+/*-- generic backend state ---------------------------------------------------*/
 typedef struct {
     _sg_pools pools;
     bool valid;
@@ -7995,7 +8013,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #else
             /* on D3D11 without shader compiler, must provide byte code */
             SOKOL_VALIDATE(0 != desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
-            SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE); 
+            SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
         #endif
         /* if shader byte code, the size must also be provided */
         if (0 != desc->vs.byte_code) {
@@ -8046,7 +8064,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     #if defined(SOKOL_GLES2)
                     SOKOL_VALIDATE(img_desc->name, _SG_VALIDATE_SHADERDESC_IMG_NAME);
                     #endif
-                } 
+                }
                 else {
                     images_continuous = false;
                 }
@@ -8557,7 +8575,7 @@ void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
     else {
         pip->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED)); 
+    SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
@@ -8590,7 +8608,7 @@ void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     else {
         pass->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED)); 
+    SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 /*-- set allocated resource to failed state ----------------------------------*/
