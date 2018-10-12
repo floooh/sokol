@@ -12,7 +12,8 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
+    SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
+    SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
 
     void sargs_setup(const sargs_desc* desc)
@@ -96,11 +97,279 @@
 extern "C" {
 #endif
 
+typedef struct {
+    int argc;
+    const char** argv;
+    int max_args;
+    int buf_size;
+} sargs_desc;
+
+/* setup sokol-args */
+extern void sargs_setup(const sargs_desc* desc);
+/* shutdown sokol-args */
+extern void sargs_shutdown(void);
+/* true between sargs_setup() and sargs_shutdown() */
+extern bool sargs_isvalid(void);
+/* test if an argument exists by key name */
+extern bool sargs_exists(const char* key);
+/* get value by key name, return empty string if key doesn't exist */
+extern const char* sargs_value(const char* key);
+/* get value by key name, return provided default if key doesn't exist */
+extern const char* sargs_value_def(const char* key, const char* def);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#include <string.h>
+
+#ifndef SOKOL_DEBUG
+    #ifdef _DEBUG
+        #define SOKOL_DEBUG (1)
+    #endif
+#endif
+#ifndef SOKOL_ASSERT
+    #include <assert.h>
+    #define SOKOL_ASSERT(c) assert(c)
+#endif
+#if !defined(SOKOL_CALLOC) && !defined(SOKOL_FREE)
+    #include <stdlib.h>
+#endif
+#if !defined(SOKOL_CALLOC)
+    #define SOKOL_CALLOC(n,s) calloc(n,s)
+#endif
+#if !defined(SOKOL_FREE)
+    #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef SOKOL_LOG
+    #ifdef SOKOL_DEBUG 
+        #include <stdio.h>
+        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+    #else
+        #define SOKOL_LOG(s)
+    #endif
+#endif
+
+#ifndef _SOKOL_PRIVATE
+    #if defined(__GNUC__)
+        #define _SOKOL_PRIVATE __attribute__((unused)) static
+    #else
+        #define _SOKOL_PRIVATE static
+    #endif
+#endif
+
+#define _sargs_def(val, def) (((val) == 0) ? (def) : (val))
+
+#define _SARGS_MAX_ARGS_DEF (16)
+#define _SARGS_BUF_SIZE_DEF (16*1024)
+
+/* parser state */
+#define _SARGS_EXPECT_KEY (1<<0)
+#define _SARGS_EXPECT_SEP (1<<1)
+#define _SARGS_EXPECT_VAL (1<<2)
+#define _SARGS_PARSING_KEY (1<<3)
+#define _SARGS_PARSING_VAL (1<<4)
+#define _SARGS_ERROR (1<<5)
+
+/* a key/value pair struct */
+typedef struct {
+    int key;        /* index to start of key string in buf */
+    int val;        /* index to start of value string in buf */
+} _sargs_kvp;
+
+/* sokol-args state */
+typedef struct {
+    int max_args;       /* number of key/value pairs in args array */
+    int num_args;       /* number of valid items in args array */
+    _sargs_kvp* args;   /* key/value pair array */
+    int buf_size;       /* size of buffer in bytes */
+    int buf_pos;        /* current buffer position */
+    char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
+    bool valid;
+    uint32_t parse_state;
+} _sargs_state;
+static _sargs_state _sargs;
+
+/*== PRIVATE IMPLEMENTATION FUNCTIONS ========================================*/
+
+_SOKOL_PRIVATE void _sargs_putc(char c) {
+    if ((_sargs.buf_pos+2) < _sargs.buf_size) {
+        _sargs.buf[_sargs.buf_pos++] = c;
+    }
+}
+
+_SOKOL_PRIVATE void _sargs_expect_key(void) {
+    _sargs.parse_state = _SARGS_EXPECT_KEY;
+}
+
+_SOKOL_PRIVATE bool _sargs_key_expected(void) {
+    return 0 != (_sargs.parse_state & _SARGS_EXPECT_KEY);
+}
+
+_SOKOL_PRIVATE void _sargs_expect_val(void) {
+    _sargs.parse_state = _SARGS_EXPECT_VAL;
+}
+
+_SOKOL_PRIVATE bool _sargs_val_expected(void) {
+    return 0 != (_sargs.parse_state & _SARGS_EXPECT_VAL);
+}
+
+_SOKOL_PRIVATE void _sargs_expect_sep(void) {
+    _sargs.parse_state = _SARGS_EXPECT_SEP;
+}
+
+_SOKOL_PRIVATE bool _sargs_sep_expected(void) {
+    return 0 != (_sargs.parse_state & _SARGS_EXPECT_SEP);
+}
+
+_SOKOL_PRIVATE bool _sargs_any_expected(void) {
+    return 0 != (_sargs.parse_state & (_SARGS_EXPECT_KEY | _SARGS_EXPECT_VAL | _SARGS_EXPECT_SEP));
+}
+
+_SOKOL_PRIVATE bool _sargs_is_whitespace(char c) {
+    return (c == ' ') || (c == '\t');
+}
+
+_SOKOL_PRIVATE bool _sargs_is_separator(char c) {
+    return (c == '=') || (c == ':');
+}
+
+_SOKOL_PRIVATE void _sargs_start_key(void) {
+    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    _sargs.parse_state = _SARGS_PARSING_KEY;
+    _sargs.args[_sargs.num_args].key = _sargs.buf_pos;
+}
+
+_SOKOL_PRIVATE void _sargs_end_key(void) {
+    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    _sargs_putc(0);
+    _sargs.parse_state = 0;
+}
+
+_SOKOL_PRIVATE bool _sargs_parsing_key(void) {
+    return 0 != (_sargs.parse_state & _SARGS_PARSING_KEY);
+}
+
+_SOKOL_PRIVATE void _sargs_start_val(void) {
+    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    _sargs.parse_state = _SARGS_PARSING_VAL;
+    _sargs.args[_sargs.num_args].val = _sargs.buf_pos;
+}
+
+_SOKOL_PRIVATE void _sargs_end_val(void) {
+    SOKOL_ASSERT(_sargs.num_args < _sargs.max_args);
+    _sargs_putc(0);
+    _sargs.num_args++;
+    _sargs.parse_state = 0;
+}
+
+_SOKOL_PRIVATE bool _sargs_parsing_val(void) {
+    return 0 != (_sargs.parse_state & _SARGS_PARSING_VAL);
+}
+
+_SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
+    char c;
+    while (0 != (c = *src++)) {
+        if (_sargs_any_expected()) {
+            /* find start of key or value */
+            if (!_sargs_is_whitespace(c)) {
+                if (_sargs_key_expected()) {
+                    /* start of new key */
+                    _sargs_start_key();
+                }
+                else if (_sargs_val_expected()) {
+                    /* start of value */
+                    _sargs_start_val();
+                }
+                else {
+                    /* separator */
+                    if (_sargs_is_separator(c)) {
+                        _sargs_expect_val();
+                        continue;
+                    }
+                }
+            }
+            else {
+                /* skip white space */
+                continue;
+            }
+        }
+        else if (_sargs_parsing_key()) {
+            if (_sargs_is_whitespace(c) || _sargs_is_separator(c)) {
+                _sargs_end_key();
+                if (_sargs_is_separator(c)) {
+                    _sargs_expect_val();
+                }
+                else {
+                    _sargs_expect_sep();
+                }
+                continue;
+            }
+        }
+        else if (_sargs_parsing_val()) {
+            if (_sargs_is_whitespace(c)) {
+                _sargs_end_val();
+                _sargs_expect_key();
+                continue;
+            }
+        }
+        if (c >= 32) {
+            _sargs.buf[_sargs.buf_pos++] = c;
+        }
+    }
+    if (_sargs_parsing_key()) {
+        _sargs_end_key();
+        _sargs_expect_sep();
+    }
+    else if (_sargs_parsing_val()) {
+        _sargs_end_val();
+        _sargs_expect_key();
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
+    bool retval = true;
+    for (int i = 1; i < argc; i++) {
+        _sargs_parse_carg(argv[i]);
+    }
+    return retval;
+}
+
+/*== PUBLIC IMPLEMENTATION FUNCTIONS =========================================*/
+void sargs_setup(const sargs_desc* desc) {
+    SOKOL_ASSERT(desc);
+    memset(&_sargs, 0, sizeof(_sargs));
+    _sargs.max_args = _sargs_def(desc->max_args, _SARGS_MAX_ARGS_DEF);
+    _sargs.buf_size = _sargs_def(desc->buf_size, _SARGS_BUF_SIZE_DEF);
+    SOKOL_ASSERT(_sargs.buf_size > 8);
+    _sargs.args = (_sargs_kvp*) SOKOL_CALLOC(_sargs.max_args, sizeof(_sargs_kvp));
+    _sargs.buf = (char*) SOKOL_CALLOC(_sargs.buf_size, sizeof(char));
+    /* the first character in buf is reserved and always zero, this is the 'empty string' */
+    _sargs.buf_pos = 1;
+    _sargs_expect_key();
+    _sargs_parse_cargs(desc->argc, desc->argv);
+    /* FIXME: parse args */
+    _sargs.valid = true;
+}
+
+void sargs_shutdown(void) {
+    SOKOL_ASSERT(_sargs.valid);
+    if (_sargs.args) {
+        SOKOL_FREE(_sargs.args);
+        _sargs.args = 0;
+    }
+    if (_sargs.buf) {
+        SOKOL_FREE(_sargs.buf);
+        _sargs.buf = 0;
+    }
+    _sargs.valid = false;
+}
+
+bool sargs_isvalid(void) {
+    return _sargs.valid;
+}
 
 #endif /* SOKOL_IMPL */
