@@ -50,6 +50,12 @@
         On emscripten, the current page's URL args will be parsed, and the
         arguments given to sargs_setup() will be ignored.
 
+    void sargs_shutdown(void)
+        Shutdown sokol-args and free any allocated memory.
+
+    bool sargs_isvalid(void)
+        Return true between sargs_setup() and sargs_shutdown()
+
     bool sargs_exists(const char* key)
         Test if a key arg exists.
 
@@ -61,8 +67,19 @@
         Return value associated with key, or the provided default
         value if the value doesn't exist or has no key.
 
-    void sargs_shutdown(void)
-        Shutdown sokol-args and free any allocated memory.
+    int sargs_find(const char* key)
+        Find argument by key name and return its index, or -1 if not found.
+
+    int sargs_num_args(void)
+        Return number of key/value pairs.
+
+    const char* sargs_key_at(int index)
+        Return the key name of argument at index. Returns empty string if
+        is index is outside range.
+
+    const char* sargs_value_at(int index)
+        Return the value of argument at index. Returns empty string
+        if index is outside range, or the argumnet has no value.
 
     LICENSE
     =======
@@ -116,6 +133,14 @@ extern bool sargs_exists(const char* key);
 extern const char* sargs_value(const char* key);
 /* get value by key name, return provided default if key doesn't exist */
 extern const char* sargs_value_def(const char* key, const char* def);
+/* get index of arg by key name, return -1 if not exists */
+extern int sargs_find(const char* key);
+/* get number of parsed arguments */
+extern int sargs_num_args(void);
+/* get key name of argument at index, or empty string */
+extern const char* sargs_key_at(int index);
+/* get value string of argument at index, or empty string */
+extern const char* sargs_value_at(int index);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -331,11 +356,18 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
 }
 
 _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
+    _sargs_expect_key();
     bool retval = true;
     for (int i = 1; i < argc; i++) {
-        _sargs_parse_carg(argv[i]);
+        retval &= _sargs_parse_carg(argv[i]);
     }
+    _sargs.parse_state = 0;
     return retval;
+}
+
+_SOKOL_PRIVATE const char* _sargs_str(int index) {
+    SOKOL_ASSERT((index >= 0) && (index < _sargs.buf_size));
+    return &_sargs.buf[index];
 }
 
 /*== PUBLIC IMPLEMENTATION FUNCTIONS =========================================*/
@@ -349,7 +381,6 @@ void sargs_setup(const sargs_desc* desc) {
     _sargs.buf = (char*) SOKOL_CALLOC(_sargs.buf_size, sizeof(char));
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
-    _sargs_expect_key();
     _sargs_parse_cargs(desc->argc, desc->argv);
     /* FIXME: parse args */
     _sargs.valid = true;
@@ -370,6 +401,64 @@ void sargs_shutdown(void) {
 
 bool sargs_isvalid(void) {
     return _sargs.valid;
+}
+
+int sargs_find(const char* key) {
+    SOKOL_ASSERT(_sargs.valid && key);
+    for (int i = 0; i < _sargs.num_args; i++) {
+        if (0 == strcmp(_sargs_str(_sargs.args[i].key), key)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int sargs_num_args(void) {
+    SOKOL_ASSERT(_sargs.valid);
+    return _sargs.num_args;
+}
+
+const char* sargs_key_at(int index) {
+    SOKOL_ASSERT(_sargs.valid);
+    if ((index >= 0) && (index < _sargs.num_args)) {
+        return _sargs_str(_sargs.args[index].key);
+    }
+    else {
+        /* index 0 is always the empty string */
+        return _sargs_str(0);
+    }
+}
+
+const char* sargs_value_at(int index) {
+    SOKOL_ASSERT(_sargs.valid);
+    if ((index >= 0) && (index < _sargs.num_args)) {
+        return _sargs_str(_sargs.args[index].val);
+    }
+    else {
+        /* index 0 is always the empty string */
+        return _sargs_str(0);
+    }
+}
+
+bool sargs_exists(const char* key) {
+    SOKOL_ASSERT(_sargs.valid && key);
+    return -1 != sargs_find(key);
+}
+
+const char* sargs_value(const char* key) {
+    SOKOL_ASSERT(_sargs.valid && key);
+    return sargs_value_at(sargs_find(key));
+}
+
+const char* sargs_value_def(const char* key, const char* def) {
+    SOKOL_ASSERT(_sargs.valid && key && def);
+    int arg_index = sargs_find(key);
+    if (-1 != arg_index) {
+        return sargs_value_at(arg_index);
+    }
+    else {
+        return def;
+    }
 }
 
 #endif /* SOKOL_IMPL */
