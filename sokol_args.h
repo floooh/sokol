@@ -341,7 +341,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
             }
         }
         if (c >= 32) {
-            _sargs.buf[_sargs.buf_pos++] = c;
+            _sargs_putc(c);
         }
     }
     if (_sargs_parsing_key()) {
