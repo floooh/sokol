@@ -214,6 +214,7 @@ typedef struct {
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
     bool valid;
     uint32_t parse_state;
+    char quote;         /* current quote char, 0 if not in a quote */
 } _sargs_state;
 static _sargs_state _sargs;
 
@@ -253,12 +254,33 @@ _SOKOL_PRIVATE bool _sargs_any_expected(void) {
     return 0 != (_sargs.parse_state & (_SARGS_EXPECT_KEY | _SARGS_EXPECT_VAL | _SARGS_EXPECT_SEP));
 }
 
-_SOKOL_PRIVATE bool _sargs_is_whitespace(char c) {
-    return (c == ' ') || (c == '\t');
-}
-
 _SOKOL_PRIVATE bool _sargs_is_separator(char c) {
     return (c == '=') || (c == ':');
+}
+
+_SOKOL_PRIVATE bool _sargs_is_quote(char c) {
+    if (0 == _sargs.quote) {
+        return (c == '\'') || (c == '"');
+    }
+    else {
+        return c == _sargs.quote;
+    }
+}
+
+_SOKOL_PRIVATE void _sargs_begin_quote(char c) {
+    _sargs.quote = c;
+}
+
+_SOKOL_PRIVATE void _sargs_end_quote(void) {
+    _sargs.quote = 0;
+}
+
+_SOKOL_PRIVATE bool _sargs_in_quotes(void) {
+    return 0 != _sargs.quote;
+}
+
+_SOKOL_PRIVATE bool _sargs_is_whitespace(char c) {
+    return !_sargs_in_quotes() && ((c == ' ') || (c == '\t'));
 }
 
 _SOKOL_PRIVATE void _sargs_start_key(void) {
@@ -306,6 +328,10 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
                 }
                 else if (_sargs_val_expected()) {
                     /* start of value */
+                    if (_sargs_is_quote(c)) {
+                        _sargs_begin_quote(c);
+                        continue;
+                    }
                     _sargs_start_val();
                 }
                 else {
@@ -334,7 +360,15 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
             }
         }
         else if (_sargs_parsing_val()) {
-            if (_sargs_is_whitespace(c)) {
+            if (_sargs_in_quotes()) {
+                if (_sargs_is_quote(c)) {
+                    _sargs_end_quote();
+                    _sargs_end_val();
+                    _sargs_expect_key();
+                    continue;
+                }
+            }
+            else if (_sargs_is_whitespace(c)) {
                 _sargs_end_val();
                 _sargs_expect_key();
                 continue;
