@@ -89,6 +89,7 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
+    CURSOR_UPDATE       | TODO    | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
@@ -169,7 +170,7 @@
             Returns true if as GLES2 or WebGL2 context had been created (for
             instance because GLES3/WebGL2 isn't available on the device)
 
-        const void* sapp_metal_get_device(void);
+        const void* sapp_metal_get_device(void)
         const void* sapp_metal_get_renderpass_descriptor(void)
         const void* sapp_metal_get_drawable(void)
             If the Metal backend has been selected, these functions return pointers
@@ -177,6 +178,12 @@
             they return a null pointer. Note that the returned pointers
             to the renderpass-descriptor and drawable may change from one
             frame to the next!
+
+        const void* sapp_macos_get_window(void)
+            On macOS, get the NSWindow object pointer, otherwise a null pointer.
+
+        const void* sapp_ios_get_window(void)
+            On macOS, get the UIWindow object pointer, otherwise a null pointer.
 
         const void* sapp_d3d11_get_device(void);
         const void* sapp_d3d11_get_device_context(void);
@@ -346,6 +353,7 @@ typedef enum {
     SAPP_EVENTTYPE_RESTORED,
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
+    SAPP_EVENTTYPE_CURSOR_UPDATE,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
@@ -551,10 +559,12 @@ extern bool sapp_keyboard_shown(void);
 /* GL/GLES specific functions */
 extern bool sapp_gles2(void);
 
-/* Metal specific functions */
+/* OSX/Metal specific functions */
 extern const void* sapp_metal_get_device(void);
 extern const void* sapp_metal_get_renderpass_descriptor(void);
 extern const void* sapp_metal_get_drawable(void); 
+extern const void* sapp_macos_get_window(void);
+extern const void* sapp_ios_get_window(void);
 
 /* D3D11 specific functions */
 extern const void* sapp_d3d11_get_device(void);
@@ -1218,6 +1228,9 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             key_code,
             _sapp_macos_mod(event.modifierFlags));
     }
+}
+- (void)cursorUpdate:(NSEvent*)event {
+    _sapp_macos_app_event(SAPP_EVENTTYPE_CURSOR_UPDATE);
 }
 @end
 
@@ -5699,6 +5712,27 @@ const void* sapp_metal_get_drawable(void) {
     #else
         return 0;
     #endif
+}
+
+const void* sapp_macos_get_window(void) {
+    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+        const void* obj = (__bridge const void*) _sapp_macos_window_obj;
+        SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_ios_get_window(void) {
+    #if defined(__APPLE__) && TARGET_OS_IPHONE
+        const void* obj = (__bridge const void*) _sapp_ios_window_obj;
+        SOKOL_ASSERT(obj);
+        return obj;
+    #else
+        return 0;
+    #endif
+
 }
 
 const void* sapp_d3d11_get_device(void) {
