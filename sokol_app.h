@@ -183,7 +183,7 @@
             On macOS, get the NSWindow object pointer, otherwise a null pointer.
 
         const void* sapp_ios_get_window(void)
-            On macOS, get the UIWindow object pointer, otherwise a null pointer.
+            On iOS, get the UIWindow object pointer, otherwise a null pointer.
 
         const void* sapp_d3d11_get_device(void);
         const void* sapp_d3d11_get_device_context(void);
