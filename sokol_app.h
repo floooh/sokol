@@ -25,8 +25,6 @@
 
     iOS onscreen keyboard support 'inspired' by libgdx.
 
-    FIXME: ERROR HANDLING (this will need an error callback function)
-
     If you use sokol_app.h together with sokol_gfx.h, include both headers
     in the implementation source file, and include sokol_app.h before
     sokol_gfx.h since sokol_app.h will also include the required 3D-API 
@@ -39,8 +37,6 @@
 
     TEMP NOTE DUMP
     ==============
-    - need callbacks for application suspend/resume, these would
-      also be used for WebGL context lost (?)
     - need a way to quit application programmatically (sapp_request_quit())
     - need a way to intercept a pending quit via UI close button (could be
       done via frame_cb return value, and a sapp_quit_requested() function)
@@ -49,6 +45,11 @@
     - GL context initialization needs more control (at least what GL version to initialize)
     - application icon
     - mouse pointer visibility(?)
+    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
+      (Win32 sends the event each frame when the mouse moves and is inside the window
+      client area, OSX sends it only once when the mouse enters the client area)
+
+    FIXME: ERROR HANDLING (this will need an error callback function)
 
     FEATURE OVERVIEW
     ================
@@ -89,7 +90,7 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
-    CURSOR_UPDATE       | TODO    | YES   | TODO  | ---   | ---     | ---   | TODO
+    UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
@@ -184,6 +185,9 @@
 
         const void* sapp_ios_get_window(void)
             On iOS, get the UIWindow object pointer, otherwise a null pointer.
+
+        const void* sapp_win32_get_hwnd(void)
+            On Windows, get the window's HWND, otherwise a null pointer.
 
         const void* sapp_d3d11_get_device(void);
         const void* sapp_d3d11_get_device_context(void);
@@ -353,7 +357,7 @@ typedef enum {
     SAPP_EVENTTYPE_RESTORED,
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
-    SAPP_EVENTTYPE_CURSOR_UPDATE,
+    SAPP_EVENTTYPE_UPDATE_CURSOR,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
@@ -542,6 +546,8 @@ typedef struct {
     const char* html5_canvas_name;
     bool html5_canvas_resize;
     bool ios_keyboard_resizes_canvas;
+    /* if true, user is expected to manage cursor image and visibility on SAPP_EVENTTYPE_UPDATE_CURSOR */
+    bool user_cursor;
 } sapp_desc;
 
 /* user-provided functions */
@@ -566,11 +572,12 @@ extern const void* sapp_metal_get_drawable(void);
 extern const void* sapp_macos_get_window(void);
 extern const void* sapp_ios_get_window(void);
 
-/* D3D11 specific functions */
+/* Win32/D3D11 specific functions */
 extern const void* sapp_d3d11_get_device(void);
 extern const void* sapp_d3d11_get_device_context(void);
 extern const void* sapp_d3d11_get_render_target_view(void);
 extern const void* sapp_d3d11_get_depth_stencil_view(void);
+extern const void* sapp_win32_get_hwnd(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -1230,7 +1237,9 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
-    _sapp_macos_app_event(SAPP_EVENTTYPE_CURSOR_UPDATE);
+    if (_sapp.desc.user_cursor) {
+        _sapp_macos_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
+    }
 }
 @end
 
@@ -3596,6 +3605,14 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 break;
+            case WM_SETCURSOR:
+                if (_sapp.desc.user_cursor) {
+                    if (LOWORD(lParam) == HTCLIENT) {
+                        _sapp_win32_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
+                        return 1;
+                    }
+                }
+                break;
             case WM_LBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
                 break;
@@ -5766,6 +5783,15 @@ const void* sapp_d3d11_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
         return _sapp_d3d11_dsv;
+    #else
+        return 0;
+    #endif
+}
+
+const void* sapp_win32_get_hwnd(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(_WIN32)
+        return _sapp_win32_hwnd;
     #else
         return 0;
     #endif
