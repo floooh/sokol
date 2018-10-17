@@ -9,7 +9,10 @@
 
     Optionally provide the following defines with your own implementations:
 
+    SOKOL_API           - public api function specifier (default: extern)
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+    SOKOL_CALLOC(n, s)  - your own allocate and zero initialize array function (default: calloc(n,s))
+    SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
@@ -327,8 +330,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
+#ifndef SOKOL_API
+    #ifdef __cplusplus
+        #define SOKOL_API extern "C"
+    #else
+        #define SOKOL_API
+    #endif
 #endif
 
 enum {
@@ -551,37 +558,33 @@ typedef struct {
 } sapp_desc;
 
 /* user-provided functions */
-extern sapp_desc sokol_main(int argc, char* argv[]);
+SOKOL_API sapp_desc sokol_main(int argc, char* argv[]);
 
 /* sokol_app API functions */
-extern bool sapp_isvalid(void);
-extern int sapp_width(void);
-extern int sapp_height(void);
-extern bool sapp_high_dpi(void);
-extern float sapp_dpi_scale(void);
-extern void sapp_show_keyboard(bool visible);
-extern bool sapp_keyboard_shown(void);
+SOKOL_API bool sapp_isvalid(void);
+SOKOL_API int sapp_width(void);
+SOKOL_API int sapp_height(void);
+SOKOL_API bool sapp_high_dpi(void);
+SOKOL_API float sapp_dpi_scale(void);
+SOKOL_API void sapp_show_keyboard(bool visible);
+SOKOL_API bool sapp_keyboard_shown(void);
 
 /* GL/GLES specific functions */
-extern bool sapp_gles2(void);
+SOKOL_API bool sapp_gles2(void);
 
 /* OSX/Metal specific functions */
-extern const void* sapp_metal_get_device(void);
-extern const void* sapp_metal_get_renderpass_descriptor(void);
-extern const void* sapp_metal_get_drawable(void); 
-extern const void* sapp_macos_get_window(void);
-extern const void* sapp_ios_get_window(void);
+SOKOL_API const void* sapp_metal_get_device(void);
+SOKOL_API const void* sapp_metal_get_renderpass_descriptor(void);
+SOKOL_API const void* sapp_metal_get_drawable(void); 
+SOKOL_API const void* sapp_macos_get_window(void);
+SOKOL_API const void* sapp_ios_get_window(void);
 
 /* Win32/D3D11 specific functions */
-extern const void* sapp_d3d11_get_device(void);
-extern const void* sapp_d3d11_get_device_context(void);
-extern const void* sapp_d3d11_get_render_target_view(void);
-extern const void* sapp_d3d11_get_depth_stencil_view(void);
-extern const void* sapp_win32_get_hwnd(void);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
+SOKOL_API const void* sapp_d3d11_get_device(void);
+SOKOL_API const void* sapp_d3d11_get_device_context(void);
+SOKOL_API const void* sapp_d3d11_get_render_target_view(void);
+SOKOL_API const void* sapp_d3d11_get_depth_stencil_view(void);
+SOKOL_API const void* sapp_win32_get_hwnd(void);
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
@@ -5660,31 +5663,31 @@ int main(int argc, char* argv[]) {
 #endif /* LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
-bool sapp_isvalid(void) {
+SOKOL_API bool sapp_isvalid(void) {
     return _sapp.valid;
 }
 
-int sapp_width(void) {
+SOKOL_API int sapp_width(void) {
     return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
-int sapp_height(void) {
+SOKOL_API int sapp_height(void) {
     return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
 
-bool sapp_high_dpi(void) {
+SOKOL_API bool sapp_high_dpi(void) {
     return _sapp.desc.high_dpi && (_sapp.dpi_scale > 1.5f);
 }
 
-float sapp_dpi_scale(void) {
+SOKOL_API float sapp_dpi_scale(void) {
     return _sapp.dpi_scale;
 }
 
-bool sapp_gles2(void) {
+SOKOL_API bool sapp_gles2(void) {
     return _sapp.gles2_fallback;
 }
 
-void sapp_show_keyboard(bool shown) {
+SOKOL_API void sapp_show_keyboard(bool shown) {
     #if TARGET_OS_IPHONE
     _sapp_ios_show_keyboard(shown);
     #elif __EMSCRIPTEN__
@@ -5694,11 +5697,11 @@ void sapp_show_keyboard(bool shown) {
     #endif
 }
 
-bool sapp_keyboard_shown(void) {
+SOKOL_API bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-const void* sapp_metal_get_device(void) {
+SOKOL_API const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj = (__bridge const void*) _sapp_mtl_device_obj;
@@ -5709,7 +5712,7 @@ const void* sapp_metal_get_device(void) {
     #endif
 }
 
-const void* sapp_metal_get_renderpass_descriptor(void) {
+SOKOL_API const void* sapp_metal_get_renderpass_descriptor(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj =  (__bridge const void*) [_sapp_view_obj currentRenderPassDescriptor];
@@ -5720,7 +5723,7 @@ const void* sapp_metal_get_renderpass_descriptor(void) {
     #endif
 }
 
-const void* sapp_metal_get_drawable(void) {
+SOKOL_API const void* sapp_metal_get_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         const void* obj = (__bridge const void*) [_sapp_view_obj currentDrawable];
@@ -5731,7 +5734,7 @@ const void* sapp_metal_get_drawable(void) {
     #endif
 }
 
-const void* sapp_macos_get_window(void) {
+SOKOL_API const void* sapp_macos_get_window(void) {
     #if defined(__APPLE__) && !TARGET_OS_IPHONE
         const void* obj = (__bridge const void*) _sapp_macos_window_obj;
         SOKOL_ASSERT(obj);
@@ -5741,7 +5744,7 @@ const void* sapp_macos_get_window(void) {
     #endif
 }
 
-const void* sapp_ios_get_window(void) {
+SOKOL_API const void* sapp_ios_get_window(void) {
     #if defined(__APPLE__) && TARGET_OS_IPHONE
         const void* obj = (__bridge const void*) _sapp_ios_window_obj;
         SOKOL_ASSERT(obj);
@@ -5752,7 +5755,7 @@ const void* sapp_ios_get_window(void) {
 
 }
 
-const void* sapp_d3d11_get_device(void) {
+SOKOL_API const void* sapp_d3d11_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
         return _sapp_d3d11_device;
@@ -5761,7 +5764,7 @@ const void* sapp_d3d11_get_device(void) {
     #endif
 }
 
-const void* sapp_d3d11_get_device_context(void) {
+SOKOL_API const void* sapp_d3d11_get_device_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
         return _sapp_d3d11_device_context;
@@ -5770,7 +5773,7 @@ const void* sapp_d3d11_get_device_context(void) {
     #endif
 }
 
-const void* sapp_d3d11_get_render_target_view(void) {
+SOKOL_API const void* sapp_d3d11_get_render_target_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
         return _sapp_d3d11_rtv;
@@ -5779,7 +5782,7 @@ const void* sapp_d3d11_get_render_target_view(void) {
     #endif
 }
 
-const void* sapp_d3d11_get_depth_stencil_view(void) {
+SOKOL_API const void* sapp_d3d11_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
         return _sapp_d3d11_dsv;
@@ -5788,7 +5791,7 @@ const void* sapp_d3d11_get_depth_stencil_view(void) {
     #endif
 }
 
-const void* sapp_win32_get_hwnd(void) {
+SOKOL_API const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_WIN32)
         return _sapp_win32_hwnd;
