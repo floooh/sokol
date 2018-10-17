@@ -9,9 +9,9 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
-- ...???
+- **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
 
-These are the internal parts of the Oryol C++ framework 
+These are (mainly) the internal parts of the Oryol C++ framework 
 rewritten in pure C as standalone header-only libs.
 
 WebAssembly is a 'first-class citizen', one important motivation for the
@@ -146,44 +146,6 @@ int main() {
     sg_shutdown();
     glfwTerminate();
     return 0;
-}
-```
-
-# sokol_time.h:
-
-Simple cross-platform time measurement:
-
-```c
-#include "sokol_time.h"
-...
-/* initialize sokol_time */
-stm_setup();
-
-/* take start timestamp */
-uint64_t start = stm_now();
-
-...some code to measure...
-
-/* compute elapsed time */
-uint64_t elapsed = stm_since(start);
-
-/* convert to time units */
-double seconds = stm_sec(elapsed);
-double milliseconds = stm_ms(elapsed);
-double microseconds = stm_us(elapsed);
-double nanoseconds = stm_ns(elapsed);
-
-/* difference between 2 time stamps */
-uint64_t start = stm_now();
-...
-uint64_t end = stm_now();
-uint64_t elapsed = stm_diff(end, start);
-
-/* compute a 'lap time' (e.g. for fps) */
-uint64_t last_time = 0;
-while (!done) {
-    ...render something...
-    double frame_time_ms = stm_ms(stm_laptime(&last_time));
 }
 ```
 
@@ -326,7 +288,86 @@ int main() {
 }
 ```
 
+# sokol_time.h:
+
+Simple cross-platform time measurement:
+
+```c
+#include "sokol_time.h"
+...
+/* initialize sokol_time */
+stm_setup();
+
+/* take start timestamp */
+uint64_t start = stm_now();
+
+...some code to measure...
+
+/* compute elapsed time */
+uint64_t elapsed = stm_since(start);
+
+/* convert to time units */
+double seconds = stm_sec(elapsed);
+double milliseconds = stm_ms(elapsed);
+double microseconds = stm_us(elapsed);
+double nanoseconds = stm_ns(elapsed);
+
+/* difference between 2 time stamps */
+uint64_t start = stm_now();
+...
+uint64_t end = stm_now();
+uint64_t elapsed = stm_diff(end, start);
+
+/* compute a 'lap time' (e.g. for fps) */
+uint64_t last_time = 0;
+while (!done) {
+    ...render something...
+    double frame_time_ms = stm_ms(stm_laptime(&last_time));
+}
+```
+
+# sokol_args.h
+
+Unified argument parsing for web and native apps. Uses argc/argv on native
+apps and the URL query string on web apps.
+
+Example URL with one arg:
+
+https://floooh.github.io/tiny8bit/kc85.html?type=kc85_4
+
+The same as command line app:
+
+> kc85 type=kc85_4
+
+Parsed like this:
+
+```c
+#include "sokol_args.h"
+
+int main(int argc, char* argv[]) {
+    sargs_setup(&(sargs_desc){ .argc=argc, .argv=argv });
+    if (sargs_exists("type")) {
+        if (sargs_equals("type", "kc85_4")) {
+            // start as KC85/4
+        }
+        else if (sargs_equals("type", "kc85_3)) {
+            // start as KC85/3
+        }
+        else {
+            // start as KC85/2
+        }
+    }
+    sargs_shutdown();
+    return 0;
+}
+```
+
+See the [Tiny Emulators](https://floooh.github.io/tiny8bit/) for more 
+interesting examples.
+
 # Updates
+
+- **17-Oct-2018**: sokol_args.h added
 
 - **26-Sep-2018**: sokol_audio.h ready for prime time :)
 
