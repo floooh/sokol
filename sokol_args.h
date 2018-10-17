@@ -61,6 +61,14 @@
         Return value associated with key, or the provided default
         value if the value doesn't exist or has no key.
 
+    bool sargs_equals(const char* key, const char* val);
+        Return true if the value associated with key matches
+        the 'val' argument.
+
+    bool sargs_boolean(const char* key)
+        Return true if the value string associated with 'key' is one
+        of 'true', 'yes', 'on'.
+
     int sargs_find(const char* key)
         Find argument by key name and return its index, or -1 if not found.
 
@@ -110,7 +118,7 @@ extern "C" {
 
 typedef struct {
     int argc;
-    const char** argv;
+    char** argv;
     int max_args;
     int buf_size;
 } sargs_desc;
@@ -127,6 +135,10 @@ extern bool sargs_exists(const char* key);
 extern const char* sargs_value(const char* key);
 /* get value by key name, return provided default if key doesn't exist */
 extern const char* sargs_value_def(const char* key, const char* def);
+/* return true if val arg matches the value associated with key */
+extern bool sargs_equals(const char* key, const char* val);
+/* return true if key's value is "true", "yes" or "on" */
+extern bool sargs_boolean(const char* key);
 /* get index of arg by key name, return -1 if not exists */
 extern int sargs_find(const char* key);
 /* get number of parsed arguments */
@@ -143,6 +155,10 @@ extern const char* sargs_value_at(int index);
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 #include <string.h>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#endif
 
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
@@ -184,13 +200,15 @@ extern const char* sargs_value_at(int index);
 #define _SARGS_MAX_ARGS_DEF (16)
 #define _SARGS_BUF_SIZE_DEF (16*1024)
 
-/* parser state */
+/* parser state (no parser needed on emscripten) */
+#if !defined(__EMSCRIPTEN__)
 #define _SARGS_EXPECT_KEY (1<<0)
 #define _SARGS_EXPECT_SEP (1<<1)
 #define _SARGS_EXPECT_VAL (1<<2)
 #define _SARGS_PARSING_KEY (1<<3)
 #define _SARGS_PARSING_VAL (1<<4)
 #define _SARGS_ERROR (1<<5)
+#endif
 
 /* a key/value pair struct */
 typedef struct {
@@ -207,9 +225,13 @@ typedef struct {
     int buf_pos;        /* current buffer position */
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
     bool valid;
+    
+    /* arg parsing isn't needed on emscripten */
+    #if !defined(__EMSCRIPTEN__)
     uint32_t parse_state;
     char quote;         /* current quote char, 0 if not in a quote */
     bool in_escape;     /* currently in an escape sequence */
+    #endif
 } _sargs_state;
 static _sargs_state _sargs;
 
@@ -221,6 +243,13 @@ _SOKOL_PRIVATE void _sargs_putc(char c) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sargs_str(int index) {
+    SOKOL_ASSERT((index >= 0) && (index < _sargs.buf_size));
+    return &_sargs.buf[index];
+}
+
+/*-- argument parser functions (not required on emscripten) ------------------*/
+#if !defined(__EMSCRIPTEN__)
 _SOKOL_PRIVATE void _sargs_expect_key(void) {
     _sargs.parse_state = _SARGS_EXPECT_KEY;
 }
@@ -430,11 +459,48 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
     _sargs.parse_state = 0;
     return retval;
 }
+#endif /* __EMSCRIPTEN__ */
 
-_SOKOL_PRIVATE const char* _sargs_str(int index) {
-    SOKOL_ASSERT((index >= 0) && (index < _sargs.buf_size));
-    return &_sargs.buf[index];
+/*-- EMSCRIPTEN IMPLEMENTATION -----------------------------------------------*/
+#if defined(__EMSCRIPTEN__)
+
+EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
+    SOKOL_ASSERT(_sargs.valid && key && val);
+    if (_sargs.num_args >= _sargs.max_args) {
+        return;
+    }
+
+    /* copy key string */
+    char c;
+    _sargs.args[_sargs.num_args].key = _sargs.buf_pos;
+    const char* ptr = key;
+    while (0 != (c = *ptr++)) {
+        _sargs_putc(c);
+    }
+    _sargs_putc(0);
+
+    /* copy value string */
+    _sargs.args[_sargs.num_args].val = _sargs.buf_pos;
+    ptr = val;
+    while (0 != (c = *ptr++)) {
+        _sargs_putc(c);
+    }
+    _sargs_putc(0);
+
+    _sargs.num_args++;
 }
+
+/* JS function to extract arguments from the page URL */
+EM_JS(void, sargs_js_parse_url, (), {
+    var params = new URLSearchParams(window.location.search).entries();
+    for (var p = params.next(); !p.done; p = params.next()) {
+        var key = p.value[0];
+        var val = p.value[1];
+        var res = Module.ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
+    }
+});
+
+#endif /* EMSCRIPTEN */
 
 /*== PUBLIC IMPLEMENTATION FUNCTIONS =========================================*/
 void sargs_setup(const sargs_desc* desc) {
@@ -447,7 +513,13 @@ void sargs_setup(const sargs_desc* desc) {
     _sargs.buf = (char*) SOKOL_CALLOC(_sargs.buf_size, sizeof(char));
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
-    _sargs_parse_cargs(desc->argc, desc->argv);
+    #if defined(__EMSCRIPTEN__)
+        /* on emscripten, ignore argc/argv, and parse the page URL instead */
+        sargs_js_parse_url();
+    #else
+        /* on native platform, parse argc/argv */
+        _sargs_parse_cargs(desc->argc, (const char**) desc->argv);
+    #endif
     _sargs.valid = true;
 }
 
@@ -524,6 +596,18 @@ const char* sargs_value_def(const char* key, const char* def) {
     else {
         return def;
     }
+}
+
+bool sargs_equals(const char* key, const char* val) {
+    SOKOL_ASSERT(_sargs.valid && key && val);
+    return 0 == strcmp(sargs_value(key), val);
+}
+
+bool sargs_boolean(const char* key) {
+    const char* val = sargs_value(key);
+    return (0 == strcmp("true", val)) ||
+           (0 == strcmp("yes", val)) ||
+           (0 == strcmp("on", val));
 }
 
 #endif /* SOKOL_IMPL */
