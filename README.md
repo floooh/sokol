@@ -350,7 +350,7 @@ int main(int argc, char* argv[]) {
         if (sargs_equals("type", "kc85_4")) {
             // start as KC85/4
         }
-        else if (sargs_equals("type", "kc85_3)) {
+        else if (sargs_equals("type", "kc85_3")) {
             // start as KC85/3
         }
         else {
