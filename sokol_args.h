@@ -127,6 +127,21 @@
             sargs_shutdown();
         }
 
+    WINMAIN AND ARGC / ARGV
+    =======================
+    On Windows with WinMain() based apps, use the __argc and __argv global
+    variables provided Windows. These are compatible with main(argc, argv)
+    and have already been converted to UTF-8 by Windows:
+
+        int WINAPI WinMain(...) {
+            sargs_setup(&(sargs_desc){
+                .argc = __argc,
+                .argv = __argv
+            });
+        }
+
+    (this is also what sokol_app.h uses btw)
+
     API DOCUMENTATION
     =================
     void sargs_setup(const sargs_desc* desc)
