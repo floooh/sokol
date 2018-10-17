@@ -329,7 +329,7 @@ while (!done) {
 # sokol_args.h
 
 Unified argument parsing for web and native apps. Uses argc/argv on native
-apps and the URL query string on web apps.
+platforms and the URL query string on the web.
 
 Example URL with one arg:
 
