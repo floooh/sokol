@@ -16,24 +16,26 @@
 
     OVERVIEW
     ========
-    sokol_args.h provides a unified argument parsing API for WebAssembly and
+    sokol_args.h provides a simple unified argument parsing API for WebAssembly and
     native apps.
 
-    When running as WebAssembly app, arguments are taken from the URL, for instance:
+    When running as WebAssembly app, arguments are taken from the page URL:
 
     https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
 
-    Providing the same args to a native app would look like this:
+    The same arguments provided to a command line app:
 
-    > kc85 type=kc85_3 mod=m022 snapshot=kc85/jungle.kcc
+    kc85 type=kc85_3 mod=m022 snapshot=kc85/jungle.kcc
 
     ARGUMENT FORMATTING
     ===================
-    On the web platforms, arguments must be formatted as a URL query string 
-    with special characters 'percent encoded'.
+    On the web platform, arguments must be formatted as a valid URL query string 
+    with 'percent encoding' used for special characters.
 
-    Strings are expected to be UTF-8 encoded (see below on how to get UTF-8 encoded
-    command line args on Windows).
+    Strings are expected to be UTF-8 encoded (although sokol_args.h doesn't
+    contain any special UTF-8 handling). See below on how to obtain
+    UTF-8 encoded argc/argv values on Windows when using WinMain() as
+    entry point.
 
     On native platforms the following rules must be followed:
 
