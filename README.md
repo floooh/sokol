@@ -362,8 +362,8 @@ int main(int argc, char* argv[]) {
 }
 ```
 
-See the [Tiny Emulators](https://floooh.github.io/tiny8bit/) for more 
-interesting examples.
+See the sokol_args.h header for a more complete documentation, and the [Tiny
+Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
 
