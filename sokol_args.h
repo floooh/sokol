@@ -1,8 +1,6 @@
 #pragma once
 /*
-    sokol_args.h    -- simple cross-platform key/value args parser
-
-    WORK IN PROGRESS!
+    sokol_args.h    -- cross-platform key/value arg-parsing for web and native
 
     Do this:
         #define SOKOL_IMPL
@@ -16,33 +14,135 @@
     SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
 
+    OVERVIEW
+    ========
+    sokol_args.h provides a unified argument parsing API for WebAssembly and
+    native apps.
+
+    When running as WebAssembly app, arguments are taken from the URL, for instance:
+
+    https://floooh.github.io/tiny8bit/kc85.html?type=kc85_3&mod=m022&snapshot=kc85/jungle.kcc
+
+    Providing the same args to a native app would look like this:
+
+    > kc85 type=kc85_3 mod=m022 snapshot=kc85/jungle.kcc
+
+    ARGUMENT FORMATTING
+    ===================
+    On the web platforms, arguments must be formatted as a URL query string 
+    with special characters 'percent encoded'.
+
+    Strings are expected to be UTF-8 encoded (see below on how to get UTF-8 encoded
+    command line args on Windows).
+
+    On native platforms the following rules must be followed:
+
+    Arguments have the general form
+
+        key=value
+
+    Key/value pairs are separates by 'whitespace', valid whitespace
+    characters are space and tab.
+    
+    Whitespace characters in front and after the separating '=' character
+    are ignored:
+
+        key = value
+
+    ...is the same as
+
+        key=value
+
+    The 'key' string must be a simple string without escape sequences or whitespace.
+
+    Currently 'single keys' without values are not allowed, but may be 
+    in the future.
+
+    The 'value' string can be quoted, and quoted value strings can contain
+    whitespace:
+
+        key = 'single-quoted value'
+        key = "double-quoted value"
+
+    Single-quoted value strings can contain double quotes, and vice-versa:
+
+        key = 'single-quoted value "can contain double-quotes"'
+        key = 'double-quoted value 'can contain single-quotes'"
+
+    Note that correct quoting can be tricky on some shells, since command
+    shells may remove quotes, unless they're escaped.
+
+    Value strings can contain a small selection of escape sequences:
+
+        \n  - newline
+        \r  - carriage return
+        \t  - tab
+        \\  - escaped backslash
+    
+    (more escape codes may be added in the future).
+
+    CODE EXAMPLE
+    ============
+
+        int main(int argc, char* argv[]) {
+            // initialize sokol_args with default parameters
+            sargs_setup(&(sargs_desc){
+                .argc = argc,
+                .argv = argv
+            });
+
+            // check if a key exists...
+            if (sargs_exists("bla")) {
+                ...
+            }
+
+            // get value string for key, if not found, return empty string ""
+            const char* val0 = sargs_value("bla");
+
+            // get value string for key, or default string if key not found
+            const char* val1 = sargs_value_def("bla", "default_value");
+
+            // check if a key matches expected value
+            if (sargs_equals("type", "kc85_4")) {
+                ...
+            }
+
+            // check if a key's value is "true", "yes" or "on"
+            if (sargs_boolean("joystick_enabled")) {
+                ...
+            }
+
+            // iterate over keys and values
+            for (int i = 0; i < sargs_num_args(); i++) {
+                printf("key: %s, value: %s\n", sargs_key_at(i), sargs_value_at(i));
+            }
+
+            // lookup argument index by key string, will return -1 if key
+            // is not found, sargs_key_at() and sargs_value_at() will return
+            // an empty string for invalid indices
+            int index = sargs_find("bla");
+            printf("key: %s, value: %s\n", sargs_key_at(index), sargs_value_at(index));
+
+            // shutdown sokol-args
+            sargs_shutdown();
+        }
+
+    API DOCUMENTATION
+    =================
     void sargs_setup(const sargs_desc* desc)
-        Initialize sokol_args, desc conatins the following configuration
+        Initialize sokol_args, desc contains the following configuration
         parameters:
             int argc        - the main function's argc parameter
             char** argv     - the main function's argv parameter
             int max_args    - max number of key/value pairs, default is 16
             int buf_size    - size of the internal string buffer, default is 16384
-        on native platform these are valid
-        command line argument formats:
-
-            key=value
-            key="value"
-            key='value'
-            key:value
-            key:"value"
-            key:'value'
-            key (without value)
-
-        The value string can contain the following escape sequences:
-            \\  - escape '\'
-            \n, \r, \t  - newline, carriage return and tab
-
-        Any spaces between the end of key and the start of value are
-        stripped. 
         
-        On emscripten, the current page's URL args will be parsed, and the
-        arguments given to sargs_setup() will be ignored.
+        Note that on the web, argc and argv will be ignored and the arguments
+        will be taken from the page URL instead.
+
+        sargs_setup() will allocate 2 memory chunks: one for keeping track
+        of the key/value args of size 'max_args*8', and a string buffer
+        of size 'buf_size'.
 
     void sargs_shutdown(void)
         Shutdown sokol-args and free any allocated memory.
@@ -55,18 +155,18 @@
 
     const char* sargs_value(const char* key)
         Return value associated with key. Returns an empty
-        string ("") if the key doesn't exist, or has no value.
+        string ("") if the key doesn't exist.
 
     const char* sargs_value_def(const char* key, const char* default)
         Return value associated with key, or the provided default
-        value if the value doesn't exist or has no key.
+        value if the value doesn't exist.
 
     bool sargs_equals(const char* key, const char* val);
         Return true if the value associated with key matches
         the 'val' argument.
 
     bool sargs_boolean(const char* key)
-        Return true if the value string associated with 'key' is one
+        Return true if the value string of 'key' is one
         of 'true', 'yes', 'on'.
 
     int sargs_find(const char* key)
@@ -81,7 +181,11 @@
 
     const char* sargs_value_at(int index)
         Return the value of argument at index. Returns empty string
-        if index is outside range, or the argumnet has no value.
+        if index is outside range.
+
+    TODO
+    ====
+    - parsing errors?
 
     LICENSE
     =======
@@ -279,7 +383,7 @@ _SOKOL_PRIVATE bool _sargs_any_expected(void) {
 }
 
 _SOKOL_PRIVATE bool _sargs_is_separator(char c) {
-    return (c == '=') || (c == ':');
+    return c == '=';
 }
 
 _SOKOL_PRIVATE bool _sargs_is_quote(char c) {
