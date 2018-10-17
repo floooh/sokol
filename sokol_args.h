@@ -43,7 +43,7 @@
 
         key=value
 
-    Key/value pairs are separates by 'whitespace', valid whitespace
+    Key/value pairs are separated by 'whitespace', valid whitespace
     characters are space and tab.
     
     Whitespace characters in front and after the separating '=' character
