@@ -69,7 +69,7 @@
     Single-quoted value strings can contain double quotes, and vice-versa:
 
         key = 'single-quoted value "can contain double-quotes"'
-        key = 'double-quoted value 'can contain single-quotes'"
+        key = "double-quoted value 'can contain single-quotes'"
 
     Note that correct quoting can be tricky on some shells, since command
     shells may remove quotes, unless they're escaped.
