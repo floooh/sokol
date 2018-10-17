@@ -36,13 +36,7 @@
 
         The value string can contain the following escape sequences:
             \\  - escape '\'
-            \=  - escape '='
-            \:  - escape ':'
-            \"  - escape '"'
-            \'  - escape '''
             \n, \r, \t  - newline, carriage return and tab
-            \[space]    - escape a space character
-            \[number]   - a decimal number (must fit in a byte)
 
         Any spaces between the end of key and the start of value are
         stripped. 
@@ -215,6 +209,7 @@ typedef struct {
     bool valid;
     uint32_t parse_state;
     char quote;         /* current quote char, 0 if not in a quote */
+    bool in_escape;     /* currently in an escape sequence */
 } _sargs_state;
 static _sargs_state _sargs;
 
@@ -312,6 +307,32 @@ _SOKOL_PRIVATE void _sargs_end_val(void) {
     _sargs.parse_state = 0;
 }
 
+_SOKOL_PRIVATE bool _sargs_is_escape(char c) {
+    return '\\' == c;
+}
+
+_SOKOL_PRIVATE void _sargs_start_escape(void) {
+    _sargs.in_escape = true;
+}
+
+_SOKOL_PRIVATE bool _sargs_in_escape(void) {
+    return _sargs.in_escape;
+}
+
+_SOKOL_PRIVATE char _sargs_escape(char c) {
+    switch (c) {
+        case 'n':   return '\n';
+        case 't':   return '\t';
+        case 'r':   return '\r';
+        case '\\':  return '\\';
+        default:    return c;
+    }
+}
+
+_SOKOL_PRIVATE void _sargs_end_escape(void) {
+    _sargs.in_escape = false;
+}
+
 _SOKOL_PRIVATE bool _sargs_parsing_val(void) {
     return 0 != (_sargs.parse_state & _SARGS_PARSING_VAL);
 }
@@ -319,9 +340,17 @@ _SOKOL_PRIVATE bool _sargs_parsing_val(void) {
 _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
     char c;
     while (0 != (c = *src++)) {
+        if (_sargs_in_escape()) {
+            c = _sargs_escape(c);
+            _sargs_end_escape();
+        }
+        else if (_sargs_is_escape(c)) {
+            _sargs_start_escape();
+            continue;
+        }
         if (_sargs_any_expected()) {
-            /* find start of key or value */
             if (!_sargs_is_whitespace(c)) {
+                /* start of key, value or separator */
                 if (_sargs_key_expected()) {
                     /* start of new key */
                     _sargs_start_key();
@@ -349,6 +378,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
         }
         else if (_sargs_parsing_key()) {
             if (_sargs_is_whitespace(c) || _sargs_is_separator(c)) {
+                /* end of key string */
                 _sargs_end_key();
                 if (_sargs_is_separator(c)) {
                     _sargs_expect_val();
@@ -361,6 +391,9 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
         }
         else if (_sargs_parsing_val()) {
             if (_sargs_in_quotes()) {
+                /* when in quotes, whitespace is a normal character 
+                   and a matching quote ends the value string
+                */
                 if (_sargs_is_quote(c)) {
                     _sargs_end_quote();
                     _sargs_end_val();
@@ -369,20 +402,19 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
                 }
             }
             else if (_sargs_is_whitespace(c)) {
+                /* end of value string (no quotes) */
                 _sargs_end_val();
                 _sargs_expect_key();
                 continue;
             }
         }
-        if (c >= 32) {
-            _sargs_putc(c);
-        }
+        _sargs_putc(c);
     }
     if (_sargs_parsing_key()) {
         _sargs_end_key();
         _sargs_expect_sep();
     }
-    else if (_sargs_parsing_val()) {
+    else if (_sargs_parsing_val() && !_sargs_in_quotes()) {
         _sargs_end_val();
         _sargs_expect_key();
     }
@@ -416,7 +448,6 @@ void sargs_setup(const sargs_desc* desc) {
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
     _sargs_parse_cargs(desc->argc, desc->argv);
-    /* FIXME: parse args */
     _sargs.valid = true;
 }
 
