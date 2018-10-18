@@ -315,7 +315,7 @@
 #include <stdbool.h>
 
 #ifndef SOKOL_API_DECL
-#define SOKOL_API_DECL extern
+    #define SOKOL_API_DECL extern
 #endif
 
 #ifdef __cplusplus
@@ -1561,7 +1561,7 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #endif
 
 #ifndef SOKOL_API_IMPL
-#define SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
