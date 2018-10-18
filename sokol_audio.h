@@ -14,6 +14,8 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
+    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     FEATURE OVERVIEW
     ================
@@ -335,6 +337,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef SOKOL_API_DECL
+    #define SOKOL_API_DECL extern
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -349,21 +355,21 @@ typedef struct {
 } saudio_desc;
 
 /* setup sokol-audio */
-extern void saudio_setup(const saudio_desc* desc);
+SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
 /* shutdown sokol-audio */
-extern void saudio_shutdown(void);
+SOKOL_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
-extern bool saudio_isvalid(void);
+SOKOL_API_DECL bool saudio_isvalid(void);
 /* actual sample rate */
-extern int saudio_sample_rate(void);
+SOKOL_API_DECL int saudio_sample_rate(void);
 /* actual backend buffer size */
-extern int saudio_buffer_size(void);
+SOKOL_API_DECL int saudio_buffer_size(void);
 /* actual number of channels */
-extern int saudio_channels(void);
+SOKOL_API_DECL int saudio_channels(void);
 /* get current number of frames to fill packet queue */
-extern int saudio_expect(void);
+SOKOL_API_DECL int saudio_expect(void);
 /* push sample frames from main thread, returns number of frames actually pushed */
-extern int saudio_push(const float* frames, int num_frames);
+SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -378,6 +384,9 @@ extern int saudio_push(const float* frames, int num_frames);
 #pragma warning(disable:4505)   /* unreferenced local function has been removed */
 #endif
 
+#ifndef SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
+#endif
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
         #define SOKOL_DEBUG (1)
@@ -1228,7 +1237,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 #endif
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
-void saudio_setup(const saudio_desc* desc) {
+SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
     SOKOL_ASSERT(desc);
     memset(&_saudio, 0, sizeof(_saudio));
@@ -1248,7 +1257,7 @@ void saudio_setup(const saudio_desc* desc) {
     }
 }
 
-void saudio_shutdown(void) {
+SOKOL_API_IMPL void saudio_shutdown(void) {
     if (_saudio.valid) {
         _saudio_backend_shutdown();
         _saudio_fifo_shutdown(&_saudio.fifo);
@@ -1257,23 +1266,23 @@ void saudio_shutdown(void) {
     _saudio_mutex_destroy();
 }
 
-bool saudio_isvalid(void) {
+SOKOL_API_IMPL bool saudio_isvalid(void) {
     return _saudio.valid;
 }
 
-int saudio_sample_rate(void) {
+SOKOL_API_IMPL int saudio_sample_rate(void) {
     return _saudio.sample_rate;
 }
 
-int saudio_buffer_frames(void) {
+SOKOL_API_IMPL int saudio_buffer_frames(void) {
     return _saudio.buffer_frames;
 }
 
-int saudio_channels(void) {
+SOKOL_API_IMPL int saudio_channels(void) {
     return _saudio.num_channels;
 }
 
-int saudio_expect(void) {
+SOKOL_API_IMPL int saudio_expect(void) {
     if (_saudio.valid) {
         const int num_frames = _saudio_fifo_writable_bytes(&_saudio.fifo) / _saudio.bytes_per_frame;
         return num_frames;
@@ -1283,7 +1292,7 @@ int saudio_expect(void) {
     }
 }
 
-int saudio_push(const float* frames, int num_frames) {
+SOKOL_API_IMPL int saudio_push(const float* frames, int num_frames) {
     SOKOL_ASSERT(frames && (num_frames > 0));
     if (_saudio.valid) {
         const int num_bytes = num_frames * _saudio.bytes_per_frame;

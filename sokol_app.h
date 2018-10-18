@@ -15,7 +15,7 @@
     SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
     SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
-    SOKOL_API_IMPL      - public function implementation (default: -)
+    SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     Optionally define the following to force debug checks and validations
     even in release mode:
