@@ -9,6 +9,8 @@
 
     Optionally provide the following defines with your own implementations:
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     void stm_setup();
         Call once before any other functions to initialize sokol_time
@@ -79,19 +81,23 @@
 */
 #include <stdint.h>
 
+#ifndef SOKOL_API_DECL
+    #define SOKOL_API_DECL extern
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern void stm_setup(void);
-extern uint64_t stm_now(void);
-extern uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
-extern uint64_t stm_since(uint64_t start_ticks);
-extern uint64_t stm_laptime(uint64_t* last_time);
-extern double stm_sec(uint64_t ticks);
-extern double stm_ms(uint64_t ticks);
-extern double stm_us(uint64_t ticks);
-extern double stm_ns(uint64_t ticks);
+SOKOL_API_DECL void stm_setup(void);
+SOKOL_API_DECL uint64_t stm_now(void);
+SOKOL_API_DECL uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
+SOKOL_API_DECL uint64_t stm_since(uint64_t start_ticks);
+SOKOL_API_DECL uint64_t stm_laptime(uint64_t* last_time);
+SOKOL_API_DECL double stm_sec(uint64_t ticks);
+SOKOL_API_DECL double stm_ms(uint64_t ticks);
+SOKOL_API_DECL double stm_us(uint64_t ticks);
+SOKOL_API_DECL double stm_ns(uint64_t ticks);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -99,9 +105,20 @@ extern double stm_ns(uint64_t ticks);
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+
+#ifndef SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
+#endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef _SOKOL_PRIVATE
+    #if defined(__GNUC__)
+        #define _SOKOL_PRIVATE __attribute__((unused)) static
+    #else
+        #define _SOKOL_PRIVATE static
+    #endif
 #endif
 
 static int _stm_initialized;
@@ -125,7 +142,7 @@ static uint64_t _stm_posix_start;
     see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
 */
 #if defined(_WIN32) || (defined(__APPLE__) && defined(__MACH__))
-static int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
+_SOKOL_PRIVATE int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
     int64_t q = value / denom;
     int64_t r = value % denom;
     return q * numer + r * numer / denom;
@@ -133,7 +150,7 @@ static int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
 #endif
 
 
-void stm_setup(void) {
+SOKOL_API_IMPL void stm_setup(void) {
     SOKOL_ASSERT(0 == _stm_initialized);
     _stm_initialized = 1;
     #if defined(_WIN32)
@@ -149,7 +166,7 @@ void stm_setup(void) {
     #endif
 }
 
-uint64_t stm_now(void) {
+SOKOL_API_IMPL uint64_t stm_now(void) {
     SOKOL_ASSERT(_stm_initialized);
     uint64_t now;
     #if defined(_WIN32)
@@ -167,7 +184,7 @@ uint64_t stm_now(void) {
     return now;
 }
 
-uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks) {
+SOKOL_API_IMPL uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks) {
     if (new_ticks > old_ticks) {
         return new_ticks - old_ticks;
     }
@@ -177,11 +194,11 @@ uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks) {
     }
 }
 
-uint64_t stm_since(uint64_t start_ticks) {
+SOKOL_API_IMPL uint64_t stm_since(uint64_t start_ticks) {
     return stm_diff(stm_now(), start_ticks);
 }
 
-uint64_t stm_laptime(uint64_t* last_time) {
+SOKOL_API_IMPL uint64_t stm_laptime(uint64_t* last_time) {
     SOKOL_ASSERT(last_time);
     uint64_t dt = 0;
     uint64_t now = stm_now();
@@ -192,19 +209,19 @@ uint64_t stm_laptime(uint64_t* last_time) {
     return dt;
 }
 
-double stm_sec(uint64_t ticks) {
+SOKOL_API_IMPL double stm_sec(uint64_t ticks) {
     return (double)ticks / 1000000000.0;
 }
 
-double stm_ms(uint64_t ticks) {
+SOKOL_API_IMPL double stm_ms(uint64_t ticks) {
     return (double)ticks / 1000000.0;
 }
 
-double stm_us(uint64_t ticks) {
+SOKOL_API_IMPL double stm_us(uint64_t ticks) {
     return (double)ticks / 1000.0;
 }
 
-double stm_ns(uint64_t ticks) {
+SOKOL_API_IMPL double stm_ns(uint64_t ticks) {
     return (double)ticks;
 }
 #endif /* SOKOL_IMPL */
