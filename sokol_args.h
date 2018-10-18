@@ -13,6 +13,8 @@
     SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
     SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
+    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     OVERVIEW
     ========
@@ -233,6 +235,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef SOKOL_API_DECL
+    #define SOKOL_API_DECL extern
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -245,29 +251,29 @@ typedef struct {
 } sargs_desc;
 
 /* setup sokol-args */
-extern void sargs_setup(const sargs_desc* desc);
+SOKOL_API_DECL void sargs_setup(const sargs_desc* desc);
 /* shutdown sokol-args */
-extern void sargs_shutdown(void);
+SOKOL_API_DECL void sargs_shutdown(void);
 /* true between sargs_setup() and sargs_shutdown() */
-extern bool sargs_isvalid(void);
+SOKOL_API_DECL bool sargs_isvalid(void);
 /* test if an argument exists by key name */
-extern bool sargs_exists(const char* key);
+SOKOL_API_DECL bool sargs_exists(const char* key);
 /* get value by key name, return empty string if key doesn't exist */
-extern const char* sargs_value(const char* key);
+SOKOL_API_DECL const char* sargs_value(const char* key);
 /* get value by key name, return provided default if key doesn't exist */
-extern const char* sargs_value_def(const char* key, const char* def);
+SOKOL_API_DECL const char* sargs_value_def(const char* key, const char* def);
 /* return true if val arg matches the value associated with key */
-extern bool sargs_equals(const char* key, const char* val);
+SOKOL_API_DECL bool sargs_equals(const char* key, const char* val);
 /* return true if key's value is "true", "yes" or "on" */
-extern bool sargs_boolean(const char* key);
+SOKOL_API_DECL bool sargs_boolean(const char* key);
 /* get index of arg by key name, return -1 if not exists */
-extern int sargs_find(const char* key);
+SOKOL_API_DECL int sargs_find(const char* key);
 /* get number of parsed arguments */
-extern int sargs_num_args(void);
+SOKOL_API_DECL int sargs_num_args(void);
 /* get key name of argument at index, or empty string */
-extern const char* sargs_key_at(int index);
+SOKOL_API_DECL const char* sargs_key_at(int index);
 /* get value string of argument at index, or empty string */
-extern const char* sargs_value_at(int index);
+SOKOL_API_DECL const char* sargs_value_at(int index);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -281,6 +287,9 @@ extern const char* sargs_value_at(int index);
 #include <emscripten/emscripten.h>
 #endif
 
+#ifndef SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
+#endif
 #ifndef SOKOL_DEBUG
     #ifdef _DEBUG
         #define SOKOL_DEBUG (1)
@@ -624,7 +633,7 @@ EM_JS(void, sargs_js_parse_url, (), {
 #endif /* EMSCRIPTEN */
 
 /*== PUBLIC IMPLEMENTATION FUNCTIONS =========================================*/
-void sargs_setup(const sargs_desc* desc) {
+SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     SOKOL_ASSERT(desc);
     memset(&_sargs, 0, sizeof(_sargs));
     _sargs.max_args = _sargs_def(desc->max_args, _SARGS_MAX_ARGS_DEF);
@@ -644,7 +653,7 @@ void sargs_setup(const sargs_desc* desc) {
     _sargs.valid = true;
 }
 
-void sargs_shutdown(void) {
+SOKOL_API_IMPL void sargs_shutdown(void) {
     SOKOL_ASSERT(_sargs.valid);
     if (_sargs.args) {
         SOKOL_FREE(_sargs.args);
@@ -657,11 +666,11 @@ void sargs_shutdown(void) {
     _sargs.valid = false;
 }
 
-bool sargs_isvalid(void) {
+SOKOL_API_IMPL bool sargs_isvalid(void) {
     return _sargs.valid;
 }
 
-int sargs_find(const char* key) {
+SOKOL_API_IMPL int sargs_find(const char* key) {
     SOKOL_ASSERT(_sargs.valid && key);
     for (int i = 0; i < _sargs.num_args; i++) {
         if (0 == strcmp(_sargs_str(_sargs.args[i].key), key)) {
@@ -671,12 +680,12 @@ int sargs_find(const char* key) {
     return -1;
 }
 
-int sargs_num_args(void) {
+SOKOL_API_IMPL int sargs_num_args(void) {
     SOKOL_ASSERT(_sargs.valid);
     return _sargs.num_args;
 }
 
-const char* sargs_key_at(int index) {
+SOKOL_API_IMPL const char* sargs_key_at(int index) {
     SOKOL_ASSERT(_sargs.valid);
     if ((index >= 0) && (index < _sargs.num_args)) {
         return _sargs_str(_sargs.args[index].key);
@@ -687,7 +696,7 @@ const char* sargs_key_at(int index) {
     }
 }
 
-const char* sargs_value_at(int index) {
+SOKOL_API_IMPL const char* sargs_value_at(int index) {
     SOKOL_ASSERT(_sargs.valid);
     if ((index >= 0) && (index < _sargs.num_args)) {
         return _sargs_str(_sargs.args[index].val);
@@ -698,17 +707,17 @@ const char* sargs_value_at(int index) {
     }
 }
 
-bool sargs_exists(const char* key) {
+SOKOL_API_IMPL bool sargs_exists(const char* key) {
     SOKOL_ASSERT(_sargs.valid && key);
     return -1 != sargs_find(key);
 }
 
-const char* sargs_value(const char* key) {
+SOKOL_API_IMPL const char* sargs_value(const char* key) {
     SOKOL_ASSERT(_sargs.valid && key);
     return sargs_value_at(sargs_find(key));
 }
 
-const char* sargs_value_def(const char* key, const char* def) {
+SOKOL_API_IMPL const char* sargs_value_def(const char* key, const char* def) {
     SOKOL_ASSERT(_sargs.valid && key && def);
     int arg_index = sargs_find(key);
     if (-1 != arg_index) {
@@ -719,12 +728,12 @@ const char* sargs_value_def(const char* key, const char* def) {
     }
 }
 
-bool sargs_equals(const char* key, const char* val) {
+SOKOL_API_IMPL bool sargs_equals(const char* key, const char* val) {
     SOKOL_ASSERT(_sargs.valid && key && val);
     return 0 == strcmp(sargs_value(key), val);
 }
 
-bool sargs_boolean(const char* key) {
+SOKOL_API_IMPL bool sargs_boolean(const char* key) {
     const char* val = sargs_value(key);
     return (0 == strcmp("true", val)) ||
            (0 == strcmp("yes", val)) ||
