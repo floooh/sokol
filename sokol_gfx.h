@@ -3007,7 +3007,10 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
                         }
                         #if !defined(SOKOL_GLES2)
                         else if (!_sg_gl_gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
-                            int mip_depth = img->depth >> mip_index;
+                            int mip_depth = img->depth;
+                            if (SG_IMAGETYPE_3D == img->type) {
+                                mip_depth >>= mip_index;
+                            }
                             if (mip_depth == 0) {
                                 mip_depth = 1;
                             }
