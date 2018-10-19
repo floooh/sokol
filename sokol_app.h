@@ -2866,6 +2866,7 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
     _SAPP_GLPROC(glCreateShader);
     _SAPP_GLPROC(glTexSubImage2D);
     _SAPP_GLPROC(glClearDepth);
+    _SAPP_GLPROC(glFramebufferTexture2D);
     _SAPP_GLPROC(glCreateProgram);
     _SAPP_GLPROC(glViewport);
     _SAPP_GLPROC(glDeleteBuffers);
