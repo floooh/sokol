@@ -552,6 +552,8 @@ typedef struct {
     const char* html5_canvas_name;
     bool html5_canvas_resize;
     bool ios_keyboard_resizes_canvas;
+    /* use GLES2 even if GLES3 is available */
+    bool gl_force_gles2; 
     /* if true, user is expected to manage cursor image and visibility on SAPP_EVENTTYPE_UPDATE_CURSOR */
     bool user_cursor;
 } sapp_desc;
@@ -1419,10 +1421,16 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp_ios_view_ctrl_obj.view = _sapp_view_obj;
         _sapp_ios_window_obj.rootViewController = _sapp_ios_view_ctrl_obj;
     #else
-        _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-        if (_sapp_ios_eagl_ctx_obj == nil) {
+        if (_sapp.desc.gl_force_gles2) {
             _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
             _sapp.gles2_fallback = true;
+        }
+        else {
+            _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+            if (_sapp_ios_eagl_ctx_obj == nil) {
+                _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+                _sapp.gles2_fallback = true;
+            }
         }
         _sapp_ios_glk_view_dlg_obj = [[_sapp_ios_glk_view_dlg alloc] init];
         _sapp_view_obj = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
@@ -2147,15 +2155,19 @@ int main(int argc, char* argv[]) {
     attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     #if defined(SOKOL_GLES3)
-        attrs.majorVersion = 2;
+        if (desc.gl_force_gles2) {
+            attrs.majorVersion = 1;
+            _sapp.gles2_fallback = true;
+        }
+        else {
+            attrs.majorVersion = 2;
+        }
     #endif
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(0, &attrs);
     if (!ctx) {
-        if (attrs.majorVersion == 2) {
-            _sapp.gles2_fallback = true;
-        }
         attrs.majorVersion = 1;
         ctx = emscripten_webgl_create_context(0, &attrs);
+        _sapp.gles2_fallback = true;
     }
     emscripten_webgl_make_context_current(ctx);
     _sapp.valid = true;
