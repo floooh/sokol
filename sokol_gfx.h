@@ -2621,7 +2621,11 @@ typedef struct {
 static _sg_backend _sg_gl;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     _sg_gl_gles2 = desc->gl_force_gles2;
+    #else
+    _sg_gl_gles2 = false;
+    #endif
     memset(&_sg_gl, 0, sizeof(_sg_gl));
     _sg_gl.valid = true;
     _sg_gl.in_pass = false;
