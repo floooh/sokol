@@ -146,13 +146,62 @@
         beginning a pass will reset the viewport to the size of the framebuffer used
         in the new pass,
 
-    --- to update the content of buffer and image resources, call:
+    --- to overwrite the content of buffer and image resources, call:
 
             sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
             sg_update_image(sg_image img, const sg_image_content* content)
 
         buffers and images to be updated must have been created with
         SG_USAGE_DYNAMIC or SG_USAGE_STREAM
+
+        only one update per frame and resource is allowed per frame, as a
+        simple countermeasure to avoid the CPU scribbling over data the
+        GPU is currently using, or the CPU having to wait for the GPU
+
+        buffer and image updates can be partial, as long as a rendering
+        operation only references the valid (updated) data in the
+        buffer or image
+
+    --- to append a chunk of data to a buffer resource, call:
+
+            int sg_append_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+
+        The difference to sg_update_buffer() is that sg_append_buffer()
+        can be called multiple times per frame to append new data to the
+        buffer piece by piece, optionally interleaved with draw calls referencing
+        the previously written data.
+
+        sg_append_buffer() returns a byte offset to the start of the
+        written data, this offset can be assigned to
+        sg_draw_state.vertex_buffer_offsets[n] or
+        sg_draw_state.index_buffer_offset
+
+        Code example:
+
+        for (...) {
+            const void* data = ...;
+            const int num_bytes = ...;
+            int offset = sg_append_buffer(buf, data, num_bytes);
+            draw_state.vertex_buffer_offsets[0] = offset;
+            sg_apply_draw_state(&draw_state);
+            sg_apply_uniform_block(...);
+            sg_draw(...);
+        }
+
+        A buffer to be used with sg_append_buffer() must have been created
+        with SG_USAGE_DYNAMIC or SG_USAGE_STREAM.
+
+        If the application appends more data to the buffer then fits into
+        the buffer, the buffer will go into the "overflow" state for the
+        rest of the frame.
+
+        Any draw calls attempting to render an overflown buffer will be
+        silently dropped (in debug mode this will also result in a
+        validation error).
+
+        You can also check manually if a buffer is in overflow-state by calling
+
+            bool sg_query_buffer_overflow(sg_buffer buf)
 
     --- to check for support of optional features:
 
@@ -5612,6 +5661,10 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     SOKOL_ASSERT(SUCCEEDED(hr));
     memcpy(d3d11_msr.pData, data_ptr, data_size);
     ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0);
+}
+
+_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int data_size, bool new_frame) {
+    // FIXME: on new_frame, map with WRITE_DISCARD, otherwise with WRITE_NO_OVERWRITE!
 }
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
