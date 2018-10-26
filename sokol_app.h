@@ -3888,14 +3888,36 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 /*== Android ================================================================*/
 #if defined(__ANDROID__)
 #include "android_native_app_glue.h" // TEMP
+#include <EGL/egl.h>
 #include <GLES3/gl3.h> // TODO: GLES2
 #include <GLES3/gl3ext.h>
 
 static struct android_app* _sapp_android_app_obj;
+static bool _sapp_android_ready_for_init;
+static bool _sapp_android_window_focus;
 
 /* Android entry function */
 void android_main(struct android_app* app) {
-    //sapp_desc desc = sokol_main(argc, argv)
+    _sapp_android_app_obj = app;
+    sapp_desc desc = sokol_main(0, NULL);
+    _sapp_init_state(&desc, 0, NULL);
+
+    // oryol breakdown:
+    // onStart
+    //      setup onAppCmd callback from glue
+    //      potentially init sensors (eg. ASensorManager_getInstance() etc)
+    // onFrame, looping
+    //      ALooper_pollAll
+    //      source?->process(android_app, source)
+    //          triggers android_app.onInputEvent and .onAppCmd
+    //      if ready_for_init
+    //          app -> onFrame
+    //              first frame -> setup egl
+    //              subsequent frames -> render
+    // onAppCmd
+    //      APP_CMD_INIT_WINDOW -> ready_for_init
+    // onStop
+    //      destroy sensor event queue
 }
 
 #endif /* Android */
