@@ -993,9 +993,9 @@ typedef struct {
     uint32_t _start_canary;
     sg_pipeline pipeline;
     sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
-    uint32_t vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    int vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_buffer index_buffer;
-    uint32_t index_buffer_offset;
+    int index_buffer_offset;
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t _end_canary;
@@ -1502,6 +1502,8 @@ SOKOL_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
 SOKOL_API_DECL void sg_destroy_pass(sg_pass pass);
 SOKOL_API_DECL void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
 SOKOL_API_DECL void sg_update_image(sg_image img, const sg_image_content* data);
+SOKOL_API_DECL int sg_append_buffer(sg_buffer buf, const void* data_ptr, int data_size);
+SOKOL_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 
 /* get resource state (initial, alloc, valid, failed) */
 SOKOL_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
@@ -1948,7 +1950,7 @@ _SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
 
 #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
 
-/* true if runnin in GLES2-fallback mode */
+/* true if running in GLES2-fallback mode */
 static bool _sg_gl_gles2;
 
 /*-- type translation --------------------------------------------------------*/
@@ -2321,9 +2323,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
 typedef struct {
     _sg_slot slot;
     int size;
+    int append_pos;
+    bool append_overflow;
     sg_buffer_type type;
     sg_usage usage;
-    uint32_t upd_frame_index;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
     int num_slots;
     int active_slot;
     GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
@@ -2410,7 +2415,7 @@ typedef struct {
     uint8_t stride;
     uint8_t size;
     uint8_t normalized;
-    uint32_t offset;
+    int offset;
     GLenum type;
 } _sg_gl_attr;
 
@@ -2539,7 +2544,7 @@ typedef struct {
     bool polygon_offset_enabled;
     _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint cur_gl_ib;
-    uint32_t cur_ib_offset;
+    int cur_ib_offset;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline* cur_pipeline;
@@ -2788,9 +2793,12 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
+    buf->append_pos = 0;
+    buf->append_overflow = false;
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
-    buf->upd_frame_index = 0;
+    buf->update_frame_index = 0;
+    buf->append_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     buf->ext_buffers = (0 != desc->gl_buffers[0]);
@@ -3697,8 +3705,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
-    _sg_buffer* ib, uint32_t ib_offset,
+    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer* ib, int ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -3906,7 +3914,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
         _sg_gl_cache_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
-        uint32_t vb_offset = 0;
+        int vb_offset = 0;
         if (attr->vb_index >= 0) {
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
@@ -4005,7 +4013,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     if (0 != i_type) {
         /* indexed rendering */
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
-        const uint32_t ib_offset = _sg_gl.cache.cur_ib_offset;
+        const int ib_offset = _sg_gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (num_instances == 1) {
             glDrawElements(p_type, num_elements, i_type, indices);
@@ -4389,9 +4397,12 @@ _SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
 typedef struct {
     _sg_slot slot;
     int size;
+    int append_pos;
+    bool append_overflow;
     sg_buffer_type type;
     sg_usage usage;
-    uint32_t upd_frame_index;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
     ID3D11Buffer* d3d11_buf;
 } _sg_buffer;
 
@@ -4631,9 +4642,12 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!buf->d3d11_buf);
     buf->size = desc->size;
+    buf->append_pos = 0;
+    buf->append_overflow = false;
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
-    buf->upd_frame_index = 0;
+    buf->update_frame_index = 0;
+    buf->append_frame_index = 0;
     const bool injected = (0 != desc->d3d11_buffer);
     if (injected) {
         buf->d3d11_buf = (ID3D11Buffer*) desc->d3d11_buffer;
@@ -5474,8 +5488,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
-    _sg_buffer* ib, uint32_t ib_offset,
+    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer* ib, int ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -6196,9 +6210,12 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
 typedef struct {
     _sg_slot slot;
     int size;
+    int append_pos;
+    bool append_overflow;
     sg_buffer_type type;
     sg_usage usage;
-    uint32_t upd_frame_index;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
     int num_slots;
     int active_slot;
     uint32_t mtl_buf[SG_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
@@ -6328,10 +6345,10 @@ _SOKOL_PRIVATE void _sg_init_context_slot(_sg_context* ctx) {
 static const _sg_pipeline* _sg_mtl_cur_pipeline;
 static sg_pipeline _sg_mtl_cur_pipeline_id;
 static const _sg_buffer* _sg_mtl_cur_indexbuffer;
-static uint32_t _sg_mtl_cur_indexbuffer_offset;
+static int _sg_mtl_cur_indexbuffer_offset;
 static sg_buffer _sg_mtl_cur_indexbuffer_id;
 static const _sg_buffer* _sg_mtl_cur_vertexbuffers[SG_MAX_SHADERSTAGE_BUFFERS];
-static uint32_t _sg_mtl_cur_vertexbuffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+static int _sg_mtl_cur_vertexbuffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
 static sg_buffer _sg_mtl_cur_vertexbuffer_ids[SG_MAX_SHADERSTAGE_BUFFERS];
 static const _sg_image* _sg_mtl_cur_vs_images[SG_MAX_SHADERSTAGE_IMAGES];
 static sg_image _sg_mtl_cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
@@ -6476,9 +6493,12 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     buf->size = desc->size;
+    buf->append_pos = 0;
+    buf->append_overflow = false;
     buf->type = _sg_def(desc->type, SG_BUFFERTYPE_VERTEXBUFFER);
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
-    buf->upd_frame_index = 0;
+    buf->update_frame_index = 0;
+    buf->append_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     const bool injected = (0 != desc->mtl_buffers[0]);
@@ -7218,8 +7238,8 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
 
 _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_pipeline* pip,
-    _sg_buffer** vbs, const uint32_t* vb_offsets, int num_vbs,
-    _sg_buffer* ib, uint32_t ib_offset,
+    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer* ib, int ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
@@ -7377,6 +7397,22 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
     memcpy(dst_ptr, data, data_size);
     #if !TARGET_OS_IPHONE
     [mtl_buf didModifyRange:NSMakeRange(0, data_size)];
+    #endif
+}
+
+_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int data_size, bool new_frame) {
+    SOKOL_ASSERT(buf && data);
+    if (new_frame) {
+        if (++buf->active_slot >= buf->num_slots) {
+            buf->active_slot = 0;
+        }
+    }
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
+    uint8_t* dst_ptr = [mtl_buf contents];
+    dst_ptr += buf->append_pos;
+    memcpy(dst_ptr, data, data_size);
+    #if !TARGET_OS_IPHONE
+    [mtl_buf didModifyRange:NSMakeRange(buf->append_pos, data_size)];
     #endif
 }
 
@@ -7758,9 +7794,11 @@ typedef enum {
     _SG_VALIDATE_ADS_PIP,
     _SG_VALIDATE_ADS_VBS,
     _SG_VALIDATE_ADS_VB_TYPE,
+    _SG_VALIDATE_ADS_VB_OVERFLOW,
     _SG_VALIDATE_ADS_NO_IB,
     _SG_VALIDATE_ADS_IB,
     _SG_VALIDATE_ADS_IB_TYPE,
+    _SG_VALIDATE_ADS_IB_OVERFLOW,
     _SG_VALIDATE_ADS_VS_IMGS,
     _SG_VALIDATE_ADS_VS_IMG_TYPES,
     _SG_VALIDATE_ADS_FS_IMGS,
@@ -7776,9 +7814,15 @@ typedef enum {
     _SG_VALIDATE_AUB_SIZE,
 
     /* sg_update_buffer validation */
-    _SG_VALIDATE_UPDBUF_USAGE,
-    _SG_VALIDATE_UPDBUF_SIZE,
-    _SG_VALIDATE_UPDBUF_ONCE,
+    _SG_VALIDATE_UPDATEBUF_USAGE,
+    _SG_VALIDATE_UPDATEBUF_SIZE,
+    _SG_VALIDATE_UPDATEBUF_ONCE,
+    _SG_VALIDATE_UPDATEBUF_APPEND,
+
+    /* sg_append_buffer validation */
+    _SG_VALIDATE_APPENDBUF_USAGE,
+    _SG_VALIDATE_APPENDBUF_SIZE,
+    _SG_VALIDATE_APPENDBUF_UPDATE,
 
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
@@ -7857,9 +7901,11 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_ADS_PIP:          return "sg_apply_draw_state: pipeline object required";
         case _SG_VALIDATE_ADS_VBS:          return "sg_apply_draw_state: number of vertex buffers doesn't match number of pipeline vertex layouts";
         case _SG_VALIDATE_ADS_VB_TYPE:      return "sg_apply_draw_state: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER";
+        case _SG_VALIDATE_ADS_VB_OVERFLOW:  return "sg_apply_draw_state: buffer in vertex buffer slot is overflown";
         case _SG_VALIDATE_ADS_NO_IB:        return "sg_apply_draw_state: pipeline object defines indexed rendering, but no index buffer provided";
         case _SG_VALIDATE_ADS_IB:           return "sg_apply_draw_state: pipeline object defines non-indexed rendering, but index buffer provided";
         case _SG_VALIDATE_ADS_IB_TYPE:      return "sg_apply_draw_state: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER";
+        case _SG_VALIDATE_ADS_IB_OVERFLOW:  return "sg_apply_draw_state: buffer in index buffer slot is overflown";
         case _SG_VALIDATE_ADS_VS_IMGS:      return "sg_apply_draw_state: vertex shader image count doesn't match sg_shader_desc";
         case _SG_VALIDATE_ADS_VS_IMG_TYPES: return "sg_apply_draw_state: one or more vertex shader image types don't match sg_shader_desc";
         case _SG_VALIDATE_ADS_FS_IMGS:      return "sg_apply_draw_state: fragment shader image count doesn't match sg_shader_desc";
@@ -7875,9 +7921,15 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size exceeds declared uniform block size";
 
         /* sg_update_buffer */
-        case _SG_VALIDATE_UPDBUF_USAGE:     return "sg_update_buffer: cannot update immutable buffer";
-        case _SG_VALIDATE_UPDBUF_SIZE:      return "sg_update_buffer: update size is bigger than buffer size";
-        case _SG_VALIDATE_UPDBUF_ONCE:      return "sg_update_buffer: only one update allowed per buffer and frame";
+        case _SG_VALIDATE_UPDATEBUF_USAGE:      return "sg_update_buffer: cannot update immutable buffer";
+        case _SG_VALIDATE_UPDATEBUF_SIZE:       return "sg_update_buffer: update size is bigger than buffer size";
+        case _SG_VALIDATE_UPDATEBUF_ONCE:       return "sg_update_buffer: only one update allowed per buffer and frame";
+        case _SG_VALIDATE_UPDATEBUF_APPEND:     return "sg_update_buffer: cannot call sg_update_buffer and sg_append_buffer in same frame";
+
+        /* sg_append_buffer */
+        case _SG_VALIDATE_APPENDBUF_USAGE:      return "sg_append_buffer: cannot append to immutable buffer";
+        case _SG_VALIDATE_APPENDBUF_SIZE:       return "sg_append_buffer: overall appended size is bigger than buffer size";
+        case _SG_VALIDATE_APPENDBUF_UPDATE:     return "sg_append_buffer: cannot call sg_append_buffer and sg_update_buffer in same frame";
 
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
@@ -8249,6 +8301,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
                 SOKOL_ASSERT(buf);
                 if (buf->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ADS_VB_TYPE);
+                    SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ADS_VB_OVERFLOW);
                 }
             }
             else {
@@ -8272,6 +8325,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_state(const sg_draw_state* ds) {
             SOKOL_ASSERT(buf);
             if (buf->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ADS_IB_TYPE);
+                SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ADS_IB_OVERFLOW);
             }
         }
 
@@ -8368,9 +8422,25 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer* buf, const void
     #else
         SOKOL_ASSERT(buf && data);
         SOKOL_VALIDATE_BEGIN();
-        SOKOL_VALIDATE(buf->usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDBUF_USAGE);
-        SOKOL_VALIDATE(buf->size >= size, _SG_VALIDATE_UPDBUF_SIZE);
-        SOKOL_VALIDATE(buf->upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDBUF_ONCE);
+        SOKOL_VALIDATE(buf->usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDATEBUF_USAGE);
+        SOKOL_VALIDATE(buf->size >= size, _SG_VALIDATE_UPDATEBUF_SIZE);
+        SOKOL_VALIDATE(buf->update_frame_index != _sg.frame_index, _SG_VALIDATE_UPDATEBUF_ONCE);
+        SOKOL_VALIDATE(buf->append_frame_index != _sg.frame_index, _SG_VALIDATE_UPDATEBUF_APPEND);
+        return SOKOL_VALIDATE_END();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer* buf, const void* data, int size) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(size);
+    #else
+        SOKOL_ASSERT(buf && data);
+        SOKOL_VALIDATE_BEGIN();
+        SOKOL_VALIDATE(buf->usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_APPENDBUF_USAGE);
+        SOKOL_VALIDATE(buf->size >= (buf->append_pos+size), _SG_VALIDATE_APPENDBUF_SIZE);
+        SOKOL_VALIDATE(buf->update_frame_index != _sg.frame_index, _SG_VALIDATE_APPENDBUF_UPDATE);
         return SOKOL_VALIDATE_END();
     #endif
 }
@@ -8912,6 +8982,7 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
             vbs[i] = _sg_lookup_buffer(&_sg.pools, ds->vertex_buffers[i].id);
             SOKOL_ASSERT(vbs[i]);
             _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vbs[i]->slot.state);
+            _sg.next_draw_valid &= !vbs[i]->append_overflow;
         }
         else {
             break;
@@ -8923,6 +8994,7 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
         ib = _sg_lookup_buffer(&_sg.pools, ds->index_buffer.id);
         SOKOL_ASSERT(ib);
         _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == ib->slot.state);
+        _sg.next_draw_valid &= !ib->append_overflow;
     }
 
     _sg_image* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
@@ -8951,8 +9023,8 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
         }
     }
     if (_sg.next_draw_valid) {
-        const uint32_t* vb_offsets = ds->vertex_buffer_offsets;
-        uint32_t ib_offset = ds->index_buffer_offset;
+        const int* vb_offsets = ds->vertex_buffer_offsets;
+        int ib_offset = ds->index_buffer_offset;
         _sg_apply_draw_state(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
     }
 }
@@ -9006,9 +9078,53 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const void* data, int num
         return;
     }
     if (_sg_validate_update_buffer(buf, data, num_bytes)) {
-        SOKOL_ASSERT(buf->upd_frame_index != _sg.frame_index);
+        SOKOL_ASSERT(num_bytes <= buf->size);
+        /* only one update allowed per buffer and frame */
+        SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
+        /* update and append on same buffer in same frame not allowed */
+        SOKOL_ASSERT(buf->append_frame_index != _sg.frame_index);
         _sg_update_buffer(buf, data, num_bytes);
-        buf->upd_frame_index = _sg.frame_index;
+        buf->update_frame_index = _sg.frame_index;
+    }
+}
+
+SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
+    _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (buf) {
+        /* rewind append cursor in a new frame */
+        if (buf->append_frame_index != _sg.frame_index) {
+            buf->append_pos = 0;
+            buf->append_overflow = false;
+        }
+        const int start_pos = buf->append_pos;
+        if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+            if (_sg_validate_append_buffer(buf, data, num_bytes)) {
+                if ((buf->append_pos + num_bytes) > buf->size) {
+                    buf->append_overflow = true;
+                    return 0;
+                }
+                /* update and append on same buffer in same frame not allowed */
+                SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
+                _sg_append_buffer(buf, data, num_bytes, buf->append_frame_index != _sg.frame_index);
+                buf->append_pos += num_bytes;
+                buf->append_frame_index = _sg.frame_index;
+            }
+        }
+        return start_pos;
+    }
+    else {
+        /* FIXME: should we return -1 here? */
+        return 0;
+    }
+}
+
+SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
+    _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    if (buf) {
+        return buf->append_overflow;
+    }
+    else {
+        return false;
     }
 }
 
