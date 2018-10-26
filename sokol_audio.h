@@ -760,7 +760,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 /*=== ALSA BACKEND ===========================================================*/
-#elif defined(linux)
+#elif defined(linux) && !defined(__ANDROID__)
 #define ALSA_PCM_NEW_HW_PARAMS_API
 #include <alsa/asoundlib.h>
 

@@ -635,7 +635,9 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 #elif defined(linux)
     #if defined(__ANDROID__)
         /* Android */
-        #error("sokol_app.h: hello android!")
+        #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+        #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+        #endif
     #else
         /* Linux */
         #if !defined(SOKOL_GLCORE33)
@@ -3880,8 +3882,26 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
-/*== LINUX ==================================================================*/
+/*== Android/LINUX ==========================================================*/
 #if defined(linux)
+
+/*== Android ================================================================*/
+#if defined(__ANDROID__)
+#include "android_native_app_glue.h" // TEMP
+#include <GLES3/gl3.h> // TODO: GLES2
+#include <GLES3/gl3ext.h>
+
+static struct android_app* _sapp_android_app_obj;
+
+/* Android entry function */
+void android_main(struct android_app* app) {
+    //sapp_desc desc = sokol_main(argc, argv)
+}
+
+#endif /* Android */
+
+/*== LINUX ==================================================================*/
+#if !defined(__ANDROID__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -5688,6 +5708,8 @@ int main(int argc, char* argv[]) {
 }
 
 #endif /* LINUX */
+
+#endif /* Android/LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 SOKOL_API_IMPL bool sapp_isvalid(void) {
