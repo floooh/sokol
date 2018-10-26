@@ -633,8 +633,14 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
 #elif defined(linux)
-    #if !defined(SOKOL_GLCORE33)
-    #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
+    #if defined(__ANDROID__)
+        /* Android */
+        #error("sokol_app.h: hello android!")
+    #else
+        /* Linux */
+        #if !defined(SOKOL_GLCORE33)
+        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
+        #endif
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
