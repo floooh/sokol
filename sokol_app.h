@@ -3893,32 +3893,214 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <GLES3/gl3ext.h>
 
 static struct android_app* _sapp_android_app_obj;
-static bool _sapp_android_ready_for_init;
-static bool _sapp_android_window_focus;
+static EGLDisplay _sapp_android_egl_display;
+static EGLSurface _sapp_android_egl_surface;
+static EGLContext _sapp_android_egl_context;
+
+_SOKOL_PRIVATE void _sapp_android_query_dimensions(void) {
+    if (!_sapp.valid) {
+        return;
+    }
+    EGLint width, height;
+    eglQuerySurface(_sapp_android_egl_display, _sapp_android_egl_surface, EGL_WIDTH, &width);
+    eglQuerySurface(_sapp_android_egl_display, _sapp_android_egl_surface, EGL_HEIGHT, &height);
+    _sapp.window_width = width;
+    _sapp.window_height = height;
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.window_height;
+}
+
+_SOKOL_PRIVATE bool _sapp_android_init_egl(struct android_app* app) {
+    _sapp_android_egl_display = EGL_NO_DISPLAY;
+    _sapp_android_egl_surface = EGL_NO_SURFACE;
+    _sapp_android_egl_context = EGL_NO_CONTEXT;
+
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (!display || eglGetError() != EGL_SUCCESS) {
+        return false; /* todo: use _sapp_android_cleanup_egl() */
+    }
+    if (!eglInitialize(display, NULL, NULL)) {
+        return false; /* todo: use _sapp_android_cleanup_egl() */
+    }
+
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    const EGLint cfg_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+        EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE,
+    };
+
+    EGLConfig available_cfgs[32];
+    EGLint cfg_count;
+    eglChooseConfig(display, cfg_attributes, available_cfgs, 32, &cfg_count);
+    SOKOL_ASSERT(cfg_count > 0);
+    SOKOL_ASSERT(cfg_count <= 32);
+
+    /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
+    EGLConfig config;
+    bool exact_cfg_found = false;
+    for (int i = 0; i < cfg_count; ++i) {
+        EGLConfig c = available_cfgs[i];
+        EGLint r, g, b, a, d;
+        if (eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r) &&
+            eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g) &&
+            eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b) &&
+            eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a) &&
+            eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) &&
+            r == 8 && g == 8 && b == 8 && (!_sapp.desc.alpha || a == alpha_size) && d == 16) {
+            exact_cfg_found = true;
+            config = c;
+            break;
+        }
+    }
+    if (!exact_cfg_found) {
+        config = available_cfgs[0];
+    }
+
+    EGLint format;
+    eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format);
+    EGLSurface surface = eglCreateWindowSurface(display, config, app->window, NULL);
+    if (!surface) {
+        return false; /* todo: use _sapp_android_cleanup_egl() */
+    }
+
+    EGLint ctx_attributes[] = {
+        #if defined(SOKOL_GLES3)
+            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+        #else
+            EGL_CONTEXT_CLIENT_VERSION, 2,
+        #endif
+        EGL_NONE,
+    };
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
+    if (!context) {
+        return false; /* todo: use _sapp_android_cleanup_egl() */
+    }
+
+    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
+        return false; /* todo: use _sapp_android_cleanup_egl() */
+    }
+
+    _sapp_android_egl_display = display;
+    _sapp_android_egl_surface = surface;
+    _sapp_android_egl_context = context;
+    _sapp.valid = true;
+
+    _sapp_android_query_dimensions();
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
+    if (_sapp_android_egl_display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(_sapp_android_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (_sapp_android_egl_context != EGL_NO_CONTEXT) {
+            eglDestroyContext(_sapp_android_egl_display, _sapp_android_egl_context);
+            _sapp_android_egl_display = EGL_NO_DISPLAY;
+        }
+        if (_sapp_android_egl_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(_sapp_android_egl_display, _sapp_android_egl_surface);
+            _sapp_android_egl_surface = EGL_NO_SURFACE;
+        }
+        eglTerminate(_sapp_android_egl_display);
+        _sapp_android_egl_display = EGL_NO_DISPLAY;
+    }
+    _sapp.valid = false;
+}
+
+_SOKOL_PRIVATE void _sapp_android_cleanup(void) {
+    if (_sapp.valid) {
+        _sapp.desc.cleanup_cb();
+    }
+    _sapp_android_cleanup_egl();
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cmd) {
+    switch (cmd) {
+        case APP_CMD_INIT_WINDOW:
+            /* window is being shown, ready for context creation */
+            SOKOL_ASSERT(app->window);
+            SOKOL_ASSERT(_sapp_android_init_egl(app));
+            break;
+        case APP_CMD_TERM_WINDOW:
+            /* window is being hidden or closed, clean up */
+            _sapp_android_cleanup();
+            break;
+        case APP_CMD_SAVE_STATE:
+            /* being asked to save state, hibernation coming up */
+            break;
+        case APP_CMD_GAINED_FOCUS:
+            /* app has focus, start tracking sensors etc */
+            break;
+        case APP_CMD_LOST_FOCUS:
+            /* app has lost focus, stop tracking sensors etc */
+            /* todo: do not animate (call frame in main loop) to preserve battery */
+            break;
+    }
+}
 
 /* Android entry function */
 void android_main(struct android_app* app) {
-    _sapp_android_app_obj = app;
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc, 0, NULL);
 
-    // oryol breakdown:
-    // onStart
-    //      setup onAppCmd callback from glue
-    //      potentially init sensors (eg. ASensorManager_getInstance() etc)
-    // onFrame, looping
-    //      ALooper_pollAll
-    //      source?->process(android_app, source)
-    //          triggers android_app.onInputEvent and .onAppCmd
-    //      if ready_for_init
-    //          app -> onFrame
-    //              first frame -> setup egl
-    //              subsequent frames -> render
-    // onAppCmd
-    //      APP_CMD_INIT_WINDOW -> ready_for_init
-    // onStop
-    //      destroy sensor event queue
+    app->userData = &_sapp;
+    app->onAppCmd = _sapp_android_on_app_cmd;
+    app->onInputEvent = NULL;
+    _sapp_android_app_obj = app;
+
+    if (app->savedState != NULL) {
+        /* todo: copy over saved state */
+    }
+
+    while (true) {
+        int32_t id, events;
+        struct android_poll_source* source;
+        /* always animate for now (first arg), later we might want to stall to preserve battery? */
+        while ((id = ALooper_pollAll(0, NULL, &events, (void**)&source)) >= 0) {
+            if (source != NULL) {
+                /* process() will call our event handlers */
+                source->process(app, source);
+            }
+
+            /* todo: handle sensors/touch? */
+
+            /* check for exit */
+            if (app->destroyRequested != 0) {
+                _sapp_android_cleanup();
+                return;
+            }
+        }
+
+        /* only call init/frame once we have a proper window */
+        if (_sapp.valid) {
+            /* rendering is throttled by ALooper_pollAll, no need for timing */
+            _sapp_frame();
+        }
+    }
 }
+
+// oryol breakdown:
+// onStart
+//      setup onAppCmd callback from glue
+//      potentially init sensors (eg. ASensorManager_getInstance() etc)
+// onFrame, looping
+//      ALooper_pollAll
+//      source?->process(android_app, source)
+//          triggers android_app.onInputEvent and .onAppCmd
+//      if ready_for_init
+//          app -> onFrame
+//              first frame -> setup egl
+//              subsequent frames -> render
+// onAppCmd
+//      APP_CMD_INIT_WINDOW -> ready_for_init
+// onStop
+//      destroy sensor event queue
 
 #endif /* Android */
 
