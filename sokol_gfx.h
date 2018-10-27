@@ -7461,7 +7461,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int dat
         }
     }
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
-    uint8_t* dst_ptr = [mtl_buf contents];
+    uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->append_pos;
     memcpy(dst_ptr, data, data_size);
     #if !TARGET_OS_IPHONE
