@@ -8488,6 +8488,7 @@ _SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer* buf, const void
         _SOKOL_UNUSED(buf);
         _SOKOL_UNUSED(data);
         _SOKOL_UNUSED(size);
+        return true;
     #else
         SOKOL_ASSERT(buf && data);
         SOKOL_VALIDATE_BEGIN();
@@ -9149,18 +9150,19 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
             buf->append_pos = 0;
             buf->append_overflow = false;
         }
+        if ((buf->append_pos + num_bytes) > buf->size) {
+            buf->append_overflow = true;
+        }
         const int start_pos = buf->append_pos;
         if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data, num_bytes)) {
-                if ((buf->append_pos + num_bytes) > buf->size) {
-                    buf->append_overflow = true;
-                    return 0;
+                if (!buf->append_overflow) {
+                    /* update and append on same buffer in same frame not allowed */
+                    SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
+                    _sg_append_buffer(buf, data, num_bytes, buf->append_frame_index != _sg.frame_index);
+                    buf->append_pos += num_bytes;
+                    buf->append_frame_index = _sg.frame_index;
                 }
-                /* update and append on same buffer in same frame not allowed */
-                SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
-                _sg_append_buffer(buf, data, num_bytes, buf->append_frame_index != _sg.frame_index);
-                buf->append_pos += num_bytes;
-                buf->append_frame_index = _sg.frame_index;
             }
         }
         return start_pos;
