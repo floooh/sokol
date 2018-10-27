@@ -2592,6 +2592,7 @@ typedef struct {
     sg_rasterizer_state rast;
     bool polygon_offset_enabled;
     _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    GLuint cur_gl_vb;
     GLuint cur_gl_ib;
     int cur_ib_offset;
     GLenum cur_primitive_type;
@@ -2599,6 +2600,23 @@ typedef struct {
     _sg_pipeline* cur_pipeline;
     sg_pipeline cur_pipeline_id;
 } _sg_state_cache;
+
+/* cached wrapper for glBindBuffer */
+_SOKOL_PRIVATE void _sg_gl_bind_buffer(GLenum target, GLuint buffer, _sg_state_cache* cache) {
+    SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target));
+    if (target == GL_ARRAY_BUFFER) {
+        if (cache->cur_gl_vb != buffer) {
+            cache->cur_gl_vb = buffer;
+            glBindBuffer(target, buffer);
+        }
+    }
+    else {
+        if (cache->cur_gl_ib != buffer) {
+            cache->cur_gl_ib = buffer;
+            glBindBuffer(target, buffer);
+        }
+    }
+}
 
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
@@ -2612,6 +2630,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
         glDisableVertexAttribArray(i);
         _SG_GL_CHECK_ERROR();
     }
+    cache->cur_gl_vb = 0;
     cache->cur_gl_ib = 0;
     cache->cur_ib_offset = 0;
     cache->cur_primitive_type = GL_TRIANGLES;
@@ -2861,7 +2880,7 @@ _SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* des
         }
         else {
             glGenBuffers(1, &gl_buf);
-            glBindBuffer(gl_target, gl_buf);
+            _sg_gl_bind_buffer(gl_target, gl_buf, &_sg_gl.cache);
             glBufferData(gl_target, buf->size, 0, gl_usage);
             if (buf->usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->content);
@@ -3951,26 +3970,24 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
 
     /* index buffer (can be 0) */
     const GLuint gl_ib = ib ? ib->gl_buf[ib->active_slot] : 0;
-    if (gl_ib != _sg_gl.cache.cur_gl_ib) {
-        _sg_gl.cache.cur_gl_ib = gl_ib;
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
-    }
+    _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, &_sg_gl.cache);
     _sg_gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
-    GLuint gl_vb = 0;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
         _sg_gl_cache_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
         int vb_offset = 0;
+        GLuint gl_vb = 0;
         if (attr->vb_index >= 0) {
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer* vb = vbs[attr->vb_index];
+            gl_vb = vb->gl_buf[vb->active_slot];
             SOKOL_ASSERT(vb);
             vb_offset = vb_offsets[attr->vb_index] + attr->offset;
-            if ((vb->gl_buf[vb->active_slot] != cache_attr->gl_vbuf) ||
+            if ((gl_vb != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
                 (attr->type != cache_attr->gl_attr.type) ||
                 (attr->normalized != cache_attr->gl_attr.normalized) ||
@@ -3978,10 +3995,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
-                if (gl_vb != vb->gl_buf[vb->active_slot]) {
-                    gl_vb = vb->gl_buf[vb->active_slot];
-                    glBindBuffer(GL_ARRAY_BUFFER, gl_vb);
-                }
+                _sg_gl_bind_buffer(GL_ARRAY_BUFFER, gl_vb, &_sg_gl.cache);
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
@@ -4101,8 +4115,25 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
-    glBindBuffer(gl_tgt, gl_buf);
+    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg_gl.cache);
     glBufferSubData(gl_tgt, 0, data_size, data_ptr);
+    _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data_ptr, int data_size, bool new_frame) {
+    SOKOL_ASSERT(buf && data_ptr);
+    if (new_frame) {
+        if (++buf->active_slot >= buf->num_slots) {
+            buf->active_slot = 0;
+        }
+    }
+    GLenum gl_tgt = _sg_gl_buffer_target(buf->type);
+    SOKOL_ASSERT(buf->active_slot < SG_NUM_INFLIGHT_FRAMES);
+    GLuint gl_buf = buf->gl_buf[buf->active_slot];
+    SOKOL_ASSERT(gl_buf);
+    _SG_GL_CHECK_ERROR();
+    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg_gl.cache);
+    glBufferSubData(gl_tgt, buf->append_pos, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
 }
 
