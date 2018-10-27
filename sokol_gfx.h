@@ -146,21 +146,22 @@
         beginning a pass will reset the viewport to the size of the framebuffer used
         in the new pass,
 
-    --- to overwrite the content of buffer and image resources, call:
+    --- to update (overwrite) the content of buffer and image resources, call:
 
             sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
             sg_update_image(sg_image img, const sg_image_content* content)
 
-        buffers and images to be updated must have been created with
+        Buffers and images to be updated must have been created with
         SG_USAGE_DYNAMIC or SG_USAGE_STREAM
 
-        only one update per frame and resource is allowed per frame, as a
-        simple countermeasure to avoid the CPU scribbling over data the
-        GPU is currently using, or the CPU having to wait for the GPU
+        Only one update per frame is allowed for buffer and image resources.
+        The rationale is to have a simple countermeasure to avoid the CPU
+        scribbling over data the GPU is currently using, or the CPU having to
+        wait for the GPU
 
-        buffer and image updates can be partial, as long as a rendering
+        Buffer and image updates can be partial, as long as a rendering
         operation only references the valid (updated) data in the
-        buffer or image
+        buffer or image.
 
     --- to append a chunk of data to a buffer resource, call:
 
