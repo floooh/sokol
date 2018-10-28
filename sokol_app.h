@@ -3922,7 +3922,7 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(void) {
     _sapp.window_height = height;
     _sapp.framebuffer_width = _sapp.window_width;
     _sapp.framebuffer_height = _sapp.window_height;
-    return true;
+    return true; /* todo: check if it actually changed */
 }
 
 _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
@@ -4083,6 +4083,7 @@ _SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cm
             _sapp_android_cleanup();
             break;
         case APP_CMD_WINDOW_RESIZED: /* surfaceChanged */
+        case APP_CMD_CONFIG_CHANGED: /* onConfigurationChanged, see android:configChanges in manifest */
             if (_sapp_android_update_dimensions()) {
                 _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
             }
