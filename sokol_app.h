@@ -810,6 +810,8 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
+    }
+    if (!_sapp.init_called) {
         _sapp.desc.init_cb();
         _sapp.init_called = true;
     }
@@ -4015,7 +4017,6 @@ _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
 _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
     if (_sapp.init_called) {
         _sapp.desc.cleanup_cb();
-        _sapp.first_frame = true;
         _sapp.init_called = false;
     }
     _sapp_android_egl_cleanup();
@@ -4028,7 +4029,6 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     }
     _sapp_android_update_dimensions();
     _sapp_frame();
-
     eglSwapBuffers(_sapp_android_egl_display, _sapp_android_egl_surface);
 }
 
