@@ -4069,7 +4069,6 @@ _SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cm
             _sapp_android_app_event(SAPP_EVENTTYPE_RESUMED);
             break;
         case APP_CMD_LOST_FOCUS: /* onWindowFocusChanged */
-            /* todo: do not animate (call frame in main loop) to preserve battery */
             _sapp_android_focus = false;
             _sapp_android_app_event(SAPP_EVENTTYPE_SUSPENDED);
             break;
