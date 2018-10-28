@@ -3889,10 +3889,18 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 /*== Android ================================================================*/
 #if defined(__ANDROID__)
-#include "android_native_app_glue.h" /* temp */
+
 #include <EGL/egl.h>
-#include <GLES3/gl3.h> /* todo: gles2 */
-#include <GLES3/gl3ext.h>
+#if defined(SOKOL_GLES3)
+#include <GLES3/gl3.h>
+#else
+#ifndef GL_EXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+#endif
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#endif
+#include "android_native_app_glue.h" /* temp */
 
 static struct android_app* _sapp_android_app_obj;
 static bool _sapp_android_resume;
@@ -4083,9 +4091,7 @@ _SOKOL_PRIVATE int32_t _sapp_android_on_input_event(struct android_app* app, AIn
 }
 
 _SOKOL_PRIVATE bool _sapp_android_should_render(void) {
-    return _sapp_android_resume &&
-            _sapp_android_focus &&
-            _sapp_android_surface;
+    return _sapp_android_resume && _sapp_android_focus && _sapp_android_surface;
 }
 
 /* Android entry function */
@@ -4094,12 +4100,11 @@ void android_main(struct android_app* app) {
     app->userData = &_sapp;
     app->onAppCmd = _sapp_android_on_app_cmd;
     app->onInputEvent = _sapp_android_on_input_event;
-    _sapp_android_app_obj = app;
 
+    _sapp_android_app_obj = app;
     _sapp_android_resume = false;
     _sapp_android_focus = false;
     _sapp_android_surface = false;
-
     _sapp_android_egl_display = EGL_NO_DISPLAY;
     _sapp_android_egl_surface = EGL_NO_SURFACE;
     _sapp_android_egl_context = EGL_NO_CONTEXT;
@@ -4116,7 +4121,6 @@ void android_main(struct android_app* app) {
     while (true) {
         int32_t id, events;
         struct android_poll_source* source;
-        /* always animate for now (first arg), later we might want to stall to preserve battery? */
         while ((id = ALooper_pollAll(_sapp_android_should_render() ? 0 : -1, NULL, &events, (void**)&source)) >= 0) {
             if (source) {
                 /* process() will call our event handlers */
@@ -4141,23 +4145,6 @@ void android_main(struct android_app* app) {
         }
     }
 }
-
-// oryol breakdown:
-// onStart
-//      setup onAppCmd callback from glue
-//      potentially init sensors (eg. ASensorManager_getInstance() etc)
-// onFrame, looping
-//      ALooper_pollAll
-//      source?->process(android_app, source)
-//          triggers android_app.onInputEvent and .onAppCmd
-//      if ready_for_init
-//          app -> onFrame
-//              first frame -> setup egl
-//              subsequent frames -> render
-// onAppCmd
-//      APP_CMD_INIT_WINDOW -> ready_for_init
-// onStop
-//      destroy sensor event queue
 
 #endif /* Android */
 
