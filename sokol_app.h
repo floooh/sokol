@@ -3925,86 +3925,6 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(void) {
     return true;
 }
 
-_SOKOL_PRIVATE bool _sapp_android_egl_init(struct android_app* app) {
-    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (!display || eglGetError() != EGL_SUCCESS) {
-        return false; /* todo: use _sapp_android_egl_cleanup() */
-    }
-    if (!eglInitialize(display, NULL, NULL)) {
-        return false; /* todo: use _sapp_android_egl_cleanup() */
-    }
-
-    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
-    const EGLint cfg_attributes[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, alpha_size,
-        EGL_DEPTH_SIZE, 16,
-        EGL_STENCIL_SIZE, 0,
-        EGL_NONE,
-    };
-
-    EGLConfig available_cfgs[32];
-    EGLint cfg_count;
-    eglChooseConfig(display, cfg_attributes, available_cfgs, 32, &cfg_count);
-    SOKOL_ASSERT(cfg_count > 0);
-    SOKOL_ASSERT(cfg_count <= 32);
-
-    /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
-    EGLConfig config;
-    bool exact_cfg_found = false;
-    for (int i = 0; i < cfg_count; ++i) {
-        EGLConfig c = available_cfgs[i];
-        EGLint r, g, b, a, d;
-        if (eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r) &&
-            eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g) &&
-            eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b) &&
-            eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a) &&
-            eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) &&
-            r == 8 && g == 8 && b == 8 && (!_sapp.desc.alpha || a == alpha_size) && d == 16) {
-            exact_cfg_found = true;
-            config = c;
-            break;
-        }
-    }
-    if (!exact_cfg_found) {
-        config = available_cfgs[0];
-    }
-
-    EGLint format;
-    eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format);
-    EGLSurface surface = eglCreateWindowSurface(display, config, app->window, NULL);
-    if (!surface) {
-        return false; /* todo: use _sapp_android_egl_cleanup() */
-    }
-
-    EGLint ctx_attributes[] = {
-        #if defined(SOKOL_GLES3)
-            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
-        #else
-            EGL_CONTEXT_CLIENT_VERSION, 2,
-        #endif
-        EGL_NONE,
-    };
-    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
-    if (!context) {
-        return false; /* todo: use _sapp_android_egl_cleanup() */
-    }
-
-    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
-        return false; /* todo: use _sapp_android_egl_cleanup() */
-    }
-
-    _sapp_android_egl_display = display;
-    _sapp_android_egl_surface = surface;
-    _sapp_android_egl_context = context;
-    _sapp.valid = true;
-
-    return true;
-}
-
 _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
     if (_sapp_android_egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(_sapp_android_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -4020,6 +3940,95 @@ _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
         _sapp_android_egl_display = EGL_NO_DISPLAY;
     }
     _sapp.valid = false;
+}
+
+_SOKOL_PRIVATE bool _sapp_android_egl_init(struct android_app* app) {
+    if (_sapp.valid) {
+        return true;
+    }
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display == EGL_NO_DISPLAY) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+    if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    const EGLint cfg_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+        EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE,
+    };
+    EGLConfig available_cfgs[32];
+    EGLint cfg_count;
+    eglChooseConfig(display, cfg_attributes, available_cfgs, 32, &cfg_count);
+    SOKOL_ASSERT(cfg_count > 0);
+    SOKOL_ASSERT(cfg_count <= 32);
+
+    /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
+    EGLConfig config;
+    bool exact_cfg_found = false;
+    for (int i = 0; i < cfg_count; ++i) {
+        EGLConfig c = available_cfgs[i];
+        EGLint r, g, b, a, d;
+        if (eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
+            r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) && d == 16) {
+            exact_cfg_found = true;
+            config = c;
+            break;
+        }
+    }
+    if (!exact_cfg_found) {
+        config = available_cfgs[0];
+    }
+
+    EGLint format;
+    if (eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format) == EGL_FALSE) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+    EGLSurface surface = eglCreateWindowSurface(display, config, app->window, NULL);
+    if (surface == EGL_NO_SURFACE) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+
+    EGLint ctx_attributes[] = {
+        #if defined(SOKOL_GLES3)
+            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+        #else
+            EGL_CONTEXT_CLIENT_VERSION, 2,
+        #endif
+        EGL_NONE,
+    };
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
+    if (context == EGL_NO_CONTEXT) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+
+    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
+        _sapp_android_egl_cleanup();
+        return false;
+    }
+
+    _sapp_android_egl_display = display;
+    _sapp_android_egl_surface = surface;
+    _sapp_android_egl_context = context;
+    _sapp.valid = true;
+    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
@@ -4049,38 +4058,38 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
-        case APP_CMD_RESUME:
+        case APP_CMD_RESUME: /* onResume */
             _sapp_android_resume = true;
             break;
-        case APP_CMD_PAUSE:
+        case APP_CMD_PAUSE: /* onPause */
             _sapp_android_resume = false;
             break;
-        case APP_CMD_GAINED_FOCUS:
+        case APP_CMD_GAINED_FOCUS: /* onWindowFocusChanged */
             _sapp_android_focus = true;
             _sapp_android_app_event(SAPP_EVENTTYPE_RESUMED);
             break;
-        case APP_CMD_LOST_FOCUS:
+        case APP_CMD_LOST_FOCUS: /* onWindowFocusChanged */
             /* todo: do not animate (call frame in main loop) to preserve battery */
             _sapp_android_focus = false;
             _sapp_android_app_event(SAPP_EVENTTYPE_SUSPENDED);
             break;
-        case APP_CMD_INIT_WINDOW:
+        case APP_CMD_INIT_WINDOW: /* surfaceCreated */
             if (app->window) {
                 _sapp_android_surface = true;
             }
             break;
-        case APP_CMD_TERM_WINDOW:
+        case APP_CMD_TERM_WINDOW: /* surfaceDestroyed */
             _sapp_android_surface = false;
             _sapp_android_cleanup();
             break;
-        case APP_CMD_WINDOW_RESIZED:
+        case APP_CMD_WINDOW_RESIZED: /* surfaceChanged */
             if (_sapp_android_update_dimensions()) {
                 _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
             }
             break;
         case APP_CMD_SAVE_STATE:
             break;
-        case APP_CMD_DESTROY:
+        case APP_CMD_DESTROY: /* onDestroy */
             _sapp_android_cleanup();
             break;
     }
@@ -4096,18 +4105,17 @@ _SOKOL_PRIVATE bool _sapp_android_should_render(void) {
 
 /* Android entry function */
 void android_main(struct android_app* app) {
-    /* init state */
-    app->userData = &_sapp;
-    app->onAppCmd = _sapp_android_on_app_cmd;
-    app->onInputEvent = _sapp_android_on_input_event;
-
-    _sapp_android_app_obj = app;
+    /* onCreate */
     _sapp_android_resume = false;
     _sapp_android_focus = false;
     _sapp_android_surface = false;
     _sapp_android_egl_display = EGL_NO_DISPLAY;
     _sapp_android_egl_surface = EGL_NO_SURFACE;
     _sapp_android_egl_context = EGL_NO_CONTEXT;
+
+    app->userData = &_sapp;
+    app->onAppCmd = _sapp_android_on_app_cmd;
+    app->onInputEvent = _sapp_android_on_input_event;
 
     if (app->savedState != NULL) {
         /* todo: copy over saved state */
@@ -4126,20 +4134,20 @@ void android_main(struct android_app* app) {
                 /* process() will call our event handlers */
                 source->process(app, source);
             }
-
             /* todo: handle sensors/touch? */
-
             /* check for exit */
             if (app->destroyRequested != 0) {
                 _sapp_android_cleanup();
                 return;
             }
         }
-
         /* rendering is throttled by ALooper_pollAll, no need for timing */
         if (_sapp_android_should_render()) {
-            if (!_sapp.valid) {
-                _sapp_android_egl_init(app);
+            /* init egl if necessary */
+            if (!_sapp.valid && !_sapp_android_egl_init(app)) {
+                /* could not init egl! */
+                _sapp_android_cleanup();
+                return;
             }
             _sapp_android_frame();
         }
