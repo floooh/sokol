@@ -4122,7 +4122,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
 }
 
 _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data_ptr, int data_size, bool new_frame) {
-    SOKOL_ASSERT(buf && data_ptr);
+    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     if (new_frame) {
         if (++buf->active_slot >= buf->num_slots) {
             buf->active_slot = 0;
@@ -5684,7 +5684,7 @@ _SOKOL_PRIVATE void _sg_commit() {
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
-    SOKOL_ASSERT(buf && data_ptr && data_size);
+    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     SOKOL_ASSERT(_sg_d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11_buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
@@ -5695,8 +5695,18 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0);
 }
 
-_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int data_size, bool new_frame) {
-    // FIXME: on new_frame, map with WRITE_DISCARD, otherwise with WRITE_NO_OVERWRITE!
+_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data_ptr, int data_size, bool new_frame) {
+    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(buf->d3d11_buf);
+    D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
+    HRESULT hr = ID3D11DeviceContext_Map(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0, map_type, 0, &d3d11_msr);
+    _SOKOL_UNUSED(hr);
+    SOKOL_ASSERT(SUCCEEDED(hr));
+    uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->append_pos;
+    memcpy(dst_ptr, data_ptr, data_size);
+    ID3D11DeviceContext_Unmap(_sg_d3d11.ctx, (ID3D11Resource*)buf->d3d11_buf, 0);
 }
 
 _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* data) {
@@ -7486,7 +7496,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
 }
 
 _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int data_size, bool new_frame) {
-    SOKOL_ASSERT(buf && data);
+    SOKOL_ASSERT(buf && data && (data_size > 0));
     if (new_frame) {
         if (++buf->active_slot >= buf->num_slots) {
             buf->active_slot = 0;
@@ -9188,7 +9198,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
         const int start_pos = buf->append_pos;
         if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data, num_bytes)) {
-                if (!buf->append_overflow) {
+                if (!buf->append_overflow && (num_bytes > 0)) {
                     /* update and append on same buffer in same frame not allowed */
                     SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
                     _sg_append_buffer(buf, data, num_bytes, buf->append_frame_index != _sg.frame_index);
