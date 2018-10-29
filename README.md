@@ -367,6 +367,18 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
 
 # Updates
 
+- **29-Oct-2018**: 
+    - sokol_gfx.h has a new function **sg_append_buffer()** which allows to
+    append new data to a buffer multiple times per frame and interleave this
+    with draw calls. This basically implements the
+    D3D11_MAP_WRITE_NO_OVERWRITE update strategy for buffer objects. For
+    example usage, see the updated Dear ImGui samples in the [sokol_samples
+    repo](https://github.com/floooh/sokol-samples)
+    - the GL state cache in sokol_gfx.h handles buffers bindings in a
+    more robust way, previously it might have happened that the 
+    buffer binding gets confused when creating buffers or updating
+    buffer contents in the render loop
+
 - **17-Oct-2018**: sokol_args.h added
 
 - **26-Sep-2018**: sokol_audio.h ready for prime time :)
