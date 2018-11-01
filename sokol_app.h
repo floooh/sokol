@@ -3894,7 +3894,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 /*== Android ================================================================*/
 #if defined(__ANDROID__)
+#include <pthread.h>
+#include <unistd.h>
 #include <android/native_activity.h>
+#include <android/looper.h>
+
 #include <EGL/egl.h>
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
@@ -3906,21 +3910,48 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <GLES2/gl2ext.h>
 #endif
 
-static bool _sapp_android_resume;
-static bool _sapp_android_focus;
-static bool _sapp_android_surface;
-static EGLDisplay _sapp_android_egl_display;
-static EGLSurface _sapp_android_egl_surface;
-static EGLContext _sapp_android_egl_context;
+typedef struct {
+    ALooper* looper;
+    bool is_init;
+    bool is_stopping;
+    bool is_destroyed;
+    bool has_resumed;
+    bool has_focus;
+    bool has_surface;
+    EGLDisplay* display;
+    EGLSurface* surface;
+    EGLContext* context;
+} _sapp_android_state;
+
+typedef struct {
+    AInputQueue* input_queue;
+    ANativeWindow* native_window;
+} _sapp_and_main_t;
+
+typedef struct {
+    pthread_t thread;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int read_from_main_fd;
+    int write_from_main_fd;
+} _sapp_and_pt_t;
+
+static _sapp_android_state _sapp_android_state_obj;
+static _sapp_and_main_t _sapp_and_main;
+static _sapp_and_pt_t _sapp_and_pt;
+
+enum {
+    _SOKOL_ANDROID_MSG_DESTROY,
+};
 
 _SOKOL_PRIVATE bool _sapp_android_update_dimensions(void) {
-    if (_sapp_android_egl_display == EGL_NO_DISPLAY ||
-        _sapp_android_egl_surface == EGL_NO_SURFACE) {
+    if (_sapp_android_state_obj.display == EGL_NO_DISPLAY ||
+        _sapp_android_state_obj.surface == EGL_NO_SURFACE) {
         return false;
     }
     EGLint width, height;
-    eglQuerySurface(_sapp_android_egl_display, _sapp_android_egl_surface, EGL_WIDTH, &width);
-    eglQuerySurface(_sapp_android_egl_display, _sapp_android_egl_surface, EGL_HEIGHT, &height);
+    eglQuerySurface(_sapp_android_state_obj.display, _sapp_android_state_obj.surface, EGL_WIDTH, &width);
+    eglQuerySurface(_sapp_android_state_obj.display, _sapp_android_state_obj.surface, EGL_HEIGHT, &height);
     _sapp.window_width = width;
     _sapp.window_height = height;
     _sapp.framebuffer_width = _sapp.window_width;
@@ -3929,18 +3960,18 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
-    if (_sapp_android_egl_display != EGL_NO_DISPLAY) {
-        eglMakeCurrent(_sapp_android_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (_sapp_android_egl_context != EGL_NO_CONTEXT) {
-            eglDestroyContext(_sapp_android_egl_display, _sapp_android_egl_context);
-            _sapp_android_egl_context = EGL_NO_CONTEXT;
+    if (_sapp_android_state_obj.display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(_sapp_android_state_obj.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (_sapp_android_state_obj.context != EGL_NO_CONTEXT) {
+            eglDestroyContext(_sapp_android_state_obj.display, _sapp_android_state_obj.context);
+            _sapp_android_state_obj.context = EGL_NO_CONTEXT;
         }
-        if (_sapp_android_egl_surface != EGL_NO_SURFACE) {
-            eglDestroySurface(_sapp_android_egl_display, _sapp_android_egl_surface);
-            _sapp_android_egl_surface = EGL_NO_SURFACE;
+        if (_sapp_android_state_obj.surface != EGL_NO_SURFACE) {
+            eglDestroySurface(_sapp_android_state_obj.display, _sapp_android_state_obj.surface);
+            _sapp_android_state_obj.surface = EGL_NO_SURFACE;
         }
-        eglTerminate(_sapp_android_egl_display);
-        _sapp_android_egl_display = EGL_NO_DISPLAY;
+        eglTerminate(_sapp_android_state_obj.display);
+        _sapp_android_state_obj.display = EGL_NO_DISPLAY;
     }
     _sapp.valid = false;
 }
@@ -3951,11 +3982,9 @@ _SOKOL_PRIVATE bool _sapp_android_egl_init(ANativeWindow* native_window) {
     }
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY) {
-        _sapp_android_egl_cleanup();
         return false;
     }
     if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
-        _sapp_android_egl_cleanup();
         return false;
     }
 
@@ -3999,12 +4028,10 @@ _SOKOL_PRIVATE bool _sapp_android_egl_init(ANativeWindow* native_window) {
 
     EGLint format;
     if (eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format) == EGL_FALSE) {
-        _sapp_android_egl_cleanup();
         return false;
     }
     EGLSurface surface = eglCreateWindowSurface(display, config, native_window, NULL);
     if (surface == EGL_NO_SURFACE) {
-        _sapp_android_egl_cleanup();
         return false;
     }
 
@@ -4018,18 +4045,16 @@ _SOKOL_PRIVATE bool _sapp_android_egl_init(ANativeWindow* native_window) {
     };
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
     if (context == EGL_NO_CONTEXT) {
-        _sapp_android_egl_cleanup();
         return false;
     }
 
     if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
-        _sapp_android_egl_cleanup();
         return false;
     }
 
-    _sapp_android_egl_display = display;
-    _sapp_android_egl_surface = surface;
-    _sapp_android_egl_context = context;
+    _sapp_android_state_obj.display = display;
+    _sapp_android_state_obj.surface = surface;
+    _sapp_android_state_obj.context = context;
     _sapp.valid = true;
     return true;
 }
@@ -4049,7 +4074,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     }
     _sapp_android_update_dimensions();
     _sapp_frame();
-    eglSwapBuffers(_sapp_android_egl_display, _sapp_android_egl_surface);
+    eglSwapBuffers(_sapp_android_state_obj.display, _sapp_android_state_obj.surface);
 }
 
 _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
@@ -4099,7 +4124,114 @@ _SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cm
 }*/
 
 _SOKOL_PRIVATE bool _sapp_android_should_render(void) {
-    return _sapp_android_resume && _sapp_android_focus && _sapp_android_surface;
+    return _sapp_android_state_obj.has_resumed &&
+            _sapp_android_state_obj.has_focus &&
+            _sapp_android_state_obj.has_surface;
+}
+
+/* android render thread */
+_SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
+    if ((events & ALOOPER_EVENT_INPUT) == 0) {
+        SOKOL_LOG("Unsupported event to _sapp_android_main_cb!");
+        return 1;
+    }
+    SOKOL_LOG("_sapp_android_main_cb()");
+    int8_t msg;
+    if (read(fd, &msg, sizeof(msg)) != sizeof(msg)) {
+        SOKOL_LOG("Could not read from file descriptor in render thread");
+        return 1;
+    }
+
+    pthread_mutex_lock(&_sapp_and_pt.mutex);
+    switch (msg) {
+        case _SOKOL_ANDROID_MSG_DESTROY:
+            SOKOL_LOG("Setting is_stopping...");
+            _sapp_android_state_obj.is_stopping = true;
+            break;
+        default:
+            SOKOL_LOG("Unhandled msg in render thread");
+            break;
+    }
+    pthread_cond_broadcast(&_sapp_and_pt.cond); /* signal "received" */
+    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+
+    return 1;
+}
+_SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
+    if ((events & ALOOPER_EVENT_INPUT) == 0) {
+        SOKOL_LOG("Unsupported event to _sapp_android_input_cb!");
+        return 1;
+    }
+    SOKOL_LOG("_sapp_android_input_cb()");
+    AInputEvent* event = NULL;
+    while (AInputQueue_getEvent(_sapp_and_main.input_queue, &event) >= 0) {
+        SOKOL_LOG("Encountered event");
+        if (AInputQueue_preDispatchEvent(_sapp_and_main.input_queue, event) != 0) {
+            continue;
+        }
+        int32_t handled = 0;
+        /* handle input event */
+        AInputQueue_finishEvent(_sapp_and_main.input_queue, event, handled);
+    }
+    return 1;
+}
+
+_SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
+    SOKOL_LOG("Hello from render thread");
+    _sapp_android_state* state = (_sapp_android_state*)obj;
+
+    state->looper = ALooper_prepare(0 /* or ALOOPER_PREPARE_ALLOW_NON_CALLBACKS*/);
+    ALooper_addFd(state->looper,
+        _sapp_and_pt.read_from_main_fd,
+        ALOOPER_POLL_CALLBACK,
+        ALOOPER_EVENT_INPUT,
+        _sapp_android_main_cb,
+        NULL); /* data */
+
+    /* signal start to main thread */
+    pthread_mutex_lock(&_sapp_and_pt.mutex);
+    state->is_init = true;
+    pthread_cond_broadcast(&_sapp_and_pt.cond);
+    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+
+    /* main loop */
+    while (!_sapp_android_state_obj.is_stopping) {
+        /* trigger event callbacks if rendering or block until rendering should start */
+        ALooper_pollAll(_sapp_android_should_render() ? 0 : -1, NULL, NULL, NULL);
+
+        if (_sapp_android_should_render()) {
+            /*
+            if (!_sapp.valid) {
+                if (!_sapp_android_egl_init(app)) {
+                    SOKOL_LOG("EGL init failed!");
+                    _sapp_android_cleanup();
+                    break;
+                }
+            }
+            _sapp_android_frame();
+            */
+        }
+    }
+
+    /* cleanup */
+    SOKOL_LOG("Cleaning up render thread...");
+
+    /* signal "destroyed" */
+    pthread_mutex_lock(&_sapp_and_pt.mutex);
+    _sapp_android_state_obj.is_destroyed = true;
+    pthread_cond_broadcast(&_sapp_and_pt.cond); /* signal done */
+    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+    return NULL;
+}
+
+/* android main/ui thread */
+_SOKOL_PRIVATE void _sapp_android_msg_render_thread(int8_t msg) {
+    if (write(_sapp_and_pt.write_from_main_fd, &msg, sizeof(msg)) != sizeof(msg)) {
+        SOKOL_LOG("Could not write to file descriptor in main thread");
+    }
+    else {
+        SOKOL_LOG("Successfully sent msg");
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
@@ -4117,9 +4249,6 @@ _SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
 }
 _SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
     SOKOL_LOG("NativeActivity onStop()");
-}
-_SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
-    SOKOL_LOG("NativeActivity onDestroy()");
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
@@ -4141,9 +4270,27 @@ _SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* ac
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
     SOKOL_LOG("NativeActivity onInputQueueCreated()");
+    /*
+    if (_sapp_and_main.input_queue != NULL) {
+        AInputQueue_detachLooper(_sapp_and_main.input_queue);
+        _sapp_and_main.input_queue = NULL;
+    }
+    AInputQueue_attachLooper(queue,
+        _sapp_android_state_obj.looper,
+        ALOOPER_POLL_CALLBACK,
+        _sapp_android_input_cb,
+        NULL); // data
+    _sapp_and_main.input_queue = queue;
+    */
 }
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
     SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
+    /*
+    if (_sapp_and_main.input_queue == queue) {
+        AInputQueue_detachLooper(_sapp_and_main.input_queue);
+        _sapp_and_main.input_queue = NULL;
+    }
+    */
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_content_rect_changed(ANativeActivity* activity, const ARect* rect) {
@@ -4158,8 +4305,68 @@ _SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
     SOKOL_LOG("NativeActivity onLowMemory()");
 }
 
-/* Android app entry */
+_SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
+    /*
+    SOKOL_LOG("NativeActivity onDestroy()");
+    if (_sapp_and_main.input_queue != NULL) {
+        AInputQueue_detachLooper(_sapp_and_main.input_queue);
+        _sapp_and_main.input_queue = NULL;
+    }*/
+    SOKOL_LOG("NativeActivity Trying to tear down thread...");
+    pthread_mutex_lock(&_sapp_and_pt.mutex);
+    _sapp_android_msg_render_thread(_SOKOL_ANDROID_MSG_DESTROY);
+    /* wait for render thread to be completely destroyed */
+    while (!_sapp_android_state_obj.is_destroyed) {
+        pthread_cond_wait(&_sapp_and_pt.cond, &_sapp_and_pt.mutex);
+    }
+    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+    SOKOL_LOG("NativeActivity done...");
+
+    /* clean up main thread */
+    pthread_mutex_destroy(&_sapp_and_pt.mutex);
+    pthread_cond_destroy(&_sapp_and_pt.cond);
+    close(_sapp_and_pt.read_from_main_fd);
+    close(_sapp_and_pt.write_from_main_fd);
+
+    SOKOL_LOG("NativeActivity completely destroyed");
+}
+
 void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
+    SOKOL_LOG("NativeActivity onCreate()");
+    _sapp_android_state_obj = (_sapp_android_state){0};
+    _sapp_and_pt = (_sapp_and_pt_t){0};
+
+    /* start main loop thread */
+    int pipe_fd[2];
+    if (pipe(pipe_fd) != 0) {
+        SOKOL_LOG("Could not create thread pipe");
+        return;
+    }
+    _sapp_and_pt.read_from_main_fd = pipe_fd[0];
+    _sapp_and_pt.write_from_main_fd = pipe_fd[1];
+
+    pthread_mutex_init(&_sapp_and_pt.mutex, NULL);
+    pthread_cond_init(&_sapp_and_pt.cond, NULL);
+
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_create(&_sapp_and_pt.thread, &attr, _sapp_android_main_loop, &_sapp_android_state_obj);
+    pthread_attr_destroy(&attr);
+
+    /* wait until main loop has started */
+    pthread_mutex_lock(&_sapp_and_pt.mutex);
+    while (!_sapp_android_state_obj.is_init) {
+        /* pthread_cond_wait unlocks mutex before sleep, then acquires mutex
+         * when it is signaled before it wakes up so the signaling thread
+         * can finish what its doing (if it holds the mutex)
+         */
+        pthread_cond_wait(&_sapp_and_pt.cond, &_sapp_and_pt.mutex);
+    }
+    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+
+    /* register for callbacks */
+    activity->instance = &_sapp;
     activity->callbacks->onStart = _sapp_android_on_start;
     activity->callbacks->onResume = _sapp_android_on_resume;
     activity->callbacks->onSaveInstanceState = _sapp_android_on_save_instance_state;
@@ -4177,7 +4384,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_
     activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
-    activity->instance = &_sapp;
+    SOKOL_LOG("NativeActivity successfully created");
 }
 
 #endif /* Android */
