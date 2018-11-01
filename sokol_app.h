@@ -671,8 +671,13 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG 
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+        #if defined(__ANDROID__)
+            #include <android/log.h>
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_print(ANDROID_LOG_DEBUG, "SOKOL_APP", "%s", s); }
+        #else
+            #include <stdio.h>
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+        #endif
     #else
         #define SOKOL_LOG(s)
     #endif
@@ -3889,7 +3894,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 /*== Android ================================================================*/
 #if defined(__ANDROID__)
-
+#include <android/native_activity.h>
 #include <EGL/egl.h>
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
@@ -3900,9 +3905,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #endif
-#include "android_native_app_glue.h" /* temp */
 
-static struct android_app* _sapp_android_app_obj;
 static bool _sapp_android_resume;
 static bool _sapp_android_focus;
 static bool _sapp_android_surface;
@@ -3942,7 +3945,7 @@ _SOKOL_PRIVATE void _sapp_android_egl_cleanup(void) {
     _sapp.valid = false;
 }
 
-_SOKOL_PRIVATE bool _sapp_android_egl_init(struct android_app* app) {
+_SOKOL_PRIVATE bool _sapp_android_egl_init(ANativeWindow* native_window) {
     if (_sapp.valid) {
         return true;
     }
@@ -3999,7 +4002,7 @@ _SOKOL_PRIVATE bool _sapp_android_egl_init(struct android_app* app) {
         _sapp_android_egl_cleanup();
         return false;
     }
-    EGLSurface surface = eglCreateWindowSurface(display, config, app->window, NULL);
+    EGLSurface surface = eglCreateWindowSurface(display, config, native_window, NULL);
     if (surface == EGL_NO_SURFACE) {
         _sapp_android_egl_cleanup();
         return false;
@@ -4055,103 +4058,126 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
         _sapp.desc.event_cb(&_sapp.event);
     }
 }
-
+/*
 _SOKOL_PRIVATE void _sapp_android_on_app_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
-        case APP_CMD_RESUME: /* onResume */
+        case APP_CMD_RESUME: // onResume
             _sapp_android_resume = true;
             break;
-        case APP_CMD_PAUSE: /* onPause */
+        case APP_CMD_PAUSE: // onPause
             _sapp_android_resume = false;
             break;
-        case APP_CMD_GAINED_FOCUS: /* onWindowFocusChanged */
+        case APP_CMD_GAINED_FOCUS: // onWindowFocusChanged
             _sapp_android_focus = true;
             _sapp_android_app_event(SAPP_EVENTTYPE_RESUMED);
             break;
-        case APP_CMD_LOST_FOCUS: /* onWindowFocusChanged */
+        case APP_CMD_LOST_FOCUS: // onWindowFocusChanged
             _sapp_android_focus = false;
             _sapp_android_app_event(SAPP_EVENTTYPE_SUSPENDED);
             break;
-        case APP_CMD_INIT_WINDOW: /* surfaceCreated */
+        case APP_CMD_INIT_WINDOW: // surfaceCreated
             if (app->window) {
                 _sapp_android_surface = true;
             }
             break;
-        case APP_CMD_TERM_WINDOW: /* surfaceDestroyed */
+        case APP_CMD_TERM_WINDOW: // surfaceDestroyed
             _sapp_android_surface = false;
             _sapp_android_cleanup();
             break;
-        case APP_CMD_WINDOW_RESIZED: /* surfaceChanged */
-        case APP_CMD_CONFIG_CHANGED: /* onConfigurationChanged, see android:configChanges in manifest */
+        case APP_CMD_WINDOW_RESIZED: // surfaceChanged
+        case APP_CMD_CONFIG_CHANGED: // onConfigurationChanged, see android:configChanges in manifest
             if (_sapp_android_update_dimensions()) {
                 _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
             }
             break;
         case APP_CMD_SAVE_STATE:
             break;
-        case APP_CMD_DESTROY: /* onDestroy */
+        case APP_CMD_DESTROY: // onDestroy
             _sapp_android_cleanup();
             break;
     }
-}
-
-_SOKOL_PRIVATE int32_t _sapp_android_on_input_event(struct android_app* app, AInputEvent* event) {
-    return 0;
-}
+}*/
 
 _SOKOL_PRIVATE bool _sapp_android_should_render(void) {
     return _sapp_android_resume && _sapp_android_focus && _sapp_android_surface;
 }
 
-/* Android entry function */
-void android_main(struct android_app* app) {
-    /* onCreate */
-    _sapp_android_resume = false;
-    _sapp_android_focus = false;
-    _sapp_android_surface = false;
-    _sapp_android_egl_display = EGL_NO_DISPLAY;
-    _sapp_android_egl_surface = EGL_NO_SURFACE;
-    _sapp_android_egl_context = EGL_NO_CONTEXT;
+_SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onStart()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onResume()");
+}
+_SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
+    SOKOL_LOG("NativeActivity onSaveInstanceState()");
+    return NULL;
+}
+_SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onPause()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onStop()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onDestroy()");
+}
 
-    app->userData = &_sapp;
-    app->onAppCmd = _sapp_android_on_app_cmd;
-    app->onInputEvent = _sapp_android_on_input_event;
+_SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
+    SOKOL_LOG("NativeActivity onWindowFocusChanged()");
+}
 
-    if (app->savedState != NULL) {
-        /* todo: copy over saved state */
-    }
+_SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowCreated()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_native_window_resized(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowResized()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_native_window_redraw_needed(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowRedrawNeeded()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowDestroyed()");
+}
 
-    /* sokol main */
-    sapp_desc desc = sokol_main(0, NULL);
-    _sapp_init_state(&desc, 0, NULL);
+_SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
+    SOKOL_LOG("NativeActivity onInputQueueCreated()");
+}
+_SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
+    SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
+}
 
-    /* event loop */
-    while (true) {
-        int32_t id, events;
-        struct android_poll_source* source;
-        while ((id = ALooper_pollAll(_sapp_android_should_render() ? 0 : -1, NULL, &events, (void**)&source)) >= 0) {
-            if (source) {
-                /* process() will call our event handlers */
-                source->process(app, source);
-            }
-            /* todo: handle sensors/touch? */
-            /* check for exit */
-            if (app->destroyRequested != 0) {
-                _sapp_android_cleanup();
-                return;
-            }
-        }
-        /* rendering is throttled by ALooper_pollAll, no need for timing */
-        if (_sapp_android_should_render()) {
-            /* init egl if necessary */
-            if (!_sapp.valid && !_sapp_android_egl_init(app)) {
-                /* could not init egl! */
-                _sapp_android_cleanup();
-                return;
-            }
-            _sapp_android_frame();
-        }
-    }
+_SOKOL_PRIVATE void _sapp_android_on_content_rect_changed(ANativeActivity* activity, const ARect* rect) {
+    SOKOL_LOG("NativeActivity onContentRectChanged()");
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onConfigurationChanged()");
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onLowMemory()");
+}
+
+/* Android app entry */
+void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
+    activity->callbacks->onStart = _sapp_android_on_start;
+    activity->callbacks->onResume = _sapp_android_on_resume;
+    activity->callbacks->onSaveInstanceState = _sapp_android_on_save_instance_state;
+    activity->callbacks->onPause = _sapp_android_on_pause;
+    activity->callbacks->onStop = _sapp_android_on_stop;
+    activity->callbacks->onDestroy = _sapp_android_on_destroy;
+    activity->callbacks->onWindowFocusChanged = _sapp_android_on_window_focus_changed;
+    activity->callbacks->onNativeWindowCreated = _sapp_android_on_native_window_created;
+    activity->callbacks->onNativeWindowResized = _sapp_android_on_native_window_resized;
+    activity->callbacks->onNativeWindowRedrawNeeded = _sapp_android_on_native_window_redraw_needed;
+    activity->callbacks->onNativeWindowDestroyed = _sapp_android_on_native_window_destroyed;
+    activity->callbacks->onInputQueueCreated = _sapp_android_on_input_queue_created;
+    activity->callbacks->onInputQueueDestroyed = _sapp_android_on_input_queue_destroyed;
+    activity->callbacks->onContentRectChanged = _sapp_android_on_content_rect_changed;
+    activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
+    activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
+
+    activity->instance = &_sapp;
 }
 
 #endif /* Android */
