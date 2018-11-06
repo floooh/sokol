@@ -4195,10 +4195,15 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     pthread_mutex_unlock(&_sapp_and_pt.mutex);
 
     /* main loop */
+    int32_t frame_counter = 0;
     while (!_sapp_android_state_obj.is_stopping) {
-        /* trigger event callbacks if rendering or block until rendering should start */
-        ALooper_pollAll(_sapp_android_should_render() ? 0 : -1, NULL, NULL, NULL);
+        if (frame_counter >= 60) {
+            SOKOL_LOG("Looping...");
+            frame_counter = 0;
+        }
+        ++frame_counter;
 
+        /* render */
         if (_sapp_android_should_render()) {
             /*
             if (!_sapp.valid) {
@@ -4211,6 +4216,13 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
             _sapp_android_frame();
             */
         }
+
+        /* process all events (or stop early if app is requested to quit) */
+        bool process_events = true;
+        while (process_events && !_sapp_android_state_obj.is_stopping) {
+            bool block_until_event = !_sapp_android_state_obj.is_stopping && !_sapp_android_should_render();
+            process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
+        }
     }
 
     /* cleanup */
@@ -4220,7 +4232,7 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     pthread_mutex_lock(&_sapp_and_pt.mutex);
     _sapp_android_state_obj.is_destroyed = true;
     pthread_cond_broadcast(&_sapp_and_pt.cond); /* signal done */
-    pthread_mutex_unlock(&_sapp_and_pt.mutex);
+    pthread_mutex_unlock(&_sapp_and_pt.mutex); /* can't do anything after this call */
     return NULL;
 }
 
@@ -4228,9 +4240,6 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
 _SOKOL_PRIVATE void _sapp_android_msg_render_thread(int8_t msg) {
     if (write(_sapp_and_pt.write_from_main_fd, &msg, sizeof(msg)) != sizeof(msg)) {
         SOKOL_LOG("Could not write to file descriptor in main thread");
-    }
-    else {
-        SOKOL_LOG("Successfully sent msg");
     }
 }
 
@@ -4306,13 +4315,13 @@ _SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
+    //SOKOL_LOG("NativeActivity onDestroy()");
     /*
-    SOKOL_LOG("NativeActivity onDestroy()");
     if (_sapp_and_main.input_queue != NULL) {
         AInputQueue_detachLooper(_sapp_and_main.input_queue);
         _sapp_and_main.input_queue = NULL;
     }*/
-    SOKOL_LOG("NativeActivity Trying to tear down thread...");
+    //SOKOL_LOG("NativeActivity Trying to tear down thread...");
     pthread_mutex_lock(&_sapp_and_pt.mutex);
     _sapp_android_msg_render_thread(_SOKOL_ANDROID_MSG_DESTROY);
     /* wait for render thread to be completely destroyed */
@@ -4320,15 +4329,15 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
         pthread_cond_wait(&_sapp_and_pt.cond, &_sapp_and_pt.mutex);
     }
     pthread_mutex_unlock(&_sapp_and_pt.mutex);
-    SOKOL_LOG("NativeActivity done...");
 
     /* clean up main thread */
-    pthread_mutex_destroy(&_sapp_and_pt.mutex);
     pthread_cond_destroy(&_sapp_and_pt.cond);
+    pthread_mutex_destroy(&_sapp_and_pt.mutex);
+
     close(_sapp_and_pt.read_from_main_fd);
     close(_sapp_and_pt.write_from_main_fd);
 
-    SOKOL_LOG("NativeActivity completely destroyed");
+    SOKOL_LOG("NativeActivity done...");
 }
 
 void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
