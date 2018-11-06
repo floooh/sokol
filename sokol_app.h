@@ -673,7 +673,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #ifdef SOKOL_DEBUG 
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_print(ANDROID_LOG_DEBUG, "SOKOL_APP", "%s", s); }
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_write(ANDROID_LOG_DEBUG, "SOKOL_APP", s); }
         #else
             #include <stdio.h>
             #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
@@ -4196,7 +4196,7 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
 
     /* main loop */
     int32_t frame_counter = 0;
-    while (!_sapp_android_state_obj.is_stopping) {
+    while (!state->is_stopping) {
         if (frame_counter >= 60) {
             SOKOL_LOG("Looping...");
             frame_counter = 0;
@@ -4219,18 +4219,20 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
 
         /* process all events (or stop early if app is requested to quit) */
         bool process_events = true;
-        while (process_events && !_sapp_android_state_obj.is_stopping) {
-            bool block_until_event = !_sapp_android_state_obj.is_stopping && !_sapp_android_should_render();
+        while (process_events && !state->is_stopping) {
+            bool block_until_event = !state->is_stopping && !_sapp_android_should_render();
             process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
         }
     }
 
     /* cleanup */
     SOKOL_LOG("Cleaning up render thread...");
+    ALooper_removeFd(state->looper, _sapp_and_pt.read_from_main_fd);
+    ALooper_release(state->looper);
 
     /* signal "destroyed" */
     pthread_mutex_lock(&_sapp_and_pt.mutex);
-    _sapp_android_state_obj.is_destroyed = true;
+    state->is_destroyed = true;
     pthread_cond_broadcast(&_sapp_and_pt.cond); /* signal done */
     pthread_mutex_unlock(&_sapp_and_pt.mutex); /* can't do anything after this call */
     return NULL;
@@ -4251,6 +4253,7 @@ _SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
 }
 _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
     SOKOL_LOG("NativeActivity onSaveInstanceState()");
+    *out_size = 0;
     return NULL;
 }
 _SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
@@ -4315,16 +4318,23 @@ _SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
-    //SOKOL_LOG("NativeActivity onDestroy()");
+    /*
+     * For some reason even an empty app using nativeactivity.h will crash (WIN DEATH)
+     * on my device (Moto X 2nd gen) when the app is removed from the task view
+     * (TaskStackView: onTaskViewDismissed).
+     *
+     * However, if ANativeActivity_finish() is explicitly called from for example
+     * _sapp_android_on_stop(), the crash disappears. Is this a bug in NativeActivity?
+     */
+    SOKOL_LOG("NativeActivity onDestroy()");
     /*
     if (_sapp_and_main.input_queue != NULL) {
         AInputQueue_detachLooper(_sapp_and_main.input_queue);
         _sapp_and_main.input_queue = NULL;
     }*/
-    //SOKOL_LOG("NativeActivity Trying to tear down thread...");
+
     pthread_mutex_lock(&_sapp_and_pt.mutex);
     _sapp_android_msg_render_thread(_SOKOL_ANDROID_MSG_DESTROY);
-    /* wait for render thread to be completely destroyed */
     while (!_sapp_android_state_obj.is_destroyed) {
         pthread_cond_wait(&_sapp_and_pt.cond, &_sapp_and_pt.mutex);
     }
@@ -4340,6 +4350,7 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     SOKOL_LOG("NativeActivity done...");
 }
 
+JNIEXPORT
 void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
     SOKOL_LOG("NativeActivity onCreate()");
     _sapp_android_state_obj = (_sapp_android_state){0};
