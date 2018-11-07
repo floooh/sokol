@@ -3808,16 +3808,18 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 }
 
 #if defined(SOKOL_WIN32_FORCE_MAIN)
-int main(int argc, const char** argv) {
+int main(int argc, char** argv) {
 #else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-#endif
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-    sapp_desc desc = sokol_main(__argc, __argv);
-    _sapp_init_state(&desc, __argc, __argv);
+    int argc = __argc;
+    char** argv = __argv;
+#endif
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_init_state(&desc, argc, argv);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
