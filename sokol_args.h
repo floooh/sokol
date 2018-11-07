@@ -134,7 +134,7 @@
     WINMAIN AND ARGC / ARGV
     =======================
     On Windows with WinMain() based apps, use the __argc and __argv global
-    variables provided Windows. These are compatible with main(argc, argv)
+    variables provided by Windows. These are compatible with main(argc, argv)
     and have already been converted to UTF-8 by Windows:
 
         int WINAPI WinMain(...) {

@@ -421,7 +421,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
 #define _saudio_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
 
-/*--- implementation-private structures --------------------------------------*/
+/*--- implementation-private constants ---------------------------------------*/
 #define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
 #define _SAUDIO_DEFAULT_BUFFER_FRAMES (2048)
 #define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
