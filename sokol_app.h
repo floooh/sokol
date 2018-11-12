@@ -3928,7 +3928,6 @@ typedef enum {
     _SOKOL_ANDROID_MSG_NO_FOCUS,
     _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW,
     _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE,
-    _SOKOL_ANDROID_MSG_UPDATE_DIMENSIONS,
     _SOKOL_ANDROID_MSG_DESTROY,
 } _sapp_android_msg_t;
 
@@ -3950,56 +3949,6 @@ typedef struct {
 } _sapp_android_state_t;
 
 static _sapp_android_state_t _sapp_android_state_obj;
-
-_SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
-    SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
-    SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
-    SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
-    SOKOL_ASSERT(state->surface_native_window != NULL);
-
-    int32_t win_w = ANativeWindow_getWidth(state->surface_native_window);
-    int32_t win_h = ANativeWindow_getHeight(state->surface_native_window);
-    SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
-    bool window_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
-    _sapp.window_width = win_w;
-    _sapp.window_height = win_h;
-
-    if (window_changed || force_update) {
-        /* set pixel count of the screen buffers */
-        int32_t buf_w = _sapp.desc.width;
-        int32_t buf_h = _sapp.desc.height;
-        if (win_w < win_h) {
-            /* portrait mode */
-            buf_w = _sapp.desc.height;
-            buf_h = _sapp.desc.width;
-        }
-        if (_sapp.desc.high_dpi) {
-            buf_w *= 2;
-            buf_h *= 2;
-        }
-        if (buf_w > win_w) {
-            buf_w = win_w;
-        }
-        if (buf_h > win_h) {
-            buf_h = win_h;
-        }
-        EGLint format;
-        SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
-        SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(state->surface_native_window, buf_w, buf_h, format) == 0);
-    }
-
-    /* query surface size */
-    EGLint fb_w, fb_h;
-    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_WIDTH, &fb_w) == EGL_TRUE);
-    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h) == EGL_TRUE);
-    bool fb_changed = fb_w != _sapp.framebuffer_width || fb_h != _sapp.framebuffer_height;
-    _sapp.framebuffer_width = fb_w;
-    _sapp.framebuffer_height = fb_h;
-
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
-    return window_changed || fb_changed || force_update;
-}
 
 _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     SOKOL_ASSERT(!_sapp.valid);
@@ -4123,6 +4072,56 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
     _sapp_android_state_obj.surface_native_window = NULL;
 }
 
+_SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
+    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
+    SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
+    SOKOL_ASSERT(state->surface_native_window != NULL);
+
+    int32_t win_w = ANativeWindow_getWidth(state->surface_native_window);
+    int32_t win_h = ANativeWindow_getHeight(state->surface_native_window);
+    SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
+    bool window_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
+    _sapp.window_width = win_w;
+    _sapp.window_height = win_h;
+
+    if (window_changed || force_update) {
+        /* set pixel count of the screen buffers */
+        int32_t buf_w = _sapp.desc.width;
+        int32_t buf_h = _sapp.desc.height;
+        if (win_w < win_h) {
+            /* portrait mode */
+            buf_w = _sapp.desc.height;
+            buf_h = _sapp.desc.width;
+        }
+        if (_sapp.desc.high_dpi) {
+            buf_w *= 2;
+            buf_h *= 2;
+        }
+        if (buf_w > win_w) {
+            buf_w = win_w;
+        }
+        if (buf_h > win_h) {
+            buf_h = win_h;
+        }
+        EGLint format;
+        SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
+        SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(state->surface_native_window, buf_w, buf_h, format) == 0);
+    }
+
+    /* query surface size */
+    EGLint fb_w, fb_h;
+    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_WIDTH, &fb_w) == EGL_TRUE);
+    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h) == EGL_TRUE);
+    bool fb_changed = fb_w != _sapp.framebuffer_width || fb_h != _sapp.framebuffer_height;
+    _sapp.framebuffer_width = fb_w;
+    _sapp.framebuffer_height = fb_h;
+
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
+    return window_changed || fb_changed || force_update;
+}
+
 _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -4187,9 +4186,6 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             /* todo */
             SOKOL_LOG("input_queue set");
             state->resources.input_queue = state->pending_resources.input_queue;
-            break;
-        case _SOKOL_ANDROID_MSG_UPDATE_DIMENSIONS:
-            SOKOL_LOG("Update dimensions");
             break;
         case _SOKOL_ANDROID_MSG_DESTROY:
             SOKOL_LOG("Setting is_stopping...");
@@ -4258,12 +4254,6 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     /* main loop */
     int32_t frame_counter = 0;
     while (!state->is_stopping) {
-        if (frame_counter >= 60) {
-            SOKOL_LOG("60 frames elapsed...");
-            frame_counter = 0;
-        }
-        ++frame_counter;
-
         /* frame */
         if (_sapp_android_should_update()) {
             /* init egl display and context */
