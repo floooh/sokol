@@ -4130,8 +4130,8 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window
 
 _SOKOL_PRIVATE void _sapp_android_shutdown(void) {
     if (!_sapp.cleanup_called) {
+        SOKOL_LOG("Shutting down");
         if (_sapp.init_called) {
-            SOKOL_LOG("cleanup_cb");
             _sapp.desc.cleanup_cb();
         }
         _sapp_android_cleanup_egl();
@@ -4165,6 +4165,9 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
 /* android render thread */
 _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_MOTION) {
+        return false;
+    }
+    if (!_sapp_events_enabled()) {
         return false;
     }
     int32_t action_idx = AMotionEvent_getAction(e);
@@ -4245,10 +4248,8 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
             continue;
         }
         int32_t handled = 0;
-        if (_sapp_events_enabled()) {
-            if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
-                handled = 1;
-            }
+        if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
+            handled = 1;
         }
         AInputQueue_finishEvent(state->current.input, event, handled);
     }
