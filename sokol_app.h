@@ -815,8 +815,6 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
-    }
-    if (!_sapp.init_called) {
         _sapp.desc.init_cb();
         _sapp.init_called = true;
     }
