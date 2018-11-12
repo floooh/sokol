@@ -4086,12 +4086,12 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
     _sapp.window_width = win_w;
     _sapp.window_height = win_h;
 
+    bool swap_desc_dim = win_w < win_h && _sapp.desc.width >= _sapp.desc.height;
     if (window_changed || force_update) {
         /* set pixel count of the screen buffers */
         int32_t buf_w = _sapp.desc.width;
         int32_t buf_h = _sapp.desc.height;
-        if (win_w < win_h) {
-            /* portrait mode */
+        if (swap_desc_dim) {
             buf_w = _sapp.desc.height;
             buf_h = _sapp.desc.width;
         }
@@ -4118,7 +4118,7 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
     _sapp.framebuffer_width = fb_w;
     _sapp.framebuffer_height = fb_h;
 
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (swap_desc_dim ? _sapp.desc.height : _sapp.desc.width);
     return window_changed || fb_changed || force_update;
 }
 
