@@ -717,6 +717,7 @@ typedef struct {
     bool gles2_fallback;
     bool first_frame;
     bool init_called;
+    bool cleanup_called;
     bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -3938,7 +3939,6 @@ typedef struct {
     _sapp_android_resources_t resources;
     ALooper* looper;
     bool is_initialized;
-    bool is_shutting_down;
     bool is_stopping_thread;
     bool is_done;
     bool has_resumed;
@@ -3947,12 +3947,14 @@ typedef struct {
     EGLDisplay* display;
     EGLContext* context;
     EGLSurface* surface;
-    ANativeWindow* surface_native_window;
 } _sapp_android_state_t;
 
 static _sapp_android_state_t _sapp_android_state_obj;
 
 _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
+    if (_sapp.cleanup_called) {
+        return false;
+    }
     SOKOL_ASSERT(!_sapp.valid);
     SOKOL_ASSERT(_sapp_android_state_obj.display == EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp_android_state_obj.context == EGL_NO_CONTEXT);
@@ -4027,14 +4029,16 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
     if (_sapp_android_state_obj.display != EGL_NO_DISPLAY) {
         eglMakeCurrent(_sapp_android_state_obj.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (_sapp_android_state_obj.surface != EGL_NO_SURFACE) {
+            SOKOL_LOG("Destroying egl surface");
             eglDestroySurface(_sapp_android_state_obj.display, _sapp_android_state_obj.surface);
             _sapp_android_state_obj.surface = EGL_NO_SURFACE;
         }
-        _sapp_android_state_obj.surface_native_window = NULL;
         if (_sapp_android_state_obj.context != EGL_NO_CONTEXT) {
+            SOKOL_LOG("Destroying egl context");
             eglDestroyContext(_sapp_android_state_obj.display, _sapp_android_state_obj.context);
             _sapp_android_state_obj.context = EGL_NO_CONTEXT;
         }
+        SOKOL_LOG("Terminating egl display");
         eglTerminate(_sapp_android_state_obj.display);
         _sapp_android_state_obj.display = EGL_NO_DISPLAY;
     }
@@ -4060,30 +4064,29 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl_surface(ANativeWindow* native_window)
         return false;
     }
     state->surface = surface;
-    state->surface_native_window = native_window;
     return true;
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
-    SOKOL_ASSERT(_sapp_android_state_obj.display != EGL_NO_DISPLAY);
-    SOKOL_ASSERT(_sapp_android_state_obj.context != EGL_NO_CONTEXT);
+    if (_sapp_android_state_obj.display == EGL_NO_DISPLAY) {
+        return;
+    }
     eglMakeCurrent(_sapp_android_state_obj.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     if (_sapp_android_state_obj.surface != EGL_NO_SURFACE) {
         eglDestroySurface(_sapp_android_state_obj.display, _sapp_android_state_obj.surface);
         _sapp_android_state_obj.surface = EGL_NO_SURFACE;
     }
-    _sapp_android_state_obj.surface_native_window = NULL;
 }
 
-_SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
+_SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window, bool force_update) {
     _sapp_android_state_t* state = &_sapp_android_state_obj;
     SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
-    SOKOL_ASSERT(state->surface_native_window != NULL);
+    SOKOL_ASSERT(native_window);
 
-    int32_t win_w = ANativeWindow_getWidth(state->surface_native_window);
-    int32_t win_h = ANativeWindow_getHeight(state->surface_native_window);
+    int32_t win_w = ANativeWindow_getWidth(native_window);
+    int32_t win_h = ANativeWindow_getHeight(native_window);
     SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
     bool window_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
     _sapp.window_width = win_w;
@@ -4110,7 +4113,7 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
         }
         EGLint format;
         SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
-        SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(state->surface_native_window, buf_w, buf_h, format) == 0);
+        SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(native_window, buf_w, buf_h, format) == 0);
     }
 
     /* query surface size */
@@ -4125,6 +4128,18 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(bool force_update) {
     return window_changed || fb_changed || force_update;
 }
 
+_SOKOL_PRIVATE void _sapp_android_shutdown(void) {
+    if (!_sapp.cleanup_called) {
+        if (_sapp.init_called) {
+            SOKOL_LOG("cleanup_cb");
+            _sapp.desc.cleanup_cb();
+        }
+        _sapp_android_cleanup_egl();
+        ANativeActivity_finish(_sapp_android_state_obj.native_activity);
+        _sapp.cleanup_called = true;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -4133,12 +4148,13 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_frame(void) {
-    if (_sapp_android_state_obj.display == EGL_NO_DISPLAY ||
-        _sapp_android_state_obj.context == EGL_NO_CONTEXT ||
-        _sapp_android_state_obj.surface == EGL_NO_SURFACE) {
+    if (!_sapp.valid) {
         return;
     }
-    if (_sapp_android_update_dimensions(false)) {
+    SOKOL_ASSERT(_sapp_android_state_obj.display != EGL_NO_DISPLAY);
+    SOKOL_ASSERT(_sapp_android_state_obj.context != EGL_NO_CONTEXT);
+    SOKOL_ASSERT(_sapp_android_state_obj.surface != EGL_NO_SURFACE);
+    if (_sapp_android_update_dimensions(_sapp_android_state_obj.resources.native_window, false)) {
         SOKOL_LOG("Resized");
         _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
     }
@@ -4210,15 +4226,7 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         return false;
     }
     if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* todo: custom exit code to avoid crash (cleanup cannot be called after _sapp_android_cleanup_egl_surface) */
-        if (!_sapp_android_state_obj.is_shutting_down) {
-            if (_sapp.init_called) {
-                SOKOL_LOG("cleanup_cb");
-                _sapp.desc.cleanup_cb();
-            }
-        }
-        _sapp_android_state_obj.is_shutting_down = true;
-        ANativeActivity_finish(_sapp_android_state_obj.native_activity);
+        _sapp_android_shutdown();
         return true;
     }
     return false;
@@ -4239,8 +4247,7 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
         }
         int32_t handled = 0;
         if (_sapp_events_enabled()) {
-            if (_sapp_android_touch_event(event) ||
-                _sapp_android_key_event(event)) {
+            if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
                 handled = 1;
             }
         }
@@ -4285,22 +4292,57 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             break;
         case _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW:
             SOKOL_LOG("native_window set");
-            state->resources.native_window = state->pending_resources.native_window;
+            ANativeWindow* current_window = state->resources.native_window;
+            ANativeWindow* pending_window = state->pending_resources.native_window;
+
+            if (current_window != pending_window && !_sapp.cleanup_called) {
+                if (current_window != NULL) {
+                    SOKOL_LOG("Cleaning up current egl surface");
+                    _sapp_android_cleanup_egl_surface();
+                }
+                if (pending_window != NULL) {
+                    if (!_sapp.valid) {
+                        SOKOL_LOG("Initializing egl ...");
+                        if (_sapp_android_init_egl()) {
+                            SOKOL_LOG("... ok!");
+                        } else {
+                            SOKOL_LOG("... failed!");
+                            _sapp_android_shutdown();
+                        }
+                    }
+                    if (_sapp.valid) {
+                        SOKOL_LOG("Creating egl surface ...");
+                        if (_sapp_android_init_egl_surface(pending_window)) {
+                            SOKOL_LOG("... ok!");
+                            _sapp_android_update_dimensions(pending_window, true);
+                        } else {
+                            SOKOL_LOG("... failed!");
+                            _sapp_android_shutdown();
+                        }
+                    }
+                }
+            }
+            state->resources.native_window = pending_window;
             break;
         case _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE:
             SOKOL_LOG("input_queue set");
-            if (state->resources.input_queue != NULL) {
-                AInputQueue_detachLooper(state->resources.input_queue);
+            AInputQueue* current_queue = state->resources.input_queue;
+            AInputQueue* pending_queue = state->pending_resources.input_queue;
+
+            if (current_queue != pending_queue) {
+                if (current_queue != NULL) {
+                    AInputQueue_detachLooper(current_queue);
+                }
+                if (pending_queue != NULL) {
+                    AInputQueue_attachLooper(
+                        pending_queue,
+                        state->looper,
+                        ALOOPER_POLL_CALLBACK,
+                        _sapp_android_input_cb,
+                        NULL); /* data */
+                }
             }
-            if (state->pending_resources.input_queue != NULL) {
-                AInputQueue_attachLooper(
-                    state->pending_resources.input_queue,
-                    state->looper,
-                    ALOOPER_POLL_CALLBACK,
-                    _sapp_android_input_cb,
-                    NULL); /* data */
-            }
-            state->resources.input_queue = state->pending_resources.input_queue;
+            state->resources.input_queue = pending_queue;
             break;
         case _SOKOL_ANDROID_MSG_DESTROY:
             SOKOL_LOG("Setting is_stopping_thread...");
@@ -4318,8 +4360,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
 _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     bool is_in_front = _sapp_android_state_obj.has_resumed && _sapp_android_state_obj.has_focus;
     bool has_surface = _sapp_android_state_obj.surface != EGL_NO_SURFACE;
-    bool window_different = _sapp_android_state_obj.resources.native_window != _sapp_android_state_obj.surface_native_window;
-    return (is_in_front && has_surface) || window_different;
+    return is_in_front && has_surface;
 }
 
 _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
@@ -4345,38 +4386,9 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     _sapp_init_state(&desc, 0, NULL);
 
     /* main loop */
-    int32_t frame_counter = 0;
     while (!state->is_stopping_thread) {
-        /* frame */
-        if (_sapp_android_should_update() && !state->is_shutting_down) {
-            /* init egl display and context */
-            if (!_sapp.valid && !_sapp.init_called) {
-                SOKOL_LOG("Initializing EGL ...");
-                if (_sapp_android_init_egl()) {
-                    SOKOL_LOG("... ok!");
-                } else {
-                    SOKOL_LOG("... failed!");
-                    break;
-                }
-            }
-            /* init/re-init egl surface if necessary */
-            if (state->resources.native_window != state->surface_native_window) {
-                if (state->surface != EGL_NO_SURFACE) {
-                    SOKOL_LOG("Cleaning up EGL surface");
-                    _sapp_android_cleanup_egl_surface();
-                }
-                if (state->resources.native_window != NULL) {
-                    SOKOL_LOG("Creating EGL surface ...");
-                    if (_sapp_android_init_egl_surface(state->resources.native_window)) {
-                        SOKOL_LOG("... ok!");
-                        _sapp_android_update_dimensions(true);
-                    } else {
-                        SOKOL_LOG("... failed!");
-                        break;
-                    }
-                }
-            }
-            /* sokol frame */
+        /* sokol frame */
+        if (_sapp_android_should_update()) {
             _sapp_android_frame();
         }
 
@@ -4390,7 +4402,6 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
 
     /* cleanup */
     SOKOL_LOG("Cleaning up render thread...");
-    _sapp_android_cleanup_egl();
 
     if (state->resources.input_queue != NULL) {
         AInputQueue_detachLooper(state->resources.input_queue);
@@ -4404,6 +4415,7 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     state->is_done = true;
     pthread_cond_broadcast(&state->pt.cond); /* signal done */
     pthread_mutex_unlock(&state->pt.mutex); /* can't do anything after this call */
+    SOKOL_LOG("Render thread done");
     return NULL;
 }
 
@@ -4424,11 +4436,11 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_native_window(_sapp_android_state_t* s
     pthread_mutex_unlock(&state->pt.mutex);
 }
 
-_SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(_sapp_android_state_t* state, AInputQueue* input_queue) {
+_SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(_sapp_android_state_t* state, AInputQueue* input) {
     pthread_mutex_lock(&state->pt.mutex);
-    state->pending_resources.input_queue = input_queue;
+    state->pending_resources.input_queue = input;
     _sapp_android_msg(state, _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE);
-    while (state->resources.input_queue != input_queue) {
+    while (state->resources.input_queue != input) {
         pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
     }
     pthread_mutex_unlock(&state->pt.mutex);
