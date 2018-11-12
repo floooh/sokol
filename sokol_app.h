@@ -4298,6 +4298,7 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     /* cleanup */
     SOKOL_LOG("Cleaning up render thread...");
 
+    _sapp.desc.cleanup_cb();
     _sapp_android_cleanup_egl();
 
     ALooper_removeFd(state->looper, state->pt.read_from_main_fd);
