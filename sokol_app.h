@@ -4407,8 +4407,9 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
         AInputQueue_detachLooper(state->resources.input_queue);
     }
 
+    /* the following causes heap corruption on exit, why??
     ALooper_removeFd(state->looper, state->pt.read_from_main_fd);
-    ALooper_release(state->looper);
+    ALooper_release(state->looper);*/
 
     /* signal "destroyed" */
     pthread_mutex_lock(&state->pt.mutex);
