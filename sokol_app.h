@@ -70,8 +70,8 @@
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
     gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | TODO    | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
+    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
@@ -87,19 +87,19 @@
     TOUCHES_MOVED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     TOUCHES_ENDED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    RESIZED             | YES     | YES   | YES   | YES   | TODO    | ---   | YES
+    RESIZED             | YES     | YES   | YES   | YES   | YES     | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
-    SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
+    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
+    RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
+    fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
@@ -670,7 +670,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG 
+    #ifdef SOKOL_DEBUG
         #if defined(__ANDROID__)
             #include <android/log.h>
             #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_write(ANDROID_LOG_DEBUG, "SOKOL_APP", s); }
