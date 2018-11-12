@@ -4361,15 +4361,6 @@ _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activ
     *out_size = 0;
     return NULL;
 }
-_SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
-    SOKOL_LOG("NativeActivity onPause()");
-    /* send msg to render thread but do NOT wait for acknowledgement */
-    _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_PAUSE);
-}
-_SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
-    SOKOL_LOG("NativeActivity onStop()");
-}
-
 _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
     SOKOL_LOG("NativeActivity onWindowFocusChanged()");
     /* send msg to render thread but do NOT wait for acknowledgement */
@@ -4379,17 +4370,19 @@ _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activ
         _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_NO_FOCUS);
     }
 }
+_SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onPause()");
+    /* send msg to render thread but do NOT wait for acknowledgement */
+    _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_PAUSE);
+}
+_SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onStop()");
+}
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
     SOKOL_LOG("NativeActivity onNativeWindowCreated()");
     /* send msg to render thread, then wait for acknowledgement */
     _sapp_android_msg_set_native_window(&_sapp_android_state_obj, window);
-}
-_SOKOL_PRIVATE void _sapp_android_on_native_window_resized(ANativeActivity* activity, ANativeWindow* window) {
-    SOKOL_LOG("NativeActivity onNativeWindowResized()");
-}
-_SOKOL_PRIVATE void _sapp_android_on_native_window_redraw_needed(ANativeActivity* activity, ANativeWindow* window) {
-    SOKOL_LOG("NativeActivity onNativeWindowRedrawNeeded()");
 }
 _SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
     SOKOL_LOG("NativeActivity onNativeWindowDestroyed()");
@@ -4406,10 +4399,6 @@ _SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* acti
     SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
     /* send msg to render thread, then wait for acknowledgement */
     _sapp_android_msg_set_input_queue(&_sapp_android_state_obj, NULL);
-}
-
-_SOKOL_PRIVATE void _sapp_android_on_content_rect_changed(ANativeActivity* activity, const ARect* rect) {
-    SOKOL_LOG("NativeActivity onContentRectChanged()");
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
@@ -4492,17 +4481,17 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_
     activity->callbacks->onStart = _sapp_android_on_start;
     activity->callbacks->onResume = _sapp_android_on_resume;
     activity->callbacks->onSaveInstanceState = _sapp_android_on_save_instance_state;
+    activity->callbacks->onWindowFocusChanged = _sapp_android_on_window_focus_changed;
     activity->callbacks->onPause = _sapp_android_on_pause;
     activity->callbacks->onStop = _sapp_android_on_stop;
     activity->callbacks->onDestroy = _sapp_android_on_destroy;
-    activity->callbacks->onWindowFocusChanged = _sapp_android_on_window_focus_changed;
     activity->callbacks->onNativeWindowCreated = _sapp_android_on_native_window_created;
-    activity->callbacks->onNativeWindowResized = _sapp_android_on_native_window_resized;
-    activity->callbacks->onNativeWindowRedrawNeeded = _sapp_android_on_native_window_redraw_needed;
+    /* activity->callbacks->onNativeWindowResized = _sapp_android_on_native_window_resized; */
+    /* activity->callbacks->onNativeWindowRedrawNeeded = _sapp_android_on_native_window_redraw_needed; */
     activity->callbacks->onNativeWindowDestroyed = _sapp_android_on_native_window_destroyed;
     activity->callbacks->onInputQueueCreated = _sapp_android_on_input_queue_created;
     activity->callbacks->onInputQueueDestroyed = _sapp_android_on_input_queue_destroyed;
-    activity->callbacks->onContentRectChanged = _sapp_android_on_content_rect_changed;
+    /* activity->callbacks->onContentRectChanged = _sapp_android_on_content_rect_changed; */
     activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
