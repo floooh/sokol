@@ -4128,16 +4128,17 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window
     return window_changed || fb_changed || force_update;
 }
 
-_SOKOL_PRIVATE void _sapp_android_shutdown(void) {
-    if (!_sapp.cleanup_called) {
-        SOKOL_LOG("Shutting down");
-        if (_sapp.init_called) {
+_SOKOL_PRIVATE void _sapp_android_cleanup(void) {
+    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    SOKOL_LOG("Cleaning up");
+    if (state->surface != EGL_NO_SURFACE) {
+        if (_sapp.init_called && !_sapp.cleanup_called) {
+            SOKOL_LOG("cleanup_cb()");
             _sapp.desc.cleanup_cb();
+            _sapp.cleanup_called = true;
         }
-        _sapp_android_cleanup_egl();
-        ANativeActivity_finish(_sapp_android_state_obj.native_activity);
-        _sapp.cleanup_called = true;
     }
+    _sapp_android_cleanup_egl();
 }
 
 _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
@@ -4229,7 +4230,8 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         return false;
     }
     if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        _sapp_android_shutdown();
+        _sapp_android_cleanup();
+        ANativeActivity_finish(_sapp_android_state_obj.native_activity);
         return true;
     }
     return false;
@@ -4292,7 +4294,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             break;
         case _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW:
             SOKOL_LOG("native_window set");
-            if (state->current.window != state->pending.window && !_sapp.cleanup_called) {
+            if (state->current.window != state->pending.window) {
                 if (state->current.window != NULL) {
                     SOKOL_LOG("Cleaning up current egl surface");
                     _sapp_android_cleanup_egl_surface();
@@ -4304,7 +4306,8 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
                             SOKOL_LOG("... ok!");
                         } else {
                             SOKOL_LOG("... failed!");
-                            _sapp_android_shutdown();
+                            _sapp_android_cleanup();
+                            ANativeActivity_finish(state->native_activity);
                         }
                     }
                     if (_sapp.valid) {
@@ -4314,7 +4317,8 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
                             _sapp_android_update_dimensions(state->pending.window, true);
                         } else {
                             SOKOL_LOG("... failed!");
-                            _sapp_android_shutdown();
+                            _sapp_android_cleanup();
+                            ANativeActivity_finish(state->native_activity);
                         }
                     }
                 }
@@ -4358,7 +4362,7 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
 }
 
 _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
-    SOKOL_LOG("Hello from render thread");
+    SOKOL_LOG("Render thread started");
     _sapp_android_state_t* state = (_sapp_android_state_t*)obj;
 
     state->looper = ALooper_prepare(0 /* or ALOOPER_PREPARE_ALLOW_NON_CALLBACKS*/);
@@ -4395,7 +4399,7 @@ _SOKOL_PRIVATE void* _sapp_android_main_loop(void* obj) {
     }
 
     /* cleanup */
-    SOKOL_LOG("Cleaning up render thread...");
+    _sapp_android_cleanup();
 
     if (state->current.input != NULL) {
         AInputQueue_detachLooper(state->current.input);
