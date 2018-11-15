@@ -4106,7 +4106,6 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
 
     bool swap_desc_dim = win_w < win_h && _sapp.desc.width >= _sapp.desc.height;
     if (win_changed || force_update) {
-        SOKOL_LOG("Window dimensions changed, setting setBuffersGeometry");
         /* set pixel count of the screen buffers */
         int32_t buf_w = _sapp.desc.width;
         int32_t buf_h = _sapp.desc.height;
@@ -4127,6 +4126,7 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
         /* only set if scaling, setting native dimensions fails on my device */
         if (!(buf_w == win_w && buf_h == win_h))
         {
+            SOKOL_LOG("Calling setBuffersGeometry");
             EGLint format;
             SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
             SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format) == 0);
