@@ -3938,7 +3938,7 @@ typedef enum {
 } _sapp_android_msg_t;
 
 typedef struct {
-    ANativeActivity* native_activity;
+    ANativeActivity* activity;
     _sapp_android_pt_t pt;
     _sapp_android_resources_t pending;
     _sapp_android_resources_t current;
@@ -3955,11 +3955,11 @@ typedef struct {
     EGLSurface* surface;
 } _sapp_android_state_t;
 
-static _sapp_android_state_t _sapp_android_state_obj;
+static _sapp_android_state_t _sapp_android_state;
 
 /* android loop thread */
 _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     SOKOL_ASSERT(state->display == EGL_NO_DISPLAY);
     SOKOL_ASSERT(state->context == EGL_NO_CONTEXT);
 
@@ -4029,7 +4029,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     if (state->display != EGL_NO_DISPLAY) {
         eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (state->surface != EGL_NO_SURFACE) {
@@ -4049,14 +4049,14 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
 }
 
 _SOKOL_PRIVATE bool _sapp_android_init_egl_surface(ANativeWindow* window) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(state->surface == EGL_NO_SURFACE);
     SOKOL_ASSERT(window);
 
     /* TODO: set window flags */
-    /* ANativeActivity_setWindowFlags(native_activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0); */
+    /* ANativeActivity_setWindowFlags(activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0); */
 
     /* create egl surface and make it current */
     EGLSurface surface = eglCreateWindowSurface(state->display, state->config, window, NULL);
@@ -4071,7 +4071,7 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl_surface(ANativeWindow* window) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     if (state->display == EGL_NO_DISPLAY) {
         return;
     }
@@ -4082,22 +4082,31 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
     }
 }
 
-_SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window, bool force_update) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+_SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        SOKOL_LOG("event_cb()");
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool force_update) {
+    _sapp_android_state_t* state = &_sapp_android_state;
     SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
-    SOKOL_ASSERT(native_window);
+    SOKOL_ASSERT(window);
 
-    int32_t win_w = ANativeWindow_getWidth(native_window);
-    int32_t win_h = ANativeWindow_getHeight(native_window);
+    int32_t win_w = ANativeWindow_getWidth(window);
+    int32_t win_h = ANativeWindow_getHeight(window);
     SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
-    bool window_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
+    bool win_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
     _sapp.window_width = win_w;
     _sapp.window_height = win_h;
 
     bool swap_desc_dim = win_w < win_h && _sapp.desc.width >= _sapp.desc.height;
-    if (window_changed || force_update) {
+    if (win_changed || force_update) {
+        SOKOL_LOG("Window dimensions changed, setting setBuffersGeometry");
         /* set pixel count of the screen buffers */
         int32_t buf_w = _sapp.desc.width;
         int32_t buf_h = _sapp.desc.height;
@@ -4115,9 +4124,13 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window
         if (buf_h > win_h) {
             buf_h = win_h;
         }
-        EGLint format;
-        SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
-        SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(native_window, buf_w, buf_h, format) == 0);
+        /* only set if scaling, setting native dimensions fails on my device */
+        if (!(buf_w == win_w && buf_h == win_h))
+        {
+            EGLint format;
+            SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
+            SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format) == 0);
+        }
     }
 
     /* query surface size */
@@ -4129,11 +4142,17 @@ _SOKOL_PRIVATE bool _sapp_android_update_dimensions(ANativeWindow* native_window
     _sapp.framebuffer_height = fb_h;
 
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (swap_desc_dim ? _sapp.desc.height : _sapp.desc.width);
-    return window_changed || fb_changed || force_update;
+
+    if (win_changed || fb_changed || force_update) {
+        if (!_sapp.first_frame) {
+            SOKOL_LOG("SAPP_EVENTTYPE_RESIZED");
+            _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     SOKOL_LOG("Cleaning up");
     if (state->surface != EGL_NO_SURFACE) {
         /* egl context is bound, cleanup gracefully */
@@ -4151,28 +4170,17 @@ _SOKOL_PRIVATE void _sapp_android_shutdown(void) {
     /* try to cleanup while we still have a surface and can call cleanup_cb() */
     _sapp_android_cleanup();
     /* request exit */
-    ANativeActivity_finish(_sapp_android_state_obj.native_activity);
-}
-
-_SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        SOKOL_LOG("event_cb()");
-        _sapp.desc.event_cb(&_sapp.event);
-    }
+    ANativeActivity_finish(_sapp_android_state.activity);
 }
 
 _SOKOL_PRIVATE void _sapp_android_frame(void) {
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
     SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
-    if (_sapp_android_update_dimensions(state->current.window, false)) {
-        SOKOL_LOG("Dimensions updated");
-        _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
-    }
+    _sapp_android_update_dimensions(state->current.window, false);
     _sapp_frame();
-    eglSwapBuffers(state->display, _sapp_android_state_obj.surface);
+    eglSwapBuffers(state->display, _sapp_android_state.surface);
 }
 
 _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
@@ -4253,7 +4261,7 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
         SOKOL_LOG("_sapp_android_input_cb() encountered unsupported event");
         return 1;
     }
-    _sapp_android_state_t* state = &_sapp_android_state_obj;;
+    _sapp_android_state_t* state = &_sapp_android_state;;
     SOKOL_ASSERT(state->current.input);
     AInputEvent* event = NULL;
     while (AInputQueue_getEvent(state->current.input, &event) >= 0) {
@@ -4274,7 +4282,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
         SOKOL_LOG("_sapp_android_main_cb() encountered unsupported event");
         return 1;
     }
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
 
     _sapp_android_msg_t msg;
     if (read(fd, &msg, sizeof(msg)) != sizeof(msg)) {
@@ -4361,8 +4369,8 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
 }
 
 _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
-    bool is_in_front = _sapp_android_state_obj.has_resumed && _sapp_android_state_obj.has_focus;
-    bool has_surface = _sapp_android_state_obj.surface != EGL_NO_SURFACE;
+    bool is_in_front = _sapp_android_state.has_resumed && _sapp_android_state.has_focus;
+    bool has_surface = _sapp_android_state.surface != EGL_NO_SURFACE;
     return is_in_front && has_surface;
 }
 
@@ -4430,7 +4438,7 @@ _SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
 
 _SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
     SOKOL_LOG("NativeActivity onResume()");
-    _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_RESUME);
+    _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_RESUME);
 }
 
 _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
@@ -4442,15 +4450,15 @@ _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activ
 _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
     SOKOL_LOG("NativeActivity onWindowFocusChanged()");
     if (has_focus) {
-        _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_FOCUS);
+        _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_FOCUS);
     } else {
-        _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_NO_FOCUS);
+        _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_NO_FOCUS);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
     SOKOL_LOG("NativeActivity onPause()");
-    _sapp_android_msg(&_sapp_android_state_obj, _SOKOL_ANDROID_MSG_PAUSE);
+    _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_PAUSE);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
@@ -4469,12 +4477,12 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_native_window(_sapp_android_state_t* s
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
     SOKOL_LOG("NativeActivity onNativeWindowCreated()");
-    _sapp_android_msg_set_native_window(&_sapp_android_state_obj, window);
+    _sapp_android_msg_set_native_window(&_sapp_android_state, window);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
     SOKOL_LOG("NativeActivity onNativeWindowDestroyed()");
-    _sapp_android_msg_set_native_window(&_sapp_android_state_obj, NULL);
+    _sapp_android_msg_set_native_window(&_sapp_android_state, NULL);
 }
 
 _SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(_sapp_android_state_t* state, AInputQueue* input) {
@@ -4489,12 +4497,12 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(_sapp_android_state_t* sta
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
     SOKOL_LOG("NativeActivity onInputQueueCreated()");
-    _sapp_android_msg_set_input_queue(&_sapp_android_state_obj, queue);
+    _sapp_android_msg_set_input_queue(&_sapp_android_state, queue);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
     SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
-    _sapp_android_msg_set_input_queue(&_sapp_android_state_obj, NULL);
+    _sapp_android_msg_set_input_queue(&_sapp_android_state, NULL);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
@@ -4516,12 +4524,12 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
      * _sapp_android_on_stop(), the crash disappears. Is this a bug in NativeActivity?
      */
     SOKOL_LOG("NativeActivity onDestroy()");
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state_t* state = &_sapp_android_state;
 
     /* send destroy msg */
     pthread_mutex_lock(&state->pt.mutex);
     _sapp_android_msg(state, _SOKOL_ANDROID_MSG_DESTROY);
-    while (!_sapp_android_state_obj.is_thread_stopped) {
+    while (!_sapp_android_state.is_thread_stopped) {
         pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
     }
     pthread_mutex_unlock(&state->pt.mutex);
@@ -4544,10 +4552,10 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     _sapp_init_state(&desc, 0, NULL);
 
     /* start loop thread */
-    _sapp_android_state_obj = (_sapp_android_state_t){0};
-    _sapp_android_state_t* state = &_sapp_android_state_obj;
+    _sapp_android_state = (_sapp_android_state_t){0};
+    _sapp_android_state_t* state = &_sapp_android_state;
 
-    state->native_activity = activity;
+    state->activity = activity;
 
     int pipe_fd[2];
     if (pipe(pipe_fd) != 0) {
