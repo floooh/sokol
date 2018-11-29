@@ -243,7 +243,7 @@
 extern "C" {
 #endif
 
-typedef struct {
+typedef struct sargs_desc {
     int argc;
     char** argv;
     int max_args;

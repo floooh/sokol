@@ -345,7 +345,7 @@
 extern "C" {
 #endif
 
-typedef struct {
+typedef struct saudio_desc {
     int sample_rate;        /* requested sample rate */
     int num_channels;       /* number of channels, default: 1 (mono) */
     int buffer_frames;      /* number of frames in streaming buffer */

@@ -343,7 +343,7 @@ enum {
     SAPP_MAX_KEYCODES = 512,
 };
 
-typedef enum {
+typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
     SAPP_EVENTTYPE_KEY_DOWN,
     SAPP_EVENTTYPE_KEY_UP,
@@ -369,7 +369,7 @@ typedef enum {
 } sapp_event_type;
 
 /* key codes are the same names and values as GLFW */
-typedef enum {
+typedef enum sapp_keycode {
     SAPP_KEYCODE_INVALID          = 0,
     SAPP_KEYCODE_SPACE            = 32,
     SAPP_KEYCODE_APOSTROPHE       = 39,  /* ' */
@@ -493,14 +493,14 @@ typedef enum {
     SAPP_KEYCODE_MENU             = 348,
 } sapp_keycode;
 
-typedef struct {
+typedef struct sapp_touchpoint {
     uintptr_t identifier;
     float pos_x;
     float pos_y;
     bool changed;
 } sapp_touchpoint;
 
-typedef enum {
+typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_INVALID = -1,
     SAPP_MOUSEBUTTON_LEFT = 0,
     SAPP_MOUSEBUTTON_RIGHT = 1,
@@ -514,7 +514,7 @@ enum {
     SAPP_MODIFIER_SUPER = (1<<3)
 };
 
-typedef struct {
+typedef struct sapp_event {
     sapp_event_type type;
     uint32_t frame_count;
     sapp_keycode key_code;
@@ -533,7 +533,7 @@ typedef struct {
     int framebuffer_height;
 } sapp_event;
 
-typedef struct {
+typedef struct sapp_desc {
     void (*init_cb)(void);
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
