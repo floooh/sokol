@@ -407,6 +407,8 @@ A list of things I'd like to do next:
             sg_apply_bindings(&bindings);
             sg_draw(...);
       ```
+    (hmm, looking at the code above it probably also makes sense to add
+    a ```sg_apply_uniforms(...)``` as an alias for ```sg_apply_uniform_block```)
 
 ## sokol_app.h planned features:
 
