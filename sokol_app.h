@@ -4919,10 +4919,10 @@ _SOKOL_PRIVATE bool _sapp_glx_extsupported(const char* ext, const char* extensio
 _SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
 {
     if (_sapp_glx_GetProcAddress) {
-        return _sapp_glx_GetProcAddress((const GLubyte*) procname);
+        return (void*) _sapp_glx_GetProcAddress((const GLubyte*) procname);
     }
     else if (_sapp_glx_GetProcAddressARB) {
-        return _sapp_glx_GetProcAddressARB((const GLubyte*) procname);
+        return (void*) _sapp_glx_GetProcAddressARB((const GLubyte*) procname);
     }
     else {
         return dlsym(_sapp_glx_libgl, procname);
@@ -4940,21 +4940,21 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
     if (!_sapp_glx_libgl) {
         _sapp_fail("GLX: failed to load libGL");
     }
-    _sapp_glx_GetFBConfigs          = dlsym(_sapp_glx_libgl, "glXGetFBConfigs");
-    _sapp_glx_GetFBConfigAttrib     = dlsym(_sapp_glx_libgl, "glXGetFBConfigAttrib");
-    _sapp_glx_GetClientString       = dlsym(_sapp_glx_libgl, "glXGetClientString");
-    _sapp_glx_QueryExtension        = dlsym(_sapp_glx_libgl, "glXQueryExtension");
-    _sapp_glx_QueryVersion          = dlsym(_sapp_glx_libgl, "glXQueryVersion");
-    _sapp_glx_DestroyContext        = dlsym(_sapp_glx_libgl, "glXDestroyContext");
-    _sapp_glx_MakeCurrent           = dlsym(_sapp_glx_libgl, "glXMakeCurrent");
-    _sapp_glx_SwapBuffers           = dlsym(_sapp_glx_libgl, "glXSwapBuffers");
-    _sapp_glx_QueryExtensionsString = dlsym(_sapp_glx_libgl, "glXQueryExtensionsString");
-    _sapp_glx_CreateNewContext      = dlsym(_sapp_glx_libgl, "glXCreateNewContext");
-    _sapp_glx_CreateWindow          = dlsym(_sapp_glx_libgl, "glXCreateWindow");
-    _sapp_glx_DestroyWindow         = dlsym(_sapp_glx_libgl, "glXDestroyWindow");
-    _sapp_glx_GetProcAddress        = dlsym(_sapp_glx_libgl, "glXGetProcAddress");
-    _sapp_glx_GetProcAddressARB     = dlsym(_sapp_glx_libgl, "glXGetProcAddressARB");
-    _sapp_glx_GetVisualFromFBConfig = dlsym(_sapp_glx_libgl, "glXGetVisualFromFBConfig");
+    _sapp_glx_GetFBConfigs          = (PFNGLXGETFBCONFIGSPROC)          dlsym(_sapp_glx_libgl, "glXGetFBConfigs");
+    _sapp_glx_GetFBConfigAttrib     = (PFNGLXGETFBCONFIGATTRIBPROC)     dlsym(_sapp_glx_libgl, "glXGetFBConfigAttrib");
+    _sapp_glx_GetClientString       = (PFNGLXGETCLIENTSTRINGPROC)       dlsym(_sapp_glx_libgl, "glXGetClientString");
+    _sapp_glx_QueryExtension        = (PFNGLXQUERYEXTENSIONPROC)        dlsym(_sapp_glx_libgl, "glXQueryExtension");
+    _sapp_glx_QueryVersion          = (PFNGLXQUERYVERSIONPROC)          dlsym(_sapp_glx_libgl, "glXQueryVersion");
+    _sapp_glx_DestroyContext        = (PFNGLXDESTROYCONTEXTPROC)        dlsym(_sapp_glx_libgl, "glXDestroyContext");
+    _sapp_glx_MakeCurrent           = (PFNGLXMAKECURRENTPROC)           dlsym(_sapp_glx_libgl, "glXMakeCurrent");
+    _sapp_glx_SwapBuffers           = (PFNGLXSWAPBUFFERSPROC)           dlsym(_sapp_glx_libgl, "glXSwapBuffers");
+    _sapp_glx_QueryExtensionsString = (PFNGLXQUERYEXTENSIONSSTRINGPROC) dlsym(_sapp_glx_libgl, "glXQueryExtensionsString");
+    _sapp_glx_CreateNewContext      = (PFNGLXCREATENEWCONTEXTPROC)      dlsym(_sapp_glx_libgl, "glXCreateNewContext");
+    _sapp_glx_CreateWindow          = (PFNGLXCREATEWINDOWPROC)          dlsym(_sapp_glx_libgl, "glXCreateWindow");
+    _sapp_glx_DestroyWindow         = (PFNGLXDESTROYWINDOWPROC)         dlsym(_sapp_glx_libgl, "glXDestroyWindow");
+    _sapp_glx_GetProcAddress        = (PFNGLXGETPROCADDRESSPROC)        dlsym(_sapp_glx_libgl, "glXGetProcAddress");
+    _sapp_glx_GetProcAddressARB     = (PFNGLXGETPROCADDRESSPROC)        dlsym(_sapp_glx_libgl, "glXGetProcAddressARB");
+    _sapp_glx_GetVisualFromFBConfig = (PFNGLXGETVISUALFROMFBCONFIGPROC) dlsym(_sapp_glx_libgl, "glXGetVisualFromFBConfig");
     if (!_sapp_glx_GetFBConfigs ||
         !_sapp_glx_GetFBConfigAttrib ||
         !_sapp_glx_GetClientString ||
