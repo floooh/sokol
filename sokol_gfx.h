@@ -399,12 +399,12 @@ extern "C" {
     The resource ids are wrapped into a struct so that the compiler
     can complain when the wrong resource type is used.
 */
-typedef struct { uint32_t id; } sg_buffer;
-typedef struct { uint32_t id; } sg_image;
-typedef struct { uint32_t id; } sg_shader;
-typedef struct { uint32_t id; } sg_pipeline;
-typedef struct { uint32_t id; } sg_pass;
-typedef struct { uint32_t id; } sg_context;
+typedef struct sg_buffer   { uint32_t id; } sg_buffer;
+typedef struct sg_image    { uint32_t id; } sg_image;
+typedef struct sg_shader   { uint32_t id; } sg_shader;
+typedef struct sg_pipeline { uint32_t id; } sg_pipeline;
+typedef struct sg_pass     { uint32_t id; } sg_pass;
+typedef struct sg_context  { uint32_t id; } sg_context;
 
 /*
     various compile-time constants
@@ -432,7 +432,7 @@ enum {
     These are optional features, use the function
     sg_query_feature() to check whether the feature is supported.
 */
-typedef enum {
+typedef enum sg_feature {
     SG_FEATURE_INSTANCING,
     SG_FEATURE_TEXTURE_COMPRESSION_DXT,
     SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
@@ -469,7 +469,7 @@ typedef enum {
     The special INVALID state is returned in sg_query_xxx_state() if no
     resource object exists for the provided resource id.
 */
-typedef enum {
+typedef enum sg_resource_state {
     SG_RESOURCESTATE_INITIAL,
     SG_RESOURCESTATE_ALLOC,
     SG_RESOURCESTATE_VALID,
@@ -510,7 +510,7 @@ typedef enum {
 
     The default usage is SG_USAGE_IMMUTABLE.
 */
-typedef enum {
+typedef enum sg_usage {
     _SG_USAGE_DEFAULT,      /* value 0 reserved for default-init */
     SG_USAGE_IMMUTABLE,
     SG_USAGE_DYNAMIC,
@@ -527,7 +527,7 @@ typedef enum {
 
     The default value is SG_BUFFERTYPE_VERTEXBUFFER.
 */
-typedef enum {
+typedef enum sg_buffer_type {
     _SG_BUFFERTYPE_DEFAULT,         /* value 0 reserved for default-init */
     SG_BUFFERTYPE_VERTEXBUFFER,
     SG_BUFFERTYPE_INDEXBUFFER,
@@ -545,7 +545,7 @@ typedef enum {
 
     The default index type is SG_INDEXTYPE_NONE.
 */
-typedef enum {
+typedef enum sg_index_type {
     _SG_INDEXTYPE_DEFAULT,   /* value 0 reserved for default-init */
     SG_INDEXTYPE_NONE,
     SG_INDEXTYPE_UINT16,
@@ -564,7 +564,7 @@ typedef enum {
 
     The default image type when creating an image is SG_IMAGETYPE_2D.
 */
-typedef enum {
+typedef enum sg_image_type {
     _SG_IMAGETYPE_DEFAULT,  /* value 0 reserved for default-init */
     SG_IMAGETYPE_2D,
     SG_IMAGETYPE_CUBE,
@@ -580,7 +580,7 @@ typedef enum {
     The cubemap faces. Use these as indices in the sg_image_desc.content
     array.
 */
-typedef enum {
+typedef enum sg_cube_face {
     SG_CUBEFACE_POS_X,
     SG_CUBEFACE_NEG_X,
     SG_CUBEFACE_POS_Y,
@@ -602,7 +602,7 @@ typedef enum {
     - SG_MAX_SHADERSTAGE_IMAGES slots for images used as textures by
       the shader function
 */
-typedef enum {
+typedef enum sg_shader_stage {
     SG_SHADERSTAGE_VS,
     SG_SHADERSTAGE_FS,
     _SG_SHADERSTAGE_FORCE_U32 = 0x7FFFFFFF
@@ -617,7 +617,7 @@ typedef enum {
 
     The default pixel format when creating an image is SG_PIXELFORMAT_RGBA8.
 */
-typedef enum {
+typedef enum sg_pixel_format {
     _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
     SG_PIXELFORMAT_NONE,
     SG_PIXELFORMAT_RGBA8,
@@ -655,7 +655,7 @@ typedef enum {
 
     The default primitive type is SG_PRIMITIVETYPE_TRIANGLES.
 */
-typedef enum {
+typedef enum sg_primitive_type {
     _SG_PRIMITIVETYPE_DEFAULT,  /* value 0 reserved for default-init */
     SG_PRIMITIVETYPE_POINTS,
     SG_PRIMITIVETYPE_LINES,
@@ -675,7 +675,7 @@ typedef enum {
 
     The default filter mode is SG_FILTER_NEAREST.
 */
-typedef enum {
+typedef enum sg_filter {
     _SG_FILTER_DEFAULT, /* value 0 reserved for default-init */
     SG_FILTER_NEAREST,
     SG_FILTER_LINEAR,
@@ -696,7 +696,7 @@ typedef enum {
 
     The default wrap mode is SG_WRAP_REPEAT.
 */
-typedef enum {
+typedef enum sg_wrap {
     _SG_WRAP_DEFAULT,   /* value 0 reserved for default-init */
     SG_WRAP_REPEAT,
     SG_WRAP_CLAMP_TO_EDGE,
@@ -711,7 +711,7 @@ typedef enum {
     The data type of a vertex component. This is used to describe
     the layout of vertex data when creating a pipeline object.
 */
-typedef enum {
+typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_INVALID,
     SG_VERTEXFORMAT_FLOAT,
     SG_VERTEXFORMAT_FLOAT2,
@@ -741,7 +741,7 @@ typedef enum {
     The vertex-step is part of the vertex-layout definition
     when creating pipeline objects.
 */
-typedef enum {
+typedef enum sg_vertex_step {
     _SG_VERTEXSTEP_DEFAULT,     /* value 0 reserved for default-init */
     SG_VERTEXSTEP_PER_VERTEX,
     SG_VERTEXSTEP_PER_INSTANCE,
@@ -756,7 +756,7 @@ typedef enum {
     describe the internal layout of uniform blocks when creating
     a shader object.
 */
-typedef enum {
+typedef enum sg_uniform_type {
     SG_UNIFORMTYPE_INVALID,
     SG_UNIFORMTYPE_FLOAT,
     SG_UNIFORMTYPE_FLOAT2,
@@ -776,7 +776,7 @@ typedef enum {
 
     The default cull mode is SG_CULLMODE_NONE
 */
-typedef enum {
+typedef enum sg_cull_mode {
     _SG_CULLMODE_DEFAULT,   /* value 0 reserved for default-init */
     SG_CULLMODE_NONE,
     SG_CULLMODE_FRONT,
@@ -794,7 +794,7 @@ typedef enum {
 
     The default winding is SG_FACEWINDING_CW (clockwise)
 */
-typedef enum {
+typedef enum sg_face_winding {
     _SG_FACEWINDING_DEFAULT,    /* value 0 reserved for default-init */
     SG_FACEWINDING_CCW,
     SG_FACEWINDING_CW,
@@ -817,7 +817,7 @@ typedef enum {
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
 */
-typedef enum {
+typedef enum sg_compare_func {
     _SG_COMPAREFUNC_DEFAULT,    /* value 0 reserved for default-init */
     SG_COMPAREFUNC_NEVER,
     SG_COMPAREFUNC_LESS,
@@ -851,7 +851,7 @@ typedef enum {
 
     The default value is SG_STENCILOP_KEEP.
 */
-typedef enum {
+typedef enum sg_stencil_op {
     _SG_STENCILOP_DEFAULT,      /* value 0 reserved for default-init */
     SG_STENCILOP_KEEP,
     SG_STENCILOP_ZERO,
@@ -881,7 +881,7 @@ typedef enum {
     The default value is SG_BLENDFACTOR_ONE for source
     factors, and SG_BLENDFACTOR_ZERO for destination factors.
 */
-typedef enum {
+typedef enum sg_blend_factor {
     _SG_BLENDFACTOR_DEFAULT,    /* value 0 reserved for default-init */
     SG_BLENDFACTOR_ZERO,
     SG_BLENDFACTOR_ONE,
@@ -916,7 +916,7 @@ typedef enum {
 
     The default value is SG_BLENDOP_ADD.
 */
-typedef enum {
+typedef enum sg_blend_op {
     _SG_BLENDOP_DEFAULT,    /* value 0 reserved for default-init */
     SG_BLENDOP_ADD,
     SG_BLENDOP_SUBTRACT,
@@ -934,7 +934,7 @@ typedef enum {
 
     The default colormask is SG_COLORMASK_RGBA (write all colors channels)
 */
-typedef enum {
+typedef enum sg_color_mask {
     _SG_COLORMASK_DEFAULT = 0,      /* value 0 reserved for default-init */
     SG_COLORMASK_NONE = (0x10),     /* special value for 'all channels disabled */
     SG_COLORMASK_R = (1<<0),
@@ -964,7 +964,7 @@ typedef enum {
     only set the clear color, but the 'action' field as well (as long as this
     is in its _SG_ACTION_DEFAULT, the value fields will be ignored).
 */
-typedef enum {
+typedef enum sg_action {
     _SG_ACTION_DEFAULT,
     SG_ACTION_CLEAR,
     SG_ACTION_LOAD,
@@ -992,22 +992,22 @@ typedef enum {
     - SG_DEFAULT_CLEAR_DEPTH:   1.0f
     - SG_DEFAULT_CLEAR_STENCIL: 0
 */
-typedef struct {
+typedef struct sg_color_attachment_action {
     sg_action action;
     float val[4];
 } sg_color_attachment_action;
 
-typedef struct {
+typedef struct sg_depth_attachment_action {
     sg_action action;
     float val;
 } sg_depth_attachment_action;
 
-typedef struct {
+typedef struct sg_stencil_attachment_action {
     sg_action action;
     uint8_t val;
 } sg_stencil_attachment_action;
 
-typedef struct {
+typedef struct sg_pass_action {
     uint32_t _start_canary;
     sg_color_attachment_action colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_depth_attachment_action depth;
@@ -1039,7 +1039,7 @@ typedef struct {
     The optional buffer offsets can be used to group different chunks
     of vertex- and/or index-data into the same buffer objects.
 */
-typedef struct {
+typedef struct sg_draw_state {
     uint32_t _start_canary;
     sg_pipeline pipeline;
     sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -1116,7 +1116,7 @@ typedef struct {
         this function will be called in sg_begin_pass() when rendering
         to the default framebuffer
 */
-typedef struct {
+typedef struct sg_desc {
     uint32_t _start_canary;
     int buffer_pool_size;
     int image_pool_size;
@@ -1180,7 +1180,7 @@ typedef struct {
     Also you need to call sg_reset_state_cache() after calling native 3D-API
     functions, and before calling any sokol_gfx function.
 */
-typedef struct {
+typedef struct sg_buffer_desc {
     uint32_t _start_canary;
     int size;
     sg_buffer_type type;
@@ -1207,7 +1207,7 @@ typedef struct {
     3D-slices of the mipmap level. It is only possible to update
     an entire mipmap level, not parts of it.
 */
-typedef struct {
+typedef struct sg_subimage_content {
     const void* ptr;    /* pointer to subimage data */
     int size;           /* size in bytes of pointed-to subimage data */
 } sg_subimage_content;
@@ -1220,7 +1220,7 @@ typedef struct {
     is the cubemap face, and the second array dimension the
     mipmap level.
 */
-typedef struct {
+typedef struct sg_image_content {
     sg_subimage_content subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
 } sg_image_content;
 
@@ -1272,7 +1272,7 @@ typedef struct {
     The same rules apply as for injecting native buffers
     (see sg_buffer_desc documentation for more details).
 */
-typedef struct {
+typedef struct sg_image_desc {
     uint32_t _start_canary;
     sg_image_type type;
     bool render_target;
@@ -1312,23 +1312,23 @@ typedef struct {
 
     TODO: source code vs byte code, 3D backend API specifics.
 */
-typedef struct {
+typedef struct sg_shader_uniform_desc {
     const char* name;
     sg_uniform_type type;
     int array_count;
 } sg_shader_uniform_desc;
 
-typedef struct {
+typedef struct sg_shader_uniform_block_desc {
     int size;
     sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
 } sg_shader_uniform_block_desc;
 
-typedef struct {
+typedef struct sg_shader_image_desc {
     const char* name;
     sg_image_type type;
 } sg_shader_image_desc;
 
-typedef struct {
+typedef struct sg_shader_stage_desc {
     const char* source;
     const uint8_t* byte_code;
     int byte_code_size;
@@ -1337,7 +1337,7 @@ typedef struct {
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
 
-typedef struct {
+typedef struct sg_shader_desc {
     uint32_t _start_canary;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
@@ -1417,13 +1417,13 @@ typedef struct {
         .depth_bias_slope_scale:        0.0f
         .depth_bias_clamp:              0.0f
 */
-typedef struct {
+typedef struct sg_buffer_layout_desc {
     int stride;
     sg_vertex_step step_func;
     int step_rate;
 } sg_buffer_layout_desc;
 
-typedef struct {
+typedef struct sg_vertex_attr_desc {
     const char* name;
     const char* sem_name;
     int sem_index;
@@ -1432,19 +1432,19 @@ typedef struct {
     sg_vertex_format format;
 } sg_vertex_attr_desc;
 
-typedef struct {
+typedef struct sg_layout_desc {
     sg_buffer_layout_desc buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_layout_desc;
 
-typedef struct {
+typedef struct sg_stencil_state {
     sg_stencil_op fail_op;
     sg_stencil_op depth_fail_op;
     sg_stencil_op pass_op;
     sg_compare_func compare_func;
 } sg_stencil_state;
 
-typedef struct {
+typedef struct sg_depth_stencil_state {
     sg_stencil_state stencil_front;
     sg_stencil_state stencil_back;
     sg_compare_func depth_compare_func;
@@ -1455,7 +1455,7 @@ typedef struct {
     uint8_t stencil_ref;
 } sg_depth_stencil_state;
 
-typedef struct {
+typedef struct sg_blend_state {
     bool enabled;
     sg_blend_factor src_factor_rgb;
     sg_blend_factor dst_factor_rgb;
@@ -1470,7 +1470,7 @@ typedef struct {
     float blend_color[4];
 } sg_blend_state;
 
-typedef struct {
+typedef struct sg_rasterizer_state {
     bool alpha_to_coverage_enabled;
     sg_cull_mode cull_mode;
     sg_face_winding face_winding;
@@ -1480,7 +1480,7 @@ typedef struct {
     float depth_bias_clamp;
 } sg_rasterizer_state;
 
-typedef struct {
+typedef struct sg_pipeline_desc {
     uint32_t _start_canary;
     sg_layout_desc layout;
     sg_shader shader;
@@ -1515,7 +1515,7 @@ typedef struct {
     In addition, all color-attachment images must have the same
     pixel format.
 */
-typedef struct {
+typedef struct sg_attachment_desc {
     sg_image image;
     int mip_level;
     union {
@@ -1525,7 +1525,7 @@ typedef struct {
     };
 } sg_attachment_desc;
 
-typedef struct {
+typedef struct sg_pass_desc {
     uint32_t _start_canary;
     sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc depth_stencil_attachment;

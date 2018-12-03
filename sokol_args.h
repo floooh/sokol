@@ -4,7 +4,7 @@
 
     Do this:
         #define SOKOL_IMPL
-    before you include this file in *one* C or C++ file to create the 
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
     Optionally provide the following defines with your own implementations:
@@ -31,7 +31,7 @@
 
     ARGUMENT FORMATTING
     ===================
-    On the web platform, arguments must be formatted as a valid URL query string 
+    On the web platform, arguments must be formatted as a valid URL query string
     with 'percent encoding' used for special characters.
 
     Strings are expected to be UTF-8 encoded (although sokol_args.h doesn't
@@ -47,7 +47,7 @@
 
     Key/value pairs are separated by 'whitespace', valid whitespace
     characters are space and tab.
-    
+
     Whitespace characters in front and after the separating '=' character
     are ignored:
 
@@ -59,7 +59,7 @@
 
     The 'key' string must be a simple string without escape sequences or whitespace.
 
-    Currently 'single keys' without values are not allowed, but may be 
+    Currently 'single keys' without values are not allowed, but may be
     in the future.
 
     The 'value' string can be quoted, and quoted value strings can contain
@@ -82,7 +82,7 @@
         \r  - carriage return
         \t  - tab
         \\  - escaped backslash
-    
+
     (more escape codes may be added in the future).
 
     CODE EXAMPLE
@@ -155,7 +155,7 @@
             char** argv     - the main function's argv parameter
             int max_args    - max number of key/value pairs, default is 16
             int buf_size    - size of the internal string buffer, default is 16384
-        
+
         Note that on the web, argc and argv will be ignored and the arguments
         will be taken from the page URL instead.
 
@@ -243,7 +243,7 @@
 extern "C" {
 #endif
 
-typedef struct {
+typedef struct sargs_desc {
     int argc;
     char** argv;
     int max_args;
@@ -309,7 +309,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
     #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG 
+    #ifdef SOKOL_DEBUG
         #include <stdio.h>
         #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
     #else
@@ -355,7 +355,7 @@ typedef struct {
     int buf_pos;        /* current buffer position */
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
     bool valid;
-    
+
     /* arg parsing isn't needed on emscripten */
     #if !defined(__EMSCRIPTEN__)
     uint32_t parse_state;
@@ -550,7 +550,7 @@ _SOKOL_PRIVATE bool _sargs_parse_carg(const char* src) {
         }
         else if (_sargs_parsing_val()) {
             if (_sargs_in_quotes()) {
-                /* when in quotes, whitespace is a normal character 
+                /* when in quotes, whitespace is a normal character
                    and a matching quote ends the value string
                 */
                 if (_sargs_is_quote(c)) {

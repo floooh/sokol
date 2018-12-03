@@ -4,7 +4,7 @@
 
     Do this:
         #define SOKOL_IMPL
-    before you include this file in *one* C or C++ file to create the 
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
     Optionally provide the following defines with your own implementations:
@@ -43,8 +43,8 @@
 
     The callback model is preferred because it is the most direct way to
     feed sample data into the audio backends and also has less moving parts
-    (there is no ring buffer between your code and the audio backend). 
-    
+    (there is no ring buffer between your code and the audio backend).
+
     Sometimes it is not possible to generate the audio stream directly in a
     callback function running in a separate thread, for such cases Sokol Audio
     provides the push-model as a convenience.
@@ -72,7 +72,7 @@
         a separate thread, on WebAudio, this is called per-frame in the
         browser thread.
 
-    - channel: 
+    - channel:
         A discrete track of audio data, currently 1-channel (mono) and
         2-channel (stereo) is supported and tested.
 
@@ -204,7 +204,7 @@
     calling saudio_setup().
 
     To provide sample data with the push model, call the saudio_push()
-    function at regular intervals (for instance once per frame). You can 
+    function at regular intervals (for instance once per frame). You can
     call the saudio_expect() function to ask Sokol Audio how much room is
     in the ring buffer, but if you provide a continuous stream of data
     at the right sample rate, saudio_expect() isn't required (it's a simple
@@ -213,7 +213,7 @@
 
     With saudio_push() you may need to maintain your own intermediate sample
     buffer, since pushing individual sample values isn't very efficient.
-    The following example is from the MOD player sample in 
+    The following example is from the MOD player sample in
     sokol-samples (https://github.com/floooh/sokol-samples):
 
         const int num_frames = saudio_expect();
@@ -257,7 +257,7 @@
 
     The WebAudio backend is automatically selected when compiling for
     emscripten (__EMSCRIPTEN__ define exists).
-    
+
     https://developers.google.com/web/updates/2017/12/audio-worklet
     https://developers.google.com/web/updates/2018/06/audio-worklet-design-pattern
 
@@ -345,7 +345,7 @@
 extern "C" {
 #endif
 
-typedef struct {
+typedef struct saudio_desc {
     int sample_rate;        /* requested sample rate */
     int num_channels;       /* number of channels, default: 1 (mono) */
     int buffer_frames;      /* number of frames in streaming buffer */
@@ -402,7 +402,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
     #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG 
+    #ifdef SOKOL_DEBUG
         #include <stdio.h>
         #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
     #else
@@ -745,7 +745,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     /* init or modify actual playback parameters */
     _saudio.bytes_per_frame = fmt.mBytesPerFrame;
-    
+
     /* ...and start playback */
     res = AudioQueueStart(_saudio_ca_audio_queue, NULL);
     SOKOL_ASSERT(0 == res);
@@ -913,7 +913,7 @@ typedef struct {
 } _saudio_wasapi_state;
 static _saudio_wasapi_state _saudio_wasapi;
 
-/* fill intermediate buffer with new data and reset buffer_pos */ 
+/* fill intermediate buffer with new data and reset buffer_pos */
 _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     if (_saudio.stream_cb) {
         _saudio.stream_cb(_saudio_wasapi.thread.src_buffer, _saudio_wasapi.thread.src_buffer_frames, _saudio.num_channels);
@@ -1011,25 +1011,25 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
-    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator, 
-        0, CLSCTX_ALL, 
-        &_saudio_IID_IMMDeviceEnumerator, 
-        (void**)&_saudio_wasapi.device_enumerator))) 
+    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator,
+        0, CLSCTX_ALL,
+        &_saudio_IID_IMMDeviceEnumerator,
+        (void**)&_saudio_wasapi.device_enumerator)))
     {
         SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
         goto error;
     }
     if (FAILED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(_saudio_wasapi.device_enumerator,
-        eRender, eConsole, 
-        &_saudio_wasapi.device))) 
+        eRender, eConsole,
+        &_saudio_wasapi.device)))
     {
         SOKOL_LOG("sokol_audio wasapi: GetDefaultAudioEndPoint failed");
         goto error;
-    } 
+    }
     if (FAILED(IMMDevice_Activate(_saudio_wasapi.device,
         &_saudio_IID_IAudioClient,
         CLSCTX_ALL, 0,
-        (void**)&_saudio_wasapi.audio_client))) 
+        (void**)&_saudio_wasapi.audio_client)))
     {
         SOKOL_LOG("sokol_audio wasapi: device activate failed");
         goto error;
@@ -1056,7 +1056,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client get buffer size failed");
         goto error;
     }
-    if (FAILED(IAudioClient_GetService(_saudio_wasapi.audio_client, 
+    if (FAILED(IAudioClient_GetService(_saudio_wasapi.audio_client,
         &_saudio_IID_IAudioRenderClient,
         (void**)&_saudio_wasapi.render_client)))
     {
@@ -1067,7 +1067,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
-    _saudio_wasapi.si16_bytes_per_frame = _saudio.num_channels * sizeof(int16_t); 
+    _saudio_wasapi.si16_bytes_per_frame = _saudio.num_channels * sizeof(int16_t);
     _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
     _saudio_wasapi.thread.src_buffer_frames = _saudio.buffer_frames;
     _saudio_wasapi.thread.src_buffer_byte_size = _saudio_wasapi.thread.src_buffer_frames * _saudio.bytes_per_frame;
