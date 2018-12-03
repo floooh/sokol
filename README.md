@@ -43,7 +43,6 @@ Eventually Oryol will just be a thin C++ layer over Sokol.
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
-
 # sokol_gfx.h:
 
 - simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
@@ -364,6 +363,80 @@ int main(int argc, char* argv[]) {
 
 See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
+
+# Overview of planned features
+
+A list of things I'd like to do next:
+
+## sokol_gfx.h planned features:
+
+- separate setting the pipeline from binding buffer and image resources:
+    - mark ```sg_apply_draw_state()``` and ```sg_draw_state``` as "deprecated"
+    - new function ```sg_apply_pipeline(sg_pipeline pip)``` to set the current
+      pipeline object, must be called inside a pass
+    - new struct ```sg_bindings```, same as sg_draw_state, but without the 
+      pipeline (only buffers and images for the two shader stages)
+    - new function ```sg_apply_bindings(const sg_bindings* bindings)``` to
+      update the resource bindings of the currently active pipeline
+    - WHY: this fixes an awkward function call sequence when just updating
+      a buffer- or image-binding via sg_apply_draw_state(), currently the
+      uniform blocks must also be updated, since the sg_apply_draw_state()
+      might have changed the currently set pipeline (but this isn't necessary
+      if the pipeline hasn't changed):
+        ```c
+            sg_apply_draw_state(&draw_state);
+            sg_apply_uniform_block(...);
+            sg_draw(...);
+            /* just change a buffer binding... */
+            draw_state.vertex_buffers[0] = buf;
+            sg_apply_uniform_block(...);
+            /* need to also update uniform blocks 
+               now even though pipeline hasn't changed
+            */
+            sg_apply_uniform_block(...);
+            sg_draw(...);
+        ```
+      With the new API this would look like this:
+      ```c
+            sg_apply_pipeline(pip);
+            sg_apply_bindings(&bindings);
+            sg_apply_uniform_block(...);
+            sg_draw(...);
+            /* changing a buffer binding doesn't require other calls */
+            bindings.vertex_buffers[0] = buf;
+            sg_apply_bindings(&bindings);
+            sg_draw(...);
+      ```
+
+## sokol_app.h planned features:
+
+Mainly some "missing features" for desktop apps:
+
+- allow 'programmatic quit' requested by the application
+- allow to intercept the window close button, so that the app can show
+  a 'do you really want to quit?' dialog box
+- define an application icon
+- change the window title on existing window
+- allow to programmatically activate and deactivate fullscreen
+- pointer lock
+- show/hide mouse cursor
+- allow to change mouse cursor image (at first only switch between system-provided standard images)
+
+Big stuff:
+
+- Android support (currently WIP)
+
+## sokol_audio.h planned features:
+
+- implement an alternative WebAudio backend using Audio Worklets and WASM threads
+
+## Potential new sokol headers:
+
+- system clipboard support
+- query filesystem standard locations
+- simple file access API (at least async file/URL loading)
+- gamepad support
+- simple cross-platform touch gesture recognition
 
 # Updates
 
