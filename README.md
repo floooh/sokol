@@ -370,6 +370,10 @@ A list of things I'd like to do next:
 
 ## sokol_gfx.h planned features:
 
+- use a per-pool-slot generation counter as 'unique tag' in the resource handles,
+  and let the application decide whether slots should be disabled when
+  their generation counter overflows, or whether the generation counter
+  should simply wrap around
 - separate setting the pipeline from binding buffer and image resources:
     - mark ```sg_apply_draw_state()``` and ```sg_draw_state``` as "deprecated"
     - new function ```sg_apply_pipeline(sg_pipeline pip)``` to set the current
