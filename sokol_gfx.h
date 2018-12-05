@@ -95,18 +95,22 @@
 
             sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
 
-    --- fill an sg_draw_state struct with the resource bindings for the next
-        draw call (one pipeline object, 1..N vertex buffers, 0 or 1
-        index buffer, 0..N image objects to use as textures each on
-        the vertex-shader- and fragment-shader-stage and then call
+    --- set the pipeline state for the next draw call with:
 
-            sg_apply_draw_state(const sg_draw_state* draw_state)
+            sg_apply_pipeline(sg_pipeline pip)
+
+    --- fill an sg_bindings struct with the resource bindings for the next
+        draw call (1..N vertex buffers, 0 or 1 index buffer, 0..N image objects
+        to use as textures each on the vertex-shader- and fragment-shader-stage
+        and then call
+
+            sg_apply_bindings(const sg_bindings* bindings)
 
         to update the resource bindings
 
     --- optionally update shader uniform data with:
 
-            sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
 
     --- kick off a draw call with:
 
@@ -174,8 +178,8 @@
 
         sg_append_buffer() returns a byte offset to the start of the
         written data, this offset can be assigned to
-        sg_draw_state.vertex_buffer_offsets[n] or
-        sg_draw_state.index_buffer_offset
+        sg_bindings.vertex_buffer_offsets[n] or
+        sg_bindings.index_buffer_offset
 
         Code example:
 
@@ -183,9 +187,10 @@
             const void* data = ...;
             const int num_bytes = ...;
             int offset = sg_append_buffer(buf, data, num_bytes);
-            draw_state.vertex_buffer_offsets[0] = offset;
-            sg_apply_draw_state(&draw_state);
-            sg_apply_uniform_block(...);
+            bindings.vertex_buffer_offsets[0] = offset;
+            sg_apply_pipeline(pip);
+            sg_apply_bindings(&bindings);
+            sg_apply_uniforms(...);
             sg_draw(...);
         }
 
@@ -1016,15 +1021,14 @@ typedef struct sg_pass_action {
 } sg_pass_action;
 
 /*
-    sg_draw_state
+    sg_bindings
 
-    The sg_draw_state structure defines the resource binding slots
+    The sg_bindings structure defines the resource binding slots
     of the sokol_gfx render pipeline, used as argument to the
-    sg_apply_draw_state() function.
+    sg_apply_bindings() function.
 
-    A draw state contains:
+    A resource binding struct contains:
 
-    - 1 pipeline object
     - 1..N vertex buffers
     - 0..N vertex buffer offsets
     - 0..1 index buffers
@@ -1039,9 +1043,8 @@ typedef struct sg_pass_action {
     The optional buffer offsets can be used to group different chunks
     of vertex- and/or index-data into the same buffer objects.
 */
-typedef struct sg_draw_state {
+typedef struct sg_bindings {
     uint32_t _start_canary;
-    sg_pipeline pipeline;
     sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
     int vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
     sg_buffer index_buffer;
@@ -1049,7 +1052,7 @@ typedef struct sg_draw_state {
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t _end_canary;
-} sg_draw_state;
+} sg_bindings;
 
 /*
     sg_desc
@@ -1567,8 +1570,9 @@ SOKOL_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int
 SOKOL_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
 SOKOL_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
-SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
-SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
+SOKOL_API_DECL void sg_apply_pipeline(sg_pipeline pip);
+SOKOL_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
+SOKOL_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
 SOKOL_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_API_DECL void sg_end_pass(void);
 SOKOL_API_DECL void sg_commit(void);
@@ -1594,6 +1598,21 @@ SOKOL_API_DECL void sg_fail_pass(sg_pass pass_id);
 SOKOL_API_DECL sg_context sg_setup_context(void);
 SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
+
+/* deprecated structs and functions */
+typedef struct sg_draw_state {
+    uint32_t _start_canary;
+    sg_pipeline pipeline;
+    sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    int vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_buffer index_buffer;
+    int index_buffer_offset;
+    sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
+    uint32_t _end_canary;
+} sg_draw_state;
+SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
+SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
 
 #ifdef _MSC_VER
 #pragma warning(pop)

@@ -119,9 +119,8 @@ int main() {
         }
     });
 
-    /* a draw state with all the resource binding */
-    sg_draw_state draw_state = {
-        .pipeline = pip,
+    /* resource bindings */
+    sg_bindings binds = {
         .vertex_buffers[0] = vbuf
     };
 
@@ -133,7 +132,8 @@ int main() {
         int cur_width, cur_height;
         glfwGetFramebufferSize(w, &cur_width, &cur_height);
         sg_begin_default_pass(&pass_action, cur_width, cur_height);
-        sg_apply_draw_state(&draw_state);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&binds);
         sg_draw(0, 3, 1);
         sg_end_pass();
         sg_commit();
