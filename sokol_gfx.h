@@ -3677,7 +3677,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     }
     if (need_pip_cache_flush) {
         /* we messed with the state cache directly, need to clear cached
-           pipeline to force re-evaluation in next sg_apply_draw_state() */
+           pipeline to force re-evaluation in next sg_apply_pipeline() */
         _sg_gl.cache.cur_pipeline = 0;
         _sg_gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
@@ -3800,21 +3800,10 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     glScissor(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state(
-    _sg_pipeline* pip,
-    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer* ib, int ib_offset,
-    _sg_image** vs_imgs, int num_vs_imgs,
-    _sg_image** fs_imgs, int num_fs_imgs)
-{
+_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
-    _SOKOL_UNUSED(num_fs_imgs);
-    _SOKOL_UNUSED(num_vs_imgs);
-    _SOKOL_UNUSED(num_vbs);
     _SG_GL_CHECK_ERROR();
-
-    /* need to apply pipeline state? */
     if ((_sg_gl.cache.cur_pipeline != pip) || (_sg_gl.cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg_gl.cache.cur_pipeline = pip;
         _sg_gl.cache.cur_pipeline_id.id = pip->slot.id;
@@ -3975,6 +3964,20 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         /* bind shader program */
         glUseProgram(pip->shader->gl_prog);
     }
+}
+
+_SOKOL_PRIVATE void _sg_apply_bindings(
+    _sg_pipeline* pip,
+    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer* ib, int ib_offset,
+    _sg_image** vs_imgs, int num_vs_imgs,
+    _sg_image** fs_imgs, int num_fs_imgs)
+{
+    SOKOL_ASSERT(pip);
+    _SOKOL_UNUSED(num_fs_imgs);
+    _SOKOL_UNUSED(num_vs_imgs);
+    _SOKOL_UNUSED(num_vbs);
+    _SG_GL_CHECK_ERROR();
 
     /* bind textures */
     _SG_GL_CHECK_ERROR();
@@ -4028,11 +4031,11 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
-#ifdef SOKOL_INSTANCING_ENABLED
-                if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
-                    glVertexAttribDivisor(attr_index, attr->divisor);
-                }
-#endif
+                #ifdef SOKOL_INSTANCING_ENABLED
+                    if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
+                        glVertexAttribDivisor(attr_index, attr->divisor);
+                    }
+                #endif
                 cache_attr_dirty = true;
             }
             if (cache_attr->gl_attr.vb_index == -1) {
