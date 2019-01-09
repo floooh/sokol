@@ -7350,15 +7350,38 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     [_sg_mtl_cmd_encoder setScissorRect:r];
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state(
+_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(pip->shader);
+    SOKOL_ASSERT(_sg_mtl_in_pass);
+    if (!_sg_mtl_pass_valid) {
+        return;
+    }
+    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+
+    if ((_sg_mtl_cur_pipeline != pip) || (_sg_mtl_cur_pipeline_id.id != pip->slot.id)) {
+        _sg_mtl_cur_pipeline = pip;
+        _sg_mtl_cur_pipeline_id.id = pip->slot.id;
+        const float* c = pip->blend_color;
+        [_sg_mtl_cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
+        [_sg_mtl_cmd_encoder setCullMode:pip->mtl_cull_mode];
+        [_sg_mtl_cmd_encoder setFrontFacingWinding:pip->mtl_winding];
+        [_sg_mtl_cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
+        [_sg_mtl_cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
+        SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_POOL_INDEX);
+        [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_pool[pip->mtl_rps]];
+        SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_POOL_INDEX);
+        [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_pool[pip->mtl_dss]];
+    }
+}
+
+_SOKOL_PRIVATE void _sg_apply_bindings(
     _sg_pipeline* pip,
     _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer* ib, int ib_offset,
     _sg_image** vs_imgs, int num_vs_imgs,
     _sg_image** fs_imgs, int num_fs_imgs)
 {
-    SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader);
     SOKOL_ASSERT(_sg_mtl_in_pass);
     if (!_sg_mtl_pass_valid) {
         return;
@@ -7375,23 +7398,6 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     else {
         SOKOL_ASSERT(pip->index_type == SG_INDEXTYPE_NONE);
         _sg_mtl_cur_indexbuffer_id.id = SG_INVALID_ID;
-    }
-
-    /* apply pipeline state */
-    if ((_sg_mtl_cur_pipeline != pip) || (_sg_mtl_cur_pipeline_id.id != pip->slot.id)) {
-        _sg_mtl_cur_pipeline = pip;
-        _sg_mtl_cur_pipeline_id.id = pip->slot.id;
-        const float* c = pip->blend_color;
-        /* FIXME: those should be filtered through a simple state cache */
-        [_sg_mtl_cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
-        [_sg_mtl_cmd_encoder setCullMode:pip->mtl_cull_mode];
-        [_sg_mtl_cmd_encoder setFrontFacingWinding:pip->mtl_winding];
-        [_sg_mtl_cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
-        [_sg_mtl_cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
-        SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_POOL_INDEX);
-        [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_pool[pip->mtl_rps]];
-        SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_POOL_INDEX);
-        [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_pool[pip->mtl_dss]];
     }
 
     /* apply vertex buffers */
@@ -8084,6 +8090,7 @@ typedef struct {
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
     bool pass_valid;
+    bool bindings_valid;
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     _sg_validate_error validate_error;
@@ -8635,7 +8642,6 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     memset(&_sg, 0, sizeof(_sg));
     _sg_setup_pools(&_sg.pools, desc);
     _sg.frame_index = 1;
-    _sg.next_draw_valid = false;
     _sg_setup_backend(desc);
     sg_setup_context();
     _sg.valid = true;
@@ -9110,6 +9116,7 @@ SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, b
 }
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
+    _sg.bindings_valid = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         return;
@@ -9132,6 +9139,10 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
         _sg.next_draw_valid = false;
         return;
     }
+    _sg.bindings_valid = true;
+
+    _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
+    SOKOL_ASSERT(pip);
 
     _sg_buffer* vbs[SG_MAX_SHADERSTAGE_BUFFERS] = { 0 };
     int num_vbs = 0;
@@ -9183,7 +9194,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     if (_sg.next_draw_valid) {
         const int* vb_offsets = bind->vertex_buffer_offsets;
         int ib_offset = bind->index_buffer_offset;
-        _sg_apply_bindings(vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+        _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
     }
 }
 
@@ -9202,7 +9213,12 @@ SOKOL_API_IMPL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
-    if (!(_sg.pass_valid && _sg.next_draw_valid)) {
+    #if defined(SOKOL_DEBUG) 
+        if (!_sg.bindings_valid) {
+            SOKOL_LOG("attempting to draw without resource bindings");
+        }
+    #endif
+    if (!(_sg.pass_valid && _sg.bindings_valid && _sg.next_draw_valid)) {
         return;
     }
     _sg_draw(base_element, num_elements, num_instances);
