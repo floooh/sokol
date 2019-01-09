@@ -382,6 +382,15 @@ extern "C" {
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
 #endif
 
+#ifndef SOKOL_DEPRECATED
+    #if defined(__GNUC__)
+        #define SOKOL_DEPRECATED(msg) __attribute__((deprecated(msg)))
+    #else
+        /* FIXME! */
+        #define SOKOL_DEPRECATED(msg,rep)
+    #endif
+#endif
+
 /*
     Resource id typedefs:
 
@@ -1610,9 +1619,9 @@ typedef struct sg_draw_state {
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t _end_canary;
-} sg_draw_state;
-SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
-SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
+} sg_draw_state SOKOL_DEPRECATED("use sg_bindings");
+SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds) SOKOL_DEPRECATED("use sg_apply_pipeline and sg_apply_bindings");
+SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) SOKOL_DEPRECATED("use sg_apply_uniforms");
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -4047,7 +4056,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
@@ -5663,7 +5672,7 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     ID3D11DeviceContext_PSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(_sg_d3d11.ctx && _sg_d3d11.in_pass);
     SOKOL_ASSERT(data && (num_bytes > 0));
@@ -7448,7 +7457,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
 
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
-_SOKOL_PRIVATE void _sg_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(_sg_mtl_in_pass);
     if (!_sg_mtl_pass_valid) {
         return;
@@ -7937,7 +7946,7 @@ typedef enum {
     _SG_VALIDATE_ABND_FS_IMGS,
     _SG_VALIDATE_ABND_FS_IMG_TYPES,
 
-    /* sg_apply_uniform_block validation */
+    /* sg_apply_uniforms validation */
     _SG_VALIDATE_AUB_NO_PIPELINE,
     _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
     _SG_VALIDATE_AUB_SIZE,
@@ -8053,10 +8062,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_ABND_FS_IMGS:             return "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc";
         case _SG_VALIDATE_ABND_FS_IMG_TYPES:        return "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc";
 
-        /* sg_apply_uniform_block */
-        case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniform_block: must be called after sg_apply_draw_state()";
-        case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniform_block: no uniform block declaration at this shader stage UB slot";
-        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniform_block: data size exceeds declared uniform block size";
+        /* sg_apply_uniforms */
+        case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniforms: must be called after sg_apply_draw_state()";
+        case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot";
+        case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniforms: data size exceeds declared uniform block size";
 
         /* sg_update_buffer */
         case _SG_VALIDATE_UPDATEBUF_USAGE:      return "sg_update_buffer: cannot update immutable buffer";
@@ -8548,7 +8557,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_apply_uniform_block(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     _SOKOL_UNUSED(data);
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(stage_index);
@@ -9198,18 +9207,18 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     }
 }
 
-SOKOL_API_IMPL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
+SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(data && (num_bytes > 0));
-    if (!_sg_validate_apply_uniform_block(stage, ub_index, data, num_bytes)) {
+    if (!_sg_validate_apply_uniforms(stage, ub_index, data, num_bytes)) {
         _sg.next_draw_valid = false;
         return;
     }
     if (!(_sg.pass_valid && _sg.next_draw_valid)) {
         return;
     }
-    _sg_apply_uniform_block(stage, ub_index, data, num_bytes);
+    _sg_apply_uniforms(stage, ub_index, data, num_bytes);
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
@@ -9333,6 +9342,10 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
         bind.fs_images[i] = ds->fs_images[i];
     }
     sg_apply_bindings(&bind);
+}
+
+SOKOL_API_IMPL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
+    sg_apply_uniforms(stage, ub_index, data, num_bytes);
 }
 
 #ifdef _MSC_VER
