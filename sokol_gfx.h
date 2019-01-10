@@ -382,15 +382,6 @@ extern "C" {
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
 #endif
 
-#ifndef SOKOL_DEPRECATED
-    #if defined(__GNUC__)
-        #define SOKOL_DEPRECATED(msg) __attribute__((deprecated(msg)))
-    #else
-        /* FIXME! */
-        #define SOKOL_DEPRECATED(msg,rep)
-    #endif
-#endif
-
 /*
     Resource id typedefs:
 
@@ -1619,9 +1610,9 @@ typedef struct sg_draw_state {
     sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
     sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
     uint32_t _end_canary;
-} sg_draw_state SOKOL_DEPRECATED("use sg_bindings");
-SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds) SOKOL_DEPRECATED("use sg_apply_pipeline and sg_apply_bindings");
-SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) SOKOL_DEPRECATED("use sg_apply_uniforms");
+} sg_draw_state;
+SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
+SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -5598,13 +5589,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     ID3D11DeviceContext_RSSetScissorRects(_sg_d3d11.ctx, 1, &rect);
 }
 
-_SOKOL_PRIVATE void _sg_apply_draw_state(
-    _sg_pipeline* pip,
-    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
-    _sg_buffer* ib, int ib_offset,
-    _sg_image** vs_imgs, int num_vs_imgs,
-    _sg_image** fs_imgs, int num_fs_imgs)
-{
+_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     SOKOL_ASSERT(_sg_d3d11.ctx);
@@ -5614,6 +5599,28 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
     _sg_d3d11.cur_pipeline = pip;
     _sg_d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg_d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
+    
+    ID3D11DeviceContext_RSSetState(_sg_d3d11.ctx, pip->d3d11_rs);
+    ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
+    ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
+    ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
+    ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
+    ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
+    ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_VS].d3d11_cbs);
+    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
+    ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_FS].d3d11_cbs);
+}
+
+_SOKOL_PRIVATE void _sg_apply_bindings(
+    _sg_pipeline* pip,
+    _sg_buffer** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer* ib, int ib_offset,
+    _sg_image** vs_imgs, int num_vs_imgs,
+    _sg_image** fs_imgs, int num_fs_imgs)
+{
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(_sg_d3d11.ctx);
+    SOKOL_ASSERT(_sg_d3d11.in_pass);
 
     /* gather all the D3D11 resources into arrays */
     ID3D11Buffer* d3d11_ib = ib ? ib->d3d11_buf : 0;
@@ -5654,23 +5661,10 @@ _SOKOL_PRIVATE void _sg_apply_draw_state(
         d3d11_fs_smps[i] = 0;
     }
 
-    /* FIXME: is it worth it to implement a state cache here? measure! */
-    ID3D11DeviceContext_RSSetState(_sg_d3d11.ctx, pip->d3d11_rs);
-    ID3D11DeviceContext_OMSetDepthStencilState(_sg_d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
-    ID3D11DeviceContext_OMSetBlendState(_sg_d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
-
     ID3D11DeviceContext_IASetVertexBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, d3d11_vbs, pip->d3d11_vb_strides, d3d11_vb_offsets);
-    ID3D11DeviceContext_IASetPrimitiveTopology(_sg_d3d11.ctx, pip->d3d11_topology);
     ID3D11DeviceContext_IASetIndexBuffer(_sg_d3d11.ctx, d3d11_ib, pip->d3d11_index_format, ib_offset);
-    ID3D11DeviceContext_IASetInputLayout(_sg_d3d11.ctx, pip->d3d11_il);
-
-    ID3D11DeviceContext_VSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_vs, NULL, 0);
-    ID3D11DeviceContext_VSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_VS].d3d11_cbs);
     ID3D11DeviceContext_VSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_srvs);
     ID3D11DeviceContext_VSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_vs_smps);
-
-    ID3D11DeviceContext_PSSetShader(_sg_d3d11.ctx, pip->shader->d3d11_fs, NULL, 0);
-    ID3D11DeviceContext_PSSetConstantBuffers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->stage[SG_SHADERSTAGE_FS].d3d11_cbs);
     ID3D11DeviceContext_PSSetShaderResources(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_srvs);
     ID3D11DeviceContext_PSSetSamplers(_sg_d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
 }
