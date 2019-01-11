@@ -8431,7 +8431,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         /* the pipeline object must be alive and valid */
         SOKOL_VALIDATE(pip_id.id != SG_INVALID_ID, _SG_VALIDATE_APIP_PIPELINE_VALID_ID);
         const _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-        SOKOL_VALIDATE(pip, _SG_VALIDATE_APIP_PIPELINE_EXISTS);
+        SOKOL_VALIDATE(pip != 0, _SG_VALIDATE_APIP_PIPELINE_EXISTS);
         if (!pip) {
             return SOKOL_VALIDATE_END();
         }
@@ -8475,7 +8475,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         /* a pipeline object must have been applied */
         SOKOL_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, _SG_VALIDATE_ABND_PIPELINE);
         const _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
-        SOKOL_VALIDATE(pip, _SG_VALIDATE_ABND_PIPELINE_EXISTS);
+        SOKOL_VALIDATE(pip != 0, _SG_VALIDATE_ABND_PIPELINE_EXISTS);
         if (!pip) {
             return SOKOL_VALIDATE_END();
         }
