@@ -39,6 +39,11 @@
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
+    If you want to compile without deprecated structs and functions,
+    define:
+
+    SOKOL_NO_DEPRECATED
+
     API usage validation macros:
 
     SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
@@ -1600,6 +1605,7 @@ SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 
 /* deprecated structs and functions */
+#ifndef SOKOL_NO_DEPRECATED
 typedef struct sg_draw_state {
     uint32_t _start_canary;
     sg_pipeline pipeline;
@@ -1613,6 +1619,7 @@ typedef struct sg_draw_state {
 } sg_draw_state;
 SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
 SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -8060,7 +8067,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_ABND_FS_IMG_TYPES:        return "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc";
 
         /* sg_apply_uniforms */
-        case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniforms: must be called after sg_apply_draw_state()";
+        case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniforms: must be called after sg_apply_pipeline()";
         case _SG_VALIDATE_AUB_NO_UB_AT_SLOT:    return "sg_apply_uniforms: no uniform block declaration at this shader stage UB slot";
         case _SG_VALIDATE_AUB_SIZE:             return "sg_apply_uniforms: data size exceeds declared uniform block size";
 
@@ -9322,6 +9329,7 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_content* dat
 }
 
 /*--- DEPRECATED ---*/
+#ifndef SOKOL_NO_DEPRECATED
 SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
@@ -9344,6 +9352,7 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
 SOKOL_API_IMPL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
     sg_apply_uniforms(stage, ub_index, data, num_bytes);
 }
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)
