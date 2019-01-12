@@ -374,45 +374,6 @@ A list of things I'd like to do next:
   and let the application decide whether slots should be disabled when
   their generation counter overflows, or whether the generation counter
   should simply wrap around
-- separate setting the pipeline from binding buffer and image resources:
-    - mark ```sg_apply_draw_state()``` and ```sg_draw_state``` as "deprecated"
-    - new function ```sg_apply_pipeline(sg_pipeline pip)``` to set the current
-      pipeline object, must be called inside a pass
-    - new struct ```sg_bindings```, same as sg_draw_state, but without the 
-      pipeline (only buffers and images for the two shader stages)
-    - new function ```sg_apply_bindings(const sg_bindings* bindings)``` to
-      update the resource bindings of the currently active pipeline
-    - WHY: this fixes an awkward function call sequence when just updating
-      a buffer- or image-binding via sg_apply_draw_state(), currently the
-      uniform blocks must also be updated, since the sg_apply_draw_state()
-      might have changed the currently set pipeline (but this isn't necessary
-      if the pipeline hasn't changed):
-        ```c
-            sg_apply_draw_state(&draw_state);
-            sg_apply_uniform_block(...);
-            sg_draw(...);
-            /* just change a buffer binding... */
-            draw_state.vertex_buffers[0] = buf;
-            sg_apply_uniform_block(...);
-            /* need to also update uniform blocks 
-               now even though pipeline hasn't changed
-            */
-            sg_apply_uniform_block(...);
-            sg_draw(...);
-        ```
-      With the new API this would look like this:
-      ```c
-            sg_apply_pipeline(pip);
-            sg_apply_bindings(&bindings);
-            sg_apply_uniform_block(...);
-            sg_draw(...);
-            /* changing a buffer binding doesn't require other calls */
-            bindings.vertex_buffers[0] = buf;
-            sg_apply_bindings(&bindings);
-            sg_draw(...);
-      ```
-    (hmm, looking at the code above it probably also makes sense to add
-    a ```sg_apply_uniforms(...)``` as an alias for ```sg_apply_uniform_block```)
 
 ## sokol_app.h planned features:
 
@@ -445,6 +406,16 @@ Big stuff:
 - simple cross-platform touch gesture recognition
 
 # Updates
+
+- **12-Jan-2019**: sokol_gfx.h - setting the pipeline state and resource
+bindings now happens in separate calls, specifically: 
+    - *sg_apply_draw_state()* has been replaced with *sg_apply_pipeline()* and
+    *sg_apply_bindings()*
+    - the *sg_draw_state* struct has been replaced with *sg_bindings*
+    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+All existing code will still work. See [this blog
+post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
+details.
 
 - **29-Oct-2018**:
     - sokol_gfx.h has a new function **sg_append_buffer()** which allows to
