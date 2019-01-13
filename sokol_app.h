@@ -4,7 +4,7 @@
 
     Do this:
         #define SOKOL_IMPL
-    before you include this file in *one* C or C++ file to create the 
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
     Optionally provide the following defines with your own implementations:
@@ -29,7 +29,7 @@
 
     If you use sokol_app.h together with sokol_gfx.h, include both headers
     in the implementation source file, and include sokol_app.h before
-    sokol_gfx.h since sokol_app.h will also include the required 3D-API 
+    sokol_gfx.h since sokol_app.h will also include the required 3D-API
     headers.
 
     On Windows, a minimal 'GL header' and function loader is integrated which
@@ -111,7 +111,7 @@
     ============
     --- Add a sokol_main() to your code which returns a sapp_desc structure
         with initialization parameters and callback function pointers. This
-        function is called very early, usually at the start of the 
+        function is called very early, usually at the start of the
         platform's entry function (e.g. main or WinMain). You should do as
         little as possible here, since the rest of your code might be called
         from another thread (this depends on the platform):
@@ -133,7 +133,7 @@
         below.
 
         DO NOT call any sokol-app function from inside sokol_main(), since
-        sokol-app will not be initialized at this point. 
+        sokol-app will not be initialized at this point.
 
         The .width and .height parameters are the preferred size of the 3D
         rendering canvas. The actual size may differ from this depending on
@@ -160,7 +160,7 @@
             future may also be used to communicate other types of events
             to the application. Keep the event_cb struct member zero-initialized
             if your application doesn't require event handling.
-                      
+
     --- Implement the initialization callback function, this is called once
         after the rendering surface, 3D API and swap chain have been
         initialized by sokol_app. All sokol-app functions can be called
@@ -172,7 +172,7 @@
             from one frame to the next.
         int sapp_height(void)
             Likewise, returns the current height of the default framebuffer.
-        
+
         bool sapp_gles2(void)
             Returns true if as GLES2 or WebGL2 context had been created (for
             instance because GLES3/WebGL2 isn't available on the device)
@@ -200,7 +200,7 @@
         const void* sapp_d3d11_get_render_target_view(void);
         const void* sapp_d3d11_get_depth_stencil_view(void);
             Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
-            return pointers to D3D11 API objects required for rendering, 
+            return pointers to D3D11 API objects required for rendering,
             only if the D3D11 backend has been selected. Otherwise they
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
@@ -272,7 +272,7 @@
     FULLSCREEN
     ==========
     If the sapp_desc.fullscreen flag is true, sokol-app will try to create
-    a fullscreen window on platforms with a 'proper' window system 
+    a fullscreen window on platforms with a 'proper' window system
     (mobile devices will always use fullscreen). The implementation details
     depend on the target platform, in general sokol-app will use a
     'soft approach' which doesn't interfere too much with the platform's
@@ -347,7 +347,7 @@ enum {
     SAPP_MAX_KEYCODES = 512,
 };
 
-typedef enum {
+typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
     SAPP_EVENTTYPE_KEY_DOWN,
     SAPP_EVENTTYPE_KEY_UP,
@@ -373,7 +373,7 @@ typedef enum {
 } sapp_event_type;
 
 /* key codes are the same names and values as GLFW */
-typedef enum {
+typedef enum sapp_keycode {
     SAPP_KEYCODE_INVALID          = 0,
     SAPP_KEYCODE_SPACE            = 32,
     SAPP_KEYCODE_APOSTROPHE       = 39,  /* ' */
@@ -497,14 +497,14 @@ typedef enum {
     SAPP_KEYCODE_MENU             = 348,
 } sapp_keycode;
 
-typedef struct {
+typedef struct sapp_touchpoint {
     uintptr_t identifier;
     float pos_x;
     float pos_y;
     bool changed;
 } sapp_touchpoint;
 
-typedef enum {
+typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_INVALID = -1,
     SAPP_MOUSEBUTTON_LEFT = 0,
     SAPP_MOUSEBUTTON_RIGHT = 1,
@@ -518,7 +518,7 @@ enum {
     SAPP_MODIFIER_SUPER = (1<<3)
 };
 
-typedef struct {
+typedef struct sapp_event {
     sapp_event_type type;
     uint32_t frame_count;
     sapp_keycode key_code;
@@ -537,7 +537,7 @@ typedef struct {
     int framebuffer_height;
 } sapp_event;
 
-typedef struct {
+typedef struct sapp_desc {
     void (*init_cb)(void);
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
@@ -557,7 +557,7 @@ typedef struct {
     bool html5_canvas_resize;
     bool ios_keyboard_resizes_canvas;
     /* use GLES2 even if GLES3 is available */
-    bool gl_force_gles2; 
+    bool gl_force_gles2;
     /* if true, user is expected to manage cursor image and visibility on SAPP_EVENTTYPE_UPDATE_CURSOR */
     bool user_cursor;
 } sapp_desc;
@@ -580,7 +580,7 @@ SOKOL_API_DECL bool sapp_gles2(void);
 /* OSX/Metal specific functions */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
 SOKOL_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
-SOKOL_API_DECL const void* sapp_metal_get_drawable(void); 
+SOKOL_API_DECL const void* sapp_metal_get_drawable(void);
 SOKOL_API_DECL const void* sapp_macos_get_window(void);
 SOKOL_API_DECL const void* sapp_ios_get_window(void);
 
@@ -1233,8 +1233,8 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 - (void)keyUp:(NSEvent*)event {
-    _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, 
-        _sapp_translate_key(event.keyCode), 
+    _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
+        _sapp_translate_key(event.keyCode),
         _sapp_macos_mod(event.modifierFlags));
 }
 - (void)flagsChanged:(NSEvent*)event {
@@ -1637,7 +1637,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
 #else
-#ifndef GL_EXT_PROTOTYPES 
+#ifndef GL_EXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES
 #endif
 #include <GLES2/gl2.h>
@@ -1890,7 +1890,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 break;
             default:
                 type = SAPP_EVENTTYPE_INVALID;
-                break; 
+                break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
@@ -3734,7 +3734,7 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
         rect.bottom = GetSystemMetrics(SM_CYSCREEN);
     }
     else {
-        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX; 
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
         rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
         rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
     }
@@ -3842,7 +3842,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
     _sapp_win32_create_window();
-    #if defined(SOKOL_D3D11) 
+    #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
     #endif
@@ -3888,7 +3888,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _sapp_win32_destroy_window();
     return 0;
 }
- 
+
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
@@ -4745,19 +4745,19 @@ static const struct _sapp_x11_codepair {
   uint16_t keysym;
   uint16_t ucs;
 } _sapp_x11_keysymtab[] = {
-  { 0x01a1, 0x0104 }, 
-  { 0x01a2, 0x02d8 }, 
-  { 0x01a3, 0x0141 }, 
-  { 0x01a5, 0x013d }, 
-  { 0x01a6, 0x015a }, 
+  { 0x01a1, 0x0104 },
+  { 0x01a2, 0x02d8 },
+  { 0x01a3, 0x0141 },
+  { 0x01a5, 0x013d },
+  { 0x01a6, 0x015a },
   { 0x01a9, 0x0160 },
-  { 0x01aa, 0x015e }, 
-  { 0x01ab, 0x0164 }, 
-  { 0x01ac, 0x0179 }, 
-  { 0x01ae, 0x017d }, 
-  { 0x01af, 0x017b }, 
+  { 0x01aa, 0x015e },
+  { 0x01ab, 0x0164 },
+  { 0x01ac, 0x0179 },
+  { 0x01ae, 0x017d },
+  { 0x01af, 0x017b },
   { 0x01b1, 0x0105 },
-  { 0x01b2, 0x02db }, 
+  { 0x01b2, 0x02db },
   { 0x01b3, 0x0142 },
   { 0x01b5, 0x013e },
   { 0x01b6, 0x015b },
@@ -5658,10 +5658,10 @@ _SOKOL_PRIVATE bool _sapp_glx_extsupported(const char* ext, const char* extensio
 _SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
 {
     if (_sapp_glx_GetProcAddress) {
-        return _sapp_glx_GetProcAddress((const GLubyte*) procname);
+        return (void*) _sapp_glx_GetProcAddress((const GLubyte*) procname);
     }
     else if (_sapp_glx_GetProcAddressARB) {
-        return _sapp_glx_GetProcAddressARB((const GLubyte*) procname);
+        return (void*) _sapp_glx_GetProcAddressARB((const GLubyte*) procname);
     }
     else {
         return dlsym(_sapp_glx_libgl, procname);
@@ -5679,21 +5679,21 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
     if (!_sapp_glx_libgl) {
         _sapp_fail("GLX: failed to load libGL");
     }
-    _sapp_glx_GetFBConfigs          = dlsym(_sapp_glx_libgl, "glXGetFBConfigs");
-    _sapp_glx_GetFBConfigAttrib     = dlsym(_sapp_glx_libgl, "glXGetFBConfigAttrib");
-    _sapp_glx_GetClientString       = dlsym(_sapp_glx_libgl, "glXGetClientString");
-    _sapp_glx_QueryExtension        = dlsym(_sapp_glx_libgl, "glXQueryExtension");
-    _sapp_glx_QueryVersion          = dlsym(_sapp_glx_libgl, "glXQueryVersion");
-    _sapp_glx_DestroyContext        = dlsym(_sapp_glx_libgl, "glXDestroyContext");
-    _sapp_glx_MakeCurrent           = dlsym(_sapp_glx_libgl, "glXMakeCurrent");
-    _sapp_glx_SwapBuffers           = dlsym(_sapp_glx_libgl, "glXSwapBuffers");
-    _sapp_glx_QueryExtensionsString = dlsym(_sapp_glx_libgl, "glXQueryExtensionsString");
-    _sapp_glx_CreateNewContext      = dlsym(_sapp_glx_libgl, "glXCreateNewContext");
-    _sapp_glx_CreateWindow          = dlsym(_sapp_glx_libgl, "glXCreateWindow");
-    _sapp_glx_DestroyWindow         = dlsym(_sapp_glx_libgl, "glXDestroyWindow");
-    _sapp_glx_GetProcAddress        = dlsym(_sapp_glx_libgl, "glXGetProcAddress");
-    _sapp_glx_GetProcAddressARB     = dlsym(_sapp_glx_libgl, "glXGetProcAddressARB");
-    _sapp_glx_GetVisualFromFBConfig = dlsym(_sapp_glx_libgl, "glXGetVisualFromFBConfig");
+    _sapp_glx_GetFBConfigs          = (PFNGLXGETFBCONFIGSPROC)          dlsym(_sapp_glx_libgl, "glXGetFBConfigs");
+    _sapp_glx_GetFBConfigAttrib     = (PFNGLXGETFBCONFIGATTRIBPROC)     dlsym(_sapp_glx_libgl, "glXGetFBConfigAttrib");
+    _sapp_glx_GetClientString       = (PFNGLXGETCLIENTSTRINGPROC)       dlsym(_sapp_glx_libgl, "glXGetClientString");
+    _sapp_glx_QueryExtension        = (PFNGLXQUERYEXTENSIONPROC)        dlsym(_sapp_glx_libgl, "glXQueryExtension");
+    _sapp_glx_QueryVersion          = (PFNGLXQUERYVERSIONPROC)          dlsym(_sapp_glx_libgl, "glXQueryVersion");
+    _sapp_glx_DestroyContext        = (PFNGLXDESTROYCONTEXTPROC)        dlsym(_sapp_glx_libgl, "glXDestroyContext");
+    _sapp_glx_MakeCurrent           = (PFNGLXMAKECURRENTPROC)           dlsym(_sapp_glx_libgl, "glXMakeCurrent");
+    _sapp_glx_SwapBuffers           = (PFNGLXSWAPBUFFERSPROC)           dlsym(_sapp_glx_libgl, "glXSwapBuffers");
+    _sapp_glx_QueryExtensionsString = (PFNGLXQUERYEXTENSIONSSTRINGPROC) dlsym(_sapp_glx_libgl, "glXQueryExtensionsString");
+    _sapp_glx_CreateNewContext      = (PFNGLXCREATENEWCONTEXTPROC)      dlsym(_sapp_glx_libgl, "glXCreateNewContext");
+    _sapp_glx_CreateWindow          = (PFNGLXCREATEWINDOWPROC)          dlsym(_sapp_glx_libgl, "glXCreateWindow");
+    _sapp_glx_DestroyWindow         = (PFNGLXDESTROYWINDOWPROC)         dlsym(_sapp_glx_libgl, "glXDestroyWindow");
+    _sapp_glx_GetProcAddress        = (PFNGLXGETPROCADDRESSPROC)        dlsym(_sapp_glx_libgl, "glXGetProcAddress");
+    _sapp_glx_GetProcAddressARB     = (PFNGLXGETPROCADDRESSPROC)        dlsym(_sapp_glx_libgl, "glXGetProcAddressARB");
+    _sapp_glx_GetVisualFromFBConfig = (PFNGLXGETVISUALFROMFBCONFIGPROC) dlsym(_sapp_glx_libgl, "glXGetVisualFromFBConfig");
     if (!_sapp_glx_GetFBConfigs ||
         !_sapp_glx_GetFBConfigAttrib ||
         !_sapp_glx_GetClientString ||
@@ -6275,7 +6275,7 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
-        case KeyPress: 
+        case KeyPress:
             {
                 const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
                 const uint32_t mods = _sapp_x11_mod(event->xkey.state);
@@ -6290,7 +6290,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
             }
             break;
-        case KeyRelease: 
+        case KeyRelease:
             {
                 const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
                 if (key != SAPP_KEYCODE_INVALID) {
@@ -6326,7 +6326,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             }
             break;
         case EnterNotify:
-            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state)); 
+            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
             break;
         case LeaveNotify:
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
@@ -6389,7 +6389,7 @@ int main(int argc, char* argv[]) {
     _sapp_x11_screen = DefaultScreen(_sapp_x11_display);
     _sapp_x11_root = DefaultRootWindow(_sapp_x11_display);
     _sapp_x11_query_system_dpi();
-    _sapp.dpi_scale = _sapp_x11_dpi / 96.0f; 
+    _sapp.dpi_scale = _sapp_x11_dpi / 96.0f;
     _sapp_x11_init_extensions();
     _sapp_glx_init();
     Visual* visual = 0;

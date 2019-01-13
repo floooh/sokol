@@ -1,6 +1,6 @@
 # Sokol
 
-**Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble 
+**Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
 Minimalistic header-only cross-platform libs in C:
@@ -11,7 +11,7 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
 
-These are (mainly) the internal parts of the Oryol C++ framework 
+These are (mainly) the internal parts of the Oryol C++ framework
 rewritten in pure C as standalone header-only libs.
 
 WebAssembly is a 'first-class citizen', one important motivation for the
@@ -42,7 +42,6 @@ the Sokol headers are intended to be low-level building blocks.
 Eventually Oryol will just be a thin C++ layer over Sokol.
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
-
 
 # sokol_gfx.h:
 
@@ -82,16 +81,16 @@ int main() {
         // positions            // colors
          0.0f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
          0.5f, -0.5f, 0.5f,     0.0f, 1.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f 
+        -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f
     };
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){
         .size = sizeof(vertices),
-        .content = vertices, 
+        .content = vertices,
     });
 
     /* a shader */
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.source = 
+        .vs.source =
             "#version 330\n"
             "in vec4 position;\n"
             "in vec4 color0;\n"
@@ -120,9 +119,8 @@ int main() {
         }
     });
 
-    /* a draw state with all the resource binding */
-    sg_draw_state draw_state = {
-        .pipeline = pip,
+    /* resource bindings */
+    sg_bindings binds = {
         .vertex_buffers[0] = vbuf
     };
 
@@ -134,7 +132,8 @@ int main() {
         int cur_width, cur_height;
         glfwGetFramebufferSize(w, &cur_width, &cur_height);
         sg_begin_default_pass(&pass_action, cur_width, cur_height);
-        sg_apply_draw_state(&draw_state);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&binds);
         sg_draw(0, 3, 1);
         sg_end_pass();
         sg_commit();
@@ -365,9 +364,60 @@ int main(int argc, char* argv[]) {
 See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
+# Overview of planned features
+
+A list of things I'd like to do next:
+
+## sokol_gfx.h planned features:
+
+- use a per-pool-slot generation counter as 'unique tag' in the resource handles,
+  and let the application decide whether slots should be disabled when
+  their generation counter overflows, or whether the generation counter
+  should simply wrap around
+
+## sokol_app.h planned features:
+
+Mainly some "missing features" for desktop apps:
+
+- allow 'programmatic quit' requested by the application
+- allow to intercept the window close button, so that the app can show
+  a 'do you really want to quit?' dialog box
+- define an application icon
+- change the window title on existing window
+- allow to programmatically activate and deactivate fullscreen
+- pointer lock
+- show/hide mouse cursor
+- allow to change mouse cursor image (at first only switch between system-provided standard images)
+
+Big stuff:
+
+- Android support (currently WIP)
+
+## sokol_audio.h planned features:
+
+- implement an alternative WebAudio backend using Audio Worklets and WASM threads
+
+## Potential new sokol headers:
+
+- system clipboard support
+- query filesystem standard locations
+- simple file access API (at least async file/URL loading)
+- gamepad support
+- simple cross-platform touch gesture recognition
+
 # Updates
 
-- **29-Oct-2018**: 
+- **12-Jan-2019**: sokol_gfx.h - setting the pipeline state and resource
+bindings now happens in separate calls, specifically: 
+    - *sg_apply_draw_state()* has been replaced with *sg_apply_pipeline()* and
+    *sg_apply_bindings()*
+    - the *sg_draw_state* struct has been replaced with *sg_bindings*
+    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+All existing code will still work. See [this blog
+post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
+details.
+
+- **29-Oct-2018**:
     - sokol_gfx.h has a new function **sg_append_buffer()** which allows to
     append new data to a buffer multiple times per frame and interleave this
     with draw calls. This basically implements the
@@ -375,7 +425,7 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
     example usage, see the updated Dear ImGui samples in the [sokol_samples
     repo](https://github.com/floooh/sokol-samples)
     - the GL state cache in sokol_gfx.h handles buffers bindings in a
-    more robust way, previously it might have happened that the 
+    more robust way, previously it might have happened that the
     buffer binding gets confused when creating buffers or updating
     buffer contents in the render loop
 
@@ -397,7 +447,7 @@ header documentation, and the new sample [multiwindow-glfw](https://github.com/f
 
 - **31-Jan-2018**: The vertex layout declaration in sg\_pipeline\_desc had
 some fairly subtle flaws and has been changed to work like Metal or Vulkan.
-The gist is that the vertex-buffer-layout properties (vertex stride, 
+The gist is that the vertex-buffer-layout properties (vertex stride,
 vertex-step-rate and -step-function for instancing) is now defined in a
 separate array from the vertex attributes. This removes some brittle backend
 code which tries to guess the right vertex attribute slot if no attribute
@@ -411,18 +461,18 @@ Oryol Gfx module over to sokol-gfx). Some code samples:
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .buffers = {
-            [0] = { 
+            [0] = {
                 .stride = 20,
                 .step_func = SG_VERTEXSTEP_PER_VERTEX,
-                .step_rate = 1 
+                .step_rate = 1
             }
         },
         .attrs = {
-            [0] = { 
-                .name = "pos", 
-                .offset = 0, 
+            [0] = {
+                .name = "pos",
+                .offset = 0,
                 .format = SG_VERTEXFORMAT_FLOAT3,
-                .buffer_index = 0 
+                .buffer_index = 0
             },
             [1] = {
                 .name = "uv",
@@ -439,16 +489,16 @@ sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
 sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
     .layout = {
         .buffers = {
-            [0] = { 
+            [0] = {
                 .step_func = SG_VERTEXSTEP_PER_VERTEX,
                 .step_rate=1
             }
         },
         .attrs = {
-            [0] = { 
-                .name = "pos", 
+            [0] = {
+                .name = "pos",
                 .format = SG_VERTEXFORMAT_FLOAT3,
-                .buffer_index = 0 
+                .buffer_index = 0
             },
             [1] = {
                 .name = "uv",

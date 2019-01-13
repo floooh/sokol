@@ -4,7 +4,7 @@
 
     Do this:
         #define SOKOL_IMPL
-    before you include this file in *one* C or C++ file to create the 
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
     Optionally provide the following defines with your own implementations:
@@ -55,7 +55,7 @@
     MacOS/iOS:      mach_absolute_time()
     emscripten:     clock_gettime(CLOCK_MONOTONIC)
     Linux+others:   clock_gettime(CLOCK_MONITONIC)
-    
+
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -162,7 +162,7 @@ SOKOL_API_IMPL void stm_setup(void) {
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        _stm_posix_start = (uint64_t)ts.tv_sec*1000000000 + (uint64_t)ts.tv_nsec; 
+        _stm_posix_start = (uint64_t)ts.tv_sec*1000000000 + (uint64_t)ts.tv_nsec;
     #endif
 }
 
