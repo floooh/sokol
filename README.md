@@ -413,6 +413,7 @@ bindings now happens in separate calls, specifically:
     *sg_apply_bindings()*
     - the *sg_draw_state* struct has been replaced with *sg_bindings*
     - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+
 All existing code will still work. See [this blog
 post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
 details.
