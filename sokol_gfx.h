@@ -1936,6 +1936,14 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     }
 }
 
+/*-- resource pool slots (must be defined before rendering backend) ----------*/
+typedef struct {
+    uint32_t id;
+    uint32_t ctx_id;
+    uint32_t gen_ctr;
+    sg_resource_state state;
+} _sg_slot;
+
 /*== GL BACKEND ==============================================================*/
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 /* strstr(), memset() */
@@ -2386,6 +2394,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
 
 /*-- GL backend resource declarations ----------------------------------------*/
 typedef struct {
+    _sg_slot slot;
     int size;
     int append_pos;
     bool append_overflow;
@@ -2400,6 +2409,7 @@ typedef struct {
 } _sg_buffer;
 
 typedef struct {
+    _sg_slot slot;
     sg_image_type type;
     bool render_target;
     int width;
@@ -2452,6 +2462,7 @@ typedef struct {
 } _sg_shader_stage;
 
 typedef struct {
+    _sg_slot slot;
     GLuint gl_prog;
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
 } _sg_shader;
@@ -2477,6 +2488,7 @@ _SOKOL_PRIVATE void _sg_gl_init_attr(_sg_gl_attr* attr) {
 }
 
 typedef struct {
+    _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
     sg_primitive_type primitive_type;
@@ -2501,6 +2513,7 @@ typedef struct {
 } _sg_attachment;
 
 typedef struct {
+    _sg_slot slot;
     GLuint gl_fb;
     int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
@@ -2508,6 +2521,7 @@ typedef struct {
 } _sg_pass;
 
 typedef struct {
+    _sg_slot slot;
     #if !defined(SOKOL_GLES2)
     GLuint vao;
     #endif
@@ -2805,8 +2819,9 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-_SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
+_SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
@@ -2819,7 +2834,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
         _SG_GL_CHECK_ERROR();
     }
     #endif
-    return SG_RESOURCESTATE_VALID;
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
@@ -2834,8 +2849,9 @@ _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
     #endif
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     buf->size = desc->size;
     buf->append_pos = 0;
@@ -2867,7 +2883,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buf
         buf->gl_buf[slot] = gl_buf;
     }
     _SG_GL_CHECK_ERROR();
-    return SG_RESOURCESTATE_VALID;
+    buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
@@ -2904,6 +2920,7 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
 
 _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     _SG_GL_CHECK_ERROR();
     img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
@@ -2925,16 +2942,19 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(img->pixel_format)) {
         SOKOL_LOG("compressed texture format not supported by GL context\n");
-        return SG_RESOURCESTATE_FAILED;
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     /* check for optional texture types */
     if ((img->type == SG_IMAGETYPE_3D) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_3D]) {
         SOKOL_LOG("3D textures not supported by GL context\n");
-        return SG_RESOURCESTATE_FAILED;
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY]) {
         SOKOL_LOG("array textures not supported by GL context\n");
-        return SG_RESOURCESTATE_FAILED;
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
 
     /* create 1 or 2 GL textures, depending on requested update strategy */
@@ -3083,7 +3103,7 @@ _SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) 
         }
     }
     _SG_GL_CHECK_ERROR();
-    return SG_RESOURCESTATE_VALID;
+    img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
@@ -3130,7 +3150,7 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
     return gl_shd;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->gl_prog);
@@ -3138,7 +3158,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_sha
     GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
     GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
     if (!(gl_vs && gl_fs)) {
-        return SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     GLuint gl_prog = glCreateProgram();
     glAttachShader(gl_prog, gl_vs);
@@ -3160,7 +3181,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_sha
             SOKOL_FREE(log_buf);
         }
         glDeleteProgram(gl_prog);
-        return SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     shd->gl_prog = gl_prog;
 
@@ -3230,7 +3252,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_sha
         }
     }
     _SG_GL_CHECK_ERROR();
-    return SG_RESOURCESTATE_VALID;
+    shd->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
@@ -3289,7 +3311,7 @@ _SOKOL_PRIVATE void _sg_gl_load_rasterizer(const sg_rasterizer_state* src, sg_ra
     dst->depth_bias_clamp = src->depth_bias_clamp;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!pip->shader && pip->shader_id.id == SG_INVALID_ID);
@@ -3364,7 +3386,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
             gl_attr->stride = (uint8_t) auto_offset[gl_attr->vb_index];
         }
     }
-    return SG_RESOURCESTATE_VALID;
+    pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
@@ -3379,8 +3401,9 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     first entries are the color attachment images (or nullptr), last entry
     is the depth-stencil image (or nullptr).
 */
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && att_images && desc);
+    SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(att_images && att_images[0]);
     _SG_GL_CHECK_ERROR();
 
@@ -3478,7 +3501,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
     /* check if framebuffer is complete */
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         SOKOL_LOG("Framebuffer completeness check failed!\n");
-        return SG_RESOURCESTATE_FAILED;
+        pass->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
 
     /* create MSAA resolve framebuffers if necessary */
@@ -3521,7 +3545,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
     /* restore original framebuffer binding */
     glBindFramebuffer(GL_FRAMEBUFFER, gl_orig_fb);
     _SG_GL_CHECK_ERROR();
-    return SG_RESOURCESTATE_VALID;
+    pass->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
@@ -4443,6 +4467,7 @@ _SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
 
 /*-- backend resource structures ---------------------------------------------*/
 typedef struct {
+    _sg_slot slot;
     int size;
     int append_pos;
     bool append_overflow;
@@ -4454,6 +4479,7 @@ typedef struct {
 } _sg_buffer;
 
 typedef struct {
+    _sg_slot slot;
     sg_image_type type;
     bool render_target;
     int width;
@@ -4496,6 +4522,7 @@ typedef struct {
 } _sg_shader_stage;
 
 typedef struct {
+    _sg_slot slot;
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
     ID3D11VertexShader* d3d11_vs;
     ID3D11PixelShader* d3d11_fs;
@@ -4504,6 +4531,7 @@ typedef struct {
 } _sg_shader;
 
 typedef struct {
+    _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
     sg_index_type index_type;
@@ -4531,6 +4559,7 @@ typedef struct {
 } _sg_attachment;
 
 typedef struct {
+    _sg_slot slot;
     int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment ds_att;
@@ -4539,8 +4568,7 @@ typedef struct {
 } _sg_pass;
 
 typedef struct {
-    /* empty */
-    uint32_t _dummy;
+    _sg_slot slot;
 } _sg_context;
 
 /*-- main D3D11 backend state and functions ----------------------------------*/
@@ -4642,7 +4670,8 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
 
 _SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
-    /* empty */
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
@@ -4650,8 +4679,9 @@ _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
     /* empty */
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!buf->d3d11_buf);
     buf->size = desc->size;
     buf->append_pos = 0;
@@ -4684,7 +4714,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buf
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11_buf);
     }
-    return SG_RESOURCESTATE_VALID;
+    buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
@@ -4723,8 +4753,9 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image* img, const sg_im
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!img->d3d11_tex2d && !img->d3d11_tex3d && !img->d3d11_texds && !img->d3d11_texmsaa);
     SOKOL_ASSERT(!img->d3d11_srv && !img->d3d11_smp);
     HRESULT hr;
@@ -4755,7 +4786,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
             /* trying to create a texture format that's not supported by D3D */
             SOKOL_LOG("trying to create a D3D11 depth-texture with unsupported pixel format\n");
-            return SG_RESOURCESTATE_FAILED;
+            img->slot.state = SG_RESOURCESTATE_FAILED;
+            return;
         }
         D3D11_TEXTURE2D_DESC d3d11_desc;
         memset(&d3d11_desc, 0, sizeof(d3d11_desc));
@@ -4812,7 +4844,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
             if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
                 /* trying to create a texture format that's not supported by D3D */
                 SOKOL_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
-                return SG_RESOURCESTATE_FAILED;
+                img->slot.state = SG_RESOURCESTATE_FAILED;
+                return;
             }
             d3d11_tex_desc.SampleDesc.Count = 1;
             d3d11_tex_desc.SampleDesc.Quality = 0;
@@ -4884,7 +4917,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
             if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
                 /* trying to create a texture format that's not supported by D3D */
                 SOKOL_LOG("trying to create a D3D11 texture with unsupported pixel format\n");
-                return SG_RESOURCESTATE_FAILED;
+                img->slot.state = SG_RESOURCESTATE_FAILED;
+                return;
             }
             if (injected) {
                 img->d3d11_tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
@@ -4919,7 +4953,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         hr = ID3D11Device_CreateSamplerState(_sg_d3d11.dev, &d3d11_smp_desc, &img->d3d11_smp);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_smp);
     }
-    return SG_RESOURCESTATE_VALID;
+    img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
@@ -4970,11 +5004,11 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
 
 #define _sg_d3d11_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(!shd->d3d11_vs && !shd->d3d11_fs && !shd->d3d11_vs_blob);
     HRESULT hr;
-    sg_resource_state result = SG_RESOURCESTATE_FAILED;
 
     /* shader stage uniform blocks and image slots */
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
@@ -5050,10 +5084,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_sha
         SOKOL_ASSERT(shd->d3d11_vs_blob);
         memcpy(shd->d3d11_vs_blob, vs_ptr, vs_length);
 
-        result = SG_RESOURCESTATE_VALID;
+        shd->slot.state = SG_RESOURCESTATE_VALID;
     }
     else {
-        result = SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
     }
     #if defined(SOKOL_D3D11_SHADER_COMPILER)
     if (vs_blob) {
@@ -5063,7 +5097,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader* shd, const sg_sha
         ID3D10Blob_Release(fs_blob); fs_blob = 0;
     }
     #endif
-    return result;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
@@ -5087,9 +5120,11 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
+    SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
     SOKOL_ASSERT(shd->d3d11_vs_blob && shd->d3d11_vs_blob_length > 0);
     SOKOL_ASSERT(!pip->d3d11_il && !pip->d3d11_rs && !pip->d3d11_dss && !pip->d3d11_bs);
     HRESULT hr;
@@ -5218,7 +5253,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
     hr = ID3D11Device_CreateBlendState(_sg_d3d11.dev, &bs_desc, &pip->d3d11_bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11_bs);
 
-    return SG_RESOURCESTATE_VALID;
+    pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
@@ -5237,8 +5272,9 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
+    SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(att_images && att_images[0]);
     SOKOL_ASSERT(_sg_d3d11.dev);
 
@@ -5343,7 +5379,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr) && pass->d3d11_dsv);
     }
-    return SG_RESOURCESTATE_VALID;
+    pass->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
@@ -5434,10 +5470,10 @@ _SOKOL_PRIVATE void _sg_end_pass() {
 
     /* need to resolve MSAA render target into texture? */
     if (_sg_d3d11.cur_pass) {
-        SOKOL_ASSERT(_sg_lookup_pass(&_sg.pools, _sg_d3d11.cur_pass_id) == _sg_d3d11.cur_pass);
+        SOKOL_ASSERT(_sg_d3d11.cur_pass->slot.id == _sg_d3d11.cur_pass_id.id);
         for (int i = 0; i < _sg_d3d11.num_rtvs; i++) {
             _sg_attachment* att = &_sg_d3d11.cur_pass->color_atts[i];
-            SOKOL_ASSERT(att->image && (att->image == _sg_lookup_image(&_sg.pools, att->image_id.id)));
+            SOKOL_ASSERT(att->image && (att->image->slot.id == att->image_id.id));
             if (att->image->sample_count > 1) {
                 SOKOL_ASSERT(att->image->d3d11_tex2d && att->image->d3d11_texmsaa && !att->image->d3d11_tex3d);
                 SOKOL_ASSERT(DXGI_FORMAT_UNKNOWN != att->image->d3d11_format);
@@ -6226,6 +6262,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
 
 /*-- Metal backend resource structs ------------------------------------------*/
 typedef struct {
+    _sg_slot slot;
     int size;
     int append_pos;
     bool append_overflow;
@@ -6239,6 +6276,7 @@ typedef struct {
 } _sg_buffer;
 
 typedef struct {
+    _sg_slot slot;
     sg_image_type type;
     bool render_target;
     int width;
@@ -6281,10 +6319,12 @@ typedef struct {
 } _sg_shader_stage;
 
 typedef struct {
+    _sg_slot slot;
     _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
 } _sg_shader;
 
 typedef struct {
+    _sg_slot slot;
     _sg_shader* shader;
     sg_shader shader_id;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -6315,14 +6355,14 @@ typedef struct {
 } _sg_attachment;
 
 typedef struct {
+    _sg_slot slot;
     int num_color_atts;
     _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_attachment ds_att;
 } _sg_pass;
 
 typedef struct {
-    /* empty */
-    uint32_t dummy;
+    _sg_slot slot;
 } _sg_context;
 
 /*-- a simple state cache for the resource bindings --------------------------*/
@@ -6460,7 +6500,8 @@ _SOKOL_PRIVATE void _sg_reset_state_cache() {
 
 _SOKOL_PRIVATE void _sg_create_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
-    /* empty */
+    SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_ALLOC);
+    ctx->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
@@ -6472,8 +6513,9 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
     _sg_reset_state_cache();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_buffer(_sg_buffer* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    SOKOL_ASSERT(buf->slot.state == SG_RESOURCESTATE_ALLOC);
     buf->size = desc->size;
     buf->append_pos = 0;
     buf->append_overflow = false;
@@ -6502,7 +6544,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buf
         }
         buf->mtl_buf[slot] = _sg_mtl_add_resource(mtl_buf);
     }
-    return SG_RESOURCESTATE_VALID;
+    buf->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer* buf) {
@@ -6555,8 +6597,9 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image* img, __unsafe_un
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_image(_sg_image* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_ALLOC);
     img->type = _sg_def(desc->type, SG_IMAGETYPE_2D);
     img->render_target = desc->render_target;
     img->width = desc->width;
@@ -6601,7 +6644,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
     }
     if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
         SOKOL_LOG("Unsupported texture pixel format!\n");
-        return SG_RESOURCESTATE_FAILED;
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     mtl_desc.width = img->width;
     mtl_desc.height = img->height;
@@ -6671,7 +6715,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         /* create (possibly shared) sampler state */
         img->mtl_sampler_state = _sg_mtl_create_sampler(_sg_mtl_device, desc);
     }
-    return SG_RESOURCESTATE_VALID;
+    img->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
@@ -6711,6 +6755,7 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, 
 
 _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_ALLOC);
 
     /* uniform block sizes and image types */
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
@@ -6767,22 +6812,25 @@ _SOKOL_PRIVATE void _sg_create_shader(_sg_shader* shd, const sg_shader_desc* des
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
     }
     else {
-        return SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     if (nil == vs_func) {
         SOKOL_LOG("vertex shader entry function not found\n");
-        return SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     if (nil == fs_func) {
         SOKOL_LOG("fragment shader entry function not found\n");
-        return SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
     /* it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index */
     shd->stage[SG_SHADERSTAGE_VS].mtl_lib  = _sg_mtl_add_resource(vs_lib);
     shd->stage[SG_SHADERSTAGE_FS].mtl_lib  = _sg_mtl_add_resource(fs_lib);
     shd->stage[SG_SHADERSTAGE_VS].mtl_func = _sg_mtl_add_resource(vs_func);
     shd->stage[SG_SHADERSTAGE_FS].mtl_func = _sg_mtl_add_resource(fs_func);
-    return SG_RESOURCESTATE_VALID;
+    shd->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
@@ -6796,8 +6844,11 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader* shd) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pipeline(_sg_pipeline* pip, _sg_shader* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
+    SOKOL_ASSERT(pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
 
     pip->shader = shd;
     pip->shader_id = desc->shader;
@@ -6898,7 +6949,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
     if (nil == mtl_rps) {
         SOKOL_ASSERT(err);
         SOKOL_LOG([err.localizedDescription UTF8String]);
-        return SG_RESOURCESTATE_FAILED;
+        pip->slot.state = SG_RESOURCESTATE_FAILED;
+        return;
     }
 
     /* depth-stencil-state */
@@ -6927,7 +6979,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
 
     pip->mtl_rps = _sg_mtl_add_resource(mtl_rps);
     pip->mtl_dss = _sg_mtl_add_resource(mtl_dss);
-    return SG_RESOURCESTATE_VALID;
+    pip->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
@@ -6938,8 +6990,9 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
+    SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_ALLOC);
     SOKOL_ASSERT(att_images && att_images[0]);
 
     /* copy image pointers and desc attributes */
@@ -6973,7 +7026,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
         att->mip_level = att_desc->mip_level;
         att->slice = att_desc->slice;
     }
-    return SG_RESOURCESTATE_VALID;
+    pass->slot.state = SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
@@ -7401,26 +7454,136 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #else
 #error "No rendering backend selected"
 #endif
-
 /*== RESOURCE POOLS ==========================================================*/
-
-/* a resource pool slot */
-typedef struct {
-    uint32_t id;                /* the stored resource id of this slot for dangling checks */
-    uint32_t ctx_id;            /* the context this resources was created in */
-    uint32_t gen_ctr;           /* the slot's generation counter */
-    sg_resource_state state;    /* the slot's current resource state */
-} _sg_slot;
-
-/* a generic resource pool, holds a slot array and 'free slot queue' */
 typedef struct {
     int size;
-    _sg_slot* slots;
     int queue_top;
     int* free_queue;
 } _sg_pool;
 
-/* all pools for all resource types */
+_SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
+    SOKOL_ASSERT(pool && (num > 1));
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    /* it's not a bug to only reserve 'num' here */
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    SOKOL_ASSERT(pool->free_queue);
+    /* never allocate the zero-th pool item since the invalid id is 0 */
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_discard_pool(_sg_pool* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_FREE(pool->free_queue);
+    pool->free_queue = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+_SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    }
+    else {
+        /* pool exhausted */
+        return 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    /* debug check against double-free */
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+_SOKOL_PRIVATE void _sg_init_buffer_slot(_sg_buffer* buf) {
+    SOKOL_ASSERT(buf);
+    memset(buf, 0, sizeof(_sg_buffer));
+}
+
+_SOKOL_PRIVATE void _sg_init_image_slot(_sg_image* img) {
+    SOKOL_ASSERT(img);
+    memset(img, 0, sizeof(_sg_image));
+}
+
+_SOKOL_PRIVATE void _sg_init_shader_slot(_sg_shader* shd) {
+    SOKOL_ASSERT(shd);
+    memset(shd, 0, sizeof(_sg_shader));
+}
+
+_SOKOL_PRIVATE void _sg_init_pipeline_slot(_sg_pipeline* pip) {
+    SOKOL_ASSERT(pip);
+    memset(pip, 0, sizeof(_sg_pipeline));
+}
+
+_SOKOL_PRIVATE void _sg_init_pass_slot(_sg_pass* pass) {
+    SOKOL_ASSERT(pass);
+    memset(pass, 0, sizeof(_sg_pass));
+}
+
+_SOKOL_PRIVATE void _sg_init_context_slot(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    memset(ctx, 0, sizeof(_sg_context));
+}
+
+_SOKOL_PRIVATE void _sg_reset_buffer_slot(_sg_buffer* buf) {
+    SOKOL_ASSERT(buf);
+    uint32_t gen_ctr = buf->slot.gen_ctr;
+    memset(buf, 0, sizeof(_sg_buffer));
+    buf->slot.gen_ctr = gen_ctr;
+}
+
+_SOKOL_PRIVATE void _sg_reset_image_slot(_sg_image* img) {
+    SOKOL_ASSERT(img);
+    uint32_t gen_ctr = img->slot.gen_ctr;
+    memset(img, 0, sizeof(_sg_image));
+    img->slot.gen_ctr = gen_ctr;
+}
+
+_SOKOL_PRIVATE void _sg_reset_shader_slot(_sg_shader* shd) {
+    SOKOL_ASSERT(shd);
+    uint32_t gen_ctr = shd->slot.gen_ctr;
+    memset(shd, 0, sizeof(_sg_shader));
+    shd->slot.gen_ctr = gen_ctr;
+}
+
+_SOKOL_PRIVATE void _sg_reset_pipeline_slot(_sg_pipeline* pip) {
+    SOKOL_ASSERT(pip);
+    uint32_t gen_ctr = pip->slot.gen_ctr;
+    memset(pip, 0, sizeof(_sg_pipeline));
+    pip->slot.gen_ctr = gen_ctr;
+}
+
+_SOKOL_PRIVATE void _sg_reset_pass_slot(_sg_pass* pass) {
+    SOKOL_ASSERT(pass);
+    uint32_t gen_ctr = pass->slot.gen_ctr;
+    memset(pass, 0, sizeof(_sg_pass));
+    pass->slot.gen_ctr = gen_ctr;
+}
+
+_SOKOL_PRIVATE void _sg_reset_context_slot(_sg_context* ctx) {
+    SOKOL_ASSERT(ctx);
+    uint32_t gen_ctr = ctx->slot.gen_ctr;
+    memset(ctx, 0, sizeof(_sg_context));
+    ctx->slot.gen_ctr = gen_ctr;
+}
+
 typedef struct {
     _sg_pool buffer_pool;
     _sg_pool image_pool;
@@ -7436,81 +7599,57 @@ typedef struct {
     _sg_context* contexts;
 } _sg_pools;
 
-_SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
-    SOKOL_ASSERT(pool && (num > 1));
-    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
-    pool->size = num + 1;
-    pool->queue_top = 0;
-    pool->slots = (_sg_slot*) SOKOL_MALLOC(sizeof(_sg_slot)*pool->size);
-    SOKOL_ASSERT(pool->slots);
-    memset(pool->slots, 0, sizeof(pool->slots));
-    /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
-    SOKOL_ASSERT(pool->free_queue);
-    /* never allocate the zero-th pool item since the invalid id is 0 */
-    for (int i = pool->size-1; i >= 1; i--) {
-        pool->free_queue[pool->queue_top++] = i;
-    }
-}
-
-_SOKOL_PRIVATE void _sg_discard_pool(_sg_pool* pool) {
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->slots);
-    SOKOL_ASSERT(pool->free_queue);
-
-    SOKOL_FREE(pool->slots);
-    SOKOL_FREE(pool->free_queue);
-    pool->slots = 0;
-    pool->free_queue = 0;
-    pool->size = 0;
-    pool->queue_top = 0;
-}
-
 _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT(p);
     SOKOL_ASSERT(desc);
     /* note: the pools here will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->buffer_pool_size >= 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->buffer_pool, _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
-    size_t buffer_pool_byte_size = sizeof(_sg_buffer) * p->buffer_pool.size;
-    p->buffers = (_sg_buffer*) SOKOL_MALLOC(buffer_pool_byte_size);
+    p->buffers = (_sg_buffer*) SOKOL_MALLOC(sizeof(_sg_buffer) * p->buffer_pool.size);
     SOKOL_ASSERT(p->buffers);
-    memset(p->buffers, 0, buffer_pool_byte_size);
+    for (int i = 0; i < p->buffer_pool.size; i++) {
+        _sg_init_buffer_slot(&p->buffers[i]);
+    }
 
     SOKOL_ASSERT((desc->image_pool_size >= 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->image_pool, _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
-    size_t image_pool_byte_size = sizeof(_sg_image) * p->image_pool.size;
-    p->images = (_sg_image*) SOKOL_MALLOC(image_pool_byte_size);
+    p->images = (_sg_image*) SOKOL_MALLOC(sizeof(_sg_image) * p->image_pool.size);
     SOKOL_ASSERT(p->images);
-    memset(p->images, 0, image_pool_byte_size);
+    for (int i = 0; i < p->image_pool.size; i++) {
+        _sg_init_image_slot(&p->images[i]);
+    }
 
     SOKOL_ASSERT((desc->shader_pool_size >= 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->shader_pool, _sg_def(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
-    size_t shader_pool_byte_size = sizeof(_sg_shader) * p->shader_pool.size);
-    p->shaders = (_sg_shader*) SOKOL_MALLOC(shader_pool_byte_size);
+    p->shaders = (_sg_shader*) SOKOL_MALLOC(sizeof(_sg_shader) * p->shader_pool.size);
     SOKOL_ASSERT(p->shaders);
-    memset(p->shaders, 0, shader_pool_byte_size);
+    for (int i = 0; i < p->shader_pool.size; i++) {
+        _sg_init_shader_slot(&p->shaders[i]);
+    }
 
     SOKOL_ASSERT((desc->pipeline_pool_size >= 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pipeline_pool, _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
-    size_t pipeline_pool_byte_size = sizeof(_sg_pipeline) * p->pipeline_pool.size);
-    p->pipelines = (_sg_pipeline*) SOKOL_MALLOC(pipeline_pool_byte_size);
+    p->pipelines = (_sg_pipeline*) SOKOL_MALLOC(sizeof(_sg_pipeline) * p->pipeline_pool.size);
     SOKOL_ASSERT(p->pipelines);
-    memset(p->pipelines, 0, pipeline_pool_byte_size);
+    for (int i = 0; i < p->pipeline_pool.size; i++) {
+        _sg_init_pipeline_slot(&p->pipelines[i]);
+    }
 
     SOKOL_ASSERT((desc->pass_pool_size >= 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->pass_pool, _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
-    size_t pass_pool_byte_size = sizeof(_sg_pass) * p->pass_pool.size;
-    p->passes = (_sg_pass*) SOKOL_MALLOC(pass_pool_byte_size);
+    p->passes = (_sg_pass*) SOKOL_MALLOC(sizeof(_sg_pass) * p->pass_pool.size);
     SOKOL_ASSERT(p->passes);
-    memset(p->passes, 0, pass_pool_byte_size);
+    for (int i = 0; i < p->pass_pool.size; i++) {
+        _sg_init_pass_slot(&p->passes[i]);
+    }
 
     SOKOL_ASSERT((desc->context_pool_size >= 0) && (desc->context_pool_size < _SG_MAX_POOL_SIZE));
     _sg_init_pool(&p->context_pool, _sg_def(desc->context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE));
-    size_t context_pool_byte_size = sizeof(_sg_context) * p->context_pool.size;
-    p->contexts = (_sg_context*) SOKOL_MALLOC(context_pool_byte_size);
+    p->contexts = (_sg_context*) SOKOL_MALLOC(sizeof(_sg_context) * p->context_pool.size);
     SOKOL_ASSERT(p->contexts);
-    memset(p->contexts, 0, context_pool_byte_size);
+    for (int i = 0; i < p->context_pool.size; i++) {
+        _sg_init_context_slot(&p->contexts[i]);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_discard_pools(_sg_pools* p) {
@@ -7529,197 +7668,139 @@ _SOKOL_PRIVATE void _sg_discard_pools(_sg_pools* p) {
     _sg_discard_pool(&p->buffer_pool);
 }
 
-_SOKOL_PRIVATE _sg_slot* _sg_slot_at(_sg_pool* pool, int slot_index) {
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->slots);
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-    return &pool->slots[slot_index];
-}
-
-/* extract slot index from id */
-_SOKOL_PRIVATE int _sg_slot_index(uint32_t res_id) {
-    return res_id & _SG_SLOT_MASK;
-}
-
-/* allocate the slot at slot_index and return a resource ID
+/* allocate the slot at slot_index:
     - bump the slot's generation counter
     - create a resource id from the generation counter and slot index
     - set the slot's id to this id
     - set the slot's state to ALLOC
-   if the pool is exhausted, return SG_INVALID_ID
+    - return the resource id
 */
-_SOKOL_PRIVATE uint32_t _sg_pool_slot_alloc(_sg_pool* pool) {
+_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_slot* slot, int slot_index) {
     /* FIXME: add handling for an overflowing generation counter,
        for now, just overflow (another option is to disable
        the slot)
     */
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->slots);
-    SOKOL_ASSERT(pool->free_queue);
-    if (pool->queue_top > 0) {
-        int slot_index = pool->free_queue[--pool->queue_top];
-        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-        _sg_slot* slot = _sg_slot_at(pool, slot_index);
-        SOKOL_ASSERT(slot->state == SG_RESOURCESTATE_INITIAL);
-        SOKOL_ASSERT(slot->id == SG_INVALID_ID);
-        slot->state = SG_RESOURCESTATE_ALLOC;
-        uint32_t ctr = ++slot->gen_ctr;
-        slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK); 
-        return slot->id;
-    }
-    else {
-        /* pool is exhausted */
-        return SG_INVALID_ID;
-    }
+    SOKOL_ASSERT(slot_index != 0);
+    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
+    uint32_t ctr = ++slot->gen_ctr;
+    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK); 
+    slot->state = SG_RESOURCESTATE_ALLOC;
+    return slot->id;
 }
 
-_SOKOL_PRIVATE void _sg_pool_slot_free(_sg_pool* pool, uint32_t res_id) {
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->slots);
-    SOKOL_ASSERT(pool->free_queue);
-    SOKOL_ASSERT(pool->queue_top < pool->size);
-    int slot_index _sg_slot_index(res_id);
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-    #ifdef SOKOL_DEBUG
-    /* debug check against double-free */
-    for (int i = 0; i < pool->queue_top; i++) {
-        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
-    }
-    #endif
-    /* NOTE: keep the slot's generation counter intact */
-    _sg_slot* slot = &pool->slots[slot_index];
-    SOKOL_ASSERT(slot->id == res_id);
-    SOKOL_ASSERT(slot->state != SG_RESOURCESTATE_INITIAL);
-    slot->id = SG_INVALID_ID;
-    slot->ctx_id = SG_INVALID_ID;
-    slot->state = SG_RESOURCESTATE_INITIAL;
-    pool->free_queue[pool->queue_top++] = slot_index;
-    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+/* extract slot index from id */
+_SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
+    return id & _SG_SLOT_MASK;
 }
 
-/* lookup slot pointer for a resource, return 0 if resource id invalid or doesn't match */
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_slot(const _sg_pool* pool, uint32_t res_id) {
-    SOKOL_ASSERT(pool);
-    if (SG_INVALID_ID != res_id) {
-        _sg_slot* slot = _sg_slot_at(pool, _sg_slot_index(res_id));
-        if (slot->id == res_id) {
-            return slot;
+/* returns pointer to resource by id without matching id check */
+_SOKOL_PRIVATE _sg_buffer* _sg_buffer_at(const _sg_pools* p, uint32_t buf_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != buf_id));
+    int slot_index = _sg_slot_index(buf_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->buffer_pool.size));
+    return &p->buffers[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_image* _sg_image_at(const _sg_pools* p, uint32_t img_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != img_id));
+    int slot_index = _sg_slot_index(img_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->image_pool.size));
+    return &p->images[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_shader* _sg_shader_at(const _sg_pools* p, uint32_t shd_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != shd_id));
+    int slot_index = _sg_slot_index(shd_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->shader_pool.size));
+    return &p->shaders[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_pipeline* _sg_pipeline_at(const _sg_pools* p, uint32_t pip_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != pip_id));
+    int slot_index = _sg_slot_index(pip_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->pipeline_pool.size));
+    return &p->pipelines[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_pass* _sg_pass_at(const _sg_pools* p, uint32_t pass_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != pass_id));
+    int slot_index = _sg_slot_index(pass_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->pass_pool.size));
+    return &p->passes[slot_index];
+}
+
+_SOKOL_PRIVATE _sg_context* _sg_context_at(const _sg_pools* p, uint32_t context_id) {
+    SOKOL_ASSERT(p && (SG_INVALID_ID != context_id));
+    int slot_index = _sg_slot_index(context_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < p->context_pool.size));
+    return &p->contexts[slot_index];
+}
+
+/* returns pointer to resource with matching id check, may return 0 */
+_SOKOL_PRIVATE _sg_buffer* _sg_lookup_buffer(const _sg_pools* p, uint32_t buf_id) {
+    if (SG_INVALID_ID != buf_id) {
+        _sg_buffer* buf = _sg_buffer_at(p, buf_id);
+        if (buf->slot.id == buf_id) {
+            return buf;
         }
     }
     return 0;
 }
 
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_buffer_slot(const _sg_pools* p, uint32_t buf_id) {
-    return _sg_lookup_slot(&p->buffer_pool, buf_id);
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_image_slot(const _sg_pools* p, uint32_t img_id) {
-    return _sg_lookup_slot(&p->image_pool, img_id);
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_shader_slot(const _sg_pools* p, uint32_t shd_id) {
-    return _sg_lookup_slot(&p->shader_pool, shd_id);
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_pipeline_slot(const _sg_pools* p, uint32_t pip_id) {
-    return _sg_lookup_slot(&p->pipeline_pool, pip_id);
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_pass_slot(const _sg_pools* p, uint32_t pass_id) {
-    return _sg_lookup_slot(&p->pass_pool, pass_id);
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_lookup_context_slot(const _sg_pools* p, uint32_t ctx_id) {
-    return _sg_lookup_slot(&p->context_pool, ctx_id);
-}
-
-/* "hard version" to lookup resource slot, asserts on invalid or non-matching resource id */
-_SOKOL_PRIVATE _sg_slot* _sg_buffer_slot(const _sg_pools* p, uint32_t buf_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->buffer_pool, buf_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_image_slot(const _sg_pools* p, uint32_t img_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->image_pool, img_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_shader_slot(const _sg_pools* p, uint32_t shd_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->shader_pool, shd_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_pipeline_slot(const _sg_pools* p, uint32_t pip_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->pipeline_pool, pip_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_pass_slot(const _sg_pools* p, uint32_t pass_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->pass_pool, pass_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-_SOKOL_PRIVATE _sg_slot* _sg_context_slot(const _sg_pools* p, uint32_t ctx_id) {
-    _sg_slot* slot = _sg_lookup_slot(&p->context_pool, ctx_id);
-    SOKOL_ASSERT(slot);
-    return slot;
-}
-
-/* returns pointer to resource with matching id check, may return 0 */
-_SOKOL_PRIVATE _sg_buffer* _sg_lookup_buffer(const _sg_pools* p, uint32_t buf_id) {
-    _sg_slot* slot = _sg_lookup_buffer_slot(p, buf_id);
-    if (slot) {
-        return &p->buffers[_sg_slot_index(buf_id)];
-    }
-    return 0;
-}
-
 _SOKOL_PRIVATE _sg_image* _sg_lookup_image(const _sg_pools* p, uint32_t img_id) {
-    _sg_slot* slot = _sg_lookup_image_slot(p, img_id);
-    if (slot) {
-        return &p->images[_sg_slot_index(img_id)];
+    if (SG_INVALID_ID != img_id) {
+        _sg_image* img = _sg_image_at(p, img_id);
+        if (img->slot.id == img_id) {
+            return img;
+        }
     }
     return 0;
 }
 
 _SOKOL_PRIVATE _sg_shader* _sg_lookup_shader(const _sg_pools* p, uint32_t shd_id) {
-    _sg_slot* slot = _sg_lookup_shader_slot(p, shd_id);
-    if (slot) {
-        return &p->shaders[_sg_slot_index(shd_id)];
+    SOKOL_ASSERT(p);
+    if (SG_INVALID_ID != shd_id) {
+        _sg_shader* shd = _sg_shader_at(p, shd_id);
+        if (shd->slot.id == shd_id) {
+            return shd;
+        }
     }
     return 0;
 }
 
 _SOKOL_PRIVATE _sg_pipeline* _sg_lookup_pipeline(const _sg_pools* p, uint32_t pip_id) {
-    _sg_slot* slot = _sg_lookup_pipeline_slot(p, pip_id);
-    if (slot) {
-        return &p->pipelines[_sg_slot_index(pip_id)];
+    SOKOL_ASSERT(p);
+    if (SG_INVALID_ID != pip_id) {
+        _sg_pipeline* pip = _sg_pipeline_at(p, pip_id);
+        if (pip->slot.id == pip_id) {
+            return pip;
+        }
     }
     return 0;
 }
 
 _SOKOL_PRIVATE _sg_pass* _sg_lookup_pass(const _sg_pools* p, uint32_t pass_id) {
-    _sg_slot* slot = _sg_lookup_pass_slot(p, pass_id);
-    if (slot) {
-        return &p->passes[_sg_slot_index(pass_id)];
+    SOKOL_ASSERT(p);
+    if (SG_INVALID_ID != pass_id) {
+        _sg_pass* pass = _sg_pass_at(p, pass_id);
+        if (pass->slot.id == pass_id) {
+            return pass;
+        }
     }
     return 0;
 }
 
 _SOKOL_PRIVATE _sg_context* _sg_lookup_context(const _sg_pools* p, uint32_t ctx_id) {
-    _sg_slot* slot = _sg_lookup_context_slot(p, ctx_id);
-    if (slot) {
-        return &p->contexts[_sg_slot_index(ctx_id)];
+    SOKOL_ASSERT(p);
+    if (SG_INVALID_ID != ctx_id) {
+        _sg_context* ctx = _sg_context_at(p, ctx_id);
+        if (ctx->slot.id == ctx_id) {
+            return ctx;
+        }
     }
     return 0;
 }
 
-/* destroy all resources for a context */
 _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
     /*  this is a bit dumb since it loops over all pool slots to
         find the occupied slots, on the other hand it is only ever
@@ -7729,33 +7810,38 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
               and the resource slots not be cleared!
     */
     for (int i = 0; i < p->buffer_pool.size; i++) {
-        _sg_slot* slot = _sg_slot_at(&p->buffer_pool, i);
-        if ((slot->ctx_id == ctx_id) && (slot->state == SG_RESOURCESTATE_VALID)) {
-            _sg_destroy_buffer(&p->buffers[i]);
+        if (p->buffers[i].slot.state == SG_RESOURCESTATE_VALID) {
+            if (p->buffers[i].slot.ctx_id == ctx_id) {
+                _sg_destroy_buffer(&p->buffers[i]);
+            }
         }
     }
     for (int i = 0; i < p->image_pool.size; i++) {
-        _sg_slot* slot = _sg_slot_at(&p->image_pool, i);
-        if ((slot->ctx_id == ctx_id) && (slot->state == SG_RESOURCESTATE_VALID)) {
-            _sg_destroy_image(&p->images[i]);
+        if (p->images[i].slot.state == SG_RESOURCESTATE_VALID) {
+            if (p->images[i].slot.ctx_id == ctx_id) {
+                _sg_destroy_image(&p->images[i]);
+            }
         }
     }
     for (int i = 0; i < p->shader_pool.size; i++) {
-        _sg_slot* slot = _sg_slot_at(&p->shader_pool, i);
-        if ((slot->ctx_id == ctx_id) && (slot->state == SG_RESOURCESTATE_VALID)) {
-            _sg_destroy_shader(&p->shaders[i]);
+        if (p->shaders[i].slot.state == SG_RESOURCESTATE_VALID) {
+            if (p->shaders[i].slot.ctx_id == ctx_id) {
+                _sg_destroy_shader(&p->shaders[i]);
+            }
         }
     }
     for (int i = 0; i < p->pipeline_pool.size; i++) {
-        _sg_slot* slot = _sg_slot_at(&p->pipeline_pool, i);
-        if ((slot->ctx_id == ctx_id) && (slot->state == SG_RESOURCESTATE_VALID)) {
-            _sg_destroy_pipeline(&p->pipelines[i]);
+        if (p->pipelines[i].slot.state == SG_RESOURCESTATE_VALID) {
+            if (p->pipelines[i].slot.ctx_id == ctx_id) {
+                _sg_destroy_pipeline(&p->pipelines[i]);
+            }
         }
     }
     for (int i = 0; i < p->pass_pool.size; i++) {
-        _sg_slot* slot = _sg_slot_at(&p->pass_pool, i);
-        if ((slot->ctx_id == ctx_id) && (slot->state == SG_RESOURCESTATE_VALID)) {
-            _sg_destroy_pass(&p->passes[i]);
+        if (p->passes[i].slot.state == SG_RESOURCESTATE_VALID) {
+            if (p->passes[i].slot.ctx_id == ctx_id) {
+                _sg_destroy_pass(&p->passes[i]);
+            }
         }
     }
 }
@@ -7831,6 +7917,7 @@ typedef enum {
     _SG_VALIDATE_APIP_PIPELINE_VALID_ID,
     _SG_VALIDATE_APIP_PIPELINE_EXISTS,
     _SG_VALIDATE_APIP_PIPELINE_VALID,
+    _SG_VALIDATE_APIP_SHADER_EXISTS,
     _SG_VALIDATE_APIP_SHADER_VALID,
     _SG_VALIDATE_APIP_ATT_COUNT,
     _SG_VALIDATE_APIP_COLOR_FORMAT,
@@ -7946,6 +8033,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
         case _SG_VALIDATE_APIP_PIPELINE_VALID_ID:   return "sg_apply_pipeline: invalid pipeline id provided";
         case _SG_VALIDATE_APIP_PIPELINE_EXISTS:     return "sg_apply_pipeline: pipeline object no longer alive";
         case _SG_VALIDATE_APIP_PIPELINE_VALID:      return "sg_apply_pipeline: pipeline object not in valid state";
+        case _SG_VALIDATE_APIP_SHADER_EXISTS:       return "sg_apply_pipeline: shader object no longer alive";
         case _SG_VALIDATE_APIP_SHADER_VALID:        return "sg_apply_pipeline: shader object not in valid state";
         case _SG_VALIDATE_APIP_ATT_COUNT:           return "sg_apply_pipeline: color_attachment_count in pipeline doesn't match number of pass color attachments";
         case _SG_VALIDATE_APIP_COLOR_FORMAT:        return "sg_apply_pipeline: color_format in pipeline doesn't match pass color attachment pixel format";
@@ -8206,7 +8294,8 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->shader.id != SG_INVALID_ID, _SG_VALIDATE_PIPELINEDESC_SHADER);
-        SOKOL_VALIDATE(_sg_shader_slot(&_sg.pools, desc->shader.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
+        const _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        SOKOL_VALIDATE(shd && shd->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
         for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[buf_index];
             if (l_desc->stride == 0) {
@@ -8256,9 +8345,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 continue;
             }
             SOKOL_VALIDATE(atts_cont, _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
-            _sg_image* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_ASSERT(img);
-            SOKOL_VALIDATE(_sg_image_slot(&_sg.pools, att->image.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
+            const _sg_image* img = _sg_lookup_image(&_sg.pools, att->image.id);
+            SOKOL_VALIDATE(img && img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->type == SG_IMAGETYPE_CUBE) {
                 SOKOL_VALIDATE(att->face < 6, _SG_VALIDATE_PASSDESC_FACE);
@@ -8287,8 +8375,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_ASSERT(img);
-            SOKOL_VALIDATE(_sg_image_slot(&_sg.pools, att->image.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_VALIDATE(img && img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->type == SG_IMAGETYPE_CUBE) {
                 SOKOL_VALIDATE(att->face < 6, _SG_VALIDATE_PASSDESC_FACE);
@@ -8309,24 +8396,24 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_begin_pass(sg_pass pass_id) {
+_SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass* pass) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(pass_id);
+        _SOKOL_UNUSED(pass);
         return true;
     #else
         SOKOL_VALIDATE_BEGIN();
-        SOKOL_VALIDATE(_sg_pass_slot(&_sg.pools, pass_id.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
-        _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-        SOKOL_ASSERT(pass);
+        SOKOL_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             const _sg_attachment* att = &pass->color_atts[i];
             if (att->image) {
-                SOKOL_VALIDATE(_sg_image_slot(&_sg.pools, att->image_id.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+                SOKOL_VALIDATE(att->image->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+                SOKOL_VALIDATE(att->image->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
             }
         }
         if (pass->ds_att.image) {
             const _sg_attachment* att = &pass->ds_att;
-            SOKOL_VALIDATE(_sg_image_slot(&_sg.pools, att->image_id.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+            SOKOL_VALIDATE(att->image->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
+            SOKOL_VALIDATE(att->image->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
         }
         return SOKOL_VALIDATE_END();
     #endif
@@ -8345,10 +8432,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         if (!pip) {
             return SOKOL_VALIDATE_END();
         }
-        SOKOL_VALIDATE(_sg_pipeline_slot(&_sg.pools, pip_id.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_APIP_PIPELINE_VALID);
+        SOKOL_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_APIP_PIPELINE_VALID);
         /* the pipeline's shader must be alive and valid */
         SOKOL_ASSERT(pip->shader);
-        SOKOL_VALIDATE(_sg_shader_slot(&_sg.pools, pip->shader_id.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_APIP_SHADER_VALID);
+        SOKOL_VALIDATE(pip->shader->slot.id == pip->shader_id.id, _SG_VALIDATE_APIP_SHADER_EXISTS);
+        SOKOL_VALIDATE(pip->shader->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_APIP_SHADER_VALID);
         /* check that pipeline attributes match current pass attributes */
         const _sg_pass* pass = _sg_lookup_pass(&_sg.pools, _sg.cur_pass.id);
         if (pass) {
@@ -8383,12 +8471,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
 
         /* a pipeline object must have been applied */
         SOKOL_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, _SG_VALIDATE_ABND_PIPELINE);
-        SOKOL_VALIDATE(_sg_pipeline_slot(&_sg.pools, _sg.cur_pipeline.id)->state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_ABND_PIPELINE_VALID);
         const _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
         SOKOL_VALIDATE(pip != 0, _SG_VALIDATE_ABND_PIPELINE_EXISTS);
         if (!pip) {
             return SOKOL_VALIDATE_END();
         }
+        SOKOL_VALIDATE(pip->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_ABND_PIPELINE_VALID);
         SOKOL_ASSERT(pip->shader);
 
         /* has expected vertex buffers, and vertex buffers still exist */
@@ -8396,9 +8484,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
             if (bind->vertex_buffers[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(pip->vertex_layout_valid[i], _SG_VALIDATE_ABND_VBS);
                 /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
-                if (_sg_buffer_slot(&_sg.pools, bind->vertex_buffers[i].id)->state == SG_RESOURCESTATE_VALID) {
-                    const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
-                    SOKOL_ASSERT(buf);
+                const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
+                SOKOL_ASSERT(buf);
+                if (buf->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ABND_VB_TYPE);
                     SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_VB_OVERFLOW);
                 }
@@ -8420,9 +8508,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         }
         if (bind->index_buffer.id != SG_INVALID_ID) {
             /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER */
-            if (_sg_buffer_slot(&_sg.pools, bind->index_buffer.id)->state == SG_RESOURCESTATE_VALID) {
-                const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
-                SOKOL_ASSERT(buf);
+            const _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
+            SOKOL_ASSERT(buf);
+            if (buf->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ABND_IB_TYPE);
                 SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_IB_OVERFLOW);
             }
@@ -8433,9 +8521,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
             _sg_shader_stage* stage = &pip->shader->stage[SG_SHADERSTAGE_VS];
             if (bind->vs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_VS_IMGS);
-                if (_sg_image_slot(&_sg.pools, bind->vs_imagesi].id)->state == SG_RESOURCESTATE_VALID) {
-                    const _sg_image* img = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
-                    SOKOL_ASSERT(img);
+                const _sg_image* img = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
+                SOKOL_ASSERT(img);
+                if (img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_VS_IMG_TYPES);
                 }
             }
@@ -8449,9 +8537,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
             _sg_shader_stage* stage = &pip->shader->stage[SG_SHADERSTAGE_FS];
             if (bind->fs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_FS_IMGS);
-                if (_sg_image_slot(&_sg.pools, bind->fs_images[i].id)->state == SG_RESOURCESTATE_VALID) {
-                    const _sg_image* img = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
-                    SOKOL_ASSERT(img);
+                const _sg_image* img = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
+                SOKOL_ASSERT(img);
+                if (img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_FS_IMG_TYPES);
                 }
             }
@@ -8476,7 +8564,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, _SG_VALIDATE_AUB_NO_PIPELINE);
         const _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
-        SOKOL_ASSERT(pip && pip->shader && pip->shader == _sg_lookup_shader(pip->shader_id.id));
+        SOKOL_ASSERT(pip && (pip->slot.id == _sg.cur_pipeline.id));
+        SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->shader_id.id));
 
         /* check that there is a uniform block at 'stage' and 'ub_index' */
         const _sg_shader_stage* stage = &pip->shader->stage[stage_index];
@@ -8587,13 +8676,13 @@ SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
 }
 
 SOKOL_API_IMPL sg_context sg_setup_context(void) {
-    sg_context ctx_id;
-    ctx_id.id = _sg_pool_slot_alloc(&_sg.pools.context_pool);
-    if (SG_INVALID_ID != ctx_id.id) {
-        _sg_context* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
-        SOKOL_ASSERT(ctx);
+    sg_context res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.context_pool);
+    if (0 != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.contexts[slot_index].slot, slot_index);
+        _sg_context* ctx = _sg_context_at(&_sg.pools, res.id);
         _sg_create_context(ctx);
-        _sg_context_slot(&_sg.pools, ctx_id.id)->state = SG_RESOURCESTATE_VALID;
+        SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
         _sg_activate_context(ctx);
     }
     else {
@@ -8609,7 +8698,8 @@ SOKOL_API_IMPL void sg_discard_context(sg_context ctx_id) {
     _sg_context* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
     if (ctx) {
         _sg_destroy_context(ctx);
-        _sg_pool_slot_free(&_sg.pools.context_pool, ctx_id.id);
+        _sg_reset_context_slot(ctx);
+        _sg_pool_free_index(&_sg.pools.context_pool, _sg_slot_index(ctx_id.id));
     }
     _sg.active_context.id = SG_INVALID_ID;
     _sg_activate_context(0);
@@ -8625,112 +8715,139 @@ SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
 /*-- allocate resource id ----------------------------------------------------*/
 SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
     sg_buffer res;
-    res.id = _sg_pool_slot_alloc(&_sg.pools.buffer_pool);
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
+    if (0 != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.buffers[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
     return res;
 }
 
 SOKOL_API_IMPL sg_image sg_alloc_image(void) {
     sg_image res;
-    res.id = _sg_pool_slot_alloc(&_sg.pools.image_pool);
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.image_pool);
+    if (0 != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.images[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
     return res;
 }
 
 SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
     sg_shader res;
-    res.id = _sg_pool_slot_alloc(&_sg.pools.shader_pool);
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.shader_pool);
+    if (0 != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.shaders[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
     return res;
 }
 
 SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
     sg_pipeline res;
-    res.id = _sg_pool_slot_alloc(&_sg.pools.pipeline_pool);
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.pipeline_pool);
+    if (0 != slot_index) {
+        res.id =_sg_slot_alloc(&_sg.pools.pipelines[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
     return res;
 }
 
 SOKOL_API_IMPL sg_pass sg_alloc_pass(void) {
     sg_pass res;
-    res.id = _sg_pool_slot_alloc(&_sg.pools.pass_pool);
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.pass_pool);
+    if (0 != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.passes[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
     return res;
 }
 
 /*-- initialize an allocated resource ----------------------------------------*/
 SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
-    SOKOL_ASSERT((buf_id.id != SG_INVALID_ID) && desc);
+    SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    _sg_slot* slot = _sg_lookup_buffer_slot(&_sg.pools, buf_id.id);
-    SOKOL_ASSERT(buf && slot && (slot->state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_buffer_desc(desc)) {
-        slot->state = _sg_create_buffer(buf, desc);
-        slot->ctx_id = _sg.active_context.id;
+        _sg_create_buffer(buf, desc);
+        buf->slot.ctx_id = _sg.active_context.id;
     }
     else {
-        slot->state = SG_RESOURCESTATE_FAILED;
+        buf->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_VALID)||(slot->state == SG_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID && desc);
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    _sg_slot* slot = _sg_lookup_image_slot(&_sg.pools, img_id.id);
-    SOKOL_ASSERT(img && slot && (slot->state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_image_desc(desc)) {
-        slot->state = _sg_create_image(img, desc);
-        slot->ctx_id = _sg.active_context.id;
+        _sg_create_image(img, desc);
+        img->slot.ctx_id = _sg.active_context.id;
     }
     else {
-        slot->state = SG_RESOURCESTATE_FAILED;
+        img->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_VALID)||(slot->state == SG_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID && desc);
     _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
-    _sg_slot* slot = _sg_lookup_shader_slot(&_sg.pools, shd_id.id);
-    SOKOL_ASSERT(shd && slot && slot->state == SG_RESOURCESTATE_ALLOC);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_shader_desc(desc)) {
-        slot->state = _sg_create_shader(shd, desc);
-        slot->ctx_id = _sg.active_context.id;
+        _sg_create_shader(shd, desc);
+        shd->slot.ctx_id = _sg.active_context.id;
     }
     else {
-        slot->state = SG_RESOURCESTATE_FAILED;
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_VALID)||(slot->state == SG_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID && desc);
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-    _sg_slot* pip_slot = _sg_lookup_pipeline_slot(&_sg.pools, pip_id.id);
-    SOKOL_ASSERT(pip && pip_slot && (pip_slot->state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_pipeline_desc(desc)) {
         _sg_shader* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
-        _sg_shader_slot* shd_slot = _sg_lookup_shader_slot(&_sg.pools, desc->shader.id);
-        SOKOL_ASSERT(shd && shd_slot && (shd_slot->state == SG_RESOURCESTATE_VALID));
-        pip_slot->state = _sg_create_pipeline(pip, shd, desc);
-        pip_slot->ctx_id = _sg.active_context.id;
+        SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
+        _sg_create_pipeline(pip, shd, desc);
+        pip->slot.ctx_id = _sg.active_context.id;
     }
     else {
-        pip_slot->state = SG_RESOURCESTATE_FAILED;
+        pip->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((pip_slot->state == SG_RESOURCESTATE_VALID)||(pip_slot->state == SG_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 SOKOL_API_IMPL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID && desc);
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-    _sg_slot* pass_slot = _sg_lookup_pass_slot(&_sg.pools, pass_id.id);
-    SOKOL_ASSERT(pass && pass_slot && (pass_slot->state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
     if (_sg_validate_pass_desc(desc)) {
         /* lookup pass attachment image pointers */
         _sg_image* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             if (desc->color_attachments[i].image.id) {
-                uint32_t att_id = desc->color_attachments[i].image.id;
-                att_imgs[i] = _sg_lookup_image(&_sg.pools, att_id);
-                _sg_slot* img_slot = _sg_lookup_image_slot(&_sg.pools, att_id);
-                SOKOL_ASSERT(att_imgs[i] && img_slot && (img_slot->state == SG_RESOURCESTATE_VALID));
+                att_imgs[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
+                SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
             }
             else {
                 att_imgs[i] = 0;
@@ -8738,83 +8855,106 @@ SOKOL_API_IMPL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
         }
         const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
         if (desc->depth_stencil_attachment.image.id) {
-            uint32_t att_id = desc->depth_stencil_attachment.image.id;
-            att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, att_id);
-            _sg_slot* img_slot = _sg_lookup_image_slot(&_sg.pools, att_id);
-            SOKOL_ASSERT(att_imgs[ds_att_index] && img_slot && (img_slot->state == SG_RESOURCESTATE_VALID));
+            att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
+            SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
         }
         else {
             att_imgs[ds_att_index] = 0;
         }
-        pass_slot->state = _sg_create_pass(pass, att_imgs, desc);
-        pass_slot->ctx_id = _sg.active_context.id;
+        _sg_create_pass(pass, att_imgs, desc);
+        pass->slot.ctx_id = _sg.active_context.id;
     }
     else {
-        pass_slot->state = SG_RESOURCESTATE_FAILED;
+        pass->slot.state = SG_RESOURCESTATE_FAILED;
     }
-    SOKOL_ASSERT((pass_slot->state == SG_RESOURCESTATE_VALID)||(pass_slot->state == SG_RESOURCESTATE_FAILED));
+    SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED));
 }
 
 /*-- set allocated resource to failed state ----------------------------------*/
 SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID);
-    _sg_slot* slot = _sg_lookup_buffer_slot(&_sg.pools, buf_id.id);
-    SOKOL_ASSERT(slot && (slot->id == buf_id.id) && (slot->state == SG_RESOURCESTATE_ALLOC));
-    slot->state = SG_RESOURCESTATE_FAILED;
+    _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    buf->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID);
-    _sg_slot* slot = _sg_lookup_image_slot(&_sg.pools, img_id.id);
-    SOKOL_ASSERT(slot && (slot->id == img_id.id) && (slot->state == SG_RESOURCESTATE_ALLOC));
-    slot->state = SG_RESOURCESTATE_FAILED;
+    _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
+    img->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID);
-    _sg_slot* slot = _sg_lookup_shader_slot(&_sg.pools, shd_id.id);
-    SOKOL_ASSERT(slot && (slot->id == shd_id.id) && (slot->state == SG_RESOURCESTATE_ALLOC));
-    slot->state = SG_RESOURCESTATE_FAILED;
+    _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    shd->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID);
-    _sg_slot* slot = _sg_lookup_pipeline_slot(&_sg.pools, pip_id.id);
-    SOKOL_ASSERT(slot && (slot->id == pip_id.id) && (slot->state == SG_RESOURCESTATE_ALLOC));
-    slot->state = SG_RESOURCESTATE_FAILED;
+    _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    pip->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID);
-    _sg_slot* slot = _sg_lookup_pass_slot(&_sg.pools, pass_id.id);
-    SOKOL_ASSERT(slot && (slot->id == pass_id.id) && (slot->state == SG_RESOURCESTATE_ALLOC));
-    slot->state = SG_RESOURCESTATE_FAILED;
+    _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
+    pass->slot.state = SG_RESOURCESTATE_FAILED;
 }
 
 /*-- get resource state */
 SOKOL_API_IMPL sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
-    _sg_slot* slot = _sg_lookup_buffer_slot(&_sg.pools, buf_id.id);
-    return slot ? slot->state : SG_RESOURCESTATE_INVALID;
+    if (buf_id.id != SG_INVALID_ID) {
+        _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+        if (buf) {
+            return buf->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_image_state(sg_image img_id) {
-    _sg_slot* slot = _sg_lookup_image_slot(&_sg.pools, img_id.id);
-    return slot ? slot->state : SG_RESOURCESTATE_INVALID;
+    if (img_id.id != SG_INVALID_ID) {
+        _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
+        if (img) {
+            return img->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_shader_state(sg_shader shd_id) {
-    _sg_slot* slot = _sg_lookup_shader_slot(&_sg.pools, shd_id.id);
-    return slot ? slot->state : SG_RESOURCESTATE_INVALID;
+    if (shd_id.id != SG_INVALID_ID) {
+        _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+        if (shd) {
+            return shd->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
-    _sg_slot* slot = _sg_lookup_pipeline_slot(&_sg.pools, pip_id.id);
-    return slot ? slot->state : SG_RESOURCESTATE_INVALID;
+    if (pip_id.id != SG_INVALID_ID) {
+        _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+        if (pip) {
+            return pip->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pass_state(sg_pass pass_id) {
-    _sg_slot* slot = _sg_lookup_pass_slot(&_sg.pools, pass_id.id);
-    return slot ? slot->state : SG_RESOURCESTATE_INVALID;
+    if (pass_id.id != SG_INVALID_ID) {
+        _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+        if (pass) {
+            return pass->slot.state;
+        }
+    }
+    return SG_RESOURCESTATE_INVALID;
 }
 
 /*-- allocate and initialize resource ----------------------------------------*/
@@ -8882,10 +9022,10 @@ SOKOL_API_IMPL sg_pass sg_make_pass(const sg_pass_desc* desc) {
 SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
-        _sg_slot* slot = _sg_buffer_slot(&_sg.pools, buf_id.id);
-        if (slot->ctx_id == _sg.active_context.id) {
+        if (buf->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_buffer(buf);
-            _sg_pool_slot_free(&_sg.pools.buffer_pool, buf_id.id);
+            _sg_reset_buffer_slot(buf);
+            _sg_pool_free_index(&_sg.pools.buffer_pool, _sg_slot_index(buf_id.id));
         }
         else {
             SOKOL_LOG("sg_destroy_buffer: active context mismatch (must be same as for creation)");
@@ -8896,10 +9036,10 @@ SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
 SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
     _sg_image* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
-        _sg_slot* slot = _sg_image_slot(&_sg.pools, img_id.id);
-        if (slot->ctx_id == _sg.active_context.id) {
+        if (img->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_image(img);
-            _sg_pool_slot_free(&_sg.pools.image_pool, img_id.id);
+            _sg_reset_image_slot(img);
+            _sg_pool_free_index(&_sg.pools.image_pool, _sg_slot_index(img_id.id));
         }
         else {
             SOKOL_LOG("sg_destroy_image: active context mismatch (must be same as for creation)");
@@ -8910,10 +9050,10 @@ SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
 SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
     _sg_shader* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     if (shd) {
-        _sg_slot* slot = _sg_shader_slot(&_sg.pools, shd_id.id);
-        if (slot->ctx_id == _sg.active_context.id) {
+        if (shd->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_shader(shd);
-            _sg_pool_slot_free(&_sg.pools.shader_pool, shd_id.id);
+            _sg_reset_shader_slot(shd);
+            _sg_pool_free_index(&_sg.pools.shader_pool, _sg_slot_index(shd_id.id));
         }
         else {
             SOKOL_LOG("sg_destroy_shader: active context mismatch (must be same as for creation)");
@@ -8924,10 +9064,10 @@ SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
 SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     if (pip) {
-        _sg_slot* slot = _sg_pipeline_slot(&_sg.pools, pip_id.id);
-        if (slot->ctx_id == _sg.active_context.id) {
+        if (pip->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_pipeline(pip);
-            _sg_pool_slot_free(&_sg.pools.pipeline_pool, pip_id.id);
+            _sg_reset_pipeline_slot(pip);
+            _sg_pool_free_index(&_sg.pools.pipeline_pool, _sg_slot_index(pip_id.id));
         }
         else {
             SOKOL_LOG("sg_destroy_pipeline: active context mismatch (must be same as for creation)");
@@ -8938,10 +9078,10 @@ SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
 SOKOL_API_IMPL void sg_destroy_pass(sg_pass pass_id) {
     _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     if (pass) {
-        _sg_slot* slot = _sg_pass_slot(&_sg.pools, pass_id.id);
-        if (slot->ctx_id == _sg.active_context.id) {
+        if (pass->slot.ctx_id == _sg.active_context.id) {
             _sg_destroy_pass(pass);
-            _sg_pool_slot_free(&_sg.pools.pass_pool, pass_id.id);
+            _sg_reset_pass_slot(pass);
+            _sg_pool_free_index(&_sg.pools.pass_pool, _sg_slot_index(pass_id.id));
         }
         else {
             SOKOL_LOG("sg_destroy_pass: active context mismatch (must be same as for creation)");
@@ -8963,17 +9103,17 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
     SOKOL_ASSERT(pass_action);
     SOKOL_ASSERT((pass_action->_start_canary == 0) && (pass_action->_end_canary == 0));
     _sg.cur_pass = pass_id;
-    _sg.pass_valid = false;
-    if (_sg_validate_begin_pass(pass_id)) {
-        _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-        if (pass) {
-            _sg.pass_valid = true;
-            sg_pass_action pa;
-            _sg_resolve_default_pass_action(pass_action, &pa);
-            const int w = pass->color_atts[0].image->width;
-            const int h = pass->color_atts[0].image->height;
-            _sg_begin_pass(pass, &pa, w, h);
-        }
+    _sg_pass* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    if (pass && _sg_validate_begin_pass(pass)) {
+        _sg.pass_valid = true;
+        sg_pass_action pa;
+        _sg_resolve_default_pass_action(pass_action, &pa);
+        const int w = pass->color_atts[0].image->width;
+        const int h = pass->color_atts[0].image->height;
+        _sg_begin_pass(pass, &pa, w, h);
+    }
+    else {
+        _sg.pass_valid = false;
     }
 }
 
@@ -8993,8 +9133,8 @@ SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, b
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.bindings_valid = false;
-    _sg.next_draw_valid = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
+        _sg.next_draw_valid = false;
         return;
     }
     if (!_sg.pass_valid) {
@@ -9003,8 +9143,8 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.cur_pipeline = pip_id;
     _sg_pipeline* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     SOKOL_ASSERT(pip);
-    _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == _sg_pipeline_slot(&_sg.pools, pip_id);
-    SOKOL_ASSERT(pip->shader && (pip->shader == _sg_lookup_shader(pip->shader_id.id)));
+    _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
+    SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->shader_id.id));
     _sg_apply_pipeline(pip);
 }
 
@@ -9023,11 +9163,10 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     _sg_buffer* vbs[SG_MAX_SHADERSTAGE_BUFFERS] = { 0 };
     int num_vbs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++, num_vbs++) {
-        uint32_t vbuf_id = bind->vertex_buffers[i].id;
-        if (vbuf_id) {
-            vbs[i] = _sg_lookup_buffer(&_sg.pools, vbuf_id);
+        if (bind->vertex_buffers[i].id) {
+            vbs[i] = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
             SOKOL_ASSERT(vbs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == _sg_buffer_slot(&_sg.pools, vbuf_id)->state);
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vbs[i]->slot.state);
             _sg.next_draw_valid &= !vbs[i]->append_overflow;
         }
         else {
@@ -9037,21 +9176,19 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
 
     _sg_buffer* ib = 0;
     if (bind->index_buffer.id) {
-        uint32_t ibuf_id = bind->index_buffer.id;
-        ib = _sg_lookup_buffer(&_sg.pools, ibuf_id);
+        ib = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
         SOKOL_ASSERT(ib);
-        _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == _sg_buffer_slot(&_sg.pools, ibuf_id)->state);
+        _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == ib->slot.state);
         _sg.next_draw_valid &= !ib->append_overflow;
     }
 
     _sg_image* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
     int num_vs_imgs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_vs_imgs++) {
-        uint32_t img_id = bind->vs_images[i].id;
-        if (img_id) {
-            vs_imgs[i] = _sg_lookup_image(&_sg.pools, img_id);
+        if (bind->vs_images[i].id) {
+            vs_imgs[i] = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
             SOKOL_ASSERT(vs_imgs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == _sg_image_slot(&_sg.pools, img_id)->state);
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vs_imgs[i]->slot.state);
         }
         else {
             break;
@@ -9061,11 +9198,10 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     _sg_image* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
     int num_fs_imgs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_fs_imgs++) {
-        uint32_t img_id = bind->fs_images[i].id;
-        if (img_id) {
-            fs_imgs[i] = _sg_lookup_image(&_sg.pools, img_id);
+        if (bind->fs_images[i].id) {
+            fs_imgs[i] = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
             SOKOL_ASSERT(fs_imgs[i]);
-            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == _sg_image_slot(&_sg.pools, img_id)->state);
+            _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == fs_imgs[i]->slot.state);
         }
         else {
             break;
@@ -9128,7 +9264,7 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const void* data, int num
         return;
     }
     _sg_buffer* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (!(buf && (_sg_buffer_slot(&_sg.pools, buf_id.id)->state == SG_RESOURCESTATE_VALID))) {
+    if (!(buf && buf->slot.state == SG_RESOURCESTATE_VALID)) {
         return;
     }
     if (_sg_validate_update_buffer(buf, data, num_bytes)) {
@@ -9154,7 +9290,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
             buf->append_overflow = true;
         }
         const int start_pos = buf->append_pos;
-        if (SG_RESOURCESTATE_VALID == _sg_buffer_slot(&_sg.pools, buf_id.id)->state) {
+        if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data, num_bytes)) {
                 if (!buf->append_overflow && (num_bytes > 0)) {
                     /* update and append on same buffer in same frame not allowed */
