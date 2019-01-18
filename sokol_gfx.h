@@ -2159,6 +2159,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
     SOKOL_ASSERT(pip && desc);
     pip->shader = shd;
     pip->shader_id = desc->shader;
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
+        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+            break;
+        }
+        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
+        pip->vertex_layout_valid[a_desc->buffer_index] = true;
+    }
     pip->color_attachment_count = _sg_def(desc->blend.color_attachment_count, 1);
     pip->color_format = _sg_def(desc->blend.color_format, SG_PIXELFORMAT_RGBA8);
     pip->depth_format = _sg_def(desc->blend.depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
@@ -7802,7 +7810,7 @@ typedef struct {
 #define _SG_INVALID_SLOT_INDEX (0)
 
 _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
-    SOKOL_ASSERT(pool && (num > 1));
+    SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
     pool->size = num + 1;
     pool->queue_top = 0;
@@ -8529,10 +8537,12 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             /* on Metal or D3D with shader compiler, must provide shader source code or byte code */
             SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-        #else
+        #elif defined(SOKOL_D3D11)
             /* on D3D11 without shader compiler, must provide byte code */
             SOKOL_VALIDATE(0 != desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
             SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
+        #else
+            /* Dummy Backend, don't require source or bytecode */
         #endif
         /* if shader byte code, the size must also be provided */
         if (0 != desc->vs.byte_code) {
