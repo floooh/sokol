@@ -1940,7 +1940,6 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 typedef struct {
     uint32_t id;
     uint32_t ctx_id;
-    uint32_t gen_ctr;
     sg_resource_state state;
 } _sg_slot;
 
@@ -2002,12 +2001,12 @@ typedef struct {
 #endif
 #ifdef SOKOL_GLES2
 #   ifdef GL_ANGLE_instanced_arrays
-#       define SOKOL_INSTANCING_ENABLED 1
+#       define SOKOL_INSTANCING_ENABLED
 #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
 #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
 #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
 #   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-#       define SOKOL_INSTANCING_ENABLED 1
+#       define SOKOL_INSTANCING_ENABLED
 #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
 #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
 #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
@@ -2018,7 +2017,7 @@ typedef struct {
 #       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
 #   endif
 #else
-#   define SOKOL_INSTANCING_ENABLED 1
+#   define SOKOL_INSTANCING_ENABLED
 #endif
 
 #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
@@ -3391,7 +3390,7 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline* pip) {
     first entries are the color attachment images (or nullptr), last entry
     is the depth-stencil image (or nullptr).
 */
-_SOKOL_PRIVATE void _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && att_images && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
     _SG_GL_CHECK_ERROR();
@@ -5702,8 +5701,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #error "Please enable ARC when using the Metal backend"
 #endif
 
-/* memset() */
-#include <string.h>
+#include <string.h> /* memset */
 #include <TargetConditionals.h>
 #import <Metal/Metal.h>
 
@@ -7423,6 +7421,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 typedef struct {
     int size;
     int queue_top;
+    uint32_t* gen_ctrs;
     int* free_queue;
 } _sg_pool;
 
@@ -7434,6 +7433,11 @@ _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
     pool->size = num + 1;
     pool->queue_top = 0;
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
+    memset(pool->gen_ctrs, 0, gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
     pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
     SOKOL_ASSERT(pool->free_queue);
@@ -7445,8 +7449,12 @@ _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
 
 _SOKOL_PRIVATE void _sg_discard_pool(_sg_pool* pool) {
     SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
     SOKOL_FREE(pool->free_queue);
     pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    SOKOL_FREE(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
     pool->size = 0;
     pool->queue_top = 0;
 }
@@ -7482,44 +7490,32 @@ _SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool* pool, int slot_index) {
 
 _SOKOL_PRIVATE void _sg_reset_buffer(_sg_buffer* buf) {
     SOKOL_ASSERT(buf);
-    uint32_t gen_ctr = buf->slot.gen_ctr;
     memset(buf, 0, sizeof(_sg_buffer));
-    buf->slot.gen_ctr = gen_ctr;
 }
 
 _SOKOL_PRIVATE void _sg_reset_image(_sg_image* img) {
     SOKOL_ASSERT(img);
-    uint32_t gen_ctr = img->slot.gen_ctr;
     memset(img, 0, sizeof(_sg_image));
-    img->slot.gen_ctr = gen_ctr;
 }
 
 _SOKOL_PRIVATE void _sg_reset_shader(_sg_shader* shd) {
     SOKOL_ASSERT(shd);
-    uint32_t gen_ctr = shd->slot.gen_ctr;
     memset(shd, 0, sizeof(_sg_shader));
-    shd->slot.gen_ctr = gen_ctr;
 }
 
 _SOKOL_PRIVATE void _sg_reset_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
-    uint32_t gen_ctr = pip->slot.gen_ctr;
     memset(pip, 0, sizeof(_sg_pipeline));
-    pip->slot.gen_ctr = gen_ctr;
 }
 
 _SOKOL_PRIVATE void _sg_reset_pass(_sg_pass* pass) {
     SOKOL_ASSERT(pass);
-    uint32_t gen_ctr = pass->slot.gen_ctr;
     memset(pass, 0, sizeof(_sg_pass));
-    pass->slot.gen_ctr = gen_ctr;
 }
 
 _SOKOL_PRIVATE void _sg_reset_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
-    uint32_t gen_ctr = ctx->slot.gen_ctr;
     memset(ctx, 0, sizeof(_sg_context));
-    ctx->slot.gen_ctr = gen_ctr;
 }
 
 typedef struct {
@@ -7607,14 +7603,15 @@ _SOKOL_PRIVATE void _sg_discard_pools(_sg_pools* p) {
     - set the slot's state to ALLOC
     - return the resource id
 */
-_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_slot* slot, int slot_index) {
+_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool* pool, _sg_slot* slot, int slot_index) {
     /* FIXME: add handling for an overflowing generation counter,
        for now, just overflow (another option is to disable
        the slot)
     */
-    SOKOL_ASSERT(slot_index != _SG_INVALID_SLOT_INDEX);
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
     SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
-    uint32_t ctr = ++slot->gen_ctr;
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
     slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK); 
     slot->state = SG_RESOURCESTATE_ALLOC;
     return slot->id;
@@ -7743,7 +7740,7 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
               ...because the free queues will not be reset
               and the resource slots not be cleared!
     */
-    for (int i = 0; i < p->buffer_pool.size; i++) {
+    for (int i = 1; i < p->buffer_pool.size; i++) {
         if (p->buffers[i].slot.ctx_id == ctx_id) {
             sg_resource_state state = p->buffers[i].slot.state;
             if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
@@ -7751,7 +7748,7 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
             }
         }
     }
-    for (int i = 0; i < p->image_pool.size; i++) {
+    for (int i = 1; i < p->image_pool.size; i++) {
         if (p->images[i].slot.ctx_id == ctx_id) {
             sg_resource_state state = p->images[i].slot.state;
             if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
@@ -7759,7 +7756,7 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
             }
         }
     }
-    for (int i = 0; i < p->shader_pool.size; i++) {
+    for (int i = 1; i < p->shader_pool.size; i++) {
         if (p->shaders[i].slot.ctx_id == ctx_id) {
             sg_resource_state state = p->shaders[i].slot.state;
             if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
@@ -7767,7 +7764,7 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
             }
         }
     }
-    for (int i = 0; i < p->pipeline_pool.size; i++) {
+    for (int i = 1; i < p->pipeline_pool.size; i++) {
         if (p->pipelines[i].slot.ctx_id == ctx_id) {
             sg_resource_state state = p->pipelines[i].slot.state;
             if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
@@ -7775,7 +7772,7 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
             }
         }
     }
-    for (int i = 0; i < p->pass_pool.size; i++) {
+    for (int i = 1; i < p->pass_pool.size; i++) {
         if (p->passes[i].slot.ctx_id == ctx_id) {
             sg_resource_state state = p->passes[i].slot.state;
             if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
@@ -8617,8 +8614,8 @@ SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
 SOKOL_API_IMPL sg_context sg_setup_context(void) {
     sg_context res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.context_pool);
-    if (0 != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.contexts[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.context_pool, &_sg.pools.contexts[slot_index].slot, slot_index);
         _sg_context* ctx = _sg_context_at(&_sg.pools, res.id);
         ctx->slot.state = _sg_create_context(ctx);
         SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
@@ -8655,8 +8652,8 @@ SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
 SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
     sg_buffer res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
-    if (0 != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.buffers[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.buffer_pool, &_sg.pools.buffers[slot_index].slot, slot_index);
     }
     else {
         /* pool is exhausted */
@@ -8668,8 +8665,8 @@ SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
 SOKOL_API_IMPL sg_image sg_alloc_image(void) {
     sg_image res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.image_pool);
-    if (0 != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.images[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.image_pool, &_sg.pools.images[slot_index].slot, slot_index);
     }
     else {
         /* pool is exhausted */
@@ -8681,8 +8678,8 @@ SOKOL_API_IMPL sg_image sg_alloc_image(void) {
 SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
     sg_shader res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.shader_pool);
-    if (0 != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.shaders[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.shader_pool, &_sg.pools.shaders[slot_index].slot, slot_index);
     }
     else {
         /* pool is exhausted */
@@ -8694,8 +8691,8 @@ SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
 SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
     sg_pipeline res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.pipeline_pool);
-    if (0 != slot_index) {
-        res.id =_sg_slot_alloc(&_sg.pools.pipelines[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id =_sg_slot_alloc(&_sg.pools.pipeline_pool, &_sg.pools.pipelines[slot_index].slot, slot_index);
     }
     else {
         /* pool is exhausted */
@@ -8707,8 +8704,8 @@ SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
 SOKOL_API_IMPL sg_pass sg_alloc_pass(void) {
     sg_pass res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.pass_pool);
-    if (0 != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.passes[slot_index].slot, slot_index);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.pass_pool, &_sg.pools.passes[slot_index].slot, slot_index);
     }
     else {
         /* pool is exhausted */
