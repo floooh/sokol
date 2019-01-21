@@ -24,9 +24,9 @@
     #define SOKOL_GLCORE33
     #include "sokol_gfx.h"
 
-    The dummy backend replaces the platform-specific backend code with
-    empty stub functions. This is useful for instance useful for 
-    writing tests that need to run on the command line.
+    The dummy backend replaces the platform-specific backend code with empty
+    stub functions. This is useful for writing tests that need to run on the
+    command line.
 
     To enable shader compilation support in the D3D11 backend:
         #define SOKOL_D3D11_SHADER_COMPILER
