@@ -632,7 +632,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
-#elif defined(linux)
+#elif defined(linux) || defined(__linux__) || defined(unix) || defined(__unix__)
     #if !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
@@ -3875,7 +3875,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #endif /* WINDOWS */
 
 /*== LINUX ==================================================================*/
-#if defined(linux)
+#if defined(linux) || defined(__linux__) || defined(unix) || defined(__unix__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
