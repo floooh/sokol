@@ -1217,7 +1217,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         _saudio.sample_rate = _saudio_js_sample_rate();
         _saudio.buffer_frames = _saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
-        _saudio_emsc_buffer = SOKOL_MALLOC(buf_size);
+        _saudio_emsc_buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
     }
     else {
