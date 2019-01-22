@@ -800,6 +800,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    int dir; unsigned int val;
     memset(&_saudio_alsa, 0, sizeof(_saudio_alsa));
     int rc = snd_pcm_open(&_saudio_alsa.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
@@ -817,8 +818,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     else {
         snd_pcm_hw_params_set_format(_saudio_alsa.device, params, SND_PCM_FORMAT_FLOAT_LE);
     }
-    unsigned int val = _saudio.sample_rate;
-    int dir = 0;
+    val = _saudio.sample_rate;
+    dir = 0;
     if (0 > snd_pcm_hw_params_set_rate_near(_saudio_alsa.device, params, &val, &dir)) {
         goto error;
     }
