@@ -1818,7 +1818,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                     case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
                     case 1: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_MIDDLE; break;
                     case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
-                    default: _sapp.event.mouse_button = emsc_event->button; break;
+                    default: _sapp.event.mouse_button = (sapp_mousebutton)emsc_event->button; break;
                 }
             }
             else {
