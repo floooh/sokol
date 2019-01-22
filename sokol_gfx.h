@@ -8634,10 +8634,10 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS);
             #if defined(SOKOL_GLES2)
             /* on GLES2, vertex attribute names must be provided */
-            SOKOL_VALIDATE(a_desc->name, _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
+            SOKOL_VALIDATE((0 != a_desc->name), _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
             #elif defined(SOKOL_D3D11)
             /* on D3D11, semantic names (and semantic indices) must be provided */
-            SOKOL_VALIDATE(a_desc->sem_name, _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+            SOKOL_VALIDATE((0 != a_desc->sem_name), _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
             #endif
         }
         return SOKOL_VALIDATE_END();
