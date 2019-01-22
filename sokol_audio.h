@@ -885,6 +885,12 @@ static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35,
 static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
 static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
 
+#if defined(__cplusplus)
+#define _SOKOL_AUDIO_WIN32COM_ID(x) (x)
+#else
+#define _SOKOL_AUDIO_WIN32COM_ID(x) (&x)
+#endif
+
 /* fix for Visual Studio 2015 SDKs */
 #ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
 #define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
@@ -1012,9 +1018,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
-    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator,
+    if (FAILED(CoCreateInstance(_SOKOL_AUDIO_WIN32COM_ID(_saudio_CLSID_IMMDeviceEnumerator),
         0, CLSCTX_ALL,
-        &_saudio_IID_IMMDeviceEnumerator,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IMMDeviceEnumerator),
         (void**)&_saudio_wasapi.device_enumerator)))
     {
         SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
@@ -1028,7 +1034,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         goto error;
     }
     if (FAILED(IMMDevice_Activate(_saudio_wasapi.device,
-        &_saudio_IID_IAudioClient,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient),
         CLSCTX_ALL, 0,
         (void**)&_saudio_wasapi.audio_client)))
     {
@@ -1058,7 +1064,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         goto error;
     }
     if (FAILED(IAudioClient_GetService(_saudio_wasapi.audio_client,
-        &_saudio_IID_IAudioRenderClient,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioRenderClient),
         (void**)&_saudio_wasapi.render_client)))
     {
         SOKOL_LOG("sokol_audio wasapi: audio client GetService failed");
