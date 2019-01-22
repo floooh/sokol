@@ -3875,7 +3875,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #endif /* WINDOWS */
 
 /*== LINUX ==================================================================*/
-#if defined(__linux__) || defined(__unix__)
+#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>

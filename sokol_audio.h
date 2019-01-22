@@ -429,7 +429,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #define _SAUDIO_RING_MAX_SLOTS (128)
 
 /*--- mutex wrappers ---------------------------------------------------------*/
-#if defined(__APPLE__) || defined(__linux__) || defined(__unix__)
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
 #include "pthread.h"
 static pthread_mutex_t _saudio_mutex;
 
@@ -760,7 +760,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 /*=== ALSA BACKEND ===========================================================*/
-#elif defined(__linux__) || defined(__unix__)
+#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
 #define ALSA_PCM_NEW_HW_PARAMS_API
 #include <alsa/asoundlib.h>
 
