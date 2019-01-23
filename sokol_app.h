@@ -636,17 +636,15 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
+#elif defined(__ANDROID__)
+    /* Android */
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+    #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #endif
 #elif defined(linux)
-    #if defined(__ANDROID__)
-        /* Android */
-        #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-        #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
-        #endif
-    #else
-        /* Linux */
-        #if !defined(SOKOL_GLCORE33)
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
-        #endif
+    /* Linux */
+    #if !defined(SOKOL_GLCORE33)
+    #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
 #else
 #error "sokol_app.h: Unknown platform"
@@ -3892,9 +3890,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
-/*== Android/LINUX ==========================================================*/
-#if defined(linux)
-
 /*== Android ================================================================*/
 #if defined(__ANDROID__)
 #include <pthread.h>
@@ -4614,7 +4609,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 #endif /* Android */
 
 /*== LINUX ==================================================================*/
-#if !defined(__ANDROID__)
+#if defined(linux) && !defined(__ANDROID__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -6421,8 +6416,6 @@ int main(int argc, char* argv[]) {
 }
 
 #endif /* LINUX */
-
-#endif /* Android/LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 SOKOL_API_IMPL bool sapp_isvalid(void) {
