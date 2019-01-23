@@ -370,10 +370,14 @@ A list of things I'd like to do next:
 
 ## sokol_gfx.h planned features:
 
-- use a per-pool-slot generation counter as 'unique tag' in the resource handles,
-  and let the application decide whether slots should be disabled when
-  their generation counter overflows, or whether the generation counter
-  should simply wrap around
+- 2 small additions to the per-pool-slot generation counters in sokol_gfx.h:
+    - an sg_setup() option to disable a pool slot when it's generation
+      counter overflows, this makes the dangling-check for resource ids
+      watertight at the cost that the pool will run out of slots at some point
+    - instead of the 16/16-bit split in the resource ids for unique-tag vs
+      slot-index, only use as many bits as necessary for the slot-index
+      (based on the number of slots in the pool), and the remaining bits
+      for the unique-tag
 
 ## sokol_app.h planned features:
 
@@ -407,12 +411,22 @@ Big stuff:
 
 # Updates
 
+- **21-Jan-2019**: sokol_gfx.h - pool-slot-generation-counters and a dummy backend:
+    - Resource pool slots now have a generation-counter for the resource-id
+      unique-tag, instead of a single counter for the whole pool. This allows
+      to create many more unique handles.
+    - sokol_gfx.h now has a dummy backend, activated by defining SOKOL_DUMMY_BACKEND
+      (instead of SOKOL_METAL, SOKOL_D3D11, ...), this allows to write
+      'headless' tests (and there's now a sokol-gfx-test in the sokol-samples
+      repository which mainly tests the resource pool system)
+
 - **12-Jan-2019**: sokol_gfx.h - setting the pipeline state and resource
 bindings now happens in separate calls, specifically: 
     - *sg_apply_draw_state()* has been replaced with *sg_apply_pipeline()* and
     *sg_apply_bindings()*
     - the *sg_draw_state* struct has been replaced with *sg_bindings*
     - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+
 All existing code will still work. See [this blog
 post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
 details.

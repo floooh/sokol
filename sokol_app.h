@@ -641,7 +641,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
     #endif
-#elif defined(linux)
+#elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #if !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
@@ -1651,9 +1651,15 @@ static bool _sapp_emsc_wants_hide_keyboard;
 /* this function is called from a JS event handler when the user hides
     the onscreen keyboard pressing the 'dismiss keyboard key'
 */
+#ifdef __cplusplus
+extern "C" {
+#endif
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
     _sapp.onscreen_keyboard_shown = false;
 }
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
 EM_JS(void, _sapp_js_create_textfield, (), {
@@ -1834,7 +1840,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                     case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
                     case 1: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_MIDDLE; break;
                     case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
-                    default: _sapp.event.mouse_button = emsc_event->button; break;
+                    default: _sapp.event.mouse_button = (sapp_mousebutton)emsc_event->button; break;
                 }
             }
             else {
@@ -4609,7 +4615,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 #endif /* Android */
 
 /*== LINUX ==================================================================*/
-#if defined(linux) && !defined(__ANDROID__)
+#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>

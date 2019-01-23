@@ -429,7 +429,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #define _SAUDIO_RING_MAX_SLOTS (128)
 
 /*--- mutex wrappers ---------------------------------------------------------*/
-#if defined(__APPLE__) || defined(linux)
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
 #include "pthread.h"
 static pthread_mutex_t _saudio_mutex;
 
@@ -760,7 +760,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 /*=== ALSA BACKEND ===========================================================*/
-#elif defined(linux) && !defined(__ANDROID__)
+#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #define ALSA_PCM_NEW_HW_PARAMS_API
 #include <alsa/asoundlib.h>
 
@@ -800,6 +800,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    int dir; unsigned int val;
     memset(&_saudio_alsa, 0, sizeof(_saudio_alsa));
     int rc = snd_pcm_open(&_saudio_alsa.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
@@ -817,8 +818,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     else {
         snd_pcm_hw_params_set_format(_saudio_alsa.device, params, SND_PCM_FORMAT_FLOAT_LE);
     }
-    unsigned int val = _saudio.sample_rate;
-    int dir = 0;
+    val = _saudio.sample_rate;
+    dir = 0;
     if (0 > snd_pcm_hw_params_set_rate_near(_saudio_alsa.device, params, &val, &dir)) {
         goto error;
     }
@@ -883,6 +884,12 @@ static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1
 static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
 static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
 static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
+
+#if defined(__cplusplus)
+#define _SOKOL_AUDIO_WIN32COM_ID(x) (x)
+#else
+#define _SOKOL_AUDIO_WIN32COM_ID(x) (&x)
+#endif
 
 /* fix for Visual Studio 2015 SDKs */
 #ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
@@ -1011,9 +1018,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
-    if (FAILED(CoCreateInstance(&_saudio_CLSID_IMMDeviceEnumerator,
+    if (FAILED(CoCreateInstance(_SOKOL_AUDIO_WIN32COM_ID(_saudio_CLSID_IMMDeviceEnumerator),
         0, CLSCTX_ALL,
-        &_saudio_IID_IMMDeviceEnumerator,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IMMDeviceEnumerator),
         (void**)&_saudio_wasapi.device_enumerator)))
     {
         SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
@@ -1027,7 +1034,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         goto error;
     }
     if (FAILED(IMMDevice_Activate(_saudio_wasapi.device,
-        &_saudio_IID_IAudioClient,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient),
         CLSCTX_ALL, 0,
         (void**)&_saudio_wasapi.audio_client)))
     {
@@ -1057,7 +1064,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         goto error;
     }
     if (FAILED(IAudioClient_GetService(_saudio_wasapi.audio_client,
-        &_saudio_IID_IAudioRenderClient,
+        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioRenderClient),
         (void**)&_saudio_wasapi.render_client)))
     {
         SOKOL_LOG("sokol_audio wasapi: audio client GetService failed");
@@ -1112,6 +1119,10 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
 static uint8_t* _saudio_emsc_buffer;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio_emsc_buffer);
     if (num_frames == _saudio.buffer_frames) {
@@ -1132,6 +1143,10 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
         return 0;
     }
 }
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
 EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
@@ -1217,7 +1232,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         _saudio.sample_rate = _saudio_js_sample_rate();
         _saudio.buffer_frames = _saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
-        _saudio_emsc_buffer = SOKOL_MALLOC(buf_size);
+        _saudio_emsc_buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
     }
     else {

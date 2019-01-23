@@ -54,7 +54,7 @@
     Windows:        QueryPerformanceFrequency() / QueryPerformanceCounter()
     MacOS/iOS:      mach_absolute_time()
     emscripten:     clock_gettime(CLOCK_MONOTONIC)
-    Linux+others:   clock_gettime(CLOCK_MONITONIC)
+    Linux+others:   clock_gettime(CLOCK_MONOTONIC)
 
     zlib/libpng license
 
