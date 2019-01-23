@@ -594,6 +594,9 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
 /*-- EMSCRIPTEN IMPLEMENTATION -----------------------------------------------*/
 #if defined(__EMSCRIPTEN__)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
     SOKOL_ASSERT(_sargs.valid && key && val);
     if (_sargs.num_args >= _sargs.max_args) {
@@ -619,6 +622,9 @@ EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
 
     _sargs.num_args++;
 }
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /* JS function to extract arguments from the page URL */
 EM_JS(void, sargs_js_parse_url, (), {

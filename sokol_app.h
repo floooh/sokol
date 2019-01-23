@@ -1635,9 +1635,15 @@ static bool _sapp_emsc_wants_hide_keyboard;
 /* this function is called from a JS event handler when the user hides
     the onscreen keyboard pressing the 'dismiss keyboard key'
 */
+#ifdef __cplusplus
+extern "C" {
+#endif
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
     _sapp.onscreen_keyboard_shown = false;
 }
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
 EM_JS(void, _sapp_js_create_textfield, (), {
