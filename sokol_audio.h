@@ -1119,6 +1119,10 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
 static uint8_t* _saudio_emsc_buffer;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio_emsc_buffer);
     if (num_frames == _saudio.buffer_frames) {
@@ -1139,6 +1143,10 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
         return 0;
     }
 }
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
 EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
