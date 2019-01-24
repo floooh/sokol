@@ -4375,6 +4375,18 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     return is_in_front && has_surface;
 }
 
+_SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
+    SOKOL_ASSERT(_sapp.valid);
+    /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
+    if (shown) {
+        SOKOL_LOG("Showing keyboard");
+        ANativeActivity_showSoftInput(_sapp_android_state.activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
+    } else {
+        SOKOL_LOG("Hiding keyboard");
+        ANativeActivity_hideSoftInput(_sapp_android_state.activity, ANATIVEACTIVITY_HIDE_SOFT_INPUT_NOT_ALWAYS);
+    }
+}
+
 _SOKOL_PRIVATE void* _sapp_android_loop(void* obj) {
     SOKOL_LOG("Loop thread started");
     _sapp_android_state_t* state = (_sapp_android_state_t*)obj;
@@ -6449,10 +6461,12 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
-    #if TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE)
     _sapp_ios_show_keyboard(shown);
-    #elif __EMSCRIPTEN__
+    #elif defined(__EMSCRIPTEN__)
     _sapp_emsc_show_keyboard(shown);
+    #elif defined(__ANDROID__)
+    _sapp_android_show_keyboard(shown);
     #else
     _SOKOL_UNUSED(shown);
     #endif
