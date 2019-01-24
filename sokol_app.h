@@ -4129,15 +4129,19 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
         {
             SOKOL_LOG("Calling setBuffersGeometry");
             EGLint format;
-            SOKOL_ASSERT(eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format) == EGL_TRUE);
-            SOKOL_ASSERT(ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format) == 0);
+            EGLBoolean egl_result = eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format);
+            SOKOL_ASSERT(egl_result == EGL_TRUE);
+            int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
+            SOKOL_ASSERT(result == 0);
         }
     }
 
     /* query surface size */
     EGLint fb_w, fb_h;
-    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_WIDTH, &fb_w) == EGL_TRUE);
-    SOKOL_ASSERT(eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h) == EGL_TRUE);
+    EGLBoolean egl_result_w = eglQuerySurface(state->display, state->surface, EGL_WIDTH, &fb_w);
+    EGLBoolean egl_result_h = eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h);
+    SOKOL_ASSERT(egl_result_w == EGL_TRUE);
+    SOKOL_ASSERT(egl_result_h == EGL_TRUE);
     bool fb_changed = fb_w != _sapp.framebuffer_width || fb_h != _sapp.framebuffer_height;
     _sapp.framebuffer_width = fb_w;
     _sapp.framebuffer_height = fb_h;
@@ -4296,7 +4300,8 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
         case _SOKOL_ANDROID_MSG_CREATE:
             SOKOL_LOG("MSG_CREATE");
             SOKOL_ASSERT(!_sapp.valid);
-            SOKOL_ASSERT(_sapp_android_init_egl());
+            bool result = _sapp_android_init_egl();
+            SOKOL_ASSERT(result);
             _sapp.valid = true;
             state->has_created = true;
             break;
