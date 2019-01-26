@@ -3951,9 +3951,9 @@ typedef struct {
     bool has_resumed;
     bool has_focus;
     EGLConfig config;
-    EGLDisplay* display;
-    EGLContext* context;
-    EGLSurface* surface;
+    EGLDisplay display;
+    EGLContext context;
+    EGLSurface surface;
 } _sapp_android_state_t;
 
 static _sapp_android_state_t _sapp_android_state;
@@ -4298,12 +4298,14 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
     pthread_mutex_lock(&state->pt.mutex);
     switch (msg) {
         case _SOKOL_ANDROID_MSG_CREATE:
-            SOKOL_LOG("MSG_CREATE");
-            SOKOL_ASSERT(!_sapp.valid);
-            bool result = _sapp_android_init_egl();
-            SOKOL_ASSERT(result);
-            _sapp.valid = true;
-            state->has_created = true;
+            {
+                SOKOL_LOG("MSG_CREATE");
+                SOKOL_ASSERT(!_sapp.valid);
+                bool result = _sapp_android_init_egl();
+                SOKOL_ASSERT(result);
+                _sapp.valid = true;
+                state->has_created = true;
+            }
             break;
         case _SOKOL_ANDROID_MSG_RESUME:
             SOKOL_LOG("MSG_RESUME");
