@@ -6466,7 +6466,7 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
-    #if defined(TARGET_OS_IPHONE)
+    #if TARGET_OS_IPHONE
     _sapp_ios_show_keyboard(shown);
     #elif defined(__EMSCRIPTEN__)
     _sapp_emsc_show_keyboard(shown);
