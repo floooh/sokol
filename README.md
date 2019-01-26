@@ -156,7 +156,7 @@ A minimal cross-platform application-wrapper library:
 - single window or canvas for 3D rendering
 - 3D context initialization
 - event-based keyboard, mouse and touch input
-- supported platforms: Win32, MacOS, Linux (X11), iOS, WASM/asm.js (planned: Android, RaspberryPi)
+- supported platforms: Win32, MacOS, Linux (X11), iOS, WASM/asm.js, Android (planned: RaspberryPi)
 - supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES2/WebGL, GLES3/WebGL2
 
 A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
@@ -393,10 +393,6 @@ Mainly some "missing features" for desktop apps:
 - show/hide mouse cursor
 - allow to change mouse cursor image (at first only switch between system-provided standard images)
 
-Big stuff:
-
-- Android support (currently WIP)
-
 ## sokol_audio.h planned features:
 
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
@@ -410,6 +406,11 @@ Big stuff:
 - simple cross-platform touch gesture recognition
 
 # Updates
+
+- **26-Jan-2019**: sokol_app.h now has an Android backend contributed by
+  [Gustav Olsson](https://github.com/gustavolsson)! 
+  See the [sokol-samples readme](https://github.com/floooh/sokol-samples/blob/master/README.md)
+  for build instructions.
 
 - **21-Jan-2019**: sokol_gfx.h - pool-slot-generation-counters and a dummy backend:
     - Resource pool slots now have a generation-counter for the resource-id
