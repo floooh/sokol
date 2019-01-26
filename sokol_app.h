@@ -615,7 +615,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
         #error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
     #endif
     #include <TargetConditionals.h>
-    #if TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
         /* iOS */
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
         #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
@@ -830,7 +830,7 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 #if defined(__APPLE__)
 
 /*== MacOS ===================================================================*/
-#if !TARGET_OS_IPHONE
+#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 
@@ -1273,7 +1273,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 #endif /* MacOS */
 
 /*== iOS =====================================================================*/
-#if TARGET_OS_IPHONE
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
 #import <UIKit/UIKit.h>
 #if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
@@ -6468,7 +6468,7 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
-    #if TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
     _sapp_ios_show_keyboard(shown);
     #elif defined(__EMSCRIPTEN__)
     _sapp_emsc_show_keyboard(shown);

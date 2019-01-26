@@ -6088,7 +6088,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 
 enum {
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    #if !TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     _SG_MTL_UB_ALIGN = 256,
     #else
     _SG_MTL_UB_ALIGN = 16,
@@ -6113,7 +6113,7 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
             return MTLResourceStorageModeShared;
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
-            #if !TARGET_OS_IPHONE
+            #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
             #else
             return MTLCPUCacheModeWriteCombined;
@@ -6171,7 +6171,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_texture_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R32F:           return MTLPixelFormatR32Float;
         case SG_PIXELFORMAT_R16F:           return MTLPixelFormatR16Float;
         case SG_PIXELFORMAT_L8:             return MTLPixelFormatR8Unorm;
-        #if !TARGET_OS_IPHONE
+        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         case SG_PIXELFORMAT_DXT1:           return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_DXT3:           return MTLPixelFormatBC2_RGBA;
         case SG_PIXELFORMAT_DXT5:           return MTLPixelFormatBC3_RGBA;
@@ -6803,7 +6803,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     _sg_mtl_ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if !TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     res_opts |= MTLResourceStorageModeManaged;
     #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -6836,7 +6836,7 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
-        #if !TARGET_OS_IPHONE
+        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
         #else
         case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
@@ -7532,7 +7532,7 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     SOKOL_ASSERT(nil == _sg_mtl_cmd_encoder);
     SOKOL_ASSERT(nil != _sg_mtl_cmd_buffer);
 
-    #if !TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     [_sg_mtl_uniform_buffers[_sg_mtl_cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg_mtl_cur_ub_offset)];
     #endif
 
@@ -7765,7 +7765,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data, data_size);
-    #if !TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     [mtl_buf didModifyRange:NSMakeRange(0, data_size)];
     #endif
 }
@@ -7781,7 +7781,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int dat
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->append_pos;
     memcpy(dst_ptr, data, data_size);
-    #if !TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     [mtl_buf didModifyRange:NSMakeRange(buf->append_pos, data_size)];
     #endif
 }
