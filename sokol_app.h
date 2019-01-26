@@ -50,6 +50,10 @@
     - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
       (Win32 sends the event each frame when the mouse moves and is inside the window
       client area, OSX sends it only once when the mouse enters the client area)
+    - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
+      at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
+      on Android Honeycomb and later (it can't be done at the moment as the app may be started
+      again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
 
     FIXME: ERROR HANDLING (this will need an error callback function)
 
@@ -70,8 +74,8 @@
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
     gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | TODO    | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---   | YES   | TODO    | ---   | YES
+    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
+    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
@@ -83,23 +87,23 @@
     MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    RESIZED             | YES     | YES   | YES   | YES   | TODO    | ---   | YES
+    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | ---   | YES
+    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
+    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
+    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | ---   | YES
+    RESIZED             | YES     | YES   | YES   | YES   | YES     | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
-    SUSPENDED           | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | TODO    | ---   | TODO
+    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
+    RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen          | YES     | YES   | TODO  | YES   | TODO    | TODO  | ---
+    fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | TODO    | TODO  | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
@@ -632,7 +636,13 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
+#elif defined(__ANDROID__)
+    /* Android */
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+    #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #endif
 #elif defined(__linux__) || defined(__unix__)
+    /* Linux */
     #if !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
@@ -663,8 +673,13 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+        #if defined(__ANDROID__)
+            #include <android/log.h>
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_write(ANDROID_LOG_DEBUG, "SOKOL_APP", s); }
+        #else
+            #include <stdio.h>
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+        #endif
     #else
         #define SOKOL_LOG(s)
     #endif
@@ -704,6 +719,7 @@ typedef struct {
     bool gles2_fallback;
     bool first_frame;
     bool init_called;
+    bool cleanup_called;
     bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -3880,8 +3896,743 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
+/*== Android ================================================================*/
+#if defined(__ANDROID__)
+#include <pthread.h>
+#include <unistd.h>
+#include <android/native_activity.h>
+#include <android/looper.h>
+
+#include <EGL/egl.h>
+#if defined(SOKOL_GLES3)
+    #include <GLES3/gl3.h>
+#else
+    #ifndef GL_EXT_PROTOTYPES
+        #define GL_GLEXT_PROTOTYPES
+    #endif
+    #include <GLES2/gl2.h>
+    #include <GLES2/gl2ext.h>
+#endif
+
+typedef struct {
+    pthread_t thread;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int read_from_main_fd;
+    int write_from_main_fd;
+} _sapp_android_pt_t;
+
+typedef struct {
+    ANativeWindow* window;
+    AInputQueue* input;
+} _sapp_android_resources_t;
+
+typedef enum {
+    _SOKOL_ANDROID_MSG_CREATE,
+    _SOKOL_ANDROID_MSG_RESUME,
+    _SOKOL_ANDROID_MSG_PAUSE,
+    _SOKOL_ANDROID_MSG_FOCUS,
+    _SOKOL_ANDROID_MSG_NO_FOCUS,
+    _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW,
+    _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE,
+    _SOKOL_ANDROID_MSG_DESTROY,
+} _sapp_android_msg_t;
+
+typedef struct {
+    ANativeActivity* activity;
+    _sapp_android_pt_t pt;
+    _sapp_android_resources_t pending;
+    _sapp_android_resources_t current;
+    ALooper* looper;
+    bool is_thread_started;
+    bool is_thread_stopping;
+    bool is_thread_stopped;
+    bool has_created;
+    bool has_resumed;
+    bool has_focus;
+    EGLConfig config;
+    EGLDisplay* display;
+    EGLContext* context;
+    EGLSurface* surface;
+} _sapp_android_state_t;
+
+static _sapp_android_state_t _sapp_android_state;
+
+/* android loop thread */
+_SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    SOKOL_ASSERT(state->display == EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context == EGL_NO_CONTEXT);
+
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display == EGL_NO_DISPLAY) {
+        return false;
+    }
+    if (eglInitialize(display, NULL, NULL) == EGL_FALSE) {
+        return false;
+    }
+
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    const EGLint cfg_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+        EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE,
+    };
+    EGLConfig available_cfgs[32];
+    EGLint cfg_count;
+    eglChooseConfig(display, cfg_attributes, available_cfgs, 32, &cfg_count);
+    SOKOL_ASSERT(cfg_count > 0);
+    SOKOL_ASSERT(cfg_count <= 32);
+
+    /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
+    EGLConfig config;
+    bool exact_cfg_found = false;
+    for (int i = 0; i < cfg_count; ++i) {
+        EGLConfig c = available_cfgs[i];
+        EGLint r, g, b, a, d;
+        if (eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
+            eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
+            r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) && d == 16) {
+            exact_cfg_found = true;
+            config = c;
+            break;
+        }
+    }
+    if (!exact_cfg_found) {
+        config = available_cfgs[0];
+    }
+
+    EGLint ctx_attributes[] = {
+        #if defined(SOKOL_GLES3)
+            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+        #else
+            EGL_CONTEXT_CLIENT_VERSION, 2,
+        #endif
+        EGL_NONE,
+    };
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
+    if (context == EGL_NO_CONTEXT) {
+        return false;
+    }
+
+    state->config = config;
+    state->display = display;
+    state->context = context;
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_android_cleanup_egl(void) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    if (state->display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (state->surface != EGL_NO_SURFACE) {
+            SOKOL_LOG("Destroying egl surface");
+            eglDestroySurface(state->display, state->surface);
+            state->surface = EGL_NO_SURFACE;
+        }
+        if (state->context != EGL_NO_CONTEXT) {
+            SOKOL_LOG("Destroying egl context");
+            eglDestroyContext(state->display, state->context);
+            state->context = EGL_NO_CONTEXT;
+        }
+        SOKOL_LOG("Terminating egl display");
+        eglTerminate(state->display);
+        state->display = EGL_NO_DISPLAY;
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_android_init_egl_surface(ANativeWindow* window) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
+    SOKOL_ASSERT(state->surface == EGL_NO_SURFACE);
+    SOKOL_ASSERT(window);
+
+    /* TODO: set window flags */
+    /* ANativeActivity_setWindowFlags(activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0); */
+
+    /* create egl surface and make it current */
+    EGLSurface surface = eglCreateWindowSurface(state->display, state->config, window, NULL);
+    if (surface == EGL_NO_SURFACE) {
+        return false;
+    }
+    if (eglMakeCurrent(state->display, surface, surface, state->context) == EGL_FALSE) {
+        return false;
+    }
+    state->surface = surface;
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    if (state->display == EGL_NO_DISPLAY) {
+        return;
+    }
+    eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (state->surface != EGL_NO_SURFACE) {
+        eglDestroySurface(state->display, state->surface);
+        state->surface = EGL_NO_SURFACE;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        SOKOL_LOG("event_cb()");
+        _sapp.desc.event_cb(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool force_update) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
+    SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
+    SOKOL_ASSERT(window);
+
+    int32_t win_w = ANativeWindow_getWidth(window);
+    int32_t win_h = ANativeWindow_getHeight(window);
+    SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
+    bool win_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
+    _sapp.window_width = win_w;
+    _sapp.window_height = win_h;
+
+    bool swap_desc_dim = win_w < win_h && _sapp.desc.width >= _sapp.desc.height;
+    if (win_changed || force_update) {
+        /* set pixel count of the screen buffers */
+        int32_t buf_w = _sapp.desc.width;
+        int32_t buf_h = _sapp.desc.height;
+        if (swap_desc_dim) {
+            buf_w = _sapp.desc.height;
+            buf_h = _sapp.desc.width;
+        }
+        if (_sapp.desc.high_dpi) {
+            buf_w *= 2;
+            buf_h *= 2;
+        }
+        if (buf_w > win_w) {
+            buf_w = win_w;
+        }
+        if (buf_h > win_h) {
+            buf_h = win_h;
+        }
+        /* only set if scaling, setting native dimensions fails on my device */
+        if (!(buf_w == win_w && buf_h == win_h))
+        {
+            SOKOL_LOG("Calling setBuffersGeometry");
+            EGLint format;
+            EGLBoolean egl_result = eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format);
+            SOKOL_ASSERT(egl_result == EGL_TRUE);
+            int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
+            SOKOL_ASSERT(result == 0);
+        }
+    }
+
+    /* query surface size */
+    EGLint fb_w, fb_h;
+    EGLBoolean egl_result_w = eglQuerySurface(state->display, state->surface, EGL_WIDTH, &fb_w);
+    EGLBoolean egl_result_h = eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h);
+    SOKOL_ASSERT(egl_result_w == EGL_TRUE);
+    SOKOL_ASSERT(egl_result_h == EGL_TRUE);
+    bool fb_changed = fb_w != _sapp.framebuffer_width || fb_h != _sapp.framebuffer_height;
+    _sapp.framebuffer_width = fb_w;
+    _sapp.framebuffer_height = fb_h;
+
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (swap_desc_dim ? _sapp.desc.height : _sapp.desc.width);
+
+    if (win_changed || fb_changed || force_update) {
+        if (!_sapp.first_frame) {
+            SOKOL_LOG("SAPP_EVENTTYPE_RESIZED");
+            _sapp_android_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_cleanup(void) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    SOKOL_LOG("Cleaning up");
+    if (state->surface != EGL_NO_SURFACE) {
+        /* egl context is bound, cleanup gracefully */
+        if (_sapp.init_called && !_sapp.cleanup_called) {
+            SOKOL_LOG("cleanup_cb()");
+            _sapp.desc.cleanup_cb();
+            _sapp.cleanup_called = true;
+        }
+    }
+    /* always try to cleanup by destroying egl context */
+    _sapp_android_cleanup_egl();
+}
+
+_SOKOL_PRIVATE void _sapp_android_shutdown(void) {
+    /* try to cleanup while we still have a surface and can call cleanup_cb() */
+    _sapp_android_cleanup();
+    /* request exit */
+    ANativeActivity_finish(_sapp_android_state.activity);
+}
+
+_SOKOL_PRIVATE void _sapp_android_frame(void) {
+    _sapp_android_state_t* state = &_sapp_android_state;
+    SOKOL_ASSERT(state->display != EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context != EGL_NO_CONTEXT);
+    SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
+    _sapp_android_update_dimensions(state->current.window, false);
+    _sapp_frame();
+    eglSwapBuffers(state->display, _sapp_android_state.surface);
+}
+
+_SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
+    if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_MOTION) {
+        return false;
+    }
+    if (!_sapp_events_enabled()) {
+        return false;
+    }
+    int32_t action_idx = AMotionEvent_getAction(e);
+    int32_t action = action_idx & AMOTION_EVENT_ACTION_MASK;
+    sapp_event_type type = SAPP_EVENTTYPE_INVALID;
+    switch (action) {
+        case AMOTION_EVENT_ACTION_DOWN:
+            SOKOL_LOG("Touch: down");
+        case AMOTION_EVENT_ACTION_POINTER_DOWN:
+            SOKOL_LOG("Touch: ptr down");
+            type = SAPP_EVENTTYPE_TOUCHES_BEGAN;
+            break;
+        case AMOTION_EVENT_ACTION_MOVE:
+            SOKOL_LOG("Touch: move");
+            type = SAPP_EVENTTYPE_TOUCHES_MOVED;
+            break;
+        case AMOTION_EVENT_ACTION_UP:
+            SOKOL_LOG("Touch: up");
+        case AMOTION_EVENT_ACTION_POINTER_UP:
+            SOKOL_LOG("Touch: ptr up");
+            type = SAPP_EVENTTYPE_TOUCHES_ENDED;
+            break;
+        case AMOTION_EVENT_ACTION_CANCEL:
+            SOKOL_LOG("Touch: cancel");
+            type = SAPP_EVENTTYPE_TOUCHES_CANCELLED;
+            break;
+        default:
+            break;
+    }
+    if (type == SAPP_EVENTTYPE_INVALID) {
+        return false;
+    }
+    int32_t idx = action_idx >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+    _sapp_init_event(type);
+    _sapp.event.num_touches = AMotionEvent_getPointerCount(e);
+    if (_sapp.event.num_touches > SAPP_MAX_TOUCHPOINTS) {
+        _sapp.event.num_touches = SAPP_MAX_TOUCHPOINTS;
+    }
+    for (int32_t i = 0; i < _sapp.event.num_touches; i++) {
+        sapp_touchpoint* dst = &_sapp.event.touches[i];
+        dst->identifier = AMotionEvent_getPointerId(e, i);
+        dst->pos_x = (AMotionEvent_getRawX(e, i) / _sapp.window_width) * _sapp.framebuffer_width;
+        dst->pos_y = (AMotionEvent_getRawY(e, i) / _sapp.window_height) * _sapp.framebuffer_height;
+
+        if (action == AMOTION_EVENT_ACTION_POINTER_DOWN ||
+            action == AMOTION_EVENT_ACTION_POINTER_UP) {
+            dst->changed = i == idx;
+        } else {
+            dst->changed = true;
+        }
+        SOKOL_LOG("touch i");
+    }
+    SOKOL_LOG("event_cb()");
+    _sapp.desc.event_cb(&_sapp.event);
+    return true;
+}
+
+_SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
+    if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
+        return false;
+    }
+    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
+        _sapp_android_shutdown();
+        return true;
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
+    if ((events & ALOOPER_EVENT_INPUT) == 0) {
+        SOKOL_LOG("_sapp_android_input_cb() encountered unsupported event");
+        return 1;
+    }
+    _sapp_android_state_t* state = &_sapp_android_state;;
+    SOKOL_ASSERT(state->current.input);
+    AInputEvent* event = NULL;
+    while (AInputQueue_getEvent(state->current.input, &event) >= 0) {
+        if (AInputQueue_preDispatchEvent(state->current.input, event) != 0) {
+            continue;
+        }
+        int32_t handled = 0;
+        if (_sapp_android_touch_event(event) || _sapp_android_key_event(event)) {
+            handled = 1;
+        }
+        AInputQueue_finishEvent(state->current.input, event, handled);
+    }
+    return 1;
+}
+
+_SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
+    if ((events & ALOOPER_EVENT_INPUT) == 0) {
+        SOKOL_LOG("_sapp_android_main_cb() encountered unsupported event");
+        return 1;
+    }
+    _sapp_android_state_t* state = &_sapp_android_state;
+
+    _sapp_android_msg_t msg;
+    if (read(fd, &msg, sizeof(msg)) != sizeof(msg)) {
+        SOKOL_LOG("Could not write to read_from_main_fd");
+        return 1;
+    }
+
+    pthread_mutex_lock(&state->pt.mutex);
+    switch (msg) {
+        case _SOKOL_ANDROID_MSG_CREATE:
+            SOKOL_LOG("MSG_CREATE");
+            SOKOL_ASSERT(!_sapp.valid);
+            bool result = _sapp_android_init_egl();
+            SOKOL_ASSERT(result);
+            _sapp.valid = true;
+            state->has_created = true;
+            break;
+        case _SOKOL_ANDROID_MSG_RESUME:
+            SOKOL_LOG("MSG_RESUME");
+            state->has_resumed = true;
+            _sapp_android_app_event(SAPP_EVENTTYPE_RESUMED);
+            break;
+        case _SOKOL_ANDROID_MSG_PAUSE:
+            SOKOL_LOG("MSG_PAUSE");
+            state->has_resumed = false;
+            _sapp_android_app_event(SAPP_EVENTTYPE_SUSPENDED);
+            break;
+        case _SOKOL_ANDROID_MSG_FOCUS:
+            SOKOL_LOG("MSG_FOCUS");
+            state->has_focus = true;
+            break;
+        case _SOKOL_ANDROID_MSG_NO_FOCUS:
+            SOKOL_LOG("MSG_NO_FOCUS");
+            state->has_focus = false;
+            break;
+        case _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW:
+            SOKOL_LOG("MSG_SET_NATIVE_WINDOW");
+            if (state->current.window != state->pending.window) {
+                if (state->current.window != NULL) {
+                    _sapp_android_cleanup_egl_surface();
+                }
+                if (state->pending.window != NULL) {
+                    SOKOL_LOG("Creating egl surface ...");
+                    if (_sapp_android_init_egl_surface(state->pending.window)) {
+                        SOKOL_LOG("... ok!");
+                        _sapp_android_update_dimensions(state->pending.window, true);
+                    } else {
+                        SOKOL_LOG("... failed!");
+                        _sapp_android_shutdown();
+                    }
+                }
+            }
+            state->current.window = state->pending.window;
+            break;
+        case _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE:
+            SOKOL_LOG("MSG_SET_INPUT_QUEUE");
+            if (state->current.input != state->pending.input) {
+                if (state->current.input != NULL) {
+                    AInputQueue_detachLooper(state->current.input);
+                }
+                if (state->pending.input != NULL) {
+                    AInputQueue_attachLooper(
+                        state->pending.input,
+                        state->looper,
+                        ALOOPER_POLL_CALLBACK,
+                        _sapp_android_input_cb,
+                        NULL); /* data */
+                }
+            }
+            state->current.input = state->pending.input;
+            break;
+        case _SOKOL_ANDROID_MSG_DESTROY:
+            SOKOL_LOG("MSG_DESTROY");
+            _sapp_android_cleanup();
+            _sapp.valid = false;
+            state->is_thread_stopping = true;
+            break;
+        default:
+            SOKOL_LOG("Unknown msg type received");
+            break;
+    }
+    pthread_cond_broadcast(&state->pt.cond); /* signal "received" */
+    pthread_mutex_unlock(&state->pt.mutex);
+    return 1;
+}
+
+_SOKOL_PRIVATE bool _sapp_android_should_update(void) {
+    bool is_in_front = _sapp_android_state.has_resumed && _sapp_android_state.has_focus;
+    bool has_surface = _sapp_android_state.surface != EGL_NO_SURFACE;
+    return is_in_front && has_surface;
+}
+
+_SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
+    SOKOL_ASSERT(_sapp.valid);
+    /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
+    if (shown) {
+        SOKOL_LOG("Showing keyboard");
+        ANativeActivity_showSoftInput(_sapp_android_state.activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
+    } else {
+        SOKOL_LOG("Hiding keyboard");
+        ANativeActivity_hideSoftInput(_sapp_android_state.activity, ANATIVEACTIVITY_HIDE_SOFT_INPUT_NOT_ALWAYS);
+    }
+}
+
+_SOKOL_PRIVATE void* _sapp_android_loop(void* obj) {
+    SOKOL_LOG("Loop thread started");
+    _sapp_android_state_t* state = (_sapp_android_state_t*)obj;
+
+    state->looper = ALooper_prepare(0 /* or ALOOPER_PREPARE_ALLOW_NON_CALLBACKS*/);
+    ALooper_addFd(state->looper,
+        state->pt.read_from_main_fd,
+        ALOOPER_POLL_CALLBACK,
+        ALOOPER_EVENT_INPUT,
+        _sapp_android_main_cb,
+        NULL); /* data */
+
+    /* signal start to main thread */
+    pthread_mutex_lock(&state->pt.mutex);
+    state->is_thread_started = true;
+    pthread_cond_broadcast(&state->pt.cond);
+    pthread_mutex_unlock(&state->pt.mutex);
+
+    /* main loop */
+    while (!state->is_thread_stopping) {
+        /* sokol frame */
+        if (_sapp_android_should_update()) {
+            _sapp_android_frame();
+        }
+
+        /* process all events (or stop early if app is requested to quit) */
+        bool process_events = true;
+        while (process_events && !state->is_thread_stopping) {
+            bool block_until_event = !state->is_thread_stopping && !_sapp_android_should_update();
+            process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
+        }
+    }
+
+    /* cleanup thread */
+    if (state->current.input != NULL) {
+        AInputQueue_detachLooper(state->current.input);
+    }
+
+    /* the following causes heap corruption on exit, why??
+    ALooper_removeFd(state->looper, state->pt.read_from_main_fd);
+    ALooper_release(state->looper);*/
+
+    /* signal "destroyed" */
+    pthread_mutex_lock(&state->pt.mutex);
+    state->is_thread_stopped = true;
+    pthread_cond_broadcast(&state->pt.cond);
+    pthread_mutex_unlock(&state->pt.mutex);
+    SOKOL_LOG("Loop thread done");
+    return NULL;
+}
+
+/* android main/ui thread */
+_SOKOL_PRIVATE void _sapp_android_msg(_sapp_android_state_t* state, _sapp_android_msg_t msg) {
+    if (write(state->pt.write_from_main_fd, &msg, sizeof(msg)) != sizeof(msg)) {
+        SOKOL_LOG("Could not write to write_from_main_fd");
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onStart()");
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onResume()");
+    _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_RESUME);
+}
+
+_SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
+    SOKOL_LOG("NativeActivity onSaveInstanceState()");
+    *out_size = 0;
+    return NULL;
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
+    SOKOL_LOG("NativeActivity onWindowFocusChanged()");
+    if (has_focus) {
+        _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_FOCUS);
+    } else {
+        _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_NO_FOCUS);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onPause()");
+    _sapp_android_msg(&_sapp_android_state, _SOKOL_ANDROID_MSG_PAUSE);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onStop()");
+}
+
+_SOKOL_PRIVATE void _sapp_android_msg_set_native_window(_sapp_android_state_t* state, ANativeWindow* window) {
+    pthread_mutex_lock(&state->pt.mutex);
+    state->pending.window = window;
+    _sapp_android_msg(state, _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW);
+    while (state->current.window != window) {
+        pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
+    }
+    pthread_mutex_unlock(&state->pt.mutex);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowCreated()");
+    _sapp_android_msg_set_native_window(&_sapp_android_state, window);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
+    SOKOL_LOG("NativeActivity onNativeWindowDestroyed()");
+    _sapp_android_msg_set_native_window(&_sapp_android_state, NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(_sapp_android_state_t* state, AInputQueue* input) {
+    pthread_mutex_lock(&state->pt.mutex);
+    state->pending.input = input;
+    _sapp_android_msg(state, _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE);
+    while (state->current.input != input) {
+        pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
+    }
+    pthread_mutex_unlock(&state->pt.mutex);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
+    SOKOL_LOG("NativeActivity onInputQueueCreated()");
+    _sapp_android_msg_set_input_queue(&_sapp_android_state, queue);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
+    SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
+    _sapp_android_msg_set_input_queue(&_sapp_android_state, NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onConfigurationChanged()");
+    /* see android:configChanges in manifest */
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
+    SOKOL_LOG("NativeActivity onLowMemory()");
+}
+
+_SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
+    /*
+     * For some reason even an empty app using nativeactivity.h will crash (WIN DEATH)
+     * on my device (Moto X 2nd gen) when the app is removed from the task view
+     * (TaskStackView: onTaskViewDismissed).
+     *
+     * However, if ANativeActivity_finish() is explicitly called from for example
+     * _sapp_android_on_stop(), the crash disappears. Is this a bug in NativeActivity?
+     */
+    SOKOL_LOG("NativeActivity onDestroy()");
+    _sapp_android_state_t* state = &_sapp_android_state;
+
+    /* send destroy msg */
+    pthread_mutex_lock(&state->pt.mutex);
+    _sapp_android_msg(state, _SOKOL_ANDROID_MSG_DESTROY);
+    while (!_sapp_android_state.is_thread_stopped) {
+        pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
+    }
+    pthread_mutex_unlock(&state->pt.mutex);
+
+    /* clean up main thread */
+    pthread_cond_destroy(&state->pt.cond);
+    pthread_mutex_destroy(&state->pt.mutex);
+
+    close(state->pt.read_from_main_fd);
+    close(state->pt.write_from_main_fd);
+
+    SOKOL_LOG("NativeActivity done");
+}
+
+JNIEXPORT
+void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size_t saved_state_size) {
+    SOKOL_LOG("NativeActivity onCreate()");
+
+    sapp_desc desc = sokol_main(0, NULL);
+    _sapp_init_state(&desc, 0, NULL);
+
+    /* start loop thread */
+    _sapp_android_state = (_sapp_android_state_t){0};
+    _sapp_android_state_t* state = &_sapp_android_state;
+
+    state->activity = activity;
+
+    int pipe_fd[2];
+    if (pipe(pipe_fd) != 0) {
+        SOKOL_LOG("Could not create thread pipe");
+        return;
+    }
+    state->pt.read_from_main_fd = pipe_fd[0];
+    state->pt.write_from_main_fd = pipe_fd[1];
+
+    pthread_mutex_init(&state->pt.mutex, NULL);
+    pthread_cond_init(&state->pt.cond, NULL);
+
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_create(&state->pt.thread, &attr, _sapp_android_loop, state);
+    pthread_attr_destroy(&attr);
+
+    /* wait until main loop has started */
+    pthread_mutex_lock(&state->pt.mutex);
+    while (!state->is_thread_started) {
+        pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
+    }
+    pthread_mutex_unlock(&state->pt.mutex);
+
+    /* send create msg */
+    pthread_mutex_lock(&state->pt.mutex);
+    _sapp_android_msg(state, _SOKOL_ANDROID_MSG_CREATE);
+    while (!state->has_created) {
+        pthread_cond_wait(&state->pt.cond, &state->pt.mutex);
+    }
+    pthread_mutex_unlock(&state->pt.mutex);
+
+    /* register for callbacks */
+    activity->instance = state;
+    activity->callbacks->onStart = _sapp_android_on_start;
+    activity->callbacks->onResume = _sapp_android_on_resume;
+    activity->callbacks->onSaveInstanceState = _sapp_android_on_save_instance_state;
+    activity->callbacks->onWindowFocusChanged = _sapp_android_on_window_focus_changed;
+    activity->callbacks->onPause = _sapp_android_on_pause;
+    activity->callbacks->onStop = _sapp_android_on_stop;
+    activity->callbacks->onDestroy = _sapp_android_on_destroy;
+    activity->callbacks->onNativeWindowCreated = _sapp_android_on_native_window_created;
+    /* activity->callbacks->onNativeWindowResized = _sapp_android_on_native_window_resized; */
+    /* activity->callbacks->onNativeWindowRedrawNeeded = _sapp_android_on_native_window_redraw_needed; */
+    activity->callbacks->onNativeWindowDestroyed = _sapp_android_on_native_window_destroyed;
+    activity->callbacks->onInputQueueCreated = _sapp_android_on_input_queue_created;
+    activity->callbacks->onInputQueueDestroyed = _sapp_android_on_input_queue_destroyed;
+    /* activity->callbacks->onContentRectChanged = _sapp_android_on_content_rect_changed; */
+    activity->callbacks->onConfigurationChanged = _sapp_android_on_config_changed;
+    activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
+
+    SOKOL_LOG("NativeActivity successfully created");
+}
+
+#endif /* Android */
+
 /*== LINUX ==================================================================*/
-#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -5715,10 +6466,12 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
-    #if TARGET_OS_IPHONE
+    #if defined(TARGET_OS_IPHONE)
     _sapp_ios_show_keyboard(shown);
-    #elif __EMSCRIPTEN__
+    #elif defined(__EMSCRIPTEN__)
     _sapp_emsc_show_keyboard(shown);
+    #elif defined(__ANDROID__)
+    _sapp_android_show_keyboard(shown);
     #else
     _SOKOL_UNUSED(shown);
     #endif
