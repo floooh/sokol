@@ -4537,6 +4537,9 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     close(state->pt.write_from_main_fd);
 
     SOKOL_LOG("NativeActivity done");
+
+    /* this is a bit naughty, but causes a clean restart of the app (static globals are reset) */
+    exit(0);
 }
 
 JNIEXPORT
