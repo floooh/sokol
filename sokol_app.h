@@ -4098,36 +4098,16 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
     SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
     SOKOL_ASSERT(window);
 
-    int32_t win_w = ANativeWindow_getWidth(window);
-    int32_t win_h = ANativeWindow_getHeight(window);
+    const int32_t win_w = ANativeWindow_getWidth(window);
+    const int32_t win_h = ANativeWindow_getHeight(window);
     SOKOL_ASSERT(win_w >= 0 && win_h >= 0);
-    bool win_changed = win_w != _sapp.window_width || win_h != _sapp.window_height;
+    const bool win_changed = (win_w != _sapp.window_width) || (win_h != _sapp.window_height);
     _sapp.window_width = win_w;
     _sapp.window_height = win_h;
-
-    bool swap_desc_dim = win_w < win_h && _sapp.desc.width >= _sapp.desc.height;
     if (win_changed || force_update) {
-        /* set pixel count of the screen buffers */
-        int32_t buf_w = _sapp.desc.width;
-        int32_t buf_h = _sapp.desc.height;
-        if (swap_desc_dim) {
-            buf_w = _sapp.desc.height;
-            buf_h = _sapp.desc.width;
-        }
-        if (_sapp.desc.high_dpi) {
-            buf_w *= 2;
-            buf_h *= 2;
-        }
-        if (buf_w > win_w) {
-            buf_w = win_w;
-        }
-        if (buf_h > win_h) {
-            buf_h = win_h;
-        }
-        /* only set if scaling, setting native dimensions fails on my device */
-        if (!(buf_w == win_w && buf_h == win_h))
-        {
-            SOKOL_LOG("Calling setBuffersGeometry");
+        if (!_sapp.desc.high_dpi) {
+            const int32_t buf_w = win_w / 2;
+            const int32_t buf_h = win_h / 2;
             EGLint format;
             EGLBoolean egl_result = eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format);
             SOKOL_ASSERT(egl_result == EGL_TRUE);
@@ -4142,12 +4122,10 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
     EGLBoolean egl_result_h = eglQuerySurface(state->display, state->surface, EGL_HEIGHT, &fb_h);
     SOKOL_ASSERT(egl_result_w == EGL_TRUE);
     SOKOL_ASSERT(egl_result_h == EGL_TRUE);
-    bool fb_changed = fb_w != _sapp.framebuffer_width || fb_h != _sapp.framebuffer_height;
+    const bool fb_changed = (fb_w != _sapp.framebuffer_width) || (fb_h != _sapp.framebuffer_height);
     _sapp.framebuffer_width = fb_w;
     _sapp.framebuffer_height = fb_h;
-
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (swap_desc_dim ? _sapp.desc.height : _sapp.desc.width);
-
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
     if (win_changed || fb_changed || force_update) {
         if (!_sapp.first_frame) {
             SOKOL_LOG("SAPP_EVENTTYPE_RESIZED");
@@ -4206,7 +4184,6 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
             type = SAPP_EVENTTYPE_TOUCHES_BEGAN;
             break;
         case AMOTION_EVENT_ACTION_MOVE:
-            SOKOL_LOG("Touch: move");
             type = SAPP_EVENTTYPE_TOUCHES_MOVED;
             break;
         case AMOTION_EVENT_ACTION_UP:
@@ -4243,9 +4220,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
         } else {
             dst->changed = true;
         }
-        SOKOL_LOG("touch i");
     }
-    SOKOL_LOG("event_cb()");
     _sapp.desc.event_cb(&_sapp.event);
     return true;
 }
