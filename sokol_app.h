@@ -4230,6 +4230,10 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         return false;
     }
     if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
+        /* FIXME: this should be hooked into a "really quit?" mechanism
+           so the app can ask the user for confirmation, this is currently
+           generally missing in sokol_app.h
+        */
         _sapp_android_shutdown();
         return true;
     }
