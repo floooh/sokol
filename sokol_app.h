@@ -4111,6 +4111,11 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
             EGLint format;
             EGLBoolean egl_result = eglGetConfigAttrib(state->display, state->config, EGL_NATIVE_VISUAL_ID, &format);
             SOKOL_ASSERT(egl_result == EGL_TRUE);
+            /* NOTE: calling ANativeWindow_setBuffersGeometry() with the same dimensions
+                as the ANativeWindow size results in weird display artefacts, that's
+                why it's only called when the buffer geometry is different from 
+                the window size
+            */
             int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
             SOKOL_ASSERT(result == 0);
         }
