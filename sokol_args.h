@@ -291,7 +291,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
     #define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         #define SOKOL_DEBUG (1)
     #endif
 #endif

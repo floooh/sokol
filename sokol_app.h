@@ -654,7 +654,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         #define SOKOL_DEBUG (1)
     #endif
 #endif
@@ -675,7 +675,7 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     #ifdef SOKOL_DEBUG
         #if defined(__ANDROID__)
             #include <android/log.h>
-            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_write(ANDROID_LOG_DEBUG, "SOKOL_APP", s); }
+            #define SOKOL_LOG(s) { SOKOL_ASSERT(s); __android_log_write(ANDROID_LOG_INFO, "SOKOL_APP", s); }
         #else
             #include <stdio.h>
             #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }

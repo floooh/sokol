@@ -388,7 +388,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
     #define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         #define SOKOL_DEBUG (1)
     #endif
 #endif

@@ -1648,7 +1648,7 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
     #define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         #define SOKOL_DEBUG (1)
     #endif
 #endif
