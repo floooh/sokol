@@ -934,9 +934,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
 
     /* allocate the streaming buffer */
-    _saudio_alsa.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
-    _saudio_alsa.buffer_frames = _saudio.buffer_frames;
-    _saudio_alsa.buffer = (float*) SOKOL_MALLOC(_saudio.backend.buffer_byte_size);
+    _saudio.backend.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+    _saudio.backend.buffer_frames = _saudio.buffer_frames;
+    _saudio.backend.buffer = (float*) SOKOL_MALLOC(_saudio.backend.buffer_byte_size);
     memset(_saudio.backend.buffer, 0, _saudio.backend.buffer_byte_size);
 
     /* create the buffer-streaming start thread */
@@ -956,7 +956,7 @@ error:
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     SOKOL_ASSERT(_saudio.backend.device);
     _saudio.backend.thread_stop = true;
-    pthread_join(_saudio.backned.thread, 0);
+    pthread_join(_saudio.backend.thread, 0);
     snd_pcm_drain(_saudio.backend.device);
     snd_pcm_close(_saudio.backend.device);
     SOKOL_FREE(_saudio.backend.buffer);
