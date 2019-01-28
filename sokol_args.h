@@ -281,7 +281,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
-#include <string.h>
+#include <string.h> /* memset, strcmp */
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
@@ -344,7 +344,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 typedef struct {
     int key;        /* index to start of key string in buf */
     int val;        /* index to start of value string in buf */
-} _sargs_kvp;
+} _sargs_kvp_t;
 
 /* sokol-args state */
 typedef struct {
@@ -362,8 +362,8 @@ typedef struct {
     char quote;         /* current quote char, 0 if not in a quote */
     bool in_escape;     /* currently in an escape sequence */
     #endif
-} _sargs_state;
-static _sargs_state _sargs;
+} _sargs_state_t;
+static _sargs_state_t _sargs;
 
 /*== PRIVATE IMPLEMENTATION FUNCTIONS ========================================*/
 
