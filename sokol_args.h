@@ -350,7 +350,7 @@ typedef struct {
 typedef struct {
     int max_args;       /* number of key/value pairs in args array */
     int num_args;       /* number of valid items in args array */
-    _sargs_kvp* args;   /* key/value pair array */
+    _sargs_kvp_t* args;   /* key/value pair array */
     int buf_size;       /* size of buffer in bytes */
     int buf_pos;        /* current buffer position */
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
@@ -645,7 +645,7 @@ SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     _sargs.max_args = _sargs_def(desc->max_args, _SARGS_MAX_ARGS_DEF);
     _sargs.buf_size = _sargs_def(desc->buf_size, _SARGS_BUF_SIZE_DEF);
     SOKOL_ASSERT(_sargs.buf_size > 8);
-    _sargs.args = (_sargs_kvp*) SOKOL_CALLOC(_sargs.max_args, sizeof(_sargs_kvp));
+    _sargs.args = (_sargs_kvp_t*) SOKOL_CALLOC(_sargs.max_args, sizeof(_sargs_kvp_t));
     _sargs.buf = (char*) SOKOL_CALLOC(_sargs.buf_size, sizeof(char));
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
