@@ -375,14 +375,9 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 } /* extern "C" */
 #endif
 
-/*--- IMPLEMENTATION ---------------------------------------------------------*/
+/*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_IMPL
 #include <string.h> /* memset, memcpy */
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4505)   /* unreferenced local function has been removed */
-#endif
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -418,10 +413,63 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
     #endif
 #endif
 
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+    #include "pthread.h"
+#elif defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+    #include <synchapi.h>
+    #pragma comment (lib, "kernel32.lib")
+    #pragma comment (lib, "ole32.lib")
+#endif
+
+#if defined(__APPLE__)
+    #include <AudioToolbox/AudioToolbox.h>
+#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    #define ALSA_PCM_NEW_HW_PARAMS_API
+    #include <alsa/asoundlib.h>
+#elif defined(_WIN32)
+    #ifndef CINTERFACE
+    #define CINTERFACE
+    #endif
+    #ifndef COBJMACROS
+    #define COBJMACROS
+    #endif
+    #ifndef CONST_VTABLE
+    #define CONST_VTABLE
+    #endif
+    #include <mmdeviceapi.h>
+    #include <audioclient.h>
+    static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2 } };
+    static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
+    static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
+    static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
+    #if defined(__cplusplus)
+    #define _SOKOL_AUDIO_WIN32COM_ID(x) (x)
+    #else
+    #define _SOKOL_AUDIO_WIN32COM_ID(x) (&x)
+    #endif
+    /* fix for Visual Studio 2015 SDKs */
+    #ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+    #define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
+    #endif
+    #ifndef AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
+    #define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
+    #endif
+#elif defined(__EMSCRIPTEN__)
+    #include <emscripten/emscripten.h>
+#endif
+
+#ifdef _MSC_VER
+    #pragma warning(push)
+    #pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
 #define _saudio_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
 
-/*--- implementation-private constants ---------------------------------------*/
 #define _SAUDIO_DEFAULT_SAMPLE_RATE (44100)
 #define _SAUDIO_DEFAULT_BUFFER_FRAMES (2048)
 #define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
@@ -430,20 +478,12 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 /*=== MUTEX WRAPPER DECLARATIONS =============================================*/
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-#include "pthread.h"
 
 typedef struct {
     pthread_mutex_t mutex;
 } _saudio_mutex_t;
 
 #elif defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <synchapi.h>
-#pragma comment (lib, "kernel32.lib")
-#pragma comment (lib, "ole32.lib")
 
 typedef struct {
     CRITICAL_SECTION critsec;
@@ -455,7 +495,6 @@ typedef struct { } _saudio_mutex_t;
 
 /*=== COREAUDIO BACKEND DECLARATIONS =========================================*/
 #if defined(__APPLE__)
-#include <AudioToolbox/AudioToolbox.h>
 
 typedef struct {
     AudioQueueRef ca_audio_queue;
@@ -463,8 +502,6 @@ typedef struct {
 
 /*=== ALSA BACKEND DECLARATIONS ==============================================*/
 #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-#define ALSA_PCM_NEW_HW_PARAMS_API
-#include <alsa/asoundlib.h>
 
 typedef struct {
     snd_pcm_t* device;
@@ -477,39 +514,6 @@ typedef struct {
 
 /*=== WASAPI BACKEND DECLARATIONS ============================================*/
 #elif defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef CINTERFACE
-#define CINTERFACE
-#endif
-#ifndef COBJMACROS
-#define COBJMACROS
-#endif
-#ifndef CONST_VTABLE
-#define CONST_VTABLE
-#endif
-#include <mmdeviceapi.h>
-#include <audioclient.h>
-
-static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2 } };
-static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
-static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
-static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
-
-#if defined(__cplusplus)
-#define _SOKOL_AUDIO_WIN32COM_ID(x) (x)
-#else
-#define _SOKOL_AUDIO_WIN32COM_ID(x) (&x)
-#endif
-
-/* fix for Visual Studio 2015 SDKs */
-#ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-#define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
-#endif
-#ifndef AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
-#define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
-#endif
 
 typedef struct {
     HANDLE thread_handle;
@@ -533,7 +537,6 @@ typedef struct {
 
 /*=== WEBAUDIO BACKEND DECLARATIONS ==========================================*/
 #elif defined(__EMSCRIPTEN__)
-#include <emscripten/emscripten.h>
 
 typedef struct {
     uint8_t* buffer;
@@ -543,7 +546,6 @@ typedef struct {
 #else
 typedef struct { } _saudio_backend_t;
 #endif
-
 /*=== GENERAL DECLARATIONS ===================================================*/
 
 /* a ringbuffer structure */
