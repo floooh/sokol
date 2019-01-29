@@ -1635,14 +1635,10 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
-#include <string.h> /* memset */
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-#pragma warning(disable:4115)   /* named type definition in parentheses */
-#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_DUMMY_BACKEND))
+#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL or SOKOL_DUMMY_BACKEND"
 #endif
+#include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -1681,9 +1677,6 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
         #define SOKOL_LOG(s)
     #endif
 #endif
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL or SOKOL_DUMMY_BACKEND"
-#endif
 
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__)
@@ -1717,6 +1710,134 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
 #define SG_DEFAULT_CLEAR_STENCIL (0)
 #endif
 
+#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
+    #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
+    #endif
+    #ifndef GL_UNSIGNED_INT_24_8
+    #define GL_UNSIGNED_INT_24_8 0x84FA
+    #endif
+    #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+    #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+    #endif
+    #ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+    #define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+    #define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+    #define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+    #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+    #endif
+    #ifndef GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
+    #define GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG 0x8C01
+    #endif
+    #ifndef GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG
+    #define GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG 0x8C00
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
+    #define GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG 0x8C03
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
+    #define GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG 0x8C02
+    #endif
+    #ifndef GL_COMPRESSED_RGB8_ETC2
+    #define GL_COMPRESSED_RGB8_ETC2 0x9274
+    #endif
+    #ifndef GL_COMPRESSED_SRGB8_ETC2
+    #define GL_COMPRESSED_SRGB8_ETC2 0x9275
+    #endif
+    #ifndef GL_DEPTH24_STENCIL8
+    #define GL_DEPTH24_STENCIL8 0x88F0
+    #endif
+    #ifndef GL_HALF_FLOAT
+    #define GL_HALF_FLOAT 0x140B
+    #endif
+    #ifndef GL_DEPTH_STENCIL
+    #define GL_DEPTH_STENCIL 0x84F9
+    #endif
+    #ifndef GL_LUMINANCE
+    #define GL_LUMINANCE 0x1909
+    #endif
+    #ifdef SOKOL_GLES2
+    #   ifdef GL_ANGLE_instanced_arrays
+    #       define SOKOL_INSTANCING_ENABLED
+    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
+    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
+    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
+    #   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
+    #       define SOKOL_INSTANCING_ENABLED
+    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
+    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+    #   else
+    #       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
+    #       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+    #       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
+    #   endif
+    #else
+    #   define SOKOL_INSTANCING_ENABLED
+    #endif
+    #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
+
+#elif defined(SOKOL_D3D11)
+    #ifndef D3D11_NO_HELPERS
+    #define D3D11_NO_HELPERS
+    #endif
+    #ifndef CINTERFACE
+    #define CINTERFACE
+    #endif
+    #ifndef COBJMACROS
+    #define COBJMACROS
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+    #include <d3d11.h>
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+    #pragma comment (lib, "WindowsApp.lib")
+    #else
+    #pragma comment (lib, "user32.lib")
+    #pragma comment (lib, "dxgi.lib")
+    #pragma comment (lib, "d3d11.lib")
+    #pragma comment (lib, "dxguid.lib")
+    #endif
+    #if defined(SOKOL_D3D11_SHADER_COMPILER)
+        #include <d3dcompiler.h>
+        #if !(defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+        #pragma comment (lib, "d3dcompiler.lib")
+        #endif
+    #endif
+#elif defined(SOKOL_METAL)
+    #if !__has_feature(objc_arc)
+    #error "Please enable ARC when using the Metal backend"
+    #endif
+    #include <TargetConditionals.h>
+    #import <Metal/Metal.h>
+#endif
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
+#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
+/*=== PRIVATE DECLS ==========================================================*/
+
+/* resource pool slots */
+typedef struct {
+    uint32_t id;
+    uint32_t ctx_id;
+    sg_resource_state state;
+} _sg_slot;
+
+/* constants */
 enum {
     _SG_SLOT_SHIFT = 16,
     _SG_SLOT_MASK = (1<<_SG_SLOT_SHIFT)-1,
@@ -1737,6 +1858,749 @@ enum {
 #define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
 #define _sg_fequal(val,cmp,delta) (((val-cmp)> -delta)&&((val-cmp)<delta))
 
+/*=== DUMMY BACKEND DECLARATIONS =============================================*/
+#if defined(SOKOL_DUMMY_BACKEND)
+typedef struct {
+    _sg_slot slot;
+    int size;
+    int append_pos;
+    bool append_overflow;
+    sg_buffer_type type;
+    sg_usage usage;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
+    int num_slots;
+    int active_slot;
+} _sg_buffer;
+
+typedef struct {
+    _sg_slot slot;
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+} _sg_image;
+
+typedef struct {
+    int size;
+} _sg_uniform_block;
+
+typedef struct {
+    sg_image_type type;
+} _sg_shader_image;
+
+typedef struct {
+    int num_uniform_blocks;
+    int num_images;
+    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
+} _sg_shader_stage;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
+} _sg_shader;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader* shader;
+    sg_shader shader_id;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    float depth_bias;
+    float depth_bias_slope_scale;
+    float depth_bias_clamp;
+    sg_index_type index_type;
+    float blend_color[4];
+} _sg_pipeline;
+
+typedef struct {
+    _sg_image* image;
+    sg_image image_id;
+    int mip_level;
+    int slice;
+} _sg_attachment;
+
+typedef struct {
+    _sg_slot slot;
+    int num_color_atts;
+    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment ds_att;
+} _sg_pass;
+
+typedef struct {
+    _sg_slot slot;
+} _sg_context;
+
+/*== GL BACKEND DECLARATIOSN =================================================*/
+#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+typedef struct {
+    _sg_slot slot;
+    int size;
+    int append_pos;
+    bool append_overflow;
+    sg_buffer_type type;
+    sg_usage usage;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
+    int num_slots;
+    int active_slot;
+    GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
+    bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
+} _sg_buffer;
+
+typedef struct {
+    _sg_slot slot;
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    GLenum gl_target;
+    GLuint gl_depth_render_buffer;
+    GLuint gl_msaa_render_buffer;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+    GLuint gl_tex[SG_NUM_INFLIGHT_FRAMES];
+    bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
+} _sg_image;
+
+typedef struct {
+    GLint gl_loc;
+    sg_uniform_type type;
+    uint8_t count;
+    uint16_t offset;
+} _sg_uniform;
+
+typedef struct {
+    int size;
+    int num_uniforms;
+    _sg_uniform uniforms[SG_MAX_UB_MEMBERS];
+} _sg_uniform_block;
+
+typedef struct {
+    sg_image_type type;
+    GLint gl_loc;
+    int gl_tex_slot;
+} _sg_shader_image;
+
+typedef struct {
+    int num_uniform_blocks;
+    int num_images;
+    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
+} _sg_shader_stage;
+
+typedef struct {
+    _sg_slot slot;
+    GLuint gl_prog;
+    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
+} _sg_shader;
+
+typedef struct {
+    int8_t vb_index;        /* -1 if attr is not enabled */
+    int8_t divisor;         /* -1 if not initialized */
+    uint8_t stride;
+    uint8_t size;
+    uint8_t normalized;
+    int offset;
+    GLenum type;
+} _sg_gl_attr;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader* shader;
+    sg_shader shader_id;
+    sg_primitive_type primitive_type;
+    sg_index_type index_type;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_depth_stencil_state depth_stencil;
+    sg_blend_state blend;
+    sg_rasterizer_state rast;
+} _sg_pipeline;
+
+typedef struct {
+    _sg_image* image;
+    sg_image image_id;
+    int mip_level;
+    int slice;
+    GLuint gl_msaa_resolve_buffer;
+} _sg_attachment;
+
+typedef struct {
+    _sg_slot slot;
+    GLuint gl_fb;
+    int num_color_atts;
+    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment ds_att;
+} _sg_pass;
+
+typedef struct {
+    _sg_slot slot;
+    #if !defined(SOKOL_GLES2)
+    GLuint vao;
+    #endif
+    GLuint default_framebuffer;
+} _sg_context;
+
+typedef struct {
+    _sg_gl_attr gl_attr;
+    GLuint gl_vbuf;
+} _sg_gl_cache_attr;
+
+typedef struct {
+    sg_depth_stencil_state ds;
+    sg_blend_state blend;
+    sg_rasterizer_state rast;
+    bool polygon_offset_enabled;
+    _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
+    GLuint cur_gl_vb;
+    GLuint cur_gl_ib;
+    int cur_ib_offset;
+    GLenum cur_primitive_type;
+    GLenum cur_index_type;
+    _sg_pipeline* cur_pipeline;
+    sg_pipeline cur_pipeline_id;
+} _sg_state_cache;
+
+typedef struct {
+    bool valid;
+    bool gles2;
+    bool in_pass;
+    int cur_pass_width;
+    int cur_pass_height;
+    _sg_context* cur_context;
+    _sg_pass* cur_pass;
+    sg_pass cur_pass_id;
+    _sg_state_cache cache;
+    bool features[SG_NUM_FEATURES];
+    bool ext_anisotropic;
+    GLint max_anisotropy;
+} _sg_backend;
+
+/* FIXME! */
+static _sg_backend _sg_gl;
+
+/*== D3D11 BACKEND DECLARATIONS ==============================================*/
+#elif defined(SOKOL_D3D11)
+
+typedef struct {
+    _sg_slot slot;
+    int size;
+    int append_pos;
+    bool append_overflow;
+    sg_buffer_type type;
+    sg_usage usage;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
+    ID3D11Buffer* d3d11_buf;
+} _sg_buffer;
+
+typedef struct {
+    _sg_slot slot;
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    uint32_t upd_frame_index;
+    DXGI_FORMAT d3d11_format;
+    ID3D11Texture2D* d3d11_tex2d;
+    ID3D11Texture3D* d3d11_tex3d;
+    ID3D11Texture2D* d3d11_texds;
+    ID3D11Texture2D* d3d11_texmsaa;
+    ID3D11ShaderResourceView* d3d11_srv;
+    ID3D11SamplerState* d3d11_smp;
+} _sg_image;
+
+typedef struct {
+    int size;
+} _sg_uniform_block;
+
+typedef struct {
+    sg_image_type type;
+} _sg_shader_image;
+
+typedef struct {
+    int num_uniform_blocks;
+    int num_images;
+    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11Buffer* d3d11_cbs[SG_MAX_SHADERSTAGE_UBS];
+} _sg_shader_stage;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
+    ID3D11VertexShader* d3d11_vs;
+    ID3D11PixelShader* d3d11_fs;
+    void* d3d11_vs_blob;
+    int d3d11_vs_blob_length;
+} _sg_shader;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader* shader;
+    sg_shader shader_id;
+    sg_index_type index_type;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    float blend_color[4];
+    UINT d3d11_stencil_ref;
+    UINT d3d11_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
+    D3D_PRIMITIVE_TOPOLOGY d3d11_topology;
+    DXGI_FORMAT d3d11_index_format;
+    ID3D11InputLayout* d3d11_il;
+    ID3D11RasterizerState* d3d11_rs;
+    ID3D11DepthStencilState* d3d11_dss;
+    ID3D11BlendState* d3d11_bs;
+} _sg_pipeline;
+
+typedef struct {
+    _sg_image* image;
+    sg_image image_id;
+    int mip_level;
+    int slice;
+} _sg_attachment;
+
+typedef struct {
+    _sg_slot slot;
+    int num_color_atts;
+    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment ds_att;
+    ID3D11RenderTargetView* d3d11_rtvs[SG_MAX_COLOR_ATTACHMENTS];
+    ID3D11DepthStencilView* d3d11_dsv;
+} _sg_pass;
+
+typedef struct {
+    _sg_slot slot;
+} _sg_context;
+
+typedef struct {
+    bool valid;
+    ID3D11Device* dev;
+    ID3D11DeviceContext* ctx;
+    const void* (*rtv_cb)(void);
+    const void* (*dsv_cb)(void);
+    bool in_pass;
+    bool use_indexed_draw;
+    int cur_width;
+    int cur_height;
+    int num_rtvs;
+    _sg_pass* cur_pass;
+    sg_pass cur_pass_id;
+    _sg_pipeline* cur_pipeline;
+    sg_pipeline cur_pipeline_id;
+    ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
+    ID3D11DepthStencilView* cur_dsv;
+    /* the following arrays are used for unbinding resources, they will always contain zeroes */
+    ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
+    ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+    UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
+    ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
+    ID3D11ShaderResourceView* zero_srvs[SG_MAX_SHADERSTAGE_IMAGES];
+    ID3D11SamplerState* zero_smps[SG_MAX_SHADERSTAGE_IMAGES];
+    /* global subresourcedata array for texture updates */
+    D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
+} _sg_backend;
+
+/* FIXME! */
+static _sg_backend _sg_d3d11;
+
+/*=== METAL BACKEND DECLARATIONS =============================================*/
+#elif defined(SOKOL_METAL)
+
+enum {
+    _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    _SG_MTL_UB_ALIGN = 256,
+    #else
+    _SG_MTL_UB_ALIGN = 16,
+    #endif
+    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
+    _SG_MTL_INVALID_POOL_INDEX = 0
+};
+
+/* FIXME: merge all the following stuff into structs */
+
+/* Metal object-id pool */
+static uint32_t _sg_mtl_pool_size;
+static NSMutableArray* _sg_mtl_pool;
+static uint32_t _sg_mtl_free_queue_top;
+static uint32_t* _sg_mtl_free_queue;
+static uint32_t _sg_mtl_release_queue_front;
+static uint32_t _sg_mtl_release_queue_back;
+typedef struct {
+    uint32_t frame_index;   /* frame index at which it is safe to release this resource */
+    uint32_t pool_index;
+} _sg_mtl_release_item;
+static _sg_mtl_release_item* _sg_mtl_release_queue;
+
+/* Metal sampler cache */
+typedef struct {
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
+    int max_lod;
+    uint32_t mtl_sampler_state;
+} _sg_mtl_sampler_cache_item;
+static int _sg_mtl_sampler_cache_capacity;
+static int _sg_mtl_sampler_cache_size;
+static _sg_mtl_sampler_cache_item* _sg_mtl_sampler_cache;
+
+typedef struct {
+    _sg_slot slot;
+    int size;
+    int append_pos;
+    bool append_overflow;
+    sg_buffer_type type;
+    sg_usage usage;
+    uint32_t update_frame_index;
+    uint32_t append_frame_index;
+    int num_slots;
+    int active_slot;
+    uint32_t mtl_buf[SG_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
+} _sg_buffer;
+
+typedef struct {
+    _sg_slot slot;
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    int depth;
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    uint32_t upd_frame_index;
+    int num_slots;
+    int active_slot;
+    uint32_t mtl_tex[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t mtl_depth_tex;
+    uint32_t mtl_msaa_tex;
+    uint32_t mtl_sampler_state;
+} _sg_image;
+
+typedef struct {
+    int size;
+} _sg_uniform_block;
+
+typedef struct {
+    sg_image_type type;
+} _sg_shader_image;
+
+typedef struct {
+    int num_uniform_blocks;
+    int num_images;
+    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
+    uint32_t mtl_lib;
+    uint32_t mtl_func;
+} _sg_shader_stage;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
+} _sg_shader;
+
+typedef struct {
+    _sg_slot slot;
+    _sg_shader* shader;
+    sg_shader shader_id;
+    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    float depth_bias;
+    float depth_bias_slope_scale;
+    float depth_bias_clamp;
+    MTLPrimitiveType mtl_prim_type;
+    sg_index_type index_type;
+    NSUInteger mtl_index_size;
+    MTLIndexType mtl_index_type;
+    MTLCullMode mtl_cull_mode;
+    MTLWinding mtl_winding;
+    float blend_color[4];
+    uint32_t mtl_stencil_ref;
+    uint32_t mtl_rps;
+    uint32_t mtl_dss;
+} _sg_pipeline;
+
+typedef struct {
+    _sg_image* image;
+    sg_image image_id;
+    int mip_level;
+    int slice;
+} _sg_attachment;
+
+typedef struct {
+    _sg_slot slot;
+    int num_color_atts;
+    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_attachment ds_att;
+} _sg_pass;
+
+typedef struct {
+    _sg_slot slot;
+} _sg_context;
+
+/* resouce binding state cache, FIXME: merge into structs */
+static const _sg_pipeline* _sg_mtl_cur_pipeline;
+static sg_pipeline _sg_mtl_cur_pipeline_id;
+static const _sg_buffer* _sg_mtl_cur_indexbuffer;
+static int _sg_mtl_cur_indexbuffer_offset;
+static sg_buffer _sg_mtl_cur_indexbuffer_id;
+static const _sg_buffer* _sg_mtl_cur_vertexbuffers[SG_MAX_SHADERSTAGE_BUFFERS];
+static int _sg_mtl_cur_vertexbuffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
+static sg_buffer _sg_mtl_cur_vertexbuffer_ids[SG_MAX_SHADERSTAGE_BUFFERS];
+static const _sg_image* _sg_mtl_cur_vs_images[SG_MAX_SHADERSTAGE_IMAGES];
+static sg_image _sg_mtl_cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
+static const _sg_image* _sg_mtl_cur_fs_images[SG_MAX_SHADERSTAGE_IMAGES];
+static sg_image _sg_mtl_cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
+
+/* main Metal backend state, FIXME: merge into struct, and with all of the above! */
+static bool _sg_mtl_valid;
+static const void*(*_sg_mtl_renderpass_descriptor_cb)(void);
+static const void*(*_sg_mtl_drawable_cb)(void);
+static id<MTLDevice> _sg_mtl_device;
+static id<MTLCommandQueue> _sg_mtl_cmd_queue;
+static id<MTLCommandBuffer> _sg_mtl_cmd_buffer;
+static id<MTLRenderCommandEncoder> _sg_mtl_cmd_encoder;
+static uint32_t _sg_mtl_frame_index;
+static uint32_t _sg_mtl_cur_frame_rotate_index;
+static uint32_t _sg_mtl_ub_size;
+static uint32_t _sg_mtl_cur_ub_offset;
+static uint8_t* _sg_mtl_cur_ub_base_ptr;
+static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
+static dispatch_semaphore_t _sg_mtl_sem;
+static bool _sg_mtl_in_pass;
+static bool _sg_mtl_pass_valid;
+static int _sg_mtl_cur_width;
+static int _sg_mtl_cur_height;
+
+#endif
+
+/*=== RESOURCE POOL DECLARATIONS =============================================*/
+
+/* this *MUST* remain 0 */
+#define _SG_INVALID_SLOT_INDEX (0)
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sg_pool;
+
+typedef struct {
+    _sg_pool buffer_pool;
+    _sg_pool image_pool;
+    _sg_pool shader_pool;
+    _sg_pool pipeline_pool;
+    _sg_pool pass_pool;
+    _sg_pool context_pool;
+    _sg_buffer* buffers;
+    _sg_image* images;
+    _sg_shader* shaders;
+    _sg_pipeline* pipelines;
+    _sg_pass* passes;
+    _sg_context* contexts;
+} _sg_pools;
+
+/*=== VALIDATION LAYER DECLARATIONS ==========================================*/
+typedef enum {
+    /* special case 'validation was successful' */
+    _SG_VALIDATE_SUCCESS,
+
+    /* buffer creation */
+    _SG_VALIDATE_BUFFERDESC_CANARY,
+    _SG_VALIDATE_BUFFERDESC_SIZE,
+    _SG_VALIDATE_BUFFERDESC_CONTENT,
+    _SG_VALIDATE_BUFFERDESC_NO_CONTENT,
+
+    /* image creation */
+    _SG_VALIDATE_IMAGEDESC_CANARY,
+    _SG_VALIDATE_IMAGEDESC_WIDTH,
+    _SG_VALIDATE_IMAGEDESC_HEIGHT,
+    _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
+    _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
+    _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
+    _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
+    _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT,
+    _SG_VALIDATE_IMAGEDESC_CONTENT,
+    _SG_VALIDATE_IMAGEDESC_NO_CONTENT,
+
+    /* shader creation */
+    _SG_VALIDATE_SHADERDESC_CANARY,
+    _SG_VALIDATE_SHADERDESC_SOURCE,
+    _SG_VALIDATE_SHADERDESC_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE,
+    _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
+    _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS,
+    _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
+    _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
+    _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH,
+    _SG_VALIDATE_SHADERDESC_IMG_NAME,
+
+    /* pipeline creation */
+    _SG_VALIDATE_PIPELINEDESC_CANARY,
+    _SG_VALIDATE_PIPELINEDESC_SHADER,
+    _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
+    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
+    _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
+
+    /* pass creation */
+    _SG_VALIDATE_PASSDESC_CANARY,
+    _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS,
+    _SG_VALIDATE_PASSDESC_IMAGE,
+    _SG_VALIDATE_PASSDESC_MIPLEVEL,
+    _SG_VALIDATE_PASSDESC_FACE,
+    _SG_VALIDATE_PASSDESC_LAYER,
+    _SG_VALIDATE_PASSDESC_SLICE,
+    _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
+    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
+    _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
+    _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
+    _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
+
+    /* sg_begin_pass validation */
+    _SG_VALIDATE_BEGINPASS_PASS,
+    _SG_VALIDATE_BEGINPASS_IMAGE,
+
+    /* sg_apply_pipeline validation */
+    _SG_VALIDATE_APIP_PIPELINE_VALID_ID,
+    _SG_VALIDATE_APIP_PIPELINE_EXISTS,
+    _SG_VALIDATE_APIP_PIPELINE_VALID,
+    _SG_VALIDATE_APIP_SHADER_EXISTS,
+    _SG_VALIDATE_APIP_SHADER_VALID,
+    _SG_VALIDATE_APIP_ATT_COUNT,
+    _SG_VALIDATE_APIP_COLOR_FORMAT,
+    _SG_VALIDATE_APIP_DEPTH_FORMAT,
+    _SG_VALIDATE_APIP_SAMPLE_COUNT,
+
+    /* sg_apply_bindings validation */
+    _SG_VALIDATE_ABND_PIPELINE,
+    _SG_VALIDATE_ABND_PIPELINE_EXISTS,
+    _SG_VALIDATE_ABND_PIPELINE_VALID,
+    _SG_VALIDATE_ABND_VBS,
+    _SG_VALIDATE_ABND_VB_TYPE,
+    _SG_VALIDATE_ABND_VB_OVERFLOW,
+    _SG_VALIDATE_ABND_NO_IB,
+    _SG_VALIDATE_ABND_IB,
+    _SG_VALIDATE_ABND_IB_TYPE,
+    _SG_VALIDATE_ABND_IB_OVERFLOW,
+    _SG_VALIDATE_ABND_VS_IMGS,
+    _SG_VALIDATE_ABND_VS_IMG_TYPES,
+    _SG_VALIDATE_ABND_FS_IMGS,
+    _SG_VALIDATE_ABND_FS_IMG_TYPES,
+
+    /* sg_apply_uniforms validation */
+    _SG_VALIDATE_AUB_NO_PIPELINE,
+    _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
+    _SG_VALIDATE_AUB_SIZE,
+
+    /* sg_update_buffer validation */
+    _SG_VALIDATE_UPDATEBUF_USAGE,
+    _SG_VALIDATE_UPDATEBUF_SIZE,
+    _SG_VALIDATE_UPDATEBUF_ONCE,
+    _SG_VALIDATE_UPDATEBUF_APPEND,
+
+    /* sg_append_buffer validation */
+    _SG_VALIDATE_APPENDBUF_USAGE,
+    _SG_VALIDATE_APPENDBUF_SIZE,
+    _SG_VALIDATE_APPENDBUF_UPDATE,
+
+    /* sg_update_image validation */
+    _SG_VALIDATE_UPDIMG_USAGE,
+    _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
+    _SG_VALIDATE_UPDIMG_SIZE,
+    _SG_VALIDATE_UPDIMG_COMPRESSED,
+    _SG_VALIDATE_UPDIMG_ONCE
+} _sg_validate_error;
+
+/*=== GENERIC BACKEND STATE ==================================================*/
+
+/* FIXME: merge all of the above in here */
+typedef struct {
+    _sg_pools pools;
+    bool valid;
+    uint32_t frame_index;
+    sg_context active_context;
+    sg_pass cur_pass;
+    sg_pipeline cur_pipeline;
+    bool pass_valid;
+    bool bindings_valid;
+    bool next_draw_valid;
+    #if defined(SOKOL_DEBUG)
+    _sg_validate_error validate_error;
+    #endif
+} _sg_state;
+static _sg_state _sg;
 
 /*-- helper functions --------------------------------------------------------*/
 
@@ -1942,103 +2806,8 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     }
 }
 
-/*-- resource pool slots (must be defined before rendering backend) ----------*/
-typedef struct {
-    uint32_t id;
-    uint32_t ctx_id;
-    sg_resource_state state;
-} _sg_slot;
-
-/*== DUMMY BACKEND ===========================================================*/
+/*== DUMMY BACKEND IMPL ======================================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
-typedef struct {
-    _sg_slot slot;
-    int size;
-    int append_pos;
-    bool append_overflow;
-    sg_buffer_type type;
-    sg_usage usage;
-    uint32_t update_frame_index;
-    uint32_t append_frame_index;
-    int num_slots;
-    int active_slot;
-} _sg_buffer;
-
-typedef struct {
-    _sg_slot slot;
-    sg_image_type type;
-    bool render_target;
-    int width;
-    int height;
-    int depth;
-    int num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    uint32_t upd_frame_index;
-    int num_slots;
-    int active_slot;
-} _sg_image;
-
-typedef struct {
-    int size;
-} _sg_uniform_block;
-
-typedef struct {
-    sg_image_type type;
-} _sg_shader_image;
-
-typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
-} _sg_shader_stage;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
-} _sg_shader;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader* shader;
-    sg_shader shader_id;
-    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    int sample_count;
-    float depth_bias;
-    float depth_bias_slope_scale;
-    float depth_bias_clamp;
-    sg_index_type index_type;
-    float blend_color[4];
-} _sg_pipeline;
-
-typedef struct {
-    _sg_image* image;
-    sg_image image_id;
-    int mip_level;
-    int slice;
-} _sg_attachment;
-
-typedef struct {
-    _sg_slot slot;
-    int num_color_atts;
-    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment ds_att;
-} _sg_pass;
-
-typedef struct {
-    _sg_slot slot;
-} _sg_context;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -2330,83 +3099,6 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 /*== GL BACKEND ==============================================================*/
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 
-#ifndef GL_UNSIGNED_INT_2_10_10_10_REV
-#define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
-#endif
-#ifndef GL_UNSIGNED_INT_24_8
-#define GL_UNSIGNED_INT_24_8 0x84FA
-#endif
-#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
-#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
-#endif
-#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
-#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
-#endif
-#ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
-#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
-#endif
-#ifndef GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
-#define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
-#endif
-#ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
-#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
-#endif
-#ifndef GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
-#define GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG 0x8C01
-#endif
-#ifndef GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG
-#define GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG 0x8C00
-#endif
-#ifndef GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
-#define GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG 0x8C03
-#endif
-#ifndef GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
-#define GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG 0x8C02
-#endif
-#ifndef GL_COMPRESSED_RGB8_ETC2
-#define GL_COMPRESSED_RGB8_ETC2 0x9274
-#endif
-#ifndef GL_COMPRESSED_SRGB8_ETC2
-#define GL_COMPRESSED_SRGB8_ETC2 0x9275
-#endif
-#ifndef GL_DEPTH24_STENCIL8
-#define GL_DEPTH24_STENCIL8 0x88F0
-#endif
-#ifndef GL_HALF_FLOAT
-#define GL_HALF_FLOAT 0x140B
-#endif
-#ifndef GL_DEPTH_STENCIL
-#define GL_DEPTH_STENCIL 0x84F9
-#endif
-#ifndef GL_LUMINANCE
-#define GL_LUMINANCE 0x1909
-#endif
-#ifdef SOKOL_GLES2
-#   ifdef GL_ANGLE_instanced_arrays
-#       define SOKOL_INSTANCING_ENABLED
-#       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
-#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
-#       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
-#   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-#       define SOKOL_INSTANCING_ENABLED
-#       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
-#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
-#       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-#   else
-#       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
-#       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-#       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-#       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-#   endif
-#else
-#   define SOKOL_INSTANCING_ENABLED
-#endif
-
-#define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
-
-/* true if running in GLES2-fallback mode */
-static bool _sg_gl_gles2;
-
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
@@ -2652,7 +3344,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             #if defined(SOKOL_GLES2)
             return GL_LUMINANCE;
             #else
-            if (_sg_gl_gles2) {
+            if (_sg_gl.gles2) {
                 return GL_LUMINANCE;
             }
             else {
@@ -2690,7 +3382,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
     #if defined(SOKOL_GLES2)
     return _sg_gl_teximage_format(fmt);
     #else
-    if (_sg_gl_gles2) {
+    if (_sg_gl.gles2) {
         return _sg_gl_teximage_format(fmt);
     }
     else {
@@ -2773,141 +3465,10 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     }
 }
 
-/*-- GL backend resource declarations ----------------------------------------*/
-typedef struct {
-    _sg_slot slot;
-    int size;
-    int append_pos;
-    bool append_overflow;
-    sg_buffer_type type;
-    sg_usage usage;
-    uint32_t update_frame_index;
-    uint32_t append_frame_index;
-    int num_slots;
-    int active_slot;
-    GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
-    bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
-} _sg_buffer;
-
-typedef struct {
-    _sg_slot slot;
-    sg_image_type type;
-    bool render_target;
-    int width;
-    int height;
-    int depth;
-    int num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    GLenum gl_target;
-    GLuint gl_depth_render_buffer;
-    GLuint gl_msaa_render_buffer;
-    uint32_t upd_frame_index;
-    int num_slots;
-    int active_slot;
-    GLuint gl_tex[SG_NUM_INFLIGHT_FRAMES];
-    bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
-} _sg_image;
-
-typedef struct {
-    GLint gl_loc;
-    sg_uniform_type type;
-    uint8_t count;
-    uint16_t offset;
-} _sg_uniform;
-
-typedef struct {
-    int size;
-    int num_uniforms;
-    _sg_uniform uniforms[SG_MAX_UB_MEMBERS];
-} _sg_uniform_block;
-
-typedef struct {
-    sg_image_type type;
-    GLint gl_loc;
-    int gl_tex_slot;
-} _sg_shader_image;
-
-typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
-} _sg_shader_stage;
-
-typedef struct {
-    _sg_slot slot;
-    GLuint gl_prog;
-    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
-} _sg_shader;
-
-typedef struct {
-    int8_t vb_index;        /* -1 if attr is not enabled */
-    int8_t divisor;         /* -1 if not initialized */
-    uint8_t stride;
-    uint8_t size;
-    uint8_t normalized;
-    int offset;
-    GLenum type;
-} _sg_gl_attr;
-
 _SOKOL_PRIVATE void _sg_gl_init_attr(_sg_gl_attr* attr) {
     attr->vb_index = -1;
     attr->divisor = -1;
-    attr->stride = 0;
-    attr->size = 0;
-    attr->normalized = 0;
-    attr->offset = 0;
-    attr->type = 0;
 }
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader* shader;
-    sg_shader shader_id;
-    sg_primitive_type primitive_type;
-    sg_index_type index_type;
-    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    int sample_count;
-    _sg_gl_attr gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_depth_stencil_state depth_stencil;
-    sg_blend_state blend;
-    sg_rasterizer_state rast;
-} _sg_pipeline;
-
-typedef struct {
-    _sg_image* image;
-    sg_image image_id;
-    int mip_level;
-    int slice;
-    GLuint gl_msaa_resolve_buffer;
-} _sg_attachment;
-
-typedef struct {
-    _sg_slot slot;
-    GLuint gl_fb;
-    int num_color_atts;
-    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment ds_att;
-} _sg_pass;
-
-typedef struct {
-    _sg_slot slot;
-    #if !defined(SOKOL_GLES2)
-    GLuint vao;
-    #endif
-    GLuint default_framebuffer;
-} _sg_context;
 
 _SOKOL_PRIVATE void _sg_gl_init_stencil_state(sg_stencil_state* s) {
     SOKOL_ASSERT(s);
@@ -2922,16 +3483,10 @@ _SOKOL_PRIVATE void _sg_gl_init_depth_stencil_state(sg_depth_stencil_state* s) {
     _sg_gl_init_stencil_state(&s->stencil_front);
     _sg_gl_init_stencil_state(&s->stencil_back);
     s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
-    s->depth_write_enabled = false;
-    s->stencil_enabled = false;
-    s->stencil_read_mask = 0;
-    s->stencil_write_mask = 0;
-    s->stencil_ref = 0;
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_blend_state(sg_blend_state* s) {
     SOKOL_ASSERT(s);
-    s->enabled = false;
     s->src_factor_rgb = SG_BLENDFACTOR_ONE;
     s->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
     s->op_rgb = SG_BLENDOP_ADD;
@@ -2939,44 +3494,16 @@ _SOKOL_PRIVATE void _sg_gl_init_blend_state(sg_blend_state* s) {
     s->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
     s->op_alpha = SG_BLENDOP_ADD;
     s->color_write_mask = SG_COLORMASK_RGBA;
-    for (int i = 0; i < 4; i++) {
-        s->blend_color[i] = 0.0f;
-    }
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     SOKOL_ASSERT(s);
-    s->alpha_to_coverage_enabled = false;
     s->cull_mode = SG_CULLMODE_NONE;
     s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
-    s->depth_bias = 0.0f;
-    s->depth_bias_slope_scale = 0.0f;
-    s->depth_bias_clamp = 0.0f;
 }
 
 /*-- state cache implementation ----------------------------------------------*/
-typedef struct {
-    _sg_gl_attr gl_attr;
-    GLuint gl_vbuf;
-} _sg_gl_cache_attr;
-
-typedef struct {
-    sg_depth_stencil_state ds;
-    sg_blend_state blend;
-    sg_rasterizer_state rast;
-    bool polygon_offset_enabled;
-    _sg_gl_cache_attr attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    GLuint cur_gl_vb;
-    GLuint cur_gl_ib;
-    int cur_ib_offset;
-    GLenum cur_primitive_type;
-    GLenum cur_index_type;
-    _sg_pipeline* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
-} _sg_state_cache;
-
-/* cached wrapper for glBindBuffer */
 _SOKOL_PRIVATE void _sg_gl_bind_buffer(GLenum target, GLuint buffer, _sg_state_cache* cache) {
     SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target));
     if (target == GL_ARRAY_BUFFER) {
@@ -2996,6 +3523,7 @@ _SOKOL_PRIVATE void _sg_gl_bind_buffer(GLenum target, GLuint buffer, _sg_state_c
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     SOKOL_ASSERT(cache);
     _SG_GL_CHECK_ERROR();
+    memset(cache, 0, sizeof(_sg_state_cache));
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     _SG_GL_CHECK_ERROR();
@@ -3052,29 +3580,14 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 }
 
 /*-- main GL backend state and functions -------------------------------------*/
-typedef struct {
-    bool valid;
-    bool in_pass;
-    int cur_pass_width;
-    int cur_pass_height;
-    _sg_context* cur_context;
-    _sg_pass* cur_pass;
-    sg_pass cur_pass_id;
-    _sg_state_cache cache;
-    bool features[SG_NUM_FEATURES];
-    bool ext_anisotropic;
-    GLint max_anisotropy;
-} _sg_backend;
-
-static _sg_backend _sg_gl;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
-    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-    _sg_gl_gles2 = desc->gl_force_gles2;
-    #else
-    _sg_gl_gles2 = false;
-    #endif
     memset(&_sg_gl, 0, sizeof(_sg_gl));
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    _sg_gl.gles2 = desc->gl_force_gles2;
+    #else
+    _sg_gl.gles2 = false;
+    #endif
     _sg_gl.valid = true;
     _sg_gl.in_pass = false;
     _sg_gl.cur_pass_width = 0;
@@ -3117,7 +3630,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         }
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        if (!_sg_gl_gles2) {
+        if (!_sg_gl.gles2) {
             _sg_gl.features[SG_FEATURE_INSTANCING] = true;
             _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
             _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
@@ -3177,7 +3690,7 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
     if (_sg_gl.cur_context) {
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl_gles2) {
+        if (!_sg_gl.gles2) {
             _SG_GL_CHECK_ERROR();
             glBindVertexArray(_sg_gl.cur_context->vao);
             _SG_GL_CHECK_ERROR();
@@ -3207,7 +3720,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2) {
+    if (!_sg_gl.gles2) {
         SOKOL_ASSERT(0 == ctx->vao);
         glGenVertexArrays(1, &ctx->vao);
         glBindVertexArray(ctx->vao);
@@ -3220,7 +3733,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2) {
+    if (!_sg_gl.gles2) {
         if (ctx->vao) {
             glDeleteVertexArrays(1, &ctx->vao);
         }
@@ -3339,7 +3852,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
 
     #if !defined(SOKOL_GLES2)
     bool msaa = false;
-    if (!_sg_gl_gles2) {
+    if (!_sg_gl.gles2) {
         msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
     }
     #endif
@@ -3352,7 +3865,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
         GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->pixel_format);
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl_gles2 && msaa) {
+        if (!_sg_gl.gles2 && msaa) {
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
         }
         else
@@ -3368,7 +3881,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
 
         /* if this is a MSAA render target, need to create a separate render buffer */
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl_gles2 && img->render_target && msaa) {
+        if (!_sg_gl.gles2 && img->render_target && msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
@@ -3409,13 +3922,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
                     #if !defined(SOKOL_GLES2)
-                    if (!_sg_gl_gles2 && (img->type == SG_IMAGETYPE_3D)) {
+                    if (!_sg_gl.gles2 && (img->type == SG_IMAGETYPE_3D)) {
                         glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                     }
                     #endif
                 }
                 #if !defined(SOKOL_GLES2)
-                    if (!_sg_gl_gles2) {
+                    if (!_sg_gl.gles2) {
                         /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
                         const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
                         const float max_lod = _sg_clamp(_sg_def_flt(desc->max_lod, 1000.0f), 0.0f, 1000.0f);
@@ -3453,7 +3966,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                             }
                         }
                         #if !defined(SOKOL_GLES2)
-                        else if (!_sg_gl_gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
+                        else if (!_sg_gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                             int mip_depth = img->depth;
                             if (SG_IMAGETYPE_3D == img->type) {
                                 mip_depth >>= mip_index;
@@ -3848,7 +4361,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
                     default:
                         /* 3D- or array-texture */
                         #if !defined(SOKOL_GLES2)
-                        if (!_sg_gl_gles2) {
+                        if (!_sg_gl.gles2) {
                             glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         }
                         #endif
@@ -3895,7 +4408,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
                         break;
                     default:
                         #if !defined(SOKOL_GLES2)
-                        if (!_sg_gl_gles2) {
+                        if (!_sg_gl.gles2) {
                             glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, att->mip_level, att->slice);
                         }
                         #endif
@@ -3955,7 +4468,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
         SOKOL_ASSERT(pass->gl_fb);
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl_gles2) {
+        if (!_sg_gl.gles2) {
             GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
                 GL_COLOR_ATTACHMENT0,
                 GL_COLOR_ATTACHMENT1,
@@ -4013,7 +4526,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     #if defined(SOKOL_GLES2)
     use_mrt_clear = false;
     #else
-    if (_sg_gl_gles2) {
+    if (_sg_gl.gles2) {
         use_mrt_clear = false;
     }
     #endif
@@ -4077,7 +4590,7 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
     /* if this was an offscreen pass, and MSAA rendering was used, need
        to resolve into the pass images */
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl_gles2 && _sg_gl.cur_pass) {
+    if (!_sg_gl.gles2 && _sg_gl.cur_pass) {
         /* check if the pass object is still valid */
         const _sg_pass* pass = _sg_gl.cur_pass;
         SOKOL_ASSERT(pass->slot.id == _sg_gl.cur_pass_id.id);
@@ -4533,7 +5046,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
                     data_ptr);
             }
             #if !defined(SOKOL_GLES2)
-            else if (!_sg_gl_gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
+            else if (!_sg_gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                 int mip_depth = img->depth >> mip_index;
                 if (mip_depth == 0) {
                     mip_depth = 1;
@@ -4550,37 +5063,8 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
-/*== D3D11 BACKEND ===========================================================*/
+/*== D3D11 BACKEND IMPLEMENTATION ============================================*/
 #elif defined(SOKOL_D3D11)
-
-#ifndef D3D11_NO_HELPERS
-#define D3D11_NO_HELPERS
-#endif
-#ifndef CINTERFACE
-#define CINTERFACE
-#endif
-#ifndef COBJMACROS
-#define COBJMACROS
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <d3d11.h>
-#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-#pragma comment (lib, "WindowsApp.lib")
-#else
-#pragma comment (lib, "user32.lib")
-#pragma comment (lib, "dxgi.lib")
-#pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "dxguid.lib")
-#endif
-#if defined(SOKOL_D3D11_SHADER_COMPILER)
-#include <d3dcompiler.h>
-#if !(defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-#pragma comment (lib, "d3dcompiler.lib")
-#endif
-#endif
 
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
@@ -4832,143 +5316,6 @@ _SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
     }
     return res;
 }
-
-/*-- backend resource structures ---------------------------------------------*/
-typedef struct {
-    _sg_slot slot;
-    int size;
-    int append_pos;
-    bool append_overflow;
-    sg_buffer_type type;
-    sg_usage usage;
-    uint32_t update_frame_index;
-    uint32_t append_frame_index;
-    ID3D11Buffer* d3d11_buf;
-} _sg_buffer;
-
-typedef struct {
-    _sg_slot slot;
-    sg_image_type type;
-    bool render_target;
-    int width;
-    int height;
-    int depth;
-    int num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    uint32_t upd_frame_index;
-    DXGI_FORMAT d3d11_format;
-    ID3D11Texture2D* d3d11_tex2d;
-    ID3D11Texture3D* d3d11_tex3d;
-    ID3D11Texture2D* d3d11_texds;
-    ID3D11Texture2D* d3d11_texmsaa;
-    ID3D11ShaderResourceView* d3d11_srv;
-    ID3D11SamplerState* d3d11_smp;
-} _sg_image;
-
-typedef struct {
-    int size;
-} _sg_uniform_block;
-
-typedef struct {
-    sg_image_type type;
-} _sg_shader_image;
-
-typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11Buffer* d3d11_cbs[SG_MAX_SHADERSTAGE_UBS];
-} _sg_shader_stage;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
-    ID3D11VertexShader* d3d11_vs;
-    ID3D11PixelShader* d3d11_fs;
-    void* d3d11_vs_blob;
-    int d3d11_vs_blob_length;
-} _sg_shader;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader* shader;
-    sg_shader shader_id;
-    sg_index_type index_type;
-    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    int sample_count;
-    float blend_color[4];
-    UINT d3d11_stencil_ref;
-    UINT d3d11_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
-    D3D_PRIMITIVE_TOPOLOGY d3d11_topology;
-    DXGI_FORMAT d3d11_index_format;
-    ID3D11InputLayout* d3d11_il;
-    ID3D11RasterizerState* d3d11_rs;
-    ID3D11DepthStencilState* d3d11_dss;
-    ID3D11BlendState* d3d11_bs;
-} _sg_pipeline;
-
-typedef struct {
-    _sg_image* image;
-    sg_image image_id;
-    int mip_level;
-    int slice;
-} _sg_attachment;
-
-typedef struct {
-    _sg_slot slot;
-    int num_color_atts;
-    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment ds_att;
-    ID3D11RenderTargetView* d3d11_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11DepthStencilView* d3d11_dsv;
-} _sg_pass;
-
-typedef struct {
-    _sg_slot slot;
-} _sg_context;
-
-/*-- main D3D11 backend state and functions ----------------------------------*/
-typedef struct {
-    bool valid;
-    ID3D11Device* dev;
-    ID3D11DeviceContext* ctx;
-    const void* (*rtv_cb)(void);
-    const void* (*dsv_cb)(void);
-    bool in_pass;
-    bool use_indexed_draw;
-    int cur_width;
-    int cur_height;
-    int num_rtvs;
-    _sg_pass* cur_pass;
-    sg_pass cur_pass_id;
-    _sg_pipeline* cur_pipeline;
-    sg_pipeline cur_pipeline_id;
-    ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11DepthStencilView* cur_dsv;
-    /* the following arrays are used for unbinding resources, they will always contain zeroes */
-    ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
-    ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
-    ID3D11ShaderResourceView* zero_srvs[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11SamplerState* zero_smps[SG_MAX_SHADERSTAGE_IMAGES];
-    /* global subresourcedata array for texture updates */
-    D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
-} _sg_backend;
-static _sg_backend _sg_d3d11;
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -6076,26 +6423,8 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     }
 }
 
-/*== METAL BACKEND ===========================================================*/
+/*== METAL BACKEND IMPLEMENTATION ============================================*/
 #elif defined(SOKOL_METAL)
-
-#if !__has_feature(objc_arc)
-#error "Please enable ARC when using the Metal backend"
-#endif
-
-#include <TargetConditionals.h>
-#import <Metal/Metal.h>
-
-enum {
-    _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-    _SG_MTL_UB_ALIGN = 256,
-    #else
-    _SG_MTL_UB_ALIGN = 16,
-    #endif
-    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
-    _SG_MTL_INVALID_POOL_INDEX = 0
-};
 
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
@@ -6390,17 +6719,6 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
 }
 
 /*-- a pool for all Metal resource objects, with deferred release queue -------*/
-static uint32_t _sg_mtl_pool_size;
-static NSMutableArray* _sg_mtl_pool;
-static uint32_t _sg_mtl_free_queue_top;
-static uint32_t* _sg_mtl_free_queue;
-static uint32_t _sg_mtl_release_queue_front;
-static uint32_t _sg_mtl_release_queue_back;
-typedef struct {
-    uint32_t frame_index;   /* frame index at which it is safe to release this resource */
-    uint32_t pool_index;
-} _sg_mtl_release_item;
-static _sg_mtl_release_item* _sg_mtl_release_queue;
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg_mtl_pool_size = 2 *
@@ -6524,21 +6842,6 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
     will never be deleted (except on shutdown), and searching an identical
     sampler is a simple linear search
 */
-typedef struct {
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
-    int max_lod;
-    uint32_t mtl_sampler_state;
-} _sg_mtl_sampler_cache_item;
-static int _sg_mtl_sampler_cache_capacity;
-static int _sg_mtl_sampler_cache_size;
-static _sg_mtl_sampler_cache_item* _sg_mtl_sampler_cache;
-
 /* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
     _sg_mtl_sampler_cache_capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
@@ -6621,125 +6924,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     return new_item->mtl_sampler_state;
 }
 
-/*-- Metal backend resource structs ------------------------------------------*/
-typedef struct {
-    _sg_slot slot;
-    int size;
-    int append_pos;
-    bool append_overflow;
-    sg_buffer_type type;
-    sg_usage usage;
-    uint32_t update_frame_index;
-    uint32_t append_frame_index;
-    int num_slots;
-    int active_slot;
-    uint32_t mtl_buf[SG_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
-} _sg_buffer;
-
-typedef struct {
-    _sg_slot slot;
-    sg_image_type type;
-    bool render_target;
-    int width;
-    int height;
-    int depth;
-    int num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    uint32_t upd_frame_index;
-    int num_slots;
-    int active_slot;
-    uint32_t mtl_tex[SG_NUM_INFLIGHT_FRAMES];
-    uint32_t mtl_depth_tex;
-    uint32_t mtl_msaa_tex;
-    uint32_t mtl_sampler_state;
-} _sg_image;
-
-typedef struct {
-    int size;
-} _sg_uniform_block;
-
-typedef struct {
-    sg_image_type type;
-} _sg_shader_image;
-
-typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image images[SG_MAX_SHADERSTAGE_IMAGES];
-    uint32_t mtl_lib;
-    uint32_t mtl_func;
-} _sg_shader_stage;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader_stage stage[SG_NUM_SHADER_STAGES];
-} _sg_shader;
-
-typedef struct {
-    _sg_slot slot;
-    _sg_shader* shader;
-    sg_shader shader_id;
-    bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    int sample_count;
-    float depth_bias;
-    float depth_bias_slope_scale;
-    float depth_bias_clamp;
-    MTLPrimitiveType mtl_prim_type;
-    sg_index_type index_type;
-    NSUInteger mtl_index_size;
-    MTLIndexType mtl_index_type;
-    MTLCullMode mtl_cull_mode;
-    MTLWinding mtl_winding;
-    float blend_color[4];
-    uint32_t mtl_stencil_ref;
-    uint32_t mtl_rps;
-    uint32_t mtl_dss;
-} _sg_pipeline;
-
-typedef struct {
-    _sg_image* image;
-    sg_image image_id;
-    int mip_level;
-    int slice;
-} _sg_attachment;
-
-typedef struct {
-    _sg_slot slot;
-    int num_color_atts;
-    _sg_attachment color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment ds_att;
-} _sg_pass;
-
-typedef struct {
-    _sg_slot slot;
-} _sg_context;
-
 /*-- a simple state cache for the resource bindings --------------------------*/
-static const _sg_pipeline* _sg_mtl_cur_pipeline;
-static sg_pipeline _sg_mtl_cur_pipeline_id;
-static const _sg_buffer* _sg_mtl_cur_indexbuffer;
-static int _sg_mtl_cur_indexbuffer_offset;
-static sg_buffer _sg_mtl_cur_indexbuffer_id;
-static const _sg_buffer* _sg_mtl_cur_vertexbuffers[SG_MAX_SHADERSTAGE_BUFFERS];
-static int _sg_mtl_cur_vertexbuffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-static sg_buffer _sg_mtl_cur_vertexbuffer_ids[SG_MAX_SHADERSTAGE_BUFFERS];
-static const _sg_image* _sg_mtl_cur_vs_images[SG_MAX_SHADERSTAGE_IMAGES];
-static sg_image _sg_mtl_cur_vs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
-static const _sg_image* _sg_mtl_cur_fs_images[SG_MAX_SHADERSTAGE_IMAGES];
-static sg_image _sg_mtl_cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
-
 _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
     _sg_mtl_cur_pipeline = 0;
     _sg_mtl_cur_pipeline_id.id = SG_INVALID_ID;
@@ -6760,25 +6945,6 @@ _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
 }
 
 /*-- main Metal backend state and functions ----------------------------------*/
-static bool _sg_mtl_valid;
-static const void*(*_sg_mtl_renderpass_descriptor_cb)(void);
-static const void*(*_sg_mtl_drawable_cb)(void);
-static id<MTLDevice> _sg_mtl_device;
-static id<MTLCommandQueue> _sg_mtl_cmd_queue;
-static id<MTLCommandBuffer> _sg_mtl_cmd_buffer;
-static id<MTLRenderCommandEncoder> _sg_mtl_cmd_encoder;
-static uint32_t _sg_mtl_frame_index;
-static uint32_t _sg_mtl_cur_frame_rotate_index;
-static uint32_t _sg_mtl_ub_size;
-static uint32_t _sg_mtl_cur_ub_offset;
-static uint8_t* _sg_mtl_cur_ub_base_ptr;
-static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
-static dispatch_semaphore_t _sg_mtl_sem;
-static bool _sg_mtl_in_pass;
-static bool _sg_mtl_pass_valid;
-static int _sg_mtl_cur_width;
-static int _sg_mtl_cur_height;
-
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->mtl_device);
@@ -7695,7 +7861,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
         }
     }
 }
-
+    
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
 _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -7798,16 +7964,8 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
 #else
 #error "No rendering backend selected"
 #endif
-/*== RESOURCE POOLS ==========================================================*/
-typedef struct {
-    int size;
-    int queue_top;
-    uint32_t* gen_ctrs;
-    int* free_queue;
-} _sg_pool;
 
-/* this *MUST* remain 0 */
-#define _SG_INVALID_SLOT_INDEX (0)
+/*== RESOURCE POOLS ==========================================================*/
 
 _SOKOL_PRIVATE void _sg_init_pool(_sg_pool* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -7898,21 +8056,6 @@ _SOKOL_PRIVATE void _sg_reset_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
     memset(ctx, 0, sizeof(_sg_context));
 }
-
-typedef struct {
-    _sg_pool buffer_pool;
-    _sg_pool image_pool;
-    _sg_pool shader_pool;
-    _sg_pool pipeline_pool;
-    _sg_pool pass_pool;
-    _sg_pool context_pool;
-    _sg_buffer* buffers;
-    _sg_image* images;
-    _sg_shader* shaders;
-    _sg_pipeline* pipelines;
-    _sg_pass* passes;
-    _sg_context* contexts;
-} _sg_pools;
 
 _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools* p, const sg_desc* desc) {
     SOKOL_ASSERT(p);
@@ -8165,123 +8308,6 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools* p, uint32_t ctx_id) {
 
 /*== VALIDATION LAYER ========================================================*/
 #if defined(SOKOL_DEBUG)
-typedef enum {
-    /* special case 'validation was successful' */
-    _SG_VALIDATE_SUCCESS,
-
-    /* buffer creation */
-    _SG_VALIDATE_BUFFERDESC_CANARY,
-    _SG_VALIDATE_BUFFERDESC_SIZE,
-    _SG_VALIDATE_BUFFERDESC_CONTENT,
-    _SG_VALIDATE_BUFFERDESC_NO_CONTENT,
-
-    /* image creation */
-    _SG_VALIDATE_IMAGEDESC_CANARY,
-    _SG_VALIDATE_IMAGEDESC_WIDTH,
-    _SG_VALIDATE_IMAGEDESC_HEIGHT,
-    _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT,
-    _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT,
-    _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT,
-    _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
-    _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
-    _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT,
-    _SG_VALIDATE_IMAGEDESC_CONTENT,
-    _SG_VALIDATE_IMAGEDESC_NO_CONTENT,
-
-    /* shader creation */
-    _SG_VALIDATE_SHADERDESC_CANARY,
-    _SG_VALIDATE_SHADERDESC_SOURCE,
-    _SG_VALIDATE_SHADERDESC_BYTECODE,
-    _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE,
-    _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE,
-    _SG_VALIDATE_SHADERDESC_NO_CONT_UBS,
-    _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS,
-    _SG_VALIDATE_SHADERDESC_NO_CONT_UB_MEMBERS,
-    _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
-    _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
-    _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH,
-    _SG_VALIDATE_SHADERDESC_IMG_NAME,
-
-    /* pipeline creation */
-    _SG_VALIDATE_PIPELINEDESC_CANARY,
-    _SG_VALIDATE_PIPELINEDESC_SHADER,
-    _SG_VALIDATE_PIPELINEDESC_NO_ATTRS,
-    _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4,
-    _SG_VALIDATE_PIPELINEDESC_ATTR_NAME,
-    _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS,
-
-    /* pass creation */
-    _SG_VALIDATE_PASSDESC_CANARY,
-    _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS,
-    _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS,
-    _SG_VALIDATE_PASSDESC_IMAGE,
-    _SG_VALIDATE_PASSDESC_MIPLEVEL,
-    _SG_VALIDATE_PASSDESC_FACE,
-    _SG_VALIDATE_PASSDESC_LAYER,
-    _SG_VALIDATE_PASSDESC_SLICE,
-    _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
-    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
-    _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT,
-    _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
-    _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
-    _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS,
-
-    /* sg_begin_pass validation */
-    _SG_VALIDATE_BEGINPASS_PASS,
-    _SG_VALIDATE_BEGINPASS_IMAGE,
-
-    /* sg_apply_pipeline validation */
-    _SG_VALIDATE_APIP_PIPELINE_VALID_ID,
-    _SG_VALIDATE_APIP_PIPELINE_EXISTS,
-    _SG_VALIDATE_APIP_PIPELINE_VALID,
-    _SG_VALIDATE_APIP_SHADER_EXISTS,
-    _SG_VALIDATE_APIP_SHADER_VALID,
-    _SG_VALIDATE_APIP_ATT_COUNT,
-    _SG_VALIDATE_APIP_COLOR_FORMAT,
-    _SG_VALIDATE_APIP_DEPTH_FORMAT,
-    _SG_VALIDATE_APIP_SAMPLE_COUNT,
-
-    /* sg_apply_bindings validation */
-    _SG_VALIDATE_ABND_PIPELINE,
-    _SG_VALIDATE_ABND_PIPELINE_EXISTS,
-    _SG_VALIDATE_ABND_PIPELINE_VALID,
-    _SG_VALIDATE_ABND_VBS,
-    _SG_VALIDATE_ABND_VB_TYPE,
-    _SG_VALIDATE_ABND_VB_OVERFLOW,
-    _SG_VALIDATE_ABND_NO_IB,
-    _SG_VALIDATE_ABND_IB,
-    _SG_VALIDATE_ABND_IB_TYPE,
-    _SG_VALIDATE_ABND_IB_OVERFLOW,
-    _SG_VALIDATE_ABND_VS_IMGS,
-    _SG_VALIDATE_ABND_VS_IMG_TYPES,
-    _SG_VALIDATE_ABND_FS_IMGS,
-    _SG_VALIDATE_ABND_FS_IMG_TYPES,
-
-    /* sg_apply_uniforms validation */
-    _SG_VALIDATE_AUB_NO_PIPELINE,
-    _SG_VALIDATE_AUB_NO_UB_AT_SLOT,
-    _SG_VALIDATE_AUB_SIZE,
-
-    /* sg_update_buffer validation */
-    _SG_VALIDATE_UPDATEBUF_USAGE,
-    _SG_VALIDATE_UPDATEBUF_SIZE,
-    _SG_VALIDATE_UPDATEBUF_ONCE,
-    _SG_VALIDATE_UPDATEBUF_APPEND,
-
-    /* sg_append_buffer validation */
-    _SG_VALIDATE_APPENDBUF_USAGE,
-    _SG_VALIDATE_APPENDBUF_SIZE,
-    _SG_VALIDATE_APPENDBUF_UPDATE,
-
-    /* sg_update_image validation */
-    _SG_VALIDATE_UPDIMG_USAGE,
-    _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
-    _SG_VALIDATE_UPDIMG_SIZE,
-    _SG_VALIDATE_UPDIMG_COMPRESSED,
-    _SG_VALIDATE_UPDIMG_ONCE
-
-} _sg_validate_error;
-
 /* return a human readable string for an _sg_validate_error */
 _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
     switch (err) {
@@ -8400,23 +8426,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error err) {
     }
 }
 #endif /* defined(SOKOL_DEBUG) */
-
-/*-- generic backend state ---------------------------------------------------*/
-typedef struct {
-    _sg_pools pools;
-    bool valid;
-    uint32_t frame_index;
-    sg_context active_context;
-    sg_pass cur_pass;
-    sg_pipeline cur_pipeline;
-    bool pass_valid;
-    bool bindings_valid;
-    bool next_draw_valid;
-    #if defined(SOKOL_DEBUG)
-    _sg_validate_error validate_error;
-    #endif
-} _sg_state;
-static _sg_state _sg;
 
 /*-- validation checks -------------------------------------------------------*/
 #if defined(SOKOL_DEBUG)
