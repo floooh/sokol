@@ -2296,10 +2296,15 @@ typedef struct {
     int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
     int max_lod;
     uint32_t mtl_sampler_state;
-} _sg_mtl_sampler_cache_item;
-static int _sg_mtl_sampler_cache_capacity;
-static int _sg_mtl_sampler_cache_size;
-static _sg_mtl_sampler_cache_item* _sg_mtl_sampler_cache;
+} _sg_mtl_sampler_cache_item_t;
+
+typedef struct {
+    int capacity;
+    int num_items;
+    _sg_mtl_sampler_cache_item_t* items;
+} _sg_mtl_sampler_cache_t;
+
+_sg_mtl_sampler_cache_t _sg_mtl_sampler_cache;
 
 typedef struct {
     _sg_slot slot;
@@ -6830,23 +6835,23 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 */
 /* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    _sg_mtl_sampler_cache_capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg_mtl_sampler_cache_size = 0;
-    const int size = _sg_mtl_sampler_cache_capacity * sizeof(_sg_mtl_sampler_cache_item);
-    _sg_mtl_sampler_cache = (_sg_mtl_sampler_cache_item*)SOKOL_MALLOC(size);
-    memset(_sg_mtl_sampler_cache, 0, size);
+    _sg_mtl_sampler_cache.capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg_mtl_sampler_cache.num_items = 0;
+    const int size = _sg_mtl_sampler_cache.capacity * sizeof(_sg_mtl_sampler_cache_item_t);
+    _sg_mtl_sampler_cache.items = (_sg_mtl_sampler_cache_item_t*)SOKOL_MALLOC(size);
+    memset(_sg_mtl_sampler_cache.items, 0, size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
 _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
-    SOKOL_ASSERT(_sg_mtl_sampler_cache);
-    SOKOL_ASSERT(_sg_mtl_sampler_cache_size <= _sg_mtl_sampler_cache_capacity);
-    for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
-        _sg_mtl_release_resource(frame_index, _sg_mtl_sampler_cache[i].mtl_sampler_state);
+    SOKOL_ASSERT(_sg_mtl_sampler_cache.items);
+    SOKOL_ASSERT(_sg_mtl_sampler_cache.num_items <= _sg_mtl_sampler_cache.capacity);
+    for (int i = 0; i < _sg_mtl_sampler_cache.num_items; i++) {
+        _sg_mtl_release_resource(frame_index, _sg_mtl_sampler_cache.items[i].mtl_sampler_state);
     }
-    SOKOL_FREE(_sg_mtl_sampler_cache); _sg_mtl_sampler_cache = 0;
-    _sg_mtl_sampler_cache_size = 0;
-    _sg_mtl_sampler_cache_capacity = 0;
+    SOKOL_FREE(_sg_mtl_sampler_cache.items); _sg_mtl_sampler_cache.items = 0;
+    _sg_mtl_sampler_cache.num_items = 0;
+    _sg_mtl_sampler_cache.capacity = 0;
 }
 
 /*
@@ -6855,7 +6860,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
 */
 _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const sg_image_desc* img_desc) {
     SOKOL_ASSERT(img_desc);
-    SOKOL_ASSERT(_sg_mtl_sampler_cache);
+    SOKOL_ASSERT(_sg_mtl_sampler_cache.items);
     /* sampler state cache is full */
     const sg_filter min_filter = _sg_def(img_desc->min_filter, SG_FILTER_NEAREST);
     const sg_filter mag_filter = _sg_def(img_desc->mag_filter, SG_FILTER_NEAREST);
@@ -6867,8 +6872,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     const int min_lod = (int)(img_desc->min_lod * 1000.0f);
     const int max_lod = (int)(_sg_def_flt(img_desc->max_lod, 1000.0f) * 1000.0f);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
-    for (int i = 0; i < _sg_mtl_sampler_cache_size; i++) {
-        _sg_mtl_sampler_cache_item* item = &_sg_mtl_sampler_cache[i];
+    for (int i = 0; i < _sg_mtl_sampler_cache.num_items; i++) {
+        _sg_mtl_sampler_cache_item_t* item = &_sg_mtl_sampler_cache.items[i];
         if ((min_filter == item->min_filter) &&
             (mag_filter == item->mag_filter) &&
             (wrap_u == item->wrap_u) &&
@@ -6882,8 +6887,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
         }
     }
     /* fallthrough: need to create a new MTLSamplerState object */
-    SOKOL_ASSERT(_sg_mtl_sampler_cache_size < _sg_mtl_sampler_cache_capacity);
-    _sg_mtl_sampler_cache_item* new_item = &_sg_mtl_sampler_cache[_sg_mtl_sampler_cache_size++];
+    SOKOL_ASSERT(_sg_mtl_sampler_cache.num_items < _sg_mtl_sampler_cache.capacity);
+    _sg_mtl_sampler_cache_item_t* new_item = &_sg_mtl_sampler_cache.items[_sg_mtl_sampler_cache.num_items++];
     new_item->min_filter = min_filter;
     new_item->mag_filter = mag_filter;
     new_item->wrap_u = wrap_u;
