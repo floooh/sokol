@@ -2262,23 +2262,28 @@ enum {
     _SG_MTL_UB_ALIGN = 16,
     #endif
     _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
-    _SG_MTL_INVALID_POOL_INDEX = 0
+    _SG_MTL_INVALID_SLOT_INDEX = 0
 };
 
 /* FIXME: merge all the following stuff into structs */
 
 /* Metal object-id pool */
-static uint32_t _sg_mtl_pool_size;
-static NSMutableArray* _sg_mtl_pool;
-static uint32_t _sg_mtl_free_queue_top;
-static uint32_t* _sg_mtl_free_queue;
-static uint32_t _sg_mtl_release_queue_front;
-static uint32_t _sg_mtl_release_queue_back;
 typedef struct {
     uint32_t frame_index;   /* frame index at which it is safe to release this resource */
-    uint32_t pool_index;
-} _sg_mtl_release_item;
-static _sg_mtl_release_item* _sg_mtl_release_queue;
+    uint32_t slot_index;
+} _sg_mtl_release_item_t;
+
+typedef struct {
+    uint32_t num_slots;
+    uint32_t free_queue_top;
+    uint32_t* free_queue;
+    uint32_t release_queue_front;
+    uint32_t release_queue_back;
+    _sg_mtl_release_item_t* release_queue;
+    NSMutableArray* slots;
+} _sg_mtl_idpool_t;
+
+_sg_mtl_idpool_t _sg_mtl_idpool;
 
 /* Metal sampler cache */
 typedef struct {
@@ -6702,7 +6707,7 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
 /*-- a pool for all Metal resource objects, with deferred release queue -------*/
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
-    _sg_mtl_pool_size = 2 *
+    _sg_mtl_idpool.num_slots = 2 *
         (
             2 * _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
             5 * _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
@@ -6710,62 +6715,62 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
             2 * _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
             _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE)
         );
-    _sg_mtl_pool = [NSMutableArray arrayWithCapacity:_sg_mtl_pool_size];
+    _sg_mtl_idpool.slots = [NSMutableArray arrayWithCapacity:_sg_mtl_idpool.num_slots];
     NSNull* null = [NSNull null];
-    for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
-        [_sg_mtl_pool addObject:null];
+    for (uint32_t i = 0; i < _sg_mtl_idpool.num_slots; i++) {
+        [_sg_mtl_idpool.slots addObject:null];
     }
-    SOKOL_ASSERT([_sg_mtl_pool count] == _sg_mtl_pool_size);
+    SOKOL_ASSERT([_sg_mtl_idpool.slots count] == _sg_mtl_idpool.num_slots);
     /* a queue of currently free slot indices */
-    _sg_mtl_free_queue_top = 0;
-    _sg_mtl_free_queue = (uint32_t*)SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(uint32_t));
+    _sg_mtl_idpool.free_queue_top = 0;
+    _sg_mtl_idpool.free_queue = (uint32_t*)SOKOL_MALLOC(_sg_mtl_idpool.num_slots * sizeof(uint32_t));
     /* pool slot 0 is reserved! */
-    for (int i = _sg_mtl_pool_size-1; i >= 1; i--) {
-        _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = (uint32_t)i;
+    for (int i = _sg_mtl_idpool.num_slots-1; i >= 1; i--) {
+        _sg_mtl_idpool.free_queue[_sg_mtl_idpool.free_queue_top++] = (uint32_t)i;
     }
     /* a circular queue which holds release items (frame index
        when a resource is to be released, and the resource's
        pool index
     */
-    _sg_mtl_release_queue_front = 0;
-    _sg_mtl_release_queue_back = 0;
-    _sg_mtl_release_queue = (_sg_mtl_release_item*)SOKOL_MALLOC(_sg_mtl_pool_size * sizeof(_sg_mtl_release_item));
-    for (uint32_t i = 0; i < _sg_mtl_pool_size; i++) {
-        _sg_mtl_release_queue[i].frame_index = 0;
-        _sg_mtl_release_queue[i].pool_index = _SG_MTL_INVALID_POOL_INDEX;
+    _sg_mtl_idpool.release_queue_front = 0;
+    _sg_mtl_idpool.release_queue_back = 0;
+    _sg_mtl_idpool.release_queue = (_sg_mtl_release_item_t*)SOKOL_MALLOC(_sg_mtl_idpool.num_slots * sizeof(_sg_mtl_release_item_t));
+    for (uint32_t i = 0; i < _sg_mtl_idpool.num_slots; i++) {
+        _sg_mtl_idpool.release_queue[i].frame_index = 0;
+        _sg_mtl_idpool.release_queue[i].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
     }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_pool(void) {
-    SOKOL_FREE(_sg_mtl_release_queue);  _sg_mtl_release_queue = 0;
-    SOKOL_FREE(_sg_mtl_free_queue);     _sg_mtl_free_queue = 0;
-    _sg_mtl_pool = nil;
+    SOKOL_FREE(_sg_mtl_idpool.release_queue);  _sg_mtl_idpool.release_queue = 0;
+    SOKOL_FREE(_sg_mtl_idpool.free_queue);     _sg_mtl_idpool.free_queue = 0;
+    _sg_mtl_idpool.slots = nil;
 }
 
 /* get a new free resource pool slot */
 _SOKOL_PRIVATE uint32_t _sg_mtl_alloc_pool_slot(void) {
-    SOKOL_ASSERT(_sg_mtl_free_queue_top > 0);
-    const uint32_t pool_index = _sg_mtl_free_queue[--_sg_mtl_free_queue_top];
-    SOKOL_ASSERT((pool_index > 0) && (pool_index < _sg_mtl_pool_size));
-    return pool_index;
+    SOKOL_ASSERT(_sg_mtl_idpool.free_queue_top > 0);
+    const uint32_t slot_index = _sg_mtl_idpool.free_queue[--_sg_mtl_idpool.free_queue_top];
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
+    return slot_index;
 }
 
 /* put a free resource pool slot back into the free-queue */
-_SOKOL_PRIVATE void _sg_mtl_free_pool_slot(uint32_t pool_index) {
-    SOKOL_ASSERT(_sg_mtl_free_queue_top < _sg_mtl_pool_size);
-    SOKOL_ASSERT((pool_index > 0) && (pool_index < _sg_mtl_pool_size));
-    _sg_mtl_free_queue[_sg_mtl_free_queue_top++] = pool_index;
+_SOKOL_PRIVATE void _sg_mtl_free_pool_slot(uint32_t slot_index) {
+    SOKOL_ASSERT(_sg_mtl_idpool.free_queue_top < _sg_mtl_idpool.num_slots);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
+    _sg_mtl_idpool.free_queue[_sg_mtl_idpool.free_queue_top++] = slot_index;
 }
 
 /*  add an MTLResource to the pool, return pool index or 0 if input was 'nil' */
 _SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
     if (nil == res) {
-        return _SG_MTL_INVALID_POOL_INDEX;
+        return _SG_MTL_INVALID_SLOT_INDEX;
     }
-    const uint32_t pool_index = _sg_mtl_alloc_pool_slot();
-    SOKOL_ASSERT([NSNull null] == _sg_mtl_pool[pool_index]);
-    _sg_mtl_pool[pool_index] = res;
-    return pool_index;
+    const uint32_t slot_index = _sg_mtl_alloc_pool_slot();
+    SOKOL_ASSERT([NSNull null] == _sg_mtl_idpool.slots[slot_index]);
+    _sg_mtl_idpool.slots[slot_index] = res;
+    return slot_index;
 }
 
 /*  mark an MTLResource for release, this will put the resource into the
@@ -6773,46 +6778,46 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
     the special pool index 0 will be ignored (this means that a nil
     value was provided to _sg_mtl_add_resource()
 */
-_SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t pool_index) {
-    if (pool_index == _SG_MTL_INVALID_POOL_INDEX) {
+_SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t slot_index) {
+    if (slot_index == _SG_MTL_INVALID_SLOT_INDEX) {
         return;
     }
-    SOKOL_ASSERT((pool_index > 0) && (pool_index < _sg_mtl_pool_size));
-    SOKOL_ASSERT([NSNull null] != _sg_mtl_pool[pool_index]);
-    int slot_index = _sg_mtl_release_queue_front++;
-    if (_sg_mtl_release_queue_front >= _sg_mtl_pool_size) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
+    SOKOL_ASSERT([NSNull null] != _sg_mtl_idpool.slots[slot_index]);
+    int release_index = _sg_mtl_idpool.release_queue_front++;
+    if (_sg_mtl_idpool.release_queue_front >= _sg_mtl_idpool.num_slots) {
         /* wrap-around */
-        _sg_mtl_release_queue_front = 0;
+        _sg_mtl_idpool.release_queue_front = 0;
     }
     /* release queue full? */
-    SOKOL_ASSERT(_sg_mtl_release_queue_front != _sg_mtl_release_queue_back);
-    SOKOL_ASSERT(0 == _sg_mtl_release_queue[slot_index].frame_index);
+    SOKOL_ASSERT(_sg_mtl_idpool.release_queue_front != _sg_mtl_idpool.release_queue_back);
+    SOKOL_ASSERT(0 == _sg_mtl_idpool.release_queue[release_index].frame_index);
     const uint32_t safe_to_release_frame_index = frame_index + SG_NUM_INFLIGHT_FRAMES + 1;
-    _sg_mtl_release_queue[slot_index].frame_index = safe_to_release_frame_index;
-    _sg_mtl_release_queue[slot_index].pool_index = pool_index;
+    _sg_mtl_idpool.release_queue[release_index].frame_index = safe_to_release_frame_index;
+    _sg_mtl_idpool.release_queue[release_index].slot_index = slot_index;
 }
 
 /* run garbage-collection pass on all resources in the release-queue */
 _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
-    while (_sg_mtl_release_queue_back != _sg_mtl_release_queue_front) {
-        if (frame_index < _sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index) {
+    while (_sg_mtl_idpool.release_queue_back != _sg_mtl_idpool.release_queue_front) {
+        if (frame_index < _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].frame_index) {
             /* don't need to check further, release-items past this are too young */
             break;
         }
         /* safe to release this resource */
-        const uint32_t pool_index = _sg_mtl_release_queue[_sg_mtl_release_queue_back].pool_index;
-        SOKOL_ASSERT((pool_index > 0) && (pool_index < _sg_mtl_pool_size));
-        SOKOL_ASSERT(_sg_mtl_pool[pool_index] != [NSNull null]);
-        _sg_mtl_pool[pool_index] = [NSNull null];
+        const uint32_t slot_index = _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].slot_index;
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
+        SOKOL_ASSERT(_sg_mtl_idpool.slots[slot_index] != [NSNull null]);
+        _sg_mtl_idpool.slots[slot_index] = [NSNull null];
         /* put the now free pool index back on the free queue */
-        _sg_mtl_free_pool_slot(pool_index);
+        _sg_mtl_free_pool_slot(slot_index);
         /* reset the release queue slot and advance the back index */
-        _sg_mtl_release_queue[_sg_mtl_release_queue_back].frame_index = 0;
-        _sg_mtl_release_queue[_sg_mtl_release_queue_back].pool_index = _SG_MTL_INVALID_POOL_INDEX;
-        _sg_mtl_release_queue_back++;
-        if (_sg_mtl_release_queue_back >= _sg_mtl_pool_size) {
+        _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].frame_index = 0;
+        _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
+        _sg_mtl_idpool.release_queue_back++;
+        if (_sg_mtl_idpool.release_queue_back >= _sg_mtl_idpool.num_slots) {
             /* wrap-around */
-            _sg_mtl_release_queue_back = 0;
+            _sg_mtl_idpool.release_queue_back = 0;
         }
     }
 }
@@ -7408,10 +7413,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
     /* render-pipeline descriptor */
     MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
     rp_desc.vertexDescriptor = vtx_desc;
-    SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_VS].mtl_func != _SG_MTL_INVALID_POOL_INDEX);
-    rp_desc.vertexFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
-    SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_POOL_INDEX);
-    rp_desc.fragmentFunction = _sg_mtl_pool[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
+    SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_VS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
+    rp_desc.vertexFunction = _sg_mtl_idpool.slots[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
+    SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
+    rp_desc.fragmentFunction = _sg_mtl_idpool.slots[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
     rp_desc.sampleCount = _sg_def(desc->rasterizer.sample_count, 1);
     rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
@@ -7584,10 +7589,10 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
             const float* c = &(action->colors[i].val[0]);
             pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c[0], c[1], c[2], c[3]);
             if (is_msaa) {
-                SOKOL_ASSERT(att->image->mtl_msaa_tex != _SG_MTL_INVALID_POOL_INDEX);
-                SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-                pass_desc.colorAttachments[i].texture = _sg_mtl_pool[att->image->mtl_msaa_tex];
-                pass_desc.colorAttachments[i].resolveTexture = _sg_mtl_pool[att->image->mtl_tex[att->image->active_slot]];
+                SOKOL_ASSERT(att->image->mtl_msaa_tex != _SG_MTL_INVALID_SLOT_INDEX);
+                SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+                pass_desc.colorAttachments[i].texture = _sg_mtl_idpool.slots[att->image->mtl_msaa_tex];
+                pass_desc.colorAttachments[i].resolveTexture = _sg_mtl_idpool.slots[att->image->mtl_tex[att->image->active_slot]];
                 pass_desc.colorAttachments[i].resolveLevel = att->mip_level;
                 switch (att->image->type) {
                     case SG_IMAGETYPE_CUBE:
@@ -7601,8 +7606,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
                 }
             }
             else {
-                SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-                pass_desc.colorAttachments[i].texture = _sg_mtl_pool[att->image->mtl_tex[att->image->active_slot]];
+                SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+                pass_desc.colorAttachments[i].texture = _sg_mtl_idpool.slots[att->image->mtl_tex[att->image->active_slot]];
                 pass_desc.colorAttachments[i].level = att->mip_level;
                 switch (att->image->type) {
                     case SG_IMAGETYPE_CUBE:
@@ -7620,12 +7625,12 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
             const _sg_attachment* att = &pass->ds_att;
             SOKOL_ASSERT(att->image->slot.state == SG_RESOURCESTATE_VALID);
             SOKOL_ASSERT(att->image->slot.id == att->image_id.id);
-            SOKOL_ASSERT(att->image->mtl_depth_tex != _SG_MTL_INVALID_POOL_INDEX);
-            pass_desc.depthAttachment.texture = _sg_mtl_pool[att->image->mtl_depth_tex];
+            SOKOL_ASSERT(att->image->mtl_depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
+            pass_desc.depthAttachment.texture = _sg_mtl_idpool.slots[att->image->mtl_depth_tex];
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
             pass_desc.depthAttachment.clearDepth = action->depth.val;
             if (_sg_is_depth_stencil_format(att->image->pixel_format)) {
-                pass_desc.stencilAttachment.texture = _sg_mtl_pool[att->image->mtl_depth_tex];
+                pass_desc.stencilAttachment.texture = _sg_mtl_idpool.slots[att->image->mtl_depth_tex];
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
                 pass_desc.stencilAttachment.clearStencil = action->stencil.val;
             }
@@ -7765,10 +7770,10 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
         [_sg_mtl_cmd_encoder setFrontFacingWinding:pip->mtl_winding];
         [_sg_mtl_cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
         [_sg_mtl_cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
-        SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_POOL_INDEX);
-        [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_pool[pip->mtl_rps]];
-        SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_POOL_INDEX);
-        [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_pool[pip->mtl_dss]];
+        SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_SLOT_INDEX);
+        [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_idpool.slots[pip->mtl_rps]];
+        SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_SLOT_INDEX);
+        [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_idpool.slots[pip->mtl_dss]];
     }
 }
 
@@ -7809,8 +7814,8 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             _sg_mtl_cur_vertexbuffer_offsets[slot] = vb_offsets[slot];
             _sg_mtl_cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
-            SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_pool[vb->mtl_buf[vb->active_slot]]
+            SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_idpool.slots[vb->mtl_buf[vb->active_slot]]
                 offset:vb_offsets[slot]
                 atIndex:mtl_slot];
         }
@@ -7822,10 +7827,10 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
         if ((_sg_mtl_cur_vs_images[slot] != img) || (_sg_mtl_cur_vs_image_ids[slot].id != img->slot.id)) {
             _sg_mtl_cur_vs_images[slot] = img;
             _sg_mtl_cur_vs_image_ids[slot].id = img->slot.id;
-            SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setVertexTexture:_sg_mtl_pool[img->mtl_tex[img->active_slot]] atIndex:slot];
-            SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setVertexSamplerState:_sg_mtl_pool[img->mtl_sampler_state] atIndex:slot];
+            SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg_mtl_cmd_encoder setVertexTexture:_sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]] atIndex:slot];
+            SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg_mtl_cmd_encoder setVertexSamplerState:_sg_mtl_idpool.slots[img->mtl_sampler_state] atIndex:slot];
         }
     }
 
@@ -7835,10 +7840,10 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
         if ((_sg_mtl_cur_fs_images[slot] != img) || (_sg_mtl_cur_fs_image_ids[slot].id != img->slot.id)) {
             _sg_mtl_cur_fs_images[slot] = img;
             _sg_mtl_cur_fs_image_ids[slot].id = img->slot.id;
-            SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setFragmentTexture:_sg_mtl_pool[img->mtl_tex[img->active_slot]] atIndex:slot];
-            SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_POOL_INDEX);
-            [_sg_mtl_cmd_encoder setFragmentSamplerState:_sg_mtl_pool[img->mtl_sampler_state] atIndex:slot];
+            SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg_mtl_cmd_encoder setFragmentTexture:_sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]] atIndex:slot];
+            SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
+            [_sg_mtl_cmd_encoder setFragmentSamplerState:_sg_mtl_idpool.slots[img->mtl_sampler_state] atIndex:slot];
         }
     }
 }
@@ -7885,13 +7890,13 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
         /* indexed rendering */
         SOKOL_ASSERT(_sg_mtl_cur_indexbuffer && (_sg_mtl_cur_indexbuffer->slot.id == _sg_mtl_cur_indexbuffer_id.id));
         const _sg_buffer* ib = _sg_mtl_cur_indexbuffer;
-        SOKOL_ASSERT(ib->mtl_buf[ib->active_slot] != _SG_MTL_INVALID_POOL_INDEX);
+        SOKOL_ASSERT(ib->mtl_buf[ib->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         const NSUInteger index_buffer_offset = _sg_mtl_cur_indexbuffer_offset +
             base_element * _sg_mtl_cur_pipeline->mtl_index_size;
         [_sg_mtl_cmd_encoder drawIndexedPrimitives:_sg_mtl_cur_pipeline->mtl_prim_type
             indexCount:num_elements
             indexType:_sg_mtl_cur_pipeline->mtl_index_type
-            indexBuffer:_sg_mtl_pool[ib->mtl_buf[ib->active_slot]]
+            indexBuffer:_sg_mtl_idpool.slots[ib->mtl_buf[ib->active_slot]]
             indexBufferOffset:index_buffer_offset
             instanceCount:num_instances];
     }
@@ -7909,7 +7914,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
     }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_idpool.slots[buf->mtl_buf[buf->active_slot]];
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data, data_size);
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
@@ -7924,7 +7929,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int dat
             buf->active_slot = 0;
         }
     }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_pool[buf->mtl_buf[buf->active_slot]];
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_idpool.slots[buf->mtl_buf[buf->active_slot]];
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->append_pos;
     memcpy(dst_ptr, data, data_size);
@@ -7938,7 +7943,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     if (++img->active_slot >= img->num_slots) {
         img->active_slot = 0;
     }
-    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_pool[img->mtl_tex[img->active_slot]];
+    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]];
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 
