@@ -1949,7 +1949,7 @@ typedef struct {
     _sg_slot slot;
 } _sg_context;
 
-/*== GL BACKEND DECLARATIOSN =================================================*/
+/*== GL BACKEND DECLARATIONS =================================================*/
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 typedef struct {
     _sg_slot slot;
@@ -2109,10 +2109,7 @@ typedef struct {
     bool features[SG_NUM_FEATURES];
     bool ext_anisotropic;
     GLint max_anisotropy;
-} _sg_backend;
-
-/* FIXME! */
-static _sg_backend _sg_gl;
+} _sg_gl_backend;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
 #elif defined(SOKOL_D3D11)
@@ -2587,7 +2584,6 @@ typedef enum {
 
 /* FIXME: merge all of the above in here */
 typedef struct {
-    _sg_pools pools;
     bool valid;
     uint32_t frame_index;
     sg_context active_context;
@@ -2598,6 +2594,10 @@ typedef struct {
     bool next_draw_valid;
     #if defined(SOKOL_DEBUG)
     _sg_validate_error validate_error;
+    #endif
+    _sg_pools pools;
+    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    _sg_gl_backend gl;
     #endif
 } _sg_state;
 static _sg_state _sg;
@@ -3344,7 +3344,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             #if defined(SOKOL_GLES2)
             return GL_LUMINANCE;
             #else
-            if (_sg_gl.gles2) {
+            if (_sg.gl.gles2) {
                 return GL_LUMINANCE;
             }
             else {
@@ -3382,7 +3382,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
     #if defined(SOKOL_GLES2)
     return _sg_gl_teximage_format(fmt);
     #else
-    if (_sg_gl.gles2) {
+    if (_sg.gl.gles2) {
         return _sg_gl_teximage_format(fmt);
     }
     else {
@@ -3529,19 +3529,10 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
     _SG_GL_CHECK_ERROR();
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_gl_init_attr(&cache->attrs[i].gl_attr);
-        cache->attrs[i].gl_vbuf = 0;
         glDisableVertexAttribArray(i);
         _SG_GL_CHECK_ERROR();
     }
-    cache->cur_gl_vb = 0;
-    cache->cur_gl_ib = 0;
-    cache->cur_ib_offset = 0;
     cache->cur_primitive_type = GL_TRIANGLES;
-    cache->cur_index_type = 0;
-
-    /* resource bindings */
-    cache->cur_pipeline = 0;
-    cache->cur_pipeline_id.id = SG_INVALID_ID;
 
     /* depth-stencil state */
     _sg_gl_init_depth_stencil_state(&cache->ds);
@@ -3563,7 +3554,6 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 
     /* rasterizer state */
     _sg_gl_init_rasterizer_state(&cache->rast);
-    cache->polygon_offset_enabled = false;
     glPolygonOffset(0.0f, 0.0f);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_CULL_FACE);
@@ -3582,18 +3572,13 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache* cache) {
 /*-- main GL backend state and functions -------------------------------------*/
 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
-    memset(&_sg_gl, 0, sizeof(_sg_gl));
+    /* assumes that _sg.gl is already zero-initialized */
+    _sg.gl.valid = true;
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-    _sg_gl.gles2 = desc->gl_force_gles2;
+    _sg.gl.gles2 = desc->gl_force_gles2;
     #else
-    _sg_gl.gles2 = false;
+    _sg.gl.gles2 = false;
     #endif
-    _sg_gl.valid = true;
-    _sg_gl.in_pass = false;
-    _sg_gl.cur_pass_width = 0;
-    _sg_gl.cur_pass_height = 0;
-    _sg_gl.cur_pass = 0;
-    _sg_gl.cur_pass_id.id = SG_INVALID_ID;
 
     /* clear initial GL error state */
     #if defined(SOKOL_DEBUG)
@@ -3601,114 +3586,110 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     #endif
 
     /* initialize feature flags */
-    for (int i = 0; i < SG_NUM_FEATURES; i++) {
-        _sg_gl.features[i] = false;
-    }
-    _sg_gl.ext_anisotropic = false;
-    _sg_gl.features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
+    _sg.gl.features[SG_FEATURE_ORIGIN_BOTTOM_LEFT] = true;
     #if defined(SOKOL_GLCORE33)
-        _sg_gl.features[SG_FEATURE_INSTANCING] = true;
-        _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
-        _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
-        _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
-        _sg_gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
-        _sg_gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
-        _sg_gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
-        _sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
+        _sg.gl.features[SG_FEATURE_INSTANCING] = true;
+        _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
+        _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+        _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+        _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+        _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        _sg.gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
+        _sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
         GLint num_ext = 0;
         glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
         for (int i = 0; i < num_ext; i++) {
             const char* ext = (const char*) glGetStringi(GL_EXTENSIONS, i);
             if (strstr(ext, "_texture_compression_s3tc")) {
-                _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
+                _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
                 continue;
             }
             else if (strstr(ext, "_texture_filter_anisotropic")) {
-                _sg_gl.ext_anisotropic = true;
+                _sg.gl.ext_anisotropic = true;
                 continue;
             }
         }
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        if (!_sg_gl.gles2) {
-            _sg_gl.features[SG_FEATURE_INSTANCING] = true;
-            _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
-            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
-            _sg_gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
-            _sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
-            _sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
-            _sg_gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
-            _sg_gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        if (!_sg.gl.gles2) {
+            _sg.gl.features[SG_FEATURE_INSTANCING] = true;
+            _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
+            _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+            _sg.gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
+            _sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
+            _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+            _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+            _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
         }
         else {
-            _sg_gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
-            _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
-            _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+            _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
+            _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
+            _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
         }
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
             strstr(ext, "_texture_compression_s3tc") ||
             strstr(ext, "_compressed_texture_s3tc") ||
             strstr(ext, "texture_compression_dxt1");
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
             strstr(ext, "_texture_compression_pvrtc") ||
             strstr(ext, "_compressed_texture_pvrtc");
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
             strstr(ext, "_compressed_texture_atc");
-        _sg_gl.ext_anisotropic =
+        _sg.gl.ext_anisotropic =
             strstr(ext, "_texture_filter_anisotropic");
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        _sg_gl.features[SG_FEATURE_INSTANCING] =
+        _sg.gl.features[SG_FEATURE_INSTANCING] =
             strstr(ext, "_instanced_arrays");
-        _sg_gl.features[SG_FEATURE_TEXTURE_FLOAT] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] =
             strstr(ext, "_texture_float");
-        _sg_gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] =
             strstr(ext, "_texture_half_float");
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
             strstr(ext, "_texture_compression_s3tc") ||
             strstr(ext, "_compressed_texture_s3tc") ||
             strstr(ext, "texture_compression_dxt1");
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
             strstr(ext, "_texture_compression_pvrtc") ||
             strstr(ext, "_compressed_texture_pvrtc");
-        _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
+        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
             strstr(ext, "_compressed_texture_atc");
-        _sg_gl.ext_anisotropic =
+        _sg.gl.ext_anisotropic =
             strstr(ext, "_texture_filter_anisotropic");
     #endif
-    _sg_gl.max_anisotropy = 1;
-    if (_sg_gl.ext_anisotropic) {
-        glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &_sg_gl.max_anisotropy);
+    _sg.gl.max_anisotropy = 1;
+    if (_sg.gl.ext_anisotropic) {
+        glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &_sg.gl.max_anisotropy);
     }
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
-    SOKOL_ASSERT(_sg_gl.valid);
-    _sg_gl.valid = false;
+    SOKOL_ASSERT(_sg.gl.valid);
+    _sg.gl.valid = false;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
-    if (_sg_gl.cur_context) {
+    if (_sg.gl.cur_context) {
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl.gles2) {
+        if (!_sg.gl.gles2) {
             _SG_GL_CHECK_ERROR();
-            glBindVertexArray(_sg_gl.cur_context->vao);
+            glBindVertexArray(_sg.gl.cur_context->vao);
             _SG_GL_CHECK_ERROR();
         }
         #endif
-        _sg_gl_reset_state_cache(&_sg_gl.cache);
+        _sg_gl_reset_state_cache(&_sg.gl.cache);
     }
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
-    return _sg_gl.features[f];
+    return _sg.gl.features[f];
 }
 
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context* ctx) {
-    SOKOL_ASSERT(_sg_gl.valid);
+    SOKOL_ASSERT(_sg.gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
-    _sg_gl.cur_context = ctx;
+    _sg.gl.cur_context = ctx;
     _sg_reset_state_cache();
 }
 
@@ -3720,7 +3701,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl.gles2) {
+    if (!_sg.gl.gles2) {
         SOKOL_ASSERT(0 == ctx->vao);
         glGenVertexArrays(1, &ctx->vao);
         glBindVertexArray(ctx->vao);
@@ -3733,7 +3714,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context* ctx) {
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context* ctx) {
     SOKOL_ASSERT(ctx);
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl.gles2) {
+    if (!_sg.gl.gles2) {
         if (ctx->vao) {
             glDeleteVertexArrays(1, &ctx->vao);
         }
@@ -3765,7 +3746,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buf
         }
         else {
             glGenBuffers(1, &gl_buf);
-            _sg_gl_bind_buffer(gl_target, gl_buf, &_sg_gl.cache);
+            _sg_gl_bind_buffer(gl_target, gl_buf, &_sg.gl.cache);
             glBufferData(gl_target, buf->size, 0, gl_usage);
             if (buf->usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->content);
@@ -3796,15 +3777,15 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_DXT1:
         case SG_PIXELFORMAT_DXT3:
         case SG_PIXELFORMAT_DXT5:
-            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
+            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
         case SG_PIXELFORMAT_PVRTC2_RGB:
         case SG_PIXELFORMAT_PVRTC4_RGB:
         case SG_PIXELFORMAT_PVRTC2_RGBA:
         case SG_PIXELFORMAT_PVRTC4_RGBA:
-            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
+            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
         case SG_PIXELFORMAT_ETC2_RGB8:
         case SG_PIXELFORMAT_ETC2_SRGB8:
-            return _sg_gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
+            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
         default:
             return true;
     }
@@ -3836,11 +3817,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         return SG_RESOURCESTATE_FAILED;
     }
     /* check for optional texture types */
-    if ((img->type == SG_IMAGETYPE_3D) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_3D]) {
+    if ((img->type == SG_IMAGETYPE_3D) && !_sg.gl.features[SG_FEATURE_IMAGETYPE_3D]) {
         SOKOL_LOG("3D textures not supported by GL context\n");
         return SG_RESOURCESTATE_FAILED;
     }
-    if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg_gl.features[SG_FEATURE_IMAGETYPE_ARRAY]) {
+    if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY]) {
         SOKOL_LOG("array textures not supported by GL context\n");
         return SG_RESOURCESTATE_FAILED;
     }
@@ -3852,8 +3833,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
 
     #if !defined(SOKOL_GLES2)
     bool msaa = false;
-    if (!_sg_gl.gles2) {
-        msaa = (img->sample_count > 1) && (_sg_gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+    if (!_sg.gl.gles2) {
+        msaa = (img->sample_count > 1) && (_sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
     }
     #endif
 
@@ -3865,7 +3846,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
         glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
         GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->pixel_format);
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl.gles2 && msaa) {
+        if (!_sg.gl.gles2 && msaa) {
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_depth_format, img->width, img->height);
         }
         else
@@ -3881,7 +3862,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
 
         /* if this is a MSAA render target, need to create a separate render buffer */
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl.gles2 && img->render_target && msaa) {
+        if (!_sg.gl.gles2 && img->render_target && msaa) {
             glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
             glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->sample_count, gl_internal_format, img->width, img->height);
@@ -3907,10 +3888,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                 GLenum gl_mag_filter = _sg_gl_filter(img->mag_filter);
                 glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
                 glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
-                if (_sg_gl.ext_anisotropic && (img->max_anisotropy > 1)) {
+                if (_sg.gl.ext_anisotropic && (img->max_anisotropy > 1)) {
                     GLint max_aniso = (GLint) img->max_anisotropy;
-                    if (max_aniso > _sg_gl.max_anisotropy) {
-                        max_aniso = _sg_gl.max_anisotropy;
+                    if (max_aniso > _sg.gl.max_anisotropy) {
+                        max_aniso = _sg.gl.max_anisotropy;
                     }
                     glTexParameteri(img->gl_target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
                 }
@@ -3922,13 +3903,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->wrap_u));
                     glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->wrap_v));
                     #if !defined(SOKOL_GLES2)
-                    if (!_sg_gl.gles2 && (img->type == SG_IMAGETYPE_3D)) {
+                    if (!_sg.gl.gles2 && (img->type == SG_IMAGETYPE_3D)) {
                         glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                     }
                     #endif
                 }
                 #if !defined(SOKOL_GLES2)
-                    if (!_sg_gl.gles2) {
+                    if (!_sg.gl.gles2) {
                         /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
                         const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
                         const float max_lod = _sg_clamp(_sg_def_flt(desc->max_lod, 1000.0f), 0.0f, 1000.0f);
@@ -3966,7 +3947,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                             }
                         }
                         #if !defined(SOKOL_GLES2)
-                        else if (!_sg_gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
+                        else if (!_sg.gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                             int mip_depth = img->depth;
                             if (SG_IMAGETYPE_3D == img->type) {
                                 mip_depth >>= mip_index;
@@ -4361,7 +4342,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
                     default:
                         /* 3D- or array-texture */
                         #if !defined(SOKOL_GLES2)
-                        if (!_sg_gl.gles2) {
+                        if (!_sg.gl.gles2) {
                             glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att, gl_tex, mip_level, slice);
                         }
                         #endif
@@ -4408,7 +4389,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass* pass, _sg_image** att
                         break;
                     default:
                         #if !defined(SOKOL_GLES2)
-                        if (!_sg_gl.gles2) {
+                        if (!_sg.gl.gles2) {
                             glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gl_tex, att->mip_level, att->slice);
                         }
                         #endif
@@ -4451,24 +4432,24 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     /* FIXME: what if a texture used as render target is still bound, should we
        unbind all currently bound textures in begin pass? */
     SOKOL_ASSERT(action);
-    SOKOL_ASSERT(!_sg_gl.in_pass);
+    SOKOL_ASSERT(!_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
-    _sg_gl.in_pass = true;
-    _sg_gl.cur_pass = pass; /* can be 0 */
+    _sg.gl.in_pass = true;
+    _sg.gl.cur_pass = pass; /* can be 0 */
     if (pass) {
-        _sg_gl.cur_pass_id.id = pass->slot.id;
+        _sg.gl.cur_pass_id.id = pass->slot.id;
     }
     else {
-        _sg_gl.cur_pass_id.id = SG_INVALID_ID;
+        _sg.gl.cur_pass_id.id = SG_INVALID_ID;
     }
-    _sg_gl.cur_pass_width = w;
-    _sg_gl.cur_pass_height = h;
+    _sg.gl.cur_pass_width = w;
+    _sg.gl.cur_pass_height = h;
     if (pass) {
         /* offscreen pass */
         SOKOL_ASSERT(pass->gl_fb);
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
         #if !defined(SOKOL_GLES2)
-        if (!_sg_gl.gles2) {
+        if (!_sg.gl.gles2) {
             GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
                 GL_COLOR_ATTACHMENT0,
                 GL_COLOR_ATTACHMENT1,
@@ -4490,43 +4471,43 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     }
     else {
         /* default pass */
-        SOKOL_ASSERT(_sg_gl.cur_context);
-        glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.cur_context->default_framebuffer);
+        SOKOL_ASSERT(_sg.gl.cur_context);
+        glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
     }
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
     bool need_pip_cache_flush = false;
-    if (_sg_gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
+    if (_sg.gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
         need_pip_cache_flush = true;
-        _sg_gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
+        _sg.gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     }
-    if (!_sg_gl.cache.ds.depth_write_enabled) {
+    if (!_sg.gl.cache.ds.depth_write_enabled) {
         need_pip_cache_flush = true;
-        _sg_gl.cache.ds.depth_write_enabled = true;
+        _sg.gl.cache.ds.depth_write_enabled = true;
         glDepthMask(GL_TRUE);
     }
-    if (_sg_gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
+    if (_sg.gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
         need_pip_cache_flush = true;
-        _sg_gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+        _sg.gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
         glDepthFunc(GL_ALWAYS);
     }
-    if (_sg_gl.cache.ds.stencil_write_mask != 0xFF) {
+    if (_sg.gl.cache.ds.stencil_write_mask != 0xFF) {
         need_pip_cache_flush = true;
-        _sg_gl.cache.ds.stencil_write_mask = 0xFF;
+        _sg.gl.cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
     }
     if (need_pip_cache_flush) {
         /* we messed with the state cache directly, need to clear cached
            pipeline to force re-evaluation in next sg_apply_pipeline() */
-        _sg_gl.cache.cur_pipeline = 0;
-        _sg_gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+        _sg.gl.cache.cur_pipeline = 0;
+        _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
     bool use_mrt_clear = (0 != pass);
     #if defined(SOKOL_GLES2)
     use_mrt_clear = false;
     #else
-    if (_sg_gl.gles2) {
+    if (_sg.gl.gles2) {
         use_mrt_clear = false;
     }
     #endif
@@ -4584,17 +4565,17 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
 }
 
 _SOKOL_PRIVATE void _sg_end_pass(void) {
-    SOKOL_ASSERT(_sg_gl.in_pass);
+    SOKOL_ASSERT(_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
     /* if this was an offscreen pass, and MSAA rendering was used, need
        to resolve into the pass images */
     #if !defined(SOKOL_GLES2)
-    if (!_sg_gl.gles2 && _sg_gl.cur_pass) {
+    if (!_sg.gl.gles2 && _sg.gl.cur_pass) {
         /* check if the pass object is still valid */
-        const _sg_pass* pass = _sg_gl.cur_pass;
-        SOKOL_ASSERT(pass->slot.id == _sg_gl.cur_pass_id.id);
-        bool is_msaa = (0 != _sg_gl.cur_pass->color_atts[0].gl_msaa_resolve_buffer);
+        const _sg_pass* pass = _sg.gl.cur_pass;
+        SOKOL_ASSERT(pass->slot.id == _sg.gl.cur_pass_id.id);
+        bool is_msaa = (0 != _sg.gl.cur_pass->color_atts[0].gl_msaa_resolve_buffer);
         if (is_msaa) {
             SOKOL_ASSERT(pass->gl_fb);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->gl_fb);
@@ -4618,26 +4599,26 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
         }
     }
     #endif
-    _sg_gl.cur_pass = 0;
-    _sg_gl.cur_pass_id.id = SG_INVALID_ID;
-    _sg_gl.cur_pass_width = 0;
-    _sg_gl.cur_pass_height = 0;
+    _sg.gl.cur_pass = 0;
+    _sg.gl.cur_pass_id.id = SG_INVALID_ID;
+    _sg.gl.cur_pass_width = 0;
+    _sg.gl.cur_pass_height = 0;
 
-    SOKOL_ASSERT(_sg_gl.cur_context);
-    glBindFramebuffer(GL_FRAMEBUFFER, _sg_gl.cur_context->default_framebuffer);
-    _sg_gl.in_pass = false;
+    SOKOL_ASSERT(_sg.gl.cur_context);
+    glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
+    _sg.gl.in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg_gl.in_pass);
-    y = origin_top_left ? (_sg_gl.cur_pass_height - (y+h)) : y;
+    SOKOL_ASSERT(_sg.gl.in_pass);
+    y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
     glViewport(x, y, w, h);
 }
 
 _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    SOKOL_ASSERT(_sg_gl.in_pass);
-    y = origin_top_left ? (_sg_gl.cur_pass_height - (y+h)) : y;
+    SOKOL_ASSERT(_sg.gl.in_pass);
+    y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
     glScissor(x, y, w, h);
 }
 
@@ -4645,15 +4626,15 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     _SG_GL_CHECK_ERROR();
-    if ((_sg_gl.cache.cur_pipeline != pip) || (_sg_gl.cache.cur_pipeline_id.id != pip->slot.id)) {
-        _sg_gl.cache.cur_pipeline = pip;
-        _sg_gl.cache.cur_pipeline_id.id = pip->slot.id;
-        _sg_gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
-        _sg_gl.cache.cur_index_type = _sg_gl_index_type(pip->index_type);
+    if ((_sg.gl.cache.cur_pipeline != pip) || (_sg.gl.cache.cur_pipeline_id.id != pip->slot.id)) {
+        _sg.gl.cache.cur_pipeline = pip;
+        _sg.gl.cache.cur_pipeline_id.id = pip->slot.id;
+        _sg.gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
+        _sg.gl.cache.cur_index_type = _sg_gl_index_type(pip->index_type);
 
         /* update depth-stencil state */
         const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
-        sg_depth_stencil_state* cache_ds = &_sg_gl.cache.ds;
+        sg_depth_stencil_state* cache_ds = &_sg.gl.cache.ds;
         if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
             cache_ds->depth_compare_func = new_ds->depth_compare_func;
             glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
@@ -4703,7 +4684,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
 
         /* update blend state */
         const sg_blend_state* new_b = &pip->blend;
-        sg_blend_state* cache_b = &_sg_gl.cache.blend;
+        sg_blend_state* cache_b = &_sg.gl.cache.blend;
         if (new_b->enabled != cache_b->enabled) {
             cache_b->enabled = new_b->enabled;
             if (new_b->enabled) glEnable(GL_BLEND);
@@ -4749,7 +4730,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
 
         /* update rasterizer state */
         const sg_rasterizer_state* new_r = &pip->rast;
-        sg_rasterizer_state* cache_r = &_sg_gl.cache.rast;
+        sg_rasterizer_state* cache_r = &_sg.gl.cache.rast;
         if (new_r->cull_mode != cache_r->cull_mode) {
             cache_r->cull_mode = new_r->cull_mode;
             if (SG_CULLMODE_NONE == new_r->cull_mode) {
@@ -4795,8 +4776,8 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
             {
                 po_enabled = false;
             }
-            if (po_enabled != _sg_gl.cache.polygon_offset_enabled) {
-                _sg_gl.cache.polygon_offset_enabled = po_enabled;
+            if (po_enabled != _sg.gl.cache.polygon_offset_enabled) {
+                _sg.gl.cache.polygon_offset_enabled = po_enabled;
                 if (po_enabled) glEnable(GL_POLYGON_OFFSET_FILL);
                 else glDisable(GL_POLYGON_OFFSET_FILL);
             }
@@ -4843,13 +4824,13 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
 
     /* index buffer (can be 0) */
     const GLuint gl_ib = ib ? ib->gl_buf[ib->active_slot] : 0;
-    _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, &_sg_gl.cache);
-    _sg_gl.cache.cur_ib_offset = ib_offset;
+    _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, &_sg.gl.cache);
+    _sg.gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         _sg_gl_attr* attr = &pip->gl_attrs[attr_index];
-        _sg_gl_cache_attr* cache_attr = &_sg_gl.cache.attrs[attr_index];
+        _sg_gl_cache_attr* cache_attr = &_sg.gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
         int vb_offset = 0;
         GLuint gl_vb = 0;
@@ -4868,12 +4849,12 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
-                _sg_gl_bind_buffer(GL_ARRAY_BUFFER, gl_vb, &_sg_gl.cache);
+                _sg_gl_bind_buffer(GL_ARRAY_BUFFER, gl_vb, &_sg.gl.cache);
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
                 #ifdef SOKOL_INSTANCING_ENABLED
-                    if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
+                    if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
                         glVertexAttribDivisor(attr_index, attr->divisor);
                     }
                 #endif
@@ -4904,10 +4885,10 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline);
-    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline->slot.id == _sg_gl.cache.cur_pipeline_id.id);
-    SOKOL_ASSERT(_sg_gl.cache.cur_pipeline->shader->slot.id == _sg_gl.cache.cur_pipeline->shader_id.id);
-    _sg_shader_stage* stage = &_sg_gl.cache.cur_pipeline->shader->stage[stage_index];
+    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
+    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->slot.id == _sg.gl.cache.cur_pipeline_id.id);
+    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->slot.id == _sg.gl.cache.cur_pipeline->shader_id.id);
+    _sg_shader_stage* stage = &_sg.gl.cache.cur_pipeline->shader->stage[stage_index];
     SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
     _sg_uniform_block* ub = &stage->uniform_blocks[ub_index];
     SOKOL_ASSERT(ub->size == num_bytes);
@@ -4944,18 +4925,18 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
 }
 
 _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
-    const GLenum i_type = _sg_gl.cache.cur_index_type;
-    const GLenum p_type = _sg_gl.cache.cur_primitive_type;
+    const GLenum i_type = _sg.gl.cache.cur_index_type;
+    const GLenum p_type = _sg.gl.cache.cur_primitive_type;
     if (0 != i_type) {
         /* indexed rendering */
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
-        const int ib_offset = _sg_gl.cache.cur_ib_offset;
+        const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
         if (num_instances == 1) {
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
+            if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
         }
@@ -4966,7 +4947,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            if (_sg_gl.features[SG_FEATURE_INSTANCING]) {
+            if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
         }
@@ -4974,7 +4955,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 }
 
 _SOKOL_PRIVATE void _sg_commit(void) {
-    SOKOL_ASSERT(!_sg_gl.in_pass);
+    SOKOL_ASSERT(!_sg.gl.in_pass);
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int data_size) {
@@ -4988,7 +4969,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data_ptr, int
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
-    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg_gl.cache);
+    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg.gl.cache);
     glBufferSubData(gl_tgt, 0, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
 }
@@ -5005,7 +4986,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data_ptr, int
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
-    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg_gl.cache);
+    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg.gl.cache);
     glBufferSubData(gl_tgt, buf->append_pos, data_size, data_ptr);
     _SG_GL_CHECK_ERROR();
 }
@@ -5046,7 +5027,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
                     data_ptr);
             }
             #if !defined(SOKOL_GLES2)
-            else if (!_sg_gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
+            else if (!_sg.gl.gles2 && ((SG_IMAGETYPE_3D == img->type) || (SG_IMAGETYPE_ARRAY == img->type))) {
                 int mip_depth = img->depth >> mip_index;
                 if (mip_depth == 0) {
                     mip_depth = 1;
