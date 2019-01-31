@@ -2115,7 +2115,7 @@ typedef struct {
 #elif defined(SOKOL_D3D11)
 
 typedef struct {
-    _sg_slot slot;
+    _sg_slot_t slot;
     int size;
     int append_pos;
     bool append_overflow;
@@ -2127,7 +2127,7 @@ typedef struct {
 } _sg_buffer_t;
 
 typedef struct {
-    _sg_slot slot;
+    _sg_slot_t slot;
     sg_image_type type;
     bool render_target;
     int width;
