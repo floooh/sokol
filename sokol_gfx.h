@@ -2262,7 +2262,9 @@ enum {
     _SG_MTL_INVALID_SLOT_INDEX = 0
 };
 
-/* Metal object-id pool */
+/* Metal object-id pool, NOTE that there's also a NSMutableArray* in the 
+    _sg_objc_t struct which can't be part of the POD C structs
+*/
 typedef struct {
     uint32_t frame_index;   /* frame index at which it is safe to release this resource */
     uint32_t slot_index;
@@ -2444,6 +2446,7 @@ typedef struct {
     id<MTLRenderCommandEncoder> cmd_encoder;
     dispatch_semaphore_t sem;
 } _sg_objc_t;
+
 static _sg_objc_t _sg_objc;
 
 #endif /* SOKOL_METAL */
