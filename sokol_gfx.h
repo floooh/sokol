@@ -2262,8 +2262,6 @@ enum {
     _SG_MTL_INVALID_SLOT_INDEX = 0
 };
 
-/* FIXME: merge all the following stuff into structs */
-
 /* Metal object-id pool */
 typedef struct {
     uint32_t frame_index;   /* frame index at which it is safe to release this resource */
@@ -2277,10 +2275,7 @@ typedef struct {
     uint32_t release_queue_front;
     uint32_t release_queue_back;
     _sg_mtl_release_item_t* release_queue;
-    NSMutableArray* slots;
 } _sg_mtl_idpool_t;
-
-_sg_mtl_idpool_t _sg_mtl_idpool;
 
 /* Metal sampler cache */
 typedef struct {
@@ -2300,8 +2295,6 @@ typedef struct {
     int num_items;
     _sg_mtl_sampler_cache_item_t* items;
 } _sg_mtl_sampler_cache_t;
-
-_sg_mtl_sampler_cache_t _sg_mtl_sampler_cache;
 
 typedef struct {
     _sg_slot slot;
@@ -2423,14 +2416,6 @@ typedef struct {
     sg_image cur_fs_image_ids[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_mtl_state_cache_t;
 
-/* main Metal backend state, FIXME: merge into struct, and with all of the above! */
-static id<MTLDevice> _sg_mtl_device;
-static id<MTLCommandQueue> _sg_mtl_cmd_queue;
-static id<MTLCommandBuffer> _sg_mtl_cmd_buffer;
-static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
-static id<MTLRenderCommandEncoder> _sg_mtl_cmd_encoder;
-static dispatch_semaphore_t _sg_mtl_sem;
-
 typedef struct {
     bool valid;
     const void*(*renderpass_descriptor_cb)(void);
@@ -2445,7 +2430,21 @@ typedef struct {
     int cur_width;
     int cur_height;
     _sg_mtl_state_cache_t state_cache;
+    _sg_mtl_sampler_cache_t sampler_cache;
+    _sg_mtl_idpool_t idpool;
 } _sg_mtl_backend_t;
+
+/* keep Objective-C 'smart data' in a separate static object, these can't be memset */
+typedef struct {
+    NSMutableArray* idpool;
+    id<MTLDevice> device;
+    id<MTLCommandQueue> cmd_queue;
+    id<MTLCommandBuffer> cmd_buffer;
+    id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
+    id<MTLRenderCommandEncoder> cmd_encoder;
+    dispatch_semaphore_t sem;
+} _sg_objc_t;
+static _sg_objc_t _sg_objc;
 
 #endif /* SOKOL_METAL */
 
@@ -6719,7 +6718,7 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
 /*-- a pool for all Metal resource objects, with deferred release queue -------*/
 
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
-    _sg_mtl_idpool.num_slots = 2 *
+    _sg.mtl.idpool.num_slots = 2 *
         (
             2 * _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
             5 * _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
@@ -6727,51 +6726,51 @@ _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
             2 * _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
             _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE)
         );
-    _sg_mtl_idpool.slots = [NSMutableArray arrayWithCapacity:_sg_mtl_idpool.num_slots];
+    _sg_objc.idpool = [NSMutableArray arrayWithCapacity:_sg.mtl.idpool.num_slots];
     NSNull* null = [NSNull null];
-    for (uint32_t i = 0; i < _sg_mtl_idpool.num_slots; i++) {
-        [_sg_mtl_idpool.slots addObject:null];
+    for (uint32_t i = 0; i < _sg.mtl.idpool.num_slots; i++) {
+        [_sg_objc.idpool addObject:null];
     }
-    SOKOL_ASSERT([_sg_mtl_idpool.slots count] == _sg_mtl_idpool.num_slots);
+    SOKOL_ASSERT([_sg_objc.idpool count] == _sg.mtl.idpool.num_slots);
     /* a queue of currently free slot indices */
-    _sg_mtl_idpool.free_queue_top = 0;
-    _sg_mtl_idpool.free_queue = (uint32_t*)SOKOL_MALLOC(_sg_mtl_idpool.num_slots * sizeof(uint32_t));
+    _sg.mtl.idpool.free_queue_top = 0;
+    _sg.mtl.idpool.free_queue = (uint32_t*)SOKOL_MALLOC(_sg.mtl.idpool.num_slots * sizeof(uint32_t));
     /* pool slot 0 is reserved! */
-    for (int i = _sg_mtl_idpool.num_slots-1; i >= 1; i--) {
-        _sg_mtl_idpool.free_queue[_sg_mtl_idpool.free_queue_top++] = (uint32_t)i;
+    for (int i = _sg.mtl.idpool.num_slots-1; i >= 1; i--) {
+        _sg.mtl.idpool.free_queue[_sg.mtl.idpool.free_queue_top++] = (uint32_t)i;
     }
     /* a circular queue which holds release items (frame index
        when a resource is to be released, and the resource's
        pool index
     */
-    _sg_mtl_idpool.release_queue_front = 0;
-    _sg_mtl_idpool.release_queue_back = 0;
-    _sg_mtl_idpool.release_queue = (_sg_mtl_release_item_t*)SOKOL_MALLOC(_sg_mtl_idpool.num_slots * sizeof(_sg_mtl_release_item_t));
-    for (uint32_t i = 0; i < _sg_mtl_idpool.num_slots; i++) {
-        _sg_mtl_idpool.release_queue[i].frame_index = 0;
-        _sg_mtl_idpool.release_queue[i].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
+    _sg.mtl.idpool.release_queue_front = 0;
+    _sg.mtl.idpool.release_queue_back = 0;
+    _sg.mtl.idpool.release_queue = (_sg_mtl_release_item_t*)SOKOL_MALLOC(_sg.mtl.idpool.num_slots * sizeof(_sg_mtl_release_item_t));
+    for (uint32_t i = 0; i < _sg.mtl.idpool.num_slots; i++) {
+        _sg.mtl.idpool.release_queue[i].frame_index = 0;
+        _sg.mtl.idpool.release_queue[i].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
     }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_pool(void) {
-    SOKOL_FREE(_sg_mtl_idpool.release_queue);  _sg_mtl_idpool.release_queue = 0;
-    SOKOL_FREE(_sg_mtl_idpool.free_queue);     _sg_mtl_idpool.free_queue = 0;
-    _sg_mtl_idpool.slots = nil;
+    SOKOL_FREE(_sg.mtl.idpool.release_queue);  _sg.mtl.idpool.release_queue = 0;
+    SOKOL_FREE(_sg.mtl.idpool.free_queue);     _sg.mtl.idpool.free_queue = 0;
+    _sg_objc.idpool = nil;
 }
 
 /* get a new free resource pool slot */
 _SOKOL_PRIVATE uint32_t _sg_mtl_alloc_pool_slot(void) {
-    SOKOL_ASSERT(_sg_mtl_idpool.free_queue_top > 0);
-    const uint32_t slot_index = _sg_mtl_idpool.free_queue[--_sg_mtl_idpool.free_queue_top];
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
+    SOKOL_ASSERT(_sg.mtl.idpool.free_queue_top > 0);
+    const uint32_t slot_index = _sg.mtl.idpool.free_queue[--_sg.mtl.idpool.free_queue_top];
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
     return slot_index;
 }
 
 /* put a free resource pool slot back into the free-queue */
 _SOKOL_PRIVATE void _sg_mtl_free_pool_slot(uint32_t slot_index) {
-    SOKOL_ASSERT(_sg_mtl_idpool.free_queue_top < _sg_mtl_idpool.num_slots);
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
-    _sg_mtl_idpool.free_queue[_sg_mtl_idpool.free_queue_top++] = slot_index;
+    SOKOL_ASSERT(_sg.mtl.idpool.free_queue_top < _sg.mtl.idpool.num_slots);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
+    _sg.mtl.idpool.free_queue[_sg.mtl.idpool.free_queue_top++] = slot_index;
 }
 
 /*  add an MTLResource to the pool, return pool index or 0 if input was 'nil' */
@@ -6780,8 +6779,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_add_resource(id res) {
         return _SG_MTL_INVALID_SLOT_INDEX;
     }
     const uint32_t slot_index = _sg_mtl_alloc_pool_slot();
-    SOKOL_ASSERT([NSNull null] == _sg_mtl_idpool.slots[slot_index]);
-    _sg_mtl_idpool.slots[slot_index] = res;
+    SOKOL_ASSERT([NSNull null] == _sg_objc.idpool[slot_index]);
+    _sg_objc.idpool[slot_index] = res;
     return slot_index;
 }
 
@@ -6794,42 +6793,42 @@ _SOKOL_PRIVATE void _sg_mtl_release_resource(uint32_t frame_index, uint32_t slot
     if (slot_index == _SG_MTL_INVALID_SLOT_INDEX) {
         return;
     }
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
-    SOKOL_ASSERT([NSNull null] != _sg_mtl_idpool.slots[slot_index]);
-    int release_index = _sg_mtl_idpool.release_queue_front++;
-    if (_sg_mtl_idpool.release_queue_front >= _sg_mtl_idpool.num_slots) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
+    SOKOL_ASSERT([NSNull null] != _sg_objc.idpool[slot_index]);
+    int release_index = _sg.mtl.idpool.release_queue_front++;
+    if (_sg.mtl.idpool.release_queue_front >= _sg.mtl.idpool.num_slots) {
         /* wrap-around */
-        _sg_mtl_idpool.release_queue_front = 0;
+        _sg.mtl.idpool.release_queue_front = 0;
     }
     /* release queue full? */
-    SOKOL_ASSERT(_sg_mtl_idpool.release_queue_front != _sg_mtl_idpool.release_queue_back);
-    SOKOL_ASSERT(0 == _sg_mtl_idpool.release_queue[release_index].frame_index);
+    SOKOL_ASSERT(_sg.mtl.idpool.release_queue_front != _sg.mtl.idpool.release_queue_back);
+    SOKOL_ASSERT(0 == _sg.mtl.idpool.release_queue[release_index].frame_index);
     const uint32_t safe_to_release_frame_index = frame_index + SG_NUM_INFLIGHT_FRAMES + 1;
-    _sg_mtl_idpool.release_queue[release_index].frame_index = safe_to_release_frame_index;
-    _sg_mtl_idpool.release_queue[release_index].slot_index = slot_index;
+    _sg.mtl.idpool.release_queue[release_index].frame_index = safe_to_release_frame_index;
+    _sg.mtl.idpool.release_queue[release_index].slot_index = slot_index;
 }
 
 /* run garbage-collection pass on all resources in the release-queue */
 _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
-    while (_sg_mtl_idpool.release_queue_back != _sg_mtl_idpool.release_queue_front) {
-        if (frame_index < _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].frame_index) {
+    while (_sg.mtl.idpool.release_queue_back != _sg.mtl.idpool.release_queue_front) {
+        if (frame_index < _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].frame_index) {
             /* don't need to check further, release-items past this are too young */
             break;
         }
         /* safe to release this resource */
-        const uint32_t slot_index = _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].slot_index;
-        SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg_mtl_idpool.num_slots));
-        SOKOL_ASSERT(_sg_mtl_idpool.slots[slot_index] != [NSNull null]);
-        _sg_mtl_idpool.slots[slot_index] = [NSNull null];
+        const uint32_t slot_index = _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].slot_index;
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
+        SOKOL_ASSERT(_sg_objc.idpool[slot_index] != [NSNull null]);
+        _sg_objc.idpool[slot_index] = [NSNull null];
         /* put the now free pool index back on the free queue */
         _sg_mtl_free_pool_slot(slot_index);
         /* reset the release queue slot and advance the back index */
-        _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].frame_index = 0;
-        _sg_mtl_idpool.release_queue[_sg_mtl_idpool.release_queue_back].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
-        _sg_mtl_idpool.release_queue_back++;
-        if (_sg_mtl_idpool.release_queue_back >= _sg_mtl_idpool.num_slots) {
+        _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].frame_index = 0;
+        _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].slot_index = _SG_MTL_INVALID_SLOT_INDEX;
+        _sg.mtl.idpool.release_queue_back++;
+        if (_sg.mtl.idpool.release_queue_back >= _sg.mtl.idpool.num_slots) {
             /* wrap-around */
-            _sg_mtl_idpool.release_queue_back = 0;
+            _sg.mtl.idpool.release_queue_back = 0;
         }
     }
 }
@@ -6842,23 +6841,23 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 */
 /* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    _sg_mtl_sampler_cache.capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg_mtl_sampler_cache.num_items = 0;
-    const int size = _sg_mtl_sampler_cache.capacity * sizeof(_sg_mtl_sampler_cache_item_t);
-    _sg_mtl_sampler_cache.items = (_sg_mtl_sampler_cache_item_t*)SOKOL_MALLOC(size);
-    memset(_sg_mtl_sampler_cache.items, 0, size);
+    _sg.mtl.sampler_cache.capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.mtl.sampler_cache.num_items = 0;
+    const int size = _sg.mtl.sampler_cache.capacity * sizeof(_sg_mtl_sampler_cache_item_t);
+    _sg.mtl.sampler_cache.items = (_sg_mtl_sampler_cache_item_t*)SOKOL_MALLOC(size);
+    memset(_sg.mtl.sampler_cache.items, 0, size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
 _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
-    SOKOL_ASSERT(_sg_mtl_sampler_cache.items);
-    SOKOL_ASSERT(_sg_mtl_sampler_cache.num_items <= _sg_mtl_sampler_cache.capacity);
-    for (int i = 0; i < _sg_mtl_sampler_cache.num_items; i++) {
-        _sg_mtl_release_resource(frame_index, _sg_mtl_sampler_cache.items[i].mtl_sampler_state);
+    SOKOL_ASSERT(_sg.mtl.sampler_cache.items);
+    SOKOL_ASSERT(_sg.mtl.sampler_cache.num_items <= _sg.mtl.sampler_cache.capacity);
+    for (int i = 0; i < _sg.mtl.sampler_cache.num_items; i++) {
+        _sg_mtl_release_resource(frame_index, _sg.mtl.sampler_cache.items[i].mtl_sampler_state);
     }
-    SOKOL_FREE(_sg_mtl_sampler_cache.items); _sg_mtl_sampler_cache.items = 0;
-    _sg_mtl_sampler_cache.num_items = 0;
-    _sg_mtl_sampler_cache.capacity = 0;
+    SOKOL_FREE(_sg.mtl.sampler_cache.items); _sg.mtl.sampler_cache.items = 0;
+    _sg.mtl.sampler_cache.num_items = 0;
+    _sg.mtl.sampler_cache.capacity = 0;
 }
 
 /*
@@ -6867,7 +6866,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
 */
 _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const sg_image_desc* img_desc) {
     SOKOL_ASSERT(img_desc);
-    SOKOL_ASSERT(_sg_mtl_sampler_cache.items);
+    SOKOL_ASSERT(_sg.mtl.sampler_cache.items);
     /* sampler state cache is full */
     const sg_filter min_filter = _sg_def(img_desc->min_filter, SG_FILTER_NEAREST);
     const sg_filter mag_filter = _sg_def(img_desc->mag_filter, SG_FILTER_NEAREST);
@@ -6879,8 +6878,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     const int min_lod = (int)(img_desc->min_lod * 1000.0f);
     const int max_lod = (int)(_sg_def_flt(img_desc->max_lod, 1000.0f) * 1000.0f);
     /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
-    for (int i = 0; i < _sg_mtl_sampler_cache.num_items; i++) {
-        _sg_mtl_sampler_cache_item_t* item = &_sg_mtl_sampler_cache.items[i];
+    for (int i = 0; i < _sg.mtl.sampler_cache.num_items; i++) {
+        _sg_mtl_sampler_cache_item_t* item = &_sg.mtl.sampler_cache.items[i];
         if ((min_filter == item->min_filter) &&
             (mag_filter == item->mag_filter) &&
             (wrap_u == item->wrap_u) &&
@@ -6894,8 +6893,8 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
         }
     }
     /* fallthrough: need to create a new MTLSamplerState object */
-    SOKOL_ASSERT(_sg_mtl_sampler_cache.num_items < _sg_mtl_sampler_cache.capacity);
-    _sg_mtl_sampler_cache_item_t* new_item = &_sg_mtl_sampler_cache.items[_sg_mtl_sampler_cache.num_items++];
+    SOKOL_ASSERT(_sg.mtl.sampler_cache.num_items < _sg.mtl.sampler_cache.capacity);
+    _sg_mtl_sampler_cache_item_t* new_item = &_sg.mtl.sampler_cache.items[_sg.mtl.sampler_cache.num_items++];
     new_item->min_filter = min_filter;
     new_item->mag_filter = mag_filter;
     new_item->wrap_u = wrap_u;
@@ -6942,15 +6941,15 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg.mtl.drawable_cb = desc->mtl_drawable_cb;
     _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
-    _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl_device;
-    _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
+    _sg_objc.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
+    _sg_objc.device = (__bridge id<MTLDevice>) desc->mtl_device;
+    _sg_objc.cmd_queue = [_sg_objc.device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     res_opts |= MTLResourceStorageModeManaged;
     #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        _sg_mtl_uniform_buffers[i] = [_sg_mtl_device
+        _sg_objc.uniform_buffers[i] = [_sg_objc.device
             newBufferWithLength:_sg.mtl.ub_size
             options:res_opts
         ];
@@ -6961,19 +6960,19 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     SOKOL_ASSERT(_sg.mtl.valid);
     /* wait for the last frame to finish */
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
+        dispatch_semaphore_wait(_sg_objc.sem, DISPATCH_TIME_FOREVER);
     }
     _sg_mtl_destroy_sampler_cache(_sg.mtl.frame_index);
     _sg_mtl_garbage_collect(_sg.mtl.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg.mtl.valid = false;
-    _sg_mtl_cmd_encoder = nil;
-    _sg_mtl_cmd_buffer = nil;
-    _sg_mtl_cmd_queue = nil;
+    _sg_objc.cmd_encoder = nil;
+    _sg_objc.cmd_buffer = nil;
+    _sg_objc.cmd_queue = nil;
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        _sg_mtl_uniform_buffers[i] = nil;
+        _sg_objc.uniform_buffers[i] = nil;
     }
-    _sg_mtl_device = nil;
+    _sg_objc.device = nil;
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -7040,10 +7039,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer* buf, const sg_buf
         else {
             if (buf->usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->content);
-                mtl_buf = [_sg_mtl_device newBufferWithBytes:desc->content length:buf->size options:mtl_options];
+                mtl_buf = [_sg_objc.device newBufferWithBytes:desc->content length:buf->size options:mtl_options];
             }
             else {
-                mtl_buf = [_sg_mtl_device newBufferWithLength:buf->size options:mtl_options];
+                mtl_buf = [_sg_objc.device newBufferWithLength:buf->size options:mtl_options];
             }
         }
         buf->mtl_buf[slot] = _sg_mtl_add_resource(mtl_buf);
@@ -7181,7 +7180,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
             mtl_desc.textureType = MTLTextureType2DMultisample;
             mtl_desc.sampleCount = img->sample_count;
         }
-        id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+        id<MTLTexture> tex = [_sg_objc.device newTextureWithDescriptor:mtl_desc];
         SOKOL_ASSERT(nil != tex);
         img->mtl_depth_tex = _sg_mtl_add_resource(tex);
     }
@@ -7194,7 +7193,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
                 tex = (__bridge id<MTLTexture>) desc->mtl_textures[slot];
             }
             else {
-                tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+                tex = [_sg_objc.device newTextureWithDescriptor:mtl_desc];
                 if ((img->usage == SG_USAGE_IMMUTABLE) && !img->render_target) {
                     _sg_mtl_copy_image_content(img, tex, &desc->content);
                 }
@@ -7209,12 +7208,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image* img, const sg_image
             mtl_desc.arrayLength = 1;
             mtl_desc.mipmapLevelCount = 1;
             mtl_desc.sampleCount = img->sample_count;
-            id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
+            id<MTLTexture> tex = [_sg_objc.device newTextureWithDescriptor:mtl_desc];
             img->mtl_msaa_tex = _sg_mtl_add_resource(tex);
         }
 
         /* create (possibly shared) sampler state */
-        img->mtl_sampler_state = _sg_mtl_create_sampler(_sg_mtl_device, desc);
+        img->mtl_sampler_state = _sg_mtl_create_sampler(_sg_objc.device, desc);
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -7232,7 +7231,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image* img) {
 
 _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
     NSError* err = NULL;
-    id<MTLLibrary> lib = [_sg_mtl_device
+    id<MTLLibrary> lib = [_sg_objc.device
         newLibraryWithSource:[NSString stringWithUTF8String:src]
         options:nil
         error:&err
@@ -7246,7 +7245,7 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
 _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, int num_bytes) {
     NSError* err = NULL;
     dispatch_data_t lib_data = dispatch_data_create(ptr, num_bytes, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
-    id<MTLLibrary> lib = [_sg_mtl_device newLibraryWithData:lib_data error:&err];
+    id<MTLLibrary> lib = [_sg_objc.device newLibraryWithData:lib_data error:&err];
     if (err) {
         SOKOL_LOG([err.localizedDescription UTF8String]);
     }
@@ -7405,9 +7404,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
     MTLRenderPipelineDescriptor* rp_desc = [[MTLRenderPipelineDescriptor alloc] init];
     rp_desc.vertexDescriptor = vtx_desc;
     SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_VS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
-    rp_desc.vertexFunction = _sg_mtl_idpool.slots[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
+    rp_desc.vertexFunction = _sg_objc.idpool[shd->stage[SG_SHADERSTAGE_VS].mtl_func];
     SOKOL_ASSERT(shd->stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
-    rp_desc.fragmentFunction = _sg_mtl_idpool.slots[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
+    rp_desc.fragmentFunction = _sg_objc.idpool[shd->stage[SG_SHADERSTAGE_FS].mtl_func];
     rp_desc.sampleCount = _sg_def(desc->rasterizer.sample_count, 1);
     rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
@@ -7435,7 +7434,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
         rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(_sg_def(desc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE));
     }
     NSError* err = NULL;
-    id<MTLRenderPipelineState> mtl_rps = [_sg_mtl_device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
+    id<MTLRenderPipelineState> mtl_rps = [_sg_objc.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
     if (nil == mtl_rps) {
         SOKOL_ASSERT(err);
         SOKOL_LOG([err.localizedDescription UTF8String]);
@@ -7464,7 +7463,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline* pip, _sg_shad
         ds_desc.frontFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
         ds_desc.frontFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
     }
-    id<MTLDepthStencilState> mtl_dss = [_sg_mtl_device newDepthStencilStateWithDescriptor:ds_desc];
+    id<MTLDepthStencilState> mtl_dss = [_sg_objc.device newDepthStencilStateWithDescriptor:ds_desc];
 
     pip->mtl_rps = _sg_mtl_add_resource(mtl_rps);
     pip->mtl_dss = _sg_mtl_add_resource(mtl_dss);
@@ -7524,8 +7523,8 @@ _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass* pass) {
 _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.mtl.in_pass);
-    SOKOL_ASSERT(_sg_mtl_cmd_queue);
-    SOKOL_ASSERT(!_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_queue);
+    SOKOL_ASSERT(!_sg_objc.cmd_encoder);
     SOKOL_ASSERT(_sg.mtl.renderpass_descriptor_cb);
     _sg.mtl.in_pass = true;
     _sg.mtl.cur_width = w;
@@ -7533,15 +7532,15 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     _sg_mtl_clear_state_cache();
 
     /* if this is the first pass in the frame, create a command buffer */
-    if (nil == _sg_mtl_cmd_buffer) {
+    if (nil == _sg_objc.cmd_buffer) {
         /* block until the oldest frame in flight has finished */
-        dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
-        _sg_mtl_cmd_buffer = [_sg_mtl_cmd_queue commandBufferWithUnretainedReferences];
+        dispatch_semaphore_wait(_sg_objc.sem, DISPATCH_TIME_FOREVER);
+        _sg_objc.cmd_buffer = [_sg_objc.cmd_queue commandBufferWithUnretainedReferences];
     }
 
     /* if this is first pass in frame, get uniform buffer base pointer */
     if (0 == _sg.mtl.cur_ub_base_ptr) {
-        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg_mtl_uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
+        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg_objc.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
     }
 
     /* initialize a render pass descriptor */
@@ -7582,8 +7581,8 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
             if (is_msaa) {
                 SOKOL_ASSERT(att->image->mtl_msaa_tex != _SG_MTL_INVALID_SLOT_INDEX);
                 SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-                pass_desc.colorAttachments[i].texture = _sg_mtl_idpool.slots[att->image->mtl_msaa_tex];
-                pass_desc.colorAttachments[i].resolveTexture = _sg_mtl_idpool.slots[att->image->mtl_tex[att->image->active_slot]];
+                pass_desc.colorAttachments[i].texture = _sg_objc.idpool[att->image->mtl_msaa_tex];
+                pass_desc.colorAttachments[i].resolveTexture = _sg_objc.idpool[att->image->mtl_tex[att->image->active_slot]];
                 pass_desc.colorAttachments[i].resolveLevel = att->mip_level;
                 switch (att->image->type) {
                     case SG_IMAGETYPE_CUBE:
@@ -7598,7 +7597,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
             }
             else {
                 SOKOL_ASSERT(att->image->mtl_tex[att->image->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-                pass_desc.colorAttachments[i].texture = _sg_mtl_idpool.slots[att->image->mtl_tex[att->image->active_slot]];
+                pass_desc.colorAttachments[i].texture = _sg_objc.idpool[att->image->mtl_tex[att->image->active_slot]];
                 pass_desc.colorAttachments[i].level = att->mip_level;
                 switch (att->image->type) {
                     case SG_IMAGETYPE_CUBE:
@@ -7617,11 +7616,11 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
             SOKOL_ASSERT(att->image->slot.state == SG_RESOURCESTATE_VALID);
             SOKOL_ASSERT(att->image->slot.id == att->image_id.id);
             SOKOL_ASSERT(att->image->mtl_depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
-            pass_desc.depthAttachment.texture = _sg_mtl_idpool.slots[att->image->mtl_depth_tex];
+            pass_desc.depthAttachment.texture = _sg_objc.idpool[att->image->mtl_depth_tex];
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
             pass_desc.depthAttachment.clearDepth = action->depth.val;
             if (_sg_is_depth_stencil_format(att->image->pixel_format)) {
-                pass_desc.stencilAttachment.texture = _sg_mtl_idpool.slots[att->image->mtl_depth_tex];
+                pass_desc.stencilAttachment.texture = _sg_objc.idpool[att->image->mtl_depth_tex];
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
                 pass_desc.stencilAttachment.clearStencil = action->stencil.val;
             }
@@ -7639,20 +7638,20 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass* pass, const sg_pass_action* action,
     }
 
     /* create a render command encoder, this might return nil if window is minimized */
-    _sg_mtl_cmd_encoder = [_sg_mtl_cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
-    if (_sg_mtl_cmd_encoder == nil) {
+    _sg_objc.cmd_encoder = [_sg_objc.cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
+    if (_sg_objc.cmd_encoder == nil) {
         _sg.mtl.pass_valid = false;
         return;
     }
 
     /* bind the global uniform buffer, this only happens once per pass */
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_UBS; slot++) {
-        [_sg_mtl_cmd_encoder
-            setVertexBuffer:_sg_mtl_uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+        [_sg_objc.cmd_encoder
+            setVertexBuffer:_sg_objc.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
             offset:0
             atIndex:slot];
-        [_sg_mtl_cmd_encoder
-            setFragmentBuffer:_sg_mtl_uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+        [_sg_objc.cmd_encoder
+            setFragmentBuffer:_sg_objc.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
             offset:0
             atIndex:slot];
     }
@@ -7662,9 +7661,9 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     _sg.mtl.in_pass = false;
     _sg.mtl.pass_valid = false;
-    if (nil != _sg_mtl_cmd_encoder) {
-        [_sg_mtl_cmd_encoder endEncoding];
-        _sg_mtl_cmd_encoder = nil;
+    if (nil != _sg_objc.cmd_encoder) {
+        [_sg_objc.cmd_encoder endEncoding];
+        _sg_objc.cmd_encoder = nil;
     }
 }
 
@@ -7672,21 +7671,21 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
     SOKOL_ASSERT(_sg.mtl.drawable_cb);
-    SOKOL_ASSERT(nil == _sg_mtl_cmd_encoder);
-    SOKOL_ASSERT(nil != _sg_mtl_cmd_buffer);
+    SOKOL_ASSERT(nil == _sg_objc.cmd_encoder);
+    SOKOL_ASSERT(nil != _sg_objc.cmd_buffer);
 
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-    [_sg_mtl_uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg.mtl.cur_ub_offset)];
+    [_sg_objc.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg.mtl.cur_ub_offset)];
     #endif
 
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
-    [_sg_mtl_cmd_buffer presentDrawable:cur_drawable];
-    __block dispatch_semaphore_t sem = _sg_mtl_sem;
-    [_sg_mtl_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+    [_sg_objc.cmd_buffer presentDrawable:cur_drawable];
+    __block dispatch_semaphore_t sem = _sg_objc.sem;
+    [_sg_objc.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
         dispatch_semaphore_signal(sem);
     }];
-    [_sg_mtl_cmd_buffer commit];
+    [_sg_objc.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
     _sg_mtl_garbage_collect(_sg.mtl.frame_index);
@@ -7698,7 +7697,7 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     _sg.mtl.frame_index++;
     _sg.mtl.cur_ub_offset = 0;
     _sg.mtl.cur_ub_base_ptr = 0;
-    _sg_mtl_cmd_buffer = nil;
+    _sg_objc.cmd_buffer = nil;
 }
 
 _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -7706,7 +7705,7 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
     MTLViewport vp;
     vp.originX = (double) x;
     vp.originY = (double) (origin_top_left ? y : (_sg.mtl.cur_height - (y + h)));
@@ -7714,7 +7713,7 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     vp.height  = (double) h;
     vp.znear   = 0.0;
     vp.zfar    = 1.0;
-    [_sg_mtl_cmd_encoder setViewport:vp];
+    [_sg_objc.cmd_encoder setViewport:vp];
 }
 
 _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
@@ -7722,7 +7721,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
     /* clip against framebuffer rect */
     x = _sg_min(_sg_max(0, x), _sg.mtl.cur_width-1);
     y = _sg_min(_sg_max(0, y), _sg.mtl.cur_height-1);
@@ -7740,7 +7739,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     r.y = origin_top_left ? y : (_sg.mtl.cur_height - (y + h));
     r.width = w;
     r.height = h;
-    [_sg_mtl_cmd_encoder setScissorRect:r];
+    [_sg_objc.cmd_encoder setScissorRect:r];
 }
 
 _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
@@ -7750,21 +7749,21 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline* pip) {
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
 
     if ((_sg.mtl.state_cache.cur_pipeline != pip) || (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg.mtl.state_cache.cur_pipeline = pip;
         _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
         const float* c = pip->blend_color;
-        [_sg_mtl_cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
-        [_sg_mtl_cmd_encoder setCullMode:pip->mtl_cull_mode];
-        [_sg_mtl_cmd_encoder setFrontFacingWinding:pip->mtl_winding];
-        [_sg_mtl_cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
-        [_sg_mtl_cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
+        [_sg_objc.cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
+        [_sg_objc.cmd_encoder setCullMode:pip->mtl_cull_mode];
+        [_sg_objc.cmd_encoder setFrontFacingWinding:pip->mtl_winding];
+        [_sg_objc.cmd_encoder setStencilReferenceValue:pip->mtl_stencil_ref];
+        [_sg_objc.cmd_encoder setDepthBias:pip->depth_bias slopeScale:pip->depth_bias_slope_scale clamp:pip->depth_bias_clamp];
         SOKOL_ASSERT(pip->mtl_rps != _SG_MTL_INVALID_SLOT_INDEX);
-        [_sg_mtl_cmd_encoder setRenderPipelineState:_sg_mtl_idpool.slots[pip->mtl_rps]];
+        [_sg_objc.cmd_encoder setRenderPipelineState:_sg_objc.idpool[pip->mtl_rps]];
         SOKOL_ASSERT(pip->mtl_dss != _SG_MTL_INVALID_SLOT_INDEX);
-        [_sg_mtl_cmd_encoder setDepthStencilState:_sg_mtl_idpool.slots[pip->mtl_dss]];
+        [_sg_objc.cmd_encoder setDepthStencilState:_sg_objc.idpool[pip->mtl_dss]];
     }
 }
 
@@ -7779,7 +7778,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
 
     /* store index buffer binding, this will be needed later in sg_draw() */
     _sg.mtl.state_cache.cur_indexbuffer = ib;
@@ -7806,7 +7805,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             _sg.mtl.state_cache.cur_vertexbuffer_ids[slot].id = vb->slot.id;
             const NSUInteger mtl_slot = SG_MAX_SHADERSTAGE_UBS + slot;
             SOKOL_ASSERT(vb->mtl_buf[vb->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg_mtl_cmd_encoder setVertexBuffer:_sg_mtl_idpool.slots[vb->mtl_buf[vb->active_slot]]
+            [_sg_objc.cmd_encoder setVertexBuffer:_sg_objc.idpool[vb->mtl_buf[vb->active_slot]]
                 offset:vb_offsets[slot]
                 atIndex:mtl_slot];
         }
@@ -7819,9 +7818,9 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             _sg.mtl.state_cache.cur_vs_images[slot] = img;
             _sg.mtl.state_cache.cur_vs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg_mtl_cmd_encoder setVertexTexture:_sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]] atIndex:slot];
+            [_sg_objc.cmd_encoder setVertexTexture:_sg_objc.idpool[img->mtl_tex[img->active_slot]] atIndex:slot];
             SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg_mtl_cmd_encoder setVertexSamplerState:_sg_mtl_idpool.slots[img->mtl_sampler_state] atIndex:slot];
+            [_sg_objc.cmd_encoder setVertexSamplerState:_sg_objc.idpool[img->mtl_sampler_state] atIndex:slot];
         }
     }
 
@@ -7832,9 +7831,9 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             _sg.mtl.state_cache.cur_fs_images[slot] = img;
             _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
             SOKOL_ASSERT(img->mtl_tex[img->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg_mtl_cmd_encoder setFragmentTexture:_sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]] atIndex:slot];
+            [_sg_objc.cmd_encoder setFragmentTexture:_sg_objc.idpool[img->mtl_tex[img->active_slot]] atIndex:slot];
             SOKOL_ASSERT(img->mtl_sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg_mtl_cmd_encoder setFragmentSamplerState:_sg_mtl_idpool.slots[img->mtl_sampler_state] atIndex:slot];
+            [_sg_objc.cmd_encoder setFragmentSamplerState:_sg_objc.idpool[img->mtl_sampler_state] atIndex:slot];
         }
     }
 }
@@ -7846,7 +7845,7 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
@@ -7862,10 +7861,10 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     uint8_t* dst = &_sg.mtl.cur_ub_base_ptr[_sg.mtl.cur_ub_offset];
     memcpy(dst, data, num_bytes);
     if (stage_index == SG_SHADERSTAGE_VS) {
-        [_sg_mtl_cmd_encoder setVertexBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
+        [_sg_objc.cmd_encoder setVertexBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
     else {
-        [_sg_mtl_cmd_encoder setFragmentBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
+        [_sg_objc.cmd_encoder setFragmentBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
     _sg.mtl.cur_ub_offset = _sg_mtl_roundup(_sg.mtl.cur_ub_offset + num_bytes, _SG_MTL_UB_ALIGN);
 }
@@ -7875,7 +7874,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     if (!_sg.mtl.pass_valid) {
         return;
     }
-    SOKOL_ASSERT(_sg_mtl_cmd_encoder);
+    SOKOL_ASSERT(_sg_objc.cmd_encoder);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && (_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id));
     if (SG_INDEXTYPE_NONE != _sg.mtl.state_cache.cur_pipeline->index_type) {
         /* indexed rendering */
@@ -7884,16 +7883,16 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
         SOKOL_ASSERT(ib->mtl_buf[ib->active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
         const NSUInteger index_buffer_offset = _sg.mtl.state_cache.cur_indexbuffer_offset +
             base_element * _sg.mtl.state_cache.cur_pipeline->mtl_index_size;
-        [_sg_mtl_cmd_encoder drawIndexedPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl_prim_type
+        [_sg_objc.cmd_encoder drawIndexedPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl_prim_type
             indexCount:num_elements
             indexType:_sg.mtl.state_cache.cur_pipeline->mtl_index_type
-            indexBuffer:_sg_mtl_idpool.slots[ib->mtl_buf[ib->active_slot]]
+            indexBuffer:_sg_objc.idpool[ib->mtl_buf[ib->active_slot]]
             indexBufferOffset:index_buffer_offset
             instanceCount:num_instances];
     }
     else {
         /* non-indexed rendering */
-        [_sg_mtl_cmd_encoder drawPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl_prim_type
+        [_sg_objc.cmd_encoder drawPrimitives:_sg.mtl.state_cache.cur_pipeline->mtl_prim_type
             vertexStart:base_element
             vertexCount:num_elements
             instanceCount:num_instances];
@@ -7905,7 +7904,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer* buf, const void* data, int dat
     if (++buf->active_slot >= buf->num_slots) {
         buf->active_slot = 0;
     }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_idpool.slots[buf->mtl_buf[buf->active_slot]];
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_objc.idpool[buf->mtl_buf[buf->active_slot]];
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data, data_size);
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
@@ -7920,7 +7919,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer* buf, const void* data, int dat
             buf->active_slot = 0;
         }
     }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_idpool.slots[buf->mtl_buf[buf->active_slot]];
+    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_objc.idpool[buf->mtl_buf[buf->active_slot]];
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->append_pos;
     memcpy(dst_ptr, data, data_size);
@@ -7934,7 +7933,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image* img, const sg_image_content* dat
     if (++img->active_slot >= img->num_slots) {
         img->active_slot = 0;
     }
-    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_idpool.slots[img->mtl_tex[img->active_slot]];
+    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_objc.idpool[img->mtl_tex[img->active_slot]];
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 
