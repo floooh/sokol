@@ -659,6 +659,66 @@ _SOKOL_PRIVATE const char* _sg_imgui_usage_string(sg_usage u) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_imagetype_string(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:       return "SG_IMAGETYPE_2D";
+        case SG_IMAGETYPE_CUBE:     return "SG_IMAGETYPE_CUBE";
+        case SG_IMAGETYPE_3D:       return "SG_IMAGETYPE_3D";
+        case SG_IMAGETYPE_ARRAY:    return "SG_IMAGETYPE_ARRAY";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_NONE:           return "SG_PIXELFORMAT_NONE";
+        case SG_PIXELFORMAT_RGBA8:          return "SG_PIXELFORMAT_RGBA8";
+        case SG_PIXELFORMAT_RGB8:           return "SG_PIXELFORMAT_RGB8";
+        case SG_PIXELFORMAT_RGBA4:          return "SG_PIXELFORMAT_RGBA4";
+        case SG_PIXELFORMAT_R5G6B5:         return "SG_PIXELFORMAT_R5G6B5";
+        case SG_PIXELFORMAT_R5G5B5A1:       return "SG_PIXELFORMAT_R5G5B5A1";
+        case SG_PIXELFORMAT_R10G10B10A2:    return "SG_PIXELFORMAT_R10G10B10A2";
+        case SG_PIXELFORMAT_RGBA32F:        return "SG_PIXELFORMAT_RGBA32F";
+        case SG_PIXELFORMAT_RGBA16F:        return "SG_PIXELFORMAT_RGBA16F";
+        case SG_PIXELFORMAT_R32F:           return "SG_PIXELFORMAT_R32F";
+        case SG_PIXELFORMAT_R16F:           return "SG_PIXELFORMAT_R16F";
+        case SG_PIXELFORMAT_L8:             return "SG_PIXELFORMAT_L8";
+        case SG_PIXELFORMAT_DXT1:           return "SG_PIXELFORMAT_DXT1";
+        case SG_PIXELFORMAT_DXT3:           return "SG_PIXELFORMAT_DXT3";
+        case SG_PIXELFORMAT_DXT5:           return "SG_PIXELFORMAT_DXT5";
+        case SG_PIXELFORMAT_DEPTH:          return "SG_PIXELFORMAT_DEPTH";
+        case SG_PIXELFORMAT_DEPTHSTENCIL:   return "SG_PIXELFORMAT_DEPTHSTENCIL";
+        case SG_PIXELFORMAT_PVRTC2_RGB:     return "SG_PIXELFORMAT_PVRTC2_RGB";
+        case SG_PIXELFORMAT_PVRTC4_RGB:     return "SG_PIXELFORMAT_PVRTC4_RGB";
+        case SG_PIXELFORMAT_PVRTC2_RGBA:    return "SG_PIXELFORMAT_PVRTC2_RGBA";
+        case SG_PIXELFORMAT_PVRTC4_RGBA:    return "SG_PIXELFORMAT_PVRTC4_RGBA";
+        case SG_PIXELFORMAT_ETC2_RGB8:      return "SG_PIXELFORMAT_ETC2_RGB8";
+        case SG_PIXELFORMAT_ETC2_SRGB8:     return "SG_PIXELFORMAT_ETC2_SRGB8";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_filter_string(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:                 return "SG_FILTER_NEAREST";
+        case SG_FILTER_LINEAR:                  return "SG_FILTER_LINEAR";
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:  return "SG_FILTER_NEAREST_MIPMAP_NEAREST";
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return "SG_FILTER_NEAREST_MIPMAP_LINEAR";
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return "SG_FILTER_LINEAR_MIPMAP_NEAREST";
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return "SG_FILTER_LINEAR_MIPMAP_LINEAR";
+        default:                                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
+    switch (w) {
+        case SG_WRAP_REPEAT:            return "SG_WRAP_REPEAT";
+        case SG_WRAP_CLAMP_TO_EDGE:     return "SG_WRAP_CLAMP_TO_EDGE";
+        case SG_WRAP_MIRRORED_REPEAT:   return "SG_WRAP_MIRRORED_REPEAT";
+        default:                        return "???";
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
@@ -667,6 +727,62 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
             bool selected = ctx->buffers.sel_id == buf->slot.id;
             if (_sg_imgui_draw_resid(buf->slot.id, ctx->buffers.slots[i].label, selected)) {
                 ctx->buffers.sel_id = buf->slot.id;
+            }
+        }
+    }
+    ImGui::EndChild();
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
+    ImGui::BeginChild("image_list", ImVec2(128,0), true);
+    for (int i = 1; i < _sg.pools.image_pool.size; i++) {
+        const _sg_image_t* img = &_sg.pools.images[i];
+        if (img->slot.state != SG_RESOURCESTATE_INITIAL) {
+            bool selected = ctx->images.sel_id == img->slot.id;
+            if (_sg_imgui_draw_resid(img->slot.id, ctx->images.slots[i].label, selected)) {
+                ctx->images.sel_id = img->slot.id;
+            }
+        }
+    }
+    ImGui::EndChild();
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
+    ImGui::BeginChild("shader_list", ImVec2(128,0), true);
+    for (int i = 1; i < _sg.pools.shader_pool.size; i++) {
+        const _sg_shader_t* shd = &_sg.pools.shaders[i];
+        if (shd->slot.state != SG_RESOURCESTATE_INITIAL) {
+            bool selected = ctx->shaders.sel_id == shd->slot.id;
+            if (_sg_imgui_draw_resid(shd->slot.id, ctx->shaders.slots[i].label, selected)) {
+                ctx->shaders.sel_id = shd->slot.id;
+            }
+        }
+    }
+    ImGui::EndChild();
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
+    ImGui::BeginChild("pipeline_list", ImVec2(128,0), true);
+    for (int i = 1; i < _sg.pools.pipeline_pool.size; i++) {
+        const _sg_pipeline_t* pip = &_sg.pools.pipelines[i];
+        if (pip->slot.state != SG_RESOURCESTATE_INITIAL) {
+            bool selected = ctx->pipelines.sel_id == pip->slot.id;
+            if (_sg_imgui_draw_resid(pip->slot.id, ctx->pipelines.slots[i].label, selected)) {
+                ctx->pipelines.sel_id = pip->slot.id;
+            }
+        }
+    }
+    ImGui::EndChild();
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
+    ImGui::BeginChild("pass_list", ImVec2(128,0), true);
+    for (int i = 1; i < _sg.pools.pass_pool.size; i++) {
+        const _sg_pass_t* pass = &_sg.pools.passes[i];
+        if (pass->slot.state != SG_RESOURCESTATE_INITIAL) {
+            bool selected = ctx->passes.sel_id == pass->slot.id;
+            if (_sg_imgui_draw_resid(pass->slot.id, ctx->passes.slots[i].label, selected)) {
+                ctx->passes.sel_id = pass->slot.id;
             }
         }
     }
@@ -682,9 +798,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
         ImGui::Text("Label: %s", buf_ui->label[0] ? buf_ui->label : "---");
         _sg_imgui_draw_resource_slot(&buf->slot);
         ImGui::Separator();
-        ImGui::Text("Size:  %d", buf->size);
         ImGui::Text("Type:  %s", _sg_imgui_buffertype_string(buf->type));
         ImGui::Text("Usage: %s", _sg_imgui_usage_string(buf->usage));
+        ImGui::Text("Size:  %d", buf->size);
         if (buf->usage != SG_USAGE_IMMUTABLE) {
             ImGui::Separator();
             ImGui::Text("Num Slots:     %d", buf->num_slots);
@@ -694,6 +810,79 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
             ImGui::Text("Append Pos:         %d", buf->append_pos);
             ImGui::Text("Append Overflow:    %s", buf->append_overflow ? "YES":"NO");
         }
+        ImGui::EndChild();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id) {
+    if (sel_id != SG_INVALID_ID) {
+        const _sg_image_t* img = _sg_image_at(&_sg.pools, sel_id);
+        const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(sel_id)];
+        ImGui::SameLine();
+        ImGui::BeginChild("image", ImVec2(0,0), false);
+        ImGui::Text("Label: %s", img_ui->label[0] ? img_ui->label : "---");
+        _sg_imgui_draw_resource_slot(&img->slot);
+        ImGui::Separator();
+        ImGui::Text("Type:              %s", _sg_imgui_imagetype_string(img->type));
+        ImGui::Text("Usage:             %s", _sg_imgui_usage_string(img->usage));
+        ImGui::Text("Render Target:     %s", img->render_target ? "YES":"NO");
+        ImGui::Text("Width:             %d", img->width);
+        ImGui::Text("Height:            %d", img->height);
+        ImGui::Text("Depth:             %d", img->depth);
+        ImGui::Text("Num Mipmaps:       %d", img->num_mipmaps);
+        ImGui::Text("Pixel Format:      %s", _sg_imgui_pixelformat_string(img->pixel_format));
+        ImGui::Text("Sample Count:      %d", img->sample_count);
+        ImGui::Text("Min Filter:        %s", _sg_imgui_filter_string(img->min_filter));
+        ImGui::Text("Mag Filter:        %s", _sg_imgui_filter_string(img->mag_filter));
+        ImGui::Text("Wrap U:            %s", _sg_imgui_wrap_string(img->wrap_u));
+        ImGui::Text("Wrap V:            %s", _sg_imgui_wrap_string(img->wrap_v));
+        ImGui::Text("Wrap W:            %s", _sg_imgui_wrap_string(img->wrap_w));
+        ImGui::Text("Max Anisotropy:    %d", img->max_anisotropy);
+        if (img->usage != SG_USAGE_IMMUTABLE) {
+            ImGui::Separator();
+            ImGui::Text("Num Slots:     %d", img->num_slots);
+            ImGui::Text("Active Slot:   %d", img->active_slot);
+            ImGui::Text("Update Frame Index: %d", img->upd_frame_index);
+        }
+        ImGui::BeginChild("texture", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::Image((ImTextureID)(intptr_t)sel_id, ImVec2(2*img->width, 2*img->height));
+        ImGui::EndChild();
+        ImGui::EndChild();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, uint32_t sel_id) {
+    if (sel_id != SG_INVALID_ID) {
+        const _sg_shader_t* shd = _sg_shader_at(&_sg.pools, sel_id);
+        const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(sel_id)];
+        ImGui::SameLine();
+        ImGui::BeginChild("shader", ImVec2(0,0), false);
+        ImGui::Text("Label: %s", shd_ui->label[0] ? shd_ui->label : "---");
+        _sg_imgui_draw_resource_slot(&shd->slot);
+        ImGui::EndChild();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_id) {
+    if (sel_id != SG_INVALID_ID) {
+        const _sg_pipeline_t* pip = _sg_pipeline_at(&_sg.pools, sel_id);
+        const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_slot_index(sel_id)];
+        ImGui::SameLine();
+        ImGui::BeginChild("pipeline", ImVec2(0,0), false);
+        ImGui::Text("Label: %s", pip_ui->label[0] ? pip_ui->label : "---");
+        _sg_imgui_draw_resource_slot(&pip->slot);
+        ImGui::EndChild();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, uint32_t sel_id) {
+    if (sel_id != SG_INVALID_ID) {
+        const _sg_pass_t* pass = _sg_pass_at(&_sg.pools, sel_id);
+        const sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_slot_index(sel_id)];
+        ImGui::SameLine();
+        ImGui::BeginChild("pass", ImVec2(0,0), false);
+        ImGui::Text("Label: %s", pass_ui->label[0] ? pass_ui->label : "---");
+        _sg_imgui_draw_resource_slot(&pass->slot);
         ImGui::EndChild();
     }
 }
@@ -848,7 +1037,7 @@ void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
     if (!ctx->images.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Images", &ctx->images.open)) {
         sg_imgui_draw_images_content(ctx);
     }
@@ -860,7 +1049,7 @@ void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
     if (!ctx->shaders.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Shaders", &ctx->shaders.open)) {
         sg_imgui_draw_shaders_content(ctx);
     }
@@ -872,7 +1061,7 @@ void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     if (!ctx->pipelines.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Pipelines", &ctx->pipelines.open)) {
         sg_imgui_draw_pipelines_content(ctx);
     }
@@ -884,7 +1073,7 @@ void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
     if (!ctx->passes.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Passes", &ctx->passes.open)) {
         sg_imgui_draw_passes_content(ctx);
     }
@@ -899,22 +1088,26 @@ void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
 
 void sg_imgui_draw_images_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
-    ImGui::Text("FIXME!");
+    _sg_imgui_draw_image_list(ctx);
+    _sg_imgui_draw_image_panel(ctx, ctx->images.sel_id);
 }
 
 void sg_imgui_draw_shaders_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
-    ImGui::Text("FIXME!");
+    _sg_imgui_draw_shader_list(ctx);
+    _sg_imgui_draw_shader_panel(ctx, ctx->shaders.sel_id);
 }
 
 void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
-    ImGui::Text("FIXME!");
+    _sg_imgui_draw_pipeline_list(ctx);
+    _sg_imgui_draw_pipeline_panel(ctx, ctx->pipelines.sel_id);
 }
 
 void sg_imgui_draw_passes_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
-    ImGui::Text("FIXME!");
+    _sg_imgui_draw_pass_list(ctx);
+    _sg_imgui_draw_pass_panel(ctx, ctx->passes.sel_id);
 }
 
 #endif /* SOKOL_IMPL */
