@@ -1469,61 +1469,62 @@ typedef struct sg_pass_desc {
     new trace hooks to form a proper call chain.
 */
 typedef struct sg_trace_hooks {
-    void (*query_feature)(sg_feature feature, bool result);
-    void (*reset_state_cache)(void);
-    void (*make_buffer)(const sg_buffer_desc* desc, sg_buffer result);
-    void (*make_image)(const sg_image_desc* desc, sg_image result);
-    void (*make_shader)(const sg_shader_desc* desc, sg_shader result);
-    void (*make_pipeline)(const sg_pipeline_desc* desc, sg_pipeline result);
-    void (*make_pass)(const sg_pass_desc* desc, sg_pass result);
-    void (*destroy_buffer)(sg_buffer buf);
-    void (*destroy_image)(sg_image img);
-    void (*destroy_shader)(sg_shader shd);
-    void (*destroy_pipeline)(sg_pipeline pip);
-    void (*destroy_pass)(sg_pass pass);
-    void (*update_buffer)(sg_buffer buf, const void* data_ptr, int data_size);
-    void (*update_image)(sg_image img, const sg_image_content* data);
-    void (*append_buffer)(sg_buffer buf, const void* data_ptr, int data_size, int result);
-    void (*query_buffer_overflow)(sg_buffer buf, bool result);
-    void (*query_buffer_state)(sg_buffer buf, sg_resource_state result);
-    void (*query_image_state)(sg_image img, sg_resource_state result);
-    void (*query_shader_state)(sg_shader shd, sg_resource_state result);
-    void (*query_pipeline_state)(sg_pipeline pip, sg_resource_state result);
-    void (*query_pass_state)(sg_pass pass, sg_resource_state result);
-    void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height);
-    void (*begin_pass)(sg_pass pass, const sg_pass_action* pass_action);
-    void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left);
-    void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left);
-    void (*apply_pipeline)(sg_pipeline pip);
-    void (*apply_bindings)(const sg_bindings* bindings);
-    void (*apply_uniforms)(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
-    void (*draw)(int base_element, int num_elements, int num_instances);
-    void (*end_pass)(void);
-    void (*commit)(void);
-    void (*alloc_buffer)(sg_buffer result);
-    void (*alloc_image)(sg_image result);
-    void (*alloc_shader)(sg_shader result);
-    void (*alloc_pipeline)(sg_pipeline result);
-    void (*alloc_pass)(sg_pass result);
-    void (*init_buffer)(sg_buffer buf_id, const sg_buffer_desc* desc);
-    void (*init_image)(sg_image img_id, const sg_image_desc* desc);
-    void (*init_shader)(sg_shader shd_id, const sg_shader_desc* desc);
-    void (*init_pipeline)(sg_pipeline pip_id, const sg_pipeline_desc* desc);
-    void (*init_pass)(sg_pass pass_id, const sg_pass_desc* desc);
-    void (*fail_buffer)(sg_buffer buf_id);
-    void (*fail_image)(sg_image img_id);
-    void (*fail_shader)(sg_shader shd_id);
-    void (*fail_pipeline)(sg_pipeline pip_id);
-    void (*fail_pass)(sg_pass pass_id);
-    void (*err_buffer_pool_exhausted)(void);
-    void (*err_image_pool_exhausted)(void);
-    void (*err_shader_pool_exhausted)(void);
-    void (*err_pipeline_pool_exhausted)(void);
-    void (*err_pass_pool_exhausted)(void);
-    void (*err_context_mismatch)(void);
-    void (*err_pass_invalid)(void);
-    void (*err_draw_invalid)(void);
-    void (*err_bindings_invalid)(void);
+    void* user_data;
+    void (*query_feature)(sg_feature feature, bool result, void* user_data);
+    void (*reset_state_cache)(void* user_data);
+    void (*make_buffer)(const sg_buffer_desc* desc, sg_buffer result, void* user_data);
+    void (*make_image)(const sg_image_desc* desc, sg_image result, void* user_data);
+    void (*make_shader)(const sg_shader_desc* desc, sg_shader result, void* user_data);
+    void (*make_pipeline)(const sg_pipeline_desc* desc, sg_pipeline result, void* user_data);
+    void (*make_pass)(const sg_pass_desc* desc, sg_pass result, void* user_data);
+    void (*destroy_buffer)(sg_buffer buf, void* user_data);
+    void (*destroy_image)(sg_image img, void* user_data);
+    void (*destroy_shader)(sg_shader shd, void* user_data);
+    void (*destroy_pipeline)(sg_pipeline pip, void* user_data);
+    void (*destroy_pass)(sg_pass pass, void* user_data);
+    void (*update_buffer)(sg_buffer buf, const void* data_ptr, int data_size, void* user_data);
+    void (*update_image)(sg_image img, const sg_image_content* data, void* user_data);
+    void (*append_buffer)(sg_buffer buf, const void* data_ptr, int data_size, int result, void* user_data);
+    void (*query_buffer_overflow)(sg_buffer buf, bool result, void* user_data);
+    void (*query_buffer_state)(sg_buffer buf, sg_resource_state result, void* user_data);
+    void (*query_image_state)(sg_image img, sg_resource_state result, void* user_data);
+    void (*query_shader_state)(sg_shader shd, sg_resource_state result, void* user_data);
+    void (*query_pipeline_state)(sg_pipeline pip, sg_resource_state result, void* user_data);
+    void (*query_pass_state)(sg_pass pass, sg_resource_state result, void* user_data);
+    void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
+    void (*begin_pass)(sg_pass pass, const sg_pass_action* pass_action, void* user_data);
+    void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
+    void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
+    void (*apply_pipeline)(sg_pipeline pip, void* user_data);
+    void (*apply_bindings)(const sg_bindings* bindings, void* user_data);
+    void (*apply_uniforms)(sg_shader_stage stage, int ub_index, const void* data, int num_bytes, void* user_data);
+    void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
+    void (*end_pass)(void* user_data);
+    void (*commit)(void* user_data);
+    void (*alloc_buffer)(sg_buffer result, void* user_data);
+    void (*alloc_image)(sg_image result, void* user_data);
+    void (*alloc_shader)(sg_shader result, void* user_data);
+    void (*alloc_pipeline)(sg_pipeline result, void* user_data);
+    void (*alloc_pass)(sg_pass result, void* user_data);
+    void (*init_buffer)(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data);
+    void (*init_image)(sg_image img_id, const sg_image_desc* desc, void* user_data);
+    void (*init_shader)(sg_shader shd_id, const sg_shader_desc* desc, void* user_data);
+    void (*init_pipeline)(sg_pipeline pip_id, const sg_pipeline_desc* desc, void* user_data);
+    void (*init_pass)(sg_pass pass_id, const sg_pass_desc* desc, void* user_data);
+    void (*fail_buffer)(sg_buffer buf_id, void* user_data);
+    void (*fail_image)(sg_image img_id, void* user_data);
+    void (*fail_shader)(sg_shader shd_id, void* user_data);
+    void (*fail_pipeline)(sg_pipeline pip_id, void* user_data);
+    void (*fail_pass)(sg_pass pass_id, void* user_data);
+    void (*err_buffer_pool_exhausted)(void* user_data);
+    void (*err_image_pool_exhausted)(void* user_data);
+    void (*err_shader_pool_exhausted)(void* user_data);
+    void (*err_pipeline_pool_exhausted)(void* user_data);
+    void (*err_pass_pool_exhausted)(void* user_data);
+    void (*err_context_mismatch)(void* user_data);
+    void (*err_pass_invalid)(void* user_data);
+    void (*err_draw_invalid)(void* user_data);
+    void (*err_bindings_invalid)(void* user_data);
 } sg_trace_hooks;
 
 /*
@@ -9204,7 +9205,7 @@ SOKOL_API_IMPL bool sg_isvalid(void) {
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
     bool res = _sg_query_feature(f);
     if (_sg.hooks.query_feature) {
-        _sg.hooks.query_feature(f, res);
+        _sg.hooks.query_feature(f, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9256,7 +9257,7 @@ SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace
 SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
     sg_buffer res = _sg_alloc_buffer();
     if (_sg.hooks.alloc_buffer) {
-        _sg.hooks.alloc_buffer(res);
+        _sg.hooks.alloc_buffer(res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9264,7 +9265,7 @@ SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
 SOKOL_API_IMPL sg_image sg_alloc_image(void) {
     sg_image res = _sg_alloc_image();
     if (_sg.hooks.alloc_image) {
-        _sg.hooks.alloc_image(res);
+        _sg.hooks.alloc_image(res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9272,7 +9273,7 @@ SOKOL_API_IMPL sg_image sg_alloc_image(void) {
 SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
     sg_shader res = _sg_alloc_shader();
     if (_sg.hooks.alloc_shader) {
-        _sg.hooks.alloc_shader(res);
+        _sg.hooks.alloc_shader(res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9280,7 +9281,7 @@ SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
 SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
     sg_pipeline res = _sg_alloc_pipeline();
     if (_sg.hooks.alloc_pipeline) {
-        _sg.hooks.alloc_pipeline(res);
+        _sg.hooks.alloc_pipeline(res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9288,7 +9289,7 @@ SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
 SOKOL_API_IMPL sg_pass sg_alloc_pass(void) {
     sg_pass res = _sg_alloc_pass();
     if (_sg.hooks.alloc_pass) {
-        _sg.hooks.alloc_pass(res);
+        _sg.hooks.alloc_pass(res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9296,35 +9297,35 @@ SOKOL_API_IMPL sg_pass sg_alloc_pass(void) {
 SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
     _sg_init_buffer(buf_id, desc);
     if (_sg.hooks.init_buffer) {
-        _sg.hooks.init_buffer(buf_id, desc);
+        _sg.hooks.init_buffer(buf_id, desc, _sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     _sg_init_image(img_id, desc);
     if (_sg.hooks.init_image) {
-        _sg.hooks.init_image(img_id, desc);
+        _sg.hooks.init_image(img_id, desc, _sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
     _sg_init_shader(shd_id, desc);
     if (_sg.hooks.init_shader) {
-        _sg.hooks.init_shader(shd_id, desc);
+        _sg.hooks.init_shader(shd_id, desc, _sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
     _sg_init_pipeline(pip_id, desc);
     if (_sg.hooks.init_pipeline) {
-        _sg.hooks.init_pipeline(pip_id, desc);
+        _sg.hooks.init_pipeline(pip_id, desc, _sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     _sg_init_pass(pass_id, desc);
     if (_sg.hooks.init_pass) {
-        _sg.hooks.init_pass(pass_id, desc);
+        _sg.hooks.init_pass(pass_id, desc, _sg.hooks.user_data);
     }
 }
 
@@ -9336,7 +9337,7 @@ SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
     buf->slot.ctx_id = _sg.active_context.id;
     buf->slot.state = SG_RESOURCESTATE_FAILED;
     if (_sg.hooks.fail_buffer) {
-        _sg.hooks.fail_buffer(buf_id);
+        _sg.hooks.fail_buffer(buf_id, _sg.hooks.user_data);
     }
 }
 
@@ -9347,7 +9348,7 @@ SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
     img->slot.ctx_id = _sg.active_context.id;
     img->slot.state = SG_RESOURCESTATE_FAILED;
     if (_sg.hooks.fail_image) {
-        _sg.hooks.fail_image(img_id);
+        _sg.hooks.fail_image(img_id, _sg.hooks.user_data);
     }
 }
 
@@ -9358,7 +9359,7 @@ SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
     shd->slot.ctx_id = _sg.active_context.id;
     shd->slot.state = SG_RESOURCESTATE_FAILED;
     if (_sg.hooks.fail_shader) {
-        _sg.hooks.fail_shader(shd_id);
+        _sg.hooks.fail_shader(shd_id, _sg.hooks.user_data);
     }
 }
 
@@ -9369,7 +9370,7 @@ SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
     pip->slot.ctx_id = _sg.active_context.id;
     pip->slot.state = SG_RESOURCESTATE_FAILED;
     if (_sg.hooks.fail_pipeline) {
-        _sg.hooks.fail_pipeline(pip_id);
+        _sg.hooks.fail_pipeline(pip_id, _sg.hooks.user_data);
     }
 }
 
@@ -9380,7 +9381,7 @@ SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
     pass->slot.ctx_id = _sg.active_context.id;
     pass->slot.state = SG_RESOURCESTATE_FAILED;
     if (_sg.hooks.fail_pass) {
-        _sg.hooks.fail_pass(pass_id);
+        _sg.hooks.fail_pass(pass_id, _sg.hooks.user_data);
     }
 }
 
@@ -9389,7 +9390,7 @@ SOKOL_API_IMPL sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     sg_resource_state res = buf ? buf->slot.state : SG_RESOURCESTATE_INVALID;
     if (_sg.hooks.query_buffer_state) {
-        _sg.hooks.query_buffer_state(buf_id, res);
+        _sg.hooks.query_buffer_state(buf_id, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9398,7 +9399,7 @@ SOKOL_API_IMPL sg_resource_state sg_query_image_state(sg_image img_id) {
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     sg_resource_state res = img ? img->slot.state : SG_RESOURCESTATE_INVALID;
     if (_sg.hooks.query_image_state) {
-        _sg.hooks.query_image_state(img_id, res);
+        _sg.hooks.query_image_state(img_id, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9407,7 +9408,7 @@ SOKOL_API_IMPL sg_resource_state sg_query_shader_state(sg_shader shd_id) {
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     sg_resource_state res = shd ? shd->slot.state : SG_RESOURCESTATE_INVALID;
     if (_sg.hooks.query_shader_state) {
-        _sg.hooks.query_shader_state(shd_id, res);
+        _sg.hooks.query_shader_state(shd_id, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9416,7 +9417,7 @@ SOKOL_API_IMPL sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     sg_resource_state res = pip ? pip->slot.state : SG_RESOURCESTATE_INVALID;
     if (_sg.hooks.query_pipeline_state) {
-        _sg.hooks.query_pipeline_state(pip_id, res);
+        _sg.hooks.query_pipeline_state(pip_id, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9425,7 +9426,7 @@ SOKOL_API_IMPL sg_resource_state sg_query_pass_state(sg_pass pass_id) {
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     sg_resource_state res = pass ? pass->slot.state : SG_RESOURCESTATE_INVALID;
     if (_sg.hooks.query_pass_state) {
-        _sg.hooks.query_pass_state(pass_id, res);
+        _sg.hooks.query_pass_state(pass_id, res, _sg.hooks.user_data);
     }
     return res;
 }
@@ -9440,83 +9441,83 @@ SOKOL_API_IMPL sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
     else {
         SOKOL_LOG("buffer pool exhausted!");
         if (_sg.hooks.err_buffer_pool_exhausted) {
-            _sg.hooks.err_buffer_pool_exhausted();
+            _sg.hooks.err_buffer_pool_exhausted(_sg.hooks.user_data);
         }
     }
     if (_sg.hooks.make_buffer) {
-        _sg.hooks.make_buffer(desc, buf_id);
+        _sg.hooks.make_buffer(desc, buf_id, _sg.hooks.user_data);
     }
     return buf_id;
 }
 
 SOKOL_API_IMPL sg_image sg_make_image(const sg_image_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_image img_id = sg_alloc_image();
+    sg_image img_id = _sg_alloc_image();
     if (img_id.id != SG_INVALID_ID) {
-        sg_init_image(img_id, desc);
+        _sg_init_image(img_id, desc);
     }
     else {
         SOKOL_LOG("image pool exhausted!");
         if (_sg.hooks.err_image_pool_exhausted) {
-            _sg.hooks.err_image_pool_exhausted();
+            _sg.hooks.err_image_pool_exhausted(_sg.hooks.user_data);
         }
     }
     if (_sg.hooks.make_image) {
-        _sg.hooks.make_image(desc, img_id);
+        _sg.hooks.make_image(desc, img_id, _sg.hooks.user_data);
     }
     return img_id;
 }
 
 SOKOL_API_IMPL sg_shader sg_make_shader(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_shader shd_id = sg_alloc_shader();
+    sg_shader shd_id = _sg_alloc_shader();
     if (shd_id.id != SG_INVALID_ID) {
-        sg_init_shader(shd_id, desc);
+        _sg_init_shader(shd_id, desc);
     }
     else {
         SOKOL_LOG("shader pool exhausted!");
         if (_sg.hooks.err_shader_pool_exhausted) {
-            _sg.hooks.err_shader_pool_exhausted();
+            _sg.hooks.err_shader_pool_exhausted(_sg.hooks.user_data);
         }
     }
     if (_sg.hooks.make_shader) {
-        _sg.hooks.make_shader(desc, shd_id);
+        _sg.hooks.make_shader(desc, shd_id, _sg.hooks.user_data);
     }
     return shd_id;
 }
 
 SOKOL_API_IMPL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_pipeline pip_id = sg_alloc_pipeline();
+    sg_pipeline pip_id = _sg_alloc_pipeline();
     if (pip_id.id != SG_INVALID_ID) {
-        sg_init_pipeline(pip_id, desc);
+        _sg_init_pipeline(pip_id, desc);
     }
     else {
         SOKOL_LOG("pipeline pool exhausted!");
         if (_sg.hooks.err_pipeline_pool_exhausted) {
-            _sg.hooks.err_pipeline_pool_exhausted();
+            _sg.hooks.err_pipeline_pool_exhausted(_sg.hooks.user_data);
         }
     }
     if (_sg.hooks.make_pipeline) {
-        _sg.hooks.make_pipeline(desc, pip_id);
+        _sg.hooks.make_pipeline(desc, pip_id, _sg.hooks.user_data);
     }
     return pip_id;
 }
 
 SOKOL_API_IMPL sg_pass sg_make_pass(const sg_pass_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_pass pass_id = sg_alloc_pass();
+    sg_pass pass_id = _sg_alloc_pass();
     if (pass_id.id != SG_INVALID_ID) {
-        sg_init_pass(pass_id, desc);
+        _sg_init_pass(pass_id, desc);
     }
     else {
         SOKOL_LOG("pass pool exhausted!");
         if (_sg.hooks.err_pass_pool_exhausted) {
-            _sg.hooks.err_pass_pool_exhausted();
+            _sg.hooks.err_pass_pool_exhausted(_sg.hooks.user_data);
         }
     }
     if (_sg.hooks.make_pass) {
-        _sg.hooks.make_pass(desc, pass_id);
+        _sg.hooks.make_pass(desc, pass_id, _sg.hooks.user_data);
     }
     return pass_id;
 }
@@ -9533,12 +9534,12 @@ SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
         else {
             SOKOL_LOG("sg_destroy_buffer: active context mismatch (must be same as for creation)");
             if (_sg.hooks.err_context_mismatch) {
-                _sg.hooks.err_context_mismatch();
+                _sg.hooks.err_context_mismatch(_sg.hooks.user_data);
             }
         }
     }
     if (_sg.hooks.destroy_buffer) {
-        _sg.hooks.destroy_buffer(buf_id);
+        _sg.hooks.destroy_buffer(buf_id, _sg.hooks.user_data);
     }
 }
 
@@ -9553,12 +9554,12 @@ SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
         else {
             SOKOL_LOG("sg_destroy_image: active context mismatch (must be same as for creation)");
             if (_sg.hooks.err_context_mismatch) {
-                _sg.hooks.err_context_mismatch();
+                _sg.hooks.err_context_mismatch(_sg.hooks.user_data);
             }
         }
     }
     if (_sg.hooks.destroy_image) {
-        _sg.hooks.destroy_image(img_id);
+        _sg.hooks.destroy_image(img_id, _sg.hooks.user_data);
     }
 }
 
@@ -9573,12 +9574,12 @@ SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
         else {
             SOKOL_LOG("sg_destroy_shader: active context mismatch (must be same as for creation)");
             if (_sg.hooks.err_context_mismatch) {
-                _sg.hooks.err_context_mismatch();
+                _sg.hooks.err_context_mismatch(_sg.hooks.user_data);
             }
         }
     }
     if (_sg.hooks.destroy_shader) {
-        _sg.hooks.destroy_shader(shd_id);
+        _sg.hooks.destroy_shader(shd_id, _sg.hooks.user_data);
     }
 }
 
@@ -9593,12 +9594,12 @@ SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
         else {
             SOKOL_LOG("sg_destroy_pipeline: active context mismatch (must be same as for creation)");
             if (_sg.hooks.err_context_mismatch) {
-                _sg.hooks.err_context_mismatch();
+                _sg.hooks.err_context_mismatch(_sg.hooks.user_data);
             }
         }
     }
     if (_sg.hooks.destroy_pipeline) {
-        _sg.hooks.destroy_pipeline(pip_id);
+        _sg.hooks.destroy_pipeline(pip_id, _sg.hooks.user_data);
     }
 }
 
@@ -9613,12 +9614,12 @@ SOKOL_API_IMPL void sg_destroy_pass(sg_pass pass_id) {
         else {
             SOKOL_LOG("sg_destroy_pass: active context mismatch (must be same as for creation)");
             if (_sg.hooks.err_context_mismatch) {
-                _sg.hooks.err_context_mismatch();
+                _sg.hooks.err_context_mismatch(_sg.hooks.user_data);
             }
         }
     }
     if (_sg.hooks.destroy_pass) {
-        _sg.hooks.destroy_pass(pass_id);
+        _sg.hooks.destroy_pass(pass_id, _sg.hooks.user_data);
     }
 }
 
@@ -9631,7 +9632,7 @@ SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int
     _sg.pass_valid = true;
     _sg_begin_pass(0, &pa, width, height);
     if (_sg.hooks.begin_default_pass) {
-        _sg.hooks.begin_default_pass(pass_action, width, height);
+        _sg.hooks.begin_default_pass(pass_action, width, height, _sg.hooks.user_data);
     }
 }
 
@@ -9648,13 +9649,13 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         const int h = pass->color_atts[0].image->height;
         _sg_begin_pass(pass, &pa, w, h);
         if (_sg.hooks.begin_pass) {
-            _sg.hooks.begin_pass(pass_id, pass_action);
+            _sg.hooks.begin_pass(pass_id, pass_action, _sg.hooks.user_data);
         }
     }
     else {
         _sg.pass_valid = false;
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
     }
 }
@@ -9662,7 +9663,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
@@ -9672,7 +9673,7 @@ SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
@@ -9684,13 +9685,13 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
         return;
     }
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
@@ -9701,7 +9702,7 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->shader_id.id));
     _sg_apply_pipeline(pip);
     if (_sg.hooks.apply_pipeline) {
-        _sg.hooks.apply_pipeline(pip_id);
+        _sg.hooks.apply_pipeline(pip_id, _sg.hooks.user_data);
     }
 }
 
@@ -9711,7 +9712,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     if (!_sg_validate_apply_bindings(bind)) {
         _sg.next_draw_valid = false;
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
         return;
     }
@@ -9772,12 +9773,12 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
         int ib_offset = bind->index_buffer_offset;
         _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
         if (_sg.hooks.apply_bindings) {
-            _sg.hooks.apply_bindings(bind);
+            _sg.hooks.apply_bindings(bind, _sg.hooks.user_data);
         }
     }
     else {
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
     }
 }
@@ -9789,24 +9790,24 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     if (!_sg_validate_apply_uniforms(stage, ub_index, data, num_bytes)) {
         _sg.next_draw_valid = false;
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
         return;
     }
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
     if (!_sg.next_draw_valid) {
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
     }
     _sg_apply_uniforms(stage, ub_index, data, num_bytes);
     if (_sg.hooks.apply_uniforms) {
-        _sg.hooks.apply_uniforms(stage, ub_index, data, num_bytes);
+        _sg.hooks.apply_uniforms(stage, ub_index, data, num_bytes, _sg.hooks.user_data);
     }
 }
 
@@ -9818,32 +9819,32 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
     #endif
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
     if (!_sg.next_draw_valid) {
         if (_sg.hooks.err_draw_invalid) {
-            _sg.hooks.err_draw_invalid();
+            _sg.hooks.err_draw_invalid(_sg.hooks.user_data);
         }
         return;
     }
     if (!_sg.bindings_valid) {
         if (_sg.hooks.err_bindings_invalid) {
-            _sg.hooks.err_bindings_invalid();
+            _sg.hooks.err_bindings_invalid(_sg.hooks.user_data);
         }
         return;
     }
     _sg_draw(base_element, num_elements, num_instances);
     if (_sg.hooks.draw) {
-        _sg.hooks.draw(base_element, num_elements, num_instances);
+        _sg.hooks.draw(base_element, num_elements, num_instances, _sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     if (!_sg.pass_valid) {
         if (_sg.hooks.err_pass_invalid) {
-            _sg.hooks.err_pass_invalid();
+            _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
     }
@@ -9852,14 +9853,14 @@ SOKOL_API_IMPL void sg_end_pass(void) {
     _sg.cur_pipeline.id = SG_INVALID_ID;
     _sg.pass_valid = false;
     if (_sg.hooks.end_pass) {
-        _sg.hooks.end_pass();
+        _sg.hooks.end_pass(_sg.hooks.user_data);
     }
 }
 
 SOKOL_API_IMPL void sg_commit(void) {
     _sg_commit();
     if (_sg.hooks.commit) {
-        _sg.hooks.commit();
+        _sg.hooks.commit(_sg.hooks.user_data);
     }
     _sg.frame_index++;
 }
@@ -9867,7 +9868,7 @@ SOKOL_API_IMPL void sg_commit(void) {
 SOKOL_API_IMPL void sg_reset_state_cache(void) {
     _sg_reset_state_cache();
     if (_sg.hooks.reset_state_cache) {
-        _sg.hooks.reset_state_cache();
+        _sg.hooks.reset_state_cache(_sg.hooks.user_data);
     }
 }
 
@@ -9885,7 +9886,7 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const void* data, int num
         }
     }
     if (_sg.hooks.update_buffer) {
-        _sg.hooks.update_buffer(buf_id, data, num_bytes);
+        _sg.hooks.update_buffer(buf_id, data, num_bytes, _sg.hooks.user_data);
     }
 }
 
@@ -9920,7 +9921,7 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
         result = 0;
     }
     if (_sg.hooks.append_buffer) {
-        _sg.hooks.append_buffer(buf_id, data, num_bytes, result);
+        _sg.hooks.append_buffer(buf_id, data, num_bytes, result, _sg.hooks.user_data);
     }
     return result;
 }
@@ -9929,7 +9930,7 @@ SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     bool result = buf ? buf->append_overflow : false;
     if (_sg.hooks.query_buffer_overflow) {
-        _sg.hooks.query_buffer_overflow(buf_id, result);
+        _sg.hooks.query_buffer_overflow(buf_id, result, _sg.hooks.user_data);
     }
     return result;
 }
@@ -9944,7 +9945,7 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_content* dat
         }
     }
     if (_sg.hooks.update_image) {
-        _sg.hooks.update_image(img_id, data);
+        _sg.hooks.update_image(img_id, data, _sg.hooks.user_data);
     }
 }
 
