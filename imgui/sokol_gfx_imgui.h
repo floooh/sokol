@@ -45,22 +45,28 @@ extern "C" {
 #define SG_SOKOL_IMGUI_MAX_LABEL_LENGTH (32)
 
 typedef struct {
+    sg_buffer res_id;
     char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
 } sg_imgui_buffer_t;
 
 typedef struct {
+    sg_image res_id;
     char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
 } sg_imgui_image_t;
 
 typedef struct {
+    sg_shader res_id;
     char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_shader_desc desc;
 } sg_imgui_shader_t;
 
 typedef struct {
+    sg_pipeline res_id;
     char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
 } sg_imgui_pipeline_t;
 
 typedef struct {
+    sg_pass res_id;
     char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
 } sg_imgui_pass_t;
 
@@ -144,9 +150,117 @@ _SOKOL_PRIVATE void _sg_imgui_strcpy(char* dst, const char* src, int maxlen) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
+    SOKOL_ASSERT(src);
+    char* dst = (char*) SOKOL_MALLOC(strlen(src) + 1);
+    strcpy(dst, src);
+    return (const char*) dst;
+}
+
+_SOKOL_PRIVATE const uint8_t* _sg_imgui_bin_dup(const uint8_t* src, int num_bytes) {
+    SOKOL_ASSERT(src && (num_bytes > 0));
+    uint8_t* dst = (uint8_t*) SOKOL_MALLOC(num_bytes);
+    memcpy(dst, src, num_bytes);
+    return (const uint8_t*) dst;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, int slot_index, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
+    sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
+    buf->res_id = res_id;
+    _sg_imgui_strcpy(buf->label, desc->trace_label, sizeof(buf->label));
+}
+
+_SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
+    sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
+    buf->res_id.id = SG_INVALID_ID;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, int slot_index, const sg_image_desc* desc) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
+    sg_imgui_image_t* img = &ctx->images.slots[slot_index];
+    img->res_id = res_id;
+    _sg_imgui_strcpy(img->label, desc->trace_label, sizeof(img->label));
+}
+
+_SOKOL_PRIVATE void _sg_imgui_image_destroyed(sg_imgui_t* ctx, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
+    sg_imgui_image_t* img = &ctx->images.slots[slot_index];
+    img->res_id.id = SG_INVALID_ID;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, int slot_index, const sg_shader_desc* desc) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->shaders.num_slots));
+    sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
+    shd->res_id = res_id;
+    _sg_imgui_strcpy(shd->label, desc->trace_label, sizeof(shd->label));
+    shd->desc = *desc;
+    if (shd->desc.vs.source) {
+        shd->desc.vs.source = _sg_imgui_str_dup(shd->desc.vs.source);
+    }
+    if (shd->desc.vs.byte_code) {
+        shd->desc.vs.byte_code = _sg_imgui_bin_dup(shd->desc.vs.byte_code, shd->desc.vs.byte_code_size);
+    }
+    if (shd->desc.fs.source) {
+        shd->desc.fs.source = _sg_imgui_str_dup(shd->desc.fs.source);
+    }
+    if (shd->desc.fs.byte_code) {
+        shd->desc.fs.byte_code = _sg_imgui_bin_dup(shd->desc.fs.byte_code, shd->desc.fs.byte_code_size);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_shader_destroyed(sg_imgui_t* ctx, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->shaders.num_slots));
+    sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
+    shd->res_id.id = SG_INVALID_ID;
+    if (shd->desc.vs.source) {
+        SOKOL_FREE((void*)shd->desc.vs.source);
+        shd->desc.vs.source = 0;
+    }
+    if (shd->desc.vs.byte_code) {
+        SOKOL_FREE((void*)shd->desc.vs.byte_code);
+        shd->desc.vs.byte_code = 0;
+    }
+    if (shd->desc.fs.source) {
+        SOKOL_FREE((void*)shd->desc.fs.source);
+        shd->desc.fs.source = 0;
+    }
+    if (shd->desc.fs.byte_code) {
+        SOKOL_FREE((void*)shd->desc.fs.byte_code);
+        shd->desc.fs.byte_code = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_id, int slot_index, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->pipelines.num_slots));
+    sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
+    pip->res_id = res_id;
+    _sg_imgui_strcpy(pip->label, desc->trace_label, sizeof(pip->label));
+}
+
+_SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->pipelines.num_slots));
+    sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
+    pip->res_id.id = SG_INVALID_ID;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int slot_index, const sg_pass_desc* desc) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
+    sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
+    pass->res_id = res_id;
+    _sg_imgui_strcpy(pass->label, desc->trace_label, sizeof(pass->label));
+}
+
+_SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
+    sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
+    pass->res_id.id = SG_INVALID_ID;
+}
+
 /*--- sokol-gfx trace hook functions -----------------------------------------*/
 _SOKOL_PRIVATE void _sg_imgui_query_feature(sg_feature feature, bool result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.query_feature) {
         ctx->hooks.query_feature(feature, result, ctx->hooks.user_data);
@@ -154,120 +268,120 @@ _SOKOL_PRIVATE void _sg_imgui_query_feature(sg_feature feature, bool result, voi
 }
 
 _SOKOL_PRIVATE void _sg_imgui_reset_state_cache(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.reset_state_cache) {
         ctx->hooks.reset_state_cache(ctx->hooks.user_data);
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_make_buffer(const sg_buffer_desc* desc, sg_buffer result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+_SOKOL_PRIVATE void _sg_imgui_make_buffer(const sg_buffer_desc* desc, sg_buffer buf_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.make_buffer) {
-        ctx->hooks.make_buffer(desc, result, ctx->hooks.user_data);
+        ctx->hooks.make_buffer(desc, buf_id, ctx->hooks.user_data);
     }
-    if (SG_INVALID_ID != result.id) {
-        int i = _sg_slot_index(result.id);
-        SOKOL_ASSERT((i > 0) && (i < ctx->buffers.num_slots));
-        sg_imgui_buffer_t* buf = &ctx->buffers.slots[i];
-        _sg_imgui_strcpy(buf->label, desc->trace_label, sizeof(buf->label));
+    if (buf_id.id != SG_INVALID_ID) {
+        _sg_imgui_buffer_created(ctx, buf_id, _sg_slot_index(buf_id.id), desc);
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_make_image(const sg_image_desc* desc, sg_image result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+_SOKOL_PRIVATE void _sg_imgui_make_image(const sg_image_desc* desc, sg_image img_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.make_image) {
-        ctx->hooks.make_image(desc, result, ctx->hooks.user_data);
+        ctx->hooks.make_image(desc, img_id, ctx->hooks.user_data);
     }
-    if (SG_INVALID_ID != result.id) {
-        int i = _sg_slot_index(result.id);
-        SOKOL_ASSERT((i > 0) && (i < ctx->images.num_slots));
-        sg_imgui_image_t* img = &ctx->images.slots[i];
-        _sg_imgui_strcpy(img->label, desc->trace_label, sizeof(img->label));
+    if (img_id.id != SG_INVALID_ID) {
+        _sg_imgui_image_created(ctx, img_id, _sg_slot_index(img_id.id), desc);
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_make_shader(const sg_shader_desc* desc, sg_shader result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+_SOKOL_PRIVATE void _sg_imgui_make_shader(const sg_shader_desc* desc, sg_shader shd_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.make_shader) {
-        ctx->hooks.make_shader(desc, result, ctx->hooks.user_data);
+        ctx->hooks.make_shader(desc, shd_id, ctx->hooks.user_data);
     }
-    if (SG_INVALID_ID != result.id) {
-        int i = _sg_slot_index(result.id);
-        SOKOL_ASSERT((i > 0) && (i < ctx->shaders.num_slots));
-        sg_imgui_shader_t* shd = &ctx->shaders.slots[i];
-        _sg_imgui_strcpy(shd->label, desc->trace_label, sizeof(shd->label));
+    if (shd_id.id != SG_INVALID_ID) {
+        _sg_imgui_shader_created(ctx, shd_id, _sg_slot_index(shd_id.id), desc);
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_make_pipeline(const sg_pipeline_desc* desc, sg_pipeline result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+_SOKOL_PRIVATE void _sg_imgui_make_pipeline(const sg_pipeline_desc* desc, sg_pipeline pip_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.make_pipeline) {
-        ctx->hooks.make_pipeline(desc, result, ctx->hooks.user_data);
+        ctx->hooks.make_pipeline(desc, pip_id, ctx->hooks.user_data);
     }
-    if (SG_INVALID_ID != result.id) {
-        int i = _sg_slot_index(result.id);
-        SOKOL_ASSERT((i > 0) && (i < ctx->pipelines.num_slots));
-        sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[i];
-        _sg_imgui_strcpy(pip->label, desc->trace_label, sizeof(pip->label));
+    if (pip_id.id != SG_INVALID_ID) {
+        _sg_imgui_pipeline_created(ctx, pip_id, _sg_slot_index(pip_id.id), desc);
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_make_pass(const sg_pass_desc* desc, sg_pass result, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+_SOKOL_PRIVATE void _sg_imgui_make_pass(const sg_pass_desc* desc, sg_pass pass_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.make_pass) {
-        ctx->hooks.make_pass(desc, result, ctx->hooks.user_data);
+        ctx->hooks.make_pass(desc, pass_id, ctx->hooks.user_data);
     }
-    if (SG_INVALID_ID != result.id) {
-        int i = _sg_slot_index(result.id);
-        SOKOL_ASSERT((i > 0) && (i < ctx->passes.num_slots));
-        sg_imgui_pass_t* pass = &ctx->passes.slots[i];
-        _sg_imgui_strcpy(pass->label, desc->trace_label, sizeof(pass->label));
+    if (pass_id.id != SG_INVALID_ID) {
+        _sg_imgui_pass_created(ctx, pass_id, _sg_slot_index(pass_id.id), desc);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_destroy_buffer(sg_buffer buf, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.destroy_buffer) {
         ctx->hooks.destroy_buffer(buf, ctx->hooks.user_data);
     }
+    if (buf.id != SG_INVALID_ID) {
+        _sg_imgui_buffer_destroyed(ctx, _sg_slot_index(buf.id));
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_destroy_image(sg_image img, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.destroy_image) {
         ctx->hooks.destroy_image(img, ctx->hooks.user_data);
     }
+    if (img.id != SG_INVALID_ID) {
+        _sg_imgui_image_destroyed(ctx, _sg_slot_index(img.id));
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_destroy_shader(sg_shader shd, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.destroy_shader) {
         ctx->hooks.destroy_shader(shd, ctx->hooks.user_data);
     }
+    if (shd.id != SG_INVALID_ID) {
+        _sg_imgui_shader_destroyed(ctx, _sg_slot_index(shd.id));
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_destroy_pipeline(sg_pipeline pip, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.destroy_pipeline) {
         ctx->hooks.destroy_pipeline(pip, ctx->hooks.user_data);
     }
+    if (pip.id != SG_INVALID_ID) {
+        _sg_imgui_pipeline_destroyed(ctx, _sg_slot_index(pip.id));
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_destroy_pass(sg_pass pass, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.destroy_pass) {
         ctx->hooks.destroy_pass(pass, ctx->hooks.user_data);
+    }
+    if (pass.id != SG_INVALID_ID) {
+        _sg_imgui_pass_destroyed(ctx, _sg_slot_index(pass.id));
     }
 }
 
@@ -464,42 +578,57 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_pass(sg_pass result, void* user_data) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.init_buffer) {
         ctx->hooks.init_buffer(buf_id, desc, ctx->hooks.user_data);
     }
+    if (buf_id.id != SG_INVALID_ID) {
+        _sg_imgui_buffer_created(ctx, buf_id, _sg_slot_index(buf_id.id), desc);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_init_image(sg_image img_id, const sg_image_desc* desc, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.init_image) {
         ctx->hooks.init_image(img_id, desc, ctx->hooks.user_data);
     }
+    if (img_id.id != SG_INVALID_ID) {
+        _sg_imgui_image_created(ctx, img_id, _sg_slot_index(img_id.id), desc);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_init_shader(sg_shader shd_id, const sg_shader_desc* desc, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.init_shader) {
         ctx->hooks.init_shader(shd_id, desc, ctx->hooks.user_data);
     }
+    if (shd_id.id != SG_INVALID_ID) {
+        _sg_imgui_shader_created(ctx, shd_id, _sg_slot_index(shd_id.id), desc);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.init_pipeline) {
         ctx->hooks.init_pipeline(pip_id, desc, ctx->hooks.user_data);
     }
+    if (pip_id.id != SG_INVALID_ID) {
+        _sg_imgui_pipeline_created(ctx, pip_id, _sg_slot_index(pip_id.id), desc);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_init_pass(sg_pass pass_id, const sg_pass_desc* desc, void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     if (ctx->hooks.init_pass) {
         ctx->hooks.init_pass(pass_id, desc, ctx->hooks.user_data);
+    }
+    if (pass_id.id != SG_INVALID_ID) {
+        _sg_imgui_pass_created(ctx, pass_id, _sg_slot_index(pass_id.id), desc);
     }
 }
 
@@ -859,6 +988,8 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, uint32_t sel_id
         ImGui::BeginChild("shader", ImVec2(0,0), false);
         ImGui::Text("Label: %s", shd_ui->label[0] ? shd_ui->label : "---");
         _sg_imgui_draw_resource_slot(&shd->slot);
+        ImGui::Separator();
+
         ImGui::EndChild();
     }
 }
@@ -990,23 +1121,48 @@ void sg_imgui_discard(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     ctx->init_tag = 0;
     if (ctx->buffers.slots) {
-        SOKOL_FREE(ctx->buffers.slots);
+        for (int i = 0; i < ctx->buffers.num_slots; i++) {
+            if (ctx->buffers.slots[i].res_id.id != SG_INVALID_ID) {
+                _sg_imgui_buffer_destroyed(ctx, i);
+            }
+        }
+        SOKOL_FREE((void*)ctx->buffers.slots);
         ctx->buffers.slots = 0;
     }
     if (ctx->images.slots) {
-        SOKOL_FREE(ctx->images.slots);
+        for (int i = 0; i < ctx->images.num_slots; i++) {
+            if (ctx->images.slots[i].res_id.id != SG_INVALID_ID) {
+                _sg_imgui_image_destroyed(ctx, i);
+            }
+        }
+        SOKOL_FREE((void*)ctx->images.slots);
         ctx->images.slots = 0;
     }
     if (ctx->shaders.slots) {
-        SOKOL_FREE(ctx->shaders.slots);
+        for (int i = 0; i < ctx->shaders.num_slots; i++) {
+            if (ctx->shaders.slots[i].res_id.id != SG_INVALID_ID) {
+                _sg_imgui_shader_destroyed(ctx, i);
+            }
+        }
+        SOKOL_FREE((void*)ctx->shaders.slots);
         ctx->shaders.slots = 0;
     }
     if (ctx->pipelines.slots) {
-        SOKOL_FREE(ctx->pipelines.slots);
+        for (int i = 0; i < ctx->pipelines.num_slots; i++) {
+            if (ctx->pipelines.slots[i].res_id.id != SG_INVALID_ID) {
+                _sg_imgui_pipeline_destroyed(ctx, i);
+            }
+        }
+        SOKOL_FREE((void*)ctx->pipelines.slots);
         ctx->pipelines.slots = 0;
     }
     if (ctx->passes.slots) {
-        SOKOL_FREE(ctx->passes.slots);
+        for (int i = 0; i < ctx->passes.num_slots; i++) {
+            if (ctx->passes.slots[i].res_id.id != SG_INVALID_ID) {
+                _sg_imgui_pass_destroyed(ctx, i);
+            }
+        }
+        SOKOL_FREE((void*)ctx->passes.slots);
         ctx->passes.slots = 0;
     }
 }
