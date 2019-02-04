@@ -44,6 +44,10 @@ extern "C" {
 
 #define SG_IMGUI_STRBUF_LEN (32)
 
+/* a small string buffer to store strings coming into sokol_gfx.h via
+    the desc structures, these are not guaranteed to be static, so
+    we need to copy them
+*/
 typedef struct {
     char buf[SG_IMGUI_STRBUF_LEN];
 } sg_imgui_str_t;
@@ -73,6 +77,9 @@ typedef struct {
 typedef struct {
     sg_pipeline res_id;
     sg_imgui_str_t label;
+    sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_imgui_str_t attr_sem_name[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_pipeline_desc desc;
 } sg_imgui_pipeline_t;
 
 typedef struct {
@@ -285,6 +292,53 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
     pip->res_id = res_id;
     _sg_imgui_strcpy(&pip->label, desc->trace_label);
+    pip->desc = *desc;
+
+    /* copy strings in vertex layout to persistent location */
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        sg_vertex_attr_desc* ad = &pip->desc.layout.attrs[i];
+        if (ad->name) {
+            _sg_imgui_strcpy(&pip->attr_name[i], ad->name);
+            ad->name = pip->attr_name[i].buf;
+        }
+        if (ad->sem_name) {
+            _sg_imgui_strcpy(&pip->attr_sem_name[i], ad->sem_name);
+            ad->sem_name = pip->attr_sem_name[i].buf;
+        }
+    }
+    
+    /* need to resolve default values */
+    sg_depth_stencil_state* ds = &pip->desc.depth_stencil;
+    sg_stencil_state* dsf = &ds->stencil_front;
+    sg_stencil_state* dsb = &ds->stencil_back;
+    sg_blend_state* blend = &pip->desc.blend;
+    sg_rasterizer_state* rs = &pip->desc.rasterizer;
+    pip->desc.primitive_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
+    pip->desc.index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
+    dsf->fail_op = _sg_def(dsf->fail_op, SG_STENCILOP_KEEP);
+    dsf->depth_fail_op = _sg_def(dsf->depth_fail_op, SG_STENCILOP_KEEP);
+    dsf->pass_op = _sg_def(dsf->pass_op, SG_STENCILOP_KEEP);
+    dsf->compare_func = _sg_def(dsf->compare_func, SG_COMPAREFUNC_ALWAYS);
+    dsb->fail_op = _sg_def(dsb->fail_op, SG_STENCILOP_KEEP);
+    dsb->depth_fail_op = _sg_def(dsb->depth_fail_op, SG_STENCILOP_KEEP);
+    dsb->pass_op = _sg_def(dsb->pass_op, SG_STENCILOP_KEEP);
+    dsb->compare_func = _sg_def(dsb->compare_func, SG_COMPAREFUNC_ALWAYS);
+    ds->depth_compare_func = _sg_def(ds->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
+    blend->src_factor_rgb = _sg_def(blend->src_factor_rgb, SG_BLENDFACTOR_ONE);
+    blend->dst_factor_rgb = _sg_def(blend->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+    blend->op_rgb = _sg_def(blend->op_rgb, SG_BLENDOP_ADD);
+    blend->src_factor_alpha = _sg_def(blend->src_factor_alpha, SG_BLENDFACTOR_ONE);
+    blend->dst_factor_alpha = _sg_def(blend->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+    blend->op_alpha = _sg_def(blend->op_alpha, SG_BLENDOP_ADD);
+    if (blend->color_write_mask == SG_COLORMASK_NONE) {
+        blend->color_write_mask = 0;
+    }
+    else {
+        blend->color_write_mask = (uint8_t) _sg_def((sg_color_mask)blend->color_write_mask, SG_COLORMASK_RGBA);
+    }
+    rs->cull_mode = _sg_def(rs->cull_mode, SG_CULLMODE_NONE);
+    rs->face_winding = _sg_def(rs->face_winding, SG_FACEWINDING_CW);
+    rs->sample_count = _sg_def(rs->sample_count, 1);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
