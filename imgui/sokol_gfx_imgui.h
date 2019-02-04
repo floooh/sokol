@@ -42,32 +42,42 @@
 extern "C" {
 #endif
 
-#define SG_SOKOL_IMGUI_MAX_LABEL_LENGTH (32)
+#define SG_IMGUI_STRBUF_LEN (32)
+
+typedef struct {
+    char buf[SG_IMGUI_STRBUF_LEN];
+} sg_imgui_str_t;
 
 typedef struct {
     sg_buffer res_id;
-    char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_imgui_str_t label;
 } sg_imgui_buffer_t;
 
 typedef struct {
     sg_image res_id;
-    char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_imgui_str_t label;
 } sg_imgui_image_t;
 
 typedef struct {
     sg_shader res_id;
-    char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_imgui_str_t label;
+    sg_imgui_str_t vs_entry;
+    sg_imgui_str_t vs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_imgui_str_t vs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
+    sg_imgui_str_t fs_entry;
+    sg_imgui_str_t fs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
+    sg_imgui_str_t fs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
     sg_shader_desc desc;
 } sg_imgui_shader_t;
 
 typedef struct {
     sg_pipeline res_id;
-    char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_imgui_str_t label;
 } sg_imgui_pipeline_t;
 
 typedef struct {
     sg_pass res_id;
-    char label[SG_SOKOL_IMGUI_MAX_LABEL_LENGTH];
+    sg_imgui_str_t label;
 } sg_imgui_pass_t;
 
 typedef struct sg_imgui_buffers_t {
@@ -139,14 +149,14 @@ void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
 #if defined SOKOL_IMPL
 #include <string.h>
 
-_SOKOL_PRIVATE void _sg_imgui_strcpy(char* dst, const char* src, int maxlen) {
-    SOKOL_ASSERT(dst && (maxlen > 0));
+_SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
+    SOKOL_ASSERT(dst);
     if (src) {
-        strncpy(dst, src, maxlen);
-        dst[maxlen-1] = 0;
+        strncpy(dst->buf, src, SG_IMGUI_STRBUF_LEN);
+        dst->buf[SG_IMGUI_STRBUF_LEN-1] = 0;
     }
     else {
-        memset(dst, 0, maxlen);
+        memset(dst->buf, 0, SG_IMGUI_STRBUF_LEN);
     }
 }
 
@@ -168,7 +178,7 @@ _SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
     sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
     buf->res_id = res_id;
-    _sg_imgui_strcpy(buf->label, desc->trace_label, sizeof(buf->label));
+    _sg_imgui_strcpy(&buf->label, desc->trace_label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -181,7 +191,7 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
     sg_imgui_image_t* img = &ctx->images.slots[slot_index];
     img->res_id = res_id;
-    _sg_imgui_strcpy(img->label, desc->trace_label, sizeof(img->label));
+    _sg_imgui_strcpy(&img->label, desc->trace_label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_image_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -194,8 +204,46 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->shaders.num_slots));
     sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
     shd->res_id = res_id;
-    _sg_imgui_strcpy(shd->label, desc->trace_label, sizeof(shd->label));
     shd->desc = *desc;
+    _sg_imgui_strcpy(&shd->label, desc->trace_label);
+    if (shd->desc.vs.entry) {
+        _sg_imgui_strcpy(&shd->vs_entry, shd->desc.vs.entry);
+        shd->desc.vs.entry = shd->vs_entry.buf;
+    }
+    if (shd->desc.fs.entry) {
+        _sg_imgui_strcpy(&shd->fs_entry, shd->desc.fs.entry);
+        shd->desc.fs.entry = shd->fs_entry.buf;
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+        for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
+            sg_shader_uniform_desc* ud = &shd->desc.vs.uniform_blocks[i].uniforms[j];
+            if (ud->name) {
+                _sg_imgui_strcpy(&shd->vs_uniform_name[i][j], ud->name);
+                ud->name = shd->vs_uniform_name[i][j].buf;
+            }
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+        for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
+            sg_shader_uniform_desc* ud = &shd->desc.fs.uniform_blocks[i].uniforms[j];
+            if (ud->name) {
+                _sg_imgui_strcpy(&shd->fs_uniform_name[i][j], ud->name);
+                ud->name = shd->fs_uniform_name[i][j].buf;
+            }
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        if (shd->desc.vs.images[i].name) {
+            _sg_imgui_strcpy(&shd->vs_image_name[i], shd->desc.vs.images[i].name);
+            shd->desc.vs.images[i].name = shd->vs_image_name[i].buf;
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        if (shd->desc.fs.images[i].name) {
+            _sg_imgui_strcpy(&shd->fs_image_name[i], shd->desc.fs.images[i].name);
+            shd->desc.fs.images[i].name = shd->fs_image_name[i].buf;
+        }
+    }
     if (shd->desc.vs.source) {
         shd->desc.vs.source = _sg_imgui_str_dup(shd->desc.vs.source);
     }
@@ -236,7 +284,7 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->pipelines.num_slots));
     sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
     pip->res_id = res_id;
-    _sg_imgui_strcpy(pip->label, desc->trace_label, sizeof(pip->label));
+    _sg_imgui_strcpy(&pip->label, desc->trace_label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -249,7 +297,7 @@ _SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
     sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
     pass->res_id = res_id;
-    _sg_imgui_strcpy(pass->label, desc->trace_label, sizeof(pass->label));
+    _sg_imgui_strcpy(&pass->label, desc->trace_label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -848,13 +896,24 @@ _SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
+    switch (t) {
+        case SG_UNIFORMTYPE_FLOAT:  return "SG_UNIFORMTYPE_FLOAT";
+        case SG_UNIFORMTYPE_FLOAT2: return "SG_UNIFORMTYPE_FLOAT2";
+        case SG_UNIFORMTYPE_FLOAT3: return "SG_UNIFORMTYPE_FLOAT3";
+        case SG_UNIFORMTYPE_FLOAT4: return "SG_UNIFORMTYPE_FLOAT4";
+        case SG_UNIFORMTYPE_MAT4:   return "SG_UNIFORMTYPE_MAT4";
+        default:                    return "???";
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
         const _sg_buffer_t* buf = &_sg.pools.buffers[i];
         if (buf->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->buffers.sel_id == buf->slot.id;
-            if (_sg_imgui_draw_resid(buf->slot.id, ctx->buffers.slots[i].label, selected)) {
+            if (_sg_imgui_draw_resid(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
                 ctx->buffers.sel_id = buf->slot.id;
             }
         }
@@ -868,7 +927,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
         const _sg_image_t* img = &_sg.pools.images[i];
         if (img->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->images.sel_id == img->slot.id;
-            if (_sg_imgui_draw_resid(img->slot.id, ctx->images.slots[i].label, selected)) {
+            if (_sg_imgui_draw_resid(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
                 ctx->images.sel_id = img->slot.id;
             }
         }
@@ -882,7 +941,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
         const _sg_shader_t* shd = &_sg.pools.shaders[i];
         if (shd->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->shaders.sel_id == shd->slot.id;
-            if (_sg_imgui_draw_resid(shd->slot.id, ctx->shaders.slots[i].label, selected)) {
+            if (_sg_imgui_draw_resid(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
                 ctx->shaders.sel_id = shd->slot.id;
             }
         }
@@ -896,7 +955,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
         const _sg_pipeline_t* pip = &_sg.pools.pipelines[i];
         if (pip->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->pipelines.sel_id == pip->slot.id;
-            if (_sg_imgui_draw_resid(pip->slot.id, ctx->pipelines.slots[i].label, selected)) {
+            if (_sg_imgui_draw_resid(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
                 ctx->pipelines.sel_id = pip->slot.id;
             }
         }
@@ -910,7 +969,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
         const _sg_pass_t* pass = &_sg.pools.passes[i];
         if (pass->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->passes.sel_id == pass->slot.id;
-            if (_sg_imgui_draw_resid(pass->slot.id, ctx->passes.slots[i].label, selected)) {
+            if (_sg_imgui_draw_resid(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
                 ctx->passes.sel_id = pass->slot.id;
             }
         }
@@ -924,7 +983,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
         const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("buffer", ImVec2(0,0), false);
-        ImGui::Text("Label: %s", buf_ui->label[0] ? buf_ui->label : "---");
+        ImGui::Text("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&buf->slot);
         ImGui::Separator();
         ImGui::Text("Type:  %s", _sg_imgui_buffertype_string(buf->type));
@@ -949,7 +1008,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id)
         const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("image", ImVec2(0,0), false);
-        ImGui::Text("Label: %s", img_ui->label[0] ? img_ui->label : "---");
+        ImGui::Text("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&img->slot);
         ImGui::Separator();
         ImGui::Text("Type:              %s", _sg_imgui_imagetype_string(img->type));
@@ -980,16 +1039,94 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id)
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(sg_imgui_t* ctx, const sg_shader_stage_desc* stage) {
+    int num_valid_ubs = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
+        const sg_shader_uniform_block_desc* ub = &stage->uniform_blocks[i];
+        for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
+            const sg_shader_uniform_desc* u = &ub->uniforms[j];
+            if (SG_UNIFORMTYPE_INVALID != u->type) {
+                num_valid_ubs++;
+                break;
+            }
+        }
+    }
+    int num_valid_images = 0;
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        if (_SG_IMAGETYPE_DEFAULT != stage->images[i].type) {
+            num_valid_images++;
+        }
+        else {
+            break;
+        }
+    }
+    if (num_valid_ubs > 0) {
+        if (ImGui::TreeNode("Uniform Blocks")) {
+            for (int i = 0; i < num_valid_ubs; i++) {
+                ImGui::Text("#%d:", i);
+                const sg_shader_uniform_block_desc* ub = &stage->uniform_blocks[i];
+                for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
+                    const sg_shader_uniform_desc* u = &ub->uniforms[j];
+                    if (SG_UNIFORMTYPE_INVALID != u->type) {
+                        if (u->array_count == 0) {
+                            ImGui::Text("  %s %s", _sg_imgui_uniformtype_string(u->type), u->name ? u->name : "");
+                        }
+                        else {
+                            ImGui::Text("  %s[%d] %s", _sg_imgui_uniformtype_string(u->type), u->array_count, u->name ? u->name : "");
+                        }
+                    }
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+    if (num_valid_images > 0) {
+        if (ImGui::TreeNode("Images")) {
+            for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+                const sg_shader_image_desc* sid = &stage->images[i];
+                if (sid->type != _SG_IMAGETYPE_DEFAULT) {
+                    ImGui::Text("%s %s", _sg_imgui_imagetype_string(sid->type), sid->name ? sid->name : "");
+                }
+                else {
+                    break;
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+    if (stage->entry) {
+        ImGui::Text("Entry: %s", stage->entry);
+    }
+    if (stage->source) {
+        if (ImGui::TreeNode("Source")) {
+            ImGui::Text("%s", stage->source);
+            ImGui::TreePop();
+        }
+    }
+    else if (stage->byte_code) {
+        if (ImGui::TreeNode("Byte Code")) {
+            ImGui::Text("FIXME!");
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, uint32_t sel_id) {
     if (sel_id != SG_INVALID_ID) {
         const _sg_shader_t* shd = _sg_shader_at(&_sg.pools, sel_id);
         const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
-        ImGui::BeginChild("shader", ImVec2(0,0), false);
-        ImGui::Text("Label: %s", shd_ui->label[0] ? shd_ui->label : "---");
+        ImGui::BeginChild("shader", ImVec2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::Text("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&shd->slot);
         ImGui::Separator();
-
+        if (ImGui::TreeNode("Vertex Shader Stage")) {
+            _sg_imgui_draw_shader_stage(ctx, &shd_ui->desc.vs);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Fragment Shader Stage")) {
+            _sg_imgui_draw_shader_stage(ctx, &shd_ui->desc.fs);
+            ImGui::TreePop();
+        }
         ImGui::EndChild();
     }
 }
@@ -1000,7 +1137,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_
         const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("pipeline", ImVec2(0,0), false);
-        ImGui::Text("Label: %s", pip_ui->label[0] ? pip_ui->label : "---");
+        ImGui::Text("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&pip->slot);
         ImGui::EndChild();
     }
@@ -1012,7 +1149,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, uint32_t sel_id) 
         const sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("pass", ImVec2(0,0), false);
-        ImGui::Text("Label: %s", pass_ui->label[0] ? pass_ui->label : "---");
+        ImGui::Text("Label: %s", pass_ui->label.buf[0] ? pass_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&pass->slot);
         ImGui::EndChild();
     }
