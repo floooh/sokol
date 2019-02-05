@@ -339,6 +339,39 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     rs->cull_mode = _sg_def(rs->cull_mode, SG_CULLMODE_NONE);
     rs->face_winding = _sg_def(rs->face_winding, SG_FACEWINDING_CW);
     rs->sample_count = _sg_def(rs->sample_count, 1);
+    
+    /* resolve vertex layout strides and offsets */
+    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
+    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+        auto_offset[layout_index] = 0;
+    }
+    bool use_auto_offset = true;
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        /* to use computed offsets, *all* attr offsets must be 0 */
+        if (pip->desc.layout.attrs[attr_index].offset != 0) {
+            use_auto_offset = false;
+        }
+    }
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        sg_vertex_attr_desc* a_desc = &pip->desc.layout.attrs[attr_index];
+        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+            break;
+        }
+        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
+        if (use_auto_offset) {
+            a_desc->offset = auto_offset[a_desc->buffer_index];
+        }
+        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
+    }
+    /* compute vertex strides if needed, and default-resolve step_func and rate */
+    for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
+        sg_buffer_layout_desc* l_desc = &pip->desc.layout.buffers[buf_index];
+        l_desc->step_func = _sg_def(l_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
+        l_desc->step_rate = _sg_def(l_desc->step_rate, 1);
+        if (l_desc->stride == 0) {
+            l_desc->stride = auto_offset[buf_index];
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -961,6 +994,81 @@ _SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_vertexstep_string(sg_vertex_step s) {
+    switch (s) {
+        case SG_VERTEXSTEP_PER_VERTEX:      return "SG_VERTEXSTEP_PER_VERTEX";
+        case SG_VERTEXSTEP_PER_INSTANCE:    return "SG_VERTEXSTEP_PER_INSTANCE";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_vertexformat_string(sg_vertex_format f) {
+    switch (f) {
+        case SG_VERTEXFORMAT_FLOAT:     return "SG_VERTEXFORMAT_FLOAT";
+        case SG_VERTEXFORMAT_FLOAT2:    return "SG_VERTEXFORMAT_FLOAT2";
+        case SG_VERTEXFORMAT_FLOAT3:    return "SG_VERTEXFORMAT_FLOAT3";
+        case SG_VERTEXFORMAT_FLOAT4:    return "SG_VERTEXFORMAT_FLOAT4";
+        case SG_VERTEXFORMAT_BYTE4:     return "SG_VERTEXFORMAT_BYTE4";
+        case SG_VERTEXFORMAT_BYTE4N:    return "SG_VERTEXFORMAT_BYTE4N";
+        case SG_VERTEXFORMAT_UBYTE4:    return "SG_VERTEXFORMAT_UBYTE4";
+        case SG_VERTEXFORMAT_UBYTE4N:   return "SG_VERTEXFORMAT_UBYTE4N";
+        case SG_VERTEXFORMAT_SHORT2:    return "SG_VERTEXFORMAT_SHORT2";
+        case SG_VERTEXFORMAT_SHORT2N:   return "SG_VERTEXFORMAT_SHORT2N";
+        case SG_VERTEXFORMAT_SHORT4:    return "SG_VERTEXFORMAT_SHORT4";
+        case SG_VERTEXFORMAT_SHORT4N:   return "SG_VERTEXFORMAT_SHORT4N";
+        case SG_VERTEXFORMAT_UINT10_N2: return "SG_VERTEXFORMAT_UINT10_N2";
+        default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_primitivetype_string(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:           return "SG_PRIMITIVETYPE_POINTS";
+        case SG_PRIMITIVETYPE_LINES:            return "SG_PRIMITIVETYPE_LINES";
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return "SG_PRIMITIVETYPE_LINE_STRIP";
+        case SG_PRIMITIVETYPE_TRIANGLES:        return "SG_PRIMITIVETYPE_TRIANGLES";
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return "SG_PRIMITIVETYPE_TRIANGLE_STRIP";
+        default:                                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_indextype_string(sg_index_type t) {
+    switch (t) {
+        case SG_INDEXTYPE_NONE:     return "SG_INDEXTYPE_NONE";
+        case SG_INDEXTYPE_UINT16:   return "SG_INDEXTYPE_UINT16";
+        case SG_INDEXTYPE_UINT32:   return "SG_INDEXTYPE_UINT32";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_stencilop_string(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return "SG_STENCILOP_KEEP";
+        case SG_STENCILOP_ZERO:         return "SG_STENCILOP_ZERO";
+        case SG_STENCILOP_REPLACE:      return "SG_STENCILOP_REPLACE";
+        case SG_STENCILOP_INCR_CLAMP:   return "SG_STENCILOP_INCR_CLAMP";
+        case SG_STENCILOP_DECR_CLAMP:   return "SG_STENCILOP_DECR_CLAMP";
+        case SG_STENCILOP_INVERT:       return "SG_STENCILOP_INVERT";
+        case SG_STENCILOP_INCR_WRAP:    return "SG_STENCILOP_INCR_WRAP";
+        case SG_STENCILOP_DECR_WRAP:    return "SG_STENCILOP_DECR_WRAP";
+        default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_comparefunc_string(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return "SG_COMPAREFUNC_NEVER";
+        case SG_COMPAREFUNC_LESS:           return "SG_COMPAREFUNC_LESS";
+        case SG_COMPAREFUNC_EQUAL:          return "SG_COMPAREFUNC_EQUAL";
+        case SG_COMPAREFUNC_LESS_EQUAL:     return "SG_COMPAREFUNC_LESS_EQUAL";
+        case SG_COMPAREFUNC_GREATER:        return "SG_COMPAREFUNC_GREATER";
+        case SG_COMPAREFUNC_NOT_EQUAL:      return "SG_COMPAREFUNC_NOT_EQUAL";
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return "SG_COMPAREFUNC_GREATER_EQUAL";
+        case SG_COMPAREFUNC_ALWAYS:         return "SG_COMPAREFUNC_ALWAYS";
+        default:                            return "???";
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
@@ -1185,6 +1293,68 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, uint32_t sel_id
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
+    if (ImGui::TreeNode("Buffers")) {
+        for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+            const sg_buffer_layout_desc* l_desc = &layout->buffers[i];
+            if (l_desc->stride > 0) {
+                ImGui::Text("#%d:", i);
+                ImGui::Text("  Stride:    %d", l_desc->stride);
+                ImGui::Text("  Step Func: %s", _sg_imgui_vertexstep_string(l_desc->step_func));
+                ImGui::Text("  Step Rate: %d", l_desc->step_rate);
+            }
+        }
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Attrs")) {
+        for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+            const sg_vertex_attr_desc* a_desc = &layout->attrs[i];
+            if (a_desc->format != SG_VERTEXFORMAT_INVALID) {
+                ImGui::Text("#%d:", i);
+                ImGui::Text("  Format:       %s", _sg_imgui_vertexformat_string(a_desc->format));
+                ImGui::Text("  Name:         %s", a_desc->name ? a_desc->name : "---");
+                ImGui::Text("  Sem Name:     %s", a_desc->sem_name ? a_desc->sem_name : "---");
+                ImGui::Text("  Sem Index:    %d", a_desc->sem_index);
+                ImGui::Text("  Offset:       %d", a_desc->offset);
+                ImGui::Text("  Buffer Index: %d", a_desc->buffer_index);
+            }
+        }
+        ImGui::TreePop();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_stencil_state(const sg_stencil_state* ss) {
+    ImGui::Text("Fail Op:       %s", _sg_imgui_stencilop_string(ss->fail_op));
+    ImGui::Text("Depth Fail Op: %s", _sg_imgui_stencilop_string(ss->depth_fail_op));
+    ImGui::Text("Pass Op:       %s", _sg_imgui_stencilop_string(ss->pass_op));
+    ImGui::Text("Compare Func:  %s", _sg_imgui_comparefunc_string(ss->compare_func));
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_depth_stencil_state(const sg_depth_stencil_state* dss) {
+    ImGui::Text("Depth Compare Func:  %s", _sg_imgui_comparefunc_string(dss->depth_compare_func));
+    ImGui::Text("Depth Write Enabled: %s", dss->depth_write_enabled ? "YES":"NO");
+    ImGui::Text("Stencil Enabled:     %s", dss->stencil_enabled ? "YES":"NO");
+    ImGui::Text("Stencil Read Mask:   0x%02X", dss->stencil_read_mask);
+    ImGui::Text("Stencil Write Mask:  0x%02X", dss->stencil_write_mask);
+    ImGui::Text("Stencil Ref:         0x%02X", dss->stencil_ref);
+    if (ImGui::TreeNode("Stencil Front")) {
+        _sg_imgui_draw_stencil_state(&dss->stencil_front);
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Stencil Back")) {
+        _sg_imgui_draw_stencil_state(&dss->stencil_back);
+        ImGui::TreePop();
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_blend_state(const sg_blend_state* b) {
+    ImGui::Text("FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_rasterizer_state(const sg_rasterizer_state* rs) {
+    ImGui::Text("FIXME");
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_id) {
     if (sel_id != SG_INVALID_ID) {
         const _sg_pipeline_t* pip = _sg_pipeline_at(&_sg.pools, sel_id);
@@ -1193,6 +1363,26 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_
         ImGui::BeginChild("pipeline", ImVec2(0,0), false);
         ImGui::Text("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&pip->slot);
+        ImGui::Separator();
+        ImGui::Text("Shader:     FIXME!");
+        ImGui::Text("Prim Type:  %s", _sg_imgui_primitivetype_string(pip_ui->desc.primitive_type));
+        ImGui::Text("Index Type: %s", _sg_imgui_indextype_string(pip_ui->desc.index_type));
+        if (ImGui::TreeNode("Vertex Layout")) {
+            _sg_imgui_draw_vertex_layout(&pip_ui->desc.layout);
+            ImGui::TreePop();
+        } 
+        if (ImGui::TreeNode("Depth Stencil State")) {
+            _sg_imgui_draw_depth_stencil_state(&pip_ui->desc.depth_stencil);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Blend State")) {
+            _sg_imgui_draw_blend_state(&pip_ui->desc.blend);
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Rasterizer State")) {
+            _sg_imgui_draw_rasterizer_state(&pip_ui->desc.rasterizer);
+            ImGui::TreePop();
+        }
         ImGui::EndChild();
     }
 }
