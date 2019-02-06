@@ -336,6 +336,9 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     else {
         blend->color_write_mask = (uint8_t) _sg_def((sg_color_mask)blend->color_write_mask, SG_COLORMASK_RGBA);
     }
+    blend->color_attachment_count = _sg_def(blend->color_attachment_count, 1);
+    blend->color_format = _sg_def(blend->color_format, SG_PIXELFORMAT_RGBA8);
+    blend->depth_format = _sg_def(blend->depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
     rs->cull_mode = _sg_def(rs->cull_mode, SG_CULLMODE_NONE);
     rs->face_winding = _sg_def(rs->face_winding, SG_FACEWINDING_CW);
     rs->sample_count = _sg_def(rs->sample_count, 1);
@@ -1069,6 +1072,75 @@ _SOKOL_PRIVATE const char* _sg_imgui_comparefunc_string(sg_compare_func f) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_blendfactor_string(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return "SG_BLENDFACTOR_ZERO";
+        case SG_BLENDFACTOR_ONE:                    return "SG_BLENDFACTOR_ONE";
+        case SG_BLENDFACTOR_SRC_COLOR:              return "SG_BLENDFACTOR_SRC_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR";
+        case SG_BLENDFACTOR_SRC_ALPHA:              return "SG_BLENDFACTOR_SRC_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA";
+        case SG_BLENDFACTOR_DST_COLOR:              return "SG_BLENDFACTOR_DST_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_DST_COLOR";
+        case SG_BLENDFACTOR_DST_ALPHA:              return "SG_BLENDFACTOR_DST_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA";
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return "SG_BLENDFACTOR_SRC_ALPHA_SATURATED";
+        case SG_BLENDFACTOR_BLEND_COLOR:            return "SG_BLENDFACTOR_BLEND_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR";
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return "SG_BLENDFACTOR_BLEND_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA";
+        default:                                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_blendop_string(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return "SG_BLENDOP_ADD";
+        case SG_BLENDOP_SUBTRACT:           return "SG_BLENDOP_SUBTRACT";
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return "SG_BLENDOP_REVERSE_SUBTRACT";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_colormask_string(uint8_t m) {
+    static const char* str[] = {
+        "NONE",
+        "R",
+        "G",
+        "RG",
+        "B",
+        "RB",
+        "GB",
+        "RGB",
+        "A",
+        "RA",
+        "GA",
+        "RGA",
+        "BA",
+        "RBA",
+        "GBA",
+        "RGBA",
+    };
+    return str[m & 0xF];
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_cullmode_string(sg_cull_mode cm) {
+    switch (cm) {
+        case SG_CULLMODE_NONE:  return "SG_CULLMODE_NONE";
+        case SG_CULLMODE_FRONT: return "SG_CULLMODE_FRONT";
+        case SG_CULLMODE_BACK:  return "SG_CULLMODE_BACK";
+        default:                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_facewinding_string(sg_face_winding fw) {
+    switch (fw) {
+        case SG_FACEWINDING_CCW:    return "SG_FACEWINDING_CCW";
+        case SG_FACEWINDING_CW:     return "SG_FACEWINDING_CW";
+        default:                    return "???";
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
@@ -1154,7 +1226,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
         if (buf->usage != SG_USAGE_IMMUTABLE) {
             ImGui::Separator();
             ImGui::Text("Num Slots:     %d", buf->num_slots);
-            ImGui::Text("Active Slot:   %d", buf->active_slot);
+            ImGui::Text("Active Slot:/s   %d", buf->active_slot);
             ImGui::Text("Update Frame Index: %d", buf->update_frame_index);
             ImGui::Text("Append Frame Index: %d", buf->append_frame_index);
             ImGui::Text("Append Pos:         %d", buf->append_pos);
@@ -1347,12 +1419,29 @@ _SOKOL_PRIVATE void _sg_imgui_draw_depth_stencil_state(const sg_depth_stencil_st
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_blend_state(const sg_blend_state* b) {
-    ImGui::Text("FIXME");
+_SOKOL_PRIVATE void _sg_imgui_draw_blend_state(const sg_blend_state* bs) {
+    ImGui::Text("Blend Enabled:    %s", bs->enabled ? "YES":"NO");
+    ImGui::Text("Src Factor RGB:   %s", _sg_imgui_blendfactor_string(bs->src_factor_rgb));
+    ImGui::Text("Dst Factor RGB:   %s", _sg_imgui_blendfactor_string(bs->dst_factor_rgb));
+    ImGui::Text("Op RGB:           %s", _sg_imgui_blendop_string(bs->op_rgb));
+    ImGui::Text("Src Factor Alpha: %s", _sg_imgui_blendfactor_string(bs->src_factor_alpha));
+    ImGui::Text("Dst Factor Alpha: %s", _sg_imgui_blendfactor_string(bs->dst_factor_alpha));
+    ImGui::Text("Op Alpha:         %s", _sg_imgui_blendop_string(bs->op_alpha));
+    ImGui::Text("Color Write Mask: %s", _sg_imgui_colormask_string(bs->color_write_mask));
+    ImGui::Text("Attachment Count: %d", bs->color_attachment_count);
+    ImGui::Text("Color Format:     %s", _sg_imgui_pixelformat_string(bs->color_format));
+    ImGui::Text("Depth Format:     %s", _sg_imgui_pixelformat_string(bs->depth_format));
+    ImGui::Text("Blend Color:      %.3f %.3f %.3f %.3f", bs->blend_color[0], bs->blend_color[1], bs->blend_color[2], bs->blend_color[3]);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_rasterizer_state(const sg_rasterizer_state* rs) {
-    ImGui::Text("FIXME");
+    ImGui::Text("Alpha to Coverage: %s", rs->alpha_to_coverage_enabled ? "YES":"NO");
+    ImGui::Text("Cull Mode:         %s", _sg_imgui_cullmode_string(rs->cull_mode));
+    ImGui::Text("Face Winding:      %s", _sg_imgui_facewinding_string(rs->face_winding));
+    ImGui::Text("Sample Count:      %d", rs->sample_count);
+    ImGui::Text("Depth Bias:        %f", rs->depth_bias);
+    ImGui::Text("Depth Bias Slope:  %f", rs->depth_bias_slope_scale);
+    ImGui::Text("Depth Bias Clamp:  %f", rs->depth_bias_clamp);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_id) {
@@ -1598,7 +1687,7 @@ void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     if (!ctx->pipelines.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(540, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Pipelines", &ctx->pipelines.open)) {
         sg_imgui_draw_pipelines_content(ctx);
     }
