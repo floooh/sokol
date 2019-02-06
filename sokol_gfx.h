@@ -636,7 +636,6 @@ typedef enum sg_pixel_format {
     _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
     SG_PIXELFORMAT_NONE,
     SG_PIXELFORMAT_RGBA8,
-    SG_PIXELFORMAT_RGB8,
     SG_PIXELFORMAT_RGBA4,
     SG_PIXELFORMAT_R5G6B5,
     SG_PIXELFORMAT_R5G5B5A1,
@@ -2716,8 +2715,6 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R10G10B10A2:
         case SG_PIXELFORMAT_R32F:
             return 4;
-        case SG_PIXELFORMAT_RGB8:
-            return 3;
         case SG_PIXELFORMAT_R5G5B5A1:
         case SG_PIXELFORMAT_R5G6B5:
         case SG_PIXELFORMAT_RGBA4:
@@ -3317,7 +3314,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R16F:
             return GL_HALF_FLOAT;
         case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_RGB8:
         case SG_PIXELFORMAT_L8:
             return GL_UNSIGNED_BYTE;
         case SG_PIXELFORMAT_R10G10B10A2:
@@ -3350,7 +3346,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA16F:
         case SG_PIXELFORMAT_R10G10B10A2:
             return GL_RGBA;
-        case SG_PIXELFORMAT_RGB8:
         case SG_PIXELFORMAT_R5G6B5:
             return GL_RGB;
         case SG_PIXELFORMAT_L8:
@@ -3406,8 +3401,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
                 return 0;
             case SG_PIXELFORMAT_RGBA8:
                 return GL_RGBA8;
-            case SG_PIXELFORMAT_RGB8:
-                return GL_RGB8;
             case SG_PIXELFORMAT_RGBA4:
                 return GL_RGBA4;
             case SG_PIXELFORMAT_R5G6B5:
