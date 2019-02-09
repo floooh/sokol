@@ -779,7 +779,7 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
-    _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
+    _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
@@ -1663,15 +1663,15 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 
 /* Javascript helper functions for mobile virtual keyboard input */
 EM_JS(void, _sapp_js_create_textfield, (), {
-    var inp = document.createElement("input");
-    inp.type = "text";
-    inp.id = "_sokol_app_input_element";
-    inp.autocapitalize = "none";
-    inp.addEventListener("focusout", function(e) {
+    var _sapp_inp = document.createElement("input");
+    _sapp_inp.type = "text";
+    _sapp_inp.id = "_sokol_app_input_element";
+    _sapp_inp.autocapitalize = "none";
+    _sapp_inp.addEventListener("focusout", function(_sapp_event) {
         __sapp_emsc_notify_keyboard_hidden()
 
     });
-    document.body.append(x);
+    document.body.append(_sapp_inp);
 });
 
 EM_JS(void, _sapp_js_focus_textfield, (), {
@@ -1772,11 +1772,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_frame(void) {
-    if (_sapp.first_frame) {
-        emscripten_set_main_loop_timing(EM_TIMING_RAF, _sapp.swap_interval);
-    }
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(userData);
     _sapp_frame();
+    return EM_TRUE;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved, void* user_data) {
@@ -1794,8 +1794,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
-    _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
-    _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
+    _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
+    _sapp.mouse_y = (emsc_event->targetY * _sapp.dpi_scale);
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
@@ -2031,8 +2031,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 const EmscriptenTouchPoint* src = &emsc_event->touches[i];
                 sapp_touchpoint* dst = &_sapp.event.touches[i];
                 dst->identifier = src->identifier;
-                dst->pos_x = src->canvasX * _sapp.dpi_scale;
-                dst->pos_y = src->canvasY * _sapp.dpi_scale;
+                dst->pos_x = src->targetX * _sapp.dpi_scale;
+                dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
             _sapp.desc.event_cb(&_sapp.event);
@@ -2157,7 +2157,7 @@ int main(int argc, char* argv[]) {
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-        emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
+        emscripten_set_resize_callback("#window", 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
@@ -2185,10 +2185,10 @@ int main(int argc, char* argv[]) {
             attrs.majorVersion = 2;
         }
     #endif
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(0, &attrs);
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
     if (!ctx) {
         attrs.majorVersion = 1;
-        ctx = emscripten_webgl_create_context(0, &attrs);
+        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
         _sapp.gles2_fallback = true;
     }
     emscripten_webgl_make_context_current(ctx);
@@ -2208,7 +2208,7 @@ int main(int argc, char* argv[]) {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
+    emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
     return 0;
 }
 #endif  /* __EMSCRIPTEN__ */
