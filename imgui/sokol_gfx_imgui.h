@@ -882,15 +882,37 @@ _SOKOL_PRIVATE void _sg_imgui_err_bindings_invalid(void* user_data) {
     }
 }
 
-_SOKOL_PRIVATE bool _sg_imgui_draw_resid(uint32_t res_id, const char* label, bool selected) {
+_SOKOL_PRIVATE bool _sg_imgui_draw_resid_list(uint32_t res_id, const char* label, bool selected) {
     if (label[0]) {
         return ImGui::Selectable(label, selected);
     }
     else {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%08X", res_id);
+        snprintf(buf, sizeof(buf), "0x%08X", res_id);
         return ImGui::Selectable(buf, selected);
     }
+}
+
+_SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label) {
+    char buf[32];
+    const char* str;
+    if (label[0]) {
+        str = label;
+    }
+    else {
+        snprintf(buf, sizeof(buf), "0x%08X", res_id);
+        str = buf;
+    }
+    return ImGui::SmallButton(str);
+}
+
+_SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, uint32_t shd_id) {
+    bool retval = false;
+    if (shd_id != SG_INVALID_ID) {
+        const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(shd_id)];
+        retval = _sg_imgui_draw_resid_link(shd_id, shd_ui->label.buf);
+    }
+    return retval;
 }
 
 _SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
@@ -1141,13 +1163,23 @@ _SOKOL_PRIVATE const char* _sg_imgui_facewinding_string(sg_face_winding fw) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_show_image(sg_imgui_t* ctx, uint32_t img_id) {
+    ctx->images.open = true;
+    ctx->images.sel_id = img_id;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_show_shader(sg_imgui_t* ctx, uint32_t shd_id) {
+    ctx->shaders.open = true;
+    ctx->shaders.sel_id = shd_id;
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
         const _sg_buffer_t* buf = &_sg.pools.buffers[i];
         if (buf->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->buffers.sel_id == buf->slot.id;
-            if (_sg_imgui_draw_resid(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
                 ctx->buffers.sel_id = buf->slot.id;
             }
         }
@@ -1161,7 +1193,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
         const _sg_image_t* img = &_sg.pools.images[i];
         if (img->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->images.sel_id == img->slot.id;
-            if (_sg_imgui_draw_resid(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
                 ctx->images.sel_id = img->slot.id;
             }
         }
@@ -1175,7 +1207,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
         const _sg_shader_t* shd = &_sg.pools.shaders[i];
         if (shd->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->shaders.sel_id == shd->slot.id;
-            if (_sg_imgui_draw_resid(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
                 ctx->shaders.sel_id = shd->slot.id;
             }
         }
@@ -1189,7 +1221,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
         const _sg_pipeline_t* pip = &_sg.pools.pipelines[i];
         if (pip->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->pipelines.sel_id == pip->slot.id;
-            if (_sg_imgui_draw_resid(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
                 ctx->pipelines.sel_id = pip->slot.id;
             }
         }
@@ -1203,7 +1235,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
         const _sg_pass_t* pass = &_sg.pools.passes[i];
         if (pass->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->passes.sel_id == pass->slot.id;
-            if (_sg_imgui_draw_resid(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
                 ctx->passes.sel_id = pass->slot.id;
             }
         }
@@ -1453,7 +1485,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_
         ImGui::Text("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&pip->slot);
         ImGui::Separator();
-        ImGui::Text("Shader:     FIXME!");
+        ImGui::Text("Shader:    "); ImGui::SameLine();
+        if (_sg_imgui_draw_shader_link(ctx, pip->shader_id.id)) {
+            _sg_imgui_show_shader(ctx, pip->shader_id.id);
+        }
         ImGui::Text("Prim Type:  %s", _sg_imgui_primitivetype_string(pip_ui->desc.primitive_type));
         ImGui::Text("Index Type: %s", _sg_imgui_indextype_string(pip_ui->desc.index_type));
         if (ImGui::TreeNode("Vertex Layout")) {
