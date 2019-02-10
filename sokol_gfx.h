@@ -1072,11 +1072,11 @@ typedef struct sg_bindings {
 
     The default configuration is:
 
-    .size:          0       (this *must* be set to a valid size in bytes)
-    .type:          SG_BUFFERTYPE_VERTEXBUFFER
-    .usage:         SG_USAGE_IMMUTABLE
-    .content        0
-    .trace_label    0       (optional string label for trace hooks)
+    .size:      0       (this *must* be set to a valid size in bytes)
+    .type:      SG_BUFFERTYPE_VERTEXBUFFER
+    .usage:     SG_USAGE_IMMUTABLE
+    .content    0
+    .label      0       (optional string label for trace hooks)
 
     The dbg_label will be ignored by sokol_gfx.h, it is only useful
     when hooking into sg_make_buffer() or sg_init_buffer() via
@@ -1111,7 +1111,7 @@ typedef struct sg_buffer_desc {
     sg_buffer_type type;
     sg_usage usage;
     const void* content;
-    const char* trace_label;
+    const char* label;
     /* GL specific */
     uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
     /* Metal specific */
@@ -1176,7 +1176,7 @@ typedef struct sg_image_content {
     .min_lod            0.0f
     .max_lod            FLT_MAX
     .content            an sg_image_content struct to define the initial content
-    .trace_label        0       (optional string label for trace hooks)
+    .label              0       (optional string label for trace hooks)
 
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
     WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
@@ -1222,7 +1222,7 @@ typedef struct sg_image_desc {
     float min_lod;
     float max_lod;
     sg_image_content content;
-    const char* trace_label;
+    const char* label;
     /* GL specific */
     uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* Metal specific */
@@ -1269,7 +1269,7 @@ typedef struct sg_shader_desc {
     uint32_t _start_canary;
     sg_shader_stage_desc vs;
     sg_shader_stage_desc fs;
-    const char* trace_label;
+    const char* label;
     uint32_t _end_canary;
 } sg_shader_desc;
 
@@ -1345,7 +1345,7 @@ typedef struct sg_shader_desc {
         .depth_bias:                    0.0f
         .depth_bias_slope_scale:        0.0f
         .depth_bias_clamp:              0.0f
-    .trace_label        0       (optional string label for trace hooks)
+    .label  0       (optional string label for trace hooks)
 */
 typedef struct sg_buffer_layout_desc {
     int stride;
@@ -1419,7 +1419,7 @@ typedef struct sg_pipeline_desc {
     sg_depth_stencil_state depth_stencil;
     sg_blend_state blend;
     sg_rasterizer_state rasterizer;
-    const char* trace_label;
+    const char* label;
     uint32_t _end_canary;
 } sg_pipeline_desc;
 
@@ -1460,7 +1460,7 @@ typedef struct sg_pass_desc {
     uint32_t _start_canary;
     sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
     sg_attachment_desc depth_stencil_attachment;
-    const char* trace_label;
+    const char* label;
     uint32_t _end_canary;
 } sg_pass_desc;
 
