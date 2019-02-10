@@ -185,7 +185,7 @@ _SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
     sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
     buf->res_id = res_id;
-    _sg_imgui_strcpy(&buf->label, desc->trace_label);
+    _sg_imgui_strcpy(&buf->label, desc->label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -198,7 +198,7 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
     sg_imgui_image_t* img = &ctx->images.slots[slot_index];
     img->res_id = res_id;
-    _sg_imgui_strcpy(&img->label, desc->trace_label);
+    _sg_imgui_strcpy(&img->label, desc->label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_image_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -212,7 +212,7 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
     shd->res_id = res_id;
     shd->desc = *desc;
-    _sg_imgui_strcpy(&shd->label, desc->trace_label);
+    _sg_imgui_strcpy(&shd->label, desc->label);
     if (shd->desc.vs.entry) {
         _sg_imgui_strcpy(&shd->vs_entry, shd->desc.vs.entry);
         shd->desc.vs.entry = shd->vs_entry.buf;
@@ -291,7 +291,7 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->pipelines.num_slots));
     sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
     pip->res_id = res_id;
-    _sg_imgui_strcpy(&pip->label, desc->trace_label);
+    _sg_imgui_strcpy(&pip->label, desc->label);
     pip->desc = *desc;
 
     /* copy strings in vertex layout to persistent location */
@@ -387,7 +387,7 @@ _SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
     sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
     pass->res_id = res_id;
-    _sg_imgui_strcpy(&pass->label, desc->trace_label);
+    _sg_imgui_strcpy(&pass->label, desc->label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1298,9 +1298,11 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id)
             ImGui::Text("Active Slot:   %d", img->active_slot);
             ImGui::Text("Update Frame Index: %d", img->upd_frame_index);
         }
-        ImGui::BeginChild("texture", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
-        ImGui::Image((ImTextureID)(intptr_t)sel_id, ImVec2(2*img->width, 2*img->height));
-        ImGui::EndChild();
+        if ((SG_IMAGETYPE_2D == img->type) && !_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
+            ImGui::BeginChild("texture", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::Image((ImTextureID)(intptr_t)sel_id, ImVec2(2*img->width, 2*img->height));
+            ImGui::EndChild();
+        }
         ImGui::EndChild();
     }
 }
