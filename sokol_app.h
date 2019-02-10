@@ -1662,7 +1662,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 #endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
-EM_JS(void, _sapp_js_create_textfield, (), {
+EM_JS(void, _sapp_js_create_textfield, (void), {
     var _sapp_inp = document.createElement("input");
     _sapp_inp.type = "text";
     _sapp_inp.id = "_sokol_app_input_element";
@@ -1674,11 +1674,11 @@ EM_JS(void, _sapp_js_create_textfield, (), {
     document.body.append(_sapp_inp);
 });
 
-EM_JS(void, _sapp_js_focus_textfield, (), {
+EM_JS(void, _sapp_js_focus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").focus();
 });
 
-EM_JS(void, _sapp_js_unfocus_textfield, (), {
+EM_JS(void, _sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
