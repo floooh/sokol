@@ -4853,8 +4853,8 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer_t* vb = vbs[attr->vb_index];
-            gl_vb = vb->gl_buf[vb->active_slot];
             SOKOL_ASSERT(vb);
+            gl_vb = vb->gl_buf[vb->active_slot];
             vb_offset = vb_offsets[attr->vb_index] + attr->offset;
             if ((gl_vb != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
