@@ -3875,6 +3875,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         _sapp_frame();
         #if defined(SOKOL_D3D11)
             IDXGISwapChain_Present(_sapp_dxgi_swap_chain, _sapp.swap_interval, 0);
+            if (IsIconic(_sapp_win32_hwnd)) {
+                Sleep(16 * _sapp.swap_interval);
+            }
         #endif
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_swap_buffers();
