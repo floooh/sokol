@@ -59,7 +59,7 @@ typedef struct {
 
 typedef struct {
     sg_image res_id;
-    bool ui_orig_size;
+    float ui_scale;
     sg_imgui_str_t label;
 } sg_imgui_image_t;
 
@@ -199,7 +199,7 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
     sg_imgui_image_t* img = &ctx->images.slots[slot_index];
     img->res_id = res_id;
-    img->ui_orig_size = true;
+    img->ui_scale = 1.0f;
     _sg_imgui_strcpy(&img->label, desc->label);
 }
 
@@ -1273,23 +1273,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, uint32_t img_id) {
     const _sg_image_t* img = _sg_image_at(&_sg.pools, img_id);
     if ((SG_IMAGETYPE_2D == img->type) && !_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
-        float w = (float) img->width;
-        float h = (float) img->height;
-        if ((w > 0.5f) && (h > 0.5f)) {
-            sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(img_id)];
-            ImVec2 avail = ImGui::GetContentRegionAvail();
-            ImGui::PushID((int)img_id);
-            ImGui::Checkbox("Original Size", &img_ui->ui_orig_size);
-            if (!img_ui->ui_orig_size) {
-                w = (int) avail.x;
-                h = ((float)img->height / (float)img->width) * w;
-            }
-            ImGui::Image((ImTextureID)(intptr_t)img_id, ImVec2(w, h));
-            ImGui::PopID();
-        }
-        else {
-            ImGui::Text("Image has invalid size.");
-        }
+        sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(img_id)];
+        ImGui::PushID((int)img_id);
+        ImGui::SliderFloat("Scale", &img_ui->ui_scale, 0.125f, 8.0f, "%.3f", 2.0f);
+        float w = (float)img->width * img_ui->ui_scale;
+        float h = (float)img->height * img_ui->ui_scale;
+        ImGui::Image((ImTextureID)(intptr_t)img_id, ImVec2(w, h));
+        ImGui::PopID();
     }
     else {
         ImGui::Text("Image not renderable.");
