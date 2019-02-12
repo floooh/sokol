@@ -86,6 +86,8 @@ typedef struct {
 typedef struct {
     sg_pass res_id;
     sg_imgui_str_t label;
+    float color_image_scale[SG_MAX_COLOR_ATTACHMENTS];
+    float ds_image_scale;
 } sg_imgui_pass_t;
 
 typedef struct sg_imgui_buffers_t {
@@ -389,6 +391,10 @@ _SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
     sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
     pass->res_id = res_id;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        pass->color_image_scale[i] = 0.25f;
+    }
+    pass->ds_image_scale = 0.25f;
     _sg_imgui_strcpy(&pass->label, desc->label);
 }
 
@@ -917,6 +923,15 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, uint32_t shd_id)
     return retval;
 }
 
+_SOKOL_PRIVATE bool _sg_imgui_draw_image_link(sg_imgui_t* ctx, uint32_t img_id) {
+    bool retval = false;
+    if (img_id != SG_INVALID_ID) {
+        const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(img_id)];
+        retval = _sg_imgui_draw_resid_link(img_id, img_ui->label.buf);
+    }
+    return retval;
+}
+
 _SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
     switch (s) {
         case SG_RESOURCESTATE_INITIAL:  return "SG_RESOURCESTATE_INITIAL";
@@ -1270,14 +1285,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t sel_id
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, uint32_t img_id) {
+_SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, uint32_t img_id, float* scale) {
     const _sg_image_t* img = _sg_image_at(&_sg.pools, img_id);
     if ((SG_IMAGETYPE_2D == img->type) && !_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
-        sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(img_id)];
         ImGui::PushID((int)img_id);
-        ImGui::SliderFloat("Scale", &img_ui->ui_scale, 0.125f, 8.0f, "%.3f", 2.0f);
-        float w = (float)img->width * img_ui->ui_scale;
-        float h = (float)img->height * img_ui->ui_scale;
+        ImGui::SliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", 2.0f);
+        float w = (float)img->width * (*scale);
+        float h = (float)img->height * (*scale);
         ImGui::Image((ImTextureID)(intptr_t)img_id, ImVec2(w, h));
         ImGui::PopID();
     }
@@ -1289,13 +1303,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, uint32_t img_
 _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id) {
     if (sel_id != SG_INVALID_ID) {
         const _sg_image_t* img = _sg_image_at(&_sg.pools, sel_id);
-        const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(sel_id)];
+        sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("image", ImVec2(0,0), false);
         ImGui::Text("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&img->slot);
         ImGui::Separator();
-        _sg_imgui_draw_embedded_image(ctx, sel_id);
+        _sg_imgui_draw_embedded_image(ctx, sel_id, &img_ui->ui_scale);
         ImGui::Separator();
         ImGui::Text("Type:              %s", _sg_imgui_imagetype_string(img->type));
         ImGui::Text("Usage:             %s", _sg_imgui_usage_string(img->usage));
@@ -1528,14 +1542,35 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, uint32_t sel_
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_attachment(sg_imgui_t* ctx, const _sg_attachment_t* att, float* img_scale) {
+    SOKOL_ASSERT(att->image && (att->image->slot.id == att->image_id.id));
+    ImGui::Text("  Image: "); ImGui::SameLine();
+    if (_sg_imgui_draw_image_link(ctx, att->image_id.id)) {
+        _sg_imgui_show_image(ctx, att->image_id.id);
+    }
+    ImGui::Text("  Mip Level: %d", att->mip_level);
+    ImGui::Text("  Slice: %d", att->slice);
+    _sg_imgui_draw_embedded_image(ctx, att->image_id.id, img_scale);
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, uint32_t sel_id) {
     if (sel_id != SG_INVALID_ID) {
         const _sg_pass_t* pass = _sg_pass_at(&_sg.pools, sel_id);
-        const sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_slot_index(sel_id)];
+        sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_slot_index(sel_id)];
         ImGui::SameLine();
         ImGui::BeginChild("pass", ImVec2(0,0), false);
         ImGui::Text("Label: %s", pass_ui->label.buf[0] ? pass_ui->label.buf : "---");
         _sg_imgui_draw_resource_slot(&pass->slot);
+        for (int i = 0; i < pass->num_color_atts; i++) {
+            ImGui::Separator();
+            ImGui::Text("Color Attachment #%d:", i);
+            _sg_imgui_draw_attachment(ctx, &pass->color_atts[i], &pass_ui->color_image_scale[i]);
+        }
+        if (pass->ds_att.image_id.id != SG_INVALID_ID) {
+            ImGui::Separator();
+            ImGui::Text("Depth-Stencil Attachemnt:");
+            _sg_imgui_draw_attachment(ctx, &pass->ds_att, &pass_ui->ds_image_scale);
+        }
         ImGui::EndChild();
     }
 }
