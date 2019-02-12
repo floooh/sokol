@@ -61,6 +61,7 @@ typedef struct {
     sg_image res_id;
     float ui_scale;
     sg_imgui_str_t label;
+    sg_image_desc desc;
 } sg_imgui_image_t;
 
 typedef struct {
@@ -159,6 +160,8 @@ void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
 #if defined SOKOL_IMPL
 #include <string.h>
 
+#define _SG_IMGUI_RESLIST_WIDTH (192)
+
 _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
     if (src) {
@@ -201,8 +204,23 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->images.num_slots));
     sg_imgui_image_t* img = &ctx->images.slots[slot_index];
     img->res_id = res_id;
+    img->desc = *desc;
     img->ui_scale = 1.0f;
     _sg_imgui_strcpy(&img->label, desc->label);
+
+    /* resolve default state */
+    img->desc.type = _sg_def(img->desc.type, SG_IMAGETYPE_2D);
+    img->desc.depth = _sg_def(img->desc.depth, 1);
+    img->desc.num_mipmaps = _sg_def(img->desc.num_mipmaps, 1);
+    img->desc.usage = _sg_def(img->desc.usage, SG_USAGE_IMMUTABLE);
+    img->desc.pixel_format = _sg_def(img->desc.pixel_format, SG_PIXELFORMAT_RGBA8);
+    img->desc.sample_count = _sg_def(img->desc.sample_count, 1);
+    img->desc.min_filter = _sg_def(img->desc.min_filter, SG_FILTER_NEAREST);
+    img->desc.mag_filter = _sg_def(img->desc.mag_filter, SG_FILTER_NEAREST);
+    img->desc.wrap_u = _sg_def(img->desc.wrap_u, SG_WRAP_REPEAT);
+    img->desc.wrap_v = _sg_def(img->desc.wrap_v, SG_WRAP_REPEAT);
+    img->desc.wrap_w = _sg_def(img->desc.wrap_w, SG_WRAP_REPEAT);
+    img->desc.max_anisotropy = _sg_def(img->desc.max_anisotropy, 1);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_image_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -890,15 +908,19 @@ _SOKOL_PRIVATE void _sg_imgui_err_bindings_invalid(void* user_data) {
     }
 }
 
-_SOKOL_PRIVATE bool _sg_imgui_draw_resid_list(uint32_t res_id, const char* label, bool selected) {
+_SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* label, bool selected) {
+    ImGui::PushID((int)res_id);
+    bool res;
     if (label[0]) {
-        return ImGui::Selectable(label, selected);
+        res = ImGui::Selectable(label, selected);
     }
     else {
         char buf[32];
         snprintf(buf, sizeof(buf), "0x%08X", res_id);
-        return ImGui::Selectable(buf, selected);
+        res = ImGui::Selectable(buf, selected);
     }
+    ImGui::PopID();
+    return res;
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label) {
@@ -911,7 +933,10 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label
         snprintf(buf, sizeof(buf), "0x%08X", res_id);
         str = buf;
     }
-    return ImGui::SmallButton(str);
+    ImGui::PushID((int)res_id);
+    bool res = ImGui::SmallButton(str);
+    ImGui::PopID();
+    return res;
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, uint32_t shd_id) {
@@ -1191,12 +1216,12 @@ _SOKOL_PRIVATE void _sg_imgui_show_shader(sg_imgui_t* ctx, uint32_t shd_id) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("buffer_list", ImVec2(128,0), true);
+    ImGui::BeginChild("buffer_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
     for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
         const _sg_buffer_t* buf = &_sg.pools.buffers[i];
         if (buf->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->buffers.sel_id == buf->slot.id;
-            if (_sg_imgui_draw_resid_list(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list_item(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
                 ctx->buffers.sel_id = buf->slot.id;
             }
         }
@@ -1205,12 +1230,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("image_list", ImVec2(128,0), true);
+    ImGui::BeginChild("image_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
     for (int i = 1; i < _sg.pools.image_pool.size; i++) {
         const _sg_image_t* img = &_sg.pools.images[i];
         if (img->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->images.sel_id == img->slot.id;
-            if (_sg_imgui_draw_resid_list(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list_item(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
                 ctx->images.sel_id = img->slot.id;
             }
         }
@@ -1219,12 +1244,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("shader_list", ImVec2(128,0), true);
+    ImGui::BeginChild("shader_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
     for (int i = 1; i < _sg.pools.shader_pool.size; i++) {
         const _sg_shader_t* shd = &_sg.pools.shaders[i];
         if (shd->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->shaders.sel_id == shd->slot.id;
-            if (_sg_imgui_draw_resid_list(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list_item(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
                 ctx->shaders.sel_id = shd->slot.id;
             }
         }
@@ -1233,12 +1258,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("pipeline_list", ImVec2(128,0), true);
+    ImGui::BeginChild("pipeline_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
     for (int i = 1; i < _sg.pools.pipeline_pool.size; i++) {
         const _sg_pipeline_t* pip = &_sg.pools.pipelines[i];
         if (pip->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->pipelines.sel_id == pip->slot.id;
-            if (_sg_imgui_draw_resid_list(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list_item(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
                 ctx->pipelines.sel_id = pip->slot.id;
             }
         }
@@ -1247,12 +1272,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("pass_list", ImVec2(128,0), true);
+    ImGui::BeginChild("pass_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
     for (int i = 1; i < _sg.pools.pass_pool.size; i++) {
         const _sg_pass_t* pass = &_sg.pools.passes[i];
         if (pass->slot.state != SG_RESOURCESTATE_INITIAL) {
             bool selected = ctx->passes.sel_id == pass->slot.id;
-            if (_sg_imgui_draw_resid_list(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
+            if (_sg_imgui_draw_resid_list_item(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
                 ctx->passes.sel_id = pass->slot.id;
             }
         }
@@ -1304,6 +1329,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id)
     if (sel_id != SG_INVALID_ID) {
         const _sg_image_t* img = _sg_image_at(&_sg.pools, sel_id);
         sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(sel_id)];
+        const sg_image_desc* desc = &img_ui->desc;
         ImGui::SameLine();
         ImGui::BeginChild("image", ImVec2(0,0), false);
         ImGui::Text("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
@@ -1311,21 +1337,23 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t sel_id)
         ImGui::Separator();
         _sg_imgui_draw_embedded_image(ctx, sel_id, &img_ui->ui_scale);
         ImGui::Separator();
-        ImGui::Text("Type:              %s", _sg_imgui_imagetype_string(img->type));
-        ImGui::Text("Usage:             %s", _sg_imgui_usage_string(img->usage));
-        ImGui::Text("Render Target:     %s", img->render_target ? "YES":"NO");
-        ImGui::Text("Width:             %d", img->width);
-        ImGui::Text("Height:            %d", img->height);
-        ImGui::Text("Depth:             %d", img->depth);
-        ImGui::Text("Num Mipmaps:       %d", img->num_mipmaps);
-        ImGui::Text("Pixel Format:      %s", _sg_imgui_pixelformat_string(img->pixel_format));
-        ImGui::Text("Sample Count:      %d", img->sample_count);
-        ImGui::Text("Min Filter:        %s", _sg_imgui_filter_string(img->min_filter));
-        ImGui::Text("Mag Filter:        %s", _sg_imgui_filter_string(img->mag_filter));
-        ImGui::Text("Wrap U:            %s", _sg_imgui_wrap_string(img->wrap_u));
-        ImGui::Text("Wrap V:            %s", _sg_imgui_wrap_string(img->wrap_v));
-        ImGui::Text("Wrap W:            %s", _sg_imgui_wrap_string(img->wrap_w));
-        ImGui::Text("Max Anisotropy:    %d", img->max_anisotropy);
+        ImGui::Text("Type:              %s", _sg_imgui_imagetype_string(desc->type));
+        ImGui::Text("Usage:             %s", _sg_imgui_usage_string(desc->usage));
+        ImGui::Text("Render Target:     %s", desc->render_target ? "YES":"NO");
+        ImGui::Text("Width:             %d", desc->width);
+        ImGui::Text("Height:            %d", desc->height);
+        ImGui::Text("Depth:             %d", desc->depth);
+        ImGui::Text("Num Mipmaps:       %d", desc->num_mipmaps);
+        ImGui::Text("Pixel Format:      %s", _sg_imgui_pixelformat_string(desc->pixel_format));
+        ImGui::Text("Sample Count:      %d", desc->sample_count);
+        ImGui::Text("Min Filter:        %s", _sg_imgui_filter_string(desc->min_filter));
+        ImGui::Text("Mag Filter:        %s", _sg_imgui_filter_string(desc->mag_filter));
+        ImGui::Text("Wrap U:            %s", _sg_imgui_wrap_string(desc->wrap_u));
+        ImGui::Text("Wrap V:            %s", _sg_imgui_wrap_string(desc->wrap_v));
+        ImGui::Text("Wrap W:            %s", _sg_imgui_wrap_string(desc->wrap_w));
+        ImGui::Text("Max Anisotropy:    %d", desc->max_anisotropy);
+        ImGui::Text("Min LOD:           %.3f", desc->min_lod);
+        ImGui::Text("Max LOD:           %.3f", desc->max_lod);
         if (img->usage != SG_USAGE_IMMUTABLE) {
             ImGui::Separator();
             ImGui::Text("Num Slots:     %d", img->num_slots);
