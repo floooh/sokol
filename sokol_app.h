@@ -144,18 +144,18 @@
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
 
-        .init_cb (void (init_cb*)(void))
+        .init_cb (void (*init_cb)(void))
             This function is called once after the application window,
             3D rendering context and swap chain have been created. The
             function takes no arguments and has no return value.
-        .frame_cb (void (frame_cb*)(void))
+        .frame_cb (void (*frame_cb)(void))
             This is the per-frame callback, which is usually called 60
             times per second. This is where your application would update
             most of its state and perform all rendering.
-        .cleanup_cb (void (cleanup_cb*)(void))
+        .cleanup_cb (void (*cleanup_cb)(void))
             The cleanup callback is called once right before the application
             quits.
-        .event_cb (void (event-cb*)(const sapp_event* event))
+        .event_cb (void (*event_cb)(const sapp_event* event))
             The event callback is mainly for input handling, but in the
             future may also be used to communicate other types of events
             to the application. Keep the event_cb struct member zero-initialized
@@ -174,8 +174,9 @@
             Likewise, returns the current height of the default framebuffer.
 
         bool sapp_gles2(void)
-            Returns true if as GLES2 or WebGL2 context had been created (for
-            instance because GLES3/WebGL2 isn't available on the device)
+            Returns true if a GLES2 or WebGL context has been created. This
+            is useful when a GLES3/WebGL2 context was requested but is not
+            available so that sokol_app.h had to fallback to GLES2/WebGL.
 
         const void* sapp_metal_get_device(void)
         const void* sapp_metal_get_renderpass_descriptor(void)
