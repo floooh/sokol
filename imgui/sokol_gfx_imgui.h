@@ -43,6 +43,8 @@ extern "C" {
 #endif
 
 #define SG_IMGUI_STRBUF_LEN (32)
+/* max number of captured calls per frame */
+#define SG_IMGUI_MAX_FRAMECAPTURE_ITEMS (4096)
 
 /* a small string buffer to store strings coming into sokol_gfx.h via
     the desc structures, these are not guaranteed to be static, so
@@ -91,42 +93,342 @@ typedef struct {
     float ds_image_scale;
 } sg_imgui_pass_t;
 
-typedef struct sg_imgui_buffers_t {
+typedef struct {
     bool open;
     int num_slots;
     uint32_t sel_id;
     sg_imgui_buffer_t* slots;
 } sg_imgui_buffers_t;
 
-typedef struct sg_imgui_images_t {
+typedef struct {
     bool open;
     int num_slots;
     uint32_t sel_id;
     sg_imgui_image_t* slots;
 } sg_imgui_images_t;
 
-typedef struct sg_imgui_shaders_t {
+typedef struct {
     bool open;
     int num_slots;
     uint32_t sel_id;
     sg_imgui_shader_t* slots;
 } sg_imgui_shaders_t;
 
-typedef struct sg_imgui_pipelines_t {
+typedef struct {
     bool open;
     int num_slots;
     uint32_t sel_id;
     sg_imgui_pipeline_t* slots;
 } sg_imgui_pipelines_t;
 
-typedef struct sg_imgui_passes_t {
+typedef struct {
     bool open;
     int num_slots;
     uint32_t sel_id;
     sg_imgui_pass_t* slots;
 } sg_imgui_passes_t;
 
-typedef struct sg_imgui_t {
+typedef enum {
+    SG_IMGUI_CMD_INVALID,
+    SG_IMGUI_CMD_QUERY_FEATURE,
+    SG_IMGUI_CMD_RESET_STATE_CACHE,
+    SG_IMGUI_CMD_MAKE_BUFFER,
+    SG_IMGUI_CMD_MAKE_IMAGE,
+    SG_IMGUI_CMD_MAKE_SHADER,
+    SG_IMGUI_CMD_MAKE_PIPELINE,
+    SG_IMGUI_CMD_MAKE_PASS,
+    SG_IMGUI_CMD_DESTROY_BUFFER,
+    SG_IMGUI_CMD_DESTROY_IMAGE,
+    SG_IMGUI_CMD_DESTROY_SHADER,
+    SG_IMGUI_CMD_DESTROY_PIPELINE,
+    SG_IMGUI_CMD_DESTROY_PASS,
+    SG_IMGUI_CMD_UPDATE_BUFFER,
+    SG_IMGUI_CMD_UPDATE_IMAGE,
+    SG_IMGUI_CMD_APPEND_BUFFER,
+    SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW,
+    SG_IMGUI_CMD_QUERY_BUFFER_STATE,
+    SG_IMGUI_CMD_QUERY_IMAGE_STATE,
+    SG_IMGUI_CMD_QUERY_SHADER_STATE,
+    SG_IMGUI_CMD_QUERY_PIPELINE_STATE,
+    SG_IMGUI_CMD_QUERY_PASS_STATE,
+    SG_IMGUI_CMD_BEGIN_DEFAULT_PASS,
+    SG_IMGUI_CMD_BEGIN_PASS,
+    SG_IMGUI_CMD_APPLY_VIEWPORT,
+    SG_IMGUI_CMD_APPLY_SCISSOR_RECT,
+    SG_IMGUI_CMD_APPLY_PIPELINE,
+    SG_IMGUI_CMD_APPLY_BINDINGS,
+    SG_IMGUI_CMD_APPLY_UNIFORMS,
+    SG_IMGUI_CMD_DRAW,
+    SG_IMGUI_CMD_END_PASS,
+    SG_IMGUI_CMD_COMMIT,
+    SG_IMGUI_CMD_ALLOC_BUFFER,
+    SG_IMGUI_CMD_ALLOC_IMAGE,
+    SG_IMGUI_CMD_ALLOC_SHADER,
+    SG_IMGUI_CMD_ALLOC_PIPELINE,
+    SG_IMGUI_CMD_ALLOC_PASS,
+    SG_IMGUI_CMD_INIT_BUFFER,
+    SG_IMGUI_CMD_INIT_IMAGE,
+    SG_IMGUI_CMD_INIT_SHADER,
+    SG_IMGUI_CMD_INIT_PIPELINE,
+    SG_IMGUI_CMD_INIT_PASS,
+    SG_IMGUI_CMD_FAIL_BUFFER,
+    SG_IMGUI_CMD_FAIL_IMAGE,
+    SG_IMGUI_CMD_FAIL_SHADER,
+    SG_IMGUI_CMD_FAIL_PIPELINE,
+    SG_IMGUI_CMD_FAIL_PASS,
+} sg_imgui_cmd_t;
+
+typedef struct {
+    sg_feature feature;
+    bool result;
+} sg_imgui_args_query_feature_t;
+
+typedef struct {
+    sg_buffer result;
+} sg_imgui_args_make_buffer_t;
+
+typedef struct {
+    sg_image result;
+} sg_imgui_args_make_image_t;
+
+typedef struct {
+    sg_shader result;
+} sg_imgui_args_make_shader_t;
+
+typedef struct {
+    sg_pipeline result;
+} sg_imgui_args_make_pipeline_t;
+
+typedef struct {
+    sg_pass result;
+} sg_imgui_args_make_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
+} sg_imgui_args_destroy_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_destroy_image_t;
+
+typedef struct {
+    sg_shader shader;
+} sg_imgui_args_destroy_shader_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_destroy_pipeline_t;
+
+typedef struct {
+    sg_pass pass;
+} sg_imgui_args_destroy_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
+    int data_size;
+} sg_imgui_args_update_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_update_image_t;
+
+typedef struct {
+    sg_buffer buffer;
+    int data_size;
+    int result;
+} sg_imgui_args_append_buffer_t;
+
+typedef struct {
+    sg_buffer buffer;
+    bool result;
+} sg_imgui_args_query_buffer_overflow_t;
+
+typedef struct {
+    sg_buffer buffer;
+    sg_resource_state result;
+} sg_imgui_args_query_buffer_state_t;
+
+typedef struct {
+    sg_image image;
+    sg_resource_state result;
+} sg_imgui_args_query_image_state_t;
+
+typedef struct {
+    sg_shader shader;
+    sg_resource_state result;
+} sg_imgui_args_query_shader_state_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+    sg_resource_state result;
+} sg_imgui_args_query_pipeline_state_t;
+
+typedef struct {
+    sg_pass pass;
+    sg_resource_state result;
+} sg_imgui_args_query_pass_state_t;
+
+typedef struct {
+    sg_pass_action action;
+    int width;
+    int height;
+} sg_imgui_args_begin_default_pass_t;
+
+typedef struct {
+    sg_pass pass;
+    sg_pass_action action;
+} sg_imgui_args_begin_pass_t;
+
+typedef struct {
+    int x, y, width, height;
+} sg_imgui_args_apply_viewport_t;
+
+typedef struct {
+    int x, y, width, height;
+} sg_imgui_args_apply_scissor_rect_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_apply_pipeline_t;
+
+typedef struct {
+    sg_bindings bindings;
+} sg_imgui_args_apply_bindings_t;
+
+typedef struct {
+    sg_shader_stage stage;
+    int ub_index;
+    const void* data;
+    int num_bytes;
+} sg_imgui_args_apply_uniforms_t;
+
+typedef struct {
+    int base_element;
+    int num_elements;
+    int num_instances;
+} sg_imgui_args_draw_t;
+
+typedef struct {
+    sg_buffer result;
+} sg_imgui_args_alloc_buffer_t;
+
+typedef struct {
+    sg_image result;
+} sg_imgui_args_alloc_image_t;
+
+typedef struct {
+    sg_shader result;
+} sg_imgui_args_alloc_shader_t;
+
+typedef struct {
+    sg_pipeline result;
+} sg_imgui_args_alloc_pipeline_t;
+
+typedef struct {
+    sg_pass result;
+} sg_imgui_args_alloc_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
+} sg_imgui_args_init_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_init_image_t;
+
+typedef struct {
+    sg_shader shader;
+} sg_imgui_args_init_shader_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_init_pipeline_t;
+
+typedef struct {
+    sg_pass pass;
+} sg_imgui_args_init_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
+} sg_imgui_args_fail_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_fail_image_t;
+
+typedef struct {
+    sg_shader shader;
+} sg_imgui_args_fail_shader_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_fail_pipeline_t;
+
+typedef struct {
+    sg_pass pass;
+} sg_imgui_args_fail_pass_t;
+
+typedef union {
+    sg_imgui_args_query_feature_t query_feature;
+    sg_imgui_args_make_buffer_t make_buffer;
+    sg_imgui_args_make_image_t make_image;
+    sg_imgui_args_make_shader_t make_shader;
+    sg_imgui_args_make_pipeline_t make_pipeline;
+    sg_imgui_args_make_pass_t make_pass;
+    sg_imgui_args_destroy_buffer_t destroy_buffer;
+    sg_imgui_args_destroy_image_t destroy_image;
+    sg_imgui_args_destroy_shader_t destroy_shader;
+    sg_imgui_args_destroy_pipeline_t destroy_pipeline;
+    sg_imgui_args_destroy_pass_t destroy_pass;
+    sg_imgui_args_update_buffer_t update_buffer;
+    sg_imgui_args_update_image_t update_image;
+    sg_imgui_args_append_buffer_t append_buffer;
+    sg_imgui_args_query_buffer_overflow_t query_buffer_overflow;
+    sg_imgui_args_query_buffer_state_t query_buffer_state;
+    sg_imgui_args_query_image_state_t query_image_state;
+    sg_imgui_args_query_shader_state_t query_shader_state;
+    sg_imgui_args_query_pipeline_state_t query_pipeline_state;
+    sg_imgui_args_query_pass_state_t query_pass_state;
+    sg_imgui_args_begin_default_pass_t begin_default_pass;
+    sg_imgui_args_begin_pass_t begin_pass;
+    sg_imgui_args_apply_viewport_t apply_viewport;
+    sg_imgui_args_apply_scissor_rect_t apply_scissor_rect;
+    sg_imgui_args_apply_pipeline_t apply_pipeline;
+    sg_imgui_args_apply_bindings_t apply_bindings;
+    sg_imgui_args_apply_uniforms_t apply_uniforms;
+    sg_imgui_args_draw_t draw;
+    sg_imgui_args_alloc_buffer_t alloc_buffer;
+    sg_imgui_args_alloc_image_t alloc_image;
+    sg_imgui_args_alloc_shader_t alloc_shader;
+    sg_imgui_args_alloc_pipeline_t alloc_pipeline;
+    sg_imgui_args_alloc_pass_t alloc_pass;
+    sg_imgui_args_init_buffer_t init_buffer;
+    sg_imgui_args_init_image_t init_image;
+    sg_imgui_args_init_shader_t init_shader;
+    sg_imgui_args_init_pipeline_t init_pipeline;
+    sg_imgui_args_init_pass_t init_pass;
+    sg_imgui_args_fail_buffer_t fail_buffer;
+    sg_imgui_args_fail_image_t fail_image;
+    sg_imgui_args_fail_shader_t fail_shader;
+    sg_imgui_args_fail_pipeline_t fail_pipeline;
+    sg_imgui_args_fail_pass_t fail_pass;
+} sg_imgui_args_t;
+
+typedef struct {
+    sg_imgui_cmd_t cmd;
+    sg_imgui_args_t args;
+} sg_imgui_capture_item_t;
+
+/* double-buffered call-capture buckets, one bucket is currently recorded,
+   the previous bucket is displayed
+*/
+typedef struct {
+    int bucket_index;     /* which bucket to record to, 0 or 1 */
+    int slot_index;       /* slot index in bucket */
+    sg_imgui_capture_item_t bucket[2][SG_IMGUI_MAX_FRAMECAPTURE_ITEMS];
+} sg_imgui_framecapture_t;
+
+typedef struct {
     uint32_t init_tag;
     sg_imgui_buffers_t buffers;
     sg_imgui_images_t images;
@@ -134,6 +436,7 @@ typedef struct sg_imgui_t {
     sg_imgui_pipelines_t pipelines;
     sg_imgui_passes_t passes;
     sg_trace_hooks hooks;
+    sg_imgui_framecapture_t capture;
 } sg_imgui_t;
 
 void sg_imgui_init(sg_imgui_t* ctx);
