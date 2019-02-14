@@ -2636,15 +2636,19 @@ typedef enum {
     _SG_VALIDATE_ABND_PIPELINE_EXISTS,
     _SG_VALIDATE_ABND_PIPELINE_VALID,
     _SG_VALIDATE_ABND_VBS,
+    _SG_VALIDATE_ABND_VB_EXISTS,
     _SG_VALIDATE_ABND_VB_TYPE,
     _SG_VALIDATE_ABND_VB_OVERFLOW,
     _SG_VALIDATE_ABND_NO_IB,
     _SG_VALIDATE_ABND_IB,
+    _SG_VALIDATE_ABND_IB_EXISTS,
     _SG_VALIDATE_ABND_IB_TYPE,
     _SG_VALIDATE_ABND_IB_OVERFLOW,
     _SG_VALIDATE_ABND_VS_IMGS,
+    _SG_VALIDATE_ABND_VS_IMG_EXISTS,
     _SG_VALIDATE_ABND_VS_IMG_TYPES,
     _SG_VALIDATE_ABND_FS_IMGS,
+    _SG_VALIDATE_ABND_FS_IMG_EXISTS,
     _SG_VALIDATE_ABND_FS_IMG_TYPES,
 
     /* sg_apply_uniforms validation */
@@ -8442,15 +8446,19 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_ABND_PIPELINE_EXISTS:     return "sg_apply_bindings: currently applied pipeline object no longer alive";
         case _SG_VALIDATE_ABND_PIPELINE_VALID:      return "sg_apply_bindings: currently applied pipeline object not in valid state";
         case _SG_VALIDATE_ABND_VBS:                 return "sg_apply_bindings: number of vertex buffers doesn't match number of pipeline vertex layouts";
+        case _SG_VALIDATE_ABND_VB_EXISTS:           return "sg_apply_bindings: vertex buffer no longer alive";
         case _SG_VALIDATE_ABND_VB_TYPE:             return "sg_apply_bindings: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER";
         case _SG_VALIDATE_ABND_VB_OVERFLOW:         return "sg_apply_bindings: buffer in vertex buffer slot is overflown";
         case _SG_VALIDATE_ABND_NO_IB:               return "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer provided";
         case _SG_VALIDATE_ABND_IB:                  return "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer provided";
+        case _SG_VALIDATE_ABND_IB_EXISTS:           return "sg_apply_bindings: index buffer no longer alive";
         case _SG_VALIDATE_ABND_IB_TYPE:             return "sg_apply_bindings: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER";
         case _SG_VALIDATE_ABND_IB_OVERFLOW:         return "sg_apply_bindings: buffer in index buffer slot is overflown";
         case _SG_VALIDATE_ABND_VS_IMGS:             return "sg_apply_bindings: vertex shader image count doesn't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_VS_IMG_EXISTS:       return "sg_apply_bindings: vertex shader image no longer alive";
         case _SG_VALIDATE_ABND_VS_IMG_TYPES:        return "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc";
         case _SG_VALIDATE_ABND_FS_IMGS:             return "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_FS_IMG_EXISTS:       return "sg_apply_bindings: fragment shader image no longer alive";
         case _SG_VALIDATE_ABND_FS_IMG_TYPES:        return "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc";
 
         /* sg_apply_uniforms */
@@ -8867,8 +8875,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
                 SOKOL_VALIDATE(pip->vertex_layout_valid[i], _SG_VALIDATE_ABND_VBS);
                 /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
                 const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
-                SOKOL_ASSERT(buf);
-                if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+                SOKOL_VALIDATE(buf != 0, _SG_VALIDATE_ABND_VB_EXISTS);
+                if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ABND_VB_TYPE);
                     SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_VB_OVERFLOW);
                 }
@@ -8891,8 +8899,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         if (bind->index_buffer.id != SG_INVALID_ID) {
             /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER */
             const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
-            SOKOL_ASSERT(buf);
-            if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+            SOKOL_VALIDATE(buf != 0, _SG_VALIDATE_ABND_IB_EXISTS);
+            if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ABND_IB_TYPE);
                 SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_IB_OVERFLOW);
             }
@@ -8904,8 +8912,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
             if (bind->vs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_VS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
-                SOKOL_ASSERT(img);
-                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_VS_IMG_EXISTS);
+                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_VS_IMG_TYPES);
                 }
             }
@@ -8920,8 +8928,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
             if (bind->fs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_FS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
-                SOKOL_ASSERT(img);
-                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_FS_IMG_EXISTS);
+                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_FS_IMG_TYPES);
                 }
             }
