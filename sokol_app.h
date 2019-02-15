@@ -2157,7 +2157,7 @@ int main(int argc, char* argv[]) {
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-        emscripten_set_resize_callback("#window", 0, false, _sapp_emsc_size_changed);
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
@@ -2199,9 +2199,9 @@ int main(int argc, char* argv[]) {
     emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
-    emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keypress_callback(0, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
     emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
