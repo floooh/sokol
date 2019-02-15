@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#define SG_IMGUI_STRBUF_LEN (32)
+#define SG_IMGUI_STRBUF_LEN (64)
 /* max number of captured calls per frame */
 #define SG_IMGUI_MAX_FRAMECAPTURE_ITEMS (4096)
 
@@ -474,6 +474,7 @@ void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 #include <string.h>
 
 #define _SG_IMGUI_RESLIST_WIDTH (192)
+#define _SG_IMGUI_CAPTURELIST_WIDTH (320)
 
 _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
@@ -484,6 +485,12 @@ _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
     else {
         memset(dst->buf, 0, SG_IMGUI_STRBUF_LEN);
     }
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_make_str(const char* str) {
+    sg_imgui_str_t res;
+    _sg_imgui_strcpy(&res, str);
+    return res;
 }
 
 _SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
@@ -504,7 +511,7 @@ _SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
     sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
     buf->res_id = res_id;
-    _sg_imgui_strcpy(&buf->label, desc->label);
+    buf->label = _sg_imgui_make_str(desc->label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -519,7 +526,7 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     img->res_id = res_id;
     img->desc = *desc;
     img->ui_scale = 1.0f;
-    _sg_imgui_strcpy(&img->label, desc->label);
+    img->label = _sg_imgui_make_str(desc->label);
 
     /* resolve default state */
     img->desc.type = _sg_def(img->desc.type, SG_IMAGETYPE_2D);
@@ -547,20 +554,20 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
     shd->res_id = res_id;
     shd->desc = *desc;
-    _sg_imgui_strcpy(&shd->label, desc->label);
+    shd->label = _sg_imgui_make_str(desc->label);
     if (shd->desc.vs.entry) {
-        _sg_imgui_strcpy(&shd->vs_entry, shd->desc.vs.entry);
+        shd->vs_entry = _sg_imgui_make_str(shd->desc.vs.entry);
         shd->desc.vs.entry = shd->vs_entry.buf;
     }
     if (shd->desc.fs.entry) {
-        _sg_imgui_strcpy(&shd->fs_entry, shd->desc.fs.entry);
+        shd->fs_entry = _sg_imgui_make_str(shd->desc.fs.entry);
         shd->desc.fs.entry = shd->fs_entry.buf;
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
         for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
             sg_shader_uniform_desc* ud = &shd->desc.vs.uniform_blocks[i].uniforms[j];
             if (ud->name) {
-                _sg_imgui_strcpy(&shd->vs_uniform_name[i][j], ud->name);
+                shd->vs_uniform_name[i][j] = _sg_imgui_make_str(ud->name);
                 ud->name = shd->vs_uniform_name[i][j].buf;
             }
         }
@@ -569,20 +576,20 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
         for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
             sg_shader_uniform_desc* ud = &shd->desc.fs.uniform_blocks[i].uniforms[j];
             if (ud->name) {
-                _sg_imgui_strcpy(&shd->fs_uniform_name[i][j], ud->name);
+                shd->fs_uniform_name[i][j] = _sg_imgui_make_str(ud->name);
                 ud->name = shd->fs_uniform_name[i][j].buf;
             }
         }
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         if (shd->desc.vs.images[i].name) {
-            _sg_imgui_strcpy(&shd->vs_image_name[i], shd->desc.vs.images[i].name);
+            shd->vs_image_name[i] = _sg_imgui_make_str(shd->desc.vs.images[i].name);
             shd->desc.vs.images[i].name = shd->vs_image_name[i].buf;
         }
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
         if (shd->desc.fs.images[i].name) {
-            _sg_imgui_strcpy(&shd->fs_image_name[i], shd->desc.fs.images[i].name);
+            shd->fs_image_name[i] = _sg_imgui_make_str(shd->desc.fs.images[i].name);
             shd->desc.fs.images[i].name = shd->fs_image_name[i].buf;
         }
     }
@@ -626,18 +633,18 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->pipelines.num_slots));
     sg_imgui_pipeline_t* pip = &ctx->pipelines.slots[slot_index];
     pip->res_id = res_id;
-    _sg_imgui_strcpy(&pip->label, desc->label);
+    pip->label = _sg_imgui_make_str(desc->label);
     pip->desc = *desc;
 
     /* copy strings in vertex layout to persistent location */
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         sg_vertex_attr_desc* ad = &pip->desc.layout.attrs[i];
         if (ad->name) {
-            _sg_imgui_strcpy(&pip->attr_name[i], ad->name);
+            pip->attr_name[i] = _sg_imgui_make_str(ad->name);
             ad->name = pip->attr_name[i].buf;
         }
         if (ad->sem_name) {
-            _sg_imgui_strcpy(&pip->attr_sem_name[i], ad->sem_name);
+            pip->attr_sem_name[i] = _sg_imgui_make_str(ad->sem_name);
             ad->sem_name = pip->attr_sem_name[i].buf;
         }
     }
@@ -726,13 +733,348 @@ _SOKOL_PRIVATE void _sg_imgui_pass_created(sg_imgui_t* ctx, sg_pass res_id, int 
         pass->color_image_scale[i] = 0.25f;
     }
     pass->ds_image_scale = 0.25f;
-    _sg_imgui_strcpy(&pass->label, desc->label);
+    pass->label = _sg_imgui_make_str(desc->label);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->passes.num_slots));
     sg_imgui_pass_t* pass = &ctx->passes.slots[slot_index];
     pass->res_id.id = SG_INVALID_ID;
+}
+
+/*--- enum to string conversion ----------------------------------------------*/
+_SOKOL_PRIVATE const char* _sg_imgui_feature_string(sg_feature f) {
+    switch (f) {
+        case SG_FEATURE_INSTANCING:                 return "SG_FEATURE_INSTANCING";
+        case SG_FEATURE_TEXTURE_COMPRESSION_DXT:    return "SG_FEATURE_TEXTURE_COMPRESSION_DXT";
+        case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:  return "SG_FEATURE_TEXTURE_COMPRESSION_PVRTC";
+        case SG_FEATURE_TEXTURE_COMPRESSION_ATC:    return "SG_FEATURE_TEXTURE_COMPRESSION_ATC";
+        case SG_FEATURE_TEXTURE_COMPRESSION_ETC2:   return "SG_FEATURE_TEXTURE_COMPRESSION_ETC2";
+        case SG_FEATURE_TEXTURE_FLOAT:              return "SG_FEATURE_TEXTURE_FLOAT";
+        case SG_FEATURE_TEXTURE_HALF_FLOAT:         return "SG_FEATURE_TEXTURE_HALF_FLOAT";
+        case SG_FEATURE_ORIGIN_BOTTOM_LEFT:         return "SG_FEATURE_ORIGIN_BOTTOM_LEFT";
+        case SG_FEATURE_ORIGIN_TOP_LEFT:            return "SG_FEATURE_ORIGIN_TOP_LEFT";
+        case SG_FEATURE_MSAA_RENDER_TARGETS:        return "SG_FEATURE_MSAA_RENDER_TARGETS";
+        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:  return "SG_FEATURE_PACKED_VERTEX_FORMAT_10_2";
+        case SG_FEATURE_MULTIPLE_RENDER_TARGET:     return "SG_FEATURE_MULTIPLE_RENDER_TARGET";
+        case SG_FEATURE_IMAGETYPE_3D:               return "SG_FEATURE_IMAGETYPE_3D";
+        case SG_FEATURE_IMAGETYPE_ARRAY:            return "SG_FEATURE_IMAGETYPE_ARRAY";
+        default:                                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
+    switch (s) {
+        case SG_RESOURCESTATE_INITIAL:  return "SG_RESOURCESTATE_INITIAL";
+        case SG_RESOURCESTATE_ALLOC:    return "SG_RESOURCESTATE_ALLOC";
+        case SG_RESOURCESTATE_VALID:    return "SG_RESOURCESTATE_VALID";
+        case SG_RESOURCESTATE_FAILED:   return "SG_RESOURCESTATE_FAILED";
+        default:                        return "SG_RESOURCESTATE_INVALID";
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const _sg_slot_t* slot) {
+    ImGui::Text("ResId: %08X", slot->id);
+    ImGui::Text("CtxId: %08X", slot->ctx_id);
+    ImGui::Text("State: %s", _sg_imgui_resourcestate_string(slot->state));
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_buffertype_string(sg_buffer_type t) {
+    switch (t) {
+        case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
+        case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_usage_string(sg_usage u) {
+    switch (u) {
+        case SG_USAGE_IMMUTABLE:    return "SG_USAGE_IMMUTABLE";
+        case SG_USAGE_DYNAMIC:      return "SG_USAGE_DYNAMIC";
+        case SG_USAGE_STREAM:       return "SG_USAGE_STREAM";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_imagetype_string(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:       return "SG_IMAGETYPE_2D";
+        case SG_IMAGETYPE_CUBE:     return "SG_IMAGETYPE_CUBE";
+        case SG_IMAGETYPE_3D:       return "SG_IMAGETYPE_3D";
+        case SG_IMAGETYPE_ARRAY:    return "SG_IMAGETYPE_ARRAY";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_NONE:           return "SG_PIXELFORMAT_NONE";
+        case SG_PIXELFORMAT_RGBA8:          return "SG_PIXELFORMAT_RGBA8";
+        case SG_PIXELFORMAT_RGB8:           return "SG_PIXELFORMAT_RGB8";
+        case SG_PIXELFORMAT_RGBA4:          return "SG_PIXELFORMAT_RGBA4";
+        case SG_PIXELFORMAT_R5G6B5:         return "SG_PIXELFORMAT_R5G6B5";
+        case SG_PIXELFORMAT_R5G5B5A1:       return "SG_PIXELFORMAT_R5G5B5A1";
+        case SG_PIXELFORMAT_R10G10B10A2:    return "SG_PIXELFORMAT_R10G10B10A2";
+        case SG_PIXELFORMAT_RGBA32F:        return "SG_PIXELFORMAT_RGBA32F";
+        case SG_PIXELFORMAT_RGBA16F:        return "SG_PIXELFORMAT_RGBA16F";
+        case SG_PIXELFORMAT_R32F:           return "SG_PIXELFORMAT_R32F";
+        case SG_PIXELFORMAT_R16F:           return "SG_PIXELFORMAT_R16F";
+        case SG_PIXELFORMAT_L8:             return "SG_PIXELFORMAT_L8";
+        case SG_PIXELFORMAT_DXT1:           return "SG_PIXELFORMAT_DXT1";
+        case SG_PIXELFORMAT_DXT3:           return "SG_PIXELFORMAT_DXT3";
+        case SG_PIXELFORMAT_DXT5:           return "SG_PIXELFORMAT_DXT5";
+        case SG_PIXELFORMAT_DEPTH:          return "SG_PIXELFORMAT_DEPTH";
+        case SG_PIXELFORMAT_DEPTHSTENCIL:   return "SG_PIXELFORMAT_DEPTHSTENCIL";
+        case SG_PIXELFORMAT_PVRTC2_RGB:     return "SG_PIXELFORMAT_PVRTC2_RGB";
+        case SG_PIXELFORMAT_PVRTC4_RGB:     return "SG_PIXELFORMAT_PVRTC4_RGB";
+        case SG_PIXELFORMAT_PVRTC2_RGBA:    return "SG_PIXELFORMAT_PVRTC2_RGBA";
+        case SG_PIXELFORMAT_PVRTC4_RGBA:    return "SG_PIXELFORMAT_PVRTC4_RGBA";
+        case SG_PIXELFORMAT_ETC2_RGB8:      return "SG_PIXELFORMAT_ETC2_RGB8";
+        case SG_PIXELFORMAT_ETC2_SRGB8:     return "SG_PIXELFORMAT_ETC2_SRGB8";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_filter_string(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:                 return "SG_FILTER_NEAREST";
+        case SG_FILTER_LINEAR:                  return "SG_FILTER_LINEAR";
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:  return "SG_FILTER_NEAREST_MIPMAP_NEAREST";
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return "SG_FILTER_NEAREST_MIPMAP_LINEAR";
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return "SG_FILTER_LINEAR_MIPMAP_NEAREST";
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return "SG_FILTER_LINEAR_MIPMAP_LINEAR";
+        default:                                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
+    switch (w) {
+        case SG_WRAP_REPEAT:            return "SG_WRAP_REPEAT";
+        case SG_WRAP_CLAMP_TO_EDGE:     return "SG_WRAP_CLAMP_TO_EDGE";
+        case SG_WRAP_MIRRORED_REPEAT:   return "SG_WRAP_MIRRORED_REPEAT";
+        default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
+    switch (t) {
+        case SG_UNIFORMTYPE_FLOAT:  return "SG_UNIFORMTYPE_FLOAT";
+        case SG_UNIFORMTYPE_FLOAT2: return "SG_UNIFORMTYPE_FLOAT2";
+        case SG_UNIFORMTYPE_FLOAT3: return "SG_UNIFORMTYPE_FLOAT3";
+        case SG_UNIFORMTYPE_FLOAT4: return "SG_UNIFORMTYPE_FLOAT4";
+        case SG_UNIFORMTYPE_MAT4:   return "SG_UNIFORMTYPE_MAT4";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_vertexstep_string(sg_vertex_step s) {
+    switch (s) {
+        case SG_VERTEXSTEP_PER_VERTEX:      return "SG_VERTEXSTEP_PER_VERTEX";
+        case SG_VERTEXSTEP_PER_INSTANCE:    return "SG_VERTEXSTEP_PER_INSTANCE";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_vertexformat_string(sg_vertex_format f) {
+    switch (f) {
+        case SG_VERTEXFORMAT_FLOAT:     return "SG_VERTEXFORMAT_FLOAT";
+        case SG_VERTEXFORMAT_FLOAT2:    return "SG_VERTEXFORMAT_FLOAT2";
+        case SG_VERTEXFORMAT_FLOAT3:    return "SG_VERTEXFORMAT_FLOAT3";
+        case SG_VERTEXFORMAT_FLOAT4:    return "SG_VERTEXFORMAT_FLOAT4";
+        case SG_VERTEXFORMAT_BYTE4:     return "SG_VERTEXFORMAT_BYTE4";
+        case SG_VERTEXFORMAT_BYTE4N:    return "SG_VERTEXFORMAT_BYTE4N";
+        case SG_VERTEXFORMAT_UBYTE4:    return "SG_VERTEXFORMAT_UBYTE4";
+        case SG_VERTEXFORMAT_UBYTE4N:   return "SG_VERTEXFORMAT_UBYTE4N";
+        case SG_VERTEXFORMAT_SHORT2:    return "SG_VERTEXFORMAT_SHORT2";
+        case SG_VERTEXFORMAT_SHORT2N:   return "SG_VERTEXFORMAT_SHORT2N";
+        case SG_VERTEXFORMAT_SHORT4:    return "SG_VERTEXFORMAT_SHORT4";
+        case SG_VERTEXFORMAT_SHORT4N:   return "SG_VERTEXFORMAT_SHORT4N";
+        case SG_VERTEXFORMAT_UINT10_N2: return "SG_VERTEXFORMAT_UINT10_N2";
+        default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_primitivetype_string(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:           return "SG_PRIMITIVETYPE_POINTS";
+        case SG_PRIMITIVETYPE_LINES:            return "SG_PRIMITIVETYPE_LINES";
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return "SG_PRIMITIVETYPE_LINE_STRIP";
+        case SG_PRIMITIVETYPE_TRIANGLES:        return "SG_PRIMITIVETYPE_TRIANGLES";
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return "SG_PRIMITIVETYPE_TRIANGLE_STRIP";
+        default:                                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_indextype_string(sg_index_type t) {
+    switch (t) {
+        case SG_INDEXTYPE_NONE:     return "SG_INDEXTYPE_NONE";
+        case SG_INDEXTYPE_UINT16:   return "SG_INDEXTYPE_UINT16";
+        case SG_INDEXTYPE_UINT32:   return "SG_INDEXTYPE_UINT32";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_stencilop_string(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return "SG_STENCILOP_KEEP";
+        case SG_STENCILOP_ZERO:         return "SG_STENCILOP_ZERO";
+        case SG_STENCILOP_REPLACE:      return "SG_STENCILOP_REPLACE";
+        case SG_STENCILOP_INCR_CLAMP:   return "SG_STENCILOP_INCR_CLAMP";
+        case SG_STENCILOP_DECR_CLAMP:   return "SG_STENCILOP_DECR_CLAMP";
+        case SG_STENCILOP_INVERT:       return "SG_STENCILOP_INVERT";
+        case SG_STENCILOP_INCR_WRAP:    return "SG_STENCILOP_INCR_WRAP";
+        case SG_STENCILOP_DECR_WRAP:    return "SG_STENCILOP_DECR_WRAP";
+        default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_comparefunc_string(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return "SG_COMPAREFUNC_NEVER";
+        case SG_COMPAREFUNC_LESS:           return "SG_COMPAREFUNC_LESS";
+        case SG_COMPAREFUNC_EQUAL:          return "SG_COMPAREFUNC_EQUAL";
+        case SG_COMPAREFUNC_LESS_EQUAL:     return "SG_COMPAREFUNC_LESS_EQUAL";
+        case SG_COMPAREFUNC_GREATER:        return "SG_COMPAREFUNC_GREATER";
+        case SG_COMPAREFUNC_NOT_EQUAL:      return "SG_COMPAREFUNC_NOT_EQUAL";
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return "SG_COMPAREFUNC_GREATER_EQUAL";
+        case SG_COMPAREFUNC_ALWAYS:         return "SG_COMPAREFUNC_ALWAYS";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_blendfactor_string(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return "SG_BLENDFACTOR_ZERO";
+        case SG_BLENDFACTOR_ONE:                    return "SG_BLENDFACTOR_ONE";
+        case SG_BLENDFACTOR_SRC_COLOR:              return "SG_BLENDFACTOR_SRC_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR";
+        case SG_BLENDFACTOR_SRC_ALPHA:              return "SG_BLENDFACTOR_SRC_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA";
+        case SG_BLENDFACTOR_DST_COLOR:              return "SG_BLENDFACTOR_DST_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_DST_COLOR";
+        case SG_BLENDFACTOR_DST_ALPHA:              return "SG_BLENDFACTOR_DST_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA";
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return "SG_BLENDFACTOR_SRC_ALPHA_SATURATED";
+        case SG_BLENDFACTOR_BLEND_COLOR:            return "SG_BLENDFACTOR_BLEND_COLOR";
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR";
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return "SG_BLENDFACTOR_BLEND_ALPHA";
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA";
+        default:                                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_blendop_string(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return "SG_BLENDOP_ADD";
+        case SG_BLENDOP_SUBTRACT:           return "SG_BLENDOP_SUBTRACT";
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return "SG_BLENDOP_REVERSE_SUBTRACT";
+        default:                            return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_colormask_string(uint8_t m) {
+    static const char* str[] = {
+        "NONE",
+        "R",
+        "G",
+        "RG",
+        "B",
+        "RB",
+        "GB",
+        "RGB",
+        "A",
+        "RA",
+        "GA",
+        "RGA",
+        "BA",
+        "RBA",
+        "GBA",
+        "RGBA",
+    };
+    return str[m & 0xF];
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_cullmode_string(sg_cull_mode cm) {
+    switch (cm) {
+        case SG_CULLMODE_NONE:  return "SG_CULLMODE_NONE";
+        case SG_CULLMODE_FRONT: return "SG_CULLMODE_FRONT";
+        case SG_CULLMODE_BACK:  return "SG_CULLMODE_BACK";
+        default:                return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_facewinding_string(sg_face_winding fw) {
+    switch (fw) {
+        case SG_FACEWINDING_CCW:    return "SG_FACEWINDING_CCW";
+        case SG_FACEWINDING_CW:     return "SG_FACEWINDING_CW";
+        default:                    return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_bool_string(bool b) {
+    return b ? "true" : "false";
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_res_id_string(uint32_t res_id, const char* label) {
+    SOKOL_ASSERT(label);
+    sg_imgui_str_t res;
+    if (label[0]) {
+        res = _sg_imgui_make_str(label);
+    }
+    else {
+        snprintf(res.buf, sizeof(res.buf), "0x%08X", res_id);
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_buffer_id_string(sg_imgui_t* ctx, sg_buffer buf_id) {
+    if (buf_id.id != SG_INVALID_ID) {
+        const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_slot_index(buf_id.id)];
+        return _sg_imgui_res_id_string(buf_id.id, buf_ui->label.buf);
+    }
+    else {
+        return _sg_imgui_make_str("<invalid>");
+    }
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_image_id_string(sg_imgui_t* ctx, sg_image img_id) {
+    if (img_id.id != SG_INVALID_ID) {
+        const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_slot_index(img_id.id)];
+        return _sg_imgui_res_id_string(img_id.id, img_ui->label.buf);
+    }
+    else {
+        return _sg_imgui_make_str("<invalid>");
+    }
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_shader_id_string(sg_imgui_t* ctx, sg_shader shd_id) {
+    if (shd_id.id != SG_INVALID_ID) {
+        const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(shd_id.id)];
+        return _sg_imgui_res_id_string(shd_id.id, shd_ui->label.buf);
+    }
+    else {
+        return _sg_imgui_make_str("<invalid>");
+    }
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_pipeline_id_string(sg_imgui_t* ctx, sg_pipeline pip_id) {
+    if (pip_id.id != SG_INVALID_ID) {
+        const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_slot_index(pip_id.id)];
+        return _sg_imgui_res_id_string(pip_id.id, pip_ui->label.buf);
+    }
+    else {
+        return _sg_imgui_make_str("<invalid>");
+    }
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_pass_id_string(sg_imgui_t* ctx, sg_pass pass_id) {
+    if (pass_id.id != SG_INVALID_ID) {
+        const sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_slot_index(pass_id.id)];
+        return _sg_imgui_res_id_string(pass_id.id, pass_ui->label.buf);
+    }
+    else {
+        return _sg_imgui_make_str("<invalid>");
+    }
 }
 
 /*--- command capturing ------------------------------------------------------*/
@@ -762,59 +1104,6 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_next_write_item(sg_img
     }
 }
 
-_SOKOL_PRIVATE const char* _sg_imgui_capture_cmd_name(sg_imgui_cmd_t cmd) {
-    switch (cmd) {
-        case SG_IMGUI_CMD_INVALID:                      return "invalid";
-        case SG_IMGUI_CMD_QUERY_FEATURE:                return "sg_query_feature";
-        case SG_IMGUI_CMD_RESET_STATE_CACHE:            return "sg_reset_state_cache";
-        case SG_IMGUI_CMD_MAKE_BUFFER:                  return "sg_make_buffer";
-        case SG_IMGUI_CMD_MAKE_IMAGE:                   return "sg_make_image";
-        case SG_IMGUI_CMD_MAKE_SHADER:                  return "sg_make_shader";
-        case SG_IMGUI_CMD_MAKE_PIPELINE:                return "sg_make_pipeline";
-        case SG_IMGUI_CMD_MAKE_PASS:                    return "sg_make_pass";
-        case SG_IMGUI_CMD_DESTROY_BUFFER:               return "sg_destroy_buffer";               
-        case SG_IMGUI_CMD_DESTROY_IMAGE:                return "sg_destory_image";
-        case SG_IMGUI_CMD_DESTROY_SHADER:               return "sg_destroy_shader";
-        case SG_IMGUI_CMD_DESTROY_PIPELINE:             return "sg_destroy_pipeline";
-        case SG_IMGUI_CMD_DESTROY_PASS:                 return "sg_destroy_pass";
-        case SG_IMGUI_CMD_UPDATE_BUFFER:                return "sg_update_buffer";
-        case SG_IMGUI_CMD_UPDATE_IMAGE:                 return "sg_update_image";
-        case SG_IMGUI_CMD_APPEND_BUFFER:                return "sg_append_buffer";
-        case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:        return "sg_query_buffer_overflow";
-        case SG_IMGUI_CMD_QUERY_BUFFER_STATE:           return "sg_query_buffer_state";
-        case SG_IMGUI_CMD_QUERY_IMAGE_STATE:            return "sg_query_image_state";
-        case SG_IMGUI_CMD_QUERY_SHADER_STATE:           return "sg_query_shader_state";
-        case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:         return "sg_query_pipeline_state";
-        case SG_IMGUI_CMD_QUERY_PASS_STATE:             return "sg_query_pass_state";
-        case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:           return "sg_begin_default_pass";
-        case SG_IMGUI_CMD_BEGIN_PASS:                   return "sg_begin_pass";
-        case SG_IMGUI_CMD_APPLY_VIEWPORT:               return "sg_apply_viewport";
-        case SG_IMGUI_CMD_APPLY_SCISSOR_RECT:           return "sg_apply_scissor_rect";
-        case SG_IMGUI_CMD_APPLY_PIPELINE:               return "sg_apply_pipeline";
-        case SG_IMGUI_CMD_APPLY_BINDINGS:               return "sg_apply_bindings";
-        case SG_IMGUI_CMD_APPLY_UNIFORMS:               return "sg_apply_uniforms";
-        case SG_IMGUI_CMD_DRAW:                         return "sg_draw";
-        case SG_IMGUI_CMD_END_PASS:                     return "sg_end_pass";
-        case SG_IMGUI_CMD_COMMIT:                       return "sg_commit";
-        case SG_IMGUI_CMD_ALLOC_BUFFER:                 return "sg_alloc_buffer";
-        case SG_IMGUI_CMD_ALLOC_IMAGE:                  return "sg_alloc_image";
-        case SG_IMGUI_CMD_ALLOC_SHADER:                 return "sg_alloc_shader";
-        case SG_IMGUI_CMD_ALLOC_PIPELINE:               return "sg_alloc_pipeline";
-        case SG_IMGUI_CMD_ALLOC_PASS:                   return "sg_alloc_pass";
-        case SG_IMGUI_CMD_INIT_BUFFER:                  return "sg_init_buffer";
-        case SG_IMGUI_CMD_INIT_IMAGE:                   return "sg_init_image";
-        case SG_IMGUI_CMD_INIT_SHADER:                  return "sg_init_shader";
-        case SG_IMGUI_CMD_INIT_PIPELINE:                return "sg_init_pipeline";
-        case SG_IMGUI_CMD_INIT_PASS:                    return "sg_init_pass";
-        case SG_IMGUI_CMD_FAIL_BUFFER:                  return "sg_fail_buffer";
-        case SG_IMGUI_CMD_FAIL_IMAGE:                   return "sg_fail_image";
-        case SG_IMGUI_CMD_FAIL_SHADER:                  return "sg_fail_shader";
-        case SG_IMGUI_CMD_FAIL_PIPELINE:                return "sg_fail_pipeline";
-        case SG_IMGUI_CMD_FAIL_PASS:                    return "sg_fail_pass";
-        default:                                        return "???";
-    }
-}
-
 _SOKOL_PRIVATE uint32_t _sg_imgui_capture_num_read_items(sg_imgui_t* ctx) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     return bucket->num_items;
@@ -824,6 +1113,202 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     SOKOL_ASSERT(index < bucket->num_items);
     return &bucket->items[index];
+}
+
+_SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, const sg_imgui_capture_item_t* item) {
+    sg_imgui_str_t str = _sg_imgui_make_str(0);
+    sg_imgui_str_t res_id = _sg_imgui_make_str(0);
+    const int len = sizeof(str.buf);
+    switch (item->cmd) {
+        case SG_IMGUI_CMD_QUERY_FEATURE: 
+            snprintf(str.buf, len, "sg_query_feature(%s) => %s",
+                _sg_imgui_feature_string(item->args.query_feature.feature),
+                _sg_imgui_bool_string(item->args.query_feature.result));
+            break;
+        
+        case SG_IMGUI_CMD_RESET_STATE_CACHE:
+            snprintf(str.buf, len, "%s", "sg_reset_state_cache");
+            break;
+
+        case SG_IMGUI_CMD_MAKE_BUFFER:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.make_buffer.result);
+            snprintf(str.buf, len, "sg_make_buffer(...) => %s", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_MAKE_IMAGE:
+            res_id = _sg_imgui_image_id_string(ctx, item->args.make_image.result);
+            snprintf(str.buf, len, "sg_make_image(...) => %s", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_MAKE_SHADER:
+            res_id = _sg_imgui_shader_id_string(ctx, item->args.make_shader.result);
+            snprintf(str.buf, len, "sg_make_shader(...) => %s", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_MAKE_PIPELINE:
+            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.make_pipeline.result);
+            snprintf(str.buf, len, "sg_make_pipeline(...) => %s", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_MAKE_PASS:
+            res_id = _sg_imgui_pass_id_string(ctx, item->args.make_pass.result);
+            snprintf(str.buf, len, "sg_make_pass(...) => %s", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_DESTROY_BUFFER:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.destroy_buffer.buffer);
+            snprintf(str.buf, len, "sg_destroy_buffer(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_DESTROY_IMAGE:
+            res_id = _sg_imgui_image_id_string(ctx, item->args.destroy_image.image);
+            snprintf(str.buf, len, "sg_destroy_image(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_DESTROY_SHADER:
+            res_id = _sg_imgui_shader_id_string(ctx, item->args.destroy_shader.shader);
+            snprintf(str.buf, len, "sg_destroy_shader(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_DESTROY_PIPELINE:
+            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.destroy_pipeline.pipeline);
+            snprintf(str.buf, len, "sg_destroy_pipeline(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_DESTROY_PASS:
+            res_id = _sg_imgui_pass_id_string(ctx, item->args.destroy_pass.pass);
+            snprintf(str.buf, len, "sg_destroy_pass(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_UPDATE_BUFFER:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
+            snprintf(str.buf, len, "sg_update_buffer(%s, ..., %d)", res_id.buf,
+                item->args.update_buffer.data_size);
+            break;
+
+        case SG_IMGUI_CMD_UPDATE_IMAGE:
+            res_id = _sg_imgui_image_id_string(ctx, item->args.update_image.image);
+            snprintf(str.buf, len, "sg_update_image(%s, ...)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_APPEND_BUFFER:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
+            snprintf(str.buf, len, "sg_append_buffer(%s, ..., %d) => %d", res_id.buf,
+                item->args.append_buffer.data_size,
+                item->args.append_buffer.result);
+            break;
+
+        case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.query_buffer_overflow.buffer);
+            snprintf(str.buf, len, "sg_query_buffer_overflow(%s) => %s", res_id.buf,
+                _sg_imgui_bool_string(item->args.query_buffer_overflow.result));
+            break;
+
+        case SG_IMGUI_CMD_QUERY_BUFFER_STATE:
+            res_id = _sg_imgui_buffer_id_string(ctx, item->args.query_buffer_state.buffer);
+            snprintf(str.buf, len, "sg_query_buffer_state(%s) => %s", res_id.buf,
+                _sg_imgui_resourcestate_string(item->args.query_buffer_state.result));
+            break;
+
+        case SG_IMGUI_CMD_QUERY_IMAGE_STATE:
+            res_id = _sg_imgui_image_id_string(ctx, item->args.query_image_state.image);
+            snprintf(str.buf, len, "sg_query_image_state(%s) => %s", res_id.buf,
+                _sg_imgui_resourcestate_string(item->args.query_image_state.result));
+            break;
+
+        case SG_IMGUI_CMD_QUERY_SHADER_STATE:
+            res_id = _sg_imgui_shader_id_string(ctx, item->args.query_shader_state.shader);
+            snprintf(str.buf, len, "sg_query_shader_state(%s) => %s", res_id.buf,
+                _sg_imgui_resourcestate_string(item->args.query_shader_state.result));
+            break;
+
+        case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:
+            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.query_pipeline_state.pipeline);
+            snprintf(str.buf, len, "sg_query_pipeline_state(%s) => %s", res_id.buf,
+                _sg_imgui_resourcestate_string(item->args.query_pipeline_state.result));
+            break;
+
+        case SG_IMGUI_CMD_QUERY_PASS_STATE:
+            res_id = _sg_imgui_pass_id_string(ctx, item->args.query_pass_state.pass);
+            snprintf(str.buf, len, "sg_query_pass_state(%s) => %s", res_id.buf,
+                _sg_imgui_resourcestate_string(item->args.query_pass_state.result));
+            break;
+
+        case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
+            snprintf(str.buf, len, "FIXME: %s", "sg_begin_default_pass");
+            break;
+
+        case SG_IMGUI_CMD_BEGIN_PASS:
+            snprintf(str.buf, len, "FIXME: %s", "sg_begin_pass");
+            break;
+
+        case SG_IMGUI_CMD_APPLY_VIEWPORT:
+            snprintf(str.buf, len, "sg_apply_viewport(%d, %d, %d, %d, %s)",
+                item->args.apply_viewport.x,
+                item->args.apply_viewport.y,
+                item->args.apply_viewport.width,
+                item->args.apply_viewport.height,
+                _sg_imgui_bool_string(item->args.apply_viewport.origin_top_left));
+            break;
+
+        case SG_IMGUI_CMD_APPLY_SCISSOR_RECT:
+            snprintf(str.buf, len, "sg_apply_scissor_rect(%d, %d, %d, %d, %s)",
+                item->args.apply_scissor_rect.x,
+                item->args.apply_scissor_rect.y,
+                item->args.apply_scissor_rect.width,
+                item->args.apply_scissor_rect.height,
+                _sg_imgui_bool_string(item->args.apply_scissor_rect.origin_top_left));
+            break;
+
+        case SG_IMGUI_CMD_APPLY_PIPELINE:
+            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.apply_pipeline.pipeline);
+            snprintf(str.buf, len, "sg_apply_pipeline(%s)", res_id.buf);
+            break;
+
+        case SG_IMGUI_CMD_APPLY_BINDINGS:
+            snprintf(str.buf, len, "FIXME: %s", "sg_apply_bindings");
+            break;
+
+        case SG_IMGUI_CMD_APPLY_UNIFORMS:
+            snprintf(str.buf, len, "FIXME: %s", "sg_apply_uniforms");
+            break;
+
+        case SG_IMGUI_CMD_DRAW:
+            snprintf(str.buf, len, "sg_draw(%d, %d, %d)",
+                item->args.draw.base_element,
+                item->args.draw.num_elements,
+                item->args.draw.num_instances);
+            break;
+
+        case SG_IMGUI_CMD_END_PASS:
+            snprintf(str.buf, len, "%s", "sg_end_pass()");
+            break;
+
+        case SG_IMGUI_CMD_COMMIT:
+            snprintf(str.buf, len, "%s", "sg_commit()");
+            break;
+
+        case SG_IMGUI_CMD_ALLOC_BUFFER:
+        case SG_IMGUI_CMD_ALLOC_IMAGE:
+        case SG_IMGUI_CMD_ALLOC_SHADER:
+        case SG_IMGUI_CMD_ALLOC_PIPELINE:
+        case SG_IMGUI_CMD_ALLOC_PASS:
+        case SG_IMGUI_CMD_INIT_BUFFER:
+        case SG_IMGUI_CMD_INIT_IMAGE:
+        case SG_IMGUI_CMD_INIT_SHADER:
+        case SG_IMGUI_CMD_INIT_PIPELINE:
+        case SG_IMGUI_CMD_INIT_PASS:
+        case SG_IMGUI_CMD_FAIL_BUFFER:
+        case SG_IMGUI_CMD_FAIL_IMAGE:
+        case SG_IMGUI_CMD_FAIL_SHADER:
+        case SG_IMGUI_CMD_FAIL_PIPELINE:
+        case SG_IMGUI_CMD_FAIL_PASS:
+        default:
+            snprintf(str.buf, len, "%s", "???");
+            break;
+    }
+    str.buf[len-1] = 0;
+    return str;
 }
 
 /*--- sokol-gfx trace hook functions -----------------------------------------*/
@@ -1585,6 +2070,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* 
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label) {
+    SOKOL_ASSERT(label);
     char buf[32];
     const char* str;
     if (label[0]) {
@@ -1616,254 +2102,6 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_image_link(sg_imgui_t* ctx, uint32_t img_id) 
         retval = _sg_imgui_draw_resid_link(img_id, img_ui->label.buf);
     }
     return retval;
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
-    switch (s) {
-        case SG_RESOURCESTATE_INITIAL:  return "SG_RESOURCESTATE_INITIAL";
-        case SG_RESOURCESTATE_ALLOC:    return "SG_RESOURCESTATE_ALLOC";
-        case SG_RESOURCESTATE_VALID:    return "SG_RESOURCESTATE_VALID";
-        case SG_RESOURCESTATE_FAILED:   return "SG_RESOURCESTATE_FAILED";
-        default:                        return "SG_RESOURCESTATE_INVALID";
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const _sg_slot_t* slot) {
-    ImGui::Text("ResId: %08X", slot->id);
-    ImGui::Text("CtxId: %08X", slot->ctx_id);
-    ImGui::Text("State: %s", _sg_imgui_resourcestate_string(slot->state));
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_buffertype_string(sg_buffer_type t) {
-    switch (t) {
-        case SG_BUFFERTYPE_VERTEXBUFFER:    return "SG_BUFFERTYPE_VERTEXBUFFER";
-        case SG_BUFFERTYPE_INDEXBUFFER:     return "SG_BUFFERTYPE_INDEXBUFFER";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_usage_string(sg_usage u) {
-    switch (u) {
-        case SG_USAGE_IMMUTABLE:    return "SG_USAGE_IMMUTABLE";
-        case SG_USAGE_DYNAMIC:      return "SG_USAGE_DYNAMIC";
-        case SG_USAGE_STREAM:       return "SG_USAGE_STREAM";
-        default:                    return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_imagetype_string(sg_image_type t) {
-    switch (t) {
-        case SG_IMAGETYPE_2D:       return "SG_IMAGETYPE_2D";
-        case SG_IMAGETYPE_CUBE:     return "SG_IMAGETYPE_CUBE";
-        case SG_IMAGETYPE_3D:       return "SG_IMAGETYPE_3D";
-        case SG_IMAGETYPE_ARRAY:    return "SG_IMAGETYPE_ARRAY";
-        default:                    return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_NONE:           return "SG_PIXELFORMAT_NONE";
-        case SG_PIXELFORMAT_RGBA8:          return "SG_PIXELFORMAT_RGBA8";
-        case SG_PIXELFORMAT_RGB8:           return "SG_PIXELFORMAT_RGB8";
-        case SG_PIXELFORMAT_RGBA4:          return "SG_PIXELFORMAT_RGBA4";
-        case SG_PIXELFORMAT_R5G6B5:         return "SG_PIXELFORMAT_R5G6B5";
-        case SG_PIXELFORMAT_R5G5B5A1:       return "SG_PIXELFORMAT_R5G5B5A1";
-        case SG_PIXELFORMAT_R10G10B10A2:    return "SG_PIXELFORMAT_R10G10B10A2";
-        case SG_PIXELFORMAT_RGBA32F:        return "SG_PIXELFORMAT_RGBA32F";
-        case SG_PIXELFORMAT_RGBA16F:        return "SG_PIXELFORMAT_RGBA16F";
-        case SG_PIXELFORMAT_R32F:           return "SG_PIXELFORMAT_R32F";
-        case SG_PIXELFORMAT_R16F:           return "SG_PIXELFORMAT_R16F";
-        case SG_PIXELFORMAT_L8:             return "SG_PIXELFORMAT_L8";
-        case SG_PIXELFORMAT_DXT1:           return "SG_PIXELFORMAT_DXT1";
-        case SG_PIXELFORMAT_DXT3:           return "SG_PIXELFORMAT_DXT3";
-        case SG_PIXELFORMAT_DXT5:           return "SG_PIXELFORMAT_DXT5";
-        case SG_PIXELFORMAT_DEPTH:          return "SG_PIXELFORMAT_DEPTH";
-        case SG_PIXELFORMAT_DEPTHSTENCIL:   return "SG_PIXELFORMAT_DEPTHSTENCIL";
-        case SG_PIXELFORMAT_PVRTC2_RGB:     return "SG_PIXELFORMAT_PVRTC2_RGB";
-        case SG_PIXELFORMAT_PVRTC4_RGB:     return "SG_PIXELFORMAT_PVRTC4_RGB";
-        case SG_PIXELFORMAT_PVRTC2_RGBA:    return "SG_PIXELFORMAT_PVRTC2_RGBA";
-        case SG_PIXELFORMAT_PVRTC4_RGBA:    return "SG_PIXELFORMAT_PVRTC4_RGBA";
-        case SG_PIXELFORMAT_ETC2_RGB8:      return "SG_PIXELFORMAT_ETC2_RGB8";
-        case SG_PIXELFORMAT_ETC2_SRGB8:     return "SG_PIXELFORMAT_ETC2_SRGB8";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_filter_string(sg_filter f) {
-    switch (f) {
-        case SG_FILTER_NEAREST:                 return "SG_FILTER_NEAREST";
-        case SG_FILTER_LINEAR:                  return "SG_FILTER_LINEAR";
-        case SG_FILTER_NEAREST_MIPMAP_NEAREST:  return "SG_FILTER_NEAREST_MIPMAP_NEAREST";
-        case SG_FILTER_NEAREST_MIPMAP_LINEAR:   return "SG_FILTER_NEAREST_MIPMAP_LINEAR";
-        case SG_FILTER_LINEAR_MIPMAP_NEAREST:   return "SG_FILTER_LINEAR_MIPMAP_NEAREST";
-        case SG_FILTER_LINEAR_MIPMAP_LINEAR:    return "SG_FILTER_LINEAR_MIPMAP_LINEAR";
-        default:                                return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
-    switch (w) {
-        case SG_WRAP_REPEAT:            return "SG_WRAP_REPEAT";
-        case SG_WRAP_CLAMP_TO_EDGE:     return "SG_WRAP_CLAMP_TO_EDGE";
-        case SG_WRAP_MIRRORED_REPEAT:   return "SG_WRAP_MIRRORED_REPEAT";
-        default:                        return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
-    switch (t) {
-        case SG_UNIFORMTYPE_FLOAT:  return "SG_UNIFORMTYPE_FLOAT";
-        case SG_UNIFORMTYPE_FLOAT2: return "SG_UNIFORMTYPE_FLOAT2";
-        case SG_UNIFORMTYPE_FLOAT3: return "SG_UNIFORMTYPE_FLOAT3";
-        case SG_UNIFORMTYPE_FLOAT4: return "SG_UNIFORMTYPE_FLOAT4";
-        case SG_UNIFORMTYPE_MAT4:   return "SG_UNIFORMTYPE_MAT4";
-        default:                    return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_vertexstep_string(sg_vertex_step s) {
-    switch (s) {
-        case SG_VERTEXSTEP_PER_VERTEX:      return "SG_VERTEXSTEP_PER_VERTEX";
-        case SG_VERTEXSTEP_PER_INSTANCE:    return "SG_VERTEXSTEP_PER_INSTANCE";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_vertexformat_string(sg_vertex_format f) {
-    switch (f) {
-        case SG_VERTEXFORMAT_FLOAT:     return "SG_VERTEXFORMAT_FLOAT";
-        case SG_VERTEXFORMAT_FLOAT2:    return "SG_VERTEXFORMAT_FLOAT2";
-        case SG_VERTEXFORMAT_FLOAT3:    return "SG_VERTEXFORMAT_FLOAT3";
-        case SG_VERTEXFORMAT_FLOAT4:    return "SG_VERTEXFORMAT_FLOAT4";
-        case SG_VERTEXFORMAT_BYTE4:     return "SG_VERTEXFORMAT_BYTE4";
-        case SG_VERTEXFORMAT_BYTE4N:    return "SG_VERTEXFORMAT_BYTE4N";
-        case SG_VERTEXFORMAT_UBYTE4:    return "SG_VERTEXFORMAT_UBYTE4";
-        case SG_VERTEXFORMAT_UBYTE4N:   return "SG_VERTEXFORMAT_UBYTE4N";
-        case SG_VERTEXFORMAT_SHORT2:    return "SG_VERTEXFORMAT_SHORT2";
-        case SG_VERTEXFORMAT_SHORT2N:   return "SG_VERTEXFORMAT_SHORT2N";
-        case SG_VERTEXFORMAT_SHORT4:    return "SG_VERTEXFORMAT_SHORT4";
-        case SG_VERTEXFORMAT_SHORT4N:   return "SG_VERTEXFORMAT_SHORT4N";
-        case SG_VERTEXFORMAT_UINT10_N2: return "SG_VERTEXFORMAT_UINT10_N2";
-        default:                        return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_primitivetype_string(sg_primitive_type t) {
-    switch (t) {
-        case SG_PRIMITIVETYPE_POINTS:           return "SG_PRIMITIVETYPE_POINTS";
-        case SG_PRIMITIVETYPE_LINES:            return "SG_PRIMITIVETYPE_LINES";
-        case SG_PRIMITIVETYPE_LINE_STRIP:       return "SG_PRIMITIVETYPE_LINE_STRIP";
-        case SG_PRIMITIVETYPE_TRIANGLES:        return "SG_PRIMITIVETYPE_TRIANGLES";
-        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return "SG_PRIMITIVETYPE_TRIANGLE_STRIP";
-        default:                                return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_indextype_string(sg_index_type t) {
-    switch (t) {
-        case SG_INDEXTYPE_NONE:     return "SG_INDEXTYPE_NONE";
-        case SG_INDEXTYPE_UINT16:   return "SG_INDEXTYPE_UINT16";
-        case SG_INDEXTYPE_UINT32:   return "SG_INDEXTYPE_UINT32";
-        default:                    return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_stencilop_string(sg_stencil_op op) {
-    switch (op) {
-        case SG_STENCILOP_KEEP:         return "SG_STENCILOP_KEEP";
-        case SG_STENCILOP_ZERO:         return "SG_STENCILOP_ZERO";
-        case SG_STENCILOP_REPLACE:      return "SG_STENCILOP_REPLACE";
-        case SG_STENCILOP_INCR_CLAMP:   return "SG_STENCILOP_INCR_CLAMP";
-        case SG_STENCILOP_DECR_CLAMP:   return "SG_STENCILOP_DECR_CLAMP";
-        case SG_STENCILOP_INVERT:       return "SG_STENCILOP_INVERT";
-        case SG_STENCILOP_INCR_WRAP:    return "SG_STENCILOP_INCR_WRAP";
-        case SG_STENCILOP_DECR_WRAP:    return "SG_STENCILOP_DECR_WRAP";
-        default:                        return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_comparefunc_string(sg_compare_func f) {
-    switch (f) {
-        case SG_COMPAREFUNC_NEVER:          return "SG_COMPAREFUNC_NEVER";
-        case SG_COMPAREFUNC_LESS:           return "SG_COMPAREFUNC_LESS";
-        case SG_COMPAREFUNC_EQUAL:          return "SG_COMPAREFUNC_EQUAL";
-        case SG_COMPAREFUNC_LESS_EQUAL:     return "SG_COMPAREFUNC_LESS_EQUAL";
-        case SG_COMPAREFUNC_GREATER:        return "SG_COMPAREFUNC_GREATER";
-        case SG_COMPAREFUNC_NOT_EQUAL:      return "SG_COMPAREFUNC_NOT_EQUAL";
-        case SG_COMPAREFUNC_GREATER_EQUAL:  return "SG_COMPAREFUNC_GREATER_EQUAL";
-        case SG_COMPAREFUNC_ALWAYS:         return "SG_COMPAREFUNC_ALWAYS";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_blendfactor_string(sg_blend_factor f) {
-    switch (f) {
-        case SG_BLENDFACTOR_ZERO:                   return "SG_BLENDFACTOR_ZERO";
-        case SG_BLENDFACTOR_ONE:                    return "SG_BLENDFACTOR_ONE";
-        case SG_BLENDFACTOR_SRC_COLOR:              return "SG_BLENDFACTOR_SRC_COLOR";
-        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR";
-        case SG_BLENDFACTOR_SRC_ALPHA:              return "SG_BLENDFACTOR_SRC_ALPHA";
-        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA";
-        case SG_BLENDFACTOR_DST_COLOR:              return "SG_BLENDFACTOR_DST_COLOR";
-        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return "SG_BLENDFACTOR_ONE_MINUS_DST_COLOR";
-        case SG_BLENDFACTOR_DST_ALPHA:              return "SG_BLENDFACTOR_DST_ALPHA";
-        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return "SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA";
-        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return "SG_BLENDFACTOR_SRC_ALPHA_SATURATED";
-        case SG_BLENDFACTOR_BLEND_COLOR:            return "SG_BLENDFACTOR_BLEND_COLOR";
-        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR";
-        case SG_BLENDFACTOR_BLEND_ALPHA:            return "SG_BLENDFACTOR_BLEND_ALPHA";
-        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return "SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA";
-        default:                                    return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_blendop_string(sg_blend_op op) {
-    switch (op) {
-        case SG_BLENDOP_ADD:                return "SG_BLENDOP_ADD";
-        case SG_BLENDOP_SUBTRACT:           return "SG_BLENDOP_SUBTRACT";
-        case SG_BLENDOP_REVERSE_SUBTRACT:   return "SG_BLENDOP_REVERSE_SUBTRACT";
-        default:                            return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_colormask_string(uint8_t m) {
-    static const char* str[] = {
-        "NONE",
-        "R",
-        "G",
-        "RG",
-        "B",
-        "RB",
-        "GB",
-        "RGB",
-        "A",
-        "RA",
-        "GA",
-        "RGA",
-        "BA",
-        "RBA",
-        "GBA",
-        "RGBA",
-    };
-    return str[m & 0xF];
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_cullmode_string(sg_cull_mode cm) {
-    switch (cm) {
-        case SG_CULLMODE_NONE:  return "SG_CULLMODE_NONE";
-        case SG_CULLMODE_FRONT: return "SG_CULLMODE_FRONT";
-        case SG_CULLMODE_BACK:  return "SG_CULLMODE_BACK";
-        default:                return "???";
-    }
-}
-
-_SOKOL_PRIVATE const char* _sg_imgui_facewinding_string(sg_face_winding fw) {
-    switch (fw) {
-        case SG_FACEWINDING_CCW:    return "SG_FACEWINDING_CCW";
-        case SG_FACEWINDING_CW:     return "SG_FACEWINDING_CW";
-        default:                    return "???";
-    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_show_image(sg_imgui_t* ctx, uint32_t img_id) {
@@ -1947,14 +2185,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
-    ImGui::BeginChild("capture_list", ImVec2(_SG_IMGUI_RESLIST_WIDTH,0), true);
+    ImGui::BeginChild("capture_list", ImVec2(_SG_IMGUI_CAPTURELIST_WIDTH,0), true);
     const uint32_t num_items = _sg_imgui_capture_num_read_items(ctx);
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     for (uint32_t i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
-        const char* cmd_name = _sg_imgui_capture_cmd_name(item->cmd);
+        sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, item);
         ImGui::PushID(i);
-        if (ImGui::Selectable(cmd_name, bucket->sel_item == i)) {
+        if (ImGui::Selectable(item_string.buf, bucket->sel_item == i)) {
             bucket->sel_item = i;
         }
         ImGui::PopID();
@@ -2529,7 +2767,7 @@ void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     if (!ctx->capture.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(640, 400), ImGuiSetCond_Once);
     if (ImGui::Begin("Frame Capture", &ctx->capture.open)) {
         sg_imgui_draw_capture_content(ctx);
     }
