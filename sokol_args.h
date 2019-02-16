@@ -632,7 +632,7 @@ EM_JS(void, sargs_js_parse_url, (), {
     for (var p = params.next(); !p.done; p = params.next()) {
         var key = p.value[0];
         var val = p.value[1];
-        var res = Module.ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
+        var res = ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
     }
 });
 
