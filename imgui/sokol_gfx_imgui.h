@@ -423,7 +423,6 @@ typedef struct {
 
 typedef struct {
     uint32_t num_items;
-    uint32_t sel_item;
     sg_imgui_capture_item_t items[SG_IMGUI_MAX_FRAMECAPTURE_ITEMS];
 } sg_imgui_capture_bucket_t;
 
@@ -432,7 +431,8 @@ typedef struct {
 */
 typedef struct {
     bool open;
-    uint32_t bucket_index;     /* which bucket to record to, 0 or 1 */
+    uint32_t bucket_index;      /* which bucket to record to, 0 or 1 */
+    uint32_t sel_item;          /* currently selected capture item by index */
     sg_imgui_capture_bucket_t bucket[2];
 } sg_imgui_capture_t;
 
@@ -1098,7 +1098,6 @@ _SOKOL_PRIVATE void _sg_imgui_capture_next_frame(sg_imgui_t* ctx) {
     ctx->capture.bucket_index = (ctx->capture.bucket_index + 1) & 1;
     sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[ctx->capture.bucket_index];
     bucket->num_items = 0;
-    bucket->sel_item = 0;
 }
 
 _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_next_write_item(sg_imgui_t* ctx) {
@@ -2276,13 +2275,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("capture_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
     const uint32_t num_items = _sg_imgui_capture_num_read_items(ctx);
-    sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     for (uint32_t i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
         ImGui::PushID(i);
-        if (ImGui::Selectable(item_string.buf, bucket->sel_item == i)) {
-            bucket->sel_item = i;
+        if (ImGui::Selectable(item_string.buf, ctx->capture.sel_item == i)) {
+            ctx->capture.sel_item = i;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s", item_string.buf);
