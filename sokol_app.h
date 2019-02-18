@@ -622,7 +622,7 @@ SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
-SOKOL_API_DECL void sapp_run(const sapp_desc* desc, int argc, char* argv[]);
+SOKOL_API_DECL void sapp_run(int argc, char* argv[], const sapp_desc* desc);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -800,7 +800,7 @@ _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc, int argc, char* argv[]) {
+_SOKOL_PRIVATE void _sapp_init_state(int argc, char* argv[], const sapp_desc* desc) {
     SOKOL_ASSERT(desc->init_cb);
     SOKOL_ASSERT(desc->frame_cb);
     SOKOL_ASSERT(desc->cleanup_cb);
@@ -1004,8 +1004,8 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
-    _sapp_init_state(desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(int argc, char* argv[], const sapp_desc* desc) {
+    _sapp_init_state(argc, argv, desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -1019,7 +1019,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc, argc, argv);
+    _sapp_run(argc, argv, &desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -1360,16 +1360,16 @@ static _sapp_ios_glk_view_dlg* _sapp_ios_glk_view_dlg_obj;
 static GLKViewController* _sapp_ios_view_ctrl_obj;
 #endif
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
-    _sapp_init_state(desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(int argc, char* argv[], const sapp_desc* desc) {
+    _sapp_init_state(argc, argv, desc);
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
 }
 
 /* iOS entry function */
 #if !defined(SOKOL_NO_ENTRY)
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc, argc, argv);
+    _sapp_run(argc, argv, &desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -2192,8 +2192,8 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
-_SOKOL_PRIVATE _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
-    _sapp_init_state(desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(int argc, char* argv[], const sapp_desc* desc) {
+    _sapp_init_state(argc, argv, desc);
     _sapp_emsc_init_keytable();
     double w, h;
     if (_sapp.html5_canvas_resize) {
@@ -2222,7 +2222,7 @@ _SOKOL_PRIVATE _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
     attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     #if defined(SOKOL_GLES3)
-        if (desc.gl_force_gles2) {
+        if (_sapp.desc.gl_force_gles2) {
             attrs.majorVersion = 1;
             _sapp.gles2_fallback = true;
         }
@@ -2254,13 +2254,12 @@ _SOKOL_PRIVATE _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
     emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
-    return 0;
 }
 
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc, argc, argv);
+    _sapp_run(argv, argc, &desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -3882,8 +3881,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
-    _sapp_init_state(desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(int argc, char* argv[], const sapp_desc* desc) {
+    _sapp_init_state(argc, argv, desc);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
@@ -3938,7 +3937,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
 }
 
 #if defined(SOKOL_WIN32_FORCE_MAIN)
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
 #else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     _SOKOL_UNUSED(hInstance);
@@ -3946,10 +3945,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
     int argc = __argc;
-    char** argv = __argv;
+    char* argv[] = __argv;
 #endif
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc, argc, argv);
+    _sapp_run(argc, argv, &desc);
     return 0;
 }
 
@@ -4616,7 +4615,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     SOKOL_LOG("NativeActivity onCreate()");
 
     sapp_desc desc = sokol_main(0, NULL);
-    _sapp_init_state(&desc, 0, NULL);
+    _sapp_init_state(0, NULL, &desc);
 
     /* start loop thread */
     _sapp_android_state = (_sapp_android_state_t){0};
@@ -6441,8 +6440,8 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
-    _sapp_init_state(desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(int argc, char* argv[], const sapp_desc* desc) {
+    _sapp_init_state(argc, argv, desc);
     _sapp_x11_quit_requested = false;
     _sapp_x11_window_state = NormalState;
 
@@ -6488,7 +6487,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc, argc, argv);
+    _sapp_run(argc, argv, &desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -6496,9 +6495,18 @@ int main(int argc, char* argv[]) {
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
-SOKOL_API_IMPL void sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+SOKOL_API_IMPL void sapp_run(int argc, char* argv[], const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
-    _sapp_run(desc, argc, argv);
+    _sapp_run(argc, argv, desc);
+}
+
+/* this is just a stub so the linker doesn't complain */
+sapp_desc sokol_main(int argc, char* argv[]) {
+    _SOKOL_UNUSED(argc);
+    _SOKOL_UNUSED(argv);
+    sapp_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    return desc;
 }
 #endif
 
