@@ -14,6 +14,7 @@
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
     SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
+    SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
@@ -36,26 +37,6 @@
     contains just enough of GL for sokol_gfx.h. If you want to use your own
     GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
     before including the implementation part of sokol_app.h.
-
-    TEMP NOTE DUMP
-    ==============
-    - need a way to quit application programmatically (sapp_request_quit())
-    - need a way to intercept a pending quit via UI close button (could be
-      done via frame_cb return value, and a sapp_quit_requested() function)
-    - onscreen keyboard support on Android requires Java :(, should we even bother?
-    - sapp_desc needs a bool whether to initialize depth-stencil surface
-    - GL context initialization needs more control (at least what GL version to initialize)
-    - application icon
-    - mouse pointer visibility(?)
-    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
-      (Win32 sends the event each frame when the mouse moves and is inside the window
-      client area, OSX sends it only once when the mouse enters the client area)
-    - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
-      at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
-      on Android Honeycomb and later (it can't be done at the moment as the app may be started
-      again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
-
-    FIXME: ERROR HANDLING (this will need an error callback function)
 
     FEATURE OVERVIEW
     ================
@@ -307,6 +288,54 @@
     an internal flag will be set, and the onscreen keyboard will be
     called at the next 'legal' opportunity (when the next input event
     is handled).
+
+    OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
+    ======================================================
+    In its default configuration, sokol_app.h "hijacks" the platform's
+    standard main() function. This was done because different platforms
+    have different main functions which are not compatible with
+    C's main() (for instance WinMain on Windows has completely different
+    arguments). However, this "main hijacking" posed a problem for
+    situations like integratins sokol_app.h with other languages than
+    C or C++, so an alternative SOKOL_NO_ENTRY mode was introduced
+    in which the user code provides the platform's main function:
+
+    - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
+    - do *not* provide a sokol_main() function
+    - instead provide the standard main() function of the platform
+    - from the main function, call the function ```sapp_run()``` which 
+      takes a pointer to an ```sapp_desc``` structure and the argc/argv 
+      from the main function (see below on how to do this on Windows with WinMain)
+    - ```sapp_run()``` takes over control and calls the provided init-, frame-, 
+      shutdown- and event-callbacks just like in the default model, it
+      will only return when the application quits (or not at all on some
+      platforms, like emscripten)
+
+    NOTE: On Windows with WinMain(), there are "magic" global variables
+    called __argc and __argv which provide main() compatible command line
+    arguments in UTF-8 format.
+
+    NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
+
+    TEMP NOTE DUMP
+    ==============
+    - need a way to quit application programmatically (sapp_request_quit())
+    - need a way to intercept a pending quit via UI close button (could be
+      done via frame_cb return value, and a sapp_quit_requested() function)
+    - onscreen keyboard support on Android requires Java :(, should we even bother?
+    - sapp_desc needs a bool whether to initialize depth-stencil surface
+    - GL context initialization needs more control (at least what GL version to initialize)
+    - application icon
+    - mouse pointer visibility(?)
+    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
+      (Win32 sends the event each frame when the mouse moves and is inside the window
+      client area, OSX sends it only once when the mouse enters the client area)
+    - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
+      at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
+      on Android Honeycomb and later (it can't be done at the moment as the app may be started
+      again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
+
+    FIXME: ERROR HANDLING (this will need an error callback function)
 
     zlib/libpng license
 
@@ -592,6 +621,9 @@ SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 
+/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
+SOKOL_API_DECL void sapp_run(const sapp_desc* desc, int argc, char* argv[]);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -641,6 +673,9 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     /* Android */
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #endif
+    #if defined(SOKOL_NO_ENTRY)
+    #error("sokol_app.h: SOKOL_NO_ENTRY is not supported on Android")
     #endif
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
@@ -765,7 +800,7 @@ _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
+_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc, int argc, char* argv[]) {
     SOKOL_ASSERT(desc->init_cb);
     SOKOL_ASSERT(desc->frame_cb);
     SOKOL_ASSERT(desc->cleanup_cb);
@@ -969,10 +1004,8 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
-/* MacOS entry function */
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    _sapp_init_state(desc, argc, argv);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -980,8 +1013,16 @@ int main(int argc, char* argv[]) {
     NSApp.delegate = _sapp_macos_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
+}
+
+/* MacOS entry function */
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc, argc, argv);
     return 0;
 }
+#endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     const CGSize fb_size = [_sapp_view_obj drawableSize];
@@ -1319,15 +1360,19 @@ static _sapp_ios_glk_view_dlg* _sapp_ios_glk_view_dlg_obj;
 static GLKViewController* _sapp_ios_view_ctrl_obj;
 #endif
 
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    _sapp_init_state(desc, argc, argv);
+    UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+}
+
 /* iOS entry function */
+#if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char** argv) {
-    @autoreleasepool {
-        sapp_desc desc = sokol_main(argc, argv);
-        _sapp_init_state(&desc, argc, argv);
-        UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
-    }
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc, argc, argv);
     return 0;
 }
+#endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
@@ -2147,14 +2192,13 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, 0, 0);
+_SOKOL_PRIVATE _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    _sapp_init_state(desc, argc, argv);
     _sapp_emsc_init_keytable();
     double w, h;
     if (_sapp.html5_canvas_resize) {
-        w = (double) desc.width;
-        h = (double) desc.height;
+        w = (double) _sapp.desc.width;
+        h = (double) _sapp.desc.height;
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
@@ -2212,7 +2256,15 @@ int main(int argc, char* argv[]) {
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
     return 0;
 }
-#endif  /* __EMSCRIPTEN__ */
+
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc, argc, argv);
+    return 0;
+}
+#endif /* SOKOL_NO_ENTRY */
+#endif /* __EMSCRIPTEN__ */
 
 /*== MISC GL SUPPORT FUNCTIONS ================================================*/
 #if defined(SOKOL_GLCORE33)
@@ -3830,19 +3882,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     }
 }
 
-#if defined(SOKOL_WIN32_FORCE_MAIN)
-int main(int argc, char** argv) {
-#else
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    _SOKOL_UNUSED(hInstance);
-    _SOKOL_UNUSED(hPrevInstance);
-    _SOKOL_UNUSED(lpCmdLine);
-    _SOKOL_UNUSED(nCmdShow);
-    int argc = __argc;
-    char** argv = __argv;
-#endif
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    _sapp_init_state(desc, argc, argv);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
@@ -3894,6 +3935,21 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+}
+
+#if defined(SOKOL_WIN32_FORCE_MAIN)
+int main(int argc, char** argv) {
+#else
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    _SOKOL_UNUSED(hInstance);
+    _SOKOL_UNUSED(hPrevInstance);
+    _SOKOL_UNUSED(lpCmdLine);
+    _SOKOL_UNUSED(nCmdShow);
+    int argc = __argc;
+    char** argv = __argv;
+#endif
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc, argc, argv);
     return 0;
 }
 
@@ -6385,9 +6441,8 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    _sapp_init_state(desc, argc, argv);
     _sapp_x11_quit_requested = false;
     _sapp_x11_window_state = NormalState;
 
@@ -6428,12 +6483,25 @@ int main(int argc, char* argv[]) {
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
-    return 0;
 }
 
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc, argc, argv);
+    return 0;
+}
+#endif /* SOKOL_NO_ENTRY */
 #endif /* LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
+#if defined(SOKOL_NO_ENTRY)
+SOKOL_API_IMPL void sapp_run(const sapp_desc* desc, int argc, char* argv[]) {
+    SOKOL_ASSERT(desc);
+    _sapp_run(desc, argc, argv);
+}
+#endif
+
 SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
 }
