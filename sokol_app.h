@@ -38,6 +38,8 @@
     GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
     before including the implementation part of sokol_app.h.
 
+    For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
+
     FEATURE OVERVIEW
     ================
     sokol_app.h provides a minimalistic cross-platform API which
@@ -141,6 +143,9 @@
             future may also be used to communicate other types of events
             to the application. Keep the event_cb struct member zero-initialized
             if your application doesn't require event handling.
+
+        NOTE that there's also an alternative compile mode where sokol_app.h
+        doesn't "hijack" the main() function. Search below for SOKOL_NO_ENTRY.
 
     --- Implement the initialization callback function, this is called once
         after the rendering surface, 3D API and swap chain have been
@@ -296,8 +301,8 @@
     have different main functions which are not compatible with
     C's main() (for instance WinMain on Windows has completely different
     arguments). However, this "main hijacking" posed a problem for
-    situations like integratins sokol_app.h with other languages than
-    C or C++, so an alternative SOKOL_NO_ENTRY mode was introduced
+    usage scenarios like integrating sokol_app.h with other languages than
+    C or C++, so an alternative SOKOL_NO_ENTRY mode has been added
     in which the user code provides the platform's main function:
 
     - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
@@ -309,10 +314,6 @@
       shutdown- and event-callbacks just like in the default model, it
       will only return when the application quits (or not at all on some
       platforms, like emscripten)
-
-    NOTE: On Windows with WinMain(), there are "magic" global variables
-    called __argc and __argv which provide main() compatible command line
-    arguments in UTF-8 format.
 
     NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
 
