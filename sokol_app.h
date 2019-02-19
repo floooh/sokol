@@ -3933,6 +3933,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_win32_destroy_window();
 }
 
+#if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
 #else
@@ -3942,13 +3943,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
     int argc = __argc;
-    char* argv[] = __argv;
+    char** argv = __argv;
 #endif
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_run(&desc);
     return 0;
 }
-
+#endif /* SOKOL_NO_ENTRY */
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
