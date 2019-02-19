@@ -6439,7 +6439,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 }
 
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
-    _sapp_init_state(argc, argv, desc);
+    _sapp_init_state(desc);
     _sapp_x11_quit_requested = false;
     _sapp_x11_window_state = NormalState;
 
