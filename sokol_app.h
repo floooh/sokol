@@ -4613,7 +4613,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     SOKOL_LOG("NativeActivity onCreate()");
 
     sapp_desc desc = sokol_main(0, NULL);
-    _sapp_init_state(0, NULL, &desc);
+    _sapp_init_state(&desc);
 
     /* start loop thread */
     _sapp_android_state = (_sapp_android_state_t){0};
