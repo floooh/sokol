@@ -407,6 +407,10 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **19-Feb-2019**: sokol_app.h now has an alternative mode where it doesn't
+"hijack" the platform's main() function. Search for SOKOL_NO_ENTRY in
+sokol_app.h for details and documentation.
+
 - **26-Jan-2019**: sokol_app.h now has an Android backend contributed by
   [Gustav Olsson](https://github.com/gustavolsson)! 
   See the [sokol-samples readme](https://github.com/floooh/sokol-samples/blob/master/README.md)
