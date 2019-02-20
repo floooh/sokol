@@ -151,9 +151,9 @@
 
         As you can see, those 'standard callbacks' don't have a user_data
         argument, so any data that needs to be preserved between callbacks
-        must live in global variables. If you're allergic to global variables,
+        must live in global variables. If you're allergic to global variables
         or cannot use them for other reasons, an alternative set of callbacks
-        can be set in sapp_desc, together with a user_data pointer:
+        can be defined in sapp_desc, together with a user_data pointer:
 
         .user_data (void*)
             The user-data argument for the callbacks below
