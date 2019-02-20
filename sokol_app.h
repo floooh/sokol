@@ -2373,8 +2373,8 @@ static HWND _sapp_win32_hwnd;
 static HDC _sapp_win32_dc;
 static bool _sapp_win32_in_create_window;
 static bool _sapp_win32_dpi_aware;
-static int _sapp_win32_content_scale;
-static int _sapp_win32_window_scale;
+static float _sapp_win32_content_scale;
+static float _sapp_win32_window_scale;
 static float _sapp_win32_mouse_scale;
 static bool _sapp_win32_iconified;
 typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
@@ -3519,13 +3519,18 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-        const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
-        const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
+        const int cur_width = (int)((float)(rect.right - rect.left) / _sapp_win32_window_scale);
+        const int cur_height = (int)((float)(rect.bottom - rect.top) / _sapp_win32_window_scale);
         if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
             _sapp.window_width = cur_width;
             _sapp.window_height = cur_height;
-            _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
-            _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
+        }
+
+        const int fb_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
+        const int fb_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
+        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+            _sapp.framebuffer_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
+            _sapp.framebuffer_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
             /* prevent a framebuffer size of 0 when window is minimized */
             if (_sapp.framebuffer_width == 0) {
                 _sapp.framebuffer_width = 1;
@@ -3533,6 +3538,7 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
             if (_sapp.framebuffer_height == 0) {
                 _sapp.framebuffer_height = 1;
             }
+
             return true;
         }
     }
@@ -3739,8 +3745,8 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     }
     else {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
-        rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
+        rect.right = (int) ((float)_sapp.window_width * _sapp_win32_window_scale);
+        rect.bottom = (int) ((float)_sapp.window_height * _sapp_win32_window_scale);
     }
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
@@ -3807,20 +3813,20 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
         /* clamp window scale to an integer factor */
-        _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
+        _sapp_win32_window_scale = (float)dpix / 96.0f;
     }
     else {
-        _sapp_win32_window_scale = 1;
+        _sapp_win32_window_scale = 1.0f;
     }
     if (_sapp.desc.high_dpi) {
         _sapp_win32_content_scale = _sapp_win32_window_scale;
         _sapp_win32_mouse_scale = 1.0f;
     }
     else {
-        _sapp_win32_content_scale = 1;
+        _sapp_win32_content_scale = 1.0f;
         _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
     }
-    _sapp.dpi_scale = (float) _sapp_win32_content_scale;
+    _sapp.dpi_scale = _sapp_win32_content_scale;
     if (user32) {
         FreeLibrary(user32);
     }
