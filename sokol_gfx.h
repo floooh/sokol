@@ -421,6 +421,8 @@ typedef struct sg_pipeline { uint32_t id; } sg_pipeline;
 typedef struct sg_pass     { uint32_t id; } sg_pass;
 typedef struct sg_context  { uint32_t id; } sg_context;
 
+#ifndef SOKOL_CONFIG
+
 /*
     various compile-time constants
 
@@ -440,6 +442,8 @@ enum {
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128
 };
+
+#endif	// SOKOL_CONFIG
 
 /*
     sg_feature
@@ -1960,6 +1964,7 @@ typedef struct {
     sg_usage usage;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
+    uint32_t map_frame_index;
     int num_slots;
     int active_slot;
     GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
@@ -2123,6 +2128,7 @@ typedef struct {
     sg_usage usage;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
+    uint32_t map_frame_index;
     ID3D11Buffer* d3d11_buf;
 } _sg_buffer_t;
 
@@ -2307,6 +2313,7 @@ typedef struct {
     sg_usage usage;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
+    uint32_t map_frame_index;
     int num_slots;
     int active_slot;
     uint32_t mtl_buf[SG_NUM_INFLIGHT_FRAMES];  /* index intp _sg_mtl_pool */
@@ -2577,6 +2584,7 @@ typedef enum {
     _SG_VALIDATE_UPDATEBUF_SIZE,
     _SG_VALIDATE_UPDATEBUF_ONCE,
     _SG_VALIDATE_UPDATEBUF_APPEND,
+    _SG_VALIDATE_UPDATEBUF_MAP,
 
     /* sg_append_buffer validation */
     _SG_VALIDATE_APPENDBUF_USAGE,
@@ -3749,6 +3757,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->update_frame_index = 0;
     buf->append_frame_index = 0;
+    buf->map_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     buf->ext_buffers = (0 != desc->gl_buffers[0]);
@@ -5402,6 +5411,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->update_frame_index = 0;
     buf->append_frame_index = 0;
+    buf->map_frame_index = 0;
     const bool injected = (0 != desc->d3d11_buffer);
     if (injected) {
         buf->d3d11_buf = (ID3D11Buffer*) desc->d3d11_buffer;
@@ -7028,6 +7038,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     buf->usage = _sg_def(desc->usage, SG_USAGE_IMMUTABLE);
     buf->update_frame_index = 0;
     buf->append_frame_index = 0;
+    buf->map_frame_index = 0;
     buf->num_slots = (buf->usage == SG_USAGE_IMMUTABLE) ? 1 : SG_NUM_INFLIGHT_FRAMES;
     buf->active_slot = 0;
     const bool injected = (0 != desc->mtl_buffers[0]);
@@ -8895,6 +8906,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const vo
         SOKOL_VALIDATE(buf->size >= size, _SG_VALIDATE_UPDATEBUF_SIZE);
         SOKOL_VALIDATE(buf->update_frame_index != _sg.frame_index, _SG_VALIDATE_UPDATEBUF_ONCE);
         SOKOL_VALIDATE(buf->append_frame_index != _sg.frame_index, _SG_VALIDATE_UPDATEBUF_APPEND);
+        SOKOL_VALIDATE(buf->map_frame_index != _sg.frame_index, _SG_VALIDATE_UPDATEBUF_MAP);
         return SOKOL_VALIDATE_END();
     #endif
 }
@@ -9557,6 +9569,8 @@ SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const void* data, int num
         SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
         /* update and append on same buffer in same frame not allowed */
         SOKOL_ASSERT(buf->append_frame_index != _sg.frame_index);
+        /* update and map on same buffer in same frame not allowed */
+        SOKOL_ASSERT(buf->map_frame_index != _sg.frame_index);
         _sg_update_buffer(buf, data, num_bytes);
         buf->update_frame_index = _sg.frame_index;
     }
