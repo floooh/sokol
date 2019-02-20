@@ -813,7 +813,7 @@ _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
     SOKOL_ABORT();
 }
 
-_SOKOL_PRIVATE void _sapp_call_init_cb(void) {
+_SOKOL_PRIVATE void _sapp_call_init(void) {
     if (_sapp.desc.init_cb) {
         _sapp.desc.init_cb();
     }
@@ -822,7 +822,7 @@ _SOKOL_PRIVATE void _sapp_call_init_cb(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_call_frame_cb(void) {
+_SOKOL_PRIVATE void _sapp_call_frame(void) {
     if (_sapp.desc.frame_cb) {
         _sapp.desc.frame_cb();
     }
@@ -831,7 +831,7 @@ _SOKOL_PRIVATE void _sapp_call_frame_cb(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_call_cleanup_cb(void) {
+_SOKOL_PRIVATE void _sapp_call_cleanup(void) {
     if (_sapp.desc.cleanup_cb) {
         _sapp.desc.cleanup_cb();
     }
@@ -840,7 +840,7 @@ _SOKOL_PRIVATE void _sapp_call_cleanup_cb(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_call_event_cb(const sapp_event* e) {
+_SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
     if (_sapp.desc.event_cb) {
         _sapp.desc.event_cb(e);
     }
@@ -915,10 +915,10 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
-        _sapp_call_init_cb();
+        _sapp_call_init();
         _sapp.init_called = true;
     }
-    _sapp_call_frame_cb();
+    _sapp_call_frame();
     _sapp.frame_count++;
 }
 
@@ -1191,7 +1191,7 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.modifiers = mod;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1200,20 +1200,20 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mod;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    _sapp_call_cleanup_cb();
+    _sapp_call_cleanup();
     return YES;
 }
 
@@ -1309,7 +1309,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1328,7 +1328,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                     continue;
                 }
                 _sapp.event.char_code = codepoint;
-                _sapp_call_event_cb(&_sapp.event);
+                _sapp_call_event(&_sapp.event);
             }
         }
     }
@@ -1440,7 +1440,7 @@ int main(int argc, char* argv[]) {
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1640,7 +1640,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if ((c < 0xD800) || (c > 0xDFFF)) {
                         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
                         _sapp.event.char_code = c;
-                        _sapp_call_event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
                 if (c <= 32) {
@@ -1653,10 +1653,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if (k != SAPP_KEYCODE_INVALID) {
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
                         _sapp.event.key_code = k;
-                        _sapp_call_event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
                         _sapp.event.key_code = k;
-                        _sapp_call_event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
             }
@@ -1665,10 +1665,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             /* this was a backspace */
             _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
             _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     return NO;
@@ -1713,7 +1713,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
             }
         }
         if (_sapp.event.num_touches > 0) {
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1876,7 +1876,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
@@ -1897,7 +1897,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved
     }
     if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
         _sapp_init_event(type);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
@@ -1957,7 +1957,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             }
             _sapp.event.mouse_x = _sapp.mouse_x;
             _sapp.event.mouse_y = _sapp.mouse_y;
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -1981,7 +1981,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         }
         _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
         _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
     return true;
@@ -2089,7 +2089,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2144,7 +2144,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
-            _sapp_call_event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -3682,7 +3682,7 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.mouse_button = btn;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3692,7 +3692,7 @@ _SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.scroll_x = -x / 30.0f;
         _sapp.event.scroll_y = y / 30.0f;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3701,7 +3701,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.key_code = _sapp.keycodes[vk];
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3710,14 +3710,14 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3987,7 +3987,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
             _sapp_wgl_swap_buffers();
         #endif
     }
-    _sapp_call_cleanup_cb();
+    _sapp_call_cleanup();
 
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
@@ -4210,7 +4210,7 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         SOKOL_LOG("event_cb()");
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -4269,7 +4269,7 @@ _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
         /* egl context is bound, cleanup gracefully */
         if (_sapp.init_called && !_sapp.cleanup_called) {
             SOKOL_LOG("cleanup_cb()");
-            _sapp_call_cleanup_cb();
+            _sapp_call_cleanup();
             _sapp.cleanup_called = true;
         }
     }
@@ -4349,7 +4349,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
             dst->changed = true;
         }
     }
-    _sapp_call_event_cb(&_sapp.event);
+    _sapp_call_event(&_sapp.event);
     return true;
 }
 
@@ -6180,7 +6180,7 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
 _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6200,7 +6200,7 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp.event.modifiers = mods;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6210,7 +6210,7 @@ _SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
         _sapp.event.modifiers = mods;
         _sapp.event.scroll_x = x;
         _sapp.event.scroll_y = y;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6219,7 +6219,7 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mods;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6228,7 +6228,7 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, uint32_t mods) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.char_code = chr;
         _sapp.event.modifiers = mods;
-        _sapp_call_event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6542,7 +6542,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
     }
-    _sapp_call_cleanup_cb();
+    _sapp_call_cleanup();
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
