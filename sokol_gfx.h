@@ -3592,6 +3592,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     _sg.gl.gles2 = desc->gl_force_gles2;
     #else
+    _SOKOL_UNUSED(desc);
     _sg.gl.gles2 = false;
     #endif
 
@@ -5381,11 +5382,13 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
     /* empty */
 }
 
