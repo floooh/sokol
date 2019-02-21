@@ -835,7 +835,7 @@ _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
     if (_sapp.desc.cleanup_cb) {
         _sapp.desc.cleanup_cb();
     }
-    else if (_sapp.desc.event_userdata_cb) {
+    else if (_sapp.desc.cleanup_userdata_cb) {
         _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
     }
 }
