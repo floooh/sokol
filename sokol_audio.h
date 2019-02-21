@@ -1202,7 +1202,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio.backend.buffer);
     if (num_frames == _saudio.buffer_frames) {
         if (_saudio_has_callback()) {
-            _saudio_strem_callback((float*)_saudio.backend.buffer, num_frames, _saudio.num_channels);
+            _saudio_stream_callback((float*)_saudio.backend.buffer, num_frames, _saudio.num_channels);
         }
         else {
             const int num_bytes = num_frames * _saudio.bytes_per_frame;
