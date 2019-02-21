@@ -407,6 +407,13 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **21-Feb-2019**: sokol_app.h and sokol_audio.h now have an alternative
+set of callbacks with user_data arguments. This is useful if you don't
+want or cannot store your own application state in global variables.
+See the header documentation in sokol_app.h and sokol_audio.h for details,
+and check out the samples *sapp/noentry-sapp.c* and *sapp/modplay-sapp.c*
+in https://github.com/floooh/sokol-samples
+
 - **19-Feb-2019**: sokol_app.h now has an alternative mode where it doesn't
 "hijack" the platform's main() function. Search for SOKOL_NO_ENTRY in
 sokol_app.h for details and documentation.
