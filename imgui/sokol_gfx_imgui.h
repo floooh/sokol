@@ -1259,7 +1259,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 
         case SG_IMGUI_CMD_BEGIN_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.begin_pass.pass);
-            snprintf(str.buf, len, "%d: sg_begin_pass(pass=%s, pass_action=..", index, res_id.buf);
+            snprintf(str.buf, len, "%d: sg_begin_pass(pass=%s, pass_action=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_APPLY_VIEWPORT:
@@ -2627,10 +2627,141 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, uint32_t pass_id)
             }
         }
         else {
-            ImGui::Text("Pass 0x08X no longer alive.");
+            ImGui::Text("Pass 0x%08X no longer alive.", pass_id);
         }
         ImGui::EndChild();
     }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
+    uint32_t sel_item_index = ctx->capture.sel_item;
+    if (sel_item_index >= _sg_imgui_capture_num_read_items(ctx)) {
+        return;
+    }
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, sel_item_index);
+    ImGui::BeginChild("capture_item", ImVec2(0, 0), false);
+    ImGui::Text("%s", _sg_imgui_capture_item_string(ctx, sel_item_index, item).buf);
+    ImGui::Separator();
+    switch (item->cmd) {
+        case SG_IMGUI_CMD_QUERY_FEATURE:
+            break;
+        case SG_IMGUI_CMD_RESET_STATE_CACHE:
+            break;
+        case SG_IMGUI_CMD_MAKE_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.make_buffer.result.id);
+            break;
+        case SG_IMGUI_CMD_MAKE_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.make_image.result.id);
+            break;
+        case SG_IMGUI_CMD_MAKE_SHADER:
+            _sg_imgui_draw_shader_panel(ctx, item->args.make_shader.result.id);
+            break;
+        case SG_IMGUI_CMD_MAKE_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.make_pipeline.result.id);
+            break;
+        case SG_IMGUI_CMD_MAKE_PASS:
+            _sg_imgui_draw_pass_panel(ctx, item->args.make_pass.result.id);
+            break;
+        case SG_IMGUI_CMD_DESTROY_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.destroy_buffer.buffer.id);
+            break;
+        case SG_IMGUI_CMD_DESTROY_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.destroy_image.image.id);
+            break;
+        case SG_IMGUI_CMD_DESTROY_SHADER:
+            _sg_imgui_draw_shader_panel(ctx, item->args.destroy_shader.shader.id);
+            break;
+        case SG_IMGUI_CMD_DESTROY_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.destroy_pipeline.pipeline.id);
+            break;
+        case SG_IMGUI_CMD_DESTROY_PASS:
+            _sg_imgui_draw_pass_panel(ctx, item->args.destroy_pass.pass.id);
+            break;
+        case SG_IMGUI_CMD_UPDATE_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer.id);
+            break;
+        case SG_IMGUI_CMD_UPDATE_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.update_image.image.id);
+            break;
+        case SG_IMGUI_CMD_APPEND_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer.id);
+            break;
+        case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:
+        case SG_IMGUI_CMD_QUERY_BUFFER_STATE:
+        case SG_IMGUI_CMD_QUERY_IMAGE_STATE:
+        case SG_IMGUI_CMD_QUERY_SHADER_STATE:
+        case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:
+        case SG_IMGUI_CMD_QUERY_PASS_STATE:
+            break;
+        case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
+        case SG_IMGUI_CMD_BEGIN_PASS:
+            ImGui::Text("FIXME");
+            break;
+        case SG_IMGUI_CMD_APPLY_VIEWPORT:
+        case SG_IMGUI_CMD_APPLY_SCISSOR_RECT:
+            break;
+        case SG_IMGUI_CMD_APPLY_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.apply_pipeline.pipeline.id);
+            break;
+        case SG_IMGUI_CMD_APPLY_BINDINGS:
+            ImGui::Text("FIXME");
+            break;
+        case SG_IMGUI_CMD_APPLY_UNIFORMS:
+            ImGui::Text("FIXME");
+            break;
+        case SG_IMGUI_CMD_DRAW:
+        case SG_IMGUI_CMD_END_PASS:
+        case SG_IMGUI_CMD_COMMIT:
+            break;
+        case SG_IMGUI_CMD_ALLOC_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.alloc_buffer.result.id);
+            break;
+        case SG_IMGUI_CMD_ALLOC_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.alloc_image.result.id);
+            break;
+        case SG_IMGUI_CMD_ALLOC_SHADER:
+            _sg_imgui_draw_shader_panel(ctx, item->args.alloc_shader.result.id);
+            break;
+        case SG_IMGUI_CMD_ALLOC_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.alloc_pipeline.result.id);
+            break;
+        case SG_IMGUI_CMD_ALLOC_PASS:
+            _sg_imgui_draw_pass_panel(ctx, item->args.alloc_pass.result.id);
+            break;
+        case SG_IMGUI_CMD_INIT_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.init_buffer.buffer.id);
+            break;
+        case SG_IMGUI_CMD_INIT_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.init_image.image.id);
+            break;
+        case SG_IMGUI_CMD_INIT_SHADER:
+            _sg_imgui_draw_shader_panel(ctx, item->args.init_shader.shader.id);
+            break;
+        case SG_IMGUI_CMD_INIT_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.init_pipeline.pipeline.id);
+            break;
+        case SG_IMGUI_CMD_INIT_PASS:
+            _sg_imgui_draw_pass_panel(ctx, item->args.init_pass.pass.id);
+            break;
+        case SG_IMGUI_CMD_FAIL_BUFFER:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.fail_buffer.buffer.id);
+            break;
+        case SG_IMGUI_CMD_FAIL_IMAGE:
+            _sg_imgui_draw_image_panel(ctx, item->args.fail_image.image.id);
+            break;
+        case SG_IMGUI_CMD_FAIL_SHADER:
+            _sg_imgui_draw_shader_panel(ctx, item->args.fail_shader.shader.id);
+            break;
+        case SG_IMGUI_CMD_FAIL_PIPELINE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.fail_pipeline.pipeline.id);
+            break;
+        case SG_IMGUI_CMD_FAIL_PASS:
+            _sg_imgui_draw_pass_panel(ctx, item->args.fail_pass.pass.id);
+            break;
+        default:
+            break;
+    }
+    ImGui::EndChild();
 }
 
 /*--- PUBLIC FUNCTIONS -------------------------------------------------------*/
@@ -2903,6 +3034,8 @@ void sg_imgui_draw_passes_content(sg_imgui_t* ctx) {
 void sg_imgui_draw_capture_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_capture_list(ctx);
+    ImGui::SameLine();
+    _sg_imgui_draw_capture_panel(ctx);
 }
 
 #endif /* SOKOL_IMPL */
