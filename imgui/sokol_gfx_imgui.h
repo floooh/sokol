@@ -2174,11 +2174,11 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label
     return res;
 }
 
-_SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, uint32_t shd_id) {
+_SOKOL_PRIVATE bool _sg_imgui_draw_buffer_link(sg_imgui_t* ctx, uint32_t buf_id) {
     bool retval = false;
-    if (shd_id != SG_INVALID_ID) {
-        const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(shd_id)];
-        retval = _sg_imgui_draw_resid_link(shd_id, shd_ui->label.buf);
+    if (buf_id != SG_INVALID_ID) {
+        const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_slot_index(buf_id)];
+        retval = _sg_imgui_draw_resid_link(buf_id, buf_ui->label.buf);
     }
     return retval;
 }
@@ -2190,6 +2190,20 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_image_link(sg_imgui_t* ctx, uint32_t img_id) 
         retval = _sg_imgui_draw_resid_link(img_id, img_ui->label.buf);
     }
     return retval;
+}
+
+_SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, uint32_t shd_id) {
+    bool retval = false;
+    if (shd_id != SG_INVALID_ID) {
+        const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(shd_id)];
+        retval = _sg_imgui_draw_resid_link(shd_id, shd_ui->label.buf);
+    }
+    return retval;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_show_buffer(sg_imgui_t* ctx, uint32_t buf_id) {
+    ctx->buffers.open = true;
+    ctx->buffers.sel_id = buf_id;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_show_image(sg_imgui_t* ctx, uint32_t img_id) {
@@ -2633,6 +2647,61 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, uint32_t pass_id)
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_bindings_panel(sg_imgui_t* ctx, const sg_bindings* bnd) {
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
+        uint32_t buf_id = bnd->vertex_buffers[i].id;
+        if (buf_id != SG_INVALID_ID) {
+            ImGui::Separator();
+            ImGui::Text("Vertex Buffer Slot #%d:", i);
+            ImGui::Text("  Buffer: "); ImGui::SameLine();
+            if (_sg_imgui_draw_buffer_link(ctx, buf_id)) {
+                _sg_imgui_show_buffer(ctx, buf_id);
+            }
+            ImGui::Text("  Offset: %d", bnd->vertex_buffer_offsets[i]);
+        }
+        else {
+            break;
+        }
+    }
+    if (bnd->index_buffer.id != SG_INVALID_ID) {
+        uint32_t buf_id = bnd->index_buffer.id;
+        if (buf_id != SG_INVALID_ID) {
+            ImGui::Separator();
+            ImGui::Text("Index Buffer Slot:");
+            ImGui::Text("  Buffer: "); ImGui::SameLine();
+            if (_sg_imgui_draw_buffer_link(ctx, buf_id)) {
+                _sg_imgui_show_buffer(ctx, buf_id);
+            }
+            ImGui::Text("  Offset: %d", bnd->index_buffer_offset);
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        uint32_t img_id = bnd->vs_images[i].id;
+        if (img_id != SG_INVALID_ID) {
+            ImGui::Separator();
+            ImGui::Text("Vertex Stage Image Slot #%d:", i);
+            ImGui::Text("  Image: "); ImGui::SameLine();
+            if (_sg_imgui_draw_image_link(ctx, img_id)) {
+                _sg_imgui_show_image(ctx, img_id);
+            }
+        }
+        else {
+            break;
+        }
+    }
+    for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        uint32_t img_id = bnd->fs_images[i].id;
+        if (img_id != SG_INVALID_ID) {
+            ImGui::Separator();
+            ImGui::Text("Fragment Stage Image Slot #%d:", i);
+            ImGui::Text("  Image: "); ImGui::SameLine();
+            if (_sg_imgui_draw_image_link(ctx, img_id)) {
+                _sg_imgui_show_image(ctx, img_id);
+            }
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
     uint32_t sel_item_index = ctx->capture.sel_item;
     if (sel_item_index >= _sg_imgui_capture_num_read_items(ctx)) {
@@ -2704,7 +2773,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
             _sg_imgui_draw_pipeline_panel(ctx, item->args.apply_pipeline.pipeline.id);
             break;
         case SG_IMGUI_CMD_APPLY_BINDINGS:
-            ImGui::Text("FIXME");
+            _sg_imgui_draw_bindings_panel(ctx, &item->args.apply_bindings.bindings);
             break;
         case SG_IMGUI_CMD_APPLY_UNIFORMS:
             ImGui::Text("FIXME");
