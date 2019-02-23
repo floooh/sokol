@@ -2702,6 +2702,47 @@ _SOKOL_PRIVATE void _sg_imgui_draw_bindings_panel(sg_imgui_t* ctx, const sg_bind
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, uint32_t pass_id, const sg_pass_action* action) {
+    int num_color_atts = 1;
+    if (SG_INVALID_ID != pass_id) {
+        const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id);
+        if (pass) {
+            num_color_atts = pass->num_color_atts;
+        }
+    }
+
+    ImGui::Text("Pass Action: ");
+    for (int i = 0; i < num_color_atts; i++) {
+        const sg_color_attachment_action* c_att = &action->colors[i];
+        ImGui::Text("  Color Attachment %d:", i);
+        switch (c_att->action) {
+            case SG_ACTION_LOAD: ImGui::Text("    SG_ACTION_LOAD"); break;
+            case SG_ACTION_DONTCARE: ImGui::Text("    SG_ACTION_DONTCARE"); break;
+            default:
+                ImGui::Text("    SG_ACTION_CLEAR: %.3f, %.3f, %.3f, %.3f",
+                    c_att->val[0],
+                    c_att->val[1],
+                    c_att->val[2],
+                    c_att->val[3]);
+                break;
+        }
+    }
+    const sg_depth_attachment_action* d_att = &action->depth;
+    ImGui::Text("  Depth Attachment:");
+    switch (d_att->action) {
+        case SG_ACTION_LOAD: ImGui::Text("    SG_ACTION_LOAD"); break;
+        case SG_ACTION_DONTCARE: ImGui::Text("    SG_ACTION_DONTCARE"); break;
+        default: ImGui::Text("    SG_ACTION_CLEAR: %.3f", d_att->val); break;
+    }
+    const sg_stencil_attachment_action* s_att = &action->stencil;
+    ImGui::Text("  Stencil Attachment");
+    switch (s_att->action) {
+        case SG_ACTION_LOAD: ImGui::Text("    SG_ACTION_LOAD"); break;
+        case SG_ACTION_DONTCARE: ImGui::Text("    SG_ACTION_DONTCARE"); break;
+        default: ImGui::Text("    SG_ACTION_CLEAR: 0x%02X", s_att->val); break;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
     uint32_t sel_item_index = ctx->capture.sel_item;
     if (sel_item_index >= _sg_imgui_capture_num_read_items(ctx)) {
@@ -2756,15 +2797,30 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
             _sg_imgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer.id);
             break;
         case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.query_buffer_overflow.buffer.id);
+            break;
         case SG_IMGUI_CMD_QUERY_BUFFER_STATE:
+            _sg_imgui_draw_buffer_panel(ctx, item->args.query_buffer_state.buffer.id);
+            break;
         case SG_IMGUI_CMD_QUERY_IMAGE_STATE:
+            _sg_imgui_draw_image_panel(ctx, item->args.query_image_state.image.id);
+            break;
         case SG_IMGUI_CMD_QUERY_SHADER_STATE:
+            _sg_imgui_draw_shader_panel(ctx, item->args.query_shader_state.shader.id);
+            break;
         case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:
+            _sg_imgui_draw_pipeline_panel(ctx, item->args.query_pipeline_state.pipeline.id);
+            break;
         case SG_IMGUI_CMD_QUERY_PASS_STATE:
+            _sg_imgui_draw_pass_panel(ctx, item->args.query_pass_state.pass.id);
             break;
         case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
+            _sg_imgui_draw_passaction_panel(ctx, SG_INVALID_ID, &item->args.begin_default_pass.action);
+            break;
         case SG_IMGUI_CMD_BEGIN_PASS:
-            ImGui::Text("FIXME");
+            _sg_imgui_draw_passaction_panel(ctx, item->args.begin_pass.pass.id, &item->args.begin_pass.action);
+            ImGui::Separator();
+            _sg_imgui_draw_pass_panel(ctx, item->args.begin_pass.pass.id);
             break;
         case SG_IMGUI_CMD_APPLY_VIEWPORT:
         case SG_IMGUI_CMD_APPLY_SCISSOR_RECT:
