@@ -176,6 +176,8 @@ typedef enum {
     SG_IMGUI_CMD_FAIL_SHADER,
     SG_IMGUI_CMD_FAIL_PIPELINE,
     SG_IMGUI_CMD_FAIL_PASS,
+    SG_IMGUI_CMD_PUSH_DEBUG_GROUP,
+    SG_IMGUI_CMD_POP_DEBUG_GROUP
 } sg_imgui_cmd_t;
 
 typedef struct {
@@ -370,6 +372,10 @@ typedef struct {
     sg_pass pass;
 } sg_imgui_args_fail_pass_t;
 
+typedef struct {
+    sg_imgui_str_t name;
+} sg_imgui_args_push_debug_group_t;
+
 typedef union {
     sg_imgui_args_query_feature_t query_feature;
     sg_imgui_args_make_buffer_t make_buffer;
@@ -414,6 +420,7 @@ typedef union {
     sg_imgui_args_fail_shader_t fail_shader;
     sg_imgui_args_fail_pipeline_t fail_pipeline;
     sg_imgui_args_fail_pass_t fail_pass;
+    sg_imgui_args_push_debug_group_t push_debug_group;
 } sg_imgui_args_t;
 
 typedef struct {
@@ -1390,6 +1397,15 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             snprintf(str.buf, len, "%d: sg_fail_pass(pass=%s)", index, res_id.buf);
             break;
 
+        case SG_IMGUI_CMD_PUSH_DEBUG_GROUP:
+            snprintf(str.buf, len, "%d: sg_push_debug_group(name=%s)", index,
+                item->args.push_debug_group.name.buf);
+            break;
+
+        case SG_IMGUI_CMD_POP_DEBUG_GROUP:
+            snprintf(str.buf, len, "%d: sg_pop_debug_group()", index);
+            break;
+
         default:
             snprintf(str.buf, len, "%d: ???", index);
             break;
@@ -2066,6 +2082,31 @@ _SOKOL_PRIVATE void _sg_imgui_fail_pass(sg_pass pass_id, void* user_data) {
     }
     if (ctx->hooks.fail_pass) {
         ctx->hooks.fail_pass(pass_id, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_PUSH_DEBUG_GROUP;
+        item->args.push_debug_group.name = _sg_imgui_make_str(name);
+    }
+    if (ctx->hooks.push_debug_group) {
+        ctx->hooks.push_debug_group(name, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_pop_debug_group(void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_POP_DEBUG_GROUP;
+    }
+    if (ctx->hooks.pop_debug_group) {
+        ctx->hooks.pop_debug_group(ctx->hooks.user_data);
     }
 }
 
@@ -2945,6 +2986,8 @@ void sg_imgui_init(sg_imgui_t* ctx) {
     hooks.fail_shader = _sg_imgui_fail_shader;
     hooks.fail_pipeline = _sg_imgui_fail_pipeline;
     hooks.fail_pass = _sg_imgui_fail_pass;
+    hooks.push_debug_group = _sg_imgui_push_debug_group;
+    hooks.pop_debug_group = _sg_imgui_pop_debug_group;
     hooks.err_buffer_pool_exhausted = _sg_imgui_err_buffer_pool_exhausted;
     hooks.err_image_pool_exhausted = _sg_imgui_err_image_pool_exhausted;
     hooks.err_shader_pool_exhausted = _sg_imgui_err_shader_pool_exhausted;
