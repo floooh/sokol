@@ -1524,6 +1524,8 @@ typedef struct sg_trace_hooks {
     void (*fail_shader)(sg_shader shd_id, void* user_data);
     void (*fail_pipeline)(sg_pipeline pip_id, void* user_data);
     void (*fail_pass)(sg_pass pass_id, void* user_data);
+    void (*push_debug_group)(const char* name, void* user_data);
+    void (*pop_debug_group)(void* user_data);
     void (*err_buffer_pool_exhausted)(void* user_data);
     void (*err_image_pool_exhausted)(void* user_data);
     void (*err_shader_pool_exhausted)(void* user_data);
@@ -1631,6 +1633,8 @@ SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
+SOKOL_API_DECL void sg_push_debug_group(const char* name);
+SOKOL_API_DECL void sg_pop_debug_group(void);
 
 /* resource creation, destruction and updating */
 SOKOL_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
@@ -9962,6 +9966,19 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_content* dat
     }
     if (_sg.hooks.update_image) {
         _sg.hooks.update_image(img_id, data, _sg.hooks.user_data);
+    }
+}
+
+SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
+    SOKOL_ASSERT(name);
+    if (_sg.hooks.push_debug_group) {
+        _sg.hooks.push_debug_group(name, _sg.hooks.user_data);
+    }
+}
+
+SOKOL_API_IMPL void sg_pop_debug_group(void) {
+    if (_sg.hooks.pop_debug_group) {
+        _sg.hooks.pop_debug_group(_sg.hooks.user_data);
     }
 }
 
