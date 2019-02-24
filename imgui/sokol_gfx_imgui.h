@@ -2330,17 +2330,38 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("capture_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
     const uint32_t num_items = _sg_imgui_capture_num_read_items(ctx);
+    uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (uint32_t i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
-        ImGui::PushID(i);
-        if (ImGui::Selectable(item_string.buf, ctx->capture.sel_item == i)) {
-            ctx->capture.sel_item = i;
+        if (item->cmd == SG_IMGUI_CMD_PUSH_DEBUG_GROUP) {
+            if (group_stack & 1) {
+                group_stack <<= 1;
+                const char* group_name = item->args.push_debug_group.name.buf;
+                if (ImGui::TreeNode(group_name, "Group: %s", group_name)) {
+                    group_stack |= 1;
+                }
+            }
+            else {
+                group_stack <<= 1;
+            }
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s", item_string.buf);
+        else if (item->cmd == SG_IMGUI_CMD_POP_DEBUG_GROUP) {
+            if (group_stack & 1) {
+                ImGui::TreePop();
+            }
+            group_stack >>= 1;
         }
-        ImGui::PopID();
+        else if (group_stack & 1) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(item_string.buf, ctx->capture.sel_item == i)) {
+                ctx->capture.sel_item = i;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", item_string.buf);
+            }
+            ImGui::PopID();
+        }
     }
     ImGui::EndChild();
 }
