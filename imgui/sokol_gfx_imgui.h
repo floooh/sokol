@@ -429,6 +429,9 @@ typedef struct {
 } sg_imgui_capture_item_t;
 
 typedef struct {
+    uint32_t ubuf_size;     /* size of uniform capture buffer in bytes */
+    uint32_t ubuf_pos;      /* current uniform buffer pos */
+    uint8_t* ubuf;          /* buffer for capturing uniform updates */
     uint32_t num_items;
     sg_imgui_capture_item_t items[SG_IMGUI_MAX_FRAMECAPTURE_ITEMS];
 } sg_imgui_capture_bucket_t;
@@ -1093,6 +1096,25 @@ _SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
 }
 
 /*--- COMMAND CAPTURING ------------------------------------------------------*/
+_SOKOL_PRIVATE void _sg_imgui_capture_init(sg_imgui_t* ctx) {
+    const int ubuf_initial_size = 4 * 1024 * 1024;
+    for (int i = 0; i < 2; i++) {
+        sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[i];
+        bucket->ubuf_size = ubuf_initial_size;
+        bucket->ubuf = (uint8_t*) SOKOL_MALLOC(bucket->ubuf_size);
+        SOKOL_ASSERT(bucket->ubuf);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_capture_discard(sg_imgui_t* ctx) {
+    for (int i = 0; i < 2; i++) {
+        sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[i];
+        SOKOL_ASSERT(bucket->ubuf);
+        SOKOL_FREE(bucket->ubuf);
+        bucket->ubuf = 0;
+    }
+}
+
 _SOKOL_PRIVATE sg_imgui_capture_bucket_t* _sg_imgui_capture_get_write_bucket(sg_imgui_t* ctx) {
     return &ctx->capture.bucket[ctx->capture.bucket_index & 1];
 }
@@ -2956,6 +2978,7 @@ void sg_imgui_init(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx);
     memset(ctx, 0, sizeof(sg_imgui_t));
     ctx->init_tag = 0xABCDABCD;
+    _sg_imgui_capture_init(ctx);
 
     /* hook into sokol_gfx functions */
     sg_trace_hooks hooks;
@@ -3056,6 +3079,7 @@ void sg_imgui_init(sg_imgui_t* ctx) {
 void sg_imgui_discard(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     ctx->init_tag = 0;
+    _sg_imgui_capture_discard(ctx);
     if (ctx->buffers.slots) {
         for (int i = 0; i < ctx->buffers.num_slots; i++) {
             if (ctx->buffers.slots[i].res_id.id != SG_INVALID_ID) {
