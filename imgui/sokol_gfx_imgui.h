@@ -304,6 +304,7 @@ typedef struct {
     int ub_index;
     const void* data;
     int num_bytes;
+    uint32_t ubuf_pos;  /* start of copied data in capture buffer */
 } sg_imgui_args_apply_uniforms_t;
 
 typedef struct {
@@ -1155,10 +1156,11 @@ _SOKOL_PRIVATE void _sg_imgui_capture_next_frame(sg_imgui_t* ctx) {
     bucket->ubuf_pos = 0;
 }
 
-_SOKOL_PRIVATE void _sg_imgui_capture_grow_ubuf(sg_imgui_t* ctx) {
+_SOKOL_PRIVATE void _sg_imgui_capture_grow_ubuf(sg_imgui_t* ctx, uint32_t required_size) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
+    SOKOL_ASSERT(required_size > bucket->ubuf_size);
     int old_size = bucket->ubuf_size;
-    int new_size = old_size + (old_size>>1); /* grow 1.5x */
+    int new_size = required_size + (required_size>>1);  /* allocate a bit ahead */
     bucket->ubuf_size = new_size;
     bucket->ubuf = (uint8_t*) _sg_imgui_realloc(bucket->ubuf, old_size, new_size);
 }
@@ -1183,6 +1185,20 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     SOKOL_ASSERT(index < bucket->num_items);
     return &bucket->items[index];
+}
+
+_SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const void* data, int num_bytes) {
+    sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
+    const uint32_t required_size = bucket->ubuf_pos + num_bytes;
+    if (required_size > bucket->ubuf_size) {
+        _sg_imgui_capture_grow_ubuf(ctx, required_size);
+    }
+    SOKOL_ASSERT(required_size <= bucket->ubuf_size);
+    memcpy(bucket->ubuf + bucket->ubuf_pos, data, num_bytes);
+    const uint32_t pos = bucket->ubuf_pos;
+    bucket->ubuf_pos += num_bytes;
+    SOKOL_ASSERT(bucket->ubuf_pos <= bucket->ubuf_size);
+    return pos;
 }
 
 _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int index, const sg_imgui_capture_item_t* item) {
@@ -1885,6 +1901,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
         item->args.apply_uniforms.ub_index = ub_index;
         item->args.apply_uniforms.data = data;
         item->args.apply_uniforms.num_bytes = num_bytes;
+        item->args.apply_uniforms.ubuf_pos = _sg_imgui_capture_uniforms(ctx, data, num_bytes);
     }
     if (ctx->hooks.apply_uniforms) {
         ctx->hooks.apply_uniforms(stage, ub_index, data, num_bytes, ctx->hooks.user_data);
