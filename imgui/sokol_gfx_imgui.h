@@ -304,7 +304,8 @@ typedef struct {
     int ub_index;
     const void* data;
     int num_bytes;
-    uint32_t ubuf_pos;  /* start of copied data in capture buffer */
+    sg_pipeline pipeline;   /* the pipeline which was active at this call */
+    uint32_t ubuf_pos;      /* start of copied data in capture buffer */
 } sg_imgui_args_apply_uniforms_t;
 
 typedef struct {
@@ -1897,11 +1898,13 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_UNIFORMS;
-        item->args.apply_uniforms.stage = stage;
-        item->args.apply_uniforms.ub_index = ub_index;
-        item->args.apply_uniforms.data = data;
-        item->args.apply_uniforms.num_bytes = num_bytes;
-        item->args.apply_uniforms.ubuf_pos = _sg_imgui_capture_uniforms(ctx, data, num_bytes);
+        sg_imgui_args_apply_uniforms_t* args = &item->args.apply_uniforms;
+        args->stage = stage;
+        args->ub_index = ub_index;
+        args->data = data;
+        args->num_bytes = num_bytes;
+        args->pipeline = _sg.cur_pipeline;
+        args->ubuf_pos = _sg_imgui_capture_uniforms(ctx, data, num_bytes);
     }
     if (ctx->hooks.apply_uniforms) {
         ctx->hooks.apply_uniforms(stage, ub_index, data, num_bytes, ctx->hooks.user_data);
@@ -2837,6 +2840,86 @@ _SOKOL_PRIVATE void _sg_imgui_draw_bindings_panel(sg_imgui_t* ctx, const sg_bind
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgui_args_apply_uniforms_t* args) {
+    SOKOL_ASSERT(args->ub_index < SG_MAX_SHADERSTAGE_BUFFERS);
+
+    /* check if all the required information for drawing the structured uniform block content
+        is available, otherwise just render a generic hexdump
+    */
+    bool draw_dump = false;
+    _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, args->pipeline.id);
+    if (!pip) {
+        ImGui::Text("Pipeline object no longer alive!");
+        draw_dump = true;
+    }
+    _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, pip->shader_id.id);
+    if (!shd) {
+        ImGui::Text("Shader object no longer alive!");
+        draw_dump = true;
+    }
+    const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(pip->shader_id.id)];
+    SOKOL_ASSERT(shd_ui->res_id.id == pip->shader_id.id);
+    const sg_shader_uniform_block_desc* ub_desc = (args->stage == SG_SHADERSTAGE_VS) ?
+        ub_desc = &shd_ui->desc.vs.uniform_blocks[args->ub_index] :
+        ub_desc = &shd_ui->desc.fs.uniform_blocks[args->ub_index];
+    SOKOL_ASSERT(args->num_bytes <= ub_desc->size);
+    if (ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID) {
+        draw_dump = true;
+    }
+
+    if (!draw_dump) {
+        sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
+        SOKOL_ASSERT((args->ubuf_pos + args->num_bytes) <= bucket->ubuf_size);
+        const float* uptrf = (const float*) (bucket->ubuf + args->ubuf_pos);
+        for (int i = 0; i < SG_MAX_UB_MEMBERS; i++) {
+            const sg_shader_uniform_desc* ud = &ub_desc->uniforms[i];
+            if (ud->type == SG_UNIFORMTYPE_INVALID) {
+                break;
+            }
+            int num_items = (ud->array_count > 1) ? ud->array_count : 1;
+            if (num_items > 1) {
+                ImGui::Text("%d: %s %s[%d] =", i, _sg_imgui_uniformtype_string(ud->type), ud->name?ud->name:"", ud->array_count);
+            }
+            else {
+                ImGui::Text("%d: %s %s =", i, _sg_imgui_uniformtype_string(ud->type), ud->name?ud->name:"");
+            }
+            for (int i = 0; i < num_items; i++) {
+                switch (ud->type) {
+                    case SG_UNIFORMTYPE_FLOAT:
+                        ImGui::Text("    %.3f", *uptrf);
+                        break;
+                    case SG_UNIFORMTYPE_FLOAT2:
+                        ImGui::Text("    %.3f, %.3f", uptrf[0], uptrf[1]);
+                        break;
+                    case SG_UNIFORMTYPE_FLOAT3:
+                        ImGui::Text("    %.3f, %.3f, %.3f", uptrf[0], uptrf[1], uptrf[2]);
+                        break;
+                    case SG_UNIFORMTYPE_FLOAT4:
+                        ImGui::Text("    %.3f, %.3f, %.3f, %.3f", uptrf[0], uptrf[1], uptrf[2], uptrf[3]);
+                        break;
+                    case SG_UNIFORMTYPE_MAT4:
+                        ImGui::Text("    %.3f, %.3f, %.3f, %.3f\n"
+                                    "    %.3f, %.3f, %.3f, %.3f\n"
+                                    "    %.3f, %.3f, %.3f, %.3f\n"
+                                    "    %.3f, %.3f, %.3f, %.3f",
+                            uptrf[0],  uptrf[1],  uptrf[2],  uptrf[3],
+                            uptrf[4],  uptrf[5],  uptrf[6],  uptrf[7],
+                            uptrf[8],  uptrf[9],  uptrf[10], uptrf[11],
+                            uptrf[12], uptrf[13], uptrf[14], uptrf[15]);
+                        break;
+                    default:
+                        ImGui::Text("???");
+                        break;
+                }
+                uptrf += _sg_uniform_size(ud->type, 1) / sizeof(float);
+            }
+        }
+    }
+    else {
+        ImGui::Text("FIXME: draw uniform data dump");
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, uint32_t pass_id, const sg_pass_action* action) {
     int num_color_atts = 1;
     if (SG_INVALID_ID != pass_id) {
@@ -2967,7 +3050,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
             _sg_imgui_draw_bindings_panel(ctx, &item->args.apply_bindings.bindings);
             break;
         case SG_IMGUI_CMD_APPLY_UNIFORMS:
-            ImGui::Text("FIXME");
+            _sg_imgui_draw_uniforms_panel(ctx, &item->args.apply_uniforms);
             break;
         case SG_IMGUI_CMD_DRAW:
         case SG_IMGUI_CMD_END_PASS:
