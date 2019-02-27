@@ -53,7 +53,7 @@
 
     Windows:        QueryPerformanceFrequency() / QueryPerformanceCounter()
     MacOS/iOS:      mach_absolute_time()
-    emscripten:     clock_gettime(CLOCK_MONOTONIC)
+    emscripten:     performance.now()
     Linux+others:   clock_gettime(CLOCK_MONOTONIC)
 
     zlib/libpng license
@@ -139,6 +139,11 @@ typedef struct {
     mach_timebase_info_data_t timebase;
     uint64_t start;
 } _stm_state_t;
+#elif defined(__EMSCRIPTEN__)
+typedef struct {
+    uint32_t initialized;
+    double start;
+} _stm_state_t;
 #else /* anything else, this will need more care for non-Linux platforms */
 #include <time.h>
 typedef struct {
@@ -159,6 +164,12 @@ _SOKOL_PRIVATE int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom)
 }
 #endif
 
+#if defined(__EMSCRIPTEN__)
+EM_JS(double, _stm_js_perfnow, (void), {
+    return performance.now();
+});
+#endif
+
 SOKOL_API_IMPL void stm_setup(void) {
     memset(&_stm, 0, sizeof(_stm));
     _stm.initialized = 0xABCDABCD;
@@ -168,6 +179,8 @@ SOKOL_API_IMPL void stm_setup(void) {
     #elif defined(__APPLE__) && defined(__MACH__)
         mach_timebase_info(&_stm.timebase);
         _stm.start = mach_absolute_time();
+    #elif defined(__EMSCRIPTEN__)
+        _stm.start = _stm_js_perfnow();
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -185,6 +198,10 @@ SOKOL_API_IMPL uint64_t stm_now(void) {
     #elif defined(__APPLE__) && defined(__MACH__)
         const uint64_t mach_now = mach_absolute_time() - _stm.start;
         now = int64_muldiv(mach_now, _stm.timebase.numer, _stm.timebase.denom);
+    #elif defined(__EMSCRIPTEN__)
+        double js_now = _stm_js_perfnow() - _stm.start;
+        SOKOL_ASSERT(js_now >= 0.0);
+        now = (uint64_t) (js_now * 1000000.0);
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);

@@ -14,6 +14,7 @@
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
     SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
+    SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
@@ -37,25 +38,7 @@
     GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
     before including the implementation part of sokol_app.h.
 
-    TEMP NOTE DUMP
-    ==============
-    - need a way to quit application programmatically (sapp_request_quit())
-    - need a way to intercept a pending quit via UI close button (could be
-      done via frame_cb return value, and a sapp_quit_requested() function)
-    - onscreen keyboard support on Android requires Java :(, should we even bother?
-    - sapp_desc needs a bool whether to initialize depth-stencil surface
-    - GL context initialization needs more control (at least what GL version to initialize)
-    - application icon
-    - mouse pointer visibility(?)
-    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
-      (Win32 sends the event each frame when the mouse moves and is inside the window
-      client area, OSX sends it only once when the mouse enters the client area)
-    - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
-      at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
-      on Android Honeycomb and later (it can't be done at the moment as the app may be started
-      again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
-
-    FIXME: ERROR HANDLING (this will need an error callback function)
+    For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
 
     FEATURE OVERVIEW
     ================
@@ -144,22 +127,47 @@
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
 
-        .init_cb (void (init_cb*)(void))
+        .init_cb (void (*)(void))
             This function is called once after the application window,
             3D rendering context and swap chain have been created. The
             function takes no arguments and has no return value.
-        .frame_cb (void (frame_cb*)(void))
+        .frame_cb (void (*)(void))
             This is the per-frame callback, which is usually called 60
             times per second. This is where your application would update
             most of its state and perform all rendering.
-        .cleanup_cb (void (cleanup_cb*)(void))
+        .cleanup_cb (void (*)(void))
             The cleanup callback is called once right before the application
             quits.
-        .event_cb (void (event-cb*)(const sapp_event* event))
+        .event_cb (void (*)(const sapp_event* event))
             The event callback is mainly for input handling, but in the
             future may also be used to communicate other types of events
             to the application. Keep the event_cb struct member zero-initialized
             if your application doesn't require event handling.
+        .fail_cb (void (*)(const char* msg))
+            The fail callback is called when a fatal error is encountered
+            during start which doesn't allow the program to continue.
+            Providing a callback here gives you a chance to show an error message
+            to the user. The default behaviour is SOKOL_LOG(msg)
+
+        As you can see, those 'standard callbacks' don't have a user_data
+        argument, so any data that needs to be preserved between callbacks
+        must live in global variables. If you're allergic to global variables
+        or cannot use them for other reasons, an alternative set of callbacks
+        can be defined in sapp_desc, together with a user_data pointer:
+
+        .user_data (void*)
+            The user-data argument for the callbacks below
+        .init_userdata_cb (void (*)(void* user_data))
+        .frame_userdata_cb (void (*)(void* user_data))
+        .cleanup_userdata_cb (void (*)(void* user_data))
+        .event_cb (void(*)(const sapp_event* event, void* user_data))
+        .fail_cb (void(*)(const char* msg, void* user_data))
+            These are the user-data versions of the callback functions. You
+            can mix those with the standard callbacks that don't have the
+            user_data argument.
+
+        NOTE that there's also an alternative compile mode where sokol_app.h
+        doesn't "hijack" the main() function. Search below for SOKOL_NO_ENTRY.
 
     --- Implement the initialization callback function, this is called once
         after the rendering surface, 3D API and swap chain have been
@@ -174,8 +182,9 @@
             Likewise, returns the current height of the default framebuffer.
 
         bool sapp_gles2(void)
-            Returns true if as GLES2 or WebGL2 context had been created (for
-            instance because GLES3/WebGL2 isn't available on the device)
+            Returns true if a GLES2 or WebGL context has been created. This
+            is useful when a GLES3/WebGL2 context was requested but is not
+            available so that sokol_app.h had to fallback to GLES2/WebGL.
 
         const void* sapp_metal_get_device(void)
         const void* sapp_metal_get_renderpass_descriptor(void)
@@ -306,6 +315,49 @@
     an internal flag will be set, and the onscreen keyboard will be
     called at the next 'legal' opportunity (when the next input event
     is handled).
+
+    OPTIONAL: DON'T HIJACK main() (#define SOKOL_NO_ENTRY)
+    ======================================================
+    In its default configuration, sokol_app.h "hijacks" the platform's
+    standard main() function. This was done because different platforms
+    have different main functions which are not compatible with
+    C's main() (for instance WinMain on Windows has completely different
+    arguments). However, this "main hijacking" posed a problem for
+    usage scenarios like integrating sokol_app.h with other languages than
+    C or C++, so an alternative SOKOL_NO_ENTRY mode has been added
+    in which the user code provides the platform's main function:
+
+    - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
+    - do *not* provide a sokol_main() function
+    - instead provide the standard main() function of the platform
+    - from the main function, call the function ```sapp_run()``` which 
+      takes a pointer to an ```sapp_desc``` structure.
+    - ```sapp_run()``` takes over control and calls the provided init-, frame-, 
+      shutdown- and event-callbacks just like in the default model, it
+      will only return when the application quits (or not at all on some
+      platforms, like emscripten)
+
+    NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
+
+    TEMP NOTE DUMP
+    ==============
+    - need a way to quit application programmatically (sapp_request_quit())
+    - need a way to intercept a pending quit via UI close button (could be
+      done via frame_cb return value, and a sapp_quit_requested() function)
+    - onscreen keyboard support on Android requires Java :(, should we even bother?
+    - sapp_desc needs a bool whether to initialize depth-stencil surface
+    - GL context initialization needs more control (at least what GL version to initialize)
+    - application icon
+    - mouse pointer visibility(?)
+    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
+      (Win32 sends the event each frame when the mouse moves and is inside the window
+      client area, OSX sends it only once when the mouse enters the client area)
+    - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
+      at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
+      on Android Honeycomb and later (it can't be done at the moment as the app may be started
+      again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
+
+    FIXME: ERROR HANDLING (this will need an error callback function)
 
     zlib/libpng license
 
@@ -538,28 +590,35 @@ typedef struct sapp_event {
 } sapp_event;
 
 typedef struct sapp_desc {
-    void (*init_cb)(void);
+    void (*init_cb)(void);                  /* these are the user-provided callbacks without user data */
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
-    int width;
-    int height;
-    int sample_count;
-    int swap_interval;
-    bool high_dpi;
-    bool fullscreen;
-    bool alpha;
-    bool premultiplied_alpha;
-    bool preserve_drawing_buffer;
-    const char* window_title;
-    const char* html5_canvas_name;
-    bool html5_canvas_resize;
-    bool ios_keyboard_resizes_canvas;
-    /* use GLES2 even if GLES3 is available */
-    bool gl_force_gles2;
-    /* if true, user is expected to manage cursor image and visibility on SAPP_EVENTTYPE_UPDATE_CURSOR */
-    bool user_cursor;
+    
+    void* user_data;                        /* these are the user-provided callbacks with user data */
+    void (*init_userdata_cb)(void*);
+    void (*frame_userdata_cb)(void*);
+    void (*cleanup_userdata_cb)(void*);
+    void (*event_userdata_cb)(const sapp_event*, void*);
+    void (*fail_userdata_cb)(const char*, void*);
+
+    int width;                          /* the preferred width of the window / canvas */
+    int height;                         /* the preferred height of the window / canvas */
+    int sample_count;                   /* MSAA sample count */
+    int swap_interval;                  /* the preferred swap interval (ignored on some platforms) */
+    bool high_dpi;                      /* whether the rendering canvas is full-resolution on HighDPI displays */
+    bool fullscreen;                    /* whether the window should be created in fullscreen mode */
+    bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
+    const char* window_title;           /* the window title as UTF-8 encoded string */
+    bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+
+    const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
+    bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
+    bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
+    bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
+    bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
+    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
 /* user-provided functions */
@@ -590,6 +649,9 @@ SOKOL_API_DECL const void* sapp_d3d11_get_device_context(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
+
+/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
+SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -640,6 +702,9 @@ SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
     /* Android */
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #endif
+    #if defined(SOKOL_NO_ENTRY)
+    #error("sokol_app.h: SOKOL_NO_ENTRY is not supported on Android")
     #endif
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
@@ -731,8 +796,6 @@ typedef struct {
     bool onscreen_keyboard_shown;
     sapp_event event;
     sapp_desc desc;
-    int argc;
-    char** argv;
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_state;
 static _sapp_state _sapp;
@@ -741,10 +804,49 @@ _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
     if (_sapp.desc.fail_cb) {
         _sapp.desc.fail_cb(msg);
     }
+    else if (_sapp.desc.fail_userdata_cb) {
+        _sapp.desc.fail_userdata_cb(msg, _sapp.desc.user_data);
+    }
     else {
         SOKOL_LOG(msg);
     }
     SOKOL_ABORT();
+}
+
+_SOKOL_PRIVATE void _sapp_call_init(void) {
+    if (_sapp.desc.init_cb) {
+        _sapp.desc.init_cb();
+    }
+    else if (_sapp.desc.init_userdata_cb) {
+        _sapp.desc.init_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_frame(void) {
+    if (_sapp.desc.frame_cb) {
+        _sapp.desc.frame_cb();
+    }
+    else if (_sapp.desc.frame_userdata_cb) {
+        _sapp.desc.frame_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_cleanup(void) {
+    if (_sapp.desc.cleanup_cb) {
+        _sapp.desc.cleanup_cb();
+    }
+    else if (_sapp.desc.cleanup_userdata_cb) {
+        _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
+    if (_sapp.desc.event_cb) {
+        _sapp.desc.event_cb(e);
+    }
+    else if (_sapp.desc.event_userdata_cb) {
+        _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
@@ -764,13 +866,8 @@ _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
-    SOKOL_ASSERT(desc->init_cb);
-    SOKOL_ASSERT(desc->frame_cb);
-    SOKOL_ASSERT(desc->cleanup_cb);
+_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     memset(&_sapp, 0, sizeof(_sapp));
-    _sapp.argc = argc;
-    _sapp.argv = argv;
     _sapp.desc = *desc;
     _sapp.first_frame = true;
     _sapp.window_width = _sapp_def(_sapp.desc.width, 640);
@@ -779,7 +876,7 @@ _SOKOL_PRIVATE void _sapp_init_state(sapp_desc* desc, int argc, char* argv[]) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
-    _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "#canvas");
+    _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
@@ -803,7 +900,7 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
     /* only send events when an event callback is set, and the init function was called */
-    return _sapp.desc.event_cb && _sapp.init_called;
+    return (_sapp.desc.event_cb || _sapp.desc.event_userdata_cb) && _sapp.init_called;
 }
 
 _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
@@ -818,10 +915,10 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
-        _sapp.desc.init_cb();
+        _sapp_call_init();
         _sapp.init_called = true;
     }
-    _sapp.desc.frame_cb();
+    _sapp_call_frame();
     _sapp.frame_count++;
 }
 
@@ -968,10 +1065,8 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
-/* MacOS entry function */
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -979,8 +1074,16 @@ int main(int argc, char* argv[]) {
     NSApp.delegate = _sapp_macos_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
+}
+
+/* MacOS entry function */
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
     return 0;
 }
+#endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     const CGSize fb_size = [_sapp_view_obj drawableSize];
@@ -1088,7 +1191,7 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.modifiers = mod;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1097,20 +1200,20 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mod;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
     return YES;
 }
 
@@ -1206,7 +1309,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1225,7 +1328,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                     continue;
                 }
                 _sapp.event.char_code = codepoint;
-                _sapp.desc.event_cb(&_sapp.event);
+                _sapp_call_event(&_sapp.event);
             }
         }
     }
@@ -1318,20 +1421,26 @@ static _sapp_ios_glk_view_dlg* _sapp_ios_glk_view_dlg_obj;
 static GLKViewController* _sapp_ios_view_ctrl_obj;
 #endif
 
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
+    static int argc = 1;
+    static char* argv[] = { "sokol_app" };
+    UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+}
+
 /* iOS entry function */
-int main(int argc, char** argv) {
-    @autoreleasepool {
-        sapp_desc desc = sokol_main(argc, argv);
-        _sapp_init_state(&desc, argc, argv);
-        UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
-    }
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
     return 0;
 }
+#endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1531,7 +1640,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if ((c < 0xD800) || (c > 0xDFFF)) {
                         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
                         _sapp.event.char_code = c;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
                 if (c <= 32) {
@@ -1544,10 +1653,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if (k != SAPP_KEYCODE_INVALID) {
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
                         _sapp.event.key_code = k;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
                         _sapp.event.key_code = k;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
             }
@@ -1556,10 +1665,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             /* this was a backspace */
             _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
             _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     return NO;
@@ -1604,7 +1713,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
             }
         }
         if (_sapp.event.num_touches > 0) {
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1662,23 +1771,23 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 #endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
-EM_JS(void, _sapp_js_create_textfield, (), {
-    var inp = document.createElement("input");
-    inp.type = "text";
-    inp.id = "_sokol_app_input_element";
-    inp.autocapitalize = "none";
-    inp.addEventListener("focusout", function(e) {
+EM_JS(void, _sapp_js_create_textfield, (void), {
+    var _sapp_inp = document.createElement("input");
+    _sapp_inp.type = "text";
+    _sapp_inp.id = "_sokol_app_input_element";
+    _sapp_inp.autocapitalize = "none";
+    _sapp_inp.addEventListener("focusout", function(_sapp_event) {
         __sapp_emsc_notify_keyboard_hidden()
 
     });
-    document.body.append(x);
+    document.body.append(_sapp_inp);
 });
 
-EM_JS(void, _sapp_js_focus_textfield, (), {
+EM_JS(void, _sapp_js_focus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").focus();
 });
 
-EM_JS(void, _sapp_js_unfocus_textfield, (), {
+EM_JS(void, _sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
@@ -1767,16 +1876,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_frame(void) {
-    if (_sapp.first_frame) {
-        emscripten_set_main_loop_timing(EM_TIMING_RAF, _sapp.swap_interval);
-    }
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(userData);
     _sapp_frame();
+    return EM_TRUE;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved, void* user_data) {
@@ -1788,14 +1897,14 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved
     }
     if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
-    _sapp.mouse_x = (emsc_event->canvasX * _sapp.dpi_scale);
-    _sapp.mouse_y = (emsc_event->canvasY * _sapp.dpi_scale);
+    _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
+    _sapp.mouse_y = (emsc_event->targetY * _sapp.dpi_scale);
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
@@ -1848,7 +1957,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             }
             _sapp.event.mouse_x = _sapp.mouse_x;
             _sapp.event.mouse_y = _sapp.mouse_y;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -1872,7 +1981,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         }
         _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
         _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
     return true;
@@ -1980,7 +2089,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2031,11 +2140,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 const EmscriptenTouchPoint* src = &emsc_event->touches[i];
                 sapp_touchpoint* dst = &_sapp.event.touches[i];
                 dst->identifier = src->identifier;
-                dst->pos_x = src->canvasX * _sapp.dpi_scale;
-                dst->pos_y = src->canvasY * _sapp.dpi_scale;
+                dst->pos_x = src->targetX * _sapp.dpi_scale;
+                dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2146,18 +2255,17 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, 0, 0);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
     _sapp_emsc_init_keytable();
     double w, h;
     if (_sapp.html5_canvas_resize) {
-        w = (double) desc.width;
-        h = (double) desc.height;
+        w = (double) _sapp.desc.width;
+        h = (double) _sapp.desc.height;
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-        emscripten_set_resize_callback(0, 0, false, _sapp_emsc_size_changed);
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
@@ -2173,11 +2281,11 @@ int main(int argc, char* argv[]) {
     attrs.depth = true;
     attrs.stencil = true;
     attrs.antialias = _sapp.sample_count > 1;
-    attrs.premultipliedAlpha = _sapp.desc.premultiplied_alpha;
-    attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
+    attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
+    attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     #if defined(SOKOL_GLES3)
-        if (desc.gl_force_gles2) {
+        if (_sapp.desc.gl_force_gles2) {
             attrs.majorVersion = 1;
             _sapp.gles2_fallback = true;
         }
@@ -2185,10 +2293,10 @@ int main(int argc, char* argv[]) {
             attrs.majorVersion = 2;
         }
     #endif
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(0, &attrs);
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
     if (!ctx) {
         attrs.majorVersion = 1;
-        ctx = emscripten_webgl_create_context(0, &attrs);
+        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
         _sapp.gles2_fallback = true;
     }
     emscripten_webgl_make_context_current(ctx);
@@ -2199,19 +2307,26 @@ int main(int argc, char* argv[]) {
     emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
-    emscripten_set_keydown_callback(0, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keyup_callback(0, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_keypress_callback(0, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
+    emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
     emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_set_main_loop(_sapp_emsc_frame, 0, 1);
+    emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
+}
+
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
     return 0;
 }
-#endif  /* __EMSCRIPTEN__ */
+#endif /* SOKOL_NO_ENTRY */
+#endif /* __EMSCRIPTEN__ */
 
 /*== MISC GL SUPPORT FUNCTIONS ================================================*/
 #if defined(SOKOL_GLCORE33)
@@ -3573,7 +3688,7 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.mouse_button = btn;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3583,7 +3698,7 @@ _SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.scroll_x = -x / 30.0f;
         _sapp.event.scroll_y = y / 30.0f;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3592,7 +3707,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.key_code = _sapp.keycodes[vk];
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3601,14 +3716,14 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3835,19 +3950,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     }
 }
 
-#if defined(SOKOL_WIN32_FORCE_MAIN)
-int main(int argc, char** argv) {
-#else
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    _SOKOL_UNUSED(hInstance);
-    _SOKOL_UNUSED(hPrevInstance);
-    _SOKOL_UNUSED(lpCmdLine);
-    _SOKOL_UNUSED(nCmdShow);
-    int argc = __argc;
-    char** argv = __argv;
-#endif
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
@@ -3889,7 +3993,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             _sapp_wgl_swap_buffers();
         #endif
     }
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
 
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
@@ -3899,9 +4003,25 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
-    return 0;
 }
 
+#if !defined(SOKOL_NO_ENTRY)
+#if defined(SOKOL_WIN32_FORCE_MAIN)
+int main(int argc, char* argv[]) {
+#else
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    _SOKOL_UNUSED(hInstance);
+    _SOKOL_UNUSED(hPrevInstance);
+    _SOKOL_UNUSED(lpCmdLine);
+    _SOKOL_UNUSED(nCmdShow);
+    int argc = __argc;
+    char** argv = __argv;
+#endif
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+#endif /* SOKOL_NO_ENTRY */
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
 
@@ -4096,7 +4216,7 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         SOKOL_LOG("event_cb()");
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -4155,7 +4275,7 @@ _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
         /* egl context is bound, cleanup gracefully */
         if (_sapp.init_called && !_sapp.cleanup_called) {
             SOKOL_LOG("cleanup_cb()");
-            _sapp.desc.cleanup_cb();
+            _sapp_call_cleanup();
             _sapp.cleanup_called = true;
         }
     }
@@ -4235,7 +4355,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
             dst->changed = true;
         }
     }
-    _sapp.desc.event_cb(&_sapp.event);
+    _sapp_call_event(&_sapp.event);
     return true;
 }
 
@@ -4565,7 +4685,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     SOKOL_LOG("NativeActivity onCreate()");
 
     sapp_desc desc = sokol_main(0, NULL);
-    _sapp_init_state(&desc, 0, NULL);
+    _sapp_init_state(&desc);
 
     /* start loop thread */
     _sapp_android_state = (_sapp_android_state_t){0};
@@ -6066,7 +6186,7 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
 _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6086,7 +6206,7 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp.event.modifiers = mods;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6096,7 +6216,7 @@ _SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
         _sapp.event.modifiers = mods;
         _sapp.event.scroll_x = x;
         _sapp.event.scroll_y = y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6105,7 +6225,7 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mods;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6114,7 +6234,7 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, uint32_t mods) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.char_code = chr;
         _sapp.event.modifiers = mods;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6390,9 +6510,8 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_init_state(&desc, argc, argv);
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
     _sapp_x11_quit_requested = false;
     _sapp_x11_window_state = NormalState;
 
@@ -6429,16 +6548,45 @@ int main(int argc, char* argv[]) {
         _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
     }
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
-    return 0;
 }
 
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+#endif /* SOKOL_NO_ENTRY */
 #endif /* LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
+#if defined(SOKOL_NO_ENTRY)
+SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
+    SOKOL_ASSERT(desc);
+    _sapp_run(desc);
+    return 0;
+}
+
+/* this is just a stub so the linker doesn't complain */
+sapp_desc sokol_main(int argc, char* argv[]) {
+    _SOKOL_UNUSED(argc);
+    _SOKOL_UNUSED(argv);
+    sapp_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    return desc;
+}
+#else
+/* likewise, in normal mode, sapp_run() is just an empty stub */
+SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
+    _SOKOL_UNUSED(desc);
+    return 0;
+}
+#endif
+
 SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
 }
