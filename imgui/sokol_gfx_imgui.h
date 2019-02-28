@@ -46,10 +46,6 @@ extern "C" {
 /* max number of captured calls per frame */
 #define SG_IMGUI_MAX_FRAMECAPTURE_ITEMS (4096)
 
-/* a small string buffer to store strings coming into sokol_gfx.h via
-    the desc structures, these are not guaranteed to be static, so
-    we need to copy them
-*/
 typedef struct {
     char buf[SG_IMGUI_STRBUF_LEN];
 } sg_imgui_str_t;
@@ -57,6 +53,7 @@ typedef struct {
 typedef struct {
     sg_buffer res_id;
     sg_imgui_str_t label;
+    sg_buffer_desc desc;
 } sg_imgui_buffer_t;
 
 typedef struct {
@@ -459,23 +456,23 @@ typedef struct {
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
-void sg_imgui_init(sg_imgui_t* ctx);
-void sg_imgui_discard(sg_imgui_t* ctx);
-void sg_imgui_draw(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
-void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
-void sg_imgui_draw_images_content(sg_imgui_t* ctx);
-void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
-void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
-void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
-void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
 
-void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
-void sg_imgui_draw_images_window(sg_imgui_t* ctx);
-void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
-void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
-void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
-void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -891,7 +888,12 @@ _SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, 
     SOKOL_ASSERT((slot_index > 0) && (slot_index < ctx->buffers.num_slots));
     sg_imgui_buffer_t* buf = &ctx->buffers.slots[slot_index];
     buf->res_id = res_id;
+    buf->desc = *desc;
     buf->label = _sg_imgui_make_str(desc->label);
+
+    /* resolve default state */
+    buf->desc.type = _sg_def(buf->desc.type, SG_BUFFERTYPE_VERTEXBUFFER);
+    buf->desc.usage = _sg_def(buf->desc.usage, SG_USAGE_IMMUTABLE);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -2451,10 +2453,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t buf_id
             ImGui::Text("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&buf->slot);
             ImGui::Separator();
-            ImGui::Text("Type:  %s", _sg_imgui_buffertype_string(buf->type));
-            ImGui::Text("Usage: %s", _sg_imgui_usage_string(buf->usage));
-            ImGui::Text("Size:  %d", buf->size);
-            if (buf->usage != SG_USAGE_IMMUTABLE) {
+            ImGui::Text("Type:  %s", _sg_imgui_buffertype_string(buf_ui->desc.type));
+            ImGui::Text("Usage: %s", _sg_imgui_usage_string(buf_ui->desc.usage));
+            ImGui::Text("Size:  %d", buf_ui->desc.size);
+            if (buf_ui->desc.usage != SG_USAGE_IMMUTABLE) {
                 ImGui::Separator();
                 ImGui::Text("Num Slots:     %d", buf->num_slots);
                 ImGui::Text("Active Slot:/s   %d", buf->active_slot);
@@ -2600,7 +2602,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(sg_imgui_t* ctx, const sg_shader
     }
     else if (stage->byte_code) {
         if (ImGui::TreeNode("Byte Code")) {
-            ImGui::Text("FIXME!");
+            ImGui::Text("Byte-code display currently not supported.");
         }
     }
 }
@@ -2867,10 +2869,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
         draw_dump = true;
     }
 
+    sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
+    SOKOL_ASSERT((args->ubuf_pos + args->num_bytes) <= bucket->ubuf_size);
+    const float* uptrf = (const float*) (bucket->ubuf + args->ubuf_pos);
     if (!draw_dump) {
-        sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
-        SOKOL_ASSERT((args->ubuf_pos + args->num_bytes) <= bucket->ubuf_size);
-        const float* uptrf = (const float*) (bucket->ubuf + args->ubuf_pos);
         for (int i = 0; i < SG_MAX_UB_MEMBERS; i++) {
             const sg_shader_uniform_desc* ud = &ub_desc->uniforms[i];
             if (ud->type == SG_UNIFORMTYPE_INVALID) {
@@ -2916,7 +2918,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
         }
     }
     else {
-        ImGui::Text("FIXME: draw uniform data dump");
+        const uint32_t num_floats = ub_desc->size / sizeof(float);
+        for (uint32_t i = 0; i < num_floats; i++) {
+            ImGui::Text("%.3f, ", uptrf[i]);
+            if (((i + 1) % 4) != 0) {
+                ImGui::SameLine();
+            }
+        }
     }
 }
 
@@ -3108,7 +3116,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
 }
 
 /*--- PUBLIC FUNCTIONS -------------------------------------------------------*/
-void sg_imgui_init(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx);
     memset(ctx, 0, sizeof(sg_imgui_t));
     ctx->init_tag = 0xABCDABCD;
@@ -3210,7 +3218,7 @@ void sg_imgui_init(sg_imgui_t* ctx) {
     memset(ctx->passes.slots, 0, pass_pool_size);
 }
 
-void sg_imgui_discard(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     ctx->init_tag = 0;
     _sg_imgui_capture_discard(ctx);
@@ -3261,7 +3269,7 @@ void sg_imgui_discard(sg_imgui_t* ctx) {
     }
 }
 
-void sg_imgui_draw(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     sg_imgui_draw_buffers_window(ctx);
     sg_imgui_draw_images_window(ctx);
@@ -3271,7 +3279,7 @@ void sg_imgui_draw(sg_imgui_t* ctx) {
     sg_imgui_draw_capture_window(ctx);
 }
 
-void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->buffers.open) {
         return;
@@ -3283,7 +3291,7 @@ void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->images.open) {
         return;
@@ -3295,7 +3303,7 @@ void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->shaders.open) {
         return;
@@ -3307,7 +3315,7 @@ void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->pipelines.open) {
         return;
@@ -3319,7 +3327,7 @@ void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->passes.open) {
         return;
@@ -3331,7 +3339,7 @@ void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     if (!ctx->capture.open) {
         return;
@@ -3343,42 +3351,42 @@ void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
-void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_buffer_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_buffer_panel(ctx, ctx->buffers.sel_id);
 }
 
-void sg_imgui_draw_images_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_images_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_image_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_image_panel(ctx, ctx->images.sel_id);
 }
 
-void sg_imgui_draw_shaders_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_shader_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_shader_panel(ctx, ctx->shaders.sel_id);
 }
 
-void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_pipeline_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_pipeline_panel(ctx, ctx->pipelines.sel_id);
 }
 
-void sg_imgui_draw_passes_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_passes_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_pass_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_pass_panel(ctx, ctx->passes.sel_id);
 }
 
-void sg_imgui_draw_capture_content(sg_imgui_t* ctx) {
+SOKOL_API_IMPL void sg_imgui_draw_capture_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_capture_list(ctx);
     ImGui::SameLine();
