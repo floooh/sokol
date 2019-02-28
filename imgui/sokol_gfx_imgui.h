@@ -481,6 +481,7 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 /*=== IMPLEMENTATION =========================================================*/
 #if defined SOKOL_IMPL
 #include <string.h>
+#include <stdio.h>      /* snprintf */
 
 #define _SG_IMGUI_LIST_WIDTH (192)
 
