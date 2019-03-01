@@ -627,12 +627,12 @@ EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
 #endif
 
 /* JS function to extract arguments from the page URL */
-EM_JS(void, sargs_js_parse_url, (), {
+EM_JS(void, sargs_js_parse_url, (void), {
     var params = new URLSearchParams(window.location.search).entries();
     for (var p = params.next(); !p.done; p = params.next()) {
         var key = p.value[0];
         var val = p.value[1];
-        var res = Module.ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
+        var res = ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
     }
 });
 

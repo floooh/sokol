@@ -3681,6 +3681,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     _sg.gl.gles2 = desc->gl_force_gles2;
     #else
+    _SOKOL_UNUSED(desc);
     _sg.gl.gles2 = false;
     #endif
 
@@ -4942,8 +4943,8 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             /* attribute is enabled */
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer_t* vb = vbs[attr->vb_index];
-            gl_vb = vb->gl_buf[vb->active_slot];
             SOKOL_ASSERT(vb);
+            gl_vb = vb->gl_buf[vb->active_slot];
             vb_offset = vb_offsets[attr->vb_index] + attr->offset;
             if ((gl_vb != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
@@ -5470,11 +5471,13 @@ _SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
     /* empty */
 }
 
