@@ -174,7 +174,16 @@ typedef enum {
     SG_IMGUI_CMD_FAIL_PIPELINE,
     SG_IMGUI_CMD_FAIL_PASS,
     SG_IMGUI_CMD_PUSH_DEBUG_GROUP,
-    SG_IMGUI_CMD_POP_DEBUG_GROUP
+    SG_IMGUI_CMD_POP_DEBUG_GROUP,
+    SG_IMGUI_CMD_ERR_BUFFER_POOL_EXHAUSTED,
+    SG_IMGUI_CMD_ERR_IMAGE_POOL_EXHAUSTED,
+    SG_IMGUI_CMD_ERR_SHADER_POOL_EXHAUSTED,
+    SG_IMGUI_CMD_ERR_PIPELINE_POOL_EXHAUSTED,
+    SG_IMGUI_CMD_ERR_PASS_POOL_EXHAUSTED,
+    SG_IMGUI_CMD_ERR_CONTEXT_MISMATCH,
+    SG_IMGUI_CMD_ERR_PASS_INVALID,
+    SG_IMGUI_CMD_ERR_DRAW_INVALID,
+    SG_IMGUI_CMD_ERR_BINDINGS_INVALID,
 } sg_imgui_cmd_t;
 
 typedef struct {
@@ -424,6 +433,7 @@ typedef union {
 
 typedef struct {
     sg_imgui_cmd_t cmd;
+    uint32_t color;
     sg_imgui_args_t args;
 } sg_imgui_capture_item_t;
 
@@ -484,6 +494,10 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 #include <stdio.h>      /* snprintf */
 
 #define _SG_IMGUI_LIST_WIDTH (192)
+#define _SG_IMGUI_COLOR_OTHER ImColor(0.75f, 0.75f, 0.75f, 1.0f)
+#define _SG_IMGUI_COLOR_RSRC ImColor(1.0f, 1.0f, 0.0f, 1.0f)
+#define _SG_IMGUI_COLOR_DRAW ImColor(0.0f, 1.0f, 0.0f, 1.0f)
+#define _SG_IMGUI_COLOR_ERR ImColor(1.0f, 0.5f, 0.5f, 1.0f)
 
 /*--- UTILS ------------------------------------------------------------------*/
 _SOKOL_PRIVATE void* _sg_imgui_alloc(int size) {
@@ -1482,6 +1496,42 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             snprintf(str.buf, len, "%d: sg_pop_debug_group()", index);
             break;
 
+        case SG_IMGUI_CMD_ERR_BUFFER_POOL_EXHAUSTED:
+            snprintf(str.buf, len, "%d: sg_err_buffer_pool_exhausted()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_IMAGE_POOL_EXHAUSTED:
+            snprintf(str.buf, len, "%d: sg_err_image_pool_exhausted()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_SHADER_POOL_EXHAUSTED:
+            snprintf(str.buf, len, "%d: sg_err_shader_pool_exhausted()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_PIPELINE_POOL_EXHAUSTED:
+            snprintf(str.buf, len, "%d: sg_err_pipeline_pool_exhausted()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_PASS_POOL_EXHAUSTED:
+            snprintf(str.buf, len, "%d: sg_err_pass_pool_exhausted()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_CONTEXT_MISMATCH:
+            snprintf(str.buf, len, "%d: sg_err_context_mismatch()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_PASS_INVALID:
+            snprintf(str.buf, len, "%d: sg_err_pass_invalid()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_DRAW_INVALID:
+            snprintf(str.buf, len, "%d: sg_err_draw_invalid()", index);
+            break;
+
+        case SG_IMGUI_CMD_ERR_BINDINGS_INVALID:
+            snprintf(str.buf, len, "%d: sg_err_bindings_invalid()", index);
+            break;
+
         default:
             snprintf(str.buf, len, "%d: ???", index);
             break;
@@ -1497,6 +1547,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_feature(sg_feature feature, bool result, voi
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_FEATURE;
+        item->color = _SG_IMGUI_COLOR_OTHER;
         item->args.query_feature.feature = feature;
         item->args.query_feature.result = result;
     }
@@ -1511,6 +1562,7 @@ _SOKOL_PRIVATE void _sg_imgui_reset_state_cache(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_RESET_STATE_CACHE;
+        item->color = _SG_IMGUI_COLOR_OTHER;
     }
     if (ctx->hooks.reset_state_cache) {
         ctx->hooks.reset_state_cache(ctx->hooks.user_data);
@@ -1523,6 +1575,7 @@ _SOKOL_PRIVATE void _sg_imgui_make_buffer(const sg_buffer_desc* desc, sg_buffer 
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_MAKE_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.make_buffer.result = buf_id;
     }
     if (ctx->hooks.make_buffer) {
@@ -1539,6 +1592,7 @@ _SOKOL_PRIVATE void _sg_imgui_make_image(const sg_image_desc* desc, sg_image img
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_MAKE_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.make_image.result = img_id;
     }
     if (ctx->hooks.make_image) {
@@ -1555,6 +1609,7 @@ _SOKOL_PRIVATE void _sg_imgui_make_shader(const sg_shader_desc* desc, sg_shader 
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_MAKE_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.make_shader.result = shd_id;
     }
     if (ctx->hooks.make_shader) {
@@ -1571,6 +1626,7 @@ _SOKOL_PRIVATE void _sg_imgui_make_pipeline(const sg_pipeline_desc* desc, sg_pip
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_MAKE_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.make_pipeline.result = pip_id;
     }
     if (ctx->hooks.make_pipeline) {
@@ -1587,6 +1643,7 @@ _SOKOL_PRIVATE void _sg_imgui_make_pass(const sg_pass_desc* desc, sg_pass pass_i
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_MAKE_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.make_pass.result = pass_id;
     }
     if (ctx->hooks.make_pass) {
@@ -1603,6 +1660,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_buffer(sg_buffer buf, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DESTROY_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.destroy_buffer.buffer = buf;
     }
     if (ctx->hooks.destroy_buffer) {
@@ -1619,6 +1677,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_image(sg_image img, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DESTROY_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.destroy_image.image = img;
     }
     if (ctx->hooks.destroy_image) {
@@ -1635,6 +1694,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_shader(sg_shader shd, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DESTROY_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.destroy_shader.shader = shd;
     }
     if (ctx->hooks.destroy_shader) {
@@ -1651,6 +1711,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_pipeline(sg_pipeline pip, void* user_data)
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DESTROY_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.destroy_pipeline.pipeline = pip;
     }
     if (ctx->hooks.destroy_pipeline) {
@@ -1667,6 +1728,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_pass(sg_pass pass, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DESTROY_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.destroy_pass.pass = pass;
     }
     if (ctx->hooks.destroy_pass) {
@@ -1683,6 +1745,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_buffer(sg_buffer buf, const void* data_ptr,
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_UPDATE_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.update_buffer.buffer = buf;
         item->args.update_buffer.data_size = data_size;
     }
@@ -1697,6 +1760,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_content*
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_UPDATE_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.update_image.image = img;
     }
     if (ctx->hooks.update_image) {
@@ -1710,6 +1774,7 @@ _SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const void* data_ptr,
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPEND_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.append_buffer.buffer = buf;
         item->args.append_buffer.data_size = data_size;
         item->args.append_buffer.result = result;
@@ -1725,6 +1790,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_buffer_overflow(sg_buffer buf, bool result, 
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_buffer_overflow.buffer = buf;
         item->args.query_buffer_overflow.result = result;
     }
@@ -1739,6 +1805,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_buffer_state(sg_buffer buf, sg_resource_stat
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_BUFFER_STATE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_buffer_state.buffer = buf;
         item->args.query_buffer_state.result = result;
     }
@@ -1753,6 +1820,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_image_state(sg_image img, sg_resource_state 
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_IMAGE_STATE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_image_state.image = img;
         item->args.query_image_state.result = result;
     }
@@ -1767,6 +1835,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_shader_state(sg_shader shd, sg_resource_stat
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_SHADER_STATE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_shader_state.shader = shd;
         item->args.query_shader_state.result = result;
     }
@@ -1781,6 +1850,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_pipeline_state(sg_pipeline pip, sg_resource_
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_PIPELINE_STATE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_pipeline_state.pipeline = pip;
         item->args.query_pipeline_state.result = result;
     }
@@ -1795,6 +1865,7 @@ _SOKOL_PRIVATE void _sg_imgui_query_pass_state(sg_pass pass, sg_resource_state r
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_QUERY_PASS_STATE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.query_pass_state.pass = pass;
         item->args.query_pass_state.result = result;
     }
@@ -1810,6 +1881,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_default_pass(const sg_pass_action* pass_acti
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_DEFAULT_PASS;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.begin_default_pass.action = *pass_action;
         item->args.begin_default_pass.width = width;
         item->args.begin_default_pass.height = height;
@@ -1826,6 +1898,7 @@ _SOKOL_PRIVATE void _sg_imgui_begin_pass(sg_pass pass, const sg_pass_action* pas
     if (item) {
         SOKOL_ASSERT(pass_action);
         item->cmd = SG_IMGUI_CMD_BEGIN_PASS;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.begin_pass.pass = pass;
         item->args.begin_pass.action = *pass_action;
     }
@@ -1840,6 +1913,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_viewport(int x, int y, int width, int height
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_VIEWPORT;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.apply_viewport.x = x;
         item->args.apply_viewport.y = y;
         item->args.apply_viewport.width = width;
@@ -1857,6 +1931,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_scissor_rect(int x, int y, int width, int he
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_SCISSOR_RECT;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.apply_scissor_rect.x = x;
         item->args.apply_scissor_rect.y = y;
         item->args.apply_scissor_rect.width = width;
@@ -1874,6 +1949,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_pipeline(sg_pipeline pip, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.apply_pipeline.pipeline = pip;
     }
     if (ctx->hooks.apply_pipeline) {
@@ -1888,6 +1964,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_bindings(const sg_bindings* bindings, void* 
     if (item) {
         SOKOL_ASSERT(bindings);
         item->cmd = SG_IMGUI_CMD_APPLY_BINDINGS;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.apply_bindings.bindings = *bindings;
     }
     if (ctx->hooks.apply_bindings) {
@@ -1901,6 +1978,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_UNIFORMS;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         sg_imgui_args_apply_uniforms_t* args = &item->args.apply_uniforms;
         args->stage = stage;
         args->ub_index = ub_index;
@@ -1920,6 +1998,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw(int base_element, int num_elements, int num_i
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_DRAW;
+        item->color = _SG_IMGUI_COLOR_DRAW;
         item->args.draw.base_element = base_element;
         item->args.draw.num_elements = num_elements;
         item->args.draw.num_instances = num_instances;
@@ -1935,6 +2014,7 @@ _SOKOL_PRIVATE void _sg_imgui_end_pass(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_END_PASS;
+        item->color = _SG_IMGUI_COLOR_DRAW;
     }
     if (ctx->hooks.end_pass) {
         ctx->hooks.end_pass(ctx->hooks.user_data);
@@ -1947,6 +2027,7 @@ _SOKOL_PRIVATE void _sg_imgui_commit(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_COMMIT;
+        item->color = _SG_IMGUI_COLOR_DRAW;
     }
     _sg_imgui_capture_next_frame(ctx);
     if (ctx->hooks.commit) {
@@ -1960,6 +2041,7 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_buffer(sg_buffer result, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_ALLOC_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.alloc_buffer.result = result;
     }
     if (ctx->hooks.alloc_buffer) {
@@ -1973,6 +2055,7 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_image(sg_image result, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_ALLOC_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.alloc_image.result = result;
     }
     if (ctx->hooks.alloc_image) {
@@ -1986,6 +2069,7 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_shader(sg_shader result, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_ALLOC_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.alloc_shader.result = result;
     }
     if (ctx->hooks.alloc_shader) {
@@ -1999,6 +2083,7 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_pipeline(sg_pipeline result, void* user_data
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_ALLOC_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.alloc_pipeline.result = result;
     }
     if (ctx->hooks.alloc_pipeline) {
@@ -2012,6 +2097,7 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_pass(sg_pass result, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_ALLOC_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.alloc_pass.result = result;
     }
     if (ctx->hooks.alloc_pass) {
@@ -2025,6 +2111,7 @@ _SOKOL_PRIVATE void _sg_imgui_init_buffer(sg_buffer buf_id, const sg_buffer_desc
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_INIT_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.init_buffer.buffer = buf_id;
     }
     if (ctx->hooks.init_buffer) {
@@ -2041,6 +2128,7 @@ _SOKOL_PRIVATE void _sg_imgui_init_image(sg_image img_id, const sg_image_desc* d
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_INIT_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.init_image.image = img_id;
     }
     if (ctx->hooks.init_image) {
@@ -2057,6 +2145,7 @@ _SOKOL_PRIVATE void _sg_imgui_init_shader(sg_shader shd_id, const sg_shader_desc
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_INIT_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.init_shader.shader = shd_id;
     }
     if (ctx->hooks.init_shader) {
@@ -2073,6 +2162,7 @@ _SOKOL_PRIVATE void _sg_imgui_init_pipeline(sg_pipeline pip_id, const sg_pipelin
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_INIT_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.init_pipeline.pipeline = pip_id;
     }
     if (ctx->hooks.init_pipeline) {
@@ -2089,6 +2179,7 @@ _SOKOL_PRIVATE void _sg_imgui_init_pass(sg_pass pass_id, const sg_pass_desc* des
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_INIT_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.init_pass.pass = pass_id;
     }
     if (ctx->hooks.init_pass) {
@@ -2105,6 +2196,7 @@ _SOKOL_PRIVATE void _sg_imgui_fail_buffer(sg_buffer buf_id, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_FAIL_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.fail_buffer.buffer = buf_id;
     }
     if (ctx->hooks.fail_buffer) {
@@ -2118,6 +2210,7 @@ _SOKOL_PRIVATE void _sg_imgui_fail_image(sg_image img_id, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_FAIL_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.fail_image.image = img_id;
     }
     if (ctx->hooks.fail_image) {
@@ -2131,6 +2224,7 @@ _SOKOL_PRIVATE void _sg_imgui_fail_shader(sg_shader shd_id, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_FAIL_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.fail_shader.shader = shd_id;
     }
     if (ctx->hooks.fail_shader) {
@@ -2144,6 +2238,7 @@ _SOKOL_PRIVATE void _sg_imgui_fail_pipeline(sg_pipeline pip_id, void* user_data)
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_FAIL_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.fail_pipeline.pipeline = pip_id;
     }
     if (ctx->hooks.fail_pipeline) {
@@ -2157,6 +2252,7 @@ _SOKOL_PRIVATE void _sg_imgui_fail_pass(sg_pass pass_id, void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_FAIL_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.fail_pass.pass = pass_id;
     }
     if (ctx->hooks.fail_pass) {
@@ -2170,6 +2266,7 @@ _SOKOL_PRIVATE void _sg_imgui_push_debug_group(const char* name, void* user_data
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_PUSH_DEBUG_GROUP;
+        item->color = _SG_IMGUI_COLOR_OTHER;
         item->args.push_debug_group.name = _sg_imgui_make_str(name);
     }
     if (ctx->hooks.push_debug_group) {
@@ -2183,6 +2280,7 @@ _SOKOL_PRIVATE void _sg_imgui_pop_debug_group(void* user_data) {
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_POP_DEBUG_GROUP;
+        item->color = _SG_IMGUI_COLOR_OTHER;
     }
     if (ctx->hooks.pop_debug_group) {
         ctx->hooks.pop_debug_group(ctx->hooks.user_data);
@@ -2190,72 +2288,117 @@ _SOKOL_PRIVATE void _sg_imgui_pop_debug_group(void* user_data) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_buffer_pool_exhausted(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_BUFFER_POOL_EXHAUSTED;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_buffer_pool_exhausted) {
         ctx->hooks.err_buffer_pool_exhausted(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_image_pool_exhausted(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_IMAGE_POOL_EXHAUSTED;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_image_pool_exhausted) {
         ctx->hooks.err_image_pool_exhausted(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_shader_pool_exhausted(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_SHADER_POOL_EXHAUSTED;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_shader_pool_exhausted) {
         ctx->hooks.err_shader_pool_exhausted(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_pipeline_pool_exhausted(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_PIPELINE_POOL_EXHAUSTED;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_pipeline_pool_exhausted) {
         ctx->hooks.err_pipeline_pool_exhausted(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_pass_pool_exhausted(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_PASS_POOL_EXHAUSTED;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_pass_pool_exhausted) {
         ctx->hooks.err_pass_pool_exhausted(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_context_mismatch(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_CONTEXT_MISMATCH;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_context_mismatch) {
         ctx->hooks.err_context_mismatch(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_pass_invalid(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_PASS_INVALID;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_pass_invalid) {
         ctx->hooks.err_pass_invalid(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_draw_invalid(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_DRAW_INVALID;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_draw_invalid) {
         ctx->hooks.err_draw_invalid(ctx->hooks.user_data);
     }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_err_bindings_invalid(void* user_data) {
-    const sg_imgui_t* ctx = (const sg_imgui_t*) user_data;
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_ERR_BINDINGS_INVALID;
+        item->color = _SG_IMGUI_COLOR_ERR;
+    }
     if (ctx->hooks.err_bindings_invalid) {
         ctx->hooks.err_bindings_invalid(ctx->hooks.user_data);
     }
@@ -2413,6 +2556,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
     for (uint32_t i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
+        ImGui::PushStyleColor(ImGuiCol_Text, item->color);
         if (item->cmd == SG_IMGUI_CMD_PUSH_DEBUG_GROUP) {
             if (group_stack & 1) {
                 group_stack <<= 1;
@@ -2441,6 +2585,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
             }
             ImGui::PopID();
         }
+        ImGui::PopStyleColor();
     }
     ImGui::EndChild();
 }
@@ -2977,7 +3122,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
     }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, sel_item_index);
     ImGui::BeginChild("capture_item", ImVec2(0, 0), false);
+    ImGui::PushStyleColor(ImGuiCol_Text, item->color);
     ImGui::Text("%s", _sg_imgui_capture_item_string(ctx, sel_item_index, item).buf);
+    ImGui::PopStyleColor();
     ImGui::Separator();
     switch (item->cmd) {
         case SG_IMGUI_CMD_QUERY_FEATURE:
