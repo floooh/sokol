@@ -9690,6 +9690,9 @@ SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool 
         }
         return;
     }
+    if (_sg.hooks.apply_viewport) {
+        _sg.hooks.apply_viewport(x, y, width, height, origin_top_left, _sg.hooks.user_data);
+    }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
 }
 
@@ -9699,6 +9702,9 @@ SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, b
             _sg.hooks.err_pass_invalid(_sg.hooks.user_data);
         }
         return;
+    }
+    if (_sg.hooks.apply_scissor_rect) {
+        _sg.hooks.apply_scissor_rect(x, y, width, height, origin_top_left, _sg.hooks.user_data);
     }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
 }
