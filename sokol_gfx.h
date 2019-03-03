@@ -8901,7 +8901,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
 
 _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(bind);
+        _SOKOL_UNUSED(bindings);
         return true;
     #else
         SOKOL_VALIDATE_BEGIN();
