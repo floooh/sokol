@@ -527,7 +527,11 @@ _SOKOL_PRIVATE void* _sg_imgui_realloc(void* old_ptr, int old_size, int new_size
 _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
     if (src) {
+        #if defined(_MSC_VER)
+        strncpy_s(dst->buf, SG_IMGUI_STRBUF_LEN, src, (SG_IMGUI_STRBUF_LEN-1));
+        #else
         strncpy(dst->buf, src, SG_IMGUI_STRBUF_LEN);
+        #endif
         dst->buf[SG_IMGUI_STRBUF_LEN-1] = 0;
     }
     else {
@@ -543,8 +547,9 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_make_str(const char* str) {
 
 _SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
     SOKOL_ASSERT(src);
-    char* dst = (char*) _sg_imgui_alloc(strlen(src) + 1);
-    strcpy(dst, src);
+    int len = (int) strlen(src) + 1;
+    char* dst = (char*) _sg_imgui_alloc(len);
+    memcpy(dst, src, len);
     return (const char*) dst;
 }
 
