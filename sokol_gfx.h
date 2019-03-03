@@ -43,6 +43,7 @@
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 
     If you want to compile without deprecated structs and functions,
     define:
@@ -348,6 +349,35 @@
     For more information, check out the multiwindow-glfw sample:
 
     https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c
+
+    TRACE HOOKS:
+    ============
+    sokol_gfx.h optionally allows to install "trace hook" callbacks for
+    each public API functions. When a public API function is called, and
+    a trace hook callback has been installed for this function, the
+    callback will be invoked with the parameters and result of the function.
+    This is useful for things like debugging- and profiling-tools, or
+    keeping track of resource creation and destruction.
+
+    To use the trace hook feature:
+
+    --- Define SOKOL_TRACE_HOOKS before including the implementation.
+
+    --- Setup an sg_trace_hooks structure with your callback function
+        pointers (keep all function pointers you're not interested
+        in zero-initialized), optionally set the user_data member
+        in the sg_trace_hooks struct.
+
+    --- Install the trace hooks by calling sg_install_trace_hooks(),
+        the return value of this function is another sg_trace_hooks
+        struct which contains the previously set of trace hooks.
+        You should keep this struct around, and call those previous
+        functions pointers from your own trace callbacks for proper
+        chaining.
+
+    As an example of how trace hooks are used, have a look at the
+    imgui/sokol_gfx_imgui.h header which implements a realtime
+    debugging UI for sokol_gfx.h on top of Dear ImGui.
 
     TODO:
     ====
