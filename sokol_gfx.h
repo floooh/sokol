@@ -43,6 +43,7 @@
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 
     If you want to compile without deprecated structs and functions,
     define:
@@ -348,6 +349,35 @@
     For more information, check out the multiwindow-glfw sample:
 
     https://github.com/floooh/sokol-samples/blob/master/glfw/multiwindow-glfw.c
+
+    TRACE HOOKS:
+    ============
+    sokol_gfx.h optionally allows to install "trace hook" callbacks for
+    each public API functions. When a public API function is called, and
+    a trace hook callback has been installed for this function, the
+    callback will be invoked with the parameters and result of the function.
+    This is useful for things like debugging- and profiling-tools, or
+    keeping track of resource creation and destruction.
+
+    To use the trace hook feature:
+
+    --- Define SOKOL_TRACE_HOOKS before including the implementation.
+
+    --- Setup an sg_trace_hooks structure with your callback function
+        pointers (keep all function pointers you're not interested
+        in zero-initialized), optionally set the user_data member
+        in the sg_trace_hooks struct.
+
+    --- Install the trace hooks by calling sg_install_trace_hooks(),
+        the return value of this function is another sg_trace_hooks
+        struct which contains the previously set of trace hooks.
+        You should keep this struct around, and call those previous
+        functions pointers from your own trace callbacks for proper
+        chaining.
+
+    As an example of how trace hooks are used, have a look at the
+    imgui/sokol_gfx_imgui.h header which implements a realtime
+    debugging UI for sokol_gfx.h on top of Dear ImGui.
 
     TODO:
     ====
@@ -1065,6 +1095,479 @@ typedef struct sg_bindings {
 } sg_bindings;
 
 /*
+    sg_buffer_desc
+
+    Creation parameters for sg_buffer objects, used in the
+    sg_make_buffer() call.
+
+    The default configuration is:
+
+    .size:      0       (this *must* be set to a valid size in bytes)
+    .type:      SG_BUFFERTYPE_VERTEXBUFFER
+    .usage:     SG_USAGE_IMMUTABLE
+    .content    0
+    .label      0       (optional string label for trace hooks)
+
+    The dbg_label will be ignored by sokol_gfx.h, it is only useful
+    when hooking into sg_make_buffer() or sg_init_buffer() via
+    the sg_install_trace_hook
+
+    ADVANCED TOPIC: Injecting native 3D-API buffers:
+
+    The following struct members allow to inject your own GL, Metal
+    or D3D11 buffers into sokol_gfx:
+
+    .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
+    .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
+    .d3d11_buffer
+
+    You must still provide all other members except the .content member, and
+    these must match the creation parameters of the native buffers you
+    provide. For SG_USAGE_IMMUTABLE, only provide a single native 3D-API
+    buffer, otherwise you need to provide SG_NUM_INFLIGHT_FRAMES buffers
+    (only for GL and Metal, not D3D11). Providing multiple buffers for GL and
+    Metal is necessary because sokol_gfx will rotate through them when
+    calling sg_update_buffer() to prevent lock-stalls.
+
+    Note that it is expected that immutable injected buffer have already been
+    initialized with content, and the .content member must be 0!
+
+    Also you need to call sg_reset_state_cache() after calling native 3D-API
+    functions, and before calling any sokol_gfx function.
+*/
+typedef struct sg_buffer_desc {
+    uint32_t _start_canary;
+    int size;
+    sg_buffer_type type;
+    sg_usage usage;
+    const void* content;
+    const char* label;
+    /* GL specific */
+    uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    /* Metal specific */
+    const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    /* D3D11 specific */
+    const void* d3d11_buffer;
+    uint32_t _end_canary;
+} sg_buffer_desc;
+
+/*
+    sg_subimage_content
+
+    Pointer to and size of a subimage-surface data, this is
+    used to describe the initial content of immutable-usage images,
+    or for updating a dynamic- or stream-usage images.
+
+    For 3D- or array-textures, one sg_subimage_content item
+    describes an entire mipmap level consisting of all array- or
+    3D-slices of the mipmap level. It is only possible to update
+    an entire mipmap level, not parts of it.
+*/
+typedef struct sg_subimage_content {
+    const void* ptr;    /* pointer to subimage data */
+    int size;           /* size in bytes of pointed-to subimage data */
+} sg_subimage_content;
+
+/*
+    sg_image_content
+
+    Defines the content of an image through a 2D array
+    of sg_subimage_content structs. The first array dimension
+    is the cubemap face, and the second array dimension the
+    mipmap level.
+*/
+typedef struct sg_image_content {
+    sg_subimage_content subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
+} sg_image_content;
+
+/*
+    sg_image_desc
+
+    Creation parameters for sg_image objects, used in the
+    sg_make_image() call.
+
+    The default configuration is:
+
+    .type:              SG_IMAGETYPE_2D
+    .render_target:     false
+    .width              0 (must be set to >0)
+    .height             0 (must be set to >0)
+    .depth/.layers:     1
+    .num_mipmaps:       1
+    .usage:             SG_USAGE_IMMUTABLE
+    .pixel_format:      SG_PIXELFORMAT_RGBA8
+    .sample_count:      1 (only used in render_targets)
+    .min_filter:        SG_FILTER_NEAREST
+    .mag_filter:        SG_FILTER_NEAREST
+    .wrap_u:            SG_WRAP_REPEAT
+    .wrap_v:            SG_WRAP_REPEAT
+    .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
+    .max_anisotropy     1 (must be 1..16)
+    .min_lod            0.0f
+    .max_lod            FLT_MAX
+    .content            an sg_image_content struct to define the initial content
+    .label              0       (optional string label for trace hooks)
+
+    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
+    WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
+    sg_query_feature(SG_FEATURE_IMAGETYPE_3D) at runtime to check
+    if array- and 3D-textures are supported.
+
+    Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
+    providing a valid .content member which points to
+    initialization data.
+
+    ADVANCED TOPIC: Injecting native 3D-API textures:
+
+    The following struct members allow to inject your own GL, Metal
+    or D3D11 textures into sokol_gfx:
+
+    .gl_textures[SG_NUM_INFLIGHT_FRAMES]
+    .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
+    .d3d11_texture
+
+    The same rules apply as for injecting native buffers
+    (see sg_buffer_desc documentation for more details).
+*/
+typedef struct sg_image_desc {
+    uint32_t _start_canary;
+    sg_image_type type;
+    bool render_target;
+    int width;
+    int height;
+    union {
+        int depth;
+        int layers;
+    };
+    int num_mipmaps;
+    sg_usage usage;
+    sg_pixel_format pixel_format;
+    int sample_count;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    uint32_t max_anisotropy;
+    float min_lod;
+    float max_lod;
+    sg_image_content content;
+    const char* label;
+    /* GL specific */
+    uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
+    /* Metal specific */
+    const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
+    /* D3D11 specific */
+    const void* d3d11_texture;
+    uint32_t _end_canary;
+} sg_image_desc;
+
+/*
+    sg_shader_desc
+
+    The structure sg_shader_desc describes the shaders, uniform blocks
+    and texture images on the vertex- and fragment-shader stage.
+
+    TODO: source code vs byte code, 3D backend API specifics.
+*/
+typedef struct sg_shader_uniform_desc {
+    const char* name;
+    sg_uniform_type type;
+    int array_count;
+} sg_shader_uniform_desc;
+
+typedef struct sg_shader_uniform_block_desc {
+    int size;
+    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
+} sg_shader_uniform_block_desc;
+
+typedef struct sg_shader_image_desc {
+    const char* name;
+    sg_image_type type;
+} sg_shader_image_desc;
+
+typedef struct sg_shader_stage_desc {
+    const char* source;
+    const uint8_t* byte_code;
+    int byte_code_size;
+    const char* entry;
+    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
+} sg_shader_stage_desc;
+
+typedef struct sg_shader_desc {
+    uint32_t _start_canary;
+    sg_shader_stage_desc vs;
+    sg_shader_stage_desc fs;
+    const char* label;
+    uint32_t _end_canary;
+} sg_shader_desc;
+
+/*
+    sg_pipeline_desc
+
+    The sg_pipeline_desc struct defines all creation parameters
+    for an sg_pipeline object, used as argument to the
+    sg_make_pipeline() function:
+
+    - the complete vertex layout for all input vertex buffers
+    - a shader object
+    - the 3D primitive type (points, lines, triangles, ...)
+    - the index type (none, 16- or 32-bit)
+    - depth-stencil state
+    - alpha-blending state
+    - rasterizer state
+
+    If the vertex data has no gaps between vertex components, you can omit
+    the .layout.buffers[].stride and layout.attrs[].offset items (leave them
+    default-initialized to 0), sokol will then compute the offsets and strides
+    from the vertex component formats (.layout.attrs[].offset). Please note
+    that ALL vertex attribute offsets must be 0 in order for the the
+    automatic offset computation to kick in.
+
+    The default configuration is as follows:
+
+    .layout:
+        .buffers[]:         vertex buffer layouts
+            .stride:        0 (if no stride is given it will be computed)
+            .step_func      SG_VERTEXSTEP_PER_VERTEX
+            .step_rate      1
+        .attrs[]:           vertex attribute declarations
+            .buffer_index   0 the vertex buffer bind slot
+            .offset         0 (offsets can be omitted if the vertex layout has no gaps)
+            .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
+            .name           0 (GLES2 requires an attribute name here)
+            .sem_name       0 (D3D11 requires a semantic name here)
+            .sem_index      0 (D3D11 requires a semantic index here)
+    .shader:            0 (must be intilized with a valid sg_shader id!)
+    .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
+    .index_type:        SG_INDEXTYPE_NONE
+    .depth_stencil:
+        .stencil_front, .stencil_back:
+            .fail_op:               SG_STENCILOP_KEEP
+            .depth_fail_op:         SG_STENCILOP_KEEP
+            .pass_op:               SG_STENCILOP_KEEP
+            .compare_func           SG_COMPAREFUNC_ALWAYS
+        .depth_compare_func:    SG_COMPAREFUNC_ALWAYS
+        .depth_write_enabled:   false
+        .stencil_enabled:       false
+        .stencil_read_mask:     0
+        .stencil_write_mask:    0
+        .stencil_ref:           0
+    .blend:
+        .enabled:               false
+        .src_factor_rgb:        SG_BLENDFACTOR_ONE
+        .dst_factor_rgb:        SG_BLENDFACTOR_ZERO
+        .op_rgb:                SG_BLENDOP_ADD
+        .src_factor_alpha:      SG_BLENDFACTOR_ONE
+        .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
+        .op_alpha:              SG_BLENDOP_ADD
+        .color_write_mask:      SG_COLORMASK_RGBA
+        .color_attachment_count 1
+        .color_format           SG_PIXELFORMAT_RGBA8
+        .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
+        .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
+    .rasterizer:
+        .alpha_to_coverage_enabled:     false
+        .cull_mode:                     SG_CULLMODE_NONE
+        .face_winding:                  SG_FACEWINDING_CW
+        .sample_count:                  1
+        .depth_bias:                    0.0f
+        .depth_bias_slope_scale:        0.0f
+        .depth_bias_clamp:              0.0f
+    .label  0       (optional string label for trace hooks)
+*/
+typedef struct sg_buffer_layout_desc {
+    int stride;
+    sg_vertex_step step_func;
+    int step_rate;
+} sg_buffer_layout_desc;
+
+typedef struct sg_vertex_attr_desc {
+    const char* name;
+    const char* sem_name;
+    int sem_index;
+    int buffer_index;
+    int offset;
+    sg_vertex_format format;
+} sg_vertex_attr_desc;
+
+typedef struct sg_layout_desc {
+    sg_buffer_layout_desc buffers[SG_MAX_SHADERSTAGE_BUFFERS];
+    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
+} sg_layout_desc;
+
+typedef struct sg_stencil_state {
+    sg_stencil_op fail_op;
+    sg_stencil_op depth_fail_op;
+    sg_stencil_op pass_op;
+    sg_compare_func compare_func;
+} sg_stencil_state;
+
+typedef struct sg_depth_stencil_state {
+    sg_stencil_state stencil_front;
+    sg_stencil_state stencil_back;
+    sg_compare_func depth_compare_func;
+    bool depth_write_enabled;
+    bool stencil_enabled;
+    uint8_t stencil_read_mask;
+    uint8_t stencil_write_mask;
+    uint8_t stencil_ref;
+} sg_depth_stencil_state;
+
+typedef struct sg_blend_state {
+    bool enabled;
+    sg_blend_factor src_factor_rgb;
+    sg_blend_factor dst_factor_rgb;
+    sg_blend_op op_rgb;
+    sg_blend_factor src_factor_alpha;
+    sg_blend_factor dst_factor_alpha;
+    sg_blend_op op_alpha;
+    uint8_t color_write_mask;
+    int color_attachment_count;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    float blend_color[4];
+} sg_blend_state;
+
+typedef struct sg_rasterizer_state {
+    bool alpha_to_coverage_enabled;
+    sg_cull_mode cull_mode;
+    sg_face_winding face_winding;
+    int sample_count;
+    float depth_bias;
+    float depth_bias_slope_scale;
+    float depth_bias_clamp;
+} sg_rasterizer_state;
+
+typedef struct sg_pipeline_desc {
+    uint32_t _start_canary;
+    sg_layout_desc layout;
+    sg_shader shader;
+    sg_primitive_type primitive_type;
+    sg_index_type index_type;
+    sg_depth_stencil_state depth_stencil;
+    sg_blend_state blend;
+    sg_rasterizer_state rasterizer;
+    const char* label;
+    uint32_t _end_canary;
+} sg_pipeline_desc;
+
+/*
+    sg_pass_desc
+
+    Creation parameters for an sg_pass object, used as argument
+    to the sg_make_pass() function.
+
+    A pass object contains 1..4 color-attachments and none, or one,
+    depth-stencil-attachment. Each attachment consists of
+    an image, and two additional indices describing
+    which subimage the pass will render: one mipmap index, and
+    if the image is a cubemap, array-texture or 3D-texture, the
+    face-index, array-layer or depth-slice.
+
+    Pass images must fulfill the following requirements:
+
+    All images must have:
+    - been created as render target (sg_image_desc.render_target = true)
+    - the same size
+    - the same sample count
+
+    In addition, all color-attachment images must have the same
+    pixel format.
+*/
+typedef struct sg_attachment_desc {
+    sg_image image;
+    int mip_level;
+    union {
+        int face;
+        int layer;
+        int slice;
+    };
+} sg_attachment_desc;
+
+typedef struct sg_pass_desc {
+    uint32_t _start_canary;
+    sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
+    sg_attachment_desc depth_stencil_attachment;
+    const char* label;
+    uint32_t _end_canary;
+} sg_pass_desc;
+
+/*
+    sg_trace_hooks
+
+    Installable callback function to keep track of the sokol_gfx calls,
+    this is useful for debugging, or keeping track of resource creation
+    and destruction.
+
+    Trace hooks are installed with sg_install_trace_hooks(), this returns
+    another sg_trace_hooks functions with the previous set of
+    trace hook function pointers. These should be invoked by the
+    new trace hooks to form a proper call chain.
+*/
+typedef struct sg_trace_hooks {
+    void* user_data;
+    void (*query_feature)(sg_feature feature, bool result, void* user_data);
+    void (*reset_state_cache)(void* user_data);
+    void (*make_buffer)(const sg_buffer_desc* desc, sg_buffer result, void* user_data);
+    void (*make_image)(const sg_image_desc* desc, sg_image result, void* user_data);
+    void (*make_shader)(const sg_shader_desc* desc, sg_shader result, void* user_data);
+    void (*make_pipeline)(const sg_pipeline_desc* desc, sg_pipeline result, void* user_data);
+    void (*make_pass)(const sg_pass_desc* desc, sg_pass result, void* user_data);
+    void (*destroy_buffer)(sg_buffer buf, void* user_data);
+    void (*destroy_image)(sg_image img, void* user_data);
+    void (*destroy_shader)(sg_shader shd, void* user_data);
+    void (*destroy_pipeline)(sg_pipeline pip, void* user_data);
+    void (*destroy_pass)(sg_pass pass, void* user_data);
+    void (*update_buffer)(sg_buffer buf, const void* data_ptr, int data_size, void* user_data);
+    void (*update_image)(sg_image img, const sg_image_content* data, void* user_data);
+    void (*append_buffer)(sg_buffer buf, const void* data_ptr, int data_size, int result, void* user_data);
+    void (*query_buffer_overflow)(sg_buffer buf, bool result, void* user_data);
+    void (*query_buffer_state)(sg_buffer buf, sg_resource_state result, void* user_data);
+    void (*query_image_state)(sg_image img, sg_resource_state result, void* user_data);
+    void (*query_shader_state)(sg_shader shd, sg_resource_state result, void* user_data);
+    void (*query_pipeline_state)(sg_pipeline pip, sg_resource_state result, void* user_data);
+    void (*query_pass_state)(sg_pass pass, sg_resource_state result, void* user_data);
+    void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
+    void (*begin_pass)(sg_pass pass, const sg_pass_action* pass_action, void* user_data);
+    void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
+    void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
+    void (*apply_pipeline)(sg_pipeline pip, void* user_data);
+    void (*apply_bindings)(const sg_bindings* bindings, void* user_data);
+    void (*apply_uniforms)(sg_shader_stage stage, int ub_index, const void* data, int num_bytes, void* user_data);
+    void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
+    void (*end_pass)(void* user_data);
+    void (*commit)(void* user_data);
+    void (*alloc_buffer)(sg_buffer result, void* user_data);
+    void (*alloc_image)(sg_image result, void* user_data);
+    void (*alloc_shader)(sg_shader result, void* user_data);
+    void (*alloc_pipeline)(sg_pipeline result, void* user_data);
+    void (*alloc_pass)(sg_pass result, void* user_data);
+    void (*init_buffer)(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data);
+    void (*init_image)(sg_image img_id, const sg_image_desc* desc, void* user_data);
+    void (*init_shader)(sg_shader shd_id, const sg_shader_desc* desc, void* user_data);
+    void (*init_pipeline)(sg_pipeline pip_id, const sg_pipeline_desc* desc, void* user_data);
+    void (*init_pass)(sg_pass pass_id, const sg_pass_desc* desc, void* user_data);
+    void (*fail_buffer)(sg_buffer buf_id, void* user_data);
+    void (*fail_image)(sg_image img_id, void* user_data);
+    void (*fail_shader)(sg_shader shd_id, void* user_data);
+    void (*fail_pipeline)(sg_pipeline pip_id, void* user_data);
+    void (*fail_pass)(sg_pass pass_id, void* user_data);
+    void (*push_debug_group)(const char* name, void* user_data);
+    void (*pop_debug_group)(void* user_data);
+    void (*err_buffer_pool_exhausted)(void* user_data);
+    void (*err_image_pool_exhausted)(void* user_data);
+    void (*err_shader_pool_exhausted)(void* user_data);
+    void (*err_pipeline_pool_exhausted)(void* user_data);
+    void (*err_pass_pool_exhausted)(void* user_data);
+    void (*err_context_mismatch)(void* user_data);
+    void (*err_pass_invalid)(void* user_data);
+    void (*err_draw_invalid)(void* user_data);
+    void (*err_bindings_invalid)(void* user_data);
+} sg_trace_hooks;
+
+/*
     sg_desc
 
     The sg_desc struct contains configuration values for sokol_gfx,
@@ -1153,404 +1656,15 @@ typedef struct sg_desc {
     uint32_t _end_canary;
 } sg_desc;
 
-/*
-    sg_buffer_desc
-
-    Creation parameters for sg_buffer objects, used in the
-    sg_make_buffer() call.
-
-    The default configuration is:
-
-    .size:      0       (this *must* be set to a valid size in bytes)
-    .type:      SG_BUFFERTYPE_VERTEXBUFFER
-    .usage:     SG_USAGE_IMMUTABLE
-    .content    0
-
-    Buffers with the SG_USAGE_IMMUTABLE usage *must* fill the buffer
-    with initial data (.content must point to a data chunk with
-    exactly .size bytes).
-
-    ADVANCED TOPIC: Injecting native 3D-API buffers:
-
-    The following struct members allow to inject your own GL, Metal
-    or D3D11 buffers into sokol_gfx:
-
-    .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
-    .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
-    .d3d11_buffer
-
-    You must still provide all other members except the .content member, and
-    these must match the creation parameters of the native buffers you
-    provide. For SG_USAGE_IMMUTABLE, only provide a single native 3D-API
-    buffer, otherwise you need to provide SG_NUM_INFLIGHT_FRAMES buffers
-    (only for GL and Metal, not D3D11). Providing multiple buffers for GL and
-    Metal is necessary because sokol_gfx will rotate through them when
-    calling sg_update_buffer() to prevent lock-stalls.
-
-    Note that it is expected that immutable injected buffer have already been
-    initialized with content, and the .content member must be 0!
-
-    Also you need to call sg_reset_state_cache() after calling native 3D-API
-    functions, and before calling any sokol_gfx function.
-*/
-typedef struct sg_buffer_desc {
-    uint32_t _start_canary;
-    int size;
-    sg_buffer_type type;
-    sg_usage usage;
-    const void* content;
-    /* GL specific */
-    uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
-    /* Metal specific */
-    const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
-    /* D3D11 specific */
-    const void* d3d11_buffer;
-    uint32_t _end_canary;
-} sg_buffer_desc;
-
-/*
-    sg_subimage_content
-
-    Pointer to and size of a subimage-surface data, this is
-    used to describe the initial content of immutable-usage images,
-    or for updating a dynamic- or stream-usage images.
-
-    For 3D- or array-textures, one sg_subimage_content item
-    describes an entire mipmap level consisting of all array- or
-    3D-slices of the mipmap level. It is only possible to update
-    an entire mipmap level, not parts of it.
-*/
-typedef struct sg_subimage_content {
-    const void* ptr;    /* pointer to subimage data */
-    int size;           /* size in bytes of pointed-to subimage data */
-} sg_subimage_content;
-
-/*
-    sg_image_content
-
-    Defines the content of an image through a 2D array
-    of sg_subimage_content structs. The first array dimension
-    is the cubemap face, and the second array dimension the
-    mipmap level.
-*/
-typedef struct sg_image_content {
-    sg_subimage_content subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
-} sg_image_content;
-
-/*
-    sg_image_desc
-
-    Creation parameters for sg_image objects, used in the
-    sg_make_image() call.
-
-    The default configuration is:
-
-    .type:              SG_IMAGETYPE_2D
-    .render_target:     false
-    .width              0 (must be set to >0)
-    .height             0 (must be set to >0)
-    .depth/.layers:     1
-    .num_mipmaps:       1
-    .usage:             SG_USAGE_IMMUTABLE
-    .pixel_format:      SG_PIXELFORMAT_RGBA8
-    .sample_count:      1 (only used in render_targets)
-    .min_filter:        SG_FILTER_NEAREST
-    .mag_filter:        SG_FILTER_NEAREST
-    .wrap_u:            SG_WRAP_REPEAT
-    .wrap_v:            SG_WRAP_REPEAT
-    .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
-    .max_anisotropy     1 (must be 1..16)
-    .min_lod            0.0f
-    .max_lod            FLT_MAX
-    .content            an sg_image_content struct to define the initial content
-
-    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
-    WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
-    sg_query_feature(SG_FEATURE_IMAGETYPE_3D) at runtime to check
-    if array- and 3D-textures are supported.
-
-    Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
-    providing a valid .content member which points to
-    initialization data.
-
-    ADVANCED TOPIC: Injecting native 3D-API textures:
-
-    The following struct members allow to inject your own GL, Metal
-    or D3D11 textures into sokol_gfx:
-
-    .gl_textures[SG_NUM_INFLIGHT_FRAMES]
-    .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
-    .d3d11_texture
-
-    The same rules apply as for injecting native buffers
-    (see sg_buffer_desc documentation for more details).
-*/
-typedef struct sg_image_desc {
-    uint32_t _start_canary;
-    sg_image_type type;
-    bool render_target;
-    int width;
-    int height;
-    union {
-        int depth;
-        int layers;
-    };
-    int num_mipmaps;
-    sg_usage usage;
-    sg_pixel_format pixel_format;
-    int sample_count;
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    uint32_t max_anisotropy;
-    float min_lod;
-    float max_lod;
-    sg_image_content content;
-    /* GL specific */
-    uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
-    /* Metal specific */
-    const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
-    /* D3D11 specific */
-    const void* d3d11_texture;
-    uint32_t _end_canary;
-} sg_image_desc;
-
-/*
-    sg_shader_desc
-
-    The structure sg_shader_desc describes the shaders, uniform blocks
-    and texture images on the vertex- and fragment-shader stage.
-
-    TODO: source code vs byte code, 3D backend API specifics.
-*/
-typedef struct sg_shader_uniform_desc {
-    const char* name;
-    sg_uniform_type type;
-    int array_count;
-} sg_shader_uniform_desc;
-
-typedef struct sg_shader_uniform_block_desc {
-    int size;
-    sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
-} sg_shader_uniform_block_desc;
-
-typedef struct sg_shader_image_desc {
-    const char* name;
-    sg_image_type type;
-} sg_shader_image_desc;
-
-typedef struct sg_shader_stage_desc {
-    const char* source;
-    const uint8_t* byte_code;
-    int byte_code_size;
-    const char* entry;
-    sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
-} sg_shader_stage_desc;
-
-typedef struct sg_shader_desc {
-    uint32_t _start_canary;
-    sg_shader_stage_desc vs;
-    sg_shader_stage_desc fs;
-    uint32_t _end_canary;
-} sg_shader_desc;
-
-/*
-    sg_pipeline_desc
-
-    The sg_pipeline_desc struct defines all creation parameters
-    for an sg_pipeline object, used as argument to the
-    sg_make_pipeline() function:
-
-    - the complete vertex layout for all input vertex buffers
-    - a shader object
-    - the 3D primitive type (points, lines, triangles, ...)
-    - the index type (none, 16- or 32-bit)
-    - depth-stencil state
-    - alpha-blending state
-    - rasterizer state
-
-    If the vertex data has no gaps between vertex components, you can omit
-    the .layout.buffers[].stride and layout.attrs[].offset items (leave them
-    default-initialized to 0), sokol will then compute the offsets and strides
-    from the vertex component formats (.layout.attrs[].offset). Please note
-    that ALL vertex attribute offsets must be 0 in order for the the
-    automatic offset computation to kick in.
-
-    The default configuration is as follows:
-
-    .layout:
-        .buffers[]:         vertex buffer layouts
-            .stride:        0 (if no stride is given it will be computed)
-            .step_func      SG_VERTEXSTEP_PER_VERTEX
-            .step_rate      1
-        .attrs[]:           vertex attribute declarations
-            .buffer_index   0 the vertex buffer bind slot
-            .offset         0 (offsets can be omitted if the vertex layout has no gaps)
-            .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
-            .name           0 (GLES2 requires an attribute name here)
-            .sem_name       0 (D3D11 requires a semantic name here)
-            .sem_index      0 (D3D11 requires a semantic index here)
-    .shader:            0 (must be intilized with a valid sg_shader id!)
-    .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
-    .index_type:        SG_INDEXTYPE_NONE
-    .depth_stencil:
-        .stencil_front, .stencil_back:
-            .fail_op:               SG_STENCILOP_KEEP
-            .depth_fail_op:         SG_STENCILOP_KEEP
-            .pass_op:               SG_STENCILOP_KEEP
-            .compare_func           SG_COMPAREFUNC_ALWAYS
-        .depth_compare_func:    SG_COMPAREFUNC_ALWAYS
-        .depth_write_enabled:   false
-        .stencil_enabled:       false
-        .stencil_read_mask:     0
-        .stencil_write_mask:    0
-        .stencil_ref:           0
-    .blend:
-        .enabled:               false
-        .src_factor_rgb:        SG_BLENDFACTOR_ONE
-        .dst_factor_rgb:        SG_BLENDFACTOR_ZERO
-        .op_rgb:                SG_BLENDOP_ADD
-        .src_factor_alpha:      SG_BLENDFACTOR_ONE
-        .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
-        .op_alpha:              SG_BLENDOP_ADD
-        .color_write_mask:      SG_COLORMASK_RGBA
-        .color_attachment_count 1
-        .color_format           SG_PIXELFORMAT_RGBA8
-        .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
-        .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
-    .rasterizer:
-        .alpha_to_coverage_enabled:     false
-        .cull_mode:                     SG_CULLMODE_NONE
-        .face_winding:                  SG_FACEWINDING_CW
-        .sample_count:                  1
-        .depth_bias:                    0.0f
-        .depth_bias_slope_scale:        0.0f
-        .depth_bias_clamp:              0.0f
-*/
-typedef struct sg_buffer_layout_desc {
-    int stride;
-    sg_vertex_step step_func;
-    int step_rate;
-} sg_buffer_layout_desc;
-
-typedef struct sg_vertex_attr_desc {
-    const char* name;
-    const char* sem_name;
-    int sem_index;
-    int buffer_index;
-    int offset;
-    sg_vertex_format format;
-} sg_vertex_attr_desc;
-
-typedef struct sg_layout_desc {
-    sg_buffer_layout_desc buffers[SG_MAX_SHADERSTAGE_BUFFERS];
-    sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
-} sg_layout_desc;
-
-typedef struct sg_stencil_state {
-    sg_stencil_op fail_op;
-    sg_stencil_op depth_fail_op;
-    sg_stencil_op pass_op;
-    sg_compare_func compare_func;
-} sg_stencil_state;
-
-typedef struct sg_depth_stencil_state {
-    sg_stencil_state stencil_front;
-    sg_stencil_state stencil_back;
-    sg_compare_func depth_compare_func;
-    bool depth_write_enabled;
-    bool stencil_enabled;
-    uint8_t stencil_read_mask;
-    uint8_t stencil_write_mask;
-    uint8_t stencil_ref;
-} sg_depth_stencil_state;
-
-typedef struct sg_blend_state {
-    bool enabled;
-    sg_blend_factor src_factor_rgb;
-    sg_blend_factor dst_factor_rgb;
-    sg_blend_op op_rgb;
-    sg_blend_factor src_factor_alpha;
-    sg_blend_factor dst_factor_alpha;
-    sg_blend_op op_alpha;
-    uint8_t color_write_mask;
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    float blend_color[4];
-} sg_blend_state;
-
-typedef struct sg_rasterizer_state {
-    bool alpha_to_coverage_enabled;
-    sg_cull_mode cull_mode;
-    sg_face_winding face_winding;
-    int sample_count;
-    float depth_bias;
-    float depth_bias_slope_scale;
-    float depth_bias_clamp;
-} sg_rasterizer_state;
-
-typedef struct sg_pipeline_desc {
-    uint32_t _start_canary;
-    sg_layout_desc layout;
-    sg_shader shader;
-    sg_primitive_type primitive_type;
-    sg_index_type index_type;
-    sg_depth_stencil_state depth_stencil;
-    sg_blend_state blend;
-    sg_rasterizer_state rasterizer;
-    uint32_t _end_canary;
-} sg_pipeline_desc;
-
-/*
-    sg_pass_desc
-
-    Creation parameters for an sg_pass object, used as argument
-    to the sg_make_pass() function.
-
-    A pass object contains 1..4 color-attachments and none, or one,
-    depth-stencil-attachment. Each attachment consists of
-    an image, and two additional indices describing
-    which subimage the pass will render: one mipmap index, and
-    if the image is a cubemap, array-texture or 3D-texture, the
-    face-index, array-layer or depth-slice.
-
-    Pass images must fulfill the following requirements:
-
-    All images must have:
-    - been created as render target (sg_image_desc.render_target = true)
-    - the same size
-    - the same sample count
-
-    In addition, all color-attachment images must have the same
-    pixel format.
-*/
-typedef struct sg_attachment_desc {
-    sg_image image;
-    int mip_level;
-    union {
-        int face;
-        int layer;
-        int slice;
-    };
-} sg_attachment_desc;
-
-typedef struct sg_pass_desc {
-    uint32_t _start_canary;
-    sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc depth_stencil_attachment;
-    uint32_t _end_canary;
-} sg_pass_desc;
-
 /* setup and misc functions */
 SOKOL_API_DECL void sg_setup(const sg_desc* desc);
 SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
 SOKOL_API_DECL void sg_reset_state_cache(void);
+SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
+SOKOL_API_DECL void sg_push_debug_group(const char* name);
+SOKOL_API_DECL void sg_pop_debug_group(void);
 
 /* resource creation, destruction and updating */
 SOKOL_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
@@ -1688,6 +1802,14 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
 
 #ifndef _SOKOL_UNUSED
     #define _SOKOL_UNUSED(x) (void)(x)
+#endif
+
+#if defined(SOKOL_TRACE_HOOKS)
+#define _SG_TRACE_ARGS(fn, ...) if (_sg.hooks.fn) { _sg.hooks.fn(__VA_ARGS__, _sg.hooks.user_data); }
+#define _SG_TRACE_NOARGS(fn) if (_sg.hooks.fn) { _sg.hooks.fn(_sg.hooks.user_data); }
+#else
+#define _SG_TRACE_ARGS(fn, ...)
+#define _SG_TRACE_NOARGS(fn)
 #endif
 
 /* default clear values */
@@ -2556,15 +2678,19 @@ typedef enum {
     _SG_VALIDATE_ABND_PIPELINE_EXISTS,
     _SG_VALIDATE_ABND_PIPELINE_VALID,
     _SG_VALIDATE_ABND_VBS,
+    _SG_VALIDATE_ABND_VB_EXISTS,
     _SG_VALIDATE_ABND_VB_TYPE,
     _SG_VALIDATE_ABND_VB_OVERFLOW,
     _SG_VALIDATE_ABND_NO_IB,
     _SG_VALIDATE_ABND_IB,
+    _SG_VALIDATE_ABND_IB_EXISTS,
     _SG_VALIDATE_ABND_IB_TYPE,
     _SG_VALIDATE_ABND_IB_OVERFLOW,
     _SG_VALIDATE_ABND_VS_IMGS,
+    _SG_VALIDATE_ABND_VS_IMG_EXISTS,
     _SG_VALIDATE_ABND_VS_IMG_TYPES,
     _SG_VALIDATE_ABND_FS_IMGS,
+    _SG_VALIDATE_ABND_FS_IMG_EXISTS,
     _SG_VALIDATE_ABND_FS_IMG_TYPES,
 
     /* sg_apply_uniforms validation */
@@ -2613,6 +2739,9 @@ typedef struct {
     _sg_mtl_backend_t mtl;
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_backend_t d3d11;
+    #endif
+    #if defined(SOKOL_TRACE_HOOKS)
+    sg_trace_hooks hooks;
     #endif
 } _sg_state_t;
 static _sg_state_t _sg;
@@ -8364,15 +8493,19 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_ABND_PIPELINE_EXISTS:     return "sg_apply_bindings: currently applied pipeline object no longer alive";
         case _SG_VALIDATE_ABND_PIPELINE_VALID:      return "sg_apply_bindings: currently applied pipeline object not in valid state";
         case _SG_VALIDATE_ABND_VBS:                 return "sg_apply_bindings: number of vertex buffers doesn't match number of pipeline vertex layouts";
+        case _SG_VALIDATE_ABND_VB_EXISTS:           return "sg_apply_bindings: vertex buffer no longer alive";
         case _SG_VALIDATE_ABND_VB_TYPE:             return "sg_apply_bindings: buffer in vertex buffer slot is not a SG_BUFFERTYPE_VERTEXBUFFER";
         case _SG_VALIDATE_ABND_VB_OVERFLOW:         return "sg_apply_bindings: buffer in vertex buffer slot is overflown";
         case _SG_VALIDATE_ABND_NO_IB:               return "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer provided";
         case _SG_VALIDATE_ABND_IB:                  return "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer provided";
+        case _SG_VALIDATE_ABND_IB_EXISTS:           return "sg_apply_bindings: index buffer no longer alive";
         case _SG_VALIDATE_ABND_IB_TYPE:             return "sg_apply_bindings: buffer in index buffer slot is not a SG_BUFFERTYPE_INDEXBUFFER";
         case _SG_VALIDATE_ABND_IB_OVERFLOW:         return "sg_apply_bindings: buffer in index buffer slot is overflown";
         case _SG_VALIDATE_ABND_VS_IMGS:             return "sg_apply_bindings: vertex shader image count doesn't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_VS_IMG_EXISTS:       return "sg_apply_bindings: vertex shader image no longer alive";
         case _SG_VALIDATE_ABND_VS_IMG_TYPES:        return "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc";
         case _SG_VALIDATE_ABND_FS_IMGS:             return "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_FS_IMG_EXISTS:       return "sg_apply_bindings: fragment shader image no longer alive";
         case _SG_VALIDATE_ABND_FS_IMG_TYPES:        return "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc";
 
         /* sg_apply_uniforms */
@@ -8766,9 +8899,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
+_SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(bind);
+        _SOKOL_UNUSED(bindings);
         return true;
     #else
         SOKOL_VALIDATE_BEGIN();
@@ -8785,12 +8918,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
 
         /* has expected vertex buffers, and vertex buffers still exist */
         for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-            if (bind->vertex_buffers[i].id != SG_INVALID_ID) {
+            if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(pip->vertex_layout_valid[i], _SG_VALIDATE_ABND_VBS);
                 /* buffers in vertex-buffer-slots must be of type SG_BUFFERTYPE_VERTEXBUFFER */
-                const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
-                SOKOL_ASSERT(buf);
-                if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+                const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
+                SOKOL_VALIDATE(buf != 0, _SG_VALIDATE_ABND_VB_EXISTS);
+                if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(SG_BUFFERTYPE_VERTEXBUFFER == buf->type, _SG_VALIDATE_ABND_VB_TYPE);
                     SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_VB_OVERFLOW);
                 }
@@ -8804,17 +8937,17 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         /* index buffer expected or not, and index buffer still exists */
         if (pip->index_type == SG_INDEXTYPE_NONE) {
             /* pipeline defines non-indexed rendering, but index buffer provided */
-            SOKOL_VALIDATE(bind->index_buffer.id == SG_INVALID_ID, _SG_VALIDATE_ABND_IB);
+            SOKOL_VALIDATE(bindings->index_buffer.id == SG_INVALID_ID, _SG_VALIDATE_ABND_IB);
         }
         else {
             /* pipeline defines indexed rendering, but no index buffer provided */
-            SOKOL_VALIDATE(bind->index_buffer.id != SG_INVALID_ID, _SG_VALIDATE_ABND_NO_IB);
+            SOKOL_VALIDATE(bindings->index_buffer.id != SG_INVALID_ID, _SG_VALIDATE_ABND_NO_IB);
         }
-        if (bind->index_buffer.id != SG_INVALID_ID) {
+        if (bindings->index_buffer.id != SG_INVALID_ID) {
             /* buffer in index-buffer-slot must be of type SG_BUFFERTYPE_INDEXBUFFER */
-            const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
-            SOKOL_ASSERT(buf);
-            if (buf->slot.state == SG_RESOURCESTATE_VALID) {
+            const _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
+            SOKOL_VALIDATE(buf != 0, _SG_VALIDATE_ABND_IB_EXISTS);
+            if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                 SOKOL_VALIDATE(SG_BUFFERTYPE_INDEXBUFFER == buf->type, _SG_VALIDATE_ABND_IB_TYPE);
                 SOKOL_VALIDATE(!buf->append_overflow, _SG_VALIDATE_ABND_IB_OVERFLOW);
             }
@@ -8823,11 +8956,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         /* has expected vertex shader images */
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->stage[SG_SHADERSTAGE_VS];
-            if (bind->vs_images[i].id != SG_INVALID_ID) {
+            if (bindings->vs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_VS_IMGS);
-                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
-                SOKOL_ASSERT(img);
-                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs_images[i].id);
+                SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_VS_IMG_EXISTS);
+                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_VS_IMG_TYPES);
                 }
             }
@@ -8839,11 +8972,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bind) {
         /* has expected fragment shader images */
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->stage[SG_SHADERSTAGE_FS];
-            if (bind->fs_images[i].id != SG_INVALID_ID) {
+            if (bindings->fs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_FS_IMGS);
-                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
-                SOKOL_ASSERT(img);
-                if (img->slot.state == SG_RESOURCESTATE_VALID) {
+                const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs_images[i].id);
+                SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_FS_IMG_EXISTS);
+                if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->type == stage->images[i].type, _SG_VALIDATE_ABND_FS_IMG_TYPES);
                 }
             }
@@ -8942,6 +9075,163 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
     #endif
 }
 
+/*== allocate/initialize resource private functions ==========================*/
+_SOKOL_PRIVATE sg_buffer _sg_alloc_buffer(void) {
+    sg_buffer res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.buffer_pool, &_sg.pools.buffers[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE sg_image _sg_alloc_image(void) {
+    sg_image res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.image_pool);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.image_pool, &_sg.pools.images[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE sg_shader _sg_alloc_shader(void) {
+    sg_shader res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.shader_pool);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.shader_pool, &_sg.pools.shaders[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE sg_pipeline _sg_alloc_pipeline(void) {
+    sg_pipeline res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.pipeline_pool);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id =_sg_slot_alloc(&_sg.pools.pipeline_pool, &_sg.pools.pipelines[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE sg_pass _sg_alloc_pass(void) {
+    sg_pass res;
+    int slot_index = _sg_pool_alloc_index(&_sg.pools.pass_pool);
+    if (_SG_INVALID_SLOT_INDEX != slot_index) {
+        res.id = _sg_slot_alloc(&_sg.pools.pass_pool, &_sg.pools.passes[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+_SOKOL_PRIVATE void _sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
+    _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    buf->slot.ctx_id = _sg.active_context.id;
+    if (_sg_validate_buffer_desc(desc)) {
+        buf->slot.state = _sg_create_buffer(buf, desc);
+    }
+    else {
+        buf->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
+}
+
+_SOKOL_PRIVATE void _sg_init_image(sg_image img_id, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img_id.id != SG_INVALID_ID && desc);
+    _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
+    img->slot.ctx_id = _sg.active_context.id;
+    if (_sg_validate_image_desc(desc)) {
+        img->slot.state = _sg_create_image(img, desc);
+    }
+    else {
+        img->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
+}
+
+_SOKOL_PRIVATE void _sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd_id.id != SG_INVALID_ID && desc);
+    _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    shd->slot.ctx_id = _sg.active_context.id;
+    if (_sg_validate_shader_desc(desc)) {
+        shd->slot.state = _sg_create_shader(shd, desc);
+    }
+    else {
+        shd->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
+}
+
+_SOKOL_PRIVATE void _sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip_id.id != SG_INVALID_ID && desc);
+    _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    pip->slot.ctx_id = _sg.active_context.id;
+    if (_sg_validate_pipeline_desc(desc)) {
+        _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
+        pip->slot.state = _sg_create_pipeline(pip, shd, desc);
+    }
+    else {
+        pip->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED));
+}
+
+_SOKOL_PRIVATE void _sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
+    SOKOL_ASSERT(pass_id.id != SG_INVALID_ID && desc);
+    _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
+    pass->slot.ctx_id = _sg.active_context.id;
+    if (_sg_validate_pass_desc(desc)) {
+        /* lookup pass attachment image pointers */
+        _sg_image_t* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (desc->color_attachments[i].image.id) {
+                att_imgs[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
+                SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
+            }
+            else {
+                att_imgs[i] = 0;
+            }
+        }
+        const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
+        if (desc->depth_stencil_attachment.image.id) {
+            att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
+            SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
+        }
+        else {
+            att_imgs[ds_att_index] = 0;
+        }
+        pass->slot.state = _sg_create_pass(pass, att_imgs, desc);
+    }
+    else {
+        pass->slot.state = SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED));
+}
+
 /*== PUBLIC API FUNCTIONS ====================================================*/
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -8976,7 +9266,9 @@ SOKOL_API_IMPL bool sg_isvalid(void) {
 }
 
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
-    return _sg_query_feature(f);
+    bool res = _sg_query_feature(f);
+    _SG_TRACE_ARGS(query_feature, f, res);
+    return res;
 }
 
 SOKOL_API_IMPL sg_context sg_setup_context(void) {
@@ -9016,162 +9308,71 @@ SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
     _sg_activate_context(ctx);
 }
 
-/*-- allocate resource id ----------------------------------------------------*/
+SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks) {
+    SOKOL_ASSERT(trace_hooks);
+    #if defined(SOKOL_TRACE_HOOKS)
+        sg_trace_hooks old_hooks = _sg.hooks;
+        _sg.hooks = *trace_hooks;
+    #else
+        static sg_trace_hooks old_hooks;
+        SOKOL_LOG("sg_install_trace_hooks() called, but SG_TRACE_HOOKS is not defined!");
+    #endif
+    return old_hooks;
+}
+
 SOKOL_API_IMPL sg_buffer sg_alloc_buffer(void) {
-    sg_buffer res;
-    int slot_index = _sg_pool_alloc_index(&_sg.pools.buffer_pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.buffer_pool, &_sg.pools.buffers[slot_index].slot, slot_index);
-    }
-    else {
-        /* pool is exhausted */
-        res.id = SG_INVALID_ID;
-    }
+    sg_buffer res = _sg_alloc_buffer();
+    _SG_TRACE_ARGS(alloc_buffer, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_image sg_alloc_image(void) {
-    sg_image res;
-    int slot_index = _sg_pool_alloc_index(&_sg.pools.image_pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.image_pool, &_sg.pools.images[slot_index].slot, slot_index);
-    }
-    else {
-        /* pool is exhausted */
-        res.id = SG_INVALID_ID;
-    }
+    sg_image res = _sg_alloc_image();
+    _SG_TRACE_ARGS(alloc_image, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_shader sg_alloc_shader(void) {
-    sg_shader res;
-    int slot_index = _sg_pool_alloc_index(&_sg.pools.shader_pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.shader_pool, &_sg.pools.shaders[slot_index].slot, slot_index);
-    }
-    else {
-        /* pool is exhausted */
-        res.id = SG_INVALID_ID;
-    }
+    sg_shader res = _sg_alloc_shader();
+    _SG_TRACE_ARGS(alloc_shader, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_pipeline sg_alloc_pipeline(void) {
-    sg_pipeline res;
-    int slot_index = _sg_pool_alloc_index(&_sg.pools.pipeline_pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        res.id =_sg_slot_alloc(&_sg.pools.pipeline_pool, &_sg.pools.pipelines[slot_index].slot, slot_index);
-    }
-    else {
-        /* pool is exhausted */
-        res.id = SG_INVALID_ID;
-    }
+    sg_pipeline res = _sg_alloc_pipeline();
+    _SG_TRACE_ARGS(alloc_pipeline, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_pass sg_alloc_pass(void) {
-    sg_pass res;
-    int slot_index = _sg_pool_alloc_index(&_sg.pools.pass_pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        res.id = _sg_slot_alloc(&_sg.pools.pass_pool, &_sg.pools.passes[slot_index].slot, slot_index);
-    }
-    else {
-        /* pool is exhausted */
-        res.id = SG_INVALID_ID;
-    }
+    sg_pass res = _sg_alloc_pass();
+    _SG_TRACE_ARGS(alloc_pass, res);
     return res;
 }
 
-/*-- initialize an allocated resource ----------------------------------------*/
 SOKOL_API_IMPL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc) {
-    SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
-    _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    buf->slot.ctx_id = _sg.active_context.id;
-    if (_sg_validate_buffer_desc(desc)) {
-        buf->slot.state = _sg_create_buffer(buf, desc);
-    }
-    else {
-        buf->slot.state = SG_RESOURCESTATE_FAILED;
-    }
-    SOKOL_ASSERT((buf->slot.state == SG_RESOURCESTATE_VALID)||(buf->slot.state == SG_RESOURCESTATE_FAILED));
+    _sg_init_buffer(buf_id, desc);
+    _SG_TRACE_ARGS(init_buffer, buf_id, desc);
 }
 
 SOKOL_API_IMPL void sg_init_image(sg_image img_id, const sg_image_desc* desc) {
-    SOKOL_ASSERT(img_id.id != SG_INVALID_ID && desc);
-    _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
-    img->slot.ctx_id = _sg.active_context.id;
-    if (_sg_validate_image_desc(desc)) {
-        img->slot.state = _sg_create_image(img, desc);
-    }
-    else {
-        img->slot.state = SG_RESOURCESTATE_FAILED;
-    }
-    SOKOL_ASSERT((img->slot.state == SG_RESOURCESTATE_VALID)||(img->slot.state == SG_RESOURCESTATE_FAILED));
+    _sg_init_image(img_id, desc);
+    _SG_TRACE_ARGS(init_image, img_id, desc);
 }
 
 SOKOL_API_IMPL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc) {
-    SOKOL_ASSERT(shd_id.id != SG_INVALID_ID && desc);
-    _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
-    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    shd->slot.ctx_id = _sg.active_context.id;
-    if (_sg_validate_shader_desc(desc)) {
-        shd->slot.state = _sg_create_shader(shd, desc);
-    }
-    else {
-        shd->slot.state = SG_RESOURCESTATE_FAILED;
-    }
-    SOKOL_ASSERT((shd->slot.state == SG_RESOURCESTATE_VALID)||(shd->slot.state == SG_RESOURCESTATE_FAILED));
+    _sg_init_shader(shd_id, desc);
+    _SG_TRACE_ARGS(init_shader, shd_id, desc);
 }
 
 SOKOL_API_IMPL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip_id.id != SG_INVALID_ID && desc);
-    _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    pip->slot.ctx_id = _sg.active_context.id;
-    if (_sg_validate_pipeline_desc(desc)) {
-        _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
-        SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
-        pip->slot.state = _sg_create_pipeline(pip, shd, desc);
-    }
-    else {
-        pip->slot.state = SG_RESOURCESTATE_FAILED;
-    }
-    SOKOL_ASSERT((pip->slot.state == SG_RESOURCESTATE_VALID)||(pip->slot.state == SG_RESOURCESTATE_FAILED));
+    _sg_init_pipeline(pip_id, desc);
+    _SG_TRACE_ARGS(init_pipeline, pip_id, desc);
 }
 
 SOKOL_API_IMPL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
-    SOKOL_ASSERT(pass_id.id != SG_INVALID_ID && desc);
-    _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    pass->slot.ctx_id = _sg.active_context.id;
-    if (_sg_validate_pass_desc(desc)) {
-        /* lookup pass attachment image pointers */
-        _sg_image_t* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (desc->color_attachments[i].image.id) {
-                att_imgs[i] = _sg_lookup_image(&_sg.pools, desc->color_attachments[i].image.id);
-                SOKOL_ASSERT(att_imgs[i] && att_imgs[i]->slot.state == SG_RESOURCESTATE_VALID);
-            }
-            else {
-                att_imgs[i] = 0;
-            }
-        }
-        const int ds_att_index = SG_MAX_COLOR_ATTACHMENTS;
-        if (desc->depth_stencil_attachment.image.id) {
-            att_imgs[ds_att_index] = _sg_lookup_image(&_sg.pools, desc->depth_stencil_attachment.image.id);
-            SOKOL_ASSERT(att_imgs[ds_att_index] && att_imgs[ds_att_index]->slot.state == SG_RESOURCESTATE_VALID);
-        }
-        else {
-            att_imgs[ds_att_index] = 0;
-        }
-        pass->slot.state = _sg_create_pass(pass, att_imgs, desc);
-    }
-    else {
-        pass->slot.state = SG_RESOURCESTATE_FAILED;
-    }
-    SOKOL_ASSERT((pass->slot.state == SG_RESOURCESTATE_VALID)||(pass->slot.state == SG_RESOURCESTATE_FAILED));
+    _sg_init_pass(pass_id, desc);
+    _SG_TRACE_ARGS(init_pass, pass_id, desc);
 }
 
 /*-- set allocated resource to failed state ----------------------------------*/
@@ -9181,6 +9382,7 @@ SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
     buf->slot.ctx_id = _sg.active_context.id;
     buf->slot.state = SG_RESOURCESTATE_FAILED;
+    _SG_TRACE_ARGS(fail_buffer, buf_id);
 }
 
 SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
@@ -9189,6 +9391,7 @@ SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
     img->slot.ctx_id = _sg.active_context.id;
     img->slot.state = SG_RESOURCESTATE_FAILED;
+    _SG_TRACE_ARGS(fail_image, img_id);
 }
 
 SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
@@ -9197,6 +9400,7 @@ SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
     shd->slot.ctx_id = _sg.active_context.id;
     shd->slot.state = SG_RESOURCESTATE_FAILED;
+    _SG_TRACE_ARGS(fail_shader, shd_id);
 }
 
 SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
@@ -9205,6 +9409,7 @@ SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
     pip->slot.ctx_id = _sg.active_context.id;
     pip->slot.state = SG_RESOURCESTATE_FAILED;
+    _SG_TRACE_ARGS(fail_pipeline, pip_id);
 }
 
 SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
@@ -9213,92 +9418,113 @@ SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
     pass->slot.ctx_id = _sg.active_context.id;
     pass->slot.state = SG_RESOURCESTATE_FAILED;
+    _SG_TRACE_ARGS(fail_pass, pass_id);
 }
 
 /*-- get resource state */
 SOKOL_API_IMPL sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    return buf ? buf->slot.state : SG_RESOURCESTATE_INVALID;
+    sg_resource_state res = buf ? buf->slot.state : SG_RESOURCESTATE_INVALID;
+    _SG_TRACE_ARGS(query_buffer_state, buf_id, res);
+    return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_image_state(sg_image img_id) {
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    return img ? img->slot.state : SG_RESOURCESTATE_INVALID;
+    sg_resource_state res = img ? img->slot.state : SG_RESOURCESTATE_INVALID;
+    _SG_TRACE_ARGS(query_image_state, img_id, res);
+    return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_shader_state(sg_shader shd_id) {
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
-    return shd ? shd->slot.state : SG_RESOURCESTATE_INVALID;
+    sg_resource_state res = shd ? shd->slot.state : SG_RESOURCESTATE_INVALID;
+    _SG_TRACE_ARGS(query_shader_state, shd_id, res);
+    return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
-    return pip ? pip->slot.state : SG_RESOURCESTATE_INVALID;
+    sg_resource_state res = pip ? pip->slot.state : SG_RESOURCESTATE_INVALID;
+    _SG_TRACE_ARGS(query_pipeline_state, pip_id, res);
+    return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pass_state(sg_pass pass_id) {
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
-    return pass ? pass->slot.state : SG_RESOURCESTATE_INVALID;
+    sg_resource_state res = pass ? pass->slot.state : SG_RESOURCESTATE_INVALID;
+    _SG_TRACE_ARGS(query_pass_state, pass_id, res);
+    return res;
 }
 
 /*-- allocate and initialize resource ----------------------------------------*/
 SOKOL_API_IMPL sg_buffer sg_make_buffer(const sg_buffer_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_buffer buf_id = sg_alloc_buffer();
+    sg_buffer buf_id = _sg_alloc_buffer();
     if (buf_id.id != SG_INVALID_ID) {
-        sg_init_buffer(buf_id, desc);
+        _sg_init_buffer(buf_id, desc);
     }
     else {
         SOKOL_LOG("buffer pool exhausted!");
+        _SG_TRACE_NOARGS(err_buffer_pool_exhausted);
     }
+    _SG_TRACE_ARGS(make_buffer, desc, buf_id);
     return buf_id;
 }
 
 SOKOL_API_IMPL sg_image sg_make_image(const sg_image_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_image img_id = sg_alloc_image();
+    sg_image img_id = _sg_alloc_image();
     if (img_id.id != SG_INVALID_ID) {
-        sg_init_image(img_id, desc);
+        _sg_init_image(img_id, desc);
     }
     else {
         SOKOL_LOG("image pool exhausted!");
+        _SG_TRACE_NOARGS(err_image_pool_exhausted);
     }
+    _SG_TRACE_ARGS(make_image, desc, img_id);
     return img_id;
 }
 
 SOKOL_API_IMPL sg_shader sg_make_shader(const sg_shader_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_shader shd_id = sg_alloc_shader();
+    sg_shader shd_id = _sg_alloc_shader();
     if (shd_id.id != SG_INVALID_ID) {
-        sg_init_shader(shd_id, desc);
+        _sg_init_shader(shd_id, desc);
     }
     else {
         SOKOL_LOG("shader pool exhausted!");
+        _SG_TRACE_NOARGS(err_shader_pool_exhausted);
     }
+    _SG_TRACE_ARGS(make_shader, desc, shd_id);
     return shd_id;
 }
 
 SOKOL_API_IMPL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_pipeline pip_id = sg_alloc_pipeline();
+    sg_pipeline pip_id = _sg_alloc_pipeline();
     if (pip_id.id != SG_INVALID_ID) {
-        sg_init_pipeline(pip_id, desc);
+        _sg_init_pipeline(pip_id, desc);
     }
     else {
         SOKOL_LOG("pipeline pool exhausted!");
+        _SG_TRACE_NOARGS(err_pipeline_pool_exhausted);
     }
+    _SG_TRACE_ARGS(make_pipeline, desc, pip_id);
     return pip_id;
 }
 
 SOKOL_API_IMPL sg_pass sg_make_pass(const sg_pass_desc* desc) {
     SOKOL_ASSERT(desc);
-    sg_pass pass_id = sg_alloc_pass();
+    sg_pass pass_id = _sg_alloc_pass();
     if (pass_id.id != SG_INVALID_ID) {
-        sg_init_pass(pass_id, desc);
+        _sg_init_pass(pass_id, desc);
     }
     else {
         SOKOL_LOG("pass pool exhausted!");
+        _SG_TRACE_NOARGS(err_pass_pool_exhausted);
     }
+    _SG_TRACE_ARGS(make_pass, desc, pass_id);
     return pass_id;
 }
 
@@ -9313,8 +9539,10 @@ SOKOL_API_IMPL void sg_destroy_buffer(sg_buffer buf_id) {
         }
         else {
             SOKOL_LOG("sg_destroy_buffer: active context mismatch (must be same as for creation)");
+            _SG_TRACE_NOARGS(err_context_mismatch);
         }
     }
+    _SG_TRACE_ARGS(destroy_buffer, buf_id);
 }
 
 SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
@@ -9327,8 +9555,10 @@ SOKOL_API_IMPL void sg_destroy_image(sg_image img_id) {
         }
         else {
             SOKOL_LOG("sg_destroy_image: active context mismatch (must be same as for creation)");
+            _SG_TRACE_NOARGS(err_context_mismatch);
         }
     }
+    _SG_TRACE_ARGS(destroy_image, img_id);
 }
 
 SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
@@ -9341,8 +9571,10 @@ SOKOL_API_IMPL void sg_destroy_shader(sg_shader shd_id) {
         }
         else {
             SOKOL_LOG("sg_destroy_shader: active context mismatch (must be same as for creation)");
+            _SG_TRACE_NOARGS(err_context_mismatch);
         }
     }
+    _SG_TRACE_ARGS(destroy_shader, shd_id);
 }
 
 SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
@@ -9355,8 +9587,10 @@ SOKOL_API_IMPL void sg_destroy_pipeline(sg_pipeline pip_id) {
         }
         else {
             SOKOL_LOG("sg_destroy_pipeline: active context mismatch (must be same as for creation)");
+            _SG_TRACE_NOARGS(err_context_mismatch);
         }
     }
+    _SG_TRACE_ARGS(destroy_pipeline, pip_id);
 }
 
 SOKOL_API_IMPL void sg_destroy_pass(sg_pass pass_id) {
@@ -9369,8 +9603,10 @@ SOKOL_API_IMPL void sg_destroy_pass(sg_pass pass_id) {
         }
         else {
             SOKOL_LOG("sg_destroy_pass: active context mismatch (must be same as for creation)");
+            _SG_TRACE_NOARGS(err_context_mismatch);
         }
     }
+    _SG_TRACE_ARGS(destroy_pass, pass_id);
 }
 
 SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height) {
@@ -9381,6 +9617,7 @@ SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int
     _sg.cur_pass.id = SG_INVALID_ID;
     _sg.pass_valid = true;
     _sg_begin_pass(0, &pa, width, height);
+    _SG_TRACE_ARGS(begin_default_pass, pass_action, width, height);
 }
 
 SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
@@ -9395,33 +9632,41 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         const int w = pass->color_atts[0].image->width;
         const int h = pass->color_atts[0].image->height;
         _sg_begin_pass(pass, &pa, w, h);
+        _SG_TRACE_ARGS(begin_pass, pass_id, pass_action);
     }
     else {
         _sg.pass_valid = false;
+        _SG_TRACE_NOARGS(err_pass_invalid);
     }
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
     if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_apply_viewport(x, y, width, height, origin_top_left);
+    _SG_TRACE_ARGS(apply_viewport, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
+    _SG_TRACE_ARGS(apply_scissor_rect, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.bindings_valid = false;
     if (!_sg_validate_apply_pipeline(pip_id)) {
         _sg.next_draw_valid = false;
+        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg.cur_pipeline = pip_id;
@@ -9430,13 +9675,15 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
     SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->shader_id.id));
     _sg_apply_pipeline(pip);
+    _SG_TRACE_ARGS(apply_pipeline, pip_id);
 }
 
-SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
-    SOKOL_ASSERT(bind);
-    SOKOL_ASSERT((bind->_start_canary == 0) && (bind->_end_canary==0));
-    if (!_sg_validate_apply_bindings(bind)) {
+SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
+    SOKOL_ASSERT(bindings);
+    SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
+    if (!_sg_validate_apply_bindings(bindings)) {
         _sg.next_draw_valid = false;
+        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
     _sg.bindings_valid = true;
@@ -9447,8 +9694,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     _sg_buffer_t* vbs[SG_MAX_SHADERSTAGE_BUFFERS] = { 0 };
     int num_vbs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++, num_vbs++) {
-        if (bind->vertex_buffers[i].id) {
-            vbs[i] = _sg_lookup_buffer(&_sg.pools, bind->vertex_buffers[i].id);
+        if (bindings->vertex_buffers[i].id) {
+            vbs[i] = _sg_lookup_buffer(&_sg.pools, bindings->vertex_buffers[i].id);
             SOKOL_ASSERT(vbs[i]);
             _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vbs[i]->slot.state);
             _sg.next_draw_valid &= !vbs[i]->append_overflow;
@@ -9459,8 +9706,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     }
 
     _sg_buffer_t* ib = 0;
-    if (bind->index_buffer.id) {
-        ib = _sg_lookup_buffer(&_sg.pools, bind->index_buffer.id);
+    if (bindings->index_buffer.id) {
+        ib = _sg_lookup_buffer(&_sg.pools, bindings->index_buffer.id);
         SOKOL_ASSERT(ib);
         _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == ib->slot.state);
         _sg.next_draw_valid &= !ib->append_overflow;
@@ -9469,8 +9716,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     _sg_image_t* vs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
     int num_vs_imgs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_vs_imgs++) {
-        if (bind->vs_images[i].id) {
-            vs_imgs[i] = _sg_lookup_image(&_sg.pools, bind->vs_images[i].id);
+        if (bindings->vs_images[i].id) {
+            vs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->vs_images[i].id);
             SOKOL_ASSERT(vs_imgs[i]);
             _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == vs_imgs[i]->slot.state);
         }
@@ -9482,8 +9729,8 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
     _sg_image_t* fs_imgs[SG_MAX_SHADERSTAGE_IMAGES] = { 0 };
     int num_fs_imgs = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++, num_fs_imgs++) {
-        if (bind->fs_images[i].id) {
-            fs_imgs[i] = _sg_lookup_image(&_sg.pools, bind->fs_images[i].id);
+        if (bindings->fs_images[i].id) {
+            fs_imgs[i] = _sg_lookup_image(&_sg.pools, bindings->fs_images[i].id);
             SOKOL_ASSERT(fs_imgs[i]);
             _sg.next_draw_valid &= (SG_RESOURCESTATE_VALID == fs_imgs[i]->slot.state);
         }
@@ -9492,9 +9739,13 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bind) {
         }
     }
     if (_sg.next_draw_valid) {
-        const int* vb_offsets = bind->vertex_buffer_offsets;
-        int ib_offset = bind->index_buffer_offset;
+        const int* vb_offsets = bindings->vertex_buffer_offsets;
+        int ib_offset = bindings->index_buffer_offset;
         _sg_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+        _SG_TRACE_ARGS(apply_bindings, bindings);
+    }
+    else {
+        _SG_TRACE_NOARGS(err_draw_invalid);
     }
 }
 
@@ -9504,12 +9755,18 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     SOKOL_ASSERT(data && (num_bytes > 0));
     if (!_sg_validate_apply_uniforms(stage, ub_index, data, num_bytes)) {
         _sg.next_draw_valid = false;
+        _SG_TRACE_NOARGS(err_draw_invalid);
         return;
     }
-    if (!(_sg.pass_valid && _sg.next_draw_valid)) {
+    if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
+    }
+    if (!_sg.next_draw_valid) {
+        _SG_TRACE_NOARGS(err_draw_invalid);
     }
     _sg_apply_uniforms(stage, ub_index, data, num_bytes);
+    _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data, num_bytes);
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
@@ -9518,52 +9775,64 @@ SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instance
             SOKOL_LOG("attempting to draw without resource bindings");
         }
     #endif
-    if (!(_sg.pass_valid && _sg.bindings_valid && _sg.next_draw_valid)) {
+    if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
+        return;
+    }
+    if (!_sg.next_draw_valid) {
+        _SG_TRACE_NOARGS(err_draw_invalid);
+        return;
+    }
+    if (!_sg.bindings_valid) {
+        _SG_TRACE_NOARGS(err_bindings_invalid);
         return;
     }
     _sg_draw(base_element, num_elements, num_instances);
+    _SG_TRACE_ARGS(draw, base_element, num_elements, num_instances);
 }
 
 SOKOL_API_IMPL void sg_end_pass(void) {
     if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
     _sg_end_pass();
     _sg.cur_pass.id = SG_INVALID_ID;
     _sg.cur_pipeline.id = SG_INVALID_ID;
     _sg.pass_valid = false;
+    _SG_TRACE_NOARGS(end_pass);
 }
 
 SOKOL_API_IMPL void sg_commit(void) {
     _sg_commit();
+    _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
 }
 
 SOKOL_API_IMPL void sg_reset_state_cache(void) {
     _sg_reset_state_cache();
+    _SG_TRACE_NOARGS(reset_state_cache);
 }
 
 SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
-    if (num_bytes == 0) {
-        return;
-    }
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (!(buf && buf->slot.state == SG_RESOURCESTATE_VALID)) {
-        return;
+    if ((num_bytes > 0) && buf && (buf->slot.state == SG_RESOURCESTATE_VALID)) {
+        if (_sg_validate_update_buffer(buf, data, num_bytes)) {
+            SOKOL_ASSERT(num_bytes <= buf->size);
+            /* only one update allowed per buffer and frame */
+            SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
+            /* update and append on same buffer in same frame not allowed */
+            SOKOL_ASSERT(buf->append_frame_index != _sg.frame_index);
+            _sg_update_buffer(buf, data, num_bytes);
+            buf->update_frame_index = _sg.frame_index;
+        }
     }
-    if (_sg_validate_update_buffer(buf, data, num_bytes)) {
-        SOKOL_ASSERT(num_bytes <= buf->size);
-        /* only one update allowed per buffer and frame */
-        SOKOL_ASSERT(buf->update_frame_index != _sg.frame_index);
-        /* update and append on same buffer in same frame not allowed */
-        SOKOL_ASSERT(buf->append_frame_index != _sg.frame_index);
-        _sg_update_buffer(buf, data, num_bytes);
-        buf->update_frame_index = _sg.frame_index;
-    }
+    _SG_TRACE_ARGS(update_buffer, buf_id, data, num_bytes);
 }
 
 SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_bytes) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    int result;
     if (buf) {
         /* rewind append cursor in a new frame */
         if (buf->append_frame_index != _sg.frame_index) {
@@ -9585,34 +9854,42 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
                 }
             }
         }
-        return start_pos;
+        result = start_pos;
     }
     else {
         /* FIXME: should we return -1 here? */
-        return 0;
+        result = 0;
     }
+    _SG_TRACE_ARGS(append_buffer, buf_id, data, num_bytes, result);
+    return result;
 }
 
 SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
-    if (buf) {
-        return buf->append_overflow;
-    }
-    else {
-        return false;
-    }
+    bool result = buf ? buf->append_overflow : false;
+    _SG_TRACE_ARGS(query_buffer_overflow, buf_id, result);
+    return result;
 }
 
 SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_content* data) {
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
-    if (!(img && img->slot.state == SG_RESOURCESTATE_VALID)) {
-        return;
+    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
+        if (_sg_validate_update_image(img, data)) {
+            SOKOL_ASSERT(img->upd_frame_index != _sg.frame_index);
+            _sg_update_image(img, data);
+            img->upd_frame_index = _sg.frame_index;
+        }
     }
-    if (_sg_validate_update_image(img, data)) {
-        SOKOL_ASSERT(img->upd_frame_index != _sg.frame_index);
-        _sg_update_image(img, data);
-        img->upd_frame_index = _sg.frame_index;
-    }
+    _SG_TRACE_ARGS(update_image, img_id, data);
+}
+
+SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
+    SOKOL_ASSERT(name);
+    _SG_TRACE_ARGS(push_debug_group, name);
+}
+
+SOKOL_API_IMPL void sg_pop_debug_group(void) {
+    _SG_TRACE_NOARGS(pop_debug_group);
 }
 
 /*--- DEPRECATED ---*/
@@ -9621,19 +9898,19 @@ SOKOL_API_IMPL void sg_apply_draw_state(const sg_draw_state* ds) {
     SOKOL_ASSERT(ds);
     SOKOL_ASSERT((ds->_start_canary==0) && (ds->_end_canary==0));
     sg_apply_pipeline(ds->pipeline);
-    sg_bindings bind;
-    memset(&bind, 0, sizeof(bind));
+    sg_bindings bindings;
+    memset(&bindings, 0, sizeof(bindings));
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
-        bind.vertex_buffers[i] = ds->vertex_buffers[i];
-        bind.vertex_buffer_offsets[i] = ds->vertex_buffer_offsets[i];
+        bindings.vertex_buffers[i] = ds->vertex_buffers[i];
+        bindings.vertex_buffer_offsets[i] = ds->vertex_buffer_offsets[i];
     }
-    bind.index_buffer = ds->index_buffer;
-    bind.index_buffer_offset = ds->index_buffer_offset;
+    bindings.index_buffer = ds->index_buffer;
+    bindings.index_buffer_offset = ds->index_buffer_offset;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        bind.vs_images[i] = ds->vs_images[i];
-        bind.fs_images[i] = ds->fs_images[i];
+        bindings.vs_images[i] = ds->vs_images[i];
+        bindings.fs_images[i] = ds->fs_images[i];
     }
-    sg_apply_bindings(&bind);
+    sg_apply_bindings(&bindings);
 }
 
 SOKOL_API_IMPL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
