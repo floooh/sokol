@@ -409,10 +409,17 @@ Mainly some "missing features" for desktop apps:
 
 - **05-Mar-2019**: sokol_gfx.h now has a 'trace hook' API, and I have started
 implementing optional debug-inspection-UI headers on top of Dear ImGui:
-    - sokol_gfx.h has a new function sg_install_trace_hook(), this allows
+    - sokol_gfx.h has a new function *sg_install_trace_hooks()_, this allows
       you to install a callback function for each public sokol_gfx.h function
       (and a couple or error callbacks). For more details, search for "TRACE HOOKS"
       in sokol_gfx.h
+    - when creating sokol_gfx.h resources, you can now set a 'debug label'
+      in the desc structure, this is ignored by sokol_gfx.h itself, but is
+      useful for debuggers or profilers hooking in via the new trace hooks
+    - likewise, two new functions *sg_push_debug_group()* and *sg_pop_debug_group()*
+      can be used to group related drawing functions under a name, this
+      is also ignored by sokol_gfx.h itself and only useful when hooking
+      into the API calls
     - I have started a new 'subproject' in the 'imgui' directory, this will
       contain a slowly growing set of optional debug-inspection-UI headers
       which allow to peek under the hood of the Sokol headers. The UIs are
