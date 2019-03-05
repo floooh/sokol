@@ -11,7 +11,65 @@
 
     The implementation must be compiled as C++ or Objective-C++, the
     declaration can be included in plain C sources.
-    
+
+    The sokol_gfx_imgui.h header recognizes the same preprocessor defines
+    that have been set for the actual Sokol headers (for instance
+    SOKOL_IMPL, SOKOL_MALLOC, SOKOL_LOG, etc...).
+
+    STEP BY STEP:
+    =============
+    --- include the sokol_gfx_imgui.h header after the actual Sokol header
+        implementations and the imgui.h header (and make sure this code
+        is compiled as C++ or Objective-C++)
+
+    --- add a Dear ImGui renderer to your application, and the basic
+        per-frame code to render an ImGui UI.
+
+    --- create an sg_imgui_t struct (which must be preserved between frames)
+        and initialize it with:
+
+            sg_imgui_init(&sg_imgui);
+
+    --- somewhere in the per-frame code call:
+
+            sg_imgui_draw(&sg_imgui)
+
+        this won't draw anything yet, since no windows are open.
+
+    --- open and close windows directly by setting the following public
+        booleans in the sg_imgui_t struct:
+
+            sg_imgui.buffers.open = true;
+            sg_imgui.images.open = true;
+            sg_imgui.shaders.open = true;
+            sg_imgui.pipelines.open = true;
+            sg_imgui.passes.open = true;
+            sg_imgui.capture.open = true;
+
+        ...for instance, to control the window visibility through
+        menu items, the following code can be used:
+
+            if (ImGui::BeginMainMenuBar()) {
+                if (ImGui::BeginMenu("sokol-gfx")) {
+                    ImGui::MenuItem("Buffers", 0, &sg_imgui.buffers.open);
+                    ImGui::MenuItem("Images", 0, &sg_imgui.images.open);
+                    ImGui::MenuItem("Shaders", 0, &sg_imgui.shaders.open);
+                    ImGui::MenuItem("Pipelines", 0, &sg_imgui.pipelines.open);
+                    ImGui::MenuItem("Passes", 0, &sg_imgui.passes.open);
+                    ImGui::MenuItem("Calls", 0, &sg_imgui.capture.open);
+                    ImGui::EndMenu();
+                }
+                ImGui::EndMainMenuBar();
+            }
+
+    --- finally before application shutdown, call:
+
+            sg_imgui_discard(&sg_imgui);
+
+        ...this is not strictly necessary because the application exits
+        anyway, but not doing this may trigger memory leak detection tools.
+
+
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
