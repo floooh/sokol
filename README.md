@@ -411,7 +411,7 @@ Mainly some "missing features" for desktop apps:
 implementing optional debug-inspection-UI headers on top of Dear ImGui:
     - sokol_gfx.h has a new function *sg_install_trace_hooks()*, this allows
       you to install a callback function for each public sokol_gfx.h function
-      (and a couple or error callbacks). For more details, search for "TRACE HOOKS"
+      (and a couple of error callbacks). For more details, search for "TRACE HOOKS"
       in sokol_gfx.h
     - when creating sokol_gfx.h resources, you can now set a 'debug label'
       in the desc structure, this is ignored by sokol_gfx.h itself, but is
