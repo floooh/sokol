@@ -525,8 +525,8 @@ if (ImGui::BeginMainMenuBar()) {
 
 The debug inspection headers also offer more granular drawing functions
 for more flexible integration into your own UI, for example the following
-```sokol_gfx_imgui.h``` functions only draw the window content (inside
-an ```ImGui::BeginChild() / ImGui::EndChild()``` pair:
+```sokol_gfx_imgui.h``` functions only draw the window content, so you
+can integrate the UIs into your own windows:
 
 ```cpp
 void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);

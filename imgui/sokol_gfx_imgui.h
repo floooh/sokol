@@ -70,6 +70,36 @@
         anyway, but not doing this may trigger memory leak detection tools.
 
 
+    ALTERNATIVE DRAWING FUNCTIONS:
+    ==============================
+    Instead of the convenient, but all-in-one sg_imgui_draw() function,
+    you can also use the following granular functions which might allow
+    better integration with your existing UI:
+
+    The following functions only render the window *content* (so you
+    can integrate the UI into you own windows):
+
+        void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
+        void sg_imgui_draw_images_content(sg_imgui_t* ctx);
+        void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
+        void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
+        void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
+        void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+
+    And these are the 'full window' drawing functions:
+
+        void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
+        void sg_imgui_draw_images_window(sg_imgui_t* ctx);
+        void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
+        void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
+        void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
+        void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+
+    Finer-grained drawing functions may be moved to the public API
+    in the future as needed.
+
+
+
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
