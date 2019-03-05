@@ -2697,8 +2697,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, uint32_t buf_id
             ImGui::Text("Size:  %d", buf_ui->desc.size);
             if (buf_ui->desc.usage != SG_USAGE_IMMUTABLE) {
                 ImGui::Separator();
+				#if !defined(SOKOL_D3D11)
                 ImGui::Text("Num Slots:     %d", buf->num_slots);
                 ImGui::Text("Active Slot:   %d", buf->active_slot);
+				#endif
                 ImGui::Text("Update Frame Index: %d", buf->update_frame_index);
                 ImGui::Text("Append Frame Index: %d", buf->append_frame_index);
                 ImGui::Text("Append Pos:         %d", buf->append_pos);
@@ -2763,8 +2765,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, uint32_t img_id)
             ImGui::Text("Max LOD:           %.3f", desc->max_lod);
             if (img->usage != SG_USAGE_IMMUTABLE) {
                 ImGui::Separator();
+				#if !defined(SOKOL_D3D11)
                 ImGui::Text("Num Slots:     %d", img->num_slots);
                 ImGui::Text("Active Slot:   %d", img->active_slot);
+				#endif
                 ImGui::Text("Update Frame Index: %d", img->upd_frame_index);
             }
         }
