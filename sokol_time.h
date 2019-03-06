@@ -140,6 +140,7 @@ typedef struct {
     uint64_t start;
 } _stm_state_t;
 #elif defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
 typedef struct {
     uint32_t initialized;
     double start;
