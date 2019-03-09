@@ -382,6 +382,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_APP_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -659,6 +660,7 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_APP_IMPL_INCLUDED (1)
 
 #ifdef _MSC_VER
 #pragma warning(push)

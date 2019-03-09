@@ -79,6 +79,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_TIME_INCLUDED (1)
 #include <stdint.h>
 
 #ifndef SOKOL_API_DECL
@@ -105,6 +106,7 @@ SOKOL_API_DECL double stm_ns(uint64_t ticks);
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_TIME_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL

@@ -126,6 +126,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#if !defined(SOKOL_GFX_INCLUDED)
+#error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
+#endif
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -578,6 +582,13 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 
 /*=== IMPLEMENTATION =========================================================*/
 #if defined SOKOL_IMPL
+#if !defined(SOKOL_GFX_IMPL_INCLUDED)
+#error "Please include the sokol_gfx.h implementation before the sokol_gfx_imgui.h implementation"
+#endif
+#if !defined(IMGUI_VERSION)
+#error "Please include imgui.h before the sokol_gfx_imgui.h implementation"
+#endif
+
 #include <string.h>
 #include <stdio.h>      /* snprintf */
 

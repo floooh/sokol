@@ -232,6 +232,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_ARGS_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -281,6 +282,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_ARGS_IMPL_INCLUDED (1)
 #include <string.h> /* memset, strcmp */
 
 #if defined(__EMSCRIPTEN__)

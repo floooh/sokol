@@ -406,6 +406,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_GFX_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -1749,6 +1750,8 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_GFX_IMPL_INCLUDED (1)
+
 #if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_DUMMY_BACKEND))
 #error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL or SOKOL_DUMMY_BACKEND"
 #endif
