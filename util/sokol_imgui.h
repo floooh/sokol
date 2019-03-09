@@ -107,7 +107,7 @@
 
     --- At the start of a frame, call:
 
-        simgui_newframe(int width, int height, double delta_time)
+        simgui_new_frame(int width, int height, double delta_time)
 
         'width' and 'height' are the dimensions of the rendering surface,
         passed to ImGui::GetIO().DisplaySize.
@@ -117,7 +117,7 @@
         For example, if you're using sokol_app.h and render to the
         default framebuffer:
 
-        simgui_newframe(sapp_width(), sapp_height(), delta_time);
+        simgui_new_frame(sapp_width(), sapp_height(), delta_time);
 
     --- at the end of the frame, before the sg_end_pass() where you
         want to render the UI, call:
@@ -196,7 +196,7 @@ typedef struct simgui_desc_t {
 } simgui_desc_t;
 
 SOKOL_API_DECL void simgui_setup(const simgui_desc_t* desc);
-SOKOL_API_DECL void simgui_newframe(int width, int height, double delta_time);
+SOKOL_API_DECL void simgui_new_frame(int width, int height, double delta_time);
 SOKOL_API_DECL void simgui_render(void);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_API_DECL bool simgui_handle_event(const sapp_event* ev);
@@ -520,7 +520,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.vbuf);
 }
 
-SOKOL_API_IMPL void simgui_newframe(int width, int height, double delta_time) {
+SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize.x = (float) width;
     io.DisplaySize.y = (float) height;
