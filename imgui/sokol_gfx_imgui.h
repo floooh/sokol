@@ -1009,10 +1009,6 @@ _SOKOL_PRIVATE void _sg_imgui_buffer_created(sg_imgui_t* ctx, sg_buffer res_id, 
     buf->res_id = res_id;
     buf->desc = *desc;
     buf->label = _sg_imgui_make_str(desc->label);
-
-    /* resolve default state */
-    buf->desc.type = _sg_def(buf->desc.type, SG_BUFFERTYPE_VERTEXBUFFER);
-    buf->desc.usage = _sg_def(buf->desc.usage, SG_USAGE_IMMUTABLE);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_buffer_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1028,20 +1024,6 @@ _SOKOL_PRIVATE void _sg_imgui_image_created(sg_imgui_t* ctx, sg_image res_id, in
     img->desc = *desc;
     img->ui_scale = 1.0f;
     img->label = _sg_imgui_make_str(desc->label);
-
-    /* resolve default state */
-    img->desc.type = _sg_def(img->desc.type, SG_IMAGETYPE_2D);
-    img->desc.depth = _sg_def(img->desc.depth, 1);
-    img->desc.num_mipmaps = _sg_def(img->desc.num_mipmaps, 1);
-    img->desc.usage = _sg_def(img->desc.usage, SG_USAGE_IMMUTABLE);
-    img->desc.pixel_format = _sg_def(img->desc.pixel_format, SG_PIXELFORMAT_RGBA8);
-    img->desc.sample_count = _sg_def(img->desc.sample_count, 1);
-    img->desc.min_filter = _sg_def(img->desc.min_filter, SG_FILTER_NEAREST);
-    img->desc.mag_filter = _sg_def(img->desc.mag_filter, SG_FILTER_NEAREST);
-    img->desc.wrap_u = _sg_def(img->desc.wrap_u, SG_WRAP_REPEAT);
-    img->desc.wrap_v = _sg_def(img->desc.wrap_v, SG_WRAP_REPEAT);
-    img->desc.wrap_w = _sg_def(img->desc.wrap_w, SG_WRAP_REPEAT);
-    img->desc.max_anisotropy = _sg_def(img->desc.max_anisotropy, 1);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_image_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1149,43 +1131,6 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
             ad->sem_name = pip->attr_sem_name[i].buf;
         }
     }
-    
-    /* need to resolve default values */
-    sg_depth_stencil_state* ds = &pip->desc.depth_stencil;
-    sg_stencil_state* dsf = &ds->stencil_front;
-    sg_stencil_state* dsb = &ds->stencil_back;
-    sg_blend_state* blend = &pip->desc.blend;
-    sg_rasterizer_state* rs = &pip->desc.rasterizer;
-    pip->desc.primitive_type = _sg_def(desc->primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
-    pip->desc.index_type = _sg_def(desc->index_type, SG_INDEXTYPE_NONE);
-    dsf->fail_op = _sg_def(dsf->fail_op, SG_STENCILOP_KEEP);
-    dsf->depth_fail_op = _sg_def(dsf->depth_fail_op, SG_STENCILOP_KEEP);
-    dsf->pass_op = _sg_def(dsf->pass_op, SG_STENCILOP_KEEP);
-    dsf->compare_func = _sg_def(dsf->compare_func, SG_COMPAREFUNC_ALWAYS);
-    dsb->fail_op = _sg_def(dsb->fail_op, SG_STENCILOP_KEEP);
-    dsb->depth_fail_op = _sg_def(dsb->depth_fail_op, SG_STENCILOP_KEEP);
-    dsb->pass_op = _sg_def(dsb->pass_op, SG_STENCILOP_KEEP);
-    dsb->compare_func = _sg_def(dsb->compare_func, SG_COMPAREFUNC_ALWAYS);
-    ds->depth_compare_func = _sg_def(ds->depth_compare_func, SG_COMPAREFUNC_ALWAYS);
-    blend->src_factor_rgb = _sg_def(blend->src_factor_rgb, SG_BLENDFACTOR_ONE);
-    blend->dst_factor_rgb = _sg_def(blend->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
-    blend->op_rgb = _sg_def(blend->op_rgb, SG_BLENDOP_ADD);
-    blend->src_factor_alpha = _sg_def(blend->src_factor_alpha, SG_BLENDFACTOR_ONE);
-    blend->dst_factor_alpha = _sg_def(blend->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
-    blend->op_alpha = _sg_def(blend->op_alpha, SG_BLENDOP_ADD);
-    if (blend->color_write_mask == SG_COLORMASK_NONE) {
-        blend->color_write_mask = 0;
-    }
-    else {
-        blend->color_write_mask = (uint8_t) _sg_def((sg_color_mask)blend->color_write_mask, SG_COLORMASK_RGBA);
-    }
-    blend->color_attachment_count = _sg_def(blend->color_attachment_count, 1);
-    blend->color_format = _sg_def(blend->color_format, SG_PIXELFORMAT_RGBA8);
-    blend->depth_format = _sg_def(blend->depth_format, SG_PIXELFORMAT_DEPTHSTENCIL);
-    rs->cull_mode = _sg_def(rs->cull_mode, SG_CULLMODE_NONE);
-    rs->face_winding = _sg_def(rs->face_winding, SG_FACEWINDING_CW);
-    rs->sample_count = _sg_def(rs->sample_count, 1);
-    
     /* resolve vertex layout strides and offsets */
     int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
@@ -1212,8 +1157,6 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     /* compute vertex strides if needed, and default-resolve step_func and rate */
     for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
         sg_buffer_layout_desc* l_desc = &pip->desc.layout.buffers[buf_index];
-        l_desc->step_func = _sg_def(l_desc->step_func, SG_VERTEXSTEP_PER_VERTEX);
-        l_desc->step_rate = _sg_def(l_desc->step_rate, 1);
         if (l_desc->stride == 0) {
             l_desc->stride = auto_offset[buf_index];
         }
