@@ -4302,17 +4302,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     pip->rast = desc->rasterizer;
 
     /* resolve vertex attributes */
-    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        auto_offset[layout_index] = 0;
-    }
-    bool use_auto_offset = true;
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         pip->gl_attrs[attr_index].vb_index = -1;
-        /* to use computed offsets, *all* attr offsets must be 0 */
-        if (desc->layout.attrs[attr_index].offset != 0) {
-            use_auto_offset = false;
-        }
     }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
@@ -4338,8 +4329,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
             else {
                 gl_attr->divisor = (int8_t) step_rate;
             }
+            SOKOL_ASSERT(l_desc->stride > 0);
             gl_attr->stride = (uint8_t) l_desc->stride;
-            gl_attr->offset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
+            gl_attr->offset = a_desc->offset;
             gl_attr->size = (uint8_t) _sg_gl_vertexformat_size(a_desc->format);
             gl_attr->type = _sg_gl_vertexformat_type(a_desc->format);
             gl_attr->normalized = _sg_gl_vertexformat_normalized(a_desc->format);
@@ -4348,14 +4340,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         else {
             SOKOL_LOG("Vertex attribute not found in shader: ");
             SOKOL_LOG(a_desc->name);
-        }
-        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
-    }
-    /* fill computed vertex strides that haven't been explicitely provided */
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        _sg_gl_attr_t* gl_attr = &pip->gl_attrs[attr_index];
-        if ((gl_attr->vb_index != -1) && (0 == gl_attr->stride)) {
-            gl_attr->stride = (uint8_t) auto_offset[gl_attr->vb_index];
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -5940,17 +5924,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     pip->d3d11_stencil_ref = desc->depth_stencil.stencil_ref;
 
     /* create input layout object */
-    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        auto_offset[layout_index] = 0;
-    }
-    bool use_auto_offset = true;
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        /* to use computed offsets, all attr offsets must be 0 */
-        if (desc->layout.attrs[attr_index].offset != 0) {
-            use_auto_offset = false;
-        }
-    }
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     memset(d3d11_comps, 0, sizeof(d3d11_comps));
     int attr_index = 0;
@@ -5968,20 +5941,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         d3d11_comp->SemanticIndex = a_desc->sem_index;
         d3d11_comp->Format = _sg_d3d11_vertex_format(a_desc->format);
         d3d11_comp->InputSlot = a_desc->buffer_index;
-        d3d11_comp->AlignedByteOffset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
+        d3d11_comp->AlignedByteOffset = a_desc->offset;
         d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
         if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
             d3d11_comp->InstanceDataStepRate = step_rate;
         }
-        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
         pip->vertex_layout_valid[a_desc->buffer_index] = true;
     }
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         if (pip->vertex_layout_valid[layout_index]) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
-            const int stride = l_desc->stride ? l_desc->stride : auto_offset[layout_index];
-            SOKOL_ASSERT(stride > 0);
-            pip->d3d11_vb_strides[layout_index] = stride;
+            SOKOL_ASSERT(l_desc->stride > 0);
+            pip->d3d11_vb_strides[layout_index] = l_desc->stride;
         }
         else {
             pip->d3d11_vb_strides[layout_index] = 0;
@@ -7459,18 +7430,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
 
     /* create vertex-descriptor */
     MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
-    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        auto_offset[layout_index] = 0;
-    }
-    /* to use computed offsets, *all* attr offsets must be 0 */
-    bool use_auto_offset = true;
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        if (desc->layout.attrs[attr_index].offset != 0) {
-            use_auto_offset = false;
-            break;
-        }
-    }
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
         if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
@@ -7478,18 +7437,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         }
         SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
         vtx_desc.attributes[attr_index].format = _sg_mtl_vertex_format(a_desc->format);
-        vtx_desc.attributes[attr_index].offset = use_auto_offset ? auto_offset[a_desc->buffer_index] : a_desc->offset;
+        vtx_desc.attributes[attr_index].offset = a_desc->offset;
         vtx_desc.attributes[attr_index].bufferIndex = a_desc->buffer_index + SG_MAX_SHADERSTAGE_UBS;
-        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
         pip->vertex_layout_valid[a_desc->buffer_index] = true;
     }
     for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         if (pip->vertex_layout_valid[layout_index]) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
             const int mtl_vb_slot = layout_index + SG_MAX_SHADERSTAGE_UBS;
-            const int stride = l_desc->stride ? l_desc->stride : auto_offset[layout_index];
-            SOKOL_ASSERT(stride > 0);
-            vtx_desc.layouts[mtl_vb_slot].stride = stride;
+            SOKOL_ASSERT(l_desc->stride > 0);
+            vtx_desc.layouts[mtl_vb_slot].stride = l_desc->stride;
             vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_desc->step_func);
             vtx_desc.layouts[mtl_vb_slot].stepRate = l_desc->step_rate;
         }
@@ -9135,7 +9092,34 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         b_desc->step_rate = _sg_def(b_desc->step_rate, 1);
     }
 
-    /* FIXME: move attr-offset-computation here? */
+    /* resolve vertex layout strides and offsets */
+    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
+    memset(auto_offset, 0, sizeof(auto_offset));
+    bool use_auto_offset = true;
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        /* to use computed offsets, *all* attr offsets must be 0 */
+        if (def.layout.attrs[attr_index].offset != 0) {
+            use_auto_offset = false;
+        }
+    }
+    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+        sg_vertex_attr_desc* a_desc = &def.layout.attrs[attr_index];
+        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+            break;
+        }
+        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
+        if (use_auto_offset) {
+            a_desc->offset = auto_offset[a_desc->buffer_index];
+        }
+        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
+    }
+    /* compute vertex strides if needed */
+    for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
+        sg_buffer_layout_desc* l_desc = &def.layout.buffers[buf_index];
+        if (l_desc->stride == 0) {
+            l_desc->stride = auto_offset[buf_index];
+        }
+    }
 
     return def;
 }
