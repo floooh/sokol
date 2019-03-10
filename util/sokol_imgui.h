@@ -494,7 +494,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.blend.color_format = _simgui.desc.color_format;
     pip_desc.blend.depth_format = _simgui.desc.depth_format;
     pip_desc.rasterizer.sample_count = _simgui.desc.sample_count;
-    pip_desc.label = "sokol-imgui-pipelne";
+    pip_desc.label = "sokol-imgui-pipeline";
     _simgui.pip = sg_make_pipeline(&pip_desc);
 
     sg_pop_debug_group();
