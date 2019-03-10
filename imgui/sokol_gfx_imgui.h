@@ -3103,16 +3103,15 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
     /* check if all the required information for drawing the structured uniform block content
         is available, otherwise just render a generic hexdump
     */
-    bool draw_dump = false;
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, args->pipeline.id);
     if (!pip) {
         ImGui::Text("Pipeline object no longer alive!");
-        draw_dump = true;
+        return;
     }
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, pip->shader_id.id);
     if (!shd) {
         ImGui::Text("Shader object no longer alive!");
-        draw_dump = true;
+        return;
     }
     const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_slot_index(pip->shader_id.id)];
     SOKOL_ASSERT(shd_ui->res_id.id == pip->shader_id.id);
@@ -3120,6 +3119,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
         ub_desc = &shd_ui->desc.vs.uniform_blocks[args->ub_index] :
         ub_desc = &shd_ui->desc.fs.uniform_blocks[args->ub_index];
     SOKOL_ASSERT(args->num_bytes <= ub_desc->size);
+    bool draw_dump = false;
     if (ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID) {
         draw_dump = true;
     }
