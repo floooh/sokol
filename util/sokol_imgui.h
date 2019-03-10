@@ -25,8 +25,6 @@
     override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
@@ -231,15 +229,6 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#if !defined(SOKOL_MALLOC) && !defined(SOKOL_FREE)
-    #include <stdlib.h>
-#endif
-#if !defined(SOKOL_MALLOC)
-    #define SOKOL_MALLOC(s) malloc(s)
-#endif
-#if !defined(SOKOL_FREE)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__)
