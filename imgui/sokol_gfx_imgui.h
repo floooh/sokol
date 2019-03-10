@@ -1131,36 +1131,6 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
             ad->sem_name = pip->attr_sem_name[i].buf;
         }
     }
-    /* resolve vertex layout strides and offsets */
-    int auto_offset[SG_MAX_SHADERSTAGE_BUFFERS];
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
-        auto_offset[layout_index] = 0;
-    }
-    bool use_auto_offset = true;
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        /* to use computed offsets, *all* attr offsets must be 0 */
-        if (pip->desc.layout.attrs[attr_index].offset != 0) {
-            use_auto_offset = false;
-        }
-    }
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        sg_vertex_attr_desc* a_desc = &pip->desc.layout.attrs[attr_index];
-        if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
-            break;
-        }
-        SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
-        if (use_auto_offset) {
-            a_desc->offset = auto_offset[a_desc->buffer_index];
-        }
-        auto_offset[a_desc->buffer_index] += _sg_vertexformat_bytesize(a_desc->format);
-    }
-    /* compute vertex strides if needed, and default-resolve step_func and rate */
-    for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
-        sg_buffer_layout_desc* l_desc = &pip->desc.layout.buffers[buf_index];
-        if (l_desc->stride == 0) {
-            l_desc->stride = auto_offset[buf_index];
-        }
-    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
