@@ -230,6 +230,10 @@
 
         ...before calling sokol_gfx functions again
 
+    --- you can inspect the original sg_desc structure handed to sg_setup()
+        by calling sg_query_desc(). This will return an sg_desc struct with
+        the default values patched in instead of any zero-initialized values
+
     BACKEND-SPECIFIC TOPICS:
     ========================
     --- the GL backends need to know about the internal structure of uniform
@@ -1661,6 +1665,7 @@ typedef struct sg_desc {
 SOKOL_API_DECL void sg_setup(const sg_desc* desc);
 SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
+SOKOL_API_DECL sg_desc sg_query_desc(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
@@ -1972,7 +1977,9 @@ enum {
     _SG_DEFAULT_SHADER_POOL_SIZE = 32,
     _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
-    _SG_DEFAULT_CONTEXT_POOL_SIZE = 16
+    _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
+    _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
+    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
 };
 
 /* helper macros */
@@ -2377,13 +2384,11 @@ typedef struct {
 #elif defined(SOKOL_METAL)
 
 enum {
-    _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
     _SG_MTL_UB_ALIGN = 256,
     #else
     _SG_MTL_UB_ALIGN = 16,
     #endif
-    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_MTL_INVALID_SLOT_INDEX = 0
 };
 
@@ -2722,9 +2727,9 @@ typedef enum {
 
 /*=== GENERIC BACKEND STATE ==================================================*/
 
-/* FIXME: merge all of the above in here */
 typedef struct {
     bool valid;
+    sg_desc desc;       /* original desc with default values patched in */
     uint32_t frame_index;
     sg_context active_context;
     sg_pass cur_pass;
@@ -6854,11 +6859,11 @@ _SOKOL_PRIVATE MTLSamplerMipFilter _sg_mtl_mip_filter(sg_filter f) {
 _SOKOL_PRIVATE void _sg_mtl_init_pool(const sg_desc* desc) {
     _sg.mtl.idpool.num_slots = 2 *
         (
-            2 * _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE) +
-            5 * _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE) +
-            4 * _sg_def(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE) +
-            2 * _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE) +
-            _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE)
+            2 * desc->buffer_pool_size +
+            5 * desc->image_pool_size +
+            4 * desc->shader_pool_size +
+            2 * desc->pipeline_pool_size +
+            desc->pass_pool_size
         );
     _sg_mtl_idpool = [NSMutableArray arrayWithCapacity:_sg.mtl.idpool.num_slots];
     NSNull* null = [NSNull null];
@@ -6975,7 +6980,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 */
 /* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    _sg.mtl.sampler_cache.capacity = _sg_def(desc->mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    SOKOL_ASSERT(desc->mtl_sampler_cache_size > 0);
+    _sg.mtl.sampler_cache.capacity = desc->mtl_sampler_cache_size;
     _sg.mtl.sampler_cache.num_items = 0;
     const int size = _sg.mtl.sampler_cache.capacity * sizeof(_sg_mtl_sampler_cache_item_t);
     _sg.mtl.sampler_cache.items = (_sg_mtl_sampler_cache_item_t*)SOKOL_MALLOC(size);
@@ -7067,6 +7073,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->mtl_device);
     SOKOL_ASSERT(desc->mtl_renderpass_descriptor_cb);
     SOKOL_ASSERT(desc->mtl_drawable_cb);
+    SOKOL_ASSERT(desc->mtl_global_uniform_buffer_size > 0);
     _sg_mtl_init_pool(desc);
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
@@ -7074,7 +7081,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg.mtl.renderpass_descriptor_cb = desc->mtl_renderpass_descriptor_cb;
     _sg.mtl.drawable_cb = desc->mtl_drawable_cb;
     _sg.mtl.frame_index = 1;
-    _sg.mtl.ub_size = _sg_def(desc->mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    _sg.mtl.ub_size = desc->mtl_global_uniform_buffer_size;
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl_device;
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
@@ -8169,43 +8176,43 @@ _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools_t* p, const sg_desc* desc) {
     SOKOL_ASSERT(p);
     SOKOL_ASSERT(desc);
     /* note: the pools here will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((desc->buffer_pool_size >= 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->buffer_pool, _sg_def(desc->buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE));
+    SOKOL_ASSERT((desc->buffer_pool_size > 0) && (desc->buffer_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->buffer_pool, desc->buffer_pool_size);
     size_t buffer_pool_byte_size = sizeof(_sg_buffer_t) * p->buffer_pool.size;
     p->buffers = (_sg_buffer_t*) SOKOL_MALLOC(buffer_pool_byte_size);
     SOKOL_ASSERT(p->buffers);
     memset(p->buffers, 0, buffer_pool_byte_size);
 
-    SOKOL_ASSERT((desc->image_pool_size >= 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->image_pool, _sg_def(desc->image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE));
+    SOKOL_ASSERT((desc->image_pool_size > 0) && (desc->image_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->image_pool, desc->image_pool_size);
     size_t image_pool_byte_size = sizeof(_sg_image_t) * p->image_pool.size;
     p->images = (_sg_image_t*) SOKOL_MALLOC(image_pool_byte_size);
     SOKOL_ASSERT(p->images);
     memset(p->images, 0, image_pool_byte_size);
 
-    SOKOL_ASSERT((desc->shader_pool_size >= 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->shader_pool, _sg_def(desc->shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE));
+    SOKOL_ASSERT((desc->shader_pool_size > 0) && (desc->shader_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->shader_pool, desc->shader_pool_size);
     size_t shader_pool_byte_size = sizeof(_sg_shader_t) * p->shader_pool.size;
     p->shaders = (_sg_shader_t*) SOKOL_MALLOC(shader_pool_byte_size);
     SOKOL_ASSERT(p->shaders);
     memset(p->shaders, 0, shader_pool_byte_size);
 
-    SOKOL_ASSERT((desc->pipeline_pool_size >= 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->pipeline_pool, _sg_def(desc->pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE));
+    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->pipeline_pool, desc->pipeline_pool_size);
     size_t pipeline_pool_byte_size = sizeof(_sg_pipeline_t) * p->pipeline_pool.size;
     p->pipelines = (_sg_pipeline_t*) SOKOL_MALLOC(pipeline_pool_byte_size);
     SOKOL_ASSERT(p->pipelines);
     memset(p->pipelines, 0, pipeline_pool_byte_size);
 
-    SOKOL_ASSERT((desc->pass_pool_size >= 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->pass_pool, _sg_def(desc->pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE));
+    SOKOL_ASSERT((desc->pass_pool_size > 0) && (desc->pass_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->pass_pool, desc->pass_pool_size);
     size_t pass_pool_byte_size = sizeof(_sg_pass_t) * p->pass_pool.size;
     p->passes = (_sg_pass_t*) SOKOL_MALLOC(pass_pool_byte_size);
     SOKOL_ASSERT(p->passes);
     memset(p->passes, 0, pass_pool_byte_size);
 
-    SOKOL_ASSERT((desc->context_pool_size >= 0) && (desc->context_pool_size < _SG_MAX_POOL_SIZE));
-    _sg_init_pool(&p->context_pool, _sg_def(desc->context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE));
+    SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SG_MAX_POOL_SIZE));
+    _sg_init_pool(&p->context_pool, desc->context_pool_size);
     size_t context_pool_byte_size = sizeof(_sg_context_t) * p->context_pool.size;
     p->contexts = (_sg_context_t*) SOKOL_MALLOC(context_pool_byte_size);
     SOKOL_ASSERT(p->contexts);
@@ -9240,9 +9247,21 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     memset(&_sg, 0, sizeof(_sg));
-    _sg_setup_pools(&_sg.pools, desc);
+    _sg.desc = *desc;
+
+    /* replace zero-init items with their default values */
+    _sg.desc.buffer_pool_size = _sg_def(_sg.desc.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
+    _sg.desc.image_pool_size = _sg_def(_sg.desc.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
+    _sg.desc.shader_pool_size = _sg_def(_sg.desc.shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE);
+    _sg.desc.pipeline_pool_size = _sg_def(_sg.desc.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
+    _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
+    _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
+    _sg.desc.mtl_global_uniform_buffer_size = _sg_def(_sg.desc.mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    _sg.desc.mtl_sampler_cache_size = _sg_def(_sg.desc.mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+
+    _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
-    _sg_setup_backend(desc);
+    _sg_setup_backend(&_sg.desc);
     sg_setup_context();
     _sg.valid = true;
 }
@@ -9266,6 +9285,10 @@ SOKOL_API_IMPL void sg_shutdown(void) {
 
 SOKOL_API_IMPL bool sg_isvalid(void) {
     return _sg.valid;
+}
+
+SOKOL_API_IMPL sg_desc sg_query_desc(void) {
+    return _sg.desc;
 }
 
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
