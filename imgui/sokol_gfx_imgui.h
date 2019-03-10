@@ -2857,6 +2857,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(sg_imgui_t* ctx, const sg_shader
     else if (stage->byte_code) {
         if (ImGui::TreeNode("Byte Code")) {
             ImGui::Text("Byte-code display currently not supported.");
+            ImGui::TreePop();
         }
     }
 }
