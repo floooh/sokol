@@ -99,8 +99,8 @@
     on all audio backends.
 
     If you want to use the callback-model, you need to provide a stream
-    callback function in stream_cb, otherwise keep the stream_cb member
-    initialized to zero.
+    callback function either in saudio_desc.stream_cb or saudio_desc.stream_userdata_cb,
+    otherwised keep both function pointers zero-initialized.
 
     Use push model and default playback parameters:
 
@@ -112,6 +112,14 @@
             .stream_cb = my_stream_callback
         });
 
+    The standard stream callback doesn't have a user data argument, if you want
+    that, use the alternative stream_userdata_cb and also set the user_data pointer:
+
+        saudio_setup(&(saudio_desc){
+            .stream_userdata_cb = my_stream_callback,
+            .user_data = &my_data
+        });
+
     The following playback parameters can be provided through the
     saudio_desc struct:
 
@@ -121,9 +129,10 @@
         int num_channels    -- number of channels, default: 1 (mono)
         int buffer_frames   -- number of frames in streaming buffer, default: 2048
 
-    Stream callback parameters:
+    The stream callback prototype (either with or without userdata):
 
         void (*stream_cb)(float* buffer, int num_frames, int num_channels)
+        void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data)
             Function pointer to the user-provide stream callback.
 
     Push-model parameters:
@@ -168,7 +177,16 @@
     To use Sokol Audio in stream-callback-mode, provide a callback function
     like this in the saudio_desc struct when calling saudio_setup():
 
-    void stream_cb(float* buffer, int num_frames, int num_channels) { ... }
+    void stream_cb(float* buffer, int num_frames, int num_channels) {
+        ...
+    }
+
+    Or the alternative version with a user-data argument:
+
+    void stream_userdata_cb(float* buffer, int num_frames, int num_channels, void* user_data) {
+        my_data_t* my_data = (my_data_t*) user_data;
+        ...
+    }
 
     The job of the callback function is to fill the *buffer* with 32-bit
     float sample values.
@@ -334,6 +352,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_AUDIO_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -351,7 +370,9 @@ typedef struct saudio_desc {
     int buffer_frames;      /* number of frames in streaming buffer */
     int packet_frames;      /* number of frames in a packet */
     int num_packets;        /* number of packets in packet queue */
-    void (*stream_cb)(float* buffer, int num_frames, int num_channels);  /* optional streaming callback */
+    void (*stream_cb)(float* buffer, int num_frames, int num_channels);  /* optional streaming callback (no user data) */
+    void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); /*... and with user data */
+    void* user_data;        /* optional user data argument for stream_userdata_cb */
 } saudio_desc;
 
 /* setup sokol-audio */
@@ -377,6 +398,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_IMPL
+#define SOKOL_AUDIO_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
 #ifndef SOKOL_API_IMPL
@@ -573,6 +595,8 @@ typedef struct {
 typedef struct {
     bool valid;
     void (*stream_cb)(float* buffer, int num_frames, int num_channels);
+    void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data);
+    void* user_data;
     int sample_rate;            /* sample rate */
     int buffer_frames;          /* number of frames in streaming buffer */
     int bytes_per_frame;        /* filled by backend */
@@ -585,6 +609,19 @@ typedef struct {
 } _saudio_state_t;
 
 static _saudio_state_t _saudio;
+
+_SOKOL_PRIVATE bool _saudio_has_callback(void) {
+    return (_saudio.stream_cb || _saudio.stream_userdata_cb);
+}
+
+_SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int num_channels) {
+    if (_saudio.stream_cb) {
+        _saudio.stream_cb(buffer, num_frames, num_channels);
+    }
+    else if (_saudio.stream_userdata_cb) {
+        _saudio.stream_userdata_cb(buffer, num_frames, num_channels, _saudio.user_data);
+    }
+}
 
 /*=== MUTEX IMPLEMENTATION ===================================================*/
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
@@ -813,10 +850,10 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
-    if (_saudio.stream_cb) {
+    if (_saudio_has_callback()) {
         const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
         const int num_channels = _saudio.num_channels;
-        _saudio.stream_cb((float*)buffer->mAudioData, num_frames, num_channels);
+        _saudio_stream_callback((float*)buffer->mAudioData, num_frames, num_channels);
     }
     else {
         uint8_t* ptr = (uint8_t*)buffer->mAudioData;
@@ -887,8 +924,8 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
         }
         else {
             /* fill the streaming buffer with new data */
-            if (_saudio.stream_cb) {
-                _saudio.stream_cb(_saudio.backend.buffer, _saudio.backend.buffer_frames, _saudio.num_channels);
+            if (_saudio_has_callback()) {
+                _saudio_stream_callback(_saudio.backend.buffer, _saudio.backend.buffer_frames, _saudio.num_channels);
             }
             else {
                 if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.buffer, _saudio.backend.buffer_byte_size)) {
@@ -969,8 +1006,8 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
 /* fill intermediate buffer with new data and reset buffer_pos */
 _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
-    if (_saudio.stream_cb) {
-        _saudio.stream_cb(_saudio.backend.thread.src_buffer, _saudio.backend.thread.src_buffer_frames, _saudio.num_channels);
+    if (_saudio_has_callback()) {
+        _saudio_stream_callback(_saudio.backend.thread.src_buffer, _saudio.backend.thread.src_buffer_frames, _saudio.num_channels);
     }
     else {
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.thread.src_buffer, _saudio.backend.thread.src_buffer_byte_size)) {
@@ -1166,8 +1203,8 @@ extern "C" {
 EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
     SOKOL_ASSERT(_saudio.backend.buffer);
     if (num_frames == _saudio.buffer_frames) {
-        if (_saudio.stream_cb) {
-            _saudio.stream_cb((float*)_saudio.backend.buffer, num_frames, _saudio.num_channels);
+        if (_saudio_has_callback()) {
+            _saudio_stream_callback((float*)_saudio.backend.buffer, num_frames, _saudio.num_channels);
         }
         else {
             const int num_bytes = num_frames * _saudio.bytes_per_frame;
@@ -1298,6 +1335,8 @@ SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     memset(&_saudio, 0, sizeof(_saudio));
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;
+    _saudio.stream_userdata_cb = desc->stream_userdata_cb;
+    _saudio.user_data = desc->user_data;
     _saudio.sample_rate = _saudio_def(_saudio.desc.sample_rate, _SAUDIO_DEFAULT_SAMPLE_RATE);
     _saudio.buffer_frames = _saudio_def(_saudio.desc.buffer_frames, _SAUDIO_DEFAULT_BUFFER_FRAMES);
     _saudio.packet_frames = _saudio_def(_saudio.desc.packet_frames, _SAUDIO_DEFAULT_PACKET_FRAMES);

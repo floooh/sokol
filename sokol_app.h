@@ -127,22 +127,44 @@
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
 
-        .init_cb (void (*init_cb)(void))
+        .init_cb (void (*)(void))
             This function is called once after the application window,
             3D rendering context and swap chain have been created. The
             function takes no arguments and has no return value.
-        .frame_cb (void (*frame_cb)(void))
+        .frame_cb (void (*)(void))
             This is the per-frame callback, which is usually called 60
             times per second. This is where your application would update
             most of its state and perform all rendering.
-        .cleanup_cb (void (*cleanup_cb)(void))
+        .cleanup_cb (void (*)(void))
             The cleanup callback is called once right before the application
             quits.
-        .event_cb (void (*event_cb)(const sapp_event* event))
+        .event_cb (void (*)(const sapp_event* event))
             The event callback is mainly for input handling, but in the
             future may also be used to communicate other types of events
             to the application. Keep the event_cb struct member zero-initialized
             if your application doesn't require event handling.
+        .fail_cb (void (*)(const char* msg))
+            The fail callback is called when a fatal error is encountered
+            during start which doesn't allow the program to continue.
+            Providing a callback here gives you a chance to show an error message
+            to the user. The default behaviour is SOKOL_LOG(msg)
+
+        As you can see, those 'standard callbacks' don't have a user_data
+        argument, so any data that needs to be preserved between callbacks
+        must live in global variables. If you're allergic to global variables
+        or cannot use them for other reasons, an alternative set of callbacks
+        can be defined in sapp_desc, together with a user_data pointer:
+
+        .user_data (void*)
+            The user-data argument for the callbacks below
+        .init_userdata_cb (void (*)(void* user_data))
+        .frame_userdata_cb (void (*)(void* user_data))
+        .cleanup_userdata_cb (void (*)(void* user_data))
+        .event_cb (void(*)(const sapp_event* event, void* user_data))
+        .fail_cb (void(*)(const char* msg, void* user_data))
+            These are the user-data versions of the callback functions. You
+            can mix those with the standard callbacks that don't have the
+            user_data argument.
 
         NOTE that there's also an alternative compile mode where sokol_app.h
         doesn't "hijack" the main() function. Search below for SOKOL_NO_ENTRY.
@@ -360,6 +382,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_APP_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -568,28 +591,35 @@ typedef struct sapp_event {
 } sapp_event;
 
 typedef struct sapp_desc {
-    void (*init_cb)(void);
+    void (*init_cb)(void);                  /* these are the user-provided callbacks without user data */
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
-    int width;
-    int height;
-    int sample_count;
-    int swap_interval;
-    bool high_dpi;
-    bool fullscreen;
-    bool alpha;
-    bool premultiplied_alpha;
-    bool preserve_drawing_buffer;
-    const char* window_title;
-    const char* html5_canvas_name;
-    bool html5_canvas_resize;
-    bool ios_keyboard_resizes_canvas;
-    /* use GLES2 even if GLES3 is available */
-    bool gl_force_gles2;
-    /* if true, user is expected to manage cursor image and visibility on SAPP_EVENTTYPE_UPDATE_CURSOR */
-    bool user_cursor;
+    
+    void* user_data;                        /* these are the user-provided callbacks with user data */
+    void (*init_userdata_cb)(void*);
+    void (*frame_userdata_cb)(void*);
+    void (*cleanup_userdata_cb)(void*);
+    void (*event_userdata_cb)(const sapp_event*, void*);
+    void (*fail_userdata_cb)(const char*, void*);
+
+    int width;                          /* the preferred width of the window / canvas */
+    int height;                         /* the preferred height of the window / canvas */
+    int sample_count;                   /* MSAA sample count */
+    int swap_interval;                  /* the preferred swap interval (ignored on some platforms) */
+    bool high_dpi;                      /* whether the rendering canvas is full-resolution on HighDPI displays */
+    bool fullscreen;                    /* whether the window should be created in fullscreen mode */
+    bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
+    const char* window_title;           /* the window title as UTF-8 encoded string */
+    bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+
+    const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
+    bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
+    bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
+    bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
+    bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
+    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
 /* user-provided functions */
@@ -630,6 +660,7 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_APP_IMPL_INCLUDED (1)
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -655,8 +686,8 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
         #endif
     #else
         /* MacOS */
-        #if !defined(SOKOL_METAL)
-        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL")
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
+        #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
         #endif
     #endif
 #elif defined(__EMSCRIPTEN__)
@@ -775,10 +806,49 @@ _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
     if (_sapp.desc.fail_cb) {
         _sapp.desc.fail_cb(msg);
     }
+    else if (_sapp.desc.fail_userdata_cb) {
+        _sapp.desc.fail_userdata_cb(msg, _sapp.desc.user_data);
+    }
     else {
         SOKOL_LOG(msg);
     }
     SOKOL_ABORT();
+}
+
+_SOKOL_PRIVATE void _sapp_call_init(void) {
+    if (_sapp.desc.init_cb) {
+        _sapp.desc.init_cb();
+    }
+    else if (_sapp.desc.init_userdata_cb) {
+        _sapp.desc.init_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_frame(void) {
+    if (_sapp.desc.frame_cb) {
+        _sapp.desc.frame_cb();
+    }
+    else if (_sapp.desc.frame_userdata_cb) {
+        _sapp.desc.frame_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_cleanup(void) {
+    if (_sapp.desc.cleanup_cb) {
+        _sapp.desc.cleanup_cb();
+    }
+    else if (_sapp.desc.cleanup_userdata_cb) {
+        _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
+    if (_sapp.desc.event_cb) {
+        _sapp.desc.event_cb(e);
+    }
+    else if (_sapp.desc.event_userdata_cb) {
+        _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
@@ -799,9 +869,6 @@ _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
 }
 
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc->init_cb);
-    SOKOL_ASSERT(desc->frame_cb);
-    SOKOL_ASSERT(desc->cleanup_cb);
     memset(&_sapp, 0, sizeof(_sapp));
     _sapp.desc = *desc;
     _sapp.first_frame = true;
@@ -835,7 +902,7 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
     /* only send events when an event callback is set, and the init function was called */
-    return _sapp.desc.event_cb && _sapp.init_called;
+    return (_sapp.desc.event_cb || _sapp.desc.event_userdata_cb) && _sapp.init_called;
 }
 
 _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
@@ -850,10 +917,10 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
-        _sapp.desc.init_cb();
+        _sapp_call_init();
         _sapp.init_called = true;
     }
-    _sapp.desc.frame_cb();
+    _sapp_call_frame();
     _sapp.frame_count++;
 }
 
@@ -863,13 +930,20 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 
 /*== MacOS ===================================================================*/
 #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+
+#if defined(SOKOL_METAL)
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
+#elif defined(SOKOL_GLCORE33)
+#include <Cocoa/Cocoa.h>
+#include <OpenGL/gl3.h>
+#endif
 
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
+#if defined(SOKOL_METAL)
 @interface _sapp_macos_mtk_view_dlg : NSObject<MTKViewDelegate>
 @end
 @interface _sapp_macos_view : MTKView
@@ -877,13 +951,28 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
     NSTrackingArea* trackingArea;
 }
 @end
+#elif defined(SOKOL_GLCORE33)
+@interface _sapp_macos_view : NSOpenGLView
+{
+    NSTrackingArea* trackingArea;
+}
+- (void)timerFired:(id)sender;
+- (void)prepareOpenGL;
+- (void)drawRect:(NSRect)bounds;
+@end
+#endif
 
 static NSWindow* _sapp_macos_window_obj;
 static _sapp_macos_window_delegate* _sapp_macos_win_dlg_obj;
 static _sapp_macos_app_delegate* _sapp_macos_app_dlg_obj;
 static _sapp_macos_view* _sapp_view_obj;
+#if defined(SOKOL_METAL)
 static _sapp_macos_mtk_view_dlg* _sapp_macos_mtk_view_dlg_obj;
 static id<MTLDevice> _sapp_mtl_device_obj;
+#elif defined(SOKOL_GLCORE33)
+static NSOpenGLPixelFormat* _sapp_macos_glpixelformat_obj;
+static NSTimer* _sapp_macos_timer_obj;
+#endif
 static uint32_t _sapp_macos_flags_changed_store;
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
@@ -1021,9 +1110,15 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
-    const CGSize fb_size = [_sapp_view_obj drawableSize];
-    _sapp.framebuffer_width = fb_size.width;
-    _sapp.framebuffer_height = fb_size.height;
+    #if defined(SOKOL_METAL)
+        const CGSize fb_size = [_sapp_view_obj drawableSize];
+        _sapp.framebuffer_width = fb_size.width;
+        _sapp.framebuffer_height = fb_size.height;
+    #elif defined(SOKOL_GLCORE33)
+        const NSRect fb_rect = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        _sapp.framebuffer_width = fb_rect.size.width;
+        _sapp.framebuffer_height = fb_rect.size.height;
+    #endif
     const NSRect bounds = [_sapp_view_obj bounds];
     _sapp.window_width = bounds.size.width;
     _sapp.window_height = bounds.size.height;
@@ -1059,8 +1154,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSWindowStyleMaskClosable |
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
+    NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
     _sapp_macos_window_obj = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height)
+        initWithContentRect:window_rect
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
@@ -1069,24 +1165,67 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_window_obj.restorable = YES;
     _sapp_macos_win_dlg_obj = [[_sapp_macos_window_delegate alloc] init];
     _sapp_macos_window_obj.delegate = _sapp_macos_win_dlg_obj;
-    _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
-    _sapp_macos_mtk_view_dlg_obj = [[_sapp_macos_mtk_view_dlg alloc] init];
-    _sapp_view_obj = [[_sapp_macos_view alloc] init];
-    [_sapp_view_obj updateTrackingAreas];
-    _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-    _sapp_view_obj.delegate = _sapp_macos_mtk_view_dlg_obj;
-    _sapp_view_obj.device = _sapp_mtl_device_obj;
-    _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-    _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-    _sapp_view_obj.sampleCount = _sapp.sample_count;
-    _sapp_macos_window_obj.contentView = _sapp_view_obj;
-    [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
-    if (!_sapp.desc.high_dpi) {
-        CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-        _sapp_view_obj.drawableSize = drawable_size;
-    }
-    _sapp_macos_update_dimensions();
-    _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
+    #if defined(SOKOL_METAL)
+        _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
+        _sapp_macos_mtk_view_dlg_obj = [[_sapp_macos_mtk_view_dlg alloc] init];
+        _sapp_view_obj = [[_sapp_macos_view alloc] init];
+        [_sapp_view_obj updateTrackingAreas];
+        _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp_view_obj.delegate = _sapp_macos_mtk_view_dlg_obj;
+        _sapp_view_obj.device = _sapp_mtl_device_obj;
+        _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        _sapp_view_obj.sampleCount = _sapp.sample_count;
+        _sapp_macos_window_obj.contentView = _sapp_view_obj;
+        [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
+        if (!_sapp.desc.high_dpi) {
+            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+            _sapp_view_obj.drawableSize = drawable_size;
+        }
+        _sapp_macos_update_dimensions();
+        _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
+    #elif defined(SOKOL_GLCORE33)
+        NSOpenGLPixelFormatAttribute attrs[32];
+        int i = 0;
+        attrs[i++] = NSOpenGLPFAAccelerated;
+        attrs[i++] = NSOpenGLPFADoubleBuffer;
+        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
+        attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
+        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
+        if (_sapp.sample_count > 1) {
+            attrs[i++] = NSOpenGLPFAMultisample;
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = _sapp.sample_count;
+        }
+        else {
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
+        }
+        attrs[i++] = 0;
+        _sapp_macos_glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        SOKOL_ASSERT(_sapp_macos_glpixelformat_obj != nil);
+
+        _sapp_view_obj = [[_sapp_macos_view alloc]
+            initWithFrame:window_rect
+            pixelFormat:_sapp_macos_glpixelformat_obj];
+        [_sapp_view_obj updateTrackingAreas];
+        if (_sapp.desc.high_dpi) {
+            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
+        }
+
+        _sapp_macos_window_obj.contentView = _sapp_view_obj;
+        [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
+
+        _sapp_macos_update_dimensions();
+
+        _sapp_macos_timer_obj = [NSTimer timerWithTimeInterval:0.001
+            target:_sapp_view_obj
+            selector:@selector(timerFired:)
+            userInfo:nil
+            repeats:YES];
+        [[NSRunLoop currentRunLoop] addTimer:_sapp_macos_timer_obj forMode:NSDefaultRunLoopMode];
+    #endif
     if (_sapp.desc.fullscreen) {
         [_sapp_macos_window_obj toggleFullScreen:self];
     }
@@ -1126,7 +1265,7 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.modifiers = mod;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1135,20 +1274,20 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mod;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
     return YES;
 }
 
@@ -1166,6 +1305,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
+#if defined(SOKOL_METAL)
 @implementation _sapp_macos_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
     @autoreleasepool {
@@ -1176,8 +1316,26 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     /* this is required by the protocol, but we can't do anything useful here */
 }
 @end
+#endif
 
 @implementation _sapp_macos_view
+#if defined(SOKOL_GLCORE33)
+- (void)timerFired:(id)sender {
+    [self setNeedsDisplay:YES];
+}
+- (void)prepareOpenGL {
+    GLint swapInt = 1;
+    NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
+    [ctx setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
+    [ctx makeCurrentContext];
+}
+- (void)drawRect:(NSRect)bound {
+    _sapp_macos_frame();
+    glFlush();
+    [[_sapp_view_obj openGLContext] flushBuffer];
+}
+#endif
+
 - (BOOL)isOpaque {
     return YES;
 }
@@ -1244,7 +1402,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1263,7 +1421,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                     continue;
                 }
                 _sapp.event.char_code = codepoint;
-                _sapp.desc.event_cb(&_sapp.event);
+                _sapp_call_event(&_sapp.event);
             }
         }
     }
@@ -1375,7 +1533,7 @@ int main(int argc, char* argv[]) {
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -1575,7 +1733,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if ((c < 0xD800) || (c > 0xDFFF)) {
                         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
                         _sapp.event.char_code = c;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
                 if (c <= 32) {
@@ -1588,10 +1746,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                     if (k != SAPP_KEYCODE_INVALID) {
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
                         _sapp.event.key_code = k;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                         _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
                         _sapp.event.key_code = k;
-                        _sapp.desc.event_cb(&_sapp.event);
+                        _sapp_call_event(&_sapp.event);
                     }
                 }
             }
@@ -1600,10 +1758,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             /* this was a backspace */
             _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
             _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     return NO;
@@ -1648,7 +1806,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
             }
         }
         if (_sapp.event.num_touches > 0) {
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1811,7 +1969,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
@@ -1832,7 +1990,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved
     }
     if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     return true;
 }
@@ -1892,7 +2050,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             }
             _sapp.event.mouse_x = _sapp.mouse_x;
             _sapp.event.mouse_y = _sapp.mouse_y;
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -1916,7 +2074,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         }
         _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
         _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
     return true;
@@ -2024,7 +2182,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2079,7 +2237,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
             }
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2216,8 +2374,8 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     attrs.depth = true;
     attrs.stencil = true;
     attrs.antialias = _sapp.sample_count > 1;
-    attrs.premultipliedAlpha = _sapp.desc.premultiplied_alpha;
-    attrs.preserveDrawingBuffer = _sapp.desc.preserve_drawing_buffer;
+    attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
+    attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
     #if defined(SOKOL_GLES3)
         if (_sapp.desc.gl_force_gles2) {
@@ -2423,8 +2581,8 @@ static HWND _sapp_win32_hwnd;
 static HDC _sapp_win32_dc;
 static bool _sapp_win32_in_create_window;
 static bool _sapp_win32_dpi_aware;
-static int _sapp_win32_content_scale;
-static int _sapp_win32_window_scale;
+static float _sapp_win32_content_scale;
+static float _sapp_win32_window_scale;
 static float _sapp_win32_mouse_scale;
 static bool _sapp_win32_iconified;
 typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
@@ -3569,13 +3727,18 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-        const int cur_width = (rect.right - rect.left) / _sapp_win32_window_scale;
-        const int cur_height = (rect.bottom - rect.top) / _sapp_win32_window_scale;
+        const int cur_width = (int)((float)(rect.right - rect.left) / _sapp_win32_window_scale);
+        const int cur_height = (int)((float)(rect.bottom - rect.top) / _sapp_win32_window_scale);
         if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
             _sapp.window_width = cur_width;
             _sapp.window_height = cur_height;
-            _sapp.framebuffer_width = _sapp.window_width * _sapp_win32_content_scale;
-            _sapp.framebuffer_height = _sapp.window_height * _sapp_win32_content_scale;
+        }
+
+        const int fb_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
+        const int fb_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
+        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+            _sapp.framebuffer_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
+            _sapp.framebuffer_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
             /* prevent a framebuffer size of 0 when window is minimized */
             if (_sapp.framebuffer_width == 0) {
                 _sapp.framebuffer_width = 1;
@@ -3583,6 +3746,7 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
             if (_sapp.framebuffer_height == 0) {
                 _sapp.framebuffer_height = 1;
             }
+
             return true;
         }
     }
@@ -3617,7 +3781,7 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp.event.mouse_button = btn;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3627,7 +3791,7 @@ _SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.scroll_x = -x / 30.0f;
         _sapp.event.scroll_y = y / 30.0f;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3636,7 +3800,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.key_code = _sapp.keycodes[vk];
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3645,14 +3809,14 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -3789,8 +3953,8 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     }
     else {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) (_sapp.window_width * _sapp_win32_window_scale);
-        rect.bottom = (int) (_sapp.window_height * _sapp_win32_window_scale);
+        rect.right = (int) ((float)_sapp.window_width * _sapp_win32_window_scale);
+        rect.bottom = (int) ((float)_sapp.window_height * _sapp_win32_window_scale);
     }
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
@@ -3857,20 +4021,20 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
         /* clamp window scale to an integer factor */
-        _sapp_win32_window_scale = (int)((float)dpix / 96.0f);
+        _sapp_win32_window_scale = (float)dpix / 96.0f;
     }
     else {
-        _sapp_win32_window_scale = 1;
+        _sapp_win32_window_scale = 1.0f;
     }
     if (_sapp.desc.high_dpi) {
         _sapp_win32_content_scale = _sapp_win32_window_scale;
         _sapp_win32_mouse_scale = 1.0f;
     }
     else {
-        _sapp_win32_content_scale = 1;
+        _sapp_win32_content_scale = 1.0f;
         _sapp_win32_mouse_scale = 1.0f / _sapp_win32_window_scale;
     }
-    _sapp.dpi_scale = (float) _sapp_win32_content_scale;
+    _sapp.dpi_scale = _sapp_win32_content_scale;
     if (user32) {
         FreeLibrary(user32);
     }
@@ -3922,7 +4086,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
             _sapp_wgl_swap_buffers();
         #endif
     }
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
 
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
@@ -4145,7 +4309,7 @@ _SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         SOKOL_LOG("event_cb()");
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -4204,7 +4368,7 @@ _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
         /* egl context is bound, cleanup gracefully */
         if (_sapp.init_called && !_sapp.cleanup_called) {
             SOKOL_LOG("cleanup_cb()");
-            _sapp.desc.cleanup_cb();
+            _sapp_call_cleanup();
             _sapp.cleanup_called = true;
         }
     }
@@ -4284,7 +4448,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
             dst->changed = true;
         }
     }
-    _sapp.desc.event_cb(&_sapp.event);
+    _sapp_call_event(&_sapp.event);
     return true;
 }
 
@@ -6115,7 +6279,7 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
 _SOKOL_PRIVATE void _sapp_x11_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6135,7 +6299,7 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp.event.modifiers = mods;
         _sapp.event.mouse_x = _sapp.mouse_x;
         _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6145,7 +6309,7 @@ _SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
         _sapp.event.modifiers = mods;
         _sapp.event.scroll_x = x;
         _sapp.event.scroll_y = y;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6154,7 +6318,7 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp_init_event(type);
         _sapp.event.key_code = key;
         _sapp.event.modifiers = mods;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6163,7 +6327,7 @@ _SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, uint32_t mods) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.char_code = chr;
         _sapp.event.modifiers = mods;
-        _sapp.desc.event_cb(&_sapp.event);
+        _sapp_call_event(&_sapp.event);
     }
 }
 
@@ -6477,7 +6641,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
     }
-    _sapp.desc.cleanup_cb();
+    _sapp_call_cleanup();
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);

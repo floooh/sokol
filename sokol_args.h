@@ -232,6 +232,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_ARGS_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -281,6 +282,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
+#define SOKOL_ARGS_IMPL_INCLUDED (1)
 #include <string.h> /* memset, strcmp */
 
 #if defined(__EMSCRIPTEN__)
@@ -627,7 +629,7 @@ EMSCRIPTEN_KEEPALIVE void _sargs_add_kvp(const char* key, const char* val) {
 #endif
 
 /* JS function to extract arguments from the page URL */
-EM_JS(void, sargs_js_parse_url, (), {
+EM_JS(void, sargs_js_parse_url, (void), {
     var params = new URLSearchParams(window.location.search).entries();
     for (var p = params.next(); !p.done; p = params.next()) {
         var key = p.value[0];
