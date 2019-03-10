@@ -3477,6 +3477,8 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
 
 SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    /* restore original trace hooks */
+    sg_install_trace_hooks(&ctx->hooks);
     ctx->init_tag = 0;
     _sg_imgui_capture_discard(ctx);
     if (ctx->buffers.slots) {
