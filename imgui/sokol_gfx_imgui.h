@@ -3372,11 +3372,12 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     ctx->hooks = sg_install_trace_hooks(&hooks);
 
     /* allocate resource debug-info slots */
-    ctx->buffers.num_slots = _sg.pools.buffer_pool.size;
-    ctx->images.num_slots = _sg.pools.image_pool.size;
-    ctx->shaders.num_slots = _sg.pools.shader_pool.size;
-    ctx->pipelines.num_slots = _sg.pools.pipeline_pool.size;
-    ctx->passes.num_slots = _sg.pools.pass_pool.size;
+    sg_desc desc = sg_query_desc();
+    ctx->buffers.num_slots = desc.buffer_pool_size;
+    ctx->images.num_slots = desc.image_pool_size;
+    ctx->shaders.num_slots = desc.shader_pool_size;
+    ctx->pipelines.num_slots = desc.pipeline_pool_size;
+    ctx->passes.num_slots = desc.pass_pool_size;
 
     const int buffer_pool_size = ctx->buffers.num_slots * sizeof(sg_imgui_buffer_t);
     ctx->buffers.slots = (sg_imgui_buffer_t*) _sg_imgui_alloc(buffer_pool_size);
