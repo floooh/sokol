@@ -407,6 +407,27 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **05-Mar-2019**: sokol_gfx.h now has a 'trace hook' API, and I have started
+implementing optional debug-inspection-UI headers on top of Dear ImGui:
+    - sokol_gfx.h has a new function *sg_install_trace_hooks()*, this allows
+      you to install a callback function for each public sokol_gfx.h function
+      (and a couple of error callbacks). For more details, search for "TRACE HOOKS"
+      in sokol_gfx.h
+    - when creating sokol_gfx.h resources, you can now set a 'debug label'
+      in the desc structure, this is ignored by sokol_gfx.h itself, but is
+      useful for debuggers or profilers hooking in via the new trace hooks
+    - likewise, two new functions *sg_push_debug_group()* and *sg_pop_debug_group()*
+      can be used to group related drawing functions under a name, this
+      is also ignored by sokol_gfx.h itself and only useful when hooking
+      into the API calls
+    - I have started a new 'subproject' in the 'imgui' directory, this will
+      contain a slowly growing set of optional debug-inspection-UI headers
+      which allow to peek under the hood of the Sokol headers. The UIs are
+      implemented with [Dear ImGui](https://github.com/ocornut/imgui). Again,
+      see the README in the 'imgui' directory and the headers in there 
+      for details, and check out the live demos on the [Sokol Sample Webpage](https://floooh.github.io/sokol-html5/)
+      (click on the little UI buttons in the top right corner of each thumbnail)
+
 - **21-Feb-2019**: sokol_app.h and sokol_audio.h now have an alternative
 set of callbacks with user_data arguments. This is useful if you don't
 want or cannot store your own application state in global variables.

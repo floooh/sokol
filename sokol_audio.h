@@ -352,6 +352,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_AUDIO_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -397,6 +398,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_IMPL
+#define SOKOL_AUDIO_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
 #ifndef SOKOL_API_IMPL
