@@ -542,15 +542,15 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 
 /*=== IMPLEMENTATION =========================================================*/
 #if defined SOKOL_IMPL
-#if !defined(SOKOL_GFX_IMPL_INCLUDED)
-#error "Please include the sokol_gfx.h implementation before the sokol_gfx_imgui.h implementation"
-#endif
 #if !defined(IMGUI_VERSION)
 #error "Please include imgui.h before the sokol_gfx_imgui.h implementation"
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 #ifndef SOKOL_MALLOC
     #include <stdlib.h>
@@ -573,6 +573,20 @@ _SOKOL_PRIVATE int _sg_imgui_slot_index(uint32_t id) {
     int slot_index = (int) (id & _SG_IMGUI_SLOT_MASK);
     SOKOL_ASSERT(0 != slot_index);
     return slot_index;
+}
+
+_SOKOL_PRIVATE int _sg_imgui_uniform_size(sg_uniform_type type, int count) {
+    switch (type) {
+        case SG_UNIFORMTYPE_INVALID:    return 0;
+        case SG_UNIFORMTYPE_FLOAT:      return 4 * count;
+        case SG_UNIFORMTYPE_FLOAT2:     return 8 * count;
+        case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
+        case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
+        case SG_UNIFORMTYPE_MAT4:       return 64 * count;
+        default:
+            SOKOL_UNREACHABLE;
+            return -1;
+    }
 }
 
 _SOKOL_PRIVATE void* _sg_imgui_alloc(int size) {
@@ -2936,7 +2950,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
                         ImGui::Text("???");
                         break;
                 }
-                uptrf += _sg_uniform_size(ud->type, 1) / sizeof(float);
+                uptrf += _sg_imgui_uniform_size(ud->type, 1) / sizeof(float);
             }
         }
     }
