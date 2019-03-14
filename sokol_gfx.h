@@ -1540,12 +1540,6 @@ typedef struct sg_trace_hooks {
     void (*update_buffer)(sg_buffer buf, const void* data_ptr, int data_size, void* user_data);
     void (*update_image)(sg_image img, const sg_image_content* data, void* user_data);
     void (*append_buffer)(sg_buffer buf, const void* data_ptr, int data_size, int result, void* user_data);
-    void (*query_buffer_overflow)(sg_buffer buf, bool result, void* user_data);
-    void (*query_buffer_state)(sg_buffer buf, sg_resource_state result, void* user_data);
-    void (*query_image_state)(sg_image img, sg_resource_state result, void* user_data);
-    void (*query_shader_state)(sg_shader shd, sg_resource_state result, void* user_data);
-    void (*query_pipeline_state)(sg_pipeline pip, sg_resource_state result, void* user_data);
-    void (*query_pass_state)(sg_pass pass, sg_resource_state result, void* user_data);
     void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
     void (*begin_pass)(sg_pass pass, const sg_pass_action* pass_action, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
@@ -9576,35 +9570,30 @@ SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
 SOKOL_API_IMPL sg_resource_state sg_query_buffer_state(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     sg_resource_state res = buf ? buf->slot.state : SG_RESOURCESTATE_INVALID;
-    _SG_TRACE_ARGS(query_buffer_state, buf_id, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_image_state(sg_image img_id) {
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     sg_resource_state res = img ? img->slot.state : SG_RESOURCESTATE_INVALID;
-    _SG_TRACE_ARGS(query_image_state, img_id, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_shader_state(sg_shader shd_id) {
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     sg_resource_state res = shd ? shd->slot.state : SG_RESOURCESTATE_INVALID;
-    _SG_TRACE_ARGS(query_shader_state, shd_id, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pipeline_state(sg_pipeline pip_id) {
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     sg_resource_state res = pip ? pip->slot.state : SG_RESOURCESTATE_INVALID;
-    _SG_TRACE_ARGS(query_pipeline_state, pip_id, res);
     return res;
 }
 
 SOKOL_API_IMPL sg_resource_state sg_query_pass_state(sg_pass pass_id) {
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     sg_resource_state res = pass ? pass->slot.state : SG_RESOURCESTATE_INVALID;
-    _SG_TRACE_ARGS(query_pass_state, pass_id, res);
     return res;
 }
 
@@ -10023,7 +10012,6 @@ SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const void* data, int num_
 SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     bool result = buf ? buf->append_overflow : false;
-    _SG_TRACE_ARGS(query_buffer_overflow, buf_id, result);
     return result;
 }
 

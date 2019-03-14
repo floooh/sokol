@@ -235,12 +235,6 @@ typedef enum {
     SG_IMGUI_CMD_UPDATE_BUFFER,
     SG_IMGUI_CMD_UPDATE_IMAGE,
     SG_IMGUI_CMD_APPEND_BUFFER,
-    SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW,
-    SG_IMGUI_CMD_QUERY_BUFFER_STATE,
-    SG_IMGUI_CMD_QUERY_IMAGE_STATE,
-    SG_IMGUI_CMD_QUERY_SHADER_STATE,
-    SG_IMGUI_CMD_QUERY_PIPELINE_STATE,
-    SG_IMGUI_CMD_QUERY_PASS_STATE,
     SG_IMGUI_CMD_BEGIN_DEFAULT_PASS,
     SG_IMGUI_CMD_BEGIN_PASS,
     SG_IMGUI_CMD_APPLY_VIEWPORT,
@@ -338,36 +332,6 @@ typedef struct {
     int data_size;
     int result;
 } sg_imgui_args_append_buffer_t;
-
-typedef struct {
-    sg_buffer buffer;
-    bool result;
-} sg_imgui_args_query_buffer_overflow_t;
-
-typedef struct {
-    sg_buffer buffer;
-    sg_resource_state result;
-} sg_imgui_args_query_buffer_state_t;
-
-typedef struct {
-    sg_image image;
-    sg_resource_state result;
-} sg_imgui_args_query_image_state_t;
-
-typedef struct {
-    sg_shader shader;
-    sg_resource_state result;
-} sg_imgui_args_query_shader_state_t;
-
-typedef struct {
-    sg_pipeline pipeline;
-    sg_resource_state result;
-} sg_imgui_args_query_pipeline_state_t;
-
-typedef struct {
-    sg_pass pass;
-    sg_resource_state result;
-} sg_imgui_args_query_pass_state_t;
 
 typedef struct {
     sg_pass_action action;
@@ -492,12 +456,6 @@ typedef union {
     sg_imgui_args_update_buffer_t update_buffer;
     sg_imgui_args_update_image_t update_image;
     sg_imgui_args_append_buffer_t append_buffer;
-    sg_imgui_args_query_buffer_overflow_t query_buffer_overflow;
-    sg_imgui_args_query_buffer_state_t query_buffer_state;
-    sg_imgui_args_query_image_state_t query_image_state;
-    sg_imgui_args_query_shader_state_t query_shader_state;
-    sg_imgui_args_query_pipeline_state_t query_pipeline_state;
-    sg_imgui_args_query_pass_state_t query_pass_state;
     sg_imgui_args_begin_default_pass_t begin_default_pass;
     sg_imgui_args_begin_pass_t begin_pass;
     sg_imgui_args_apply_viewport_t apply_viewport;
@@ -1340,48 +1298,6 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
                 item->args.append_buffer.result);
             break;
 
-        case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.query_buffer_overflow.buffer);
-            snprintf(str.buf, len, "%d: sg_query_buffer_overflow(buf=%s) => %s", 
-                index, res_id.buf,
-                _sg_imgui_bool_string(item->args.query_buffer_overflow.result));
-            break;
-
-        case SG_IMGUI_CMD_QUERY_BUFFER_STATE:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.query_buffer_state.buffer);
-            snprintf(str.buf, len, "%d: sg_query_buffer_state(buf=%s) => %s",
-                index, res_id.buf,
-                _sg_imgui_resourcestate_string(item->args.query_buffer_state.result));
-            break;
-
-        case SG_IMGUI_CMD_QUERY_IMAGE_STATE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.query_image_state.image);
-            snprintf(str.buf, len, "%d: sg_query_image_state(img=%s) => %s",
-                index, res_id.buf,
-                _sg_imgui_resourcestate_string(item->args.query_image_state.result));
-            break;
-
-        case SG_IMGUI_CMD_QUERY_SHADER_STATE:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.query_shader_state.shader);
-            snprintf(str.buf, len, "%d: sg_query_shader_state(shd=%s) => %s",
-                index, res_id.buf,
-                _sg_imgui_resourcestate_string(item->args.query_shader_state.result));
-            break;
-
-        case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.query_pipeline_state.pipeline);
-            snprintf(str.buf, len, "%d: sg_query_pipeline_state(pip=%s) => %s",
-                index, res_id.buf,
-                _sg_imgui_resourcestate_string(item->args.query_pipeline_state.result));
-            break;
-
-        case SG_IMGUI_CMD_QUERY_PASS_STATE:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.query_pass_state.pass);
-            snprintf(str.buf, len, "%d: sg_query_pass_state(pass=%s) => %s",
-                index, res_id.buf,
-                _sg_imgui_resourcestate_string(item->args.query_pass_state.result));
-            break;
-
         case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
             snprintf(str.buf, len, "%d: sg_begin_default_pass(pass_action=.., width=%d, height=%d)",
                 index,
@@ -1816,96 +1732,6 @@ _SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const void* data_ptr,
     }
     if (ctx->hooks.append_buffer) {
         ctx->hooks.append_buffer(buf, data_ptr, data_size, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_buffer_overflow(sg_buffer buf, bool result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_buffer_overflow.buffer = buf;
-        item->args.query_buffer_overflow.result = result;
-    }
-    if (ctx->hooks.query_buffer_overflow) {
-        ctx->hooks.query_buffer_overflow(buf, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_buffer_state(sg_buffer buf, sg_resource_state result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_BUFFER_STATE;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_buffer_state.buffer = buf;
-        item->args.query_buffer_state.result = result;
-    }
-    if (ctx->hooks.query_buffer_state) {
-        ctx->hooks.query_buffer_state(buf, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_image_state(sg_image img, sg_resource_state result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_IMAGE_STATE;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_image_state.image = img;
-        item->args.query_image_state.result = result;
-    }
-    if (ctx->hooks.query_image_state) {
-        ctx->hooks.query_image_state(img, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_shader_state(sg_shader shd, sg_resource_state result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_SHADER_STATE;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_shader_state.shader = shd;
-        item->args.query_shader_state.result = result;
-    }
-    if (ctx->hooks.query_shader_state) {
-        ctx->hooks.query_shader_state(shd, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_pipeline_state(sg_pipeline pip, sg_resource_state result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_PIPELINE_STATE;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_pipeline_state.pipeline = pip;
-        item->args.query_pipeline_state.result = result;
-    }
-    if (ctx->hooks.query_pipeline_state) {
-        ctx->hooks.query_pipeline_state(pip, result, ctx->hooks.user_data);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_imgui_query_pass_state(sg_pass pass, sg_resource_state result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_PASS_STATE;
-        item->color = _SG_IMGUI_COLOR_RSRC;
-        item->args.query_pass_state.pass = pass;
-        item->args.query_pass_state.result = result;
-    }
-    if (ctx->hooks.query_pass_state) {
-        ctx->hooks.query_pass_state(pass, result, ctx->hooks.user_data);
     }
 }
 
@@ -3220,24 +3046,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
         case SG_IMGUI_CMD_APPEND_BUFFER:
             _sg_imgui_draw_buffer_panel(ctx, item->args.update_buffer.buffer);
             break;
-        case SG_IMGUI_CMD_QUERY_BUFFER_OVERFLOW:
-            _sg_imgui_draw_buffer_panel(ctx, item->args.query_buffer_overflow.buffer);
-            break;
-        case SG_IMGUI_CMD_QUERY_BUFFER_STATE:
-            _sg_imgui_draw_buffer_panel(ctx, item->args.query_buffer_state.buffer);
-            break;
-        case SG_IMGUI_CMD_QUERY_IMAGE_STATE:
-            _sg_imgui_draw_image_panel(ctx, item->args.query_image_state.image);
-            break;
-        case SG_IMGUI_CMD_QUERY_SHADER_STATE:
-            _sg_imgui_draw_shader_panel(ctx, item->args.query_shader_state.shader);
-            break;
-        case SG_IMGUI_CMD_QUERY_PIPELINE_STATE:
-            _sg_imgui_draw_pipeline_panel(ctx, item->args.query_pipeline_state.pipeline);
-            break;
-        case SG_IMGUI_CMD_QUERY_PASS_STATE:
-            _sg_imgui_draw_pass_panel(ctx, item->args.query_pass_state.pass);
-            break;
         case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
             {
                 sg_pass inv_pass = { SG_INVALID_ID };
@@ -3342,12 +3150,6 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     hooks.update_buffer = _sg_imgui_update_buffer;
     hooks.update_image = _sg_imgui_update_image;
     hooks.append_buffer = _sg_imgui_append_buffer;
-    hooks.query_buffer_overflow = _sg_imgui_query_buffer_overflow;
-    hooks.query_buffer_state = _sg_imgui_query_buffer_state;
-    hooks.query_image_state = _sg_imgui_query_image_state;
-    hooks.query_shader_state = _sg_imgui_query_shader_state;
-    hooks.query_pipeline_state = _sg_imgui_query_pipeline_state;
-    hooks.query_pass_state = _sg_imgui_query_pass_state;
     hooks.begin_default_pass = _sg_imgui_begin_default_pass;
     hooks.begin_pass = _sg_imgui_begin_pass;
     hooks.apply_viewport = _sg_imgui_apply_viewport;
