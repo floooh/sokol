@@ -2342,12 +2342,13 @@ _SOKOL_PRIVATE void _sg_imgui_show_shader(sg_imgui_t* ctx, sg_shader shd) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("buffer_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
-    for (int i = 1; i < _sg.pools.buffer_pool.size; i++) {
-        const _sg_buffer_t* buf = &_sg.pools.buffers[i];
-        if (buf->slot.state != SG_RESOURCESTATE_INITIAL) {
-            bool selected = ctx->buffers.sel_buf.id == buf->slot.id;
-            if (_sg_imgui_draw_resid_list_item(buf->slot.id, ctx->buffers.slots[i].label.buf, selected)) {
-                ctx->buffers.sel_buf.id = buf->slot.id;
+    for (int i = 0; i < ctx->buffers.num_slots; i++) {
+        sg_buffer buf = ctx->buffers.slots[i].res_id;
+        sg_resource_state state = sg_query_buffer_state(buf);
+        if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
+            bool selected = ctx->buffers.sel_buf.id == buf.id;
+            if (_sg_imgui_draw_resid_list_item(buf.id, ctx->buffers.slots[i].label.buf, selected)) {
+                ctx->buffers.sel_buf.id = buf.id;
             }
         }
     }
@@ -2356,12 +2357,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("image_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
-    for (int i = 1; i < _sg.pools.image_pool.size; i++) {
-        const _sg_image_t* img = &_sg.pools.images[i];
-        if (img->slot.state != SG_RESOURCESTATE_INITIAL) {
-            bool selected = ctx->images.sel_img.id == img->slot.id;
-            if (_sg_imgui_draw_resid_list_item(img->slot.id, ctx->images.slots[i].label.buf, selected)) {
-                ctx->images.sel_img.id = img->slot.id;
+    for (int i = 0; i < ctx->images.num_slots; i++) {
+        sg_image img = ctx->images.slots[i].res_id;
+        sg_resource_state state = sg_query_image_state(img);
+        if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
+            bool selected = ctx->images.sel_img.id == img.id;
+            if (_sg_imgui_draw_resid_list_item(img.id, ctx->images.slots[i].label.buf, selected)) {
+                ctx->images.sel_img.id = img.id;
             }
         }
     }
@@ -2370,12 +2372,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("shader_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
-    for (int i = 1; i < _sg.pools.shader_pool.size; i++) {
-        const _sg_shader_t* shd = &_sg.pools.shaders[i];
-        if (shd->slot.state != SG_RESOURCESTATE_INITIAL) {
-            bool selected = ctx->shaders.sel_shd.id == shd->slot.id;
-            if (_sg_imgui_draw_resid_list_item(shd->slot.id, ctx->shaders.slots[i].label.buf, selected)) {
-                ctx->shaders.sel_shd.id = shd->slot.id;
+    for (int i = 0; i < ctx->shaders.num_slots; i++) {
+        sg_shader shd = ctx->shaders.slots[i].res_id;
+        sg_resource_state state = sg_query_shader_state(shd);
+        if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
+            bool selected = ctx->shaders.sel_shd.id == shd.id;
+            if (_sg_imgui_draw_resid_list_item(shd.id, ctx->shaders.slots[i].label.buf, selected)) {
+                ctx->shaders.sel_shd.id = shd.id;
             }
         }
     }
@@ -2384,12 +2387,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("pipeline_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
-    for (int i = 1; i < _sg.pools.pipeline_pool.size; i++) {
-        const _sg_pipeline_t* pip = &_sg.pools.pipelines[i];
-        if (pip->slot.state != SG_RESOURCESTATE_INITIAL) {
-            bool selected = ctx->pipelines.sel_pip.id == pip->slot.id;
-            if (_sg_imgui_draw_resid_list_item(pip->slot.id, ctx->pipelines.slots[i].label.buf, selected)) {
-                ctx->pipelines.sel_pip.id = pip->slot.id;
+    for (int i = 1; i < ctx->pipelines.num_slots; i++) {
+        sg_pipeline pip = ctx->pipelines.slots[i].res_id;
+        sg_resource_state state = sg_query_pipeline_state(pip);
+        if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
+            bool selected = ctx->pipelines.sel_pip.id == pip.id;
+            if (_sg_imgui_draw_resid_list_item(pip.id, ctx->pipelines.slots[i].label.buf, selected)) {
+                ctx->pipelines.sel_pip.id = pip.id;
             }
         }
     }
@@ -2398,12 +2402,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
     ImGui::BeginChild("pass_list", ImVec2(_SG_IMGUI_LIST_WIDTH,0), true);
-    for (int i = 1; i < _sg.pools.pass_pool.size; i++) {
-        const _sg_pass_t* pass = &_sg.pools.passes[i];
-        if (pass->slot.state != SG_RESOURCESTATE_INITIAL) {
-            bool selected = ctx->passes.sel_pass.id == pass->slot.id;
-            if (_sg_imgui_draw_resid_list_item(pass->slot.id, ctx->passes.slots[i].label.buf, selected)) {
-                ctx->passes.sel_pass.id = pass->slot.id;
+    for (int i = 1; i < ctx->passes.num_slots; i++) {
+        sg_pass pass = ctx->passes.slots[i].res_id;
+        sg_resource_state state = sg_query_pass_state(pass);
+        if ((state != SG_RESOURCESTATE_INVALID) && (state != SG_RESOURCESTATE_INITIAL)) {
+            bool selected = ctx->passes.sel_pass.id == pass.id;
+            if (_sg_imgui_draw_resid_list_item(pass.id, ctx->passes.slots[i].label.buf, selected)) {
+                ctx->passes.sel_pass.id = pass.id;
             }
         }
     }
