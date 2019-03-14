@@ -822,14 +822,17 @@ _SOKOL_PRIVATE void _sapp_call_init(void) {
     else if (_sapp.desc.init_userdata_cb) {
         _sapp.desc.init_userdata_cb(_sapp.desc.user_data);
     }
+    _sapp.init_called = true;
 }
 
 _SOKOL_PRIVATE void _sapp_call_frame(void) {
-    if (_sapp.desc.frame_cb) {
-        _sapp.desc.frame_cb();
-    }
-    else if (_sapp.desc.frame_userdata_cb) {
-        _sapp.desc.frame_userdata_cb(_sapp.desc.user_data);
+    if (_sapp.init_called && !_sapp.cleanup_called) {
+        if (_sapp.desc.frame_cb) {
+            _sapp.desc.frame_cb();
+        }
+        else if (_sapp.desc.frame_userdata_cb) {
+            _sapp.desc.frame_userdata_cb(_sapp.desc.user_data);
+        }
     }
 }
 
@@ -840,6 +843,7 @@ _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
     else if (_sapp.desc.cleanup_userdata_cb) {
         _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
     }
+    _sapp.cleanup_called = true;
 }
 
 _SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
@@ -918,7 +922,6 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
         _sapp_call_init();
-        _sapp.init_called = true;
     }
     _sapp_call_frame();
     _sapp.frame_count++;
@@ -1217,8 +1220,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp_macos_window_obj.contentView = _sapp_view_obj;
         [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
 
-        _sapp_macos_update_dimensions();
-
         _sapp_macos_timer_obj = [NSTimer timerWithTimeInterval:0.001
             target:_sapp_view_obj
             selector:@selector(timerFired:)
@@ -1226,14 +1227,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
             repeats:YES];
         [[NSRunLoop currentRunLoop] addTimer:_sapp_macos_timer_obj forMode:NSDefaultRunLoopMode];
     #endif
+    _sapp.valid = true;
     if (_sapp.desc.fullscreen) {
+        /* on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp_macos_window_obj toggleFullScreen:self];
     }
     else {
         [_sapp_macos_window_obj center];
     }
     [_sapp_macos_window_obj makeKeyAndOrderFront:nil];
-    _sapp.valid = true;
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -1326,7 +1328,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)prepareOpenGL {
     GLint swapInt = 1;
     NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
-    [ctx setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
+    [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
 }
 - (void)drawRect:(NSRect)bound {
@@ -4369,7 +4371,6 @@ _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
         if (_sapp.init_called && !_sapp.cleanup_called) {
             SOKOL_LOG("cleanup_cb()");
             _sapp_call_cleanup();
-            _sapp.cleanup_called = true;
         }
     }
     /* always try to cleanup by destroying egl context */
