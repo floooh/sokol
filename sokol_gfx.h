@@ -9093,8 +9093,13 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
 
 _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* desc) {
     sg_shader_desc def = *desc;
-    def.vs.entry = _sg_def(def.vs.entry, "_main");
-    def.fs.entry = _sg_def(def.fs.entry, "_main");
+    #if defined(SOKOL_METAL)
+        def.vs.entry = _sg_def(def.vs.entry, "_main");
+        def.fs.entry = _sg_def(def.fs.entry, "_main");
+    #else
+        def.vs.entry = _sg_def(def.vs.entry, "main");
+        def.fs.entry = _sg_def(def.fs.entry, "main");
+    #endif
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &def.vs : &def.fs;
         for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
