@@ -514,6 +514,7 @@ typedef struct {
     sg_imgui_pipelines_t pipelines;
     sg_imgui_passes_t passes;
     sg_imgui_capture_t capture;
+    sg_pipeline cur_pipeline;
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
@@ -1807,6 +1808,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_scissor_rect(int x, int y, int width, int he
 _SOKOL_PRIVATE void _sg_imgui_apply_pipeline(sg_pipeline pip, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    ctx->cur_pipeline = pip;    /* stored for _sg_imgui_apply_uniforms */
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_PIPELINE;
@@ -1845,7 +1847,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
         args->ub_index = ub_index;
         args->data = data;
         args->num_bytes = num_bytes;
-        args->pipeline = _sg.cur_pipeline;
+        args->pipeline = ctx->cur_pipeline;
         args->ubuf_pos = _sg_imgui_capture_uniforms(ctx, data, num_bytes);
     }
     if (ctx->hooks.apply_uniforms) {
@@ -1872,6 +1874,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw(int base_element, int num_elements, int num_i
 _SOKOL_PRIVATE void _sg_imgui_end_pass(void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    ctx->cur_pipeline.id = SG_INVALID_ID;
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_END_PASS;
