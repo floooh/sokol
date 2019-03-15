@@ -704,6 +704,9 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_PVRTC4_RGBA,
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
+    SG_PIXELFORMAT_R8UI,
+    SG_PIXELFORMAT_R16UI,
+    SG_PIXELFORMAT_R32UI,
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_pixel_format;
@@ -2922,6 +2925,7 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA8:
         case SG_PIXELFORMAT_R10G10B10A2:
         case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_R32UI:
             return 4;
         case SG_PIXELFORMAT_RGB8:
             return 3;
@@ -2929,8 +2933,10 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R5G6B5:
         case SG_PIXELFORMAT_RGBA4:
         case SG_PIXELFORMAT_R16F:
+        case SG_PIXELFORMAT_R16UI:
             return 2;
         case SG_PIXELFORMAT_L8:
+        case SG_PIXELFORMAT_R8UI:
             return 1;
         default:
             SOKOL_UNREACHABLE;
@@ -3526,6 +3532,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA8:
         case SG_PIXELFORMAT_RGB8:
         case SG_PIXELFORMAT_L8:
+        case SG_PIXELFORMAT_R8UI:
             return GL_UNSIGNED_BYTE;
         case SG_PIXELFORMAT_R10G10B10A2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
@@ -3537,10 +3544,13 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
             return GL_UNSIGNED_SHORT_4_4_4_4;
         case SG_PIXELFORMAT_DEPTH:
             /* FIXME */
+        case SG_PIXELFORMAT_R16UI:
             return GL_UNSIGNED_SHORT;
         case SG_PIXELFORMAT_DEPTHSTENCIL:
             /* FIXME */
             return GL_UNSIGNED_INT_24_8;
+        case SG_PIXELFORMAT_R32UI:
+            return GL_UNSIGNED_INT;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -3595,6 +3605,10 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             return GL_COMPRESSED_RGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_SRGB8:
             return GL_COMPRESSED_SRGB8_ETC2;
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_R16UI:
+        case SG_PIXELFORMAT_R32UI:
+            return GL_RED_INTEGER;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -3660,6 +3674,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
                 return GL_COMPRESSED_RGB8_ETC2;
             case SG_PIXELFORMAT_ETC2_SRGB8:
                 return GL_COMPRESSED_SRGB8_ETC2;
+            case SG_PIXELFORMAT_R8UI:
+                return GL_R8UI;
+            case SG_PIXELFORMAT_R16UI:
+                return GL_R16UI;
+            case SG_PIXELFORMAT_R32UI:
+                return GL_R32UI;
             default:
                 SOKOL_UNREACHABLE; return 0;
         }
@@ -6368,7 +6388,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     _sg.d3d11.cur_pipeline = pip;
     _sg.d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg.d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
-    
+
     ID3D11DeviceContext_RSSetState(_sg.d3d11.ctx, pip->d3d11_rs);
     ID3D11DeviceContext_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
     ID3D11DeviceContext_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
@@ -7958,7 +7978,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
         }
     }
 }
-    
+
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
 _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -8231,7 +8251,7 @@ _SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int s
     SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
     SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
     uint32_t ctr = ++pool->gen_ctrs[slot_index];
-    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK); 
+    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK);
     slot->state = SG_RESOURCESTATE_ALLOC;
     return slot->id;
 }
@@ -9920,7 +9940,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
-    #if defined(SOKOL_DEBUG) 
+    #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_valid) {
             SOKOL_LOG("attempting to draw without resource bindings");
         }
