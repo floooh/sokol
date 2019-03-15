@@ -330,9 +330,9 @@
     - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
     - do *not* provide a sokol_main() function
     - instead provide the standard main() function of the platform
-    - from the main function, call the function ```sapp_run()``` which 
+    - from the main function, call the function ```sapp_run()``` which
       takes a pointer to an ```sapp_desc``` structure.
-    - ```sapp_run()``` takes over control and calls the provided init-, frame-, 
+    - ```sapp_run()``` takes over control and calls the provided init-, frame-,
       shutdown- and event-callbacks just like in the default model, it
       will only return when the application quits (or not at all on some
       platforms, like emscripten)
@@ -596,7 +596,7 @@ typedef struct sapp_desc {
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
-    
+
     void* user_data;                        /* these are the user-provided callbacks with user data */
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
@@ -2858,6 +2858,10 @@ typedef int  GLint;
 #define GL_POINTS 0x0000
 #define GL_ONE_MINUS_SRC_COLOR 0x0301
 #define GL_MIRRORED_REPEAT 0x8370
+#define GL_RED_INTEGER 0x8D94
+#define GL_R8UI 0x8232
+#define GL_R16UI 0x8234
+#define GL_R32UI 0x8236
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
@@ -4337,7 +4341,7 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
             SOKOL_ASSERT(egl_result == EGL_TRUE);
             /* NOTE: calling ANativeWindow_setBuffersGeometry() with the same dimensions
                 as the ANativeWindow size results in weird display artefacts, that's
-                why it's only called when the buffer geometry is different from 
+                why it's only called when the buffer geometry is different from
                 the window size
             */
             int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
