@@ -3,6 +3,8 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
+[See what's new](#updates)
+
 Minimalistic header-only cross-platform libs in C:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
@@ -406,6 +408,22 @@ Mainly some "missing features" for desktop apps:
 - simple cross-platform touch gesture recognition
 
 # Updates
+
+- **15-Mar-2019**: various Dear ImGui related changes:
+    - there's a new utility header sokol_imgui.h with a simple drop-in
+      renderer for Dear ImGui on top of sokol_gfx.h and sokol_app.h
+      (sokol_app.h is optional, and only used for input handling)
+    - the sokol_gfx_imgui.h debug inspection header no longer
+      depends on internal data structures and functions of sokol_gfx.h, as such
+      it is now a normal *utility header* and has been moved to the *utils*
+      directory
+    - the implementation macro for sokol_gfx_imgui.h has been changed
+      from SOKOL_IMPL to SOKOL_GFX_IMGUI_IMPL (so when you suddenly get
+      unresoled linker errors, that's the reason)
+    - all headers now have two preprocessor defines for the declaration
+      and implementation (for instance in sokol_gfx.h: SOKOL_GFX_INCLUDED
+      and SOKOL_GFX_IMPL_INCLUDED) these are checked in the utility-headers
+      to provide useful error message when dependent headers are missing
 
 - **05-Mar-2019**: sokol_gfx.h now has a 'trace hook' API, and I have started
 implementing optional debug-inspection-UI headers on top of Dear ImGui:

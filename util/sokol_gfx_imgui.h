@@ -2,29 +2,44 @@
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
-    This is an extension header for sokol_gfx.h, this means sokol_gfx_imgui.h
-    must be included *after* sokol_gfx.h both for the implementation
-    and declaration.
+    Do this:
+        #define SOKOL_GFX_IMGUI_IMPL
+    before you include this file in *one* C++ file to create the
+    implementation.
 
-    You also need to include imgui.h before including the implementation
-    of sokol_gfx_imgui.h.
+    NOTE that the implementation must be compiled as C++ or Objective-C++
+    because it calls into the ImGui C++ API. The sokol_gfx_imgui.h API
+    itself is plain C though.
 
-    The implementation must be compiled as C++ or Objective-C++, the
-    declaration can be included in plain C sources.
+    Include the following file(s) before including sokol_gfx_imgui.h:
 
-    The sokol_gfx_imgui.h header recognizes the same preprocessor defines
-    that have been set for the actual Sokol headers (for instance
-    SOKOL_IMPL, SOKOL_MALLOC, SOKOL_LOG, etc...).
+        sokol_gfx.h
+
+    Additionally, include the following files(s) beforing including
+    the implementation of sokol_gfx_imgui.h:
+
+        imgui.h
+
+    The sokol_gfx.h implementation must be compiled with debug trace hooks
+    enabled by defining:
+
+        SOKOL_TRACE_HOOKS
+
+    ...before including the sokol_gfx.h implementation.
+
+    Before including the sokol_gfx_imgui.h implementation, optionally
+    override the following macros:
+
+        SOKOL_ASSERT(c)     -- your own assert macro, default: assert(c)
+        SOKOL_UNREACHABLE   -- your own macro to annotate unreachable code,
+                               default: SOKOL_ASSERT(false)
+        SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
+        SOKOL_FREE(p)       -- your own memory free function, default: free(p)
+        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     STEP BY STEP:
     =============
-    --- include the sokol_gfx_imgui.h header after the actual Sokol header
-        implementations and the imgui.h header (and make sure this code
-        is compiled as C++ or Objective-C++)
-
-    --- add a Dear ImGui renderer to your application, and the basic
-        per-frame code to render an ImGui UI.
-
     --- create an sg_imgui_t struct (which must be preserved between frames)
         and initialize it with:
 
@@ -62,13 +77,15 @@
                 ImGui::EndMainMenuBar();
             }
 
-    --- finally before application shutdown, call:
+    --- before application shutdown, call:
 
             sg_imgui_discard(&sg_imgui);
 
         ...this is not strictly necessary because the application exits
         anyway, but not doing this may trigger memory leak detection tools.
 
+    --- finally, your application needs an ImGui renderer, you can either
+        provide your own, or drop in the sokol_imgui.h utility header
 
     ALTERNATIVE DRAWING FUNCTIONS:
     ==============================
@@ -98,8 +115,8 @@
     Finer-grained drawing functions may be moved to the public API
     in the future as needed.
 
-
-
+    LICENSE
+    =======
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -128,6 +145,10 @@
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
+#endif
+
+#ifndef SOKOL_API_DECL
+#define SOKOL_API_DECL extern
 #endif
 
 #if defined(__cplusplus)
@@ -541,7 +562,7 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
 #endif
 
 /*=== IMPLEMENTATION =========================================================*/
-#if defined SOKOL_IMPL
+#if defined SOKOL_GFX_IMGUI_IMPL
 #if !defined(IMGUI_VERSION)
 #error "Please include imgui.h before the sokol_gfx_imgui.h implementation"
 #endif
@@ -556,6 +577,16 @@ SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
     #include <stdlib.h>
     #define SOKOL_MALLOC(s) malloc(s)
     #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef _SOKOL_PRIVATE
+    #if defined(__GNUC__)
+        #define _SOKOL_PRIVATE __attribute__((unused)) static
+    #else
+        #define _SOKOL_PRIVATE static
+    #endif
+#endif
+#ifndef SOKOL_API_IMPL
+#define SOKOL_API_IMPL
 #endif
 
 #include <string.h>
@@ -3421,4 +3452,4 @@ SOKOL_API_IMPL void sg_imgui_draw_capture_content(sg_imgui_t* ctx) {
     _sg_imgui_draw_capture_panel(ctx);
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_GFX_IMGUI_IMPL */
