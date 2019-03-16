@@ -2006,6 +2006,7 @@ typedef struct {
     sg_usage usage;
     uint32_t update_frame_index;
     uint32_t append_frame_index;
+    uint32_t map_frame_index;
     int num_slots;
     int active_slot;
 } _sg_buffer_t;

@@ -659,7 +659,7 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 #endif
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#if defined(SOKOL_IMPL) || defined(__INTELLISENSE__)
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
 #ifdef _MSC_VER
