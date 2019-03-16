@@ -109,8 +109,10 @@ typedef enum sgl_matrix_mode_t {
     Used in sgl_enable() / sgl_disable()
 */
 typedef enum sgl_state_t {
-    SGL_TEXTURE,
-    SGL_CULL_FACE,
+    SGL_ORIGIN_TOP_LEFT = 0,        /* default: true */
+    SGL_TEXTURING,                  /* default: false */
+    SGL_CULL_FACE,                  /* default: false */
+    SGL_NUM_STATES,
 } sgl_state_t;
 
 /*
@@ -120,31 +122,54 @@ typedef enum sgl_state_t {
 */
 typedef sg_image sgl_texture_t;
 
-typedef struct sgl_desc_t {
-    int max_vertices;
+typedef struct sgl_desc_t { 
+    int max_vertices;   /* size for vertex buffer */
+    int max_commands;   /* size of uniform- and command-buffers */
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
 } sgl_desc_t;
 
+/* setup/shutdown */
 SOKOL_API_DECL void sgl_setup(const sgl_desc_t* desc);
 SOKOL_API_DECL void sgl_shutdown(void);
 
+/* render state functions (only valid outside begin/end) */
 SOKOL_API_DECL void sgl_enable(sgl_state_t state);
 SOKOL_API_DECL void sgl_disable(sgl_state_t state);
-SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_bind_texture(sgl_texture_t tex);
+SOKOL_API_DECL bool sgl_is_enabled(sgl_state_t state);
+SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h);
+SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h);
+SOKOL_API_DECL void sgl_texture(sgl_texture_t tex);
+SOKOL_API_DECL void sgl_texcoord_int_bits(int n);
 
-SOKOL_API_DECL void sgl_begin(sgl_primitive_type_t mode);
-SOKOL_API_DECL void sgl_vtx2f(float x, float y);
-SOKOL_API_DECL void sgl_vtx3f(float x, float y, float z);
+/* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_tex2f(float u, float v);
 SOKOL_API_DECL void sgl_col4f(float r, float g, float b, float a);
 SOKOL_API_DECL void sgl_col4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_API_DECL void sgl_col1u32(uint32_t rgba);
+
+/* define primitives, each begin/end is one draw command */
+SOKOL_API_DECL void sgl_begin(sgl_primitive_type_t mode);
+SOKOL_API_DECL void sgl_vtx2f(float x, float y);
+SOKOL_API_DECL void sgl_vtx3f(float x, float y, float z);
+SOKOL_API_DECL void sgl_vtx2f_tex2f(float x, float y, float u, float v);
+SOKOL_API_DECL void sgl_vtx3f_tex2f(float x, float y, float z, float u, float v);
+SOKOL_API_DECL void sgl_vtx2f_col4f(float x, float y, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_vtx2f_col4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_vtx2f_col1u32(float x, float y, uint32_t rgba);
+SOKOL_API_DECL void sgl_vtx3f_col4f(float x, float y, float z, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_vtx3f_col4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_vtx3f_col1u32(float x, float y, float z, uint32_t rgba);
+SOKOL_API_DECL void sgl_vtx2f_tex2f_col4f(float x, float y, float u, float v, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_vtx2f_tex2f_col4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_vtx2f_tex2f_col1u32(float x, float y, float u, float v, uint32_t rgba);
+SOKOL_API_DECL void sgl_vtx3f_tex2f_col4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_vtx3f_tex2f_col4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_vtx3f_tex2f_col1u32(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
 
+/* matrix stack functions (only valid outside begin end */
 SOKOL_API_DECL void sgl_matrix_mode(sgl_matrix_mode_t mode);
 SOKOL_API_DECL void sgl_load_matrix(float m[16]);
 SOKOL_API_DECL void sgl_mult_matrix(float m[16]);
@@ -197,5 +222,74 @@ extern "C" {
         #define _SOKOL_PRIVATE static
     #endif
 #endif
+
+typedef struct {
+    float x, y, z;
+    int16_t u, v;       /* texcoords as packed fixed-point format, see sgl_texcoord_int_bits */
+    uint32_t rgba;
+} _sgl_vertex_t;
+
+typedef struct {
+    float mvp[16];      /* model-view-projection matrix */
+    float uv_scale[2];  /* scaler for converting fixed-point texcoord to float */
+} _sgl_uniform_t;
+
+typedef enum {
+    SGL_COMMAND_DRAW,
+    SGL_COMMAND_VIEWPORT,
+    SGL_COMMAND_SCISSOR_RECT,
+} _sgl_command_type_t;
+
+typedef struct {
+    sgl_primitive_type_t type;
+    sgl_texture_t texture;
+    int base_vertex_index;
+    int num_vertices;
+    int uniforms_index;
+} _sgl_draw_args_t;
+
+typedef struct {
+    int x, y, w, h;
+} _sgl_viewport_args_t;
+
+typedef struct {
+    int x, y, w, h;
+} _sgl_scissor_rect_args_t;
+
+typedef union {
+    _sgl_draw_args_t draw;
+    _sgl_viewport_args_t viewport;
+    _sgl_scissor_rect_args_t scissor_rect;
+} _sgl_args_t;
+
+typedef struct {
+    _sgl_command_t cmd;
+    _sgl_args_t args;
+} _sgl_command_t;
+
+typedef struct {
+    /* per-frame draw data */
+    int num_vertices;
+    int num_uniforms;
+    int num_commands;
+    int cur_vertex;
+    int cur_uniform;
+    int cur_command;
+    _sgl_vertex_t* vertices;
+    _sgl_uniform_t* uniforms;
+    _sgl_command_t* commands;
+
+    /* current render state */
+    bool sgl_state_t state[SGL_NUM_STATES];
+    float u_scale, v_scale;
+    int16_t u, v;
+    uint32_t rgba;
+    sgl_texture tex;
+
+    /* matrix stacks */
+    // FIXME
+} _sgl_state_t;
+
+static _sgl_state_t _sgl;
 
 #endif /* SOKOL_GL_IMPL */
