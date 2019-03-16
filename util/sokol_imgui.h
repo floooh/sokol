@@ -17,23 +17,25 @@
     SOKOL_D3D11
     SOKOL_METAL
 
-    Optionally provide the following defines to further configure 
+    Optionally provide the following configuration defines before including the
+    implementation:
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 
-    ...and finally, optionally provide the following macros to
-    override defaults:
+    Optionally provide the following macros before including the implementatuon
+    to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
-    Include the following headers before sokol_imgui.h:
+    Include the following headers before sokol_imgui.h (both before including
+    the declaration and implementation):
 
         sokol_gfx.h
         sokol_app.h     (except SOKOL_IMGUI_NO_SOKOL_APP)
 
-    Additionally, include the following headers before the sokol_imgui.h
+    Additionally, include the following headers before including the
     implementation:
 
         imgui.h
@@ -41,8 +43,7 @@
     Note that the sokol_imgui.h *implementation* must be compiled as C++
     (since Dear ImGui has a C++ API).
 
-    FIXME: replace embedded Metal shader sources with
-    precompiled bytecode blobs(?)
+    FIXME: replace embedded Metal shader sources with precompiled bytecode blobs(?)
 
     FEATURE OVERVIEW:
     =================
@@ -52,8 +53,8 @@
 
     The sokol_app.h dependency is optional and used for input event handling.
     If you only use sokol_gfx.h but not sokol_app.h in your application,
-    just define SOKOL_IMGUI_NO_SOKOL_APP before including the implementation
-    of sokol_imgui.h, this will remove any dependency on sokol_app.h, and
+    define SOKOL_IMGUI_NO_SOKOL_APP before including the implementation
+    of sokol_imgui.h, this will remove any dependency to sokol_app.h, but
     you must feed input events into Dear ImGui yourself.
 
     sokol_imgui.h is not thread-safe, all calls must be made from the
@@ -62,7 +63,7 @@
     HOWTO:
     ======
 
-    --- To initialize sokol-imgui call:
+    --- To initialize sokol-imgui, call:
 
         simgui_setup(const simgui_desc_t* desc)
 
@@ -70,7 +71,7 @@
         (two buffers for vertices and indices, a font texture and a pipeline-
         state-object).
 
-        Use the following simgui_desc members to configure behaviour:
+        Use the following simgui_desc_t members to configure behaviour:
 
             int max_vertices
                 The maximum number of vertices used for UI rendering, default is 65536.
@@ -91,7 +92,8 @@
 
             float dpi_scale
                 DPI scaling factor. Set this to the result of sapp_dpi_scale().
-                The default value is 1.0
+                To render in high resolution on a Retina Mac this would
+                typically be 2.0. The default value is 1.0
 
             const char* ini_filename
                 Use this path as ImGui::GetIO().IniFilename. By default
@@ -176,7 +178,7 @@
 #endif
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#define SOKOL_API_DECL extern
 #endif
 
 #ifdef __cplusplus
@@ -219,7 +221,7 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL
-    #define SOKOL_API_IMPL
+#define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
@@ -746,7 +748,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io.Fonts->TexID = (ImTextureID)(uintptr_t) _simgui.img.id;
     }
 
-    /* shader object for imgui rendering */
+    /* shader object for using the embedded shader source (or bytecode) */
     sg_shader_desc shd_desc = { };
     auto& ub = shd_desc.vs.uniform_blocks[0];
     ub.size = sizeof(_simgui_vs_params_t);
@@ -872,7 +874,7 @@ SOKOL_API_IMPL void simgui_render(void) {
         const int vb_offset = sg_append_buffer(bind.vertex_buffers[0], &cl->VtxBuffer.front(), vtx_size);
         const int ib_offset = sg_append_buffer(bind.index_buffer, &cl->IdxBuffer.front(), idx_size);
         /* don't render anything if the buffer is in overflow state (this is also
-            checked internally in sokol_gfx, draw calls that attempt from
+            checked internally in sokol_gfx, draw calls that attempt to draw with
             overflowed buffers will be silently dropped)
         */
         if (sg_query_buffer_overflow(bind.vertex_buffers[0]) ||
