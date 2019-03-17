@@ -218,6 +218,7 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #error "The sokol_imgui.h implementation must be compiled as C++"
 #endif
 
+#include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL
