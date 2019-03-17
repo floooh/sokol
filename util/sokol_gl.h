@@ -26,6 +26,7 @@
     SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     Include the following headers before including sokol_gl.h:
 
@@ -82,14 +83,15 @@
 
     Used in sgl_begin() to start rendering this type of primitive.
 
-    The values are identical with sokol-gfx's sg_primitive_type.
+    NOTE: the values are *not* identical with sg_primitive_type!
 */
 typedef enum sgl_primitive_type_t {
-    SGL_POINTS = 1,
+    SGL_POINTS = 0,
     SGL_LINES,
     SGL_LINE_STRIP,
     SGL_TRIANGLES,
     SGL_TRIANGLE_STRIP,
+    SGL_NUM_PRIMITIVE_TYPES,
 } sgl_primitive_type_t;
 
 /*
@@ -110,6 +112,7 @@ typedef enum sgl_matrix_mode_t {
 */
 typedef enum sgl_state_t {
     SGL_ORIGIN_TOP_LEFT = 0,        /* default: true */
+    SGL_ALPHABLEND,                 /* default: false */
     SGL_TEXTURING,                  /* default: false */
     SGL_CULL_FACE,                  /* default: false */
     SGL_NUM_STATES,
@@ -196,6 +199,7 @@ extern "C" {
 #ifdef SOKOL_GL_IMPL
 #define SOKOL_GL_IMPL_INCLUDED (1)
 
+#include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL
@@ -215,6 +219,9 @@ extern "C" {
     #define SOKOL_MALLOC(s) malloc(s)
     #define SOKOL_FREE(p) free(p)
 #endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
+#endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
@@ -223,9 +230,126 @@ extern "C" {
     #endif
 #endif
 
+#define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
+
+#if defined(SOKOL_GLCORE33)
+static const char* _sgl_vs_src =
+    "#version 330\n"
+    "uniform mat4 mvp;\n"
+    "uniform vec2 uv_scale;\n"
+    "in vec2 position;\n"
+    "in vec2 texcoord0;\n"
+    "in vec4 color0;\n"
+    "out vec2 uv;\n"
+    "out vec4 color;\n"
+    "void main() {\n"
+    "    gl_Position = mvp * position;\n"
+    "    uv = uv_scale * texcoord0;\n"
+    "    color = color0;\n"
+    "}\n";
+static const char* _sgl_fs_src =
+    "#version 330\n"
+    "uniform sampler2D tex;\n"
+    "in vec2 uv;\n"
+    "in vec4 color;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    frag_color = texture(tex, uv) * color;\n"
+    "}\n";
+#elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+static const char* _sgl_vs_src =
+    "uniform mat4 mvp;\n"
+    "uniform vec2 uv_scale;\n"
+    "attribute vec2 position;\n"
+    "attribute vec2 texcoord0;\n"
+    "attribute vec4 color0;\n"
+    "varying vec2 uv;\n"
+    "varying vec4 color;\n"
+    "void main() {\n"
+    "    gl_Position = mvp * position;\n"
+    "    uv = uv_scale * texcoord0;\n"
+    "    color = color0;\n"
+    "}\n";
+static const char* _sgl_fs_src =
+    "precision mediump float;\n"
+    "uniform sampler2D tex;\n"
+    "varying vec2 uv;\n"
+    "varying vec4 color;\n"
+    "void main() {\n"
+    "    gl_FragColor = texture2D(tex, uv) * color;\n"
+    "}\n";
+#elif defined(SOKOL_METAL)
+static const char* _sgl_vs_src =
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "struct params_t {\n"
+    "  float4x4 mvp;\n"
+    "  float2 uv_scale;\n"
+    "};\n"
+    "struct vs_in {\n"
+    "  float2 pos [[attribute(0)]];\n"
+    "  float2 uv [[attribute(1)]];\n"
+    "  float4 color [[attribute(2)]];\n"
+    "};\n"
+    "struct vs_out {\n"
+    "  float4 pos [[position]];\n"
+    "  float2 uv;\n"
+    "  float4 color;\n"
+    "};\n"
+    "vertex vs_out _main(vs_in in [[stage_in]], constant params_t& params [[buffer(0)]]) {\n"
+    "  vs_out out;\n"
+    "  out.pos = params.mvp * in.position;\n"
+    "  out.uv = params.uv_scale * in.uv;\n"
+    "  out.color = in.color;\n"
+    "  return out;\n"
+    "}\n";
+static const char* _sgl_fs_src =
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "struct fs_in {\n"
+    "  float2 uv;\n"
+    "  float4 color;\n"
+    "};\n"
+    "fragment float4 _main(fs_in in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {\n"
+    "  return tex.sample(smp, in.uv) * in.color;\n"
+    "}\n";
+#elif defined(SOKOL_D3D11)
+static const char* _sgl_vs_src =
+    "cbuffer params: register(b0) {\n"
+    "  float4x4 mvp;\n"
+    "  float2 uv_scale;\n"
+    "};\n"
+    "struct vs_in {\n"
+    "  float4 pos: POS;\n"
+    "  float2 uv: TEXCOORD0;\n"
+    "  float4 color: COLOR0;\n"
+    "};\n"
+    "struct vs_out {\n"
+    "  float2 uv: TEXCOORD0;\n"
+    "  float4 color: COLOR0;\n"
+    "  float4 pos: SV_Position;\n"
+    "};\n"
+    "vs_out main(vs_in inp) {\n"
+    "  vs_out outp;\n"
+    "  outp.pos = mul(mvp, inp.pos);\n"
+    "  outp.uv = uv_scale * inp.uv;\n"
+    "  outp.color = inp.color;\n"
+    "  return outp;\n"
+    "};\n";
+static const char* _sgl_fs_src =
+    "Texture2D<float4> tex: register(t0);\n"
+    "sampler smp: register(s0);\n"
+    "float4 main(float2 uv: TEXCOORD0, float4 color: COLOR0): SV_Target0 {\n"
+    "  return tex.Sample(smp, uv) * color;\n"
+    "}\n";
+#elif defined(SOKOL_DUMMY_BACKEND)
+static const char* _sgl_vs_src = "";
+static const char* _sgl_fs_src = "";
+#endif
+
 typedef struct {
-    float x, y, z;
-    int16_t u, v;       /* texcoords as packed fixed-point format, see sgl_texcoord_int_bits */
+    float pos[3];
+    int16_t uv[2];  /* texcoords as packed fixed-point format, see sgl_texcoord_int_bits */
     uint32_t rgba;
 } _sgl_vertex_t;
 
@@ -263,11 +387,13 @@ typedef union {
 } _sgl_args_t;
 
 typedef struct {
-    _sgl_command_t cmd;
+    _sgl_command_type_t cmd;
     _sgl_args_t args;
 } _sgl_command_t;
 
 typedef struct {
+    uint32_t init_cookie;
+
     /* per-frame draw data */
     int num_vertices;
     int num_uniforms;
@@ -280,16 +406,159 @@ typedef struct {
     _sgl_command_t* commands;
 
     /* current render state */
-    bool sgl_state_t state[SGL_NUM_STATES];
+    bool state[SGL_NUM_STATES];
     float u_scale, v_scale;
     int16_t u, v;
     uint32_t rgba;
-    sgl_texture tex;
+    sgl_texture_t tex;
 
     /* matrix stacks */
     // FIXME
+
+    /* resource objects */
+    sg_buffer vbuf;
+    sg_image img;   /* a default white texture */
+    sg_shader shd;
+    sg_pipeline pip[2][2][SGL_NUM_PRIMITIVE_TYPES];    /* blend/cull/primitive-type */
 } _sgl_state_t;
 
 static _sgl_state_t _sgl;
+
+SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    memset(&_sgl, 0, sizeof(_sgl));
+    _sgl.init_cookie = 0xABCDABCD;
+
+    /* allocate buffers */
+    _sgl.num_vertices = _sgl_def(desc->max_vertices, (1<<16));
+    _sgl.num_uniforms = _sgl_def(desc->max_commands, (1<<14));
+    _sgl.num_commands = _sgl.num_uniforms;
+    _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC(_sgl.num_vertices * sizeof(_sgl_vertex_t));
+    SOKOL_ASSERT(_sgl.vertices);
+    _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC(_sgl.num_uniforms * sizeof(_sgl_uniform_t));
+    SOKOL_ASSERT(_sgl.uniforms);
+    _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC(_sgl.num_commands * sizeof(_sgl_command_t));
+    SOKOL_ASSERT(_sgl.commands);
+
+    /* default state */
+    _sgl.state[SGL_ORIGIN_TOP_LEFT] = true;
+    _sgl.u_scale = _sgl.v_scale = 1.0f;
+    _sgl.rgba = 0xFFFFFFFF;
+
+    /* create sokol-gfx resource objects */
+    sg_push_debug_group("sokol-gl");
+
+    sg_buffer_desc vbuf_desc;
+    memset(&vbuf_desc, 0, sizeof(vbuf_desc));
+    vbuf_desc.size = _sgl.num_vertices * sizeof(_sgl_vertex_t);
+    vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
+    vbuf_desc.usage = SG_USAGE_STREAM;
+    vbuf_desc.label = "sgl-vertex-buffer";
+    _sgl.vbuf = sg_make_buffer(&vbuf_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sgl.vbuf.id);
+
+    uint32_t pixels[64];
+    for (int i = 0; i < 64; i++) {
+        pixels[i] = 0xFFFFFFFF;
+    }
+    sg_image_desc img_desc;
+    memset(&img_desc, 0, sizeof(img_desc));
+    img_desc.type = SG_IMAGETYPE_2D;
+    img_desc.width = 8;
+    img_desc.height = 8;
+    img_desc.num_mipmaps = 1;
+    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.min_filter = SG_FILTER_NEAREST;
+    img_desc.mag_filter = SG_FILTER_NEAREST;
+    img_desc.content.subimage[0][0].ptr = pixels;
+    img_desc.content.subimage[0][0].size = sizeof(pixels);
+    img_desc.label = "sgl-default-texture";
+    _sgl.img = sg_make_image(&img_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sgl.img.id);
+
+    sg_shader_desc shd_desc;
+    memset(&shd_desc, 0, sizeof(shd_desc));
+    sg_shader_uniform_block_desc* ub = &shd_desc.vs.uniform_blocks[0];
+    ub->size = sizeof(_sgl_uniform_t);
+    ub->uniforms[0].name = "mvp";
+    ub->uniforms[0].type = SG_UNIFORMTYPE_MAT4;
+    ub->uniforms[1].name = "uv_scale";
+    ub->uniforms[1].type = SG_UNIFORMTYPE_FLOAT2;
+    shd_desc.fs.images[0].name = "tex";
+    shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.vs.source = _sgl_vs_src;
+    shd_desc.fs.source = _sgl_fs_src;
+    shd_desc.label = "sgl-shader";
+    _sgl.shd = sg_make_shader(&shd_desc);
+
+    sg_pipeline_desc pip_desc;
+    memset(&pip_desc, 0, sizeof(pip_desc));
+    pip_desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
+    {
+        sg_vertex_attr_desc* pos = &pip_desc.layout.attrs[0];
+        pos->name = "position";
+        pos->sem_name = "POSITION";
+        pos->offset = offsetof(_sgl_vertex_t, pos);
+        pos->format = SG_VERTEXFORMAT_FLOAT3;
+    }
+    {
+        sg_vertex_attr_desc* uv = &pip_desc.layout.attrs[1];
+        uv->name = "texcoord0";
+        uv->sem_name = "TEXCOORD";
+        uv->offset = offsetof(_sgl_vertex_t, uv);
+        uv->format = SG_VERTEXFORMAT_SHORT2N;
+    }
+    {
+        sg_vertex_attr_desc* rgba = &pip_desc.layout.attrs[2];
+        rgba->name = "color0";
+        rgba->sem_name = "TEXCOORD";
+        rgba->offset = offsetof(_sgl_vertex_t, rgba);
+        rgba->format = SG_VERTEXFORMAT_UBYTE4N;
+    }
+    pip_desc.shader = _sgl.shd;
+    pip_desc.index_type = SG_INDEXTYPE_NONE;
+    pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip_desc.blend.color_write_mask = SG_COLORMASK_RGB;
+    pip_desc.blend.color_format = desc->color_format;
+    pip_desc.blend.depth_format = desc->depth_format;
+    pip_desc.rasterizer.sample_count = desc->sample_count;
+    for (int blend = 0; blend < 2; blend++) {
+        pip_desc.blend.enabled = (blend == 0);
+        for (int cull = 0; cull < 2; cull++) {
+            pip_desc.rasterizer.cull_mode = (cull == 0) ? SG_CULLMODE_NONE : SG_CULLMODE_BACK;
+            for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
+                switch (prim_type) {
+                    case SGL_POINTS: pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
+                    case SGL_LINES: pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
+                    case SGL_LINE_STRIP: pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
+                    case SGL_TRIANGLES: pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
+                    case SGL_TRIANGLE_STRIP: pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
+                    default: SOKOL_UNREACHABLE; break;
+                }
+                _sgl.pip[blend][cull][prim_type] = sg_make_pipeline(&pip_desc);
+            }
+        }
+    }
+    sg_pop_debug_group();
+}
+
+SOKOL_API_IMPL void sgl_shutdown(void) {
+    SOKOL_ASSERT(_sgl.init_cookie == 0xABCDABCD);
+    SOKOL_FREE(_sgl.vertices); _sgl.vertices = 0;
+    SOKOL_FREE(_sgl.uniforms); _sgl.uniforms = 0;
+    SOKOL_FREE(_sgl.commands = _sgl.commands = 0);
+    sg_destroy_buffer(_sgl.vbuf);
+    sg_destroy_image(_sgl.img);
+    sg_destroy_shader(_sgl.shd);
+    for (int blend = 0; blend < 2; blend++) {
+        for (int cull = 0; cull < 2; cull++) {
+            for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
+                sg_destroy_pipeline(_sgl.pip[blend][cull][prim_type]);
+            }
+        }
+    }
+    _sgl.init_cookie = 0;
+}
 
 #endif /* SOKOL_GL_IMPL */
