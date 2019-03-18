@@ -119,6 +119,19 @@ typedef enum sgl_state_t {
 } sgl_state_t;
 
 /*
+    sgl_error_t
+
+    Errors are reset each frame after calling sgl_draw(),
+    get the last error code with sgl_error()
+*/
+typedef enum sgl_error_t {
+    SGL_NO_ERROR = 0,
+    SGL_ERROR_VERTICES_FULL,
+    SGL_ERROR_UNIFORMS_FULL,
+    SGL_ERROR_COMMANDS_FULL,
+} sgl_error_t;
+
+/*
     sgl_texture_t 
 
     This is simply an alias for sg_image.
@@ -136,6 +149,7 @@ typedef struct sgl_desc_t {
 /* setup/shutdown */
 SOKOL_API_DECL void sgl_setup(const sgl_desc_t* desc);
 SOKOL_API_DECL void sgl_shutdown(void);
+SOKOL_API_DECL sgl_error_t sgl_error(void);
 
 /* render state functions (only valid outside begin/end) */
 SOKOL_API_DECL void sgl_enable(sgl_state_t state);
@@ -231,6 +245,7 @@ extern "C" {
 #endif
 
 #define _sgl_def(val, def) (((val) == 0) ? (def) : (val))
+#define _SGL_INIT_COOKIE (0xABCDABCD)
 
 #if defined(SOKOL_GLCORE33)
 static const char* _sgl_vs_src =
@@ -374,10 +389,12 @@ typedef struct {
 
 typedef struct {
     int x, y, w, h;
+    bool origin_top_left;
 } _sgl_viewport_args_t;
 
 typedef struct {
     int x, y, w, h;
+    bool origin_top_left;
 } _sgl_scissor_rect_args_t;
 
 typedef union {
@@ -394,7 +411,6 @@ typedef struct {
 typedef struct {
     uint32_t init_cookie;
 
-    /* per-frame draw data */
     int num_vertices;
     int num_uniforms;
     int num_commands;
@@ -405,29 +421,66 @@ typedef struct {
     _sgl_uniform_t* uniforms;
     _sgl_command_t* commands;
 
-    /* current render state */
+    sgl_error_t error;
+    bool in_begin;
     bool state[SGL_NUM_STATES];
     float u_scale, v_scale;
     int16_t u, v;
     uint32_t rgba;
     sgl_texture_t tex;
 
-    /* matrix stacks */
     // FIXME
 
-    /* resource objects */
     sg_buffer vbuf;
     sg_image img;   /* a default white texture */
     sg_shader shd;
     sg_pipeline pip[2][2][SGL_NUM_PRIMITIVE_TYPES];    /* blend/cull/primitive-type */
-} _sgl_state_t;
+} _sgl_t;
+static _sgl_t _sgl;
 
-static _sgl_state_t _sgl;
+/*== PRIVATE FUNCTIONS =======================================================*/
+_SOKOL_PRIVATE void _sgl_rewind(void) {
+    _sgl.cur_vertex = 0;
+    _sgl.cur_uniform = 0;
+    _sgl.cur_command = 0;
+    _sgl.error = SGL_NO_ERROR;
+}
 
+_SOKOL_PRIVATE _sgl_vertex_t* _sgl_next_vertex(void) {
+    if (_sgl.cur_vertex < _sgl.num_vertices) {
+        return &_sgl.vertices[_sgl.cur_vertex++];
+    }
+    else {
+        _sgl.error = SGL_ERROR_VERTICES_FULL;
+        return 0;
+    }
+}
+
+_SOKOL_PRIVATE _sgl_uniform_t* _sgl_next_uniform(void) {
+    if (_sgl.cur_uniform < _sgl.num_uniforms) {
+        return &_sgl.uniforms[_sgl.cur_uniform++];
+    }
+    else {
+        _sgl.error = SGL_ERROR_UNIFORMS_FULL;
+        return 0;
+    }
+}
+
+_SOKOL_PRIVATE _sgl_command_t* _sgl_next_command(void) {
+    if (_sgl.cur_command < _sgl.num_commands) {
+        return &_sgl.commands[_sgl.cur_command++];
+    }
+    else {
+        _sgl.error = SGL_ERROR_COMMANDS_FULL;
+        return 0;
+    }
+}
+
+/*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_sgl, 0, sizeof(_sgl));
-    _sgl.init_cookie = 0xABCDABCD;
+    _sgl.init_cookie = _SGL_INIT_COOKIE;
 
     /* allocate buffers */
     _sgl.num_vertices = _sgl_def(desc->max_vertices, (1<<16));
@@ -560,5 +613,77 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     }
     _sgl.init_cookie = 0;
 }
+
+SOKOL_API_IMPL sgl_error_t sgl_error(void) {
+    return _sgl.error;
+}
+
+SOKOL_API_IMPL void sgl_enable(sgl_state_t state) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.state[state] = true;
+}
+
+SOKOL_API_IMPL void sgl_disable(sgl_state_t state) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.state[state] = false;
+}
+
+SOKOL_API_IMPL bool sgl_is_enabled(sgl_state_t state) {
+    SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    return _sgl.state[state];
+}
+
+SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_command_t* cmd = _sgl_next_command();
+    if (cmd) {
+        cmd->cmd = SGL_COMMAND_VIEWPORT;
+        cmd->args.viewport.x = x;
+        cmd->args.viewport.y = y;
+        cmd->args.viewport.w = w;
+        cmd->args.viewport.h = h;
+        cmd->args.viewport.origin_top_left = _sgl.state[SGL_ORIGIN_TOP_LEFT];
+    }
+}
+
+SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_command_t* cmd = _sgl_next_command();
+    if (cmd) {
+        cmd->cmd = SGL_COMMAND_SCISSOR_RECT;
+        cmd->args.scissor_rect.x = x;
+        cmd->args.scissor_rect.y = y;
+        cmd->args.scissor_rect.w = w;
+        cmd->args.scissor_rect.h = h;
+        cmd->args.scissor_rect.origin_top_left = _sgl.state[SGL_ORIGIN_TOP_LEFT];
+    }
+}
+
+SOKOL_API_IMPL void sgl_texture(sgl_texture_t tex) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    if (SG_INVALID_ID != tex.id) {
+        _sgl.tex = tex;
+    }
+    else {
+        _sgl.tex = _sgl.img;
+    }
+}
+
+SOKOL_API_IMPL void sgl_texcoord_int_bits(int n) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    SOKOL_ASSERT((n >= 0) && (n <= 15));
+    // FIXME: separate int-bits for u and v?
+    _sgl.u_scale = _sgl.v_scale = (float)(1<<n);
+}
+
 
 #endif /* SOKOL_GL_IMPL */
