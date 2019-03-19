@@ -84,6 +84,8 @@
     Used in sgl_begin() to start rendering this type of primitive.
 
     NOTE: the values are *not* identical with sg_primitive_type!
+
+    FIXME: add an (emulated) SGL_QUADS mode??
 */
 typedef enum sgl_primitive_type_t {
     SGL_POINTS = 0,
@@ -158,7 +160,7 @@ SOKOL_API_DECL bool sgl_is_enabled(sgl_state_t state);
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h);
 SOKOL_API_DECL void sgl_texture(sgl_texture_t tex);
-SOKOL_API_DECL void sgl_texcoord_int_bits(int n);
+SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_tex2f(float u, float v);
@@ -446,7 +448,7 @@ _SOKOL_PRIVATE void _sgl_rewind(void) {
     _sgl.error = SGL_NO_ERROR;
 }
 
-_SOKOL_PRIVATE _sgl_vertex_t* _sgl_next_vertex(void) {
+static inline _sgl_vertex_t* _sgl_next_vertex(void) {
     if (_sgl.cur_vertex < _sgl.num_vertices) {
         return &_sgl.vertices[_sgl.cur_vertex++];
     }
@@ -456,7 +458,7 @@ _SOKOL_PRIVATE _sgl_vertex_t* _sgl_next_vertex(void) {
     }
 }
 
-_SOKOL_PRIVATE _sgl_uniform_t* _sgl_next_uniform(void) {
+static inline _sgl_uniform_t* _sgl_next_uniform(void) {
     if (_sgl.cur_uniform < _sgl.num_uniforms) {
         return &_sgl.uniforms[_sgl.cur_uniform++];
     }
@@ -466,13 +468,43 @@ _SOKOL_PRIVATE _sgl_uniform_t* _sgl_next_uniform(void) {
     }
 }
 
-_SOKOL_PRIVATE _sgl_command_t* _sgl_next_command(void) {
+static inline _sgl_command_t* _sgl_next_command(void) {
     if (_sgl.cur_command < _sgl.num_commands) {
         return &_sgl.commands[_sgl.cur_command++];
     }
     else {
         _sgl.error = SGL_ERROR_COMMANDS_FULL;
         return 0;
+    }
+}
+
+static inline int16_t _sgl_pack_u(float u) {
+    return (int16_t) ((u * (1<<15)) / _sgl.u_scale);
+}
+
+static inline int16_t _sgl_pack_v(float v) {
+    return (int16_t) ((v * (1<<15)) / _sgl.v_scale);
+}
+
+static inline uint32_t _sgl_pack_rgbau8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return (uint32_t)((a<<24)|(b<<16)|(g<<8)|r);
+}
+
+static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
+    uint8_t r_u8 = (uint8_t) (r * 255.0f);
+    uint8_t g_u8 = (uint8_t) (g * 255.0f);
+    uint8_t b_u8 = (uint8_t) (b * 255.0f);
+    uint8_t a_u8 = (uint8_t) (a * 255.0f);
+    return _sgl_pack_rgbau8(r_u8, g_u8, b_u8, a_u8);
+}
+
+static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uint32_t rgba) {
+    SOKOL_ASSERT(_sgl.in_begin);
+    _sgl_vertex_t* vtx = _sgl_next_vertex();
+    if (vtx) {
+        vtx->pos[0] = x; vtx->pos[1] = y; vtx->pos[2] = z;
+        vtx->uv[0] = u; vtx->uv[1] = v;
+        vtx->rgba = rgba;
     }
 }
 
@@ -677,13 +709,94 @@ SOKOL_API_IMPL void sgl_texture(sgl_texture_t tex) {
     }
 }
 
-SOKOL_API_IMPL void sgl_texcoord_int_bits(int n) {
+SOKOL_API_IMPL void sgl_texcoord_int_bits(int u_bits, int v_bits) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    SOKOL_ASSERT((n >= 0) && (n <= 15));
-    // FIXME: separate int-bits for u and v?
-    _sgl.u_scale = _sgl.v_scale = (float)(1<<n);
+    SOKOL_ASSERT((u_bits >= 0) && (u_bits <= 15));
+    SOKOL_ASSERT((v_bits >= 0) && (v_bits <= 15));
+    _sgl.u_scale = (float)(1<<u_bits);
+    _sgl.v_scale = (float)(1<<v_bits);
 }
 
+SOKOL_API_IMPL void sgl_tex2f(float u, float v) {
+    _sgl.u = _sgl_pack_u(u);
+    _sgl.v = _sgl_pack_u(v);
+}
+
+SOKOL_API_IMPL void sgl_col4f(float r, float g, float b, float a) {
+    _sgl.rgba = _sgl_pack_rgbaf(r, g, b, a);
+}
+
+SOKOL_API_IMPL void sgl_col4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl.rgba = _sgl_pack_rgbau8(r, g, b, a);
+}
+
+SOKOL_API_IMPL void sgl_col1u32(uint32_t rgba) {
+    _sgl.rgba = rgba;
+}
+
+SOKOL_API_IMPL void sgl_vtx2f(float x, float y) {
+    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl.rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx3f(float x, float y, float z) {
+    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl.rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_tex2f(float x, float y, float u, float v) {
+    _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl.rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_tex2f(float x, float y, float z, float u, float v) {
+    _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl.rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_col4f(float x, float y, float r, float g, float b, float a) {
+    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_col4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, x, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_col1u32(float x, float y, uint32_t rgba) {
+    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_col4f(float x, float y, float z, float r, float g, float b, float a) {
+    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_col4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, x, z, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_col1u32(float x, float y, float z, uint32_t rgba) {
+    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_tex2f_col4f(float x, float y, float u, float v, float r, float g, float b, float a) {
+    _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_tex2f_col4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, x, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx2f_tex2f_col1u32(float x, float y, float u, float v, uint32_t rgba) {
+    _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_tex2f_col4f(float x, float y, float z, float u, float v, float r, float g, float b, float a) {
+    _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_tex2f_col4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, x, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
+}
+
+SOKOL_API_IMPL void sgl_vtx3f_tex2f_col1u32(float x, float y, float z, float u, float v, uint32_t rgba) {
+    _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
+}
 
 #endif /* SOKOL_GL_IMPL */
