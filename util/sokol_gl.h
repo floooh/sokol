@@ -161,29 +161,29 @@ SOKOL_API_DECL void sgl_texture(sgl_texture_t tex);
 SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
-SOKOL_API_DECL void sgl_tex2f(float u, float v);
-SOKOL_API_DECL void sgl_col4f(float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_col4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_col1u32(uint32_t rgba);
+SOKOL_API_DECL void sgl_t2f(float u, float v);
+SOKOL_API_DECL void sgl_c4f(float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_c4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_c1u32(uint32_t rgba);
 
 /* define primitives, each begin/end is one draw command */
 SOKOL_API_DECL void sgl_begin(sgl_primitive_type_t mode);
-SOKOL_API_DECL void sgl_vtx2f(float x, float y);
-SOKOL_API_DECL void sgl_vtx3f(float x, float y, float z);
-SOKOL_API_DECL void sgl_vtx2f_tex2f(float x, float y, float u, float v);
-SOKOL_API_DECL void sgl_vtx3f_tex2f(float x, float y, float z, float u, float v);
-SOKOL_API_DECL void sgl_vtx2f_col4f(float x, float y, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_vtx2f_col4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_vtx2f_col1u32(float x, float y, uint32_t rgba);
-SOKOL_API_DECL void sgl_vtx3f_col4f(float x, float y, float z, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_vtx3f_col4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_vtx3f_col1u32(float x, float y, float z, uint32_t rgba);
-SOKOL_API_DECL void sgl_vtx2f_tex2f_col4f(float x, float y, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_vtx2f_tex2f_col4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_vtx2f_tex2f_col1u32(float x, float y, float u, float v, uint32_t rgba);
-SOKOL_API_DECL void sgl_vtx3f_tex2f_col4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_vtx3f_tex2f_col4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_vtx3f_tex2f_col1u32(float x, float y, float z, float u, float v, uint32_t rgba);
+SOKOL_API_DECL void sgl_v2f(float x, float y);
+SOKOL_API_DECL void sgl_v3f(float x, float y, float z);
+SOKOL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
+SOKOL_API_DECL void sgl_v3f_t2f(float x, float y, float z, float u, float v);
+SOKOL_API_DECL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_v2f_c4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v2f_c1u32(float x, float y, uint32_t rgba);
+SOKOL_API_DECL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_v3f_c4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v3f_c1u32(float x, float y, float z, uint32_t rgba);
+SOKOL_API_DECL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_v2f_t2f_c4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v2f_t2f_c1u32(float x, float y, float u, float v, uint32_t rgba);
+SOKOL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
+SOKOL_API_DECL void sgl_v3f_t2f_c4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v3f_t2f_c1u32(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
 
 /* matrix stack functions (only valid outside begin end */
@@ -200,6 +200,9 @@ SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, flo
 SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
 SOKOL_API_DECL void sgl_push_matrix(void);
 SOKOL_API_DECL void sgl_pop_matrix(void);
+
+/* render everything */
+SOKOL_API_DECL void sgl_draw(void);
 
 #ifdef __cplusplus
 extern "C" {
@@ -754,10 +757,10 @@ SOKOL_API_IMPL void sgl_begin(sgl_primitive_type_t mode) {
 SOKOL_API_IMPL void sgl_end(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(_sgl.in_begin);
+    _sgl.in_begin = false;
     if (_sgl.base_vertex == _sgl.cur_vertex) {
         return;
     }
-    _sgl.in_begin = false;
     _sgl_command_t* cmd = _sgl_next_command();
     if (cmd) {
         cmd->cmd = SGL_COMMAND_DRAW;
@@ -777,85 +780,90 @@ SOKOL_API_IMPL void sgl_end(void) {
     }
 }
 
-SOKOL_API_IMPL void sgl_tex2f(float u, float v) {
+SOKOL_API_IMPL void sgl_t2f(float u, float v) {
     _sgl.u = _sgl_pack_u(u);
     _sgl.v = _sgl_pack_u(v);
 }
 
-SOKOL_API_IMPL void sgl_col4f(float r, float g, float b, float a) {
+SOKOL_API_IMPL void sgl_c4f(float r, float g, float b, float a) {
     _sgl.rgba = _sgl_pack_rgbaf(r, g, b, a);
 }
 
-SOKOL_API_IMPL void sgl_col4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+SOKOL_API_IMPL void sgl_c4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     _sgl.rgba = _sgl_pack_rgbau8(r, g, b, a);
 }
 
-SOKOL_API_IMPL void sgl_col1u32(uint32_t rgba) {
+SOKOL_API_IMPL void sgl_c1u32(uint32_t rgba) {
     _sgl.rgba = rgba;
 }
 
-SOKOL_API_IMPL void sgl_vtx2f(float x, float y) {
+SOKOL_API_IMPL void sgl_v2f(float x, float y) {
     _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl.rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx3f(float x, float y, float z) {
+SOKOL_API_IMPL void sgl_v3f(float x, float y, float z) {
     _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl.rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_tex2f(float x, float y, float u, float v) {
+SOKOL_API_IMPL void sgl_v2f_t2f(float x, float y, float u, float v) {
     _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl.rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_tex2f(float x, float y, float z, float u, float v) {
+SOKOL_API_IMPL void sgl_v3f_t2f(float x, float y, float z, float u, float v) {
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl.rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_col4f(float x, float y, float r, float g, float b, float a) {
+SOKOL_API_IMPL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a) {
     _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_col4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+SOKOL_API_IMPL void sgl_v2f_c4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     _sgl_vtx(x, x, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_col1u32(float x, float y, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v2f_c1u32(float x, float y, uint32_t rgba) {
     _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_col4f(float x, float y, float z, float r, float g, float b, float a) {
+SOKOL_API_IMPL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a) {
     _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_col4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+SOKOL_API_IMPL void sgl_v3f_c4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     _sgl_vtx(x, x, z, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_col1u32(float x, float y, float z, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v3f_c1u32(float x, float y, float z, uint32_t rgba) {
     _sgl_vtx(x, y, z, _sgl.u, _sgl.v, rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_tex2f_col4f(float x, float y, float u, float v, float r, float g, float b, float a) {
+SOKOL_API_IMPL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a) {
     _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_tex2f_col4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+SOKOL_API_IMPL void sgl_v2f_t2f_c4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     _sgl_vtx(x, x, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx2f_tex2f_col1u32(float x, float y, float u, float v, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v2f_t2f_c1u32(float x, float y, float u, float v, uint32_t rgba) {
     _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_tex2f_col4f(float x, float y, float z, float u, float v, float r, float g, float b, float a) {
+SOKOL_API_IMPL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a) {
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_tex2f_col4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+SOKOL_API_IMPL void sgl_v3f_t2f_c4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     _sgl_vtx(x, x, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_vtx3f_tex2f_col1u32(float x, float y, float z, float u, float v, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v3f_t2f_c1u32(float x, float y, float z, float u, float v, uint32_t rgba) {
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
+}
+
+SOKOL_API_IMPL void sgl_draw(void) {
+    /* FIXME! */
+    _sgl_rewind();
 }
 
 #endif /* SOKOL_GL_IMPL */
