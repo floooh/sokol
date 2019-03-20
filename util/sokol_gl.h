@@ -84,8 +84,6 @@
     Used in sgl_begin() to start rendering this type of primitive.
 
     NOTE: the values are *not* identical with sg_primitive_type!
-
-    FIXME: add an (emulated) SGL_QUADS mode??
 */
 typedef enum sgl_primitive_type_t {
     SGL_POINTS = 0,
@@ -113,8 +111,8 @@ typedef enum sgl_matrix_mode_t {
     Used in sgl_enable() / sgl_disable()
 */
 typedef enum sgl_state_t {
-    SGL_ORIGIN_TOP_LEFT = 0,        /* default: true */
-    SGL_ALPHABLEND,                 /* default: false */
+    SGL_DEPTH_TEST,                 /* default: false */
+    SGL_BLEND,                      /* default: false */
     SGL_TEXTURING,                  /* default: false */
     SGL_CULL_FACE,                  /* default: false */
     SGL_NUM_STATES,
@@ -157,8 +155,8 @@ SOKOL_API_DECL sgl_error_t sgl_error(void);
 SOKOL_API_DECL void sgl_enable(sgl_state_t state);
 SOKOL_API_DECL void sgl_disable(sgl_state_t state);
 SOKOL_API_DECL bool sgl_is_enabled(sgl_state_t state);
-SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h);
-SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h);
+SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_texture(sgl_texture_t tex);
 SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
 
@@ -382,11 +380,12 @@ typedef enum {
 } _sgl_command_type_t;
 
 typedef struct {
-    sgl_primitive_type_t type;
-    sgl_texture_t texture;
-    int base_vertex_index;
+    sgl_texture_t tex;
+    uint16_t prim_type;
+    uint16_t state;
+    int base_vertex;
     int num_vertices;
-    int uniforms_index;
+    int uniform_index;
 } _sgl_draw_args_t;
 
 typedef struct {
@@ -416,6 +415,7 @@ typedef struct {
     int num_vertices;
     int num_uniforms;
     int num_commands;
+    int base_vertex;
     int cur_vertex;
     int cur_uniform;
     int cur_command;
@@ -425,7 +425,8 @@ typedef struct {
 
     sgl_error_t error;
     bool in_begin;
-    bool state[SGL_NUM_STATES];
+    uint16_t state;
+    sgl_primitive_type_t cur_prim_type;
     float u_scale, v_scale;
     int16_t u, v;
     uint32_t rgba;
@@ -436,12 +437,14 @@ typedef struct {
     sg_buffer vbuf;
     sg_image img;   /* a default white texture */
     sg_shader shd;
-    sg_pipeline pip[2][2][SGL_NUM_PRIMITIVE_TYPES];    /* blend/cull/primitive-type */
+    sg_pipeline pip[2][2][2][SGL_NUM_PRIMITIVE_TYPES];    /* [depth_test][bend][cull_face][prim_type] */
+    sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
 } _sgl_t;
 static _sgl_t _sgl;
 
 /*== PRIVATE FUNCTIONS =======================================================*/
 _SOKOL_PRIVATE void _sgl_rewind(void) {
+    _sgl.base_vertex = 0;
     _sgl.cur_vertex = 0;
     _sgl.cur_uniform = 0;
     _sgl.cur_command = 0;
@@ -508,6 +511,41 @@ static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uin
     }
 }
 
+static inline bool _sgl_state(sgl_state_t s) {
+    return 0 != (_sgl.state & (1<<s));
+}
+
+/* lookup or lazy-create pipeline object matching current state */
+static inline sg_pipeline _sgl_pipeline(void) {
+    const int depth_test = _sgl_state(SGL_DEPTH_TEST) ? 1 : 0;
+    const int blend = _sgl_state(SGL_BLEND) ? 1 : 0;
+    const int cull_face = _sgl_state(SGL_CULL_FACE) ? 1 : 0;
+    const int prim_type = (int) _sgl.cur_prim_type;
+    if (SG_INVALID_ID == _sgl.pip[depth_test][blend][cull_face][prim_type].id) {
+        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_BLEND);
+        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_CULL_FACE) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
+        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_DEPTH_TEST) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+        switch (_sgl.cur_prim_type) {
+            case SGL_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
+            case SGL_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
+            case SGL_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
+            case SGL_TRIANGLES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
+            case SGL_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
+            default: SOKOL_UNREACHABLE; break;
+        }
+        _sgl.pip[depth_test][blend][cull_face][prim_type] = sg_make_pipeline(&_sgl.pip_desc);
+    }
+    return _sgl.pip[depth_test][blend][cull_face][prim_type];
+}
+
+/* initialize identity matrix */
+static inline void _sgl_identity(float mx[16]) {
+    mx[0] =1.0f; mx[1] =0.0f; mx[2] =0.0f; mx[3] =0.0f;
+    mx[4] =0.0f; mx[5] =1.0f; mx[6] =0.0f; mx[7] =0.0f;
+    mx[8] =0.0f; mx[9] =0.0f; mx[10]=1.0f; mx[11]=0.0f;
+    mx[12]=0.0f; mx[13]=0.0f; mx[14]=0.0f; mx[15]=1.0f;
+}
+
 /*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -526,7 +564,6 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(_sgl.commands);
 
     /* default state */
-    _sgl.state[SGL_ORIGIN_TOP_LEFT] = true;
     _sgl.u_scale = _sgl.v_scale = 1.0f;
     _sgl.rgba = 0xFFFFFFFF;
 
@@ -575,57 +612,41 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     shd_desc.fs.source = _sgl_fs_src;
     shd_desc.label = "sgl-shader";
     _sgl.shd = sg_make_shader(&shd_desc);
+    sg_pop_debug_group();
 
-    sg_pipeline_desc pip_desc;
-    memset(&pip_desc, 0, sizeof(pip_desc));
-    pip_desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
+    /* template desc for lazy pipeline creation */
+    _sgl.pip_desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
     {
-        sg_vertex_attr_desc* pos = &pip_desc.layout.attrs[0];
+        sg_vertex_attr_desc* pos = &_sgl.pip_desc.layout.attrs[0];
         pos->name = "position";
         pos->sem_name = "POSITION";
         pos->offset = offsetof(_sgl_vertex_t, pos);
         pos->format = SG_VERTEXFORMAT_FLOAT3;
     }
     {
-        sg_vertex_attr_desc* uv = &pip_desc.layout.attrs[1];
+        sg_vertex_attr_desc* uv = &_sgl.pip_desc.layout.attrs[1];
         uv->name = "texcoord0";
         uv->sem_name = "TEXCOORD";
         uv->offset = offsetof(_sgl_vertex_t, uv);
         uv->format = SG_VERTEXFORMAT_SHORT2N;
     }
     {
-        sg_vertex_attr_desc* rgba = &pip_desc.layout.attrs[2];
+        sg_vertex_attr_desc* rgba = &_sgl.pip_desc.layout.attrs[2];
         rgba->name = "color0";
         rgba->sem_name = "TEXCOORD";
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
-    pip_desc.shader = _sgl.shd;
-    pip_desc.index_type = SG_INDEXTYPE_NONE;
-    pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pip_desc.blend.color_write_mask = SG_COLORMASK_RGB;
-    pip_desc.blend.color_format = desc->color_format;
-    pip_desc.blend.depth_format = desc->depth_format;
-    pip_desc.rasterizer.sample_count = desc->sample_count;
-    for (int blend = 0; blend < 2; blend++) {
-        pip_desc.blend.enabled = (blend == 0);
-        for (int cull = 0; cull < 2; cull++) {
-            pip_desc.rasterizer.cull_mode = (cull == 0) ? SG_CULLMODE_NONE : SG_CULLMODE_BACK;
-            for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
-                switch (prim_type) {
-                    case SGL_POINTS: pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
-                    case SGL_LINES: pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
-                    case SGL_LINE_STRIP: pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
-                    case SGL_TRIANGLES: pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
-                    case SGL_TRIANGLE_STRIP: pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
-                    default: SOKOL_UNREACHABLE; break;
-                }
-                _sgl.pip[blend][cull][prim_type] = sg_make_pipeline(&pip_desc);
-            }
-        }
-    }
-    sg_pop_debug_group();
+    _sgl.pip_desc.shader = _sgl.shd;
+    _sgl.pip_desc.index_type = SG_INDEXTYPE_NONE;
+    _sgl.pip_desc.depth_stencil.depth_write_enabled = true;
+    _sgl.pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    _sgl.pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    _sgl.pip_desc.blend.color_write_mask = SG_COLORMASK_RGB;
+    _sgl.pip_desc.blend.color_format = desc->color_format;
+    _sgl.pip_desc.blend.depth_format = desc->depth_format;
+    _sgl.pip_desc.rasterizer.sample_count = desc->sample_count;
+
 }
 
 SOKOL_API_IMPL void sgl_shutdown(void) {
@@ -636,10 +657,13 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_buffer(_sgl.vbuf);
     sg_destroy_image(_sgl.img);
     sg_destroy_shader(_sgl.shd);
-    for (int blend = 0; blend < 2; blend++) {
-        for (int cull = 0; cull < 2; cull++) {
-            for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
-                sg_destroy_pipeline(_sgl.pip[blend][cull][prim_type]);
+    /* NOTE: calling sg_destroy_*() with an invalid id is valid */
+    for (int depth_test = 0; depth_test < 2; depth_test++) {
+        for (int blend = 0; blend < 2; blend++) {
+            for (int cull_face = 0; cull_face < 2; cull_face++) {
+                for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
+                    sg_destroy_pipeline(_sgl.pip[depth_test][blend][cull_face][prim_type]);
+                }
             }
         }
     }
@@ -654,23 +678,23 @@ SOKOL_API_IMPL void sgl_enable(sgl_state_t state) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state[state] = true;
+    _sgl.state |= (1<<state);
 }
 
 SOKOL_API_IMPL void sgl_disable(sgl_state_t state) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state[state] = false;
+    _sgl.state &= ~(1<<state);
 }
 
 SOKOL_API_IMPL bool sgl_is_enabled(sgl_state_t state) {
     SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    return _sgl.state[state];
+    return _sgl_state(state);
 }
 
-SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h) {
+SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
     _sgl_command_t* cmd = _sgl_next_command();
@@ -680,11 +704,11 @@ SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h) {
         cmd->args.viewport.y = y;
         cmd->args.viewport.w = w;
         cmd->args.viewport.h = h;
-        cmd->args.viewport.origin_top_left = _sgl.state[SGL_ORIGIN_TOP_LEFT];
+        cmd->args.viewport.origin_top_left = origin_top_left;
     }
 }
 
-SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h) {
+SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
     _sgl_command_t* cmd = _sgl_next_command();
@@ -694,7 +718,7 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h) {
         cmd->args.scissor_rect.y = y;
         cmd->args.scissor_rect.w = w;
         cmd->args.scissor_rect.h = h;
-        cmd->args.scissor_rect.origin_top_left = _sgl.state[SGL_ORIGIN_TOP_LEFT];
+        cmd->args.scissor_rect.origin_top_left = origin_top_left;
     }
 }
 
@@ -716,6 +740,41 @@ SOKOL_API_IMPL void sgl_texcoord_int_bits(int u_bits, int v_bits) {
     SOKOL_ASSERT((v_bits >= 0) && (v_bits <= 15));
     _sgl.u_scale = (float)(1<<u_bits);
     _sgl.v_scale = (float)(1<<v_bits);
+}
+
+SOKOL_API_IMPL void sgl_begin(sgl_primitive_type_t mode) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((mode >= 0) && (mode <= SGL_NUM_PRIMITIVE_TYPES));
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.in_begin = true;
+    _sgl.base_vertex = _sgl.cur_vertex;
+    _sgl.cur_prim_type = mode;
+}
+
+SOKOL_API_IMPL void sgl_end(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(_sgl.in_begin);
+    if (_sgl.base_vertex == _sgl.cur_vertex) {
+        return;
+    }
+    _sgl.in_begin = false;
+    _sgl_command_t* cmd = _sgl_next_command();
+    if (cmd) {
+        cmd->cmd = SGL_COMMAND_DRAW;
+        cmd->args.draw.tex = _sgl.tex;
+        cmd->args.draw.prim_type = (uint16_t) _sgl.cur_prim_type;
+        cmd->args.draw.state = _sgl.state;
+        cmd->args.draw.base_vertex = _sgl.base_vertex;
+        cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
+        cmd->args.draw.uniform_index = _sgl.cur_uniform;
+    }
+    _sgl_uniform_t* uni = _sgl_next_uniform();
+    if (uni) {
+        // FIXME
+        _sgl_identity(uni->mvp);
+        uni->uv_scale[0] = _sgl.u_scale;
+        uni->uv_scale[1] = _sgl.v_scale;
+    }
 }
 
 SOKOL_API_IMPL void sgl_tex2f(float u, float v) {
