@@ -163,8 +163,8 @@ SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_t2f(float u, float v);
 SOKOL_API_DECL void sgl_c4f(float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_c4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_c1u32(uint32_t rgba);
+SOKOL_API_DECL void sgl_c4ub(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_c1ui(uint32_t rgba);
 
 /* define primitives, each begin/end is one draw command */
 SOKOL_API_DECL void sgl_begin(sgl_primitive_type_t mode);
@@ -173,17 +173,17 @@ SOKOL_API_DECL void sgl_v3f(float x, float y, float z);
 SOKOL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
 SOKOL_API_DECL void sgl_v3f_t2f(float x, float y, float z, float u, float v);
 SOKOL_API_DECL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v2f_c4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v2f_c1u32(float x, float y, uint32_t rgba);
+SOKOL_API_DECL void sgl_v2f_c4ub(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v2f_c1ui(float x, float y, uint32_t rgba);
 SOKOL_API_DECL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v3f_c4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v3f_c1u32(float x, float y, float z, uint32_t rgba);
+SOKOL_API_DECL void sgl_v3f_c4ub(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v3f_c1ui(float x, float y, float z, uint32_t rgba);
 SOKOL_API_DECL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v2f_t2f_c4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v2f_t2f_c1u32(float x, float y, float u, float v, uint32_t rgba);
+SOKOL_API_DECL void sgl_v2f_t2f_c4ub(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v2f_t2f_c1ui(float x, float y, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v3f_t2f_c4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v3f_t2f_c1u32(float x, float y, float z, float u, float v, uint32_t rgba);
+SOKOL_API_DECL void sgl_v3f_t2f_c4ub(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_API_DECL void sgl_v3f_t2f_c1ui(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
 
 /* matrix stack functions (only valid outside begin end */
@@ -255,7 +255,7 @@ static const char* _sgl_vs_src =
     "#version 330\n"
     "uniform mat4 mvp;\n"
     "uniform vec2 uv_scale;\n"
-    "in vec2 position;\n"
+    "in vec4 position;\n"
     "in vec2 texcoord0;\n"
     "in vec4 color0;\n"
     "out vec2 uv;\n"
@@ -278,7 +278,7 @@ static const char* _sgl_fs_src =
 static const char* _sgl_vs_src =
     "uniform mat4 mvp;\n"
     "uniform vec2 uv_scale;\n"
-    "attribute vec2 position;\n"
+    "attribute vec4 position;\n"
     "attribute vec2 texcoord0;\n"
     "attribute vec4 color0;\n"
     "varying vec2 uv;\n"
@@ -305,7 +305,7 @@ static const char* _sgl_vs_src =
     "  float2 uv_scale;\n"
     "};\n"
     "struct vs_in {\n"
-    "  float2 pos [[attribute(0)]];\n"
+    "  float4 pos [[attribute(0)]];\n"
     "  float2 uv [[attribute(1)]];\n"
     "  float4 color [[attribute(2)]];\n"
     "};\n"
@@ -316,7 +316,7 @@ static const char* _sgl_vs_src =
     "};\n"
     "vertex vs_out _main(vs_in in [[stage_in]], constant params_t& params [[buffer(0)]]) {\n"
     "  vs_out out;\n"
-    "  out.pos = params.mvp * in.position;\n"
+    "  out.pos = params.mvp * in.pos;\n"
     "  out.uv = params.uv_scale * in.uv;\n"
     "  out.color = in.color;\n"
     "  return out;\n"
@@ -435,13 +435,14 @@ typedef struct {
     uint32_t rgba;
     sgl_texture_t tex;
 
-    // FIXME
+    // FIXME: matrix stack stuff
 
     sg_buffer vbuf;
     sg_image img;   /* a default white texture */
     sg_shader shd;
     sg_pipeline pip[2][2][2][SGL_NUM_PRIMITIVE_TYPES];    /* [depth_test][bend][cull_face][prim_type] */
     sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
+    sg_bindings bind;
 } _sgl_t;
 static _sgl_t _sgl;
 
@@ -492,7 +493,7 @@ static inline int16_t _sgl_pack_v(float v) {
     return (int16_t) ((v * (1<<15)) / _sgl.v_scale);
 }
 
-static inline uint32_t _sgl_pack_rgbau8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+static inline uint32_t _sgl_pack_rgbaub(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (uint32_t)((a<<24)|(b<<16)|(g<<8)|r);
 }
 
@@ -501,7 +502,7 @@ static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
     uint8_t g_u8 = (uint8_t) (g * 255.0f);
     uint8_t b_u8 = (uint8_t) (b * 255.0f);
     uint8_t a_u8 = (uint8_t) (a * 255.0f);
-    return _sgl_pack_rgbau8(r_u8, g_u8, b_u8, a_u8);
+    return _sgl_pack_rgbaub(r_u8, g_u8, b_u8, a_u8);
 }
 
 static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uint32_t rgba) {
@@ -514,21 +515,20 @@ static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uin
     }
 }
 
-static inline bool _sgl_state(sgl_state_t s) {
-    return 0 != (_sgl.state & (1<<s));
+static inline bool _sgl_state(uint32_t mask, sgl_state_t s) {
+    return 0 != (mask & (1<<s));
 }
 
-/* lookup or lazy-create pipeline object matching current state */
-static inline sg_pipeline _sgl_pipeline(void) {
-    const int depth_test = _sgl_state(SGL_DEPTH_TEST) ? 1 : 0;
-    const int blend = _sgl_state(SGL_BLEND) ? 1 : 0;
-    const int cull_face = _sgl_state(SGL_CULL_FACE) ? 1 : 0;
-    const int prim_type = (int) _sgl.cur_prim_type;
-    if (SG_INVALID_ID == _sgl.pip[depth_test][blend][cull_face][prim_type].id) {
-        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_BLEND);
-        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_CULL_FACE) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
-        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_DEPTH_TEST) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
-        switch (_sgl.cur_prim_type) {
+/* lookup or lazy-create pipeline object */
+static inline sg_pipeline _sgl_pipeline(sgl_primitive_type_t prim_type, uint16_t state) {
+    const int depth_test = _sgl_state(state, SGL_DEPTH_TEST) ? 1 : 0;
+    const int blend = _sgl_state(state, SGL_BLEND) ? 1 : 0;
+    const int cull_face = _sgl_state(state, SGL_CULL_FACE) ? 1 : 0;
+    if (SG_INVALID_ID == _sgl.pip[depth_test][blend][cull_face][(int)prim_type].id) {
+        _sgl.pip_desc.blend.enabled = _sgl_state(state, SGL_BLEND);
+        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(state, SGL_CULL_FACE) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
+        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(state, SGL_DEPTH_TEST) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+        switch (prim_type) {
             case SGL_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
             case SGL_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
             case SGL_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
@@ -600,6 +600,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     img_desc.label = "sgl-default-texture";
     _sgl.img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.img.id);
+    _sgl.tex = _sgl.img;
 
     sg_shader_desc shd_desc;
     memset(&shd_desc, 0, sizeof(shd_desc));
@@ -649,7 +650,6 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     _sgl.pip_desc.blend.color_format = desc->color_format;
     _sgl.pip_desc.blend.depth_format = desc->depth_format;
     _sgl.pip_desc.rasterizer.sample_count = desc->sample_count;
-
 }
 
 SOKOL_API_IMPL void sgl_shutdown(void) {
@@ -694,7 +694,7 @@ SOKOL_API_IMPL void sgl_disable(sgl_state_t state) {
 SOKOL_API_IMPL bool sgl_is_enabled(sgl_state_t state) {
     SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    return _sgl_state(state);
+    return _sgl_state(_sgl.state, state);
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -789,11 +789,11 @@ SOKOL_API_IMPL void sgl_c4f(float r, float g, float b, float a) {
     _sgl.rgba = _sgl_pack_rgbaf(r, g, b, a);
 }
 
-SOKOL_API_IMPL void sgl_c4u8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl.rgba = _sgl_pack_rgbau8(r, g, b, a);
+SOKOL_API_IMPL void sgl_c4ub(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl.rgba = _sgl_pack_rgbaub(r, g, b, a);
 }
 
-SOKOL_API_IMPL void sgl_c1u32(uint32_t rgba) {
+SOKOL_API_IMPL void sgl_c1ui(uint32_t rgba) {
     _sgl.rgba = rgba;
 }
 
@@ -817,11 +817,11 @@ SOKOL_API_IMPL void sgl_v2f_c4f(float x, float y, float r, float g, float b, flo
     _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v2f_c4u8(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, x, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
+SOKOL_API_IMPL void sgl_v2f_c4ub(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaub(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v2f_c1u32(float x, float y, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v2f_c1ui(float x, float y, uint32_t rgba) {
     _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, rgba);
 }
 
@@ -829,11 +829,11 @@ SOKOL_API_IMPL void sgl_v3f_c4f(float x, float y, float z, float r, float g, flo
     _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v3f_c4u8(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, x, z, _sgl.u, _sgl.v, _sgl_pack_rgbau8(r, g, b, a));
+SOKOL_API_IMPL void sgl_v3f_c4ub(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaub(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v3f_c1u32(float x, float y, float z, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v3f_c1ui(float x, float y, float z, uint32_t rgba) {
     _sgl_vtx(x, y, z, _sgl.u, _sgl.v, rgba);
 }
 
@@ -841,11 +841,11 @@ SOKOL_API_IMPL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r,
     _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v2f_t2f_c4u8(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, x, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
+SOKOL_API_IMPL void sgl_v2f_t2f_c4ub(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaub(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v2f_t2f_c1u32(float x, float y, float u, float v, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v2f_t2f_c1ui(float x, float y, float u, float v, uint32_t rgba) {
     _sgl_vtx(x, y, 0.0f, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
 }
 
@@ -853,17 +853,53 @@ SOKOL_API_IMPL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v,
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaf(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v3f_t2f_c4u8(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, x, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbau8(r, g, b, a));
+SOKOL_API_IMPL void sgl_v3f_t2f_c4ub(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), _sgl_pack_rgbaub(r, g, b, a));
 }
 
-SOKOL_API_IMPL void sgl_v3f_t2f_c1u32(float x, float y, float z, float u, float v, uint32_t rgba) {
+SOKOL_API_IMPL void sgl_v3f_t2f_c1ui(float x, float y, float z, float u, float v, uint32_t rgba) {
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
 }
 
+/* this draw the accumulated draw commands via sokol-gfx */
 SOKOL_API_IMPL void sgl_draw(void) {
-    /* FIXME! */
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    if ((_sgl.error == SGL_NO_ERROR) && (_sgl.cur_vertex > 0) && (_sgl.cur_command > 0)) {
+        sg_push_debug_group("sokol-gl");
+        sg_update_buffer(_sgl.vbuf, _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t));
+        _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
+        for (int i = 0; i < _sgl.cur_command; i++) {
+            const _sgl_command_t* cmd = &_sgl.commands[i];
+            switch (cmd->cmd) {
+                case SGL_COMMAND_VIEWPORT:
+                    { 
+                        const _sgl_viewport_args_t* args = &cmd->args.viewport;
+                        sg_apply_viewport(args->x, args->y, args->w, args->h, args->origin_top_left);
+                    }
+                    break;
+                case SGL_COMMAND_SCISSOR_RECT:
+                    {
+                        const _sgl_scissor_rect_args_t* args = &cmd->args.scissor_rect;
+                        sg_apply_scissor_rect(args->x, args->y, args->w, args->h, args->origin_top_left);
+                    }
+                    break;
+                case SGL_COMMAND_DRAW:
+                    {
+                        /* FIXME: don't apply redundant state */
+                        const _sgl_draw_args_t* args = &cmd->args.draw;
+                        sg_pipeline pip = _sgl_pipeline((sgl_primitive_type_t)args->prim_type, args->state);
+                        sg_apply_pipeline(pip);
+                        _sgl.bind.fs_images[0] = args->tex;
+                        sg_apply_bindings(&_sgl.bind);
+                        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
+                        /* FIXME: what if number of vertices doesn't match the primitive type? */
+                        sg_draw(args->base_vertex, args->num_vertices, 1);
+                    }
+                    break;
+            }
+        }
+        sg_pop_debug_group();
+    }
     _sgl_rewind();
 }
-
 #endif /* SOKOL_GL_IMPL */
