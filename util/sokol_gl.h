@@ -107,22 +107,23 @@ typedef enum sgl_primitive_type_t {
     adding new states, make sure to update the implementation!
 */
 typedef enum sgl_state_t {
-    SGL_DEPTH_TEST,                 /* default: false */
-    SGL_BLEND,                      /* default: false */
-    SGL_CULL_FACE,                  /* default: false */
-    SGL_TEXTURING,                  /* default: false */
-    SGL_NUM_STATES,
+    SGL_STATE_DEPTHTEST,        /* default: false */
+    SGL_STATE_BLEND,            /* default: false */
+    SGL_STATE_CULLFACE,         /* default: false */
+    SGL_STATE_TEXTURING,        /* default: false */
+    SGL_NUM_STATES
 } sgl_state_t;
 
 /*
     sgl_matrixmode_t
 
-    Used in sgl_matrix_mode()
+    Used in sgl_matrix_mode(). The default matrix mode is SGL_MODELVIEW
 */
 typedef enum sgl_matrix_mode_t {
-    SGL_MODELVIEW,
-    SGL_PROJECTION,
-    SGL_TEXTURE,
+    SGL_MATRIXMODE_MODELVIEW,
+    SGL_MATRIXMODE_PROJECTION,
+    SGL_MATRIXMODE_TEXTURE,
+    SGL_NUM_MATRIXMODES
 } sgl_matrix_mode_t;
 
 /*
@@ -136,6 +137,8 @@ typedef enum sgl_error_t {
     SGL_ERROR_VERTICES_FULL,
     SGL_ERROR_UNIFORMS_FULL,
     SGL_ERROR_COMMANDS_FULL,
+    SGL_ERROR_STACK_OVERFLOW,
+    SGL_ERROR_STACK_UNDERFLOW,
 } sgl_error_t;
 
 /*
@@ -193,13 +196,16 @@ SOKOL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v,
 SOKOL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
 
-/* matrix stack functions (only valid outside begin end */
+/* matrix stack functions (only valid outside begin end)
+    rm = row major
+    cm = column major
+*/
 SOKOL_API_DECL void sgl_matrix_mode(sgl_matrix_mode_t mode);
-SOKOL_API_DECL void sgl_load_matrix(float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix(float m[16]);
-SOKOL_API_DECL void sgl_load_transpose_matrix(float m[16]);
-SOKOL_API_DECL void sgl_mult_transpose_matrix(float m[16]);
 SOKOL_API_DECL void sgl_load_identity(void);
+SOKOL_API_DECL void sgl_load_matrix_rm(float m[16]);
+SOKOL_API_DECL void sgl_mult_matrix_rm(float m[16]);
+SOKOL_API_DECL void sgl_load_matrix_cm(float m[16]);
+SOKOL_API_DECL void sgl_mult_matrix_cm(float m[16]);
 SOKOL_API_DECL void sgl_rotate(float angle, float x, float y, float z);
 SOKOL_API_DECL void sgl_scale(float x, float y, float z);
 SOKOL_API_DECL void sgl_translate(float x, float y, float z);
@@ -379,7 +385,11 @@ typedef struct {
 } _sgl_vertex_t;
 
 typedef struct {
-    float mvp[16];      /* model-view-projection matrix */
+    float v[4][4];
+} _sgl_matrix_t;
+
+typedef struct {
+    _sgl_matrix_t mvp;  /* model-view-projection matrix */
     float uv_scale[2];  /* scaler for converting fixed-point texcoord to float */
 } _sgl_uniform_t;
 
@@ -420,6 +430,8 @@ typedef struct {
 
 /* number of pipelines: 3 bits for primitive type, 3 relevant render state bits */
 #define _SGL_MAX_PIPELINES (64)
+/* matrix stack depth */
+#define _SGL_MAX_STACK_DEPTH (64)
 
 typedef struct {
     uint32_t init_cookie;
@@ -427,7 +439,6 @@ typedef struct {
     int num_vertices;
     int num_uniforms;
     int num_commands;
-    int base_vertex;
     int cur_vertex;
     int cur_uniform;
     int cur_command;
@@ -435,6 +446,8 @@ typedef struct {
     _sgl_uniform_t* uniforms;
     _sgl_command_t* commands;
 
+    /* state tracking */
+    int base_vertex;
     sgl_error_t error;
     bool in_begin;
     uint16_t state_bits;        /* bitmask with primitive type and render states */
@@ -443,14 +456,18 @@ typedef struct {
     uint32_t rgba;
     sgl_texture_t tex;
 
-    // FIXME: matrix stack stuff
-
+    /* sokol-gfx resources */
     sg_buffer vbuf;
     sg_image img;   /* a default white texture */
     sg_shader shd;
     sg_bindings bind;
     sg_pipeline pip[_SGL_MAX_PIPELINES];
     sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
+
+    /* matrix stacks */
+    sgl_matrix_mode_t cur_matrix_mode;
+    int top_of_stack[SGL_NUM_MATRIXMODES];
+    _sgl_matrix_t matrix_stack[SGL_NUM_MATRIXMODES][_SGL_MAX_STACK_DEPTH];
 } _sgl_t;
 static _sgl_t _sgl;
 
@@ -560,9 +577,9 @@ static inline int _sgl_pipeline_index(uint16_t state) {
 static inline sg_pipeline _sgl_pipeline(uint16_t state_bits) {
     int pip_index = _sgl_pipeline_index(state_bits);
     if (SG_INVALID_ID == _sgl.pip[pip_index].id) {
-        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_BLEND, state_bits);
-        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_CULL_FACE, state_bits) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
-        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_DEPTH_TEST, state_bits) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_STATE_BLEND, state_bits);
+        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_STATE_CULLFACE, state_bits) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
+        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_STATE_DEPTHTEST, state_bits) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
         switch (_sgl_prim_type(state_bits)) {
             case SGL_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
             case SGL_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
@@ -577,11 +594,39 @@ static inline sg_pipeline _sgl_pipeline(uint16_t state_bits) {
 }
 
 /* initialize identity matrix */
-static inline void _sgl_identity(float mx[16]) {
-    mx[0] =1.0f; mx[1] =0.0f; mx[2] =0.0f; mx[3] =0.0f;
-    mx[4] =0.0f; mx[5] =1.0f; mx[6] =0.0f; mx[7] =0.0f;
-    mx[8] =0.0f; mx[9] =0.0f; mx[10]=1.0f; mx[11]=0.0f;
-    mx[12]=0.0f; mx[13]=0.0f; mx[14]=0.0f; mx[15]=1.0f;
+static inline void _sgl_identity(_sgl_matrix_t* m) {
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            m->v[c][r] = (c == r) ? 1.0f : 0.0f;
+        }
+    }
+}
+
+/* multiply to (row-major) matrices */
+static inline void _sgl_mul(const _sgl_matrix_t* m0, const _sgl_matrix_t* m1, _sgl_matrix_t* out) {
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            out->v[c][r] = m0->v[0][r] * m1->v[c][0] + 
+                           m0->v[1][r] * m1->v[c][1] + 
+                           m0->v[2][r] * m1->v[c][2] + 
+                           m0->v[3][r] * m1->v[c][3];
+        }
+    }
+}
+
+/* current top-of-stack projection matrix */
+static inline _sgl_matrix_t* _sgl_matrix_projection(void) {
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_PROJECTION][_sgl.top_of_stack[SGL_MATRIXMODE_PROJECTION]];
+}
+
+/* get top-of-stack modelview matrix */
+static inline _sgl_matrix_t* _sgl_matrix_modelview(void) {
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_MODELVIEW][_sgl.top_of_stack[SGL_MATRIXMODE_MODELVIEW]];
+}
+
+/* get top-of-stack texture matrix */
+static inline _sgl_matrix_t* _sgl_matrix_texture(void) {
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_TEXTURE][_sgl.top_of_stack[SGL_MATRIXMODE_TEXTURE]];
 }
 
 /*== PUBLIC FUNCTIONS ========================================================*/
@@ -604,6 +649,9 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     /* default state */
     _sgl.u_scale = _sgl.v_scale = 1.0f;
     _sgl.rgba = 0xFFFFFFFF;
+    for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
+        _sgl_identity(&_sgl.matrix_stack[i][0]);
+    }
 
     /* create sokol-gfx resource objects */
     sg_push_debug_group("sokol-gl");
@@ -799,8 +847,8 @@ SOKOL_API_IMPL void sgl_end(void) {
     }
     _sgl_uniform_t* uni = _sgl_next_uniform();
     if (uni) {
-        // FIXME
-        _sgl_identity(uni->mvp);
+        /* FIXME: update the model-view-proj matrix lazily */
+        _sgl_mul(_sgl_matrix_projection(), _sgl_matrix_modelview(), &uni->mvp);
         uni->uv_scale[0] = _sgl.u_scale;
         uni->uv_scale[1] = _sgl.v_scale;
     }
@@ -885,6 +933,12 @@ SOKOL_API_IMPL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v,
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba) {
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
+}
+
+SOKOL_API_IMPL void sgl_matrix_mode(sgl_matrix_mode_t mode) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((mode >= 0) && (mode < SGL_NUM_MATRIXMODES));
+    _sgl.cur_matrix_mode = mode;
 }
 
 /* this draw the accumulated draw commands via sokol-gfx */
