@@ -83,7 +83,10 @@
 
     Used in sgl_begin() to start rendering this type of primitive.
 
-    NOTE: the values are *not* identical with sg_primitive_type!
+    NOTE: The values are *not* identical with sg_primitive_type!
+    When adding new primitive types, check the implementation
+    for how primitive types and states are merged into
+    an index for looking up pipeline objects!
 */
 typedef enum sgl_primitive_type_t {
     SGL_POINTS = 0,
@@ -95,6 +98,23 @@ typedef enum sgl_primitive_type_t {
 } sgl_primitive_type_t;
 
 /*
+    sgl_state_t
+
+    Used in sgl_enable() / sgl_disable()
+
+    NOTE: States are merged with primitive types into a bit mask,
+    used as index for looking up pipeline state objects. When
+    adding new states, make sure to update the implementation!
+*/
+typedef enum sgl_state_t {
+    SGL_DEPTH_TEST,                 /* default: false */
+    SGL_BLEND,                      /* default: false */
+    SGL_CULL_FACE,                  /* default: false */
+    SGL_TEXTURING,                  /* default: false */
+    SGL_NUM_STATES,
+} sgl_state_t;
+
+/*
     sgl_matrixmode_t
 
     Used in sgl_matrix_mode()
@@ -104,19 +124,6 @@ typedef enum sgl_matrix_mode_t {
     SGL_PROJECTION,
     SGL_TEXTURE,
 } sgl_matrix_mode_t;
-
-/*
-    sgl_state_t
-
-    Used in sgl_enable() / sgl_disable()
-*/
-typedef enum sgl_state_t {
-    SGL_DEPTH_TEST,                 /* default: false */
-    SGL_BLEND,                      /* default: false */
-    SGL_TEXTURING,                  /* default: false */
-    SGL_CULL_FACE,                  /* default: false */
-    SGL_NUM_STATES,
-} sgl_state_t;
 
 /*
     sgl_error_t
@@ -384,8 +391,7 @@ typedef enum {
 
 typedef struct {
     sgl_texture_t tex;
-    uint16_t prim_type;
-    uint16_t state;
+    uint16_t state_bits;    /* bit mask with primitive type and render states */
     int base_vertex;
     int num_vertices;
     int uniform_index;
@@ -412,6 +418,9 @@ typedef struct {
     _sgl_args_t args;
 } _sgl_command_t;
 
+/* number of pipelines: 3 bits for primitive type, 3 relevant render state bits */
+#define _SGL_MAX_PIPELINES (64)
+
 typedef struct {
     uint32_t init_cookie;
 
@@ -428,8 +437,7 @@ typedef struct {
 
     sgl_error_t error;
     bool in_begin;
-    uint16_t state;
-    sgl_primitive_type_t cur_prim_type;
+    uint16_t state_bits;        /* bitmask with primitive type and render states */
     float u_scale, v_scale;
     int16_t u, v;
     uint32_t rgba;
@@ -440,9 +448,9 @@ typedef struct {
     sg_buffer vbuf;
     sg_image img;   /* a default white texture */
     sg_shader shd;
-    sg_pipeline pip[2][2][2][SGL_NUM_PRIMITIVE_TYPES];    /* [depth_test][bend][cull_face][prim_type] */
-    sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
     sg_bindings bind;
+    sg_pipeline pip[_SGL_MAX_PIPELINES];
+    sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
 } _sgl_t;
 static _sgl_t _sgl;
 
@@ -515,20 +523,47 @@ static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uin
     }
 }
 
-static inline bool _sgl_state(uint32_t mask, sgl_state_t s) {
-    return 0 != (mask & (1<<s));
+/* set primitive type in 16-bit merged state */
+static inline uint16_t _sgl_set_prim_type(sgl_primitive_type_t type, uint16_t bits) {
+    SOKOL_ASSERT(((int)type) < 8);
+    return (bits & ~7) | (type & 7);
+}
+
+/* extract primitive type from 16-bit merged state */
+static inline sgl_primitive_type_t _sgl_prim_type(uint16_t bits) {
+    return (sgl_primitive_type_t) (bits & 7);
+}
+
+/* set render state bit in 16-bit merged state */
+static inline uint16_t _sgl_enable_state(sgl_state_t state, uint16_t bits) {
+    /* first 3 bits are used by the primitive type */
+    return bits | (8<<state);
+}
+
+/* clear render state bit in 16-bit merged state */
+static inline uint16_t _sgl_disable_state(sgl_state_t state, uint16_t bits) {
+    /* first 3 bits are used by the primitive type */
+    return bits & ~(8<<state);
+}
+
+/* get render state from merged state bit mask */
+static inline bool _sgl_state(sgl_state_t state, uint16_t bits) {
+    return 0 != (bits & (8<<state));
+}
+
+/* get pipeline index from merged primitive-type / render state bit mask */
+static inline int _sgl_pipeline_index(uint16_t state) {
+    return (int) (state & (_SGL_MAX_PIPELINES-1));
 }
 
 /* lookup or lazy-create pipeline object */
-static inline sg_pipeline _sgl_pipeline(sgl_primitive_type_t prim_type, uint16_t state) {
-    const int depth_test = _sgl_state(state, SGL_DEPTH_TEST) ? 1 : 0;
-    const int blend = _sgl_state(state, SGL_BLEND) ? 1 : 0;
-    const int cull_face = _sgl_state(state, SGL_CULL_FACE) ? 1 : 0;
-    if (SG_INVALID_ID == _sgl.pip[depth_test][blend][cull_face][(int)prim_type].id) {
-        _sgl.pip_desc.blend.enabled = _sgl_state(state, SGL_BLEND);
-        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(state, SGL_CULL_FACE) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
-        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(state, SGL_DEPTH_TEST) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
-        switch (prim_type) {
+static inline sg_pipeline _sgl_pipeline(uint16_t state_bits) {
+    int pip_index = _sgl_pipeline_index(state_bits);
+    if (SG_INVALID_ID == _sgl.pip[pip_index].id) {
+        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_BLEND, state_bits);
+        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_CULL_FACE, state_bits) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
+        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_DEPTH_TEST, state_bits) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+        switch (_sgl_prim_type(state_bits)) {
             case SGL_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
             case SGL_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
             case SGL_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
@@ -536,9 +571,9 @@ static inline sg_pipeline _sgl_pipeline(sgl_primitive_type_t prim_type, uint16_t
             case SGL_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
             default: SOKOL_UNREACHABLE; break;
         }
-        _sgl.pip[depth_test][blend][cull_face][prim_type] = sg_make_pipeline(&_sgl.pip_desc);
+        _sgl.pip[pip_index] = sg_make_pipeline(&_sgl.pip_desc);
     }
-    return _sgl.pip[depth_test][blend][cull_face][prim_type];
+    return _sgl.pip[pip_index];
 }
 
 /* initialize identity matrix */
@@ -661,14 +696,8 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_image(_sgl.img);
     sg_destroy_shader(_sgl.shd);
     /* NOTE: calling sg_destroy_*() with an invalid id is valid */
-    for (int depth_test = 0; depth_test < 2; depth_test++) {
-        for (int blend = 0; blend < 2; blend++) {
-            for (int cull_face = 0; cull_face < 2; cull_face++) {
-                for (int prim_type = 0; prim_type < SGL_NUM_PRIMITIVE_TYPES; prim_type++) {
-                    sg_destroy_pipeline(_sgl.pip[depth_test][blend][cull_face][prim_type]);
-                }
-            }
-        }
+    for (int i = 0; i < _SGL_MAX_PIPELINES; i++) {
+        sg_destroy_pipeline(_sgl.pip[i]);
     }
     _sgl.init_cookie = 0;
 }
@@ -679,22 +708,20 @@ SOKOL_API_IMPL sgl_error_t sgl_error(void) {
 
 SOKOL_API_IMPL void sgl_enable(sgl_state_t state) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state |= (1<<state);
+    _sgl.state_bits = _sgl_enable_state(state, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL void sgl_disable(sgl_state_t state) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state &= ~(1<<state);
+    _sgl.state_bits = _sgl_disable_state(state, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL bool sgl_is_enabled(sgl_state_t state) {
     SOKOL_ASSERT((state >= 0) && (state < SGL_NUM_STATES));
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    return _sgl_state(_sgl.state, state);
+    return _sgl_state(state, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -751,7 +778,7 @@ SOKOL_API_IMPL void sgl_begin(sgl_primitive_type_t mode) {
     SOKOL_ASSERT(!_sgl.in_begin);
     _sgl.in_begin = true;
     _sgl.base_vertex = _sgl.cur_vertex;
-    _sgl.cur_prim_type = mode;
+    _sgl.state_bits = _sgl_set_prim_type(mode, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL void sgl_end(void) {
@@ -765,8 +792,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     if (cmd) {
         cmd->cmd = SGL_COMMAND_DRAW;
         cmd->args.draw.tex = _sgl.tex;
-        cmd->args.draw.prim_type = (uint16_t) _sgl.cur_prim_type;
-        cmd->args.draw.state = _sgl.state;
+        cmd->args.draw.state_bits = _sgl.state_bits;
         cmd->args.draw.base_vertex = _sgl.base_vertex;
         cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
         cmd->args.draw.uniform_index = _sgl.cur_uniform;
@@ -887,7 +913,7 @@ SOKOL_API_IMPL void sgl_draw(void) {
                     {
                         /* FIXME: don't apply redundant state */
                         const _sgl_draw_args_t* args = &cmd->args.draw;
-                        sg_pipeline pip = _sgl_pipeline((sgl_primitive_type_t)args->prim_type, args->state);
+                        sg_pipeline pip = _sgl_pipeline(args->state_bits);
                         sg_apply_pipeline(pip);
                         _sgl.bind.fs_images[0] = args->tex;
                         sg_apply_bindings(&_sgl.bind);
