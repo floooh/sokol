@@ -202,10 +202,10 @@ SOKOL_API_DECL void sgl_end(void);
 */
 SOKOL_API_DECL void sgl_matrix_mode(sgl_matrix_mode_t mode);
 SOKOL_API_DECL void sgl_load_identity(void);
-SOKOL_API_DECL void sgl_load_matrix_cm(const float m[16]);
-SOKOL_API_DECL void sgl_load_matrix_rm(const float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix_cm(const float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix_rm(const float m[16]);
+SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
 SOKOL_API_DECL void sgl_rotate(float angle, float x, float y, float z);
 SOKOL_API_DECL void sgl_scale(float x, float y, float z);
 SOKOL_API_DECL void sgl_translate(float x, float y, float z);
@@ -598,25 +598,27 @@ static inline sg_pipeline _sgl_pipeline(uint16_t state_bits) {
 
 /* initialize identity matrix */
 static inline void _sgl_identity(_sgl_matrix_t* m) {
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) {
-            m->v[c][r] = (c == r) ? 1.0f : 0.0f;
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            m->v[r][c] = (r == c) ? 1.0f : 0.0f;
         }
     }
 }
 
-/* multiply to (row-major) matrices */
-static inline _sgl_matrix_t _sgl_mul(const _sgl_matrix_t* m0, const _sgl_matrix_t* m1) {
-    _sgl_matrix_t res;
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) {
-            res.v[c][r] = m0->v[0][r] * m1->v[c][0] + 
-                          m0->v[1][r] * m1->v[c][1] + 
-                          m0->v[2][r] * m1->v[c][2] + 
-                          m0->v[3][r] * m1->v[c][3];
-        }
+/* multiply matrices, can be in-place if p and a are identical */
+static inline void _sgl_matmul4(_sgl_matrix_t* p, const _sgl_matrix_t* a, const _sgl_matrix_t* b) {
+    for (int i = 0; i < 4; i++) {
+        float ai0=a->v[i][0], ai1=a->v[i][1], ai2=a->v[i][2], ai3=a->v[i][3];
+        p->v[i][0] = ai0*b->v[0][0] + ai1*b->v[1][0] + ai2*b->v[2][0] + ai3*b->v[3][0];
+        p->v[i][1] = ai0*b->v[0][1] + ai1*b->v[1][1] + ai2*b->v[2][1] + ai3*b->v[3][1];
+        p->v[i][2] = ai0*b->v[0][2] + ai1*b->v[1][2] + ai2*b->v[2][2] + ai3*b->v[3][2];
+        p->v[i][3] = ai0*b->v[0][3] + ai1*b->v[1][3] + ai2*b->v[2][3] + ai3*b->v[3][3];
     }
-    return res;
+}
+
+/* in-place matrix multiplication */
+static inline void _sgl_mul(_sgl_matrix_t* dest, const _sgl_matrix_t* m) {
+    _sgl_matmul4(dest, dest, m);
 }
 
 /* return transposed matrix */
@@ -624,7 +626,7 @@ static inline _sgl_matrix_t _sgl_transpose(const _sgl_matrix_t* m) {
     _sgl_matrix_t res;
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
-            res.v[c][r] = m->v[r][c];
+            res.v[r][c] = m->v[c][r];
         }
     }
     return res;
@@ -869,7 +871,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     _sgl_uniform_t* uni = _sgl_next_uniform();
     if (uni) {
         /* FIXME: update the model-view-proj matrix lazily */
-        uni->mvp = _sgl_mul(_sgl_matrix_projection(), _sgl_matrix_modelview());
+        _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(), _sgl_matrix_modelview());
         uni->uv_scale[0] = _sgl.u_scale;
         uni->uv_scale[1] = _sgl.v_scale;
     }
@@ -962,33 +964,33 @@ SOKOL_API_IMPL void sgl_matrix_mode(sgl_matrix_mode_t mode) {
     _sgl.cur_matrix_mode = mode;
 }
 
-SOKOL_API_IMPL void sgl_load_identify(void) {
+SOKOL_API_IMPL void sgl_load_identity(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_identity(_sgl_matrix());
 }
 
-SOKOL_API_IMPL void sgl_load_matrix_cm(const float m[16]) {
+SOKOL_API_IMPL void sgl_load_matrix(const float m[16]) {
     _sgl_matrix_t* dst = _sgl_matrix();
     memcpy(&dst->v[0][0], &m[0], 64);
 }
 
-SOKOL_API_IMPL void sgl_load_matrix_rm(const float m[16]) {
+SOKOL_API_IMPL void sgl_load_transpose_matrix(const float m[16]) {
     _sgl_matrix_t* dst = _sgl_matrix();
     *dst = _sgl_transpose((const _sgl_matrix_t*) &m[0]);
 }
 
-SOKOL_API_IMPL void sgl_mult_matrix_cm(const float m[16]) {
+SOKOL_API_IMPL void sgl_mult_matrix(const float m[16]) {
     _sgl_matrix_t* m1 = _sgl_matrix();
     const _sgl_matrix_t* m0  = (const _sgl_matrix_t*) &m[0];
     /* order? */
-    *m1 = _sgl_mul(m0, m1);
+    _sgl_mul(m1, m0);
 }
 
-SOKOL_API_IMPL void sgl_mult_matrix_rm(const float m[16]) {
+SOKOL_API_IMPL void sgl_mult_transpose_matrix(const float m[16]) {
     _sgl_matrix_t* m1 = _sgl_matrix();
     _sgl_matrix_t m0 = _sgl_transpose((const _sgl_matrix_t*) &m[0]);
     /* order? */
-    *m1 = _sgl_mul(&m0, m1);
+    _sgl_mul(m1, &m0);
 }
 
 /* this draw the accumulated draw commands via sokol-gfx */
