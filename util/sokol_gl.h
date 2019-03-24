@@ -200,6 +200,10 @@ extern "C" {
 #include <string.h> /* memset */
 #include <math.h> /* M_PI, sqrtf, sinf, cosf */
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327
+#endif
+
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
@@ -845,7 +849,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     SOKOL_ASSERT(_sgl.init_cookie == 0xABCDABCD);
     SOKOL_FREE(_sgl.vertices); _sgl.vertices = 0;
     SOKOL_FREE(_sgl.uniforms); _sgl.uniforms = 0;
-    SOKOL_FREE(_sgl.commands = _sgl.commands = 0);
+    SOKOL_FREE(_sgl.commands); _sgl.commands = 0;
     sg_destroy_buffer(_sgl.vbuf);
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
