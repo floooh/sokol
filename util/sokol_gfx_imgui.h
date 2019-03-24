@@ -2508,7 +2508,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
     if (buf.id != SG_INVALID_ID) {
         ImGui::BeginChild("buffer", ImVec2(0,0), false);
         sg_buffer_info info = sg_query_buffer_info(buf);
-        if (info.slot.res_id != SG_INVALID_ID) {
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_imgui_slot_index(buf.id)];
             ImGui::Text("Label: %s", buf_ui->label.buf[0] ? buf_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
@@ -2527,7 +2527,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
             }
         }
         else {
-            ImGui::Text("Buffer 0x%08X not alive.", buf.id);
+            ImGui::Text("Buffer 0x%08X not valid.", buf.id);
         }
         ImGui::EndChild();
     }
@@ -2563,7 +2563,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
     if (img.id != SG_INVALID_ID) {
         ImGui::BeginChild("image", ImVec2(0,0), false);
         sg_image_info info = sg_query_image_info(img);
-        if (info.slot.state != SG_INVALID_ID) {
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
             const sg_image_desc* desc = &img_ui->desc;
             ImGui::Text("Label: %s", img_ui->label.buf[0] ? img_ui->label.buf : "---");
@@ -2596,7 +2596,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             }
         }
         else {
-            ImGui::Text("Image 0x%08X not alive.", img.id);
+            ImGui::Text("Image 0x%08X not valid.", img.id);
         }
         ImGui::EndChild();
     }
@@ -2678,7 +2678,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
     if (shd.id != SG_INVALID_ID) {
         ImGui::BeginChild("shader", ImVec2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
         sg_shader_info info = sg_query_shader_info(shd);
-        if (info.slot.state != SG_INVALID_ID) {
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_imgui_slot_index(shd.id)];
             ImGui::Text("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
@@ -2693,7 +2693,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
             }
         }
         else {
-            ImGui::Text("Shader 0x%08X no longer alive", shd.id);
+            ImGui::Text("Shader 0x%08X not valid!", shd.id);
         }
         ImGui::EndChild();
     }
@@ -2782,7 +2782,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
     if (pip.id != SG_INVALID_ID) {
         ImGui::BeginChild("pipeline", ImVec2(0,0), false);
         sg_pipeline_info info = sg_query_pipeline_info(pip);
-        if (info.slot.state != SG_INVALID_ID) {
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_imgui_slot_index(pip.id)];
             ImGui::Text("Label: %s", pip_ui->label.buf[0] ? pip_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
@@ -2811,7 +2811,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             }
         }
         else {
-            ImGui::Text("Pipeline 0x%08X not alive.", pip.id);
+            ImGui::Text("Pipeline 0x%08X not valid.", pip.id);
         }
         ImGui::EndChild();
     }
@@ -2831,7 +2831,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
     if (pass.id != SG_INVALID_ID) {
         ImGui::BeginChild("pass", ImVec2(0,0), false);
         sg_pass_info info = sg_query_pass_info(pass);
-        if (info.slot.res_id != SG_INVALID_ID) {
+        if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_imgui_slot_index(pass.id)];
             ImGui::Text("Label: %s", pass_ui->label.buf[0] ? pass_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
@@ -2850,7 +2850,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
             }
         }
         else {
-            ImGui::Text("Pass 0x%08X no longer alive.", pass.id);
+            ImGui::Text("Pass 0x%08X not valid.", pass.id);
         }
         ImGui::EndChild();
     }
@@ -2917,20 +2917,20 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
     /* check if all the required information for drawing the structured uniform block content
         is available, otherwise just render a generic hexdump
     */
-   if (sg_query_pipeline_state(args->pipeline) == SG_INVALID_ID) {
-        ImGui::Text("Pipeline object no longer alive!");
+   if (sg_query_pipeline_state(args->pipeline) != SG_RESOURCESTATE_VALID) {
+        ImGui::Text("Pipeline object not valid!");
         return;
    }
     sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_imgui_slot_index(args->pipeline.id)];
-    if (sg_query_shader_state(pip_ui->desc.shader) == SG_INVALID_ID) {
-        ImGui::Text("Shader object no longer alive!");
+    if (sg_query_shader_state(pip_ui->desc.shader) != SG_RESOURCESTATE_VALID) {
+        ImGui::Text("Shader object not valid!");
         return;
     }
     sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_imgui_slot_index(pip_ui->desc.shader.id)];
     SOKOL_ASSERT(shd_ui->res_id.id == pip_ui->desc.shader.id);
     const sg_shader_uniform_block_desc* ub_desc = (args->stage == SG_SHADERSTAGE_VS) ?
-        ub_desc = &shd_ui->desc.vs.uniform_blocks[args->ub_index] :
-        ub_desc = &shd_ui->desc.fs.uniform_blocks[args->ub_index];
+        &shd_ui->desc.vs.uniform_blocks[args->ub_index] :
+        &shd_ui->desc.fs.uniform_blocks[args->ub_index];
     SOKOL_ASSERT(args->num_bytes <= ub_desc->size);
     bool draw_dump = false;
     if (ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID) {
