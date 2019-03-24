@@ -626,8 +626,8 @@ static void _sgl_transpose(_sgl_matrix_t* dst, const _sgl_matrix_t* m) {
 
 static void _sgl_rotate(_sgl_matrix_t* dst, float a, float x, float y, float z) {
     
-    float s = sinf(a * M_PI / 180.0f);
-    float c = cosf(a * M_PI / 180.0f);
+    float s = sinf(a * ((float)M_PI) / 180.0f);
+    float c = cosf(a * ((float)M_PI) / 180.0f);
 
     float xx = x * x;
     float yy = y * y;
