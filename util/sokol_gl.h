@@ -176,7 +176,6 @@ SOKOL_API_DECL void sgl_scale(float x, float y, float z);
 SOKOL_API_DECL void sgl_translate(float x, float y, float z);
 SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
 SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_ortho2d(float left, float right, float bottom, float top);
 SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
 SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
 SOKOL_API_DECL void sgl_push_matrix(void);
