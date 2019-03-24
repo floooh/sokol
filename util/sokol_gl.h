@@ -81,25 +81,6 @@
 #endif
 
 /*
-    sgl_primitive_type
-
-    Used in sgl_begin() to start rendering this type of primitive.
-
-    NOTE: The values are *not* identical with sg_primitive_type!
-    When adding new primitive types, check the implementation
-    for how primitive types and states are merged into
-    an index for looking up pipeline objects!
-*/
-typedef enum sgl_primitive_type_t {
-    SGL_POINTS = 0,
-    SGL_LINES,
-    SGL_LINE_STRIP,
-    SGL_TRIANGLES,
-    SGL_TRIANGLE_STRIP,
-    SGL_NUM_PRIMITIVE_TYPES,
-} sgl_primitive_type_t;
-
-/*
     sgl_state_t
 
     Used in sgl_enable() / sgl_disable()
@@ -181,7 +162,11 @@ SOKOL_API_DECL void sgl_c4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_API_DECL void sgl_c1i(uint32_t rgba);
 
 /* define primitives, each begin/end is one draw command */
-SOKOL_API_DECL void sgl_begin(sgl_primitive_type_t mode);
+SOKOL_API_DECL void sgl_begin_points(void);
+SOKOL_API_DECL void sgl_begin_lines(void);
+SOKOL_API_DECL void sgl_begin_line_strip(void);
+SOKOL_API_DECL void sgl_begin_triangles(void);
+SOKOL_API_DECL void sgl_begin_triangle_strip(void);
 SOKOL_API_DECL void sgl_v2f(float x, float y);
 SOKOL_API_DECL void sgl_v3f(float x, float y, float z);
 SOKOL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
@@ -384,6 +369,15 @@ static const char* _sgl_vs_src = "";
 static const char* _sgl_fs_src = "";
 #endif
 
+typedef enum {
+    SGL_PRIMITIVETYPE_POINTS = 0,
+    SGL_PRIMITIVETYPE_LINES,
+    SGL_PRIMITIVETYPE_LINE_STRIP,
+    SGL_PRIMITIVETYPE_TRIANGLES,
+    SGL_PRIMITIVETYPE_TRIANGLE_STRIP,
+    SGL_NUM_PRIMITIVE_TYPES,
+} _sgl_primitive_type_t;
+
 typedef struct {
     float pos[3];
     int16_t uv[2];  /* texcoords as packed fixed-point format, see sgl_texcoord_int_bits */
@@ -478,6 +472,23 @@ typedef struct {
 static _sgl_t _sgl;
 
 /*== PRIVATE FUNCTIONS =======================================================*/
+/* set primitive type in 16-bit merged state */
+static inline uint16_t _sgl_set_prim_type(_sgl_primitive_type_t type, uint16_t bits) {
+    SOKOL_ASSERT(((int)type) < 8);
+    return (bits & ~7) | (type & 7);
+}
+
+/* extract primitive type from 16-bit merged state */
+static inline _sgl_primitive_type_t _sgl_prim_type(uint16_t bits) {
+    return (_sgl_primitive_type_t) (bits & 7);
+}
+
+static inline void _sgl_begin(_sgl_primitive_type_t mode) {
+    _sgl.in_begin = true;
+    _sgl.base_vertex = _sgl.cur_vertex;
+    _sgl.state_bits = _sgl_set_prim_type(mode, _sgl.state_bits);
+}
+
 static void _sgl_rewind(void) {
     _sgl.base_vertex = 0;
     _sgl.cur_vertex = 0;
@@ -546,17 +557,6 @@ static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uin
     }
 }
 
-/* set primitive type in 16-bit merged state */
-static inline uint16_t _sgl_set_prim_type(sgl_primitive_type_t type, uint16_t bits) {
-    SOKOL_ASSERT(((int)type) < 8);
-    return (bits & ~7) | (type & 7);
-}
-
-/* extract primitive type from 16-bit merged state */
-static inline sgl_primitive_type_t _sgl_prim_type(uint16_t bits) {
-    return (sgl_primitive_type_t) (bits & 7);
-}
-
 /* set render state bit in 16-bit merged state */
 static inline uint16_t _sgl_enable_state(sgl_state_t state, uint16_t bits) {
     /* first 3 bits are used by the primitive type */
@@ -587,11 +587,11 @@ static sg_pipeline _sgl_pipeline(uint16_t state_bits) {
         _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_STATE_CULLFACE, state_bits) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
         _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_STATE_DEPTHTEST, state_bits) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
         switch (_sgl_prim_type(state_bits)) {
-            case SGL_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
-            case SGL_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
-            case SGL_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
-            case SGL_TRIANGLES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
-            case SGL_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
+            case SGL_PRIMITIVETYPE_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
+            case SGL_PRIMITIVETYPE_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
+            case SGL_PRIMITIVETYPE_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
+            case SGL_PRIMITIVETYPE_TRIANGLES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
+            case SGL_PRIMITIVETYPE_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
             default: SOKOL_UNREACHABLE; break;
         }
         _sgl.pip[pip_index] = sg_make_pipeline(&_sgl.pip_desc);
@@ -903,13 +903,34 @@ SOKOL_API_IMPL void sgl_texcoord_int_bits(int u_bits, int v_bits) {
     _sgl.v_scale = (float)(1<<v_bits);
 }
 
-SOKOL_API_IMPL void sgl_begin(sgl_primitive_type_t mode) {
+SOKOL_API_IMPL void sgl_begin_points(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((mode >= 0) && (mode <= SGL_NUM_PRIMITIVE_TYPES));
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.in_begin = true;
-    _sgl.base_vertex = _sgl.cur_vertex;
-    _sgl.state_bits = _sgl_set_prim_type(mode, _sgl.state_bits);
+    _sgl_begin(SGL_PRIMITIVETYPE_POINTS);
+}
+
+SOKOL_API_IMPL void sgl_begin_lines(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_begin(SGL_PRIMITIVETYPE_LINES);
+}
+
+SOKOL_API_IMPL void sgl_begin_line_strip(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_begin(SGL_PRIMITIVETYPE_LINE_STRIP);
+}
+
+SOKOL_API_IMPL void sgl_begin_triangles(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_begin(SGL_PRIMITIVETYPE_TRIANGLES);
+}
+
+SOKOL_API_IMPL void sgl_begin_triangle_strip(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_begin(SGL_PRIMITIVETYPE_TRIANGLE_STRIP);
 }
 
 SOKOL_API_IMPL void sgl_end(void) {
