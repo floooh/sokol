@@ -81,18 +81,6 @@
 #endif
 
 /*
-    sgl_matrixmode_t
-
-    Used in sgl_matrix_mode(). The default matrix mode is SGL_MODELVIEW
-*/
-typedef enum sgl_matrix_mode_t {
-    SGL_MATRIXMODE_MODELVIEW,
-    SGL_MATRIXMODE_PROJECTION,
-    SGL_MATRIXMODE_TEXTURE,
-    SGL_NUM_MATRIXMODES
-} sgl_matrix_mode_t;
-
-/*
     sgl_error_t
 
     Errors are reset each frame after calling sgl_draw(),
@@ -107,14 +95,7 @@ typedef enum sgl_error_t {
     SGL_ERROR_STACK_UNDERFLOW,
 } sgl_error_t;
 
-/*
-    sgl_texture_t 
-
-    This is simply an alias for sg_image.
-*/
-typedef sg_image sgl_texture_t;
-
-typedef struct sgl_desc_t { 
+typedef struct sgl_desc_t {
     int max_vertices;   /* size for vertex buffer */
     int max_commands;   /* size of uniform- and command-buffers */
     sg_pixel_format color_format;
@@ -138,7 +119,7 @@ SOKOL_API_DECL void sgl_disable_cull_face(void);
 SOKOL_API_DECL void sgl_disable_texture(void);
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_texture(sgl_texture_t tex);
+SOKOL_API_DECL void sgl_texture(sg_image img);
 SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
@@ -182,7 +163,9 @@ SOKOL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v,
 SOKOL_API_DECL void sgl_end(void);
 
 /* matrix stack functions (only valid outside begin end) */
-SOKOL_API_DECL void sgl_matrix_mode(sgl_matrix_mode_t mode);
+SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
+SOKOL_API_DECL void sgl_matrix_mode_projection(void);
+SOKOL_API_DECL void sgl_matrix_mode_texture(void);
 SOKOL_API_DECL void sgl_load_identity(void);
 SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
 SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
@@ -374,6 +357,14 @@ typedef enum {
     SGL_NUM_STATES
 } _sgl_state_t;
 
+typedef enum {
+    SGL_MATRIXMODE_MODELVIEW,
+    SGL_MATRIXMODE_PROJECTION,
+    SGL_MATRIXMODE_TEXTURE,
+    SGL_NUM_MATRIXMODES
+} _sgl_matrix_mode_t;
+
+
 typedef struct {
     float pos[3];
     int16_t uv[2];  /* texcoords as packed fixed-point format, see sgl_texcoord_int_bits */
@@ -396,7 +387,7 @@ typedef enum {
 } _sgl_command_type_t;
 
 typedef struct {
-    sgl_texture_t tex;
+    sg_image img;
     uint16_t state_bits;    /* bit mask with primitive type and render states */
     int base_vertex;
     int num_vertices;
@@ -450,18 +441,18 @@ typedef struct {
     float u_scale, v_scale;
     int16_t u, v;
     uint32_t rgba;
-    sgl_texture_t tex;
+    sg_image cur_img;
 
     /* sokol-gfx resources */
     sg_buffer vbuf;
-    sg_image img;   /* a default white texture */
+    sg_image def_img;   /* a default white texture */
     sg_shader shd;
     sg_bindings bind;
     sg_pipeline pip[_SGL_MAX_PIPELINES];
     sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
 
     /* matrix stacks */
-    sgl_matrix_mode_t cur_matrix_mode;
+    _sgl_matrix_mode_t cur_matrix_mode;
     int top_of_stack[SGL_NUM_MATRIXMODES];
     _sgl_matrix_t matrix_stack[SGL_NUM_MATRIXMODES][_SGL_MAX_STACK_DEPTH];
 } _sgl_t;
@@ -760,9 +751,9 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     img_desc.content.subimage[0][0].ptr = pixels;
     img_desc.content.subimage[0][0].size = sizeof(pixels);
     img_desc.label = "sgl-default-texture";
-    _sgl.img = sg_make_image(&img_desc);
-    SOKOL_ASSERT(SG_INVALID_ID != _sgl.img.id);
-    _sgl.tex = _sgl.img;
+    _sgl.def_img = sg_make_image(&img_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);
+    _sgl.cur_img = _sgl.def_img;
 
     sg_shader_desc shd_desc;
     memset(&shd_desc, 0, sizeof(shd_desc));
@@ -820,7 +811,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     SOKOL_FREE(_sgl.uniforms); _sgl.uniforms = 0;
     SOKOL_FREE(_sgl.commands = _sgl.commands = 0);
     sg_destroy_buffer(_sgl.vbuf);
-    sg_destroy_image(_sgl.img);
+    sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
     /* NOTE: calling sg_destroy_*() with an invalid id is valid */
     for (int i = 0; i < _SGL_MAX_PIPELINES; i++) {
@@ -909,14 +900,14 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
     }
 }
 
-SOKOL_API_IMPL void sgl_texture(sgl_texture_t tex) {
+SOKOL_API_IMPL void sgl_texture(sg_image img) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    if (SG_INVALID_ID != tex.id) {
-        _sgl.tex = tex;
+    if (SG_INVALID_ID != img.id) {
+        _sgl.cur_img = img;
     }
     else {
-        _sgl.tex = _sgl.img;
+        _sgl.cur_img = _sgl.def_img;
     }
 }
 
@@ -969,7 +960,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     _sgl_command_t* cmd = _sgl_next_command();
     if (cmd) {
         cmd->cmd = SGL_COMMAND_DRAW;
-        cmd->args.draw.tex = _sgl.tex;
+        cmd->args.draw.img = _sgl.cur_img;
         cmd->args.draw.state_bits = _sgl.state_bits;
         cmd->args.draw.base_vertex = _sgl.base_vertex;
         cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
@@ -1105,10 +1096,19 @@ SOKOL_API_IMPL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v,
     _sgl_vtx(x, y, z, _sgl_pack_u(u), _sgl_pack_v(v), rgba);
 }
 
-SOKOL_API_IMPL void sgl_matrix_mode(sgl_matrix_mode_t mode) {
+SOKOL_API_IMPL void sgl_matrix_mode_modelview(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((mode >= 0) && (mode < SGL_NUM_MATRIXMODES));
-    _sgl.cur_matrix_mode = mode;
+    _sgl.cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
+}
+
+SOKOL_API_IMPL void sgl_matrix_mode_projection(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.cur_matrix_mode = SGL_MATRIXMODE_PROJECTION;
+}
+
+SOKOL_API_IMPL void sgl_matrix_mode_texture(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.cur_matrix_mode = SGL_MATRIXMODE_TEXTURE;
 }
 
 SOKOL_API_IMPL void sgl_load_identity(void) {
@@ -1184,7 +1184,7 @@ SOKOL_API_IMPL void sgl_draw(void) {
                         const _sgl_draw_args_t* args = &cmd->args.draw;
                         sg_pipeline pip = _sgl_pipeline(args->state_bits);
                         sg_apply_pipeline(pip);
-                        _sgl.bind.fs_images[0] = args->tex;
+                        _sgl.bind.fs_images[0] = args->img;
                         sg_apply_bindings(&_sgl.bind);
                         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
                         /* FIXME: what if number of vertices doesn't match the primitive type? */
