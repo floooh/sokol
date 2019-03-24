@@ -679,6 +679,43 @@ static void _sgl_translate(_sgl_matrix_t* dst, float x, float y, float z) {
     }
 }
 
+static void _sgl_frustum(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float near, float far) {
+    float x = (2.0f * near) / (right - left);
+    float y = (2.0f * near) / (top - bottom);
+    float a = (right + left) / (right - left);
+    float b = (top + bottom) / (top - bottom);
+    float c = -(far + near) / (far - near);
+    float d = -(2.0f * far * near) / (far - near);
+    _sgl_matrix_t m;
+    m.v[0][0] = x;    m.v[0][1] = 0.0f; m.v[0][2] = 0.0f; m.v[0][3] = 0.0f;
+    m.v[1][0] = 0.0f; m.v[1][1] = y;    m.v[1][2] = 0.0f; m.v[1][3] = 0.0f;
+    m.v[2][0] = a;    m.v[2][1] = b;    m.v[2][2] = c;    m.v[2][3] = -1.0f;
+    m.v[3][0] = 0.0f; m.v[3][1] = 0.0f; m.v[3][2] = d;    m.v[3][3] = 0.0f;
+    _sgl_matmul4(dst, dst, &m);
+}
+
+static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float near, float far) {
+    _sgl_matrix_t m;
+    m.v[0][0] = 2.0f / (right - left);
+    m.v[1][0] = 0.0f;
+    m.v[2][0] = 0.0f;
+    m.v[3][0] = -(right + left) / (right - left);
+    m.v[0][1] = 0.0f;
+    m.v[1][1] = 2.0f / (top - bottom);
+    m.v[2][1] = 0.0f;
+    m.v[3][1] = -(top + bottom) / (top - bottom);
+    m.v[0][2] = 0.0f;
+    m.v[1][2] = 0.0f;
+    m.v[2][2] = -2.0f / (far - near);
+    m.v[3][2] = -(far + near) / (far - near);
+    m.v[0][3] = 0.0f;
+    m.v[1][3] = 0.0f;
+    m.v[2][3] = 0.0f;
+    m.v[3][3] = 1.0f;
+
+    _sgl_matmul4(dst, dst, &m);
+}
+
 /* current top-of-stack projection matrix */
 static inline _sgl_matrix_t* _sgl_matrix_projection(void) {
     return &_sgl.matrix_stack[SGL_MATRIXMODE_PROJECTION][_sgl.top_of_stack[SGL_MATRIXMODE_PROJECTION]];
@@ -1154,6 +1191,16 @@ SOKOL_API_IMPL void sgl_scale(float x, float y, float z) {
 SOKOL_API_IMPL void sgl_translate(float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_translate(_sgl_matrix(), x, y, z);
+}
+
+SOKOL_API_IMPL void sgl_frustum(float l, float r, float b, float t, float n, float f) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_frustum(_sgl_matrix(), l, r, b, t, n, f);
+}
+
+SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float f) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_ortho(_sgl_matrix(), l, r, b, t, n, f);
 }
 
 /* this draw the accumulated draw commands via sokol-gfx */
