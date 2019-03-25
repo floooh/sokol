@@ -109,6 +109,7 @@ SOKOL_API_DECL void sgl_shutdown(void);
 SOKOL_API_DECL sgl_error_t sgl_error(void);
 
 /* render state functions (only valid outside begin/end) */
+SOKOL_API_DECL void sgl_default_state(void);
 SOKOL_API_DECL void sgl_enable_depth_test(void);
 SOKOL_API_DECL void sgl_enable_blend(void);
 SOKOL_API_DECL void sgl_enable_cull_face(void);
@@ -121,6 +122,10 @@ SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_lef
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_texture(sg_image img);
 SOKOL_API_DECL void sgl_texcoord_int_bits(int u_bits, int v_bits);
+
+/* degree-radian conversion */
+SOKOL_API_DECL float sgl_rad(float deg);
+SOKOL_API_DECL float sgl_deg(float rad);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_t2f(float u, float v);
@@ -136,6 +141,7 @@ SOKOL_API_DECL void sgl_begin_lines(void);
 SOKOL_API_DECL void sgl_begin_line_strip(void);
 SOKOL_API_DECL void sgl_begin_triangles(void);
 SOKOL_API_DECL void sgl_begin_triangle_strip(void);
+SOKOL_API_DECL void sgl_begin_quads(void);
 SOKOL_API_DECL void sgl_v2f(float x, float y);
 SOKOL_API_DECL void sgl_v3f(float x, float y, float z);
 SOKOL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
@@ -171,7 +177,7 @@ SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
 SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
 SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
 SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_rotate(float angle, float x, float y, float z);
+SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
 SOKOL_API_DECL void sgl_scale(float x, float y, float z);
 SOKOL_API_DECL void sgl_translate(float x, float y, float z);
 SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
@@ -349,6 +355,7 @@ typedef enum {
     SGL_PRIMITIVETYPE_LINE_STRIP,
     SGL_PRIMITIVETYPE_TRIANGLES,
     SGL_PRIMITIVETYPE_TRIANGLE_STRIP,
+    SGL_PRIMITIVETYPE_QUADS,
     SGL_NUM_PRIMITIVE_TYPES,
 } _sgl_primitive_type_t;
 
@@ -438,6 +445,7 @@ typedef struct {
 
     /* state tracking */
     int base_vertex;
+    int vtx_count;      /* number of times vtx function has been called, used for non-triangle primitives */
     sgl_error_t error;
     bool in_begin;
     uint16_t state_bits;        /* bitmask with primitive type and render states */
@@ -476,6 +484,7 @@ static inline _sgl_primitive_type_t _sgl_prim_type(uint16_t bits) {
 static inline void _sgl_begin(_sgl_primitive_type_t mode) {
     _sgl.in_begin = true;
     _sgl.base_vertex = _sgl.cur_vertex;
+    _sgl.vtx_count = 0;
     _sgl.state_bits = _sgl_set_prim_type(mode, _sgl.state_bits);
 }
 
@@ -539,12 +548,24 @@ static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
 
 static inline void _sgl_vtx(float x, float y, float z, int16_t u, int16_t v, uint32_t rgba) {
     SOKOL_ASSERT(_sgl.in_begin);
-    _sgl_vertex_t* vtx = _sgl_next_vertex();
+    _sgl_vertex_t* vtx;
+    /* handle non-native primitive types */
+    if ((_sgl_prim_type(_sgl.state_bits) == SGL_PRIMITIVETYPE_QUADS) && ((_sgl.vtx_count & 3) == 3)) {
+        /* for quads, before writing the last quad vertex, reuse 
+           the first and third vertex to start the second triangle in the quad
+        */
+        vtx = _sgl_next_vertex();
+        if (vtx) { *vtx = *(vtx - 3); }
+        vtx = _sgl_next_vertex();
+        if (vtx) { *vtx = *(vtx - 2); }
+    }
+    vtx = _sgl_next_vertex();
     if (vtx) {
         vtx->pos[0] = x; vtx->pos[1] = y; vtx->pos[2] = z;
         vtx->uv[0] = u; vtx->uv[1] = v;
         vtx->rgba = rgba;
     }
+    _sgl.vtx_count++;
 }
 
 /* set render state bit in 16-bit merged state */
@@ -566,11 +587,18 @@ static inline bool _sgl_state(_sgl_state_t state, uint16_t bits) {
 
 /* get pipeline index from merged primitive-type / render state bit mask */
 static inline int _sgl_pipeline_index(uint16_t state) {
+    /* replace emulated primitive types */
+    if (_sgl_prim_type(state) == SGL_PRIMITIVETYPE_QUADS) {
+        state = _sgl_set_prim_type(SGL_PRIMITIVETYPE_TRIANGLES, state);
+    }
     return (int) (state & (_SGL_MAX_PIPELINES-1));
 }
 
 /* lookup or lazy-create pipeline object */
 static sg_pipeline _sgl_pipeline(uint16_t state_bits) {
+    /* NOTE: emulated primitive types like QUADS are 'redirected' to 
+       a native primitive type in _sgl_pipeline_index
+    */
     int pip_index = _sgl_pipeline_index(state_bits);
     if (SG_INVALID_ID == _sgl.pip[pip_index].id) {
         _sgl.pip_desc.blend.enabled = _sgl_state(SGL_STATE_BLEND, state_bits);
@@ -582,6 +610,7 @@ static sg_pipeline _sgl_pipeline(uint16_t state_bits) {
             case SGL_PRIMITIVETYPE_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
             case SGL_PRIMITIVETYPE_TRIANGLES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
             case SGL_PRIMITIVETYPE_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
+            case SGL_PRIMITIVETYPE_QUADS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
             default: SOKOL_UNREACHABLE; break;
         }
         _sgl.pip[pip_index] = sg_make_pipeline(&_sgl.pip_desc);
@@ -626,8 +655,8 @@ static void _sgl_transpose(_sgl_matrix_t* dst, const _sgl_matrix_t* m) {
 
 static void _sgl_rotate(_sgl_matrix_t* dst, float a, float x, float y, float z) {
     
-    float s = sinf(a * ((float)M_PI) / 180.0f);
-    float c = cosf(a * ((float)M_PI) / 180.0f);
+    float s = sinf(a);
+    float c = cosf(a);
 
     float xx = x * x;
     float yy = y * y;
@@ -864,6 +893,21 @@ SOKOL_API_IMPL sgl_error_t sgl_error(void) {
     return _sgl.error;
 }
 
+SOKOL_API_IMPL void sgl_default_state(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.state_bits = 0;
+    _sgl.u_scale = _sgl.v_scale = 1.0f;
+    _sgl.u = 0; _sgl.v = 0;
+    _sgl.rgba = 0xFFFFFFFF;
+    _sgl.cur_img = _sgl.def_img;
+    for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
+        _sgl.cur_matrix_mode = (_sgl_matrix_mode_t)i;
+        _sgl_identity(_sgl_matrix());
+    }
+    _sgl.cur_matrix_mode = 0;
+}
+
 SOKOL_API_IMPL void sgl_enable_depth_test(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
@@ -990,6 +1034,12 @@ SOKOL_API_IMPL void sgl_begin_triangle_strip(void) {
     _sgl_begin(SGL_PRIMITIVETYPE_TRIANGLE_STRIP);
 }
 
+SOKOL_API_IMPL void sgl_begin_quads(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_begin(SGL_PRIMITIVETYPE_QUADS);
+}
+
 SOKOL_API_IMPL void sgl_end(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(_sgl.in_begin);
@@ -1013,6 +1063,14 @@ SOKOL_API_IMPL void sgl_end(void) {
         uni->uv_scale[0] = _sgl.u_scale;
         uni->uv_scale[1] = _sgl.v_scale;
     }
+}
+
+SOKOL_API_IMPL float sgl_rad(float deg) {
+    return (deg * (float)M_PI) / 180.0f;
+}
+
+SOKOL_API_IMPL float sgl_deg(float rad) {
+    return (rad * 180.0f) / (float)M_PI;
 }
 
 SOKOL_API_IMPL void sgl_t2f(float u, float v) {
@@ -1181,9 +1239,9 @@ SOKOL_API_IMPL void sgl_mult_transpose_matrix_matrix(const float m[16]) {
     _sgl_mul(_sgl_matrix(), m0);
 }
 
-SOKOL_API_IMPL void sgl_rotate(float angle, float x, float y, float z) {
+SOKOL_API_IMPL void sgl_rotate(float angle_rad, float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl_rotate(_sgl_matrix(), angle, x, y, z);
+    _sgl_rotate(_sgl_matrix(), angle_rad, x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_scale(float x, float y, float z) {
