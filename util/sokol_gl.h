@@ -32,7 +32,7 @@
 
         sokol_gfx.h
 
-    Matrix functions taken from MESA.
+    Matrix functions are taken from MESA and Regal.
 
     FEATURE OVERVIEW:
     =================
@@ -748,6 +748,24 @@ static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom
     _sgl_matmul4(dst, dst, &m);
 }
 
+static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float near, float far) {
+    float sine = sinf(fovy / 2.0f);
+    float delta_z = far - near;
+    if ((delta_z == 0.0f) || (sine == 0.0f) || (aspect == 0.0f)) {
+        return;
+    }
+    float cotan = cosf(fovy / 2.0f) / sine;
+    _sgl_matrix_t m;
+    _sgl_identity(&m);
+    m.v[0][0] = cotan / aspect;
+    m.v[1][1] = cotan;
+    m.v[2][2] = -(far + near) / delta_z;
+    m.v[2][3] = -1.0f;
+    m.v[3][2] = -2.0f * near * far / delta_z;
+    m.v[3][3] = 0.0f;
+    _sgl_matmul4(dst, dst, &m);
+}
+
 /* current top-of-stack projection matrix */
 static inline _sgl_matrix_t* _sgl_matrix_projection(void) {
     return &_sgl.matrix_stack[SGL_MATRIXMODE_PROJECTION][_sgl.top_of_stack[SGL_MATRIXMODE_PROJECTION]];
@@ -1262,6 +1280,11 @@ SOKOL_API_IMPL void sgl_frustum(float l, float r, float b, float t, float n, flo
 SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float f) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_ortho(_sgl_matrix(), l, r, b, t, n, f);
+}
+
+SOKOL_API_IMPL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_perspective(_sgl_matrix(), fov_y, aspect, z_near, z_far);
 }
 
 /* this draw the accumulated draw commands via sokol-gfx */
