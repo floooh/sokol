@@ -101,6 +101,7 @@ typedef struct sgl_desc_t {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
+    sg_face_winding face_winding; /* default front face winding is CCW */
 } sgl_desc_t;
 
 /* setup/shutdown */
@@ -658,17 +659,16 @@ static void _sgl_rotate(_sgl_matrix_t* dst, float a, float x, float y, float z) 
     float s = sinf(a);
     float c = cosf(a);
 
-    float xx = x * x;
-    float yy = y * y;
-    float zz = z * z;
-    float mag = sqrtf(xx + yy + zz);
+    float mag = sqrtf(x*x + y*y + z*z);
     if (mag < 1.0e-4F) {
         return;
     }
     x /= mag;
     y /= mag;
     z /= mag;
-
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
     float xy = x * y;
     float yz = y * z;
     float zx = z * x;
@@ -890,6 +890,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     _sgl.pip_desc.blend.color_format = desc->color_format;
     _sgl.pip_desc.blend.depth_format = desc->depth_format;
     _sgl.pip_desc.rasterizer.sample_count = desc->sample_count;
+    _sgl.pip_desc.rasterizer.face_winding = _sgl_def(desc->face_winding, SG_FACEWINDING_CCW);
 }
 
 SOKOL_API_IMPL void sgl_shutdown(void) {
@@ -1285,6 +1286,31 @@ SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float
 SOKOL_API_IMPL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_perspective(_sgl_matrix(), fov_y, aspect, z_near, z_far);
+}
+
+SOKOL_API_DECL void sgl_push_matrix(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    if (_sgl.top_of_stack[_sgl.cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
+        const _sgl_matrix_t* src = _sgl_matrix();
+        _sgl.top_of_stack[_sgl.cur_matrix_mode]++;
+        _sgl_matrix_t* dst = _sgl_matrix();
+        *dst = *src;
+    }
+    else {
+        _sgl.error = SGL_ERROR_STACK_OVERFLOW;
+    }
+}
+
+SOKOL_API_DECL void sgl_pop_matrix(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    if (_sgl.top_of_stack[_sgl.cur_matrix_mode] > 0) {
+        _sgl.top_of_stack[_sgl.cur_matrix_mode]--;
+    }
+    else {
+        _sgl.error = SGL_ERROR_STACK_UNDERFLOW;
+    }
 }
 
 /* this draw the accumulated draw commands via sokol-gfx */
