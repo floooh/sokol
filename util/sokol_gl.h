@@ -1093,7 +1093,7 @@ SOKOL_API_IMPL float sgl_deg(float rad) {
 
 SOKOL_API_IMPL void sgl_t2f(float u, float v) {
     _sgl.u = _sgl_pack_u(u);
-    _sgl.v = _sgl_pack_u(v);
+    _sgl.v = _sgl_pack_v(v);
 }
 
 SOKOL_API_IMPL void sgl_c3f(float r, float g, float b) {
