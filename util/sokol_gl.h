@@ -684,7 +684,7 @@ static void _sgl_rotate(_sgl_matrix_t* dst, float a, float x, float y, float z) 
     m.v[1][3] = 0.0f;
     m.v[2][3] = 0.0f;
     m.v[3][3] = 1.0f;
-    _sgl_matmul4(dst, dst, &m);
+    _sgl_mul(dst, &m);
 }
 
 static void _sgl_scale(_sgl_matrix_t* dst, float x, float y, float z) {
@@ -713,7 +713,7 @@ static void _sgl_frustum(_sgl_matrix_t* dst, float left, float right, float bott
     m.v[1][0] = 0.0f; m.v[1][1] = y;    m.v[1][2] = 0.0f; m.v[1][3] = 0.0f;
     m.v[2][0] = a;    m.v[2][1] = b;    m.v[2][2] = c;    m.v[2][3] = -1.0f;
     m.v[3][0] = 0.0f; m.v[3][1] = 0.0f; m.v[3][2] = d;    m.v[3][3] = 0.0f;
-    _sgl_matmul4(dst, dst, &m);
+    _sgl_mul(dst, &m);
 }
 
 static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float near, float far) {
@@ -735,7 +735,7 @@ static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom
     m.v[2][3] = 0.0f;
     m.v[3][3] = 1.0f;
 
-    _sgl_matmul4(dst, dst, &m);
+    _sgl_mul(dst, &m);
 }
 
 static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float near, float far) {
@@ -753,7 +753,7 @@ static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float
     m.v[2][3] = -1.0f;
     m.v[3][2] = -2.0f * near * far / delta_z;
     m.v[3][3] = 0.0f;
-    _sgl_matmul4(dst, dst, &m);
+    _sgl_mul(dst, &m);
 }
 
 /* current top-of-stack projection matrix */
