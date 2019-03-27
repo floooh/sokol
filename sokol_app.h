@@ -1326,6 +1326,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     [self setNeedsDisplay:YES];
 }
 - (void)prepareOpenGL {
+    [super prepareOpenGL];
     GLint swapInt = 1;
     NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
