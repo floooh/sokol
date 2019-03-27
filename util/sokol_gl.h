@@ -609,7 +609,6 @@ static sg_pipeline _sgl_pipeline(uint16_t state_bits) {
     return _sgl.pip[pip_index];
 }
 
-/* initialize identity matrix */
 static void _sgl_identity(_sgl_matrix_t* m) {
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
@@ -618,7 +617,16 @@ static void _sgl_identity(_sgl_matrix_t* m) {
     }
 }
 
-/* multiply matrices, can be in-place if p and a are identical */
+static void _sgl_transpose(_sgl_matrix_t* dst, const _sgl_matrix_t* m) {
+    SOKOL_ASSERT(dst != m);
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            dst->v[r][c] = m->v[c][r];
+        }
+    }
+}
+
+/* _sgl_rotate, _sgl_frustum, _sgl_ortho from MESA m_matric.c */ 
 static void _sgl_matmul4(_sgl_matrix_t* p, const _sgl_matrix_t* a, const _sgl_matrix_t* b) {
     for (int r = 0; r < 4; r++) {
         float ai0=a->v[0][r], ai1=a->v[1][r], ai2=a->v[2][r], ai3=a->v[3][r];
@@ -629,19 +637,8 @@ static void _sgl_matmul4(_sgl_matrix_t* p, const _sgl_matrix_t* a, const _sgl_ma
     }
 }
 
-/* in-place matrix multiplication */
 static void _sgl_mul(_sgl_matrix_t* dst, const _sgl_matrix_t* m) {
     _sgl_matmul4(dst, dst, m);
-}
-
-/* return transposed matrix */
-static void _sgl_transpose(_sgl_matrix_t* dst, const _sgl_matrix_t* m) {
-    SOKOL_ASSERT(dst != m);
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) {
-            dst->v[r][c] = m->v[c][r];
-        }
-    }
 }
 
 static void _sgl_rotate(_sgl_matrix_t* dst, float a, float x, float y, float z) {
@@ -738,6 +735,7 @@ static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom
     _sgl_mul(dst, &m);
 }
 
+/* _sgl_perspective, _sgl_lookat from Regal project.c */
 static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float near, float far) {
     float sine = sinf(fovy / 2.0f);
     float delta_z = far - near;
@@ -754,6 +752,51 @@ static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float
     m.v[3][2] = -2.0f * near * far / delta_z;
     m.v[3][3] = 0.0f;
     _sgl_mul(dst, &m);
+}
+
+static void _sgl_normalize(float v[3]) {
+    float r = sqrtf(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    if (r == 0.0f) {
+        return;
+    }
+    v[0] /= r;
+    v[1] /= r;
+    v[2] /= r;
+}
+
+static void _sgl_cross(float v1[3], float v2[3], float res[3]) {
+    res[0] = v1[1]*v2[2] - v1[2]*v2[1];
+    res[1] = v1[2]*v2[0] - v1[0]*v2[2];
+    res[2] = v1[0]*v2[1] - v1[1]*v2[0];
+}
+
+static void _sgl_lookat(_sgl_matrix_t* dst, 
+                        float eye_x, float eye_y, float eye_z,
+                        float center_x, float center_y, float center_z,
+                        float up_x, float up_y, float up_z)
+{
+    float fwd[3], side[3], up[3];
+
+    fwd[0] = center_x - eye_x; fwd[1] = center_y - eye_y; fwd[2] = center_z - eye_z;
+    up[0] = up_x; up[1] = up_y; up[2] = up_z;
+    _sgl_normalize(fwd);
+    _sgl_cross(fwd, up, side);
+    _sgl_normalize(side);
+    _sgl_cross(side, fwd, up);
+
+    _sgl_matrix_t m;
+    _sgl_identity(&m);
+    m.v[0][0] = side[0];
+    m.v[1][0] = side[1];
+    m.v[2][0] = side[2];
+    m.v[0][1] = up[0];
+    m.v[1][1] = up[1];
+    m.v[2][1] = up[2];
+    m.v[0][2] = -fwd[0];
+    m.v[1][2] = -fwd[1];
+    m.v[2][2] = -fwd[2];
+    _sgl_mul(dst, &m);
+    _sgl_translate(dst, -eye_x, -eye_y, -eye_z);
 }
 
 /* current top-of-stack projection matrix */
@@ -1263,6 +1306,11 @@ SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float
 SOKOL_API_IMPL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_perspective(_sgl_matrix(), fov_y, aspect, z_near, z_far);
+}
+
+SOKOL_API_IMPL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_lookat(_sgl_matrix(), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
 }
 
 SOKOL_API_DECL void sgl_push_matrix(void) {
