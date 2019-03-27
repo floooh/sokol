@@ -104,28 +104,22 @@ typedef struct sgl_desc_t {
     sg_face_winding face_winding; /* default front face winding is CCW */
 } sgl_desc_t;
 
-/* setup/shutdown */
+/* setup/shutdown/misc */
 SOKOL_API_DECL void sgl_setup(const sgl_desc_t* desc);
 SOKOL_API_DECL void sgl_shutdown(void);
 SOKOL_API_DECL sgl_error_t sgl_error(void);
+SOKOL_API_DECL void sgl_defaults(void);
+SOKOL_API_DECL float sgl_rad(float deg);
+SOKOL_API_DECL float sgl_deg(float rad);
 
 /* render state functions (only valid outside begin/end) */
-SOKOL_API_DECL void sgl_default_state(void);
-SOKOL_API_DECL void sgl_enable_depth_test(void);
-SOKOL_API_DECL void sgl_enable_blend(void);
-SOKOL_API_DECL void sgl_enable_cull_face(void);
-SOKOL_API_DECL void sgl_enable_texture(void);
-SOKOL_API_DECL void sgl_disable_depth_test(void);
-SOKOL_API_DECL void sgl_disable_blend(void);
-SOKOL_API_DECL void sgl_disable_cull_face(void);
-SOKOL_API_DECL void sgl_disable_texture(void);
+SOKOL_API_DECL void sgl_state_depth_test(bool enabled);
+SOKOL_API_DECL void sgl_state_blend(bool enabled);
+SOKOL_API_DECL void sgl_state_cull_face(bool enabled);
+SOKOL_API_DECL void sgl_state_texture(bool enabled);
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_texture(sg_image img);
-
-/* degree-radian conversion */
-SOKOL_API_DECL float sgl_rad(float deg);
-SOKOL_API_DECL float sgl_deg(float rad);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_t2f(float u, float v);
@@ -374,7 +368,6 @@ typedef enum {
     SGL_NUM_MATRIXMODES
 } _sgl_matrix_mode_t;
 
-
 typedef struct {
     float pos[3];
     float uv[2];
@@ -559,16 +552,10 @@ static inline void _sgl_vtx(float x, float y, float z, float u, float v, uint32_
     _sgl.vtx_count++;
 }
 
-/* set render state bit in 16-bit merged state */
-static inline uint16_t _sgl_enable_state(_sgl_state_t state, uint16_t bits) {
+/* set or clear render state bit in 16-bit merged state */
+static inline uint16_t _sgl_set_state(_sgl_state_t state, bool enabled, uint16_t bits) {
     /* first 3 bits are used by the primitive type */
-    return bits | (8<<state);
-}
-
-/* clear render state bit in 16-bit merged state */
-static inline uint16_t _sgl_disable_state(_sgl_state_t state, uint16_t bits) {
-    /* first 3 bits are used by the primitive type */
-    return bits & ~(8<<state);
+    return (bits & ~(8<<state)) | (enabled ? (8<<state) : 0);
 }
 
 /* get render state from merged state bit mask */
@@ -944,7 +931,15 @@ SOKOL_API_IMPL sgl_error_t sgl_error(void) {
     return _sgl.error;
 }
 
-SOKOL_API_IMPL void sgl_default_state(void) {
+SOKOL_API_IMPL float sgl_rad(float deg) {
+    return (deg * (float)M_PI) / 180.0f;
+}
+
+SOKOL_API_IMPL float sgl_deg(float rad) {
+    return (rad * 180.0f) / (float)M_PI;
+}
+
+SOKOL_API_IMPL void sgl_defaults(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
     _sgl.state_bits = 0;
@@ -958,52 +953,28 @@ SOKOL_API_IMPL void sgl_default_state(void) {
     _sgl.cur_matrix_mode = 0;
 }
 
-SOKOL_API_IMPL void sgl_enable_depth_test(void) {
+SOKOL_API_IMPL void sgl_state_depth_test(bool enabled) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_enable_state(SGL_STATE_DEPTHTEST, _sgl.state_bits);
+    _sgl.state_bits = _sgl_set_state(SGL_STATE_DEPTHTEST, enabled, _sgl.state_bits);
 }
 
-SOKOL_API_IMPL void sgl_enable_blend(void) {
+SOKOL_API_IMPL void sgl_state_blend(bool enabled) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_enable_state(SGL_STATE_BLEND, _sgl.state_bits);
+    _sgl.state_bits = _sgl_set_state(SGL_STATE_BLEND, enabled, _sgl.state_bits);
 }
 
-SOKOL_API_IMPL void sgl_enable_cull_face(void) {
+SOKOL_API_IMPL void sgl_state_cull_face(bool enabled) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_enable_state(SGL_STATE_CULLFACE, _sgl.state_bits);
+    _sgl.state_bits = _sgl_set_state(SGL_STATE_CULLFACE, enabled,_sgl.state_bits);
 }
 
-SOKOL_API_IMPL void sgl_enable_texture(void) {
+SOKOL_API_IMPL void sgl_state_texture(bool enabled) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_enable_state(SGL_STATE_TEXTURE, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_disable_depth_test(void) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_disable_state(SGL_STATE_DEPTHTEST, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_disable_blend(void) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_disable_state(SGL_STATE_BLEND, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_disable_cull_face(void) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_disable_state(SGL_STATE_CULLFACE, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_disable_texture(void) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_disable_state(SGL_STATE_TEXTURE, _sgl.state_bits);
+    _sgl.state_bits = _sgl_set_state(SGL_STATE_TEXTURE, enabled, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -1103,14 +1074,6 @@ SOKOL_API_IMPL void sgl_end(void) {
         _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(), _sgl_matrix_modelview());
         uni->tm = *_sgl_matrix_texture();
     }
-}
-
-SOKOL_API_IMPL float sgl_rad(float deg) {
-    return (deg * (float)M_PI) / 180.0f;
-}
-
-SOKOL_API_IMPL float sgl_deg(float rad) {
-    return (rad * 180.0f) / (float)M_PI;
 }
 
 SOKOL_API_IMPL void sgl_t2f(float u, float v) {
