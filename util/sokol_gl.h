@@ -240,7 +240,7 @@ static const char* _sgl_vs_src =
     "uniform mat4 mvp;\n"
     "uniform mat4 tm;\n"
     "in vec4 position;\n"
-    "in vec4 texcoord0;\n"
+    "in vec2 texcoord0;\n"
     "in vec4 color0;\n"
     "out vec4 uv;\n"
     "out vec4 color;\n"
