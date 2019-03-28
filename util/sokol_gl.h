@@ -316,7 +316,7 @@ static const char* _sgl_vs_src =
     "  float4x4 tm;\n"
     "};\n"
     "struct vs_in {\n"
-    "  float4 pos: POS;\n"
+    "  float4 pos: POSITION;\n"
     "  float2 uv: TEXCOORD0;\n"
     "  float4 color: COLOR0;\n"
     "};\n"
@@ -896,7 +896,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     {
         sg_vertex_attr_desc* rgba = &_sgl.pip_desc.layout.attrs[2];
         rgba->name = "color0";
-        rgba->sem_name = "TEXCOORD";
+        rgba->sem_name = "COLOR";
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
