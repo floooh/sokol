@@ -2,8 +2,6 @@
 /*
     sokol_gl.h -- OpenGL 1.x style rendering on top of sokol_gfx.h
 
-    WIP! Progress will be slow.
-
     Do this:
         #define SOKOL_GL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -34,17 +32,151 @@
 
     Matrix functions are taken from MESA and Regal.
 
+    TODO v1
+    =======
+    - check that the mult_matrix and load_matrix functions have the same
+      memory layout as GL
+    - optimize sokol-gfx state update in sgl_draw() (only set what's changed)
+    - in sgl_end(), only allocate a new uniform block when matrices have
+      changed since last time
+
     FEATURE OVERVIEW:
     =================
-    FIXME
+    sokol_gl.h implements a subset of the OpenGLES 1.x feature set useful for
+    when you just want to quickly render a bunch of colored triangles or
+    lines without having to mess around with buffers, pipeline objects and
+    shaders.
+
+    The current feature set is mostly useful for debug visualizations
+    and simple UI-style 2D rendering:
+
+    What's implemented:
+
+        - vertex components:
+            - position (x, y, z)
+            - 2D texture coords (u, v)
+            - color (r, g, b, a)
+        - primitive types:
+            - triangle list and strip
+            - line list and strip
+            - quad list (TODO: quad strips)
+            - point list (TODO: point size)
+        - render state:
+            - depth test (always less-equal)
+            - blending (always src_alpha / inv_src_alpha)
+            - cull face (front face selectable at start, default is CCW)
+            - texturing
+        - one texture layer (no multi-texturing)
+        - viewport and scissor-rect with selectable origin (top-left or bottom-left)
+        - all GL 1.x matrix stack functions, and additionally equivalent 
+        functions for gluPerspective and gluLookat
+    
+    Notable GLES 1.x features that are *NOT* implemented:
+
+        - vertex lighting (this is the most likely GL feature that might be added later)
+        - vertex arrays (although providing whole chunks of vertex data at once
+        might be a useful feature for a later version)
+        - stencil operations
+        - texture coordinate generation
+        - depth comparison functions other that less-equal
+        - point size and line width
+        - all pixel store functions
+        - no ALPHA_TEST
+        - no color mask or clear functions (clear is handled by the
+        sokol-gfx render pass)
+        - fog
+
+    Notable differences to GL:
+
+        - no "enum soup" for render states etc, instead there are
+        explicitely named state functions
+        - all angles are in radians, not degree (not the sgl_rad() and
+        sgl_deg() conversion functions)
+        - no enable/disable state for scissor test, this is always enabled
 
     HOWTO:
     ======
     FIXME
+        - initialize sokol-gfx and sokol-gl
+        - optionally create textures via sokol-gfx
+        - call sokol-gl functions anywhere in the frame
+        - inside a sokol-gfx render pass, call sgl_draw() once per frame
+
+    UNDER THE HOOD:
+    ===============
+    sokol_gl.h works by recording vertex data and rendering commands into
+    memory buffers.
+
+    The only functions which call into sokol_gfx.h are:
+        - sgl_setup()
+        - sgl_shutdown()
+        - sgl_draw()
+
+    sgl_setup() must be called after initializing sokol-gfx.
+    sgl_shutdown() must be called before shutting down sokol-gfx.
+    sgl_draw() must be called once per frame inside a sokol-gfx render pass.
+
+    All other sokol-gl function can be called anywhere in a frame, since
+    they just record data into memory buffers owned by sokol-gl.
+
+    What happens in:
+
+        sgl_setup():
+            - 3 memory buffers are allocated, one for vertex data,
+              one for uniform data, and one for commands
+            - sokol-gfx resources are created: a (dynamic) vertex buffer,
+              a shader object (using embedded shader source or byte code),
+              and an 8x8 all-white default texture
+
+            One vertex is 24 bytes:
+                - float3 position
+                - float2 texture coords
+                - uint32_t color
+
+            One uniform block is 128 bytes:
+                - mat4 model-view-projection matrix
+                - mat4 texture matrix
+
+            One draw command is ca. 24 bytes for the actual
+            command code plus command arguments.
+
+            Each sgl_end() consumes one uniform block and one
+            command, so the required size for one sgl_begin/end pair
+            is at most:
+
+                152 + 24 * num_verts
+
+            (I'm writing 'at most' because it would make sense to not
+            use a new uniform block slot when the model-view-projection
+            and texture matrix doesn't change between two sgl_begin/end,
+            but this is not yet implemented).
+
+        sgl_shutdown():
+            - all sokol-gfx resources (buffer, shader, default-texture and
+              all pipeline objects) are destroyed
+            - the 3 memory buffers are freed
+
+        sgl_draw():
+            - copy all recorded vertex data into the dynamic sokol-gfx buffer
+              via a call to sg_update_buffer()
+            - for each recorded command:
+                - if it's a viewport command, call sg_apply_viewport()
+                - if it's a scissor-rect command, call sg_apply_scissor_rect()
+                - if it's a draw command:
+                    - depending on the primitive type and render state
+                      mask of the command, lookup an existing, or create
+                      a new pipeline-state-object
+                    - depending on what has changed since the last draw command,
+                      call sg_apply_pipeline(), sg_apply_bindings() and
+                      sg_apply_uniforms()
+                    - finally call sg_draw()
+
+    All other functions just modify the internally tracked state, add
+    data to the vertex, uniform and command buffers, or manipulate
+    the matrix stack.
 
     LICENSE
     =======
-
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -391,10 +523,10 @@ typedef enum {
 
 typedef struct {
     sg_image img;
-    uint16_t state_bits;    /* bit mask with primitive type and render states */
     int base_vertex;
     int num_vertices;
     int uniform_index;
+    uint16_t state_bits;    /* bit mask with primitive type and render states */
 } _sgl_draw_args_t;
 
 typedef struct {
