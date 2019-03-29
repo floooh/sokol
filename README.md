@@ -419,7 +419,7 @@ Mainly some "missing features" for desktop apps:
       directory
     - the implementation macro for sokol_gfx_imgui.h has been changed
       from SOKOL_IMPL to SOKOL_GFX_IMGUI_IMPL (so when you suddenly get
-      unresoled linker errors, that's the reason)
+      unresolved linker errors, that's the reason)
     - all headers now have two preprocessor defines for the declaration
       and implementation (for instance in sokol_gfx.h: SOKOL_GFX_INCLUDED
       and SOKOL_GFX_IMPL_INCLUDED) these are checked in the utility-headers
