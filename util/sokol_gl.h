@@ -1472,7 +1472,6 @@ SOKOL_API_IMPL void sgl_draw(void) {
                     break;
                 case SGL_COMMAND_DRAW:
                     {
-                        /* FIXME: don't apply redundant state */
                         const _sgl_draw_args_t* args = &cmd->args.draw;
                         sg_pipeline pip = _sgl_pipeline(args->state_bits);
                         if (pip.id != cur_pip_id) {
