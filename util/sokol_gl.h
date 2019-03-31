@@ -37,8 +37,6 @@
     - check that the mult_matrix and load_matrix functions have the same
       memory layout as GL
     - optimize sokol-gfx state update in sgl_draw() (only set what's changed)
-    - in sgl_end(), only allocate a new uniform block when matrices have
-      changed since last time
 
     FEATURE OVERVIEW:
     =================
@@ -105,7 +103,7 @@
     UNDER THE HOOD:
     ===============
     sokol_gl.h works by recording vertex data and rendering commands into
-    memory buffers.
+    memory buffers, and then drawing the recorded commands via sokol_gfx.h
 
     The only functions which call into sokol_gfx.h are:
         - sgl_setup()
@@ -140,16 +138,11 @@
             One draw command is ca. 24 bytes for the actual
             command code plus command arguments.
 
-            Each sgl_end() consumes one uniform block and one
-            command, so the required size for one sgl_begin/end pair
-            is at most:
+            Each sgl_end() consumes one command, and one uniform block
+            (only when the matrices have changed).
+            The required size for one sgl_begin/end pair is (at most):
 
-                152 + 24 * num_verts
-
-            (I'm writing 'at most' because it would make sense to not
-            use a new uniform block slot when the model-view-projection
-            and texture matrix doesn't change between two sgl_begin/end,
-            but this is not yet implemented).
+                (152 + 24 * num_verts) bytes
 
         sgl_shutdown():
             - all sokol-gfx resources (buffer, shader, default-texture and
@@ -570,13 +563,14 @@ typedef struct {
 
     /* state tracking */
     int base_vertex;
-    int vtx_count;      /* number of times vtx function has been called, used for non-triangle primitives */
+    int vtx_count;          /* number of times vtx function has been called, used for non-triangle primitives */
     sgl_error_t error;
     bool in_begin;
-    uint16_t state_bits;        /* bitmask with primitive type and render states */
+    uint16_t state_bits;    /* bitmask with primitive type and render states */
     float u, v;
     uint32_t rgba;
     sg_image cur_img;
+    bool matrix_dirty;      /* reset in sgl_end(), set in any of the matrix stack functions */
 
     /* sokol-gfx resources */
     sg_buffer vbuf;
@@ -618,6 +612,7 @@ static void _sgl_rewind(void) {
     _sgl.cur_uniform = 0;
     _sgl.cur_command = 0;
     _sgl.error = SGL_NO_ERROR;
+    _sgl.matrix_dirty = true;
 }
 
 static inline _sgl_vertex_t* _sgl_next_vertex(void) {
@@ -960,6 +955,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
         _sgl_identity(&_sgl.matrix_stack[i][0]);
     }
+    _sgl.matrix_dirty = true;
 
     /* create sokol-gfx resource objects */
     sg_push_debug_group("sokol-gl");
@@ -1191,20 +1187,23 @@ SOKOL_API_IMPL void sgl_end(void) {
     if (_sgl.base_vertex == _sgl.cur_vertex) {
         return;
     }
+    if (_sgl.matrix_dirty) {
+        _sgl.matrix_dirty = false;
+        _sgl_uniform_t* uni = _sgl_next_uniform();
+        if (uni) {
+            _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(), _sgl_matrix_modelview());
+            uni->tm = *_sgl_matrix_texture();
+        }
+    }
     _sgl_command_t* cmd = _sgl_next_command();
     if (cmd) {
+        SOKOL_ASSERT(_sgl.cur_uniform > 0);
         cmd->cmd = SGL_COMMAND_DRAW;
         cmd->args.draw.img = _sgl.cur_img;
         cmd->args.draw.state_bits = _sgl.state_bits;
         cmd->args.draw.base_vertex = _sgl.base_vertex;
         cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
-        cmd->args.draw.uniform_index = _sgl.cur_uniform;
-    }
-    _sgl_uniform_t* uni = _sgl_next_uniform();
-    if (uni) {
-        /* FIXME: update the model-view-proj matrix lazily */
-        _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(), _sgl_matrix_modelview());
-        uni->tm = *_sgl_matrix_texture();
+        cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
     }
 }
 
@@ -1345,21 +1344,25 @@ SOKOL_API_IMPL void sgl_matrix_mode_texture(void) {
 
 SOKOL_API_IMPL void sgl_load_identity(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_identity(_sgl_matrix());
 }
 
 SOKOL_API_IMPL void sgl_load_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_transpose(_sgl_matrix(), (const _sgl_matrix_t*) &m[0]);
 }
 
 SOKOL_API_IMPL void sgl_load_transpose_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     memcpy(&_sgl_matrix()->v[0][0], &m[0], 64);
 }
 
 SOKOL_API_IMPL void sgl_mult_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_matrix_t m0;
     _sgl_transpose(&m0, (const _sgl_matrix_t*) &m[0]);
     /* order? */
@@ -1368,6 +1371,7 @@ SOKOL_API_IMPL void sgl_mult_matrix(const float m[16]) {
 
 SOKOL_API_IMPL void sgl_mult_transpose_matrix_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     const _sgl_matrix_t* m0  = (const _sgl_matrix_t*) &m[0];
     /* order? */
     _sgl_mul(_sgl_matrix(), m0);
@@ -1375,42 +1379,50 @@ SOKOL_API_IMPL void sgl_mult_transpose_matrix_matrix(const float m[16]) {
 
 SOKOL_API_IMPL void sgl_rotate(float angle_rad, float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_rotate(_sgl_matrix(), angle_rad, x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_scale(float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_scale(_sgl_matrix(), x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_translate(float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_translate(_sgl_matrix(), x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_frustum(float l, float r, float b, float t, float n, float f) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_frustum(_sgl_matrix(), l, r, b, t, n, f);
 }
 
 SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float f) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_ortho(_sgl_matrix(), l, r, b, t, n, f);
 }
 
 SOKOL_API_IMPL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_perspective(_sgl_matrix(), fov_y, aspect, z_near, z_far);
 }
 
 SOKOL_API_IMPL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl.matrix_dirty = true;
     _sgl_lookat(_sgl_matrix(), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
 }
 
 SOKOL_API_DECL void sgl_push_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    _sgl.matrix_dirty = true;
     if (_sgl.top_of_stack[_sgl.cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
         const _sgl_matrix_t* src = _sgl_matrix();
         _sgl.top_of_stack[_sgl.cur_matrix_mode]++;
@@ -1425,6 +1437,7 @@ SOKOL_API_DECL void sgl_push_matrix(void) {
 SOKOL_API_DECL void sgl_pop_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    _sgl.matrix_dirty = true;
     if (_sgl.top_of_stack[_sgl.cur_matrix_mode] > 0) {
         _sgl.top_of_stack[_sgl.cur_matrix_mode]--;
     }
