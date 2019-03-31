@@ -41,7 +41,7 @@
     =================
     sokol_gl.h implements a subset of the OpenGLES 1.x feature set useful for
     when you just want to quickly render a bunch of colored triangles or
-    lines without having to mess around with buffers, pipeline objects and
+    lines without having to mess with buffers, pipeline objects and
     shaders.
 
     The current feature set is mostly useful for debug visualizations
@@ -66,13 +66,13 @@
         - one texture layer (no multi-texturing)
         - viewport and scissor-rect with selectable origin (top-left or bottom-left)
         - all GL 1.x matrix stack functions, and additionally equivalent 
-        functions for gluPerspective and gluLookat
+          functions for gluPerspective and gluLookat
     
     Notable GLES 1.x features that are *NOT* implemented:
 
         - vertex lighting (this is the most likely GL feature that might be added later)
         - vertex arrays (although providing whole chunks of vertex data at once
-        might be a useful feature for a later version)
+          might be a useful feature for a later version)
         - stencil operations
         - texture coordinate generation
         - depth comparison functions other that less-equal
@@ -80,15 +80,15 @@
         - all pixel store functions
         - no ALPHA_TEST
         - no color mask or clear functions (clear is handled by the
-        sokol-gfx render pass)
+          sokol-gfx render pass)
         - fog
 
     Notable differences to GL:
 
         - no "enum soup" for render states etc, instead there are
-        explicitely named state functions
+          explicitely named state functions
         - all angles are in radians, not degree (not the sgl_rad() and
-        sgl_deg() conversion functions)
+          sgl_deg() conversion functions)
         - no enable/disable state for scissor test, this is always enabled
 
     HOWTO:
