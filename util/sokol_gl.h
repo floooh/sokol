@@ -36,7 +36,6 @@
     =======
     - check that the mult_matrix and load_matrix functions have the same
       memory layout as GL
-    - optimize sokol-gfx state update in sgl_draw() (only set what's changed)
 
     FEATURE OVERVIEW:
     =================
@@ -60,10 +59,10 @@
             - quad list (TODO: quad strips)
             - point list (TODO: point size)
         - render state:
-            - depth test (always less-equal)
-            - blending (always src_alpha / inv_src_alpha)
-            - cull face (front face selectable at start, default is CCW)
-            - texturing
+            - depth test (always less-equal when enabled)
+            - blending (always src_alpha / inv_src_alpha when enabled)
+            - cull face (front face winding selectable at start, default is CCW)
+            - texturing (enabled/disabled)
         - one texture layer (no multi-texturing)
         - viewport and scissor-rect with selectable origin (top-left or bottom-left)
         - all GL 1.x matrix stack functions, and additionally equivalent 
@@ -1446,10 +1445,13 @@ SOKOL_API_DECL void sgl_pop_matrix(void) {
     }
 }
 
-/* this draw the accumulated draw commands via sokol-gfx */
+/* this renders the accumulated draw commands via sokol-gfx */
 SOKOL_API_IMPL void sgl_draw(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     if ((_sgl.error == SGL_NO_ERROR) && (_sgl.cur_vertex > 0) && (_sgl.cur_command > 0)) {
+        uint32_t cur_pip_id = SG_INVALID_ID;
+        uint32_t cur_img_id = SG_INVALID_ID;
+        int cur_uniform_index = -1;
         sg_push_debug_group("sokol-gl");
         sg_update_buffer(_sgl.vbuf, _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t));
         _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
@@ -1473,10 +1475,22 @@ SOKOL_API_IMPL void sgl_draw(void) {
                         /* FIXME: don't apply redundant state */
                         const _sgl_draw_args_t* args = &cmd->args.draw;
                         sg_pipeline pip = _sgl_pipeline(args->state_bits);
-                        sg_apply_pipeline(pip);
-                        _sgl.bind.fs_images[0] = args->img;
-                        sg_apply_bindings(&_sgl.bind);
-                        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
+                        if (pip.id != cur_pip_id) {
+                            sg_apply_pipeline(pip);
+                            cur_pip_id = pip.id;
+                            /* when pipeline changes, also need to re-apply uniforms and bindings */
+                            cur_img_id = SG_INVALID_ID;
+                            cur_uniform_index = -1;
+                        }
+                        if (cur_img_id != args->img.id) {
+                            _sgl.bind.fs_images[0] = args->img;
+                            sg_apply_bindings(&_sgl.bind);
+                            cur_img_id = args->img.id;
+                        }
+                        if (cur_uniform_index != args->uniform_index) {
+                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
+                            cur_uniform_index = args->uniform_index;
+                        }
                         /* FIXME: what if number of vertices doesn't match the primitive type? */
                         sg_draw(args->base_vertex, args->num_vertices, 1);
                     }
