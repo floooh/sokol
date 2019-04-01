@@ -409,6 +409,13 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **01-Apr-2019** (not an April Fool's joke): There's a new **sokol_gl.h**
+util header which implements an 'OpenGL-1.x-in-spirit' rendering API on top
+of sokol_gfx.h (vertex specification via begin/end, and a matrix stack). This is
+only a small subset of OpenGL 1.x, mainly intended for debug-visualization or
+simple tasks like 2D UI rendering. As always, sample code is in the
+[sokol-samples](https://github.com/floooh/sokol-samples) project.
+
 - **15-Mar-2019**: various Dear ImGui related changes:
     - there's a new utility header sokol_imgui.h with a simple drop-in
       renderer for Dear ImGui on top of sokol_gfx.h and sokol_app.h
