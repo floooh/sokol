@@ -87,7 +87,7 @@
 
         - no "enum soup" for render states etc, instead there are
           explicitely named state functions
-        - all angles are in radians, not degree (not the sgl_rad() and
+        - all angles are in radians, not degrees (note the sgl_rad() and
           sgl_deg() conversion functions)
         - no enable/disable state for scissor test, this is always enabled
 
