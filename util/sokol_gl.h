@@ -91,13 +91,187 @@
           sgl_deg() conversion functions)
         - no enable/disable state for scissor test, this is always enabled
 
-    HOWTO:
-    ======
-    FIXME
-        - initialize sokol-gfx and sokol-gl
-        - optionally create textures via sokol-gfx
-        - call sokol-gl functions anywhere in the frame
-        - inside a sokol-gfx render pass, call sgl_draw() once per frame
+    STEP BY STEP:
+    =============
+    --- To initialize sokol-gl, call:
+
+            sgl_setup(const sgl_desc_t* desc)
+
+        NOTE that sgl_setup() must be called *after* initializing sokol-gfx
+        (via sg_setup). This is because sgl_setup() needs to create
+        sokol-gfx resource objects.
+
+        sgl_setup() needs to know the attributes of the sokol-gfx render pass
+        where sokol-gl rendering will happen through the passed-in sgl_desc_t
+        struct:
+
+            sg_pixel_format color_format    - color pixel format of render pass
+            sg_pixel_format depth_format    - depth pixel format of render pass
+            int sample_count                - MSAA sample count of render pass
+
+        These values have the same defaults as sokol_gfx.h and sokol_app.h,
+        to use the default values, leave them zero-initialized.
+
+        You can adjust the maximum number of vertices and drawing commands
+        through the members:
+
+            int max_vertices    - default is 65536
+            int max_commands    - default is 16384
+
+        Finally you can change the face winding for front-facing triangles
+        and quads:
+
+            sg_face_winding face_winding    - default is SG_FACEWINDING_CCW
+
+        The default winding for front faces is counter-clock-wise. This is 
+        the same as OpenGL's default, but different from sokol-gfx.
+
+    --- After sgl_setup() you can call any of the sokol-gl functions anywhere
+        in a frame, *except* sgl_draw(). The 'vanilla' functions
+        will only change internal sokol-gl state, and not call any sokol-gfx
+        functions.
+
+    --- Unlike OpenGL, sokol-gl has a function to reset internal state to
+        a known default. This is useful at the start of a sequence of
+        rendering operations:
+
+            void sgl_defaults(void)
+
+        This will set the following default state:
+
+            - depth-test, blending, cull-face, texturing disabled
+            - current texture coordinate to u=0.0f, v=0.0f
+            - current color to white (rgba all 1.0f)
+            - unbind the current texture
+            - *all* matrices will be set to identity (also the projection matrix)
+        
+        The current matrix stack depths will not be changed by sgl_defaults().
+
+    --- adjust render state with:
+
+            sgl_state_depth_test(bool enabled)
+            sgl_state_blend(bool enabled)
+            sgl_state_cull_face(bool enabled)
+            sgl_state_texture(bool enabled)
+
+    --- optionally set an sg_image as current texture, this
+        will only be used when texturing has been enabled
+        with sgl_state_texture(true):
+
+            sgl_texture(sg_image img)
+
+    --- set the current viewport and scissor rect with:
+
+            sgl_viewport(int x, int y, int w, int h, bool origin_top_left)
+            sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left)
+
+        ...these calls add a new command to the internal command queue, so
+        that the viewport or scissor rect are set at the right time relative
+        to other sokol-gl calls.
+
+    --- adjust the transform matrices, matrix manipulation works just like
+        the OpenGL matrix stack:
+
+        ...set the current matrix mode:
+
+            sgl_matrix_mode_modelview()
+            sgl_matrix_mode_projection()
+            sgl_matrix_mode_texture()
+
+        ...load the identity matrix on top of the current matrix:
+
+            sgl_load_identity()
+
+        ...translate, rotate and scale the current matrix:
+
+            sgl_translate(float x, float y, float z)
+            sgl_rotate(float angle_rad, float x, float y, float z)
+            sgl_scale(float x, float y, float z)
+
+        NOTE that all angles in sokol-gl are in radians, not in degree.
+        Convert between radians and degree with the helper funtions:
+
+            float sgl_rad(float deg)        - degrees to radians
+            float sgl_deg(float rad)        - radians to degrees
+
+        ...directly load the current matrix from a float[16] array:
+
+            sgl_load_matrix(const float m[16])
+            sgl_load_transpose_matrix(const float m[16])
+
+        ...directly multiply the current matrix from a float[16] array:
+
+            sgl_mult_matrix(const float m[16])
+            sgl_mult_transpose_matrix(const float m[16])
+
+        The memory layout of those float[16] arrays is the same as in OpenGL.
+
+        ...more matrix functions:
+
+            sgl_frustum(float left, float right, float bottom, float top, float near, float far)
+            sgl_ortho(float left, float right, float bottom, float top, float near, float far)
+            sgl_perspective(float fov_y, float aspect, float near, float far)
+            sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z)
+        
+        These functions work the same as glFrustum(), glOrtho(), gluPerspective()
+        and gluLookAt().
+
+        ...and finally to push / pop the current matrix stack:
+
+            sgl_push_matrix(void)
+            sgl_pop_matrix(void)
+
+        Again, these work the same as glPushMatrix() and glPopMatrix().
+
+    --- perform primitive rendering:
+
+        ...set the current texture coordinate and color 'registers' with:
+
+            sgl_t2f(float u, float v)   - set current texture coordinate
+            sgl_c*(...)                 - set current color
+
+        There are several functions for setting the color (as float values,
+        unsigned byte values, packed as unsigned 32-bit integer, with
+        and without alpha).
+
+        NOTE that these are the only functions that can be called both inside
+        sgl_begin_*() / sgl_end() and outside.
+
+        ...start a primitive vertex sequence with:
+
+            sgl_begin_points()
+            sgl_begin_lines()
+            sgl_begin_line_strip()
+            sgl_begin_triangles()
+            sgl_begin_triangle_strip()
+            sgl_begin_quads()
+
+        ...after sgl_begin_*() specifiy vertices:
+
+            sgl_v*(...)
+            sgl_v*_t*(...)
+            sgl_v*_c*(...)
+            sgl_v*_t*_c*(...)
+
+        These functions write a new vertex to sokol-gl's internal vertex buffer,
+        optionally with texture-coords and color. If the texture coordinate
+        and/or color is missing, it will be taken from the current texture-coord
+        and color 'register'.
+
+        ...finally, after specifying vertices, call:
+
+            sgl_end()
+
+        This will record a new draw command in sokol-gl's internal command
+        list.
+
+    --- inside a sokol-gfx rendering pass, call:
+
+            sgl_draw()
+
+        This will render everything that has been recorded since the last
+        call to sgl_draw() through sokol-gfx, and will 'rewind' the internal
+        vertex-, uniform- and command-buffers.
 
     UNDER THE HOOD:
     ===============
@@ -1073,11 +1247,11 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     _sgl.u = 0.0f; _sgl.v = 0.0f;
     _sgl.rgba = 0xFFFFFFFF;
     _sgl.cur_img = _sgl.def_img;
-    for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
-        _sgl.cur_matrix_mode = (_sgl_matrix_mode_t)i;
-        _sgl_identity(_sgl_matrix());
-    }
+    _sgl_identity(_sgl_matrix_texture());
+    _sgl_identity(_sgl_matrix_modelview());
+    _sgl_identity(_sgl_matrix_projection());
     _sgl.cur_matrix_mode = 0;
+    _sgl.matrix_dirty = true;
 }
 
 SOKOL_API_IMPL void sgl_state_depth_test(bool enabled) {
