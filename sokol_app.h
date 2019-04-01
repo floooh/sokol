@@ -2566,8 +2566,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 
 /* see https://github.com/floooh/sokol/issues/138 */
-#ifndef WM_MOUSEWHEEL
-#define WM_MOUSEWHEEL (0x020A)
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL (0x020E)
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
