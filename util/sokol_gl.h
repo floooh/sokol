@@ -32,11 +32,6 @@
 
     Matrix functions are taken from MESA and Regal.
 
-    TODO v1
-    =======
-    - check that the mult_matrix and load_matrix functions have the same
-      memory layout as GL
-
     FEATURE OVERVIEW:
     =================
     sokol_gl.h implements a subset of the OpenGLES 1.x feature set useful for
@@ -1851,30 +1846,28 @@ SOKOL_API_IMPL void sgl_load_identity(void) {
 SOKOL_API_IMPL void sgl_load_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl.matrix_dirty = true;
-    _sgl_transpose(_sgl_matrix(), (const _sgl_matrix_t*) &m[0]);
+    memcpy(&_sgl_matrix()->v[0][0], &m[0], 64);
 }
 
 SOKOL_API_IMPL void sgl_load_transpose_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl.matrix_dirty = true;
-    memcpy(&_sgl_matrix()->v[0][0], &m[0], 64);
+    _sgl_transpose(_sgl_matrix(), (const _sgl_matrix_t*) &m[0]);
 }
 
 SOKOL_API_IMPL void sgl_mult_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl.matrix_dirty = true;
-    _sgl_matrix_t m0;
-    _sgl_transpose(&m0, (const _sgl_matrix_t*) &m[0]);
-    /* order? */
-    _sgl_mul(_sgl_matrix(), &m0);
+    const _sgl_matrix_t* m0  = (const _sgl_matrix_t*) &m[0];
+    _sgl_mul(_sgl_matrix(), m0);
 }
 
-SOKOL_API_IMPL void sgl_mult_transpose_matrix_matrix(const float m[16]) {
+SOKOL_API_IMPL void sgl_mult_transpose_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl.matrix_dirty = true;
-    const _sgl_matrix_t* m0  = (const _sgl_matrix_t*) &m[0];
-    /* order? */
-    _sgl_mul(_sgl_matrix(), m0);
+    _sgl_matrix_t m0;
+    _sgl_transpose(&m0, (const _sgl_matrix_t*) &m[0]);
+    _sgl_mul(_sgl_matrix(), &m0);
 }
 
 SOKOL_API_IMPL void sgl_rotate(float angle_rad, float x, float y, float z) {
