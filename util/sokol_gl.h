@@ -108,7 +108,7 @@
         to use the default values, leave them zero-initialized.
 
         You can adjust the maximum number of vertices and drawing commands
-        through the members:
+        per frame through the members:
 
             int max_vertices    - default is 65536
             int max_commands    - default is 16384
@@ -267,6 +267,23 @@
         This will render everything that has been recorded since the last
         call to sgl_draw() through sokol-gfx, and will 'rewind' the internal
         vertex-, uniform- and command-buffers.
+
+    --- sokol-gl tracks a single internal error code which can be
+        queried with
+
+            sgl_error_t sgl_error(void)
+
+        ...which can return the following error codes:
+
+        SGL_NO_ERROR                - all OK, no error occurded since last sgl_draw()
+        SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
+        SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
+        SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
+        SGL_ERROR_STACK_OVERFLOW    - current matrix stack overflow (checked in sgl_push_matrix())
+        SGL_ERROR_STACK_UNDERFLOW   - current matrix stack underflow (checked in sgl_pop_matrix())
+
+        ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
+        and reset the error code to SGL_NO_ERROR.
 
     UNDER THE HOOD:
     ===============
