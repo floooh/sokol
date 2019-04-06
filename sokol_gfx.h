@@ -7234,6 +7234,99 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image_t* img, __unsafe_
     }
 }
 
+/*
+    FIXME: METAL RESOURCE STORAGE MODE FOR macOS AND iOS
+
+    For immutable textures on macOS, the recommended procedure is to create
+    a MTLStorageModeManaged texture with the immutable content first,
+    and then use the GPU to blit the content into a MTLStorageModePrivate
+    texture before the first use.
+
+    On iOS use the same one-time-blit procedure, but from a
+    MTLStorageModeShared to a MTLStorageModePrivate texture.
+
+    It probably makes sense to handle this in a separate 'resource manager'
+    with a recycable pool of blit-source-textures?
+*/
+
+/* initialize MTLTextureDescritor with common attributes */
+_SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
+    mtl_desc.textureType = _sg_mtl_texture_type(img->type);
+    if (img->render_target) {
+        if (_sg_is_valid_rendertarget_color_format(img->pixel_format)) {
+            mtl_desc.pixelFormat = _sg_mtl_rendertarget_color_format(img->pixel_format);
+        }
+        else {
+            mtl_desc.pixelFormat = _sg_mtl_rendertarget_depth_format(img->pixel_format);
+        }
+    }
+    else {
+        mtl_desc.pixelFormat = _sg_mtl_texture_format(img->pixel_format);
+    }
+    if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
+        SOKOL_LOG("Unsupported texture pixel format!\n");
+        return false;
+    }
+    mtl_desc.width = img->width;
+    mtl_desc.height = img->height;
+    if (SG_IMAGETYPE_3D == img->type) {
+        mtl_desc.depth = img->depth;
+    }
+    else {
+        mtl_desc.depth = 1;
+    }
+    mtl_desc.mipmapLevelCount = img->num_mipmaps;
+    if (SG_IMAGETYPE_ARRAY == img->type) {
+        mtl_desc.arrayLength = img->depth;
+    }
+    else {
+        mtl_desc.arrayLength = 1;
+    }
+    mtl_desc.usage = MTLTextureUsageShaderRead;
+    if (img->usage != SG_USAGE_IMMUTABLE) {
+        mtl_desc.cpuCacheMode = MTLCPUCacheModeWriteCombined;
+    }
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        /* macOS: use managed textures */
+        mtl_desc.resourceOptions = MTLResourceStorageModeManaged;
+        mtl_desc.storageMode = MTLStorageModeManaged;
+    #else
+        /* iOS: use CPU/GPU shared memory */
+        mtl_desc.resourceOptions = MTLResourceStorageModeShared;
+        mtl_desc.storageMode = MTLStorageModeShared;
+    #endif
+    return true;
+}
+
+/* initialize MTLTextureDescritor with rendertarget attributes */
+_SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
+    SOKOL_ASSERT(img->render_target);
+    /* reset the cpuCacheMode to 'default' */
+    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
+    /* render targets are only visible to the GPU */
+    mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
+    mtl_desc.storageMode = MTLStorageModePrivate;
+    /* non-MSAA render targets are shader-readable */
+    mtl_desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+}
+
+/* initialize MTLTextureDescritor with MSAA attributes */
+_SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
+    SOKOL_ASSERT(img->sample_count > 1);
+    /* reset the cpuCacheMode to 'default' */
+    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
+    /* render targets are only visible to the GPU */
+    mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
+    mtl_desc.storageMode = MTLStorageModePrivate;
+    /* MSAA render targets are not shader-readable (instead they are resolved) */
+    mtl_desc.usage = MTLTextureUsageRenderTarget;
+    mtl_desc.textureType = MTLTextureType2DMultisample;
+    mtl_desc.depth = 1;
+    mtl_desc.arrayLength = 1;
+    mtl_desc.mipmapLevelCount = 1;
+    mtl_desc.sampleCount = img->sample_count;
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     img->type = desc->type;
@@ -7255,6 +7348,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->num_slots = (img->usage == SG_USAGE_IMMUTABLE) ? 1 :SG_NUM_INFLIGHT_FRAMES;
     img->active_slot = 0;
     const bool injected = (0 != desc->mtl_textures[0]);
+    const bool msaa = (img->sample_count > 1);
 
     /* first initialize all Metal resource pool slots to 'empty' */
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -7266,61 +7360,39 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
 
     /* initialize a Metal texture descriptor with common attributes */
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
-    mtl_desc.textureType = _sg_mtl_texture_type(img->type);
-    if (img->render_target) {
-        if (_sg_is_valid_rendertarget_color_format(img->pixel_format)) {
-            mtl_desc.pixelFormat = _sg_mtl_rendertarget_color_format(img->pixel_format);
-        }
-        else {
-            mtl_desc.pixelFormat = _sg_mtl_rendertarget_depth_format(img->pixel_format);
-        }
-    }
-    else {
-        mtl_desc.pixelFormat = _sg_mtl_texture_format(img->pixel_format);
-    }
-    if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
-        SOKOL_LOG("Unsupported texture pixel format!\n");
+    if (!_sg_mtl_init_texdesc_common(mtl_desc, img)) {
         return SG_RESOURCESTATE_FAILED;
-    }
-    mtl_desc.width = img->width;
-    mtl_desc.height = img->height;
-    if (SG_IMAGETYPE_3D == img->type) {
-        mtl_desc.depth = img->depth;
-    }
-    else {
-        mtl_desc.depth = 1;
-    }
-    mtl_desc.mipmapLevelCount = img->num_mipmaps;
-    if (SG_IMAGETYPE_ARRAY == img->type) {
-        mtl_desc.arrayLength = img->depth;
-    }
-    else {
-        mtl_desc.arrayLength = 1;
-    }
-    if (img->render_target) {
-        mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
-        mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
-        mtl_desc.storageMode = MTLStorageModePrivate;
-        mtl_desc.usage |= MTLTextureUsageRenderTarget;
     }
 
     /* special case depth-stencil-buffer? */
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
-        /* create only a depth texture */
+        /* depth-stencil buffer texture must always be a render target */
         SOKOL_ASSERT(img->render_target);
         SOKOL_ASSERT(img->type == SG_IMAGETYPE_2D);
         SOKOL_ASSERT(img->num_mipmaps == 1);
         SOKOL_ASSERT(!injected);
-        if (img->sample_count > 1) {
-            mtl_desc.textureType = MTLTextureType2DMultisample;
-            mtl_desc.sampleCount = img->sample_count;
+        if (msaa) {
+            _sg_mtl_init_texdesc_rt_msaa(mtl_desc, img);
+        }
+        else {
+            _sg_mtl_init_texdesc_rt(mtl_desc, img);
         }
         id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
         SOKOL_ASSERT(nil != tex);
         img->mtl_depth_tex = _sg_mtl_add_resource(tex);
     }
     else {
-        /* create the color texture(s) */
+        /* create the color texture
+            In case this is a render target without MSAA, add the relevant
+            render-target descriptor attributes.
+            In case this is a render target *with* MSAA, the color texture
+            will serve as MSAA-resolve target (not as render target), and rendering
+            will go into a separate render target texture of type
+            MTLTextureType2DMultisample.
+        */
+        if (img->render_target && !msaa) {
+            _sg_mtl_init_texdesc_rt(mtl_desc, img);
+        }
         for (int slot = 0; slot < img->num_slots; slot++) {
             id<MTLTexture> tex;
             if (injected) {
@@ -7337,12 +7409,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
         }
 
         /* if MSAA color render target, create an additional MSAA render-surface texture */
-        if (img->render_target && (img->sample_count > 1)) {
-            mtl_desc.textureType = MTLTextureType2DMultisample;
-            mtl_desc.depth = 1;
-            mtl_desc.arrayLength = 1;
-            mtl_desc.mipmapLevelCount = 1;
-            mtl_desc.sampleCount = img->sample_count;
+        if (img->render_target && msaa) {
+            _sg_mtl_init_texdesc_rt_msaa(mtl_desc, img);
             id<MTLTexture> tex = [_sg_mtl_device newTextureWithDescriptor:mtl_desc];
             img->mtl_msaa_tex = _sg_mtl_add_resource(tex);
         }
