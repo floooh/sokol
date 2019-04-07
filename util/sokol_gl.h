@@ -173,7 +173,7 @@
             sgl_matrix_mode_projection()
             sgl_matrix_mode_texture()
 
-        ...load the identity matrix on top of the current matrix:
+        ...load the identity matrix into the current matrix:
 
             sgl_load_identity()
 
