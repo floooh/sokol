@@ -70,7 +70,7 @@
           might be a useful feature for a later version)
         - stencil operations
         - texture coordinate generation
-        - depth comparison functions other that less-equal
+        - depth comparison functions other than less-equal
         - point size and line width
         - all pixel store functions
         - no ALPHA_TEST
