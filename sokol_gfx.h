@@ -5632,6 +5632,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->max_anisotropy = desc->max_anisotropy;
     img->upd_frame_index = 0;
     const bool injected = (0 != desc->d3d11_texture);
+    const bool msaa = (img->sample_count > 1);
 
     /* special case depth-stencil buffer? */
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
@@ -5653,7 +5654,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
         d3d11_desc.Usage = D3D11_USAGE_DEFAULT;
         d3d11_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
         d3d11_desc.SampleDesc.Count = img->sample_count;
-        d3d11_desc.SampleDesc.Quality = (img->sample_count > 1) ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+        d3d11_desc.SampleDesc.Quality = msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
         hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11_texds);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texds);
     }
@@ -5684,7 +5685,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                 img->d3d11_format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
-                if (img->sample_count == 1) {
+                if (!msaa) {
                     d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
                 }
                 d3d11_tex_desc.CPUAccessFlags = 0;
@@ -5710,15 +5711,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             else {
                 hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11_tex2d);
                 SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_tex2d);
-            }
-
-            /* also need to create a separate MSAA render target texture? */
-            if (img->sample_count > 1) {
-                d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
-                d3d11_tex_desc.SampleDesc.Count = img->sample_count;
-                d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
-                hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11_texmsaa);
-                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texmsaa);
             }
 
             /* shader-resource-view */
@@ -5753,18 +5745,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             d3d11_tex_desc.Height = img->height;
             d3d11_tex_desc.Depth = img->depth;
             d3d11_tex_desc.MipLevels = img->num_mipmaps;
+            d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             if (img->render_target) {
                 img->d3d11_format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
-                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
+                if (!msaa) {
+                    d3d11_tex_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+                }
                 d3d11_tex_desc.CPUAccessFlags = 0;
             }
             else {
                 img->d3d11_format = _sg_d3d11_texture_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
-                d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
             }
             if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
@@ -5789,6 +5783,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             d3d11_srv_desc.Texture3D.MipLevels = img->num_mipmaps;
             hr = ID3D11Device_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11_tex3d, &d3d11_srv_desc, &img->d3d11_srv);
             SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_srv);
+        }
+
+        /* also need to create a separate MSAA render target texture? */
+        if (msaa) {
+            D3D11_TEXTURE2D_DESC d3d11_tex_desc;
+            memset(&d3d11_tex_desc, 0, sizeof(d3d11_tex_desc));
+            d3d11_tex_desc.Width = img->width;
+            d3d11_tex_desc.Height = img->height;
+            d3d11_tex_desc.MipLevels = 1;
+            d3d11_tex_desc.ArraySize = 1;
+            d3d11_tex_desc.Format = img->d3d11_format;
+            d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
+            d3d11_tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+            d3d11_tex_desc.CPUAccessFlags = 0;
+            d3d11_tex_desc.SampleDesc.Count = img->sample_count;
+            d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
+            hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11_texmsaa);
+            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11_texmsaa);
         }
 
         /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
@@ -6136,44 +6148,31 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
             D3D11_RENDER_TARGET_VIEW_DESC d3d11_rtv_desc;
             memset(&d3d11_rtv_desc, 0, sizeof(d3d11_rtv_desc));
             d3d11_rtv_desc.Format = att->image->d3d11_format;
-            switch (att->image->type) {
-                case SG_IMAGETYPE_2D:
-                    if (is_msaa) {
-                        d3d11_res = (ID3D11Resource*) att->image->d3d11_texmsaa;
-                        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
-                    }
-                    else {
-                        d3d11_res = (ID3D11Resource*) att->image->d3d11_tex2d;
-                        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-                        d3d11_rtv_desc.Texture2D.MipSlice = att->mip_level;
-                    }
-                    break;
-                case SG_IMAGETYPE_CUBE:
-                case SG_IMAGETYPE_ARRAY:
-                    if (is_msaa) {
-                        d3d11_res = (ID3D11Resource*) att->image->d3d11_texmsaa;
-                        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
-                        d3d11_rtv_desc.Texture2DMSArray.FirstArraySlice = att->slice;
-                        d3d11_rtv_desc.Texture2DMSArray.ArraySize = 1;
-                    }
-                    else {
-                        d3d11_res = (ID3D11Resource*) att->image->d3d11_tex2d;
-                        d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-                        d3d11_rtv_desc.Texture2DArray.MipSlice = att->mip_level;
-                        d3d11_rtv_desc.Texture2DArray.FirstArraySlice = att->slice;
-                        d3d11_rtv_desc.Texture2DArray.ArraySize = 1;
-                    }
-                    break;
-                case SG_IMAGETYPE_3D:
-                    SOKOL_ASSERT(!is_msaa);
-                    d3d11_res = (ID3D11Resource*) att->image->d3d11_tex3d;
-                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
-                    d3d11_rtv_desc.Texture3D.MipSlice = att->mip_level;
-                    d3d11_rtv_desc.Texture3D.FirstWSlice = att->slice;
-                    d3d11_rtv_desc.Texture3D.WSize = 1;
-                    break;
-                default:
-                    SOKOL_UNREACHABLE; break;
+            if ((att->image->type == SG_IMAGETYPE_2D) || is_msaa) {
+                if (is_msaa) {
+                    d3d11_res = (ID3D11Resource*) att->image->d3d11_texmsaa;
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+                }
+                else {
+                    d3d11_res = (ID3D11Resource*) att->image->d3d11_tex2d;
+                    d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                    d3d11_rtv_desc.Texture2D.MipSlice = att->mip_level;
+                }
+            }
+            else if ((att->image->type == SG_IMAGETYPE_CUBE) || (att->image->type == SG_IMAGETYPE_ARRAY)) {
+                d3d11_res = (ID3D11Resource*) att->image->d3d11_tex2d;
+                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                d3d11_rtv_desc.Texture2DArray.MipSlice = att->mip_level;
+                d3d11_rtv_desc.Texture2DArray.FirstArraySlice = att->slice;
+                d3d11_rtv_desc.Texture2DArray.ArraySize = 1;
+            }
+            else {
+                SOKOL_ASSERT(att->image->type == SG_IMAGETYPE_3D);
+                d3d11_res = (ID3D11Resource*) att->image->d3d11_tex3d;
+                d3d11_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+                d3d11_rtv_desc.Texture3D.MipSlice = att->mip_level;
+                d3d11_rtv_desc.Texture3D.FirstWSlice = att->slice;
+                d3d11_rtv_desc.Texture3D.WSize = 1;
             }
             SOKOL_ASSERT(d3d11_res);
             HRESULT hr = ID3D11Device_CreateRenderTargetView(_sg.d3d11.dev, d3d11_res, &d3d11_rtv_desc, &pass->d3d11_rtvs[i]);
@@ -6310,15 +6309,16 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
             _sg_attachment_t* att = &_sg.d3d11.cur_pass->color_atts[i];
             SOKOL_ASSERT(att->image && (att->image->slot.id == att->image_id.id));
             if (att->image->sample_count > 1) {
+                /* FIXME: support MSAA resolve into 3D texture */
                 SOKOL_ASSERT(att->image->d3d11_tex2d && att->image->d3d11_texmsaa && !att->image->d3d11_tex3d);
                 SOKOL_ASSERT(DXGI_FORMAT_UNKNOWN != att->image->d3d11_format);
                 const _sg_image_t* img = att->image;
-                UINT subres = _sg_d3d11_calcsubresource(att->mip_level, att->slice, img->num_mipmaps);
+                UINT dst_subres = _sg_d3d11_calcsubresource(att->mip_level, att->slice, img->num_mipmaps);
                 ID3D11DeviceContext_ResolveSubresource(_sg.d3d11.ctx,
                     (ID3D11Resource*) img->d3d11_tex2d,     /* pDstResource */
-                    subres,                                 /* DstSubresource */
+                    dst_subres,                             /* DstSubresource */
                     (ID3D11Resource*) img->d3d11_texmsaa,   /* pSrcResource */
-                    subres,                                 /* SrcSubresource */
+                    0,                                      /* SrcSubresource */
                     img->d3d11_format);
             }
         }
