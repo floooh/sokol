@@ -17,23 +17,25 @@
     SOKOL_D3D11
     SOKOL_METAL
 
-    Optionally provide the following defines to further configure 
+    Optionally provide the following configuration defines before including the
+    implementation:
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 
-    ...and finally, optionally provide the following macros to
-    override defaults:
+    Optionally provide the following macros before including the implementatuon
+    to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
-    Include the following headers before sokol_imgui.h:
+    Include the following headers before sokol_imgui.h (both before including
+    the declaration and implementation):
 
         sokol_gfx.h
         sokol_app.h     (except SOKOL_IMGUI_NO_SOKOL_APP)
 
-    Additionally, include the following headers before the sokol_imgui.h
+    Additionally, include the following headers before including the
     implementation:
 
         imgui.h
@@ -41,8 +43,7 @@
     Note that the sokol_imgui.h *implementation* must be compiled as C++
     (since Dear ImGui has a C++ API).
 
-    FIXME: replace embedded Metal and D3D11 shader sources with
-    precompiled bytecode blobs.
+    FIXME: replace embedded Metal shader sources with precompiled bytecode blobs(?)
 
     FEATURE OVERVIEW:
     =================
@@ -52,8 +53,8 @@
 
     The sokol_app.h dependency is optional and used for input event handling.
     If you only use sokol_gfx.h but not sokol_app.h in your application,
-    just define SOKOL_IMGUI_NO_SOKOL_APP before including the implementation
-    of sokol_imgui.h, this will remove any dependency on sokol_app.h, and
+    define SOKOL_IMGUI_NO_SOKOL_APP before including the implementation
+    of sokol_imgui.h, this will remove any dependency to sokol_app.h, but
     you must feed input events into Dear ImGui yourself.
 
     sokol_imgui.h is not thread-safe, all calls must be made from the
@@ -62,7 +63,7 @@
     HOWTO:
     ======
 
-    --- To initialize sokol-imgui call:
+    --- To initialize sokol-imgui, call:
 
         simgui_setup(const simgui_desc_t* desc)
 
@@ -70,7 +71,7 @@
         (two buffers for vertices and indices, a font texture and a pipeline-
         state-object).
 
-        Use the following simgui_desc members to configure behaviour:
+        Use the following simgui_desc_t members to configure behaviour:
 
             int max_vertices
                 The maximum number of vertices used for UI rendering, default is 65536.
@@ -91,7 +92,8 @@
 
             float dpi_scale
                 DPI scaling factor. Set this to the result of sapp_dpi_scale().
-                The default value is 1.0
+                To render in high resolution on a Retina Mac this would
+                typically be 2.0. The default value is 1.0
 
             const char* ini_filename
                 Use this path as ImGui::GetIO().IniFilename. By default
@@ -176,7 +178,7 @@
 #endif
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#define SOKOL_API_DECL extern
 #endif
 
 #ifdef __cplusplus
@@ -216,10 +218,11 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #error "The sokol_imgui.h implementation must be compiled as C++"
 #endif
 
+#include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
 #ifndef SOKOL_API_IMPL
-    #define SOKOL_API_IMPL
+#define SOKOL_API_IMPL
 #endif
 #ifndef SOKOL_DEBUG
     #ifndef NDEBUG
@@ -339,33 +342,331 @@ static const char* _simgui_fs_src =
     "  return tex.sample(smp, in.uv) * in.color;\n"
     "}\n";
 #elif defined(SOKOL_D3D11)
-static const char* _simgui_vs_src =
-    "cbuffer params {\n"
-    "  float2 disp_size;\n"
-    "};\n"
-    "struct vs_in {\n"
-    "  float2 pos: POSITION;\n"
-    "  float2 uv: TEXCOORD0;\n"
-    "  float4 color: COLOR0;\n"
-    "};\n"
-    "struct vs_out {\n"
-    "  float2 uv: TEXCOORD0;\n"
-    "  float4 color: COLOR0;\n"
-    "  float4 pos: SV_Position;\n"
-    "};\n"
-    "vs_out main(vs_in inp) {\n"
-    "  vs_out outp;\n"
-    "  outp.pos = float4(((inp.pos/disp_size)-0.5)*float2(2.0,-2.0), 0.5, 1.0);\n"
-    "  outp.uv = inp.uv;\n"
-    "  outp.color = inp.color;\n"
-    "  return outp;\n"
-    "}\n";
-static const char* _simgui_fs_src =
-    "Texture2D<float4> tex: register(t0);\n"
-    "sampler smp: register(s0);\n"
-    "float4 main(float2 uv: TEXCOORD0, float4 color: COLOR0): SV_Target0 {\n"
-    "  return tex.Sample(smp, uv) * color;\n"
-    "}\n";
+/*
+    Shader blobs for D3D11, compiled with:
+
+    fxc.exe /T vs_5_0 /Fh vs.h /Gec /O3 vs.hlsl
+    fxc.exe /T ps_5_0 /Fh fs.h /Gec /O3 fs.hlsl
+
+    Vertex shader source:
+
+        cbuffer params {
+            float2 disp_size;
+        };
+        struct vs_in {
+            float2 pos: POSITION;
+            float2 uv: TEXCOORD0;
+            float4 color: COLOR0;
+        };
+        struct vs_out {
+            float2 uv: TEXCOORD0;
+            float4 color: COLOR0;
+            float4 pos: SV_Position;
+        };
+        vs_out main(vs_in inp) {
+            vs_out outp;
+            outp.pos = float4(((inp.pos/disp_size)-0.5)*float2(2.0,-2.0), 0.5, 1.0);
+            outp.uv = inp.uv;
+            outp.color = inp.color;
+            return outp;
+        }
+        
+    Fragment shader source:
+
+        Texture2D<float4> tex: register(t0);
+        sampler smp: register(s0);
+        float4 main(float2 uv: TEXCOORD0, float4 color: COLOR0): SV_Target0 {
+            return tex.Sample(smp, uv) * color;
+        }
+*/
+static const uint8_t _simgui_vs_bin[] = {
+     68,  88,  66,  67, 204, 137, 
+    115, 177, 245,  67, 161, 195, 
+     58, 224,  90,  35,  76, 123, 
+     88, 146,   1,   0,   0,   0, 
+    244,   3,   0,   0,   5,   0, 
+      0,   0,  52,   0,   0,   0, 
+     64,   1,   0,   0, 176,   1, 
+      0,   0,  36,   2,   0,   0, 
+     88,   3,   0,   0,  82,  68, 
+     69,  70,   4,   1,   0,   0, 
+      1,   0,   0,   0, 100,   0, 
+      0,   0,   1,   0,   0,   0, 
+     60,   0,   0,   0,   0,   5, 
+    254, 255,   0, 145,   0,   0, 
+    220,   0,   0,   0,  82,  68, 
+     49,  49,  60,   0,   0,   0, 
+     24,   0,   0,   0,  32,   0, 
+      0,   0,  40,   0,   0,   0, 
+     36,   0,   0,   0,  12,   0, 
+      0,   0,   0,   0,   0,   0, 
+     92,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      1,   0,   0,   0,   0,   0, 
+      0,   0, 112,  97, 114,  97, 
+    109, 115,   0, 171,  92,   0, 
+      0,   0,   1,   0,   0,   0, 
+    124,   0,   0,   0,  16,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0, 164,   0, 
+      0,   0,   0,   0,   0,   0, 
+      8,   0,   0,   0,   2,   0, 
+      0,   0, 184,   0,   0,   0, 
+      0,   0,   0,   0, 255, 255, 
+    255, 255,   0,   0,   0,   0, 
+    255, 255, 255, 255,   0,   0, 
+      0,   0, 100, 105, 115, 112, 
+     95, 115, 105, 122, 101,   0, 
+    102, 108, 111,  97, 116,  50, 
+      0, 171, 171, 171,   1,   0, 
+      3,   0,   1,   0,   2,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+    174,   0,   0,   0,  77, 105, 
+     99, 114, 111, 115, 111, 102, 
+    116,  32,  40,  82,  41,  32, 
+     72,  76,  83,  76,  32,  83, 
+    104,  97, 100, 101, 114,  32, 
+     67, 111, 109, 112, 105, 108, 
+    101, 114,  32,  49,  48,  46, 
+     49,   0,  73,  83,  71,  78, 
+    104,   0,   0,   0,   3,   0, 
+      0,   0,   8,   0,   0,   0, 
+     80,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      3,   0,   0,   0,   0,   0, 
+      0,   0,   3,   3,   0,   0, 
+     89,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      3,   0,   0,   0,   1,   0, 
+      0,   0,   3,   3,   0,   0, 
+     98,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      3,   0,   0,   0,   2,   0, 
+      0,   0,  15,  15,   0,   0, 
+     80,  79,  83,  73,  84,  73, 
+     79,  78,   0,  84,  69,  88, 
+     67,  79,  79,  82,  68,   0, 
+     67,  79,  76,  79,  82,   0, 
+     79,  83,  71,  78, 108,   0, 
+      0,   0,   3,   0,   0,   0, 
+      8,   0,   0,   0,  80,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   3,   0, 
+      0,   0,   0,   0,   0,   0, 
+      3,  12,   0,   0,  89,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   3,   0, 
+      0,   0,   1,   0,   0,   0, 
+     15,   0,   0,   0,  95,   0, 
+      0,   0,   0,   0,   0,   0, 
+      1,   0,   0,   0,   3,   0, 
+      0,   0,   2,   0,   0,   0, 
+     15,   0,   0,   0,  84,  69, 
+     88,  67,  79,  79,  82,  68, 
+      0,  67,  79,  76,  79,  82, 
+      0,  83,  86,  95,  80, 111, 
+    115, 105, 116, 105, 111, 110, 
+      0, 171,  83,  72,  69,  88, 
+     44,   1,   0,   0,  80,   0, 
+      1,   0,  75,   0,   0,   0, 
+    106,   8,   0,   1,  89,   0, 
+      0,   4,  70, 142,  32,   0, 
+      0,   0,   0,   0,   1,   0, 
+      0,   0,  95,   0,   0,   3, 
+     50,  16,  16,   0,   0,   0, 
+      0,   0,  95,   0,   0,   3, 
+     50,  16,  16,   0,   1,   0, 
+      0,   0,  95,   0,   0,   3, 
+    242,  16,  16,   0,   2,   0, 
+      0,   0, 101,   0,   0,   3, 
+     50,  32,  16,   0,   0,   0, 
+      0,   0, 101,   0,   0,   3, 
+    242,  32,  16,   0,   1,   0, 
+      0,   0, 103,   0,   0,   4, 
+    242,  32,  16,   0,   2,   0, 
+      0,   0,   1,   0,   0,   0, 
+    104,   0,   0,   2,   1,   0, 
+      0,   0,  54,   0,   0,   5, 
+     50,  32,  16,   0,   0,   0, 
+      0,   0,  70,  16,  16,   0, 
+      1,   0,   0,   0,  54,   0, 
+      0,   5, 242,  32,  16,   0, 
+      1,   0,   0,   0,  70,  30, 
+     16,   0,   2,   0,   0,   0, 
+     14,   0,   0,   8,  50,   0, 
+     16,   0,   0,   0,   0,   0, 
+     70,  16,  16,   0,   0,   0, 
+      0,   0,  70, 128,  32,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,  10, 
+     50,   0,  16,   0,   0,   0, 
+      0,   0,  70,   0,  16,   0, 
+      0,   0,   0,   0,   2,  64, 
+      0,   0,   0,   0,   0, 191, 
+      0,   0,   0, 191,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+     56,   0,   0,  10,  50,  32, 
+     16,   0,   2,   0,   0,   0, 
+     70,   0,  16,   0,   0,   0, 
+      0,   0,   2,  64,   0,   0, 
+      0,   0,   0,  64,   0,   0, 
+      0, 192,   0,   0,   0,   0, 
+      0,   0,   0,   0,  54,   0, 
+      0,   8, 194,  32,  16,   0, 
+      2,   0,   0,   0,   2,  64, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,  63,   0,   0, 128,  63, 
+     62,   0,   0,   1,  83,  84, 
+     65,  84, 148,   0,   0,   0, 
+      7,   0,   0,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+      6,   0,   0,   0,   3,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   3,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0
+};
+static const uint8_t _simgui_fs_bin[] = {
+     68,  88,  66,  67, 116,  27, 
+    191,   2, 170,  79,  42, 154, 
+     39,  13,  69, 105, 240,  12, 
+    136,  97,   1,   0,   0,   0, 
+    176,   2,   0,   0,   5,   0, 
+      0,   0,  52,   0,   0,   0, 
+    232,   0,   0,   0,  56,   1, 
+      0,   0, 108,   1,   0,   0, 
+     20,   2,   0,   0,  82,  68, 
+     69,  70, 172,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   2,   0,   0,   0, 
+     60,   0,   0,   0,   0,   5, 
+    255, 255,   0, 145,   0,   0, 
+    132,   0,   0,   0,  82,  68, 
+     49,  49,  60,   0,   0,   0, 
+     24,   0,   0,   0,  32,   0, 
+      0,   0,  40,   0,   0,   0, 
+     36,   0,   0,   0,  12,   0, 
+      0,   0,   0,   0,   0,   0, 
+    124,   0,   0,   0,   3,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      1,   0,   0,   0,   1,   0, 
+      0,   0, 128,   0,   0,   0, 
+      2,   0,   0,   0,   5,   0, 
+      0,   0,   4,   0,   0,   0, 
+    255, 255, 255, 255,   0,   0, 
+      0,   0,   1,   0,   0,   0, 
+     13,   0,   0,   0, 115, 109, 
+    112,   0, 116, 101, 120,   0, 
+     77, 105,  99, 114, 111, 115, 
+    111, 102, 116,  32,  40,  82, 
+     41,  32,  72,  76,  83,  76, 
+     32,  83, 104,  97, 100, 101, 
+    114,  32,  67, 111, 109, 112, 
+    105, 108, 101, 114,  32,  49, 
+     48,  46,  49,   0,  73,  83, 
+     71,  78,  72,   0,   0,   0, 
+      2,   0,   0,   0,   8,   0, 
+      0,   0,  56,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   3,   0,   0,   0, 
+      0,   0,   0,   0,   3,   3, 
+      0,   0,  65,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   3,   0,   0,   0, 
+      1,   0,   0,   0,  15,  15, 
+      0,   0,  84,  69,  88,  67, 
+     79,  79,  82,  68,   0,  67, 
+     79,  76,  79,  82,   0, 171, 
+     79,  83,  71,  78,  44,   0, 
+      0,   0,   1,   0,   0,   0, 
+      8,   0,   0,   0,  32,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   3,   0, 
+      0,   0,   0,   0,   0,   0, 
+     15,   0,   0,   0,  83,  86, 
+     95,  84,  97, 114, 103, 101, 
+    116,   0, 171, 171,  83,  72, 
+     69,  88, 160,   0,   0,   0, 
+     80,   0,   0,   0,  40,   0, 
+      0,   0, 106,   8,   0,   1, 
+     90,   0,   0,   3,   0,  96, 
+     16,   0,   0,   0,   0,   0, 
+     88,  24,   0,   4,   0, 112, 
+     16,   0,   0,   0,   0,   0, 
+     85,  85,   0,   0,  98,  16, 
+      0,   3,  50,  16,  16,   0, 
+      0,   0,   0,   0,  98,  16, 
+      0,   3, 242,  16,  16,   0, 
+      1,   0,   0,   0, 101,   0, 
+      0,   3, 242,  32,  16,   0, 
+      0,   0,   0,   0, 104,   0, 
+      0,   2,   1,   0,   0,   0, 
+     69,   0,   0, 139, 194,   0, 
+      0, 128,  67,  85,  21,   0, 
+    242,   0,  16,   0,   0,   0, 
+      0,   0,  70,  16,  16,   0, 
+      0,   0,   0,   0,  70, 126, 
+     16,   0,   0,   0,   0,   0, 
+      0,  96,  16,   0,   0,   0, 
+      0,   0,  56,   0,   0,   7, 
+    242,  32,  16,   0,   0,   0, 
+      0,   0,  70,  14,  16,   0, 
+      0,   0,   0,   0,  70,  30, 
+     16,   0,   1,   0,   0,   0, 
+     62,   0,   0,   1,  83,  84, 
+     65,  84, 148,   0,   0,   0, 
+      3,   0,   0,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+      3,   0,   0,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   1,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   1,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0
+};
 #else
 #error "sokol_imgui.h: No sokol_gfx.h backend selected (SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL)"
 #endif
@@ -448,7 +749,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io.Fonts->TexID = (ImTextureID)(uintptr_t) _simgui.img.id;
     }
 
-    /* shader object for imgui rendering */
+    /* shader object for using the embedded shader source (or bytecode) */
     sg_shader_desc shd_desc = { };
     auto& ub = shd_desc.vs.uniform_blocks[0];
     ub.size = sizeof(_simgui_vs_params_t);
@@ -456,8 +757,15 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     ub.uniforms[0].type = SG_UNIFORMTYPE_FLOAT2;
     shd_desc.fs.images[0].name = "tex";
     shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
-    shd_desc.vs.source = _simgui_vs_src;
-    shd_desc.fs.source = _simgui_fs_src;
+    #if defined(SOKOL_D3D11)
+        shd_desc.vs.byte_code = _simgui_vs_bin;
+        shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bin);
+        shd_desc.fs.byte_code = _simgui_fs_bin;
+        shd_desc.fs.byte_code_size = sizeof(_simgui_fs_bin);
+    #else
+        shd_desc.vs.source = _simgui_vs_src;
+        shd_desc.fs.source = _simgui_fs_src;
+    #endif
     shd_desc.label = "sokol-imgui-shader";
     _simgui.shd = sg_make_shader(&shd_desc);
 
@@ -567,7 +875,7 @@ SOKOL_API_IMPL void simgui_render(void) {
         const int vb_offset = sg_append_buffer(bind.vertex_buffers[0], &cl->VtxBuffer.front(), vtx_size);
         const int ib_offset = sg_append_buffer(bind.index_buffer, &cl->IdxBuffer.front(), idx_size);
         /* don't render anything if the buffer is in overflow state (this is also
-            checked internally in sokol_gfx, draw calls that attempt from
+            checked internally in sokol_gfx, draw calls that attempt to draw with
             overflowed buffers will be silently dropped)
         */
         if (sg_query_buffer_overflow(bind.vertex_buffers[0]) ||

@@ -1326,6 +1326,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     [self setNeedsDisplay:YES];
 }
 - (void)prepareOpenGL {
+    [super prepareOpenGL];
     GLint swapInt = 1;
     NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
@@ -2562,6 +2563,11 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "dxguid.lib")
 #endif
+#endif
+
+/* see https://github.com/floooh/sokol/issues/138 */
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL (0x020E)
 #endif
 
 #ifndef DPI_ENUMS_DECLARED
