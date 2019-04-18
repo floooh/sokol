@@ -44,7 +44,6 @@
     and simple UI-style 2D rendering:
 
     What's implemented:
-
         - vertex components:
             - position (x, y, z)
             - 2D texture coords (u, v)
@@ -54,38 +53,34 @@
             - line list and strip
             - quad list (TODO: quad strips)
             - point list (TODO: point size)
-        - render state:
-            - depth test (always less-equal when enabled)
-            - blending (always src_alpha / inv_src_alpha when enabled)
-            - cull face (front face winding selectable at start, default is CCW)
-            - texturing (enabled/disabled)
         - one texture layer (no multi-texturing)
         - viewport and scissor-rect with selectable origin (top-left or bottom-left)
         - all GL 1.x matrix stack functions, and additionally equivalent 
           functions for gluPerspective and gluLookat
-    
-    Notable GLES 1.x features that are *NOT* implemented:
 
+    Notable GLES 1.x features that are *NOT* implemented:
         - vertex lighting (this is the most likely GL feature that might be added later)
         - vertex arrays (although providing whole chunks of vertex data at once
           might be a useful feature for a later version)
-        - stencil operations
         - texture coordinate generation
-        - depth comparison functions other than less-equal
         - point size and line width
         - all pixel store functions
         - no ALPHA_TEST
-        - no color mask or clear functions (clear is handled by the
-          sokol-gfx render pass)
+        - no clear functions (clearing is handled by the sokol-gfx render pass)
         - fog
 
     Notable differences to GL:
-
-        - no "enum soup" for render states etc, instead there are
-          explicitely named state functions
-        - all angles are in radians, not degrees (note the sgl_rad() and
+        - GL's render state handling through 'fine-grained' functions
+          has been replaced with a 'pipeline stack' (see further below
+          for details)
+        - No "enum soup" for render states etc, instead there's a
+          'pipeline stack', this is similar to GL's matrix stack,
+          for for pipeline-state-objects. The pipeline object at
+          the top of the pipeline stack defines the collection
+          active render states
+        - All angles are in radians, not degrees (note the sgl_rad() and
           sgl_deg() conversion functions)
-        - no enable/disable state for scissor test, this is always enabled
+        - No enable/disable state for scissor test, this is always enabled
 
     STEP BY STEP:
     =============
@@ -114,6 +109,11 @@
             int max_vertices    - default is 65536
             int max_commands    - default is 16384
 
+        You can adjust the size of the internal pipeline state object pool
+        with:
+
+            int pipeline_pool_size  - default is 64
+
         Finally you can change the face winding for front-facing triangles
         and quads:
 
@@ -121,6 +121,27 @@
 
         The default winding for front faces is counter-clock-wise. This is 
         the same as OpenGL's default, but different from sokol-gfx.
+
+    --- Optionally create pipeline-state-objects if you need render states
+        the differ from sokol-gl's default state:
+
+            sgl_pipeline pip = sgl_make_pipeline(const sg_pipeline_desc* desc)
+
+        The similarity with sokol_gfx.h's sg_pipeline type and sg_make_pipeline()
+        function is intended. sgl_make_pipeline() also takes a standard
+        sokol-gfx sg_pipeline_desc object to describe the render state, but
+        without:
+            - shader
+            - vertex layout
+            - color- and depth-pixel-formats
+            - sample count
+        Those will be filled in by sgl_make_pipeline(). Note that each
+        call to sgl_make_pipeline() needs to create several sokol-gfx
+        pipeline objects (one for each primitive type).
+
+    --- if you need to destroy sgl_pipeline objects before sgl_shutdown():
+
+            sgl_destroy_pipeline(sgl_pipeline pip)
 
     --- After sgl_setup() you can call any of the sokol-gl functions anywhere
         in a frame, *except* sgl_draw(). The 'vanilla' functions
@@ -135,26 +156,38 @@
 
         This will set the following default state:
 
-            - depth-test, blending, cull-face, texturing disabled
             - current texture coordinate to u=0.0f, v=0.0f
             - current color to white (rgba all 1.0f)
-            - unbind the current texture
+            - unbind the current texture and texturing will be disabled
             - *all* matrices will be set to identity (also the projection matrix)
+            - the default render state will be set by loading the 'default pipeline'
+              into the top of the pipeline stack
         
-        The current matrix stack depths will not be changed by sgl_defaults().
+        The current matrix- and pipeline-stack-depths will not be changed by
+        sgl_defaults().
 
-    --- adjust render state with:
+    --- change the currently active render-state-set through the
+        pipeline-stack functions, this works similar to the
+        traditional GL matrix stack:
 
-            sgl_state_depth_test(bool enabled)
-            sgl_state_blend(bool enabled)
-            sgl_state_cull_face(bool enabled)
-            sgl_state_texture(bool enabled)
+            ...load the default pipeline state on the top of the pipeline stack:
 
-    --- optionally set an sg_image as current texture, this
-        will only be used when texturing has been enabled
-        with sgl_state_texture(true):
+                sgl_default_pipeline()
+
+            ...load a specific pipeline on the top of the pipeline stack:
+
+                sgl_load_pipeline(sgl_pipeline pip)
+
+            ...push and pop a pipeline on/off the pipeline stack:
+                sgl_push_pipeline(sgl_pipeline pip)
+                sgl_pop_pipeline(void);
+
+    --- set an sg_image as current texture, this
+        will only be used for texturing, and active or deactivate
+        texturing:
 
             sgl_texture(sg_image img)
+            sgl_state_texture(bool enabled)
 
     --- set the current viewport and scissor rect with:
 
@@ -280,8 +313,8 @@
         SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
         SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
         SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
-        SGL_ERROR_STACK_OVERFLOW    - current matrix stack overflow (checked in sgl_push_matrix())
-        SGL_ERROR_STACK_UNDERFLOW   - current matrix stack underflow (checked in sgl_pop_matrix())
+        SGL_ERROR_STACK_OVERFLOW    - matrix- or pipeline-stack overflow
+        SGL_ERROR_STACK_UNDERFLOW   - matrix- or pipeline-stack underflow
 
         ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
         and reset the error code to SGL_NO_ERROR.
@@ -342,9 +375,6 @@
                 - if it's a viewport command, call sg_apply_viewport()
                 - if it's a scissor-rect command, call sg_apply_scissor_rect()
                 - if it's a draw command:
-                    - depending on the primitive type and render state
-                      mask of the command, lookup an existing, or create
-                      a new pipeline-state-object
                     - depending on what has changed since the last draw command,
                       call sg_apply_pipeline(), sg_apply_bindings() and
                       sg_apply_uniforms()
@@ -427,17 +457,40 @@ SOKOL_API_DECL void sgl_defaults(void);
 SOKOL_API_DECL float sgl_rad(float deg);
 SOKOL_API_DECL float sgl_deg(float rad);
 
-/* render state functions (only valid outside begin/end) */
+/* create and destroy pipeline objects */
 SOKOL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
 SOKOL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
-SOKOL_API_DECL void sgl_default_pipeline(void);
-SOKOL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
-SOKOL_API_DECL void sgl_push_pipeline(sgl_pipeline pip);
-SOKOL_API_DECL void sgl_pop_pipeline(void);
+
+/* render state functions */
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_state_texture(bool enabled);
 SOKOL_API_DECL void sgl_texture(sg_image img);
+
+/* pipeline stack functions (only valid outside begin/end) */
+SOKOL_API_DECL void sgl_default_pipeline(void);
+SOKOL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
+SOKOL_API_DECL void sgl_push_pipeline(sgl_pipeline pip);
+SOKOL_API_DECL void sgl_pop_pipeline(void);
+
+/* matrix stack functions (only valid outside begin end) */
+SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
+SOKOL_API_DECL void sgl_matrix_mode_projection(void);
+SOKOL_API_DECL void sgl_matrix_mode_texture(void);
+SOKOL_API_DECL void sgl_load_identity(void);
+SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
+SOKOL_API_DECL void sgl_scale(float x, float y, float z);
+SOKOL_API_DECL void sgl_translate(float x, float y, float z);
+SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
+SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
+SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
+SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
+SOKOL_API_DECL void sgl_push_matrix(void);
+SOKOL_API_DECL void sgl_pop_matrix(void);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_t2f(float u, float v);
@@ -479,25 +532,6 @@ SOKOL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v,
 SOKOL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
-
-/* matrix stack functions (only valid outside begin end) */
-SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
-SOKOL_API_DECL void sgl_matrix_mode_projection(void);
-SOKOL_API_DECL void sgl_matrix_mode_texture(void);
-SOKOL_API_DECL void sgl_load_identity(void);
-SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
-SOKOL_API_DECL void sgl_scale(float x, float y, float z);
-SOKOL_API_DECL void sgl_translate(float x, float y, float z);
-SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
-SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
-SOKOL_API_DECL void sgl_push_matrix(void);
-SOKOL_API_DECL void sgl_pop_matrix(void);
 
 /* render everything */
 SOKOL_API_DECL void sgl_draw(void);
@@ -1050,8 +1084,8 @@ typedef enum {
 } _sgl_command_type_t;
 
 typedef struct {
-    sg_image img;
     sg_pipeline pip;
+    sg_image img;
     int base_vertex;
     int num_vertices;
     int uniform_index;
@@ -1079,21 +1113,12 @@ typedef struct {
 } _sgl_command_t;
 
 #define _SGL_INVALID_SLOT_INDEX (0)
-/* number of pipelines: 3 bits for primitive type, 3 relevant render state bits */
-#define _SGL_MAX_PIPELINES (64)
-/* matrix stack depth */
 #define _SGL_MAX_STACK_DEPTH (64)
-/* default pipeline pool size */
 #define _SGL_DEFAULT_PIPELINE_POOL_SIZE (64)
-/* default max number of vertices per frame */
 #define _SGL_DEFAULT_MAX_VERTICES (1<<16)
-/* default max number of draw commands per frame */
 #define _SGL_DEFAULT_MAX_COMMANDS (1<<14)
-/* how many bits for resource pool index in handle */
 #define _SGL_SLOT_SHIFT (16)
-/* max resulting pool size */
 #define _SGL_MAX_POOL_SIZE (1<<_SGL_SLOT_SHIFT)
-/* bitmask to get pool index from handle */
 #define _SGL_SLOT_MASK (_SGL_MAX_POOL_SIZE-1)
 
 typedef struct {
@@ -1127,10 +1152,10 @@ typedef struct {
     sg_image def_img;   /* a default white texture */
     sg_shader shd;
     sg_bindings bind;
+    sgl_pipeline def_pip;
     _sgl_pipeline_pool_t pip_pool;
 
     /* pipeline stack */
-    sgl_pipeline def_pip;
     int pip_tos;
     sgl_pipeline pip_stack[_SGL_MAX_STACK_DEPTH];
 
@@ -1143,7 +1168,6 @@ static _sgl_t _sgl;
 
 /*== PRIVATE FUNCTIONS =======================================================*/
 
-/* generic resource pool initialisation */
 static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -1442,14 +1466,20 @@ static inline _sgl_command_t* _sgl_next_command(void) {
 }
 
 static inline uint32_t _sgl_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    return (uint32_t)((a<<24)|(b<<16)|(g<<8)|r);
+    return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
+}
+
+static inline float _sgl_clamp(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    else if (v > hi) return hi;
+    else return v;
 }
 
 static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
-    uint8_t r_u8 = (uint8_t) (r * 255.0f);
-    uint8_t g_u8 = (uint8_t) (g * 255.0f);
-    uint8_t b_u8 = (uint8_t) (b * 255.0f);
-    uint8_t a_u8 = (uint8_t) (a * 255.0f);
+    uint8_t r_u8 = (uint8_t) (_sgl_clamp(r, 0.0f, 1.0f) * 255.0f);
+    uint8_t g_u8 = (uint8_t) (_sgl_clamp(g, 0.0f, 1.0f) * 255.0f);
+    uint8_t b_u8 = (uint8_t) (_sgl_clamp(b, 0.0f, 1.0f) * 255.0f);
+    uint8_t a_u8 = (uint8_t) (_sgl_clamp(a, 0.0f, 1.0f) * 255.0f);
     return _sgl_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
 }
 
