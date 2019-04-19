@@ -409,6 +409,69 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **19-Apr-2019** I have replaced the rather inflexible render-state handling
+in **sokol_gl.h** with a *pipeline stack* (like the GL matrix stack, but with
+pipeline-state-objects), along with a couple of other minor API tweaks.
+
+    These are the new pipeline-stack functions:
+    ```c
+    sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+    void sgl_destroy_pipeline(sgl_pipeline pip);
+    void sgl_default_pipeline(void);
+    void sgl_load_pipeline(sgl_pipeline pip);
+    void sgl_push_pipeline(void);
+    void sgl_pop_pipeline(void);
+    ```
+
+    A pipeline object is created just like in sokol_gfx.h, but without shaders,
+    vertex layout, pixel formats, primitive-type and sample count (these details
+    are filles in by the ```sgl_make_pipeline()``` wrapper functions. For instance
+    to create a pipeline object for additive transparency:
+
+    ```c
+    sgl_pipeline additive_pip = sgl_make_pipeline(&(sg_pipeline){
+        .blend = {
+            .enabled = true,
+            .src_factor_rgb = SG_BLENDFACTOR_ONE,
+            .dst_factor_rgb = SG_BLENDFACTOR_ONE
+        }
+    });
+    ```
+
+    And to render with this, simply call ```sgl_load_pipeline()```:
+
+    ```c
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_triangles();
+    ...
+    sgl_end();
+    ```
+
+    Or to preserve and restore the previously active pipeline state:
+
+    ```c
+    sgl_push_pipeline();
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_quads();
+    ...
+    sgl_end();
+    sgl_pop_pipeline();
+    ```
+
+    You can also load the 'default pipeline' explicitely on the top of the
+    pipeline stack with ```sgl_default_pipeline()```.
+
+    The other API change is:
+
+    - ```sgl_state_texture(bool b)``` has been replaced with ```sgl_enable_texture()```
+      and ```sgl_disable_texture()```
+
+    The code samples have been updated accordingly:
+
+    - [sgl-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-sapp.c)
+    - [sgl-lines-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-lines-sapp.c)
+    - [sgl-microui-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-microui-sapp.c)
+
 - **01-Apr-2019** (not an April Fool's joke): There's a new **sokol_gl.h**
 util header which implements an 'OpenGL-1.x-in-spirit' rendering API on top
 of sokol_gfx.h (vertex specification via begin/end, and a matrix stack). This is
