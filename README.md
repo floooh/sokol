@@ -429,7 +429,7 @@ pipeline-state-objects), along with a couple of other minor API tweaks.
     to create a pipeline object for additive transparency:
 
     ```c
-    sgl_pipeline additive_pip = sgl_make_pipeline(&(sg_pipeline){
+    sgl_pipeline additive_pip = sgl_make_pipeline(&(sg_pipeline_desc){
         .blend = {
             .enabled = true,
             .src_factor_rgb = SG_BLENDFACTOR_ONE,
