@@ -24,6 +24,7 @@
     SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     Include the following headers before including sokol_gl.h:
@@ -43,7 +44,6 @@
     and simple UI-style 2D rendering:
 
     What's implemented:
-
         - vertex components:
             - position (x, y, z)
             - 2D texture coords (u, v)
@@ -53,38 +53,30 @@
             - line list and strip
             - quad list (TODO: quad strips)
             - point list (TODO: point size)
-        - render state:
-            - depth test (always less-equal when enabled)
-            - blending (always src_alpha / inv_src_alpha when enabled)
-            - cull face (front face winding selectable at start, default is CCW)
-            - texturing (enabled/disabled)
         - one texture layer (no multi-texturing)
         - viewport and scissor-rect with selectable origin (top-left or bottom-left)
         - all GL 1.x matrix stack functions, and additionally equivalent 
           functions for gluPerspective and gluLookat
-    
-    Notable GLES 1.x features that are *NOT* implemented:
 
+    Notable GLES 1.x features that are *NOT* implemented:
         - vertex lighting (this is the most likely GL feature that might be added later)
         - vertex arrays (although providing whole chunks of vertex data at once
           might be a useful feature for a later version)
-        - stencil operations
         - texture coordinate generation
-        - depth comparison functions other than less-equal
         - point size and line width
         - all pixel store functions
         - no ALPHA_TEST
-        - no color mask or clear functions (clear is handled by the
-          sokol-gfx render pass)
+        - no clear functions (clearing is handled by the sokol-gfx render pass)
         - fog
 
     Notable differences to GL:
-
-        - no "enum soup" for render states etc, instead there are
-          explicitely named state functions
-        - all angles are in radians, not degrees (note the sgl_rad() and
+        - No "enum soup" for render states etc, instead there's a
+          'pipeline stack', this is similar to GL's matrix stack,
+          for for pipeline-state-objects. The pipeline object at
+          the top of the pipeline stack defines the active set of render states
+        - All angles are in radians, not degrees (note the sgl_rad() and
           sgl_deg() conversion functions)
-        - no enable/disable state for scissor test, this is always enabled
+        - No enable/disable state for scissor test, this is always enabled
 
     STEP BY STEP:
     =============
@@ -113,6 +105,11 @@
             int max_vertices    - default is 65536
             int max_commands    - default is 16384
 
+        You can adjust the size of the internal pipeline state object pool
+        with:
+
+            int pipeline_pool_size  - default is 64
+
         Finally you can change the face winding for front-facing triangles
         and quads:
 
@@ -120,6 +117,27 @@
 
         The default winding for front faces is counter-clock-wise. This is 
         the same as OpenGL's default, but different from sokol-gfx.
+
+    --- Optionally create pipeline-state-objects if you need render state
+        that differs from sokol-gl's default state:
+
+            sgl_pipeline pip = sgl_make_pipeline(const sg_pipeline_desc* desc)
+
+        The similarity with sokol_gfx.h's sg_pipeline type and sg_make_pipeline()
+        function is intended. sgl_make_pipeline() also takes a standard
+        sokol-gfx sg_pipeline_desc object to describe the render state, but
+        without:
+            - shader
+            - vertex layout
+            - color- and depth-pixel-formats
+            - sample count
+        Those will be filled in by sgl_make_pipeline(). Note that each
+        call to sgl_make_pipeline() needs to create several sokol-gfx
+        pipeline objects (one for each primitive type).
+
+    --- if you need to destroy sgl_pipeline objects before sgl_shutdown():
+
+            sgl_destroy_pipeline(sgl_pipeline pip)
 
     --- After sgl_setup() you can call any of the sokol-gl functions anywhere
         in a frame, *except* sgl_draw(). The 'vanilla' functions
@@ -134,25 +152,36 @@
 
         This will set the following default state:
 
-            - depth-test, blending, cull-face, texturing disabled
             - current texture coordinate to u=0.0f, v=0.0f
             - current color to white (rgba all 1.0f)
-            - unbind the current texture
+            - unbind the current texture and texturing will be disabled
             - *all* matrices will be set to identity (also the projection matrix)
+            - the default render state will be set by loading the 'default pipeline'
+              into the top of the pipeline stack
         
-        The current matrix stack depths will not be changed by sgl_defaults().
+        The current matrix- and pipeline-stack-depths will not be changed by
+        sgl_defaults().
 
-    --- adjust render state with:
+    --- change the currently active renderstate through the
+        pipeline-stack functions, this works similar to the
+        traditional GL matrix stack:
 
-            sgl_state_depth_test(bool enabled)
-            sgl_state_blend(bool enabled)
-            sgl_state_cull_face(bool enabled)
-            sgl_state_texture(bool enabled)
+            ...load the default pipeline state on the top of the pipeline stack:
 
-    --- optionally set an sg_image as current texture, this
-        will only be used when texturing has been enabled
-        with sgl_state_texture(true):
+                sgl_default_pipeline()
 
+            ...load a specific pipeline on the top of the pipeline stack:
+
+                sgl_load_pipeline(sgl_pipeline pip)
+
+            ...push and pop the pipeline stack:
+                sgl_push_pipeline()
+                sgl_pop_pipeline()
+
+    --- control texturing with:
+
+            sgl_enable_texture()
+            sgl_disable_texture()
             sgl_texture(sg_image img)
 
     --- set the current viewport and scissor rect with:
@@ -279,8 +308,8 @@
         SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
         SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
         SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
-        SGL_ERROR_STACK_OVERFLOW    - current matrix stack overflow (checked in sgl_push_matrix())
-        SGL_ERROR_STACK_UNDERFLOW   - current matrix stack underflow (checked in sgl_pop_matrix())
+        SGL_ERROR_STACK_OVERFLOW    - matrix- or pipeline-stack overflow
+        SGL_ERROR_STACK_UNDERFLOW   - matrix- or pipeline-stack underflow
 
         ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
         and reset the error code to SGL_NO_ERROR.
@@ -341,9 +370,6 @@
                 - if it's a viewport command, call sg_apply_viewport()
                 - if it's a scissor-rect command, call sg_apply_scissor_rect()
                 - if it's a draw command:
-                    - depending on the primitive type and render state
-                      mask of the command, lookup an existing, or create
-                      a new pipeline-state-object
                     - depending on what has changed since the last draw command,
                       call sg_apply_pipeline(), sg_apply_bindings() and
                       sg_apply_uniforms()
@@ -390,6 +416,9 @@
     #define SOKOL_API_DECL extern
 #endif
 
+/* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
+typedef struct sgl_pipeline { uint32_t id; } sgl_pipeline;
+
 /*
     sgl_error_t
 
@@ -406,8 +435,9 @@ typedef enum sgl_error_t {
 } sgl_error_t;
 
 typedef struct sgl_desc_t {
-    int max_vertices;   /* size for vertex buffer */
-    int max_commands;   /* size of uniform- and command-buffers */
+    int max_vertices;       /* size for vertex buffer */
+    int max_commands;       /* size of uniform- and command-buffers */
+    int pipeline_pool_size; /* size of the internal pipeline pool, default is 64 */
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
@@ -422,14 +452,41 @@ SOKOL_API_DECL void sgl_defaults(void);
 SOKOL_API_DECL float sgl_rad(float deg);
 SOKOL_API_DECL float sgl_deg(float rad);
 
-/* render state functions (only valid outside begin/end) */
-SOKOL_API_DECL void sgl_state_depth_test(bool enabled);
-SOKOL_API_DECL void sgl_state_blend(bool enabled);
-SOKOL_API_DECL void sgl_state_cull_face(bool enabled);
-SOKOL_API_DECL void sgl_state_texture(bool enabled);
+/* create and destroy pipeline objects */
+SOKOL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+SOKOL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
+
+/* render state functions */
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_API_DECL void sgl_enable_texture(void);
+SOKOL_API_DECL void sgl_disable_texture(void);
 SOKOL_API_DECL void sgl_texture(sg_image img);
+
+/* pipeline stack functions */
+SOKOL_API_DECL void sgl_default_pipeline(void);
+SOKOL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
+SOKOL_API_DECL void sgl_push_pipeline(void);
+SOKOL_API_DECL void sgl_pop_pipeline(void);
+
+/* matrix stack functions */
+SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
+SOKOL_API_DECL void sgl_matrix_mode_projection(void);
+SOKOL_API_DECL void sgl_matrix_mode_texture(void);
+SOKOL_API_DECL void sgl_load_identity(void);
+SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
+SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
+SOKOL_API_DECL void sgl_scale(float x, float y, float z);
+SOKOL_API_DECL void sgl_translate(float x, float y, float z);
+SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
+SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
+SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
+SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
+SOKOL_API_DECL void sgl_push_matrix(void);
+SOKOL_API_DECL void sgl_pop_matrix(void);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
 SOKOL_API_DECL void sgl_t2f(float u, float v);
@@ -472,25 +529,6 @@ SOKOL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v,
 SOKOL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_API_DECL void sgl_end(void);
 
-/* matrix stack functions (only valid outside begin end) */
-SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
-SOKOL_API_DECL void sgl_matrix_mode_projection(void);
-SOKOL_API_DECL void sgl_matrix_mode_texture(void);
-SOKOL_API_DECL void sgl_load_identity(void);
-SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
-SOKOL_API_DECL void sgl_scale(float x, float y, float z);
-SOKOL_API_DECL void sgl_translate(float x, float y, float z);
-SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
-SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
-SOKOL_API_DECL void sgl_push_matrix(void);
-SOKOL_API_DECL void sgl_pop_matrix(void);
-
 /* render everything */
 SOKOL_API_DECL void sgl_draw(void);
 
@@ -530,6 +568,14 @@ extern "C" {
     #include <stdlib.h>
     #define SOKOL_MALLOC(s) malloc(s)
     #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef SOKOL_LOG
+    #ifdef SOKOL_DEBUG
+        #include <stdio.h>
+        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+    #else
+        #define SOKOL_LOG(s)
+    #endif
 #endif
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
@@ -983,13 +1029,27 @@ typedef enum {
     SGL_NUM_PRIMITIVE_TYPES,
 } _sgl_primitive_type_t;
 
-typedef enum {
-    SGL_STATE_DEPTHTEST,
-    SGL_STATE_BLEND,
-    SGL_STATE_CULLFACE,
-    SGL_STATE_TEXTURE,
-    SGL_NUM_STATES
-} _sgl_state_t;
+typedef struct {
+    uint32_t id;
+    sg_resource_state state;
+} _sgl_slot_t;
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sgl_pool_t;
+
+typedef struct {
+    _sgl_slot_t slot;
+    sg_pipeline pip[SGL_NUM_PRIMITIVE_TYPES];
+} _sgl_pipeline_t;
+
+typedef struct {
+    _sgl_pool_t pool;
+    _sgl_pipeline_t* pips;
+} _sgl_pipeline_pool_t; 
 
 typedef enum {
     SGL_MATRIXMODE_MODELVIEW,
@@ -1020,11 +1080,11 @@ typedef enum {
 } _sgl_command_type_t;
 
 typedef struct {
+    sg_pipeline pip;
     sg_image img;
     int base_vertex;
     int num_vertices;
     int uniform_index;
-    uint16_t state_bits;    /* bit mask with primitive type and render states */
 } _sgl_draw_args_t;
 
 typedef struct {
@@ -1048,13 +1108,18 @@ typedef struct {
     _sgl_args_t args;
 } _sgl_command_t;
 
-/* number of pipelines: 3 bits for primitive type, 3 relevant render state bits */
-#define _SGL_MAX_PIPELINES (64)
-/* matrix stack depth */
+#define _SGL_INVALID_SLOT_INDEX (0)
 #define _SGL_MAX_STACK_DEPTH (64)
+#define _SGL_DEFAULT_PIPELINE_POOL_SIZE (64)
+#define _SGL_DEFAULT_MAX_VERTICES (1<<16)
+#define _SGL_DEFAULT_MAX_COMMANDS (1<<14)
+#define _SGL_SLOT_SHIFT (16)
+#define _SGL_MAX_POOL_SIZE (1<<_SGL_SLOT_SHIFT)
+#define _SGL_SLOT_MASK (_SGL_MAX_POOL_SIZE-1)
 
 typedef struct {
     uint32_t init_cookie;
+    sgl_desc_t desc;
 
     int num_vertices;
     int num_uniforms;
@@ -1071,10 +1136,11 @@ typedef struct {
     int vtx_count;          /* number of times vtx function has been called, used for non-triangle primitives */
     sgl_error_t error;
     bool in_begin;
-    uint16_t state_bits;    /* bitmask with primitive type and render states */
     float u, v;
     uint32_t rgba;
+    _sgl_primitive_type_t cur_prim_type;
     sg_image cur_img;
+    bool texturing_enabled;
     bool matrix_dirty;      /* reset in sgl_end(), set in any of the matrix stack functions */
 
     /* sokol-gfx resources */
@@ -1082,33 +1148,278 @@ typedef struct {
     sg_image def_img;   /* a default white texture */
     sg_shader shd;
     sg_bindings bind;
-    sg_pipeline pip[_SGL_MAX_PIPELINES];
-    sg_pipeline_desc pip_desc;  /* template for lazy pipeline creation */
+    sgl_pipeline def_pip;
+    _sgl_pipeline_pool_t pip_pool;
+
+    /* pipeline stack */
+    int pip_tos;
+    sgl_pipeline pip_stack[_SGL_MAX_STACK_DEPTH];
 
     /* matrix stacks */
     _sgl_matrix_mode_t cur_matrix_mode;
-    int top_of_stack[SGL_NUM_MATRIXMODES];
+    int matrix_tos[SGL_NUM_MATRIXMODES];
     _sgl_matrix_t matrix_stack[SGL_NUM_MATRIXMODES][_SGL_MAX_STACK_DEPTH];
 } _sgl_t;
 static _sgl_t _sgl;
 
 /*== PRIVATE FUNCTIONS =======================================================*/
-/* set primitive type in 16-bit merged state */
-static inline uint16_t _sgl_set_prim_type(_sgl_primitive_type_t type, uint16_t bits) {
-    SOKOL_ASSERT(((int)type) < 8);
-    return (bits & ~7) | (type & 7);
+
+static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
+    memset(pool->gen_ctrs, 0, gen_ctrs_size);
+    /* it's not a bug to only reserve 'num' here */
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    SOKOL_ASSERT(pool->free_queue);
+    /* never allocate the zero-th pool item since the invalid id is 0 */
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
 }
 
-/* extract primitive type from 16-bit merged state */
-static inline _sgl_primitive_type_t _sgl_prim_type(uint16_t bits) {
-    return (_sgl_primitive_type_t) (bits & 7);
+static void _sgl_discard_pool(_sgl_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_FREE(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    SOKOL_FREE(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _sgl_pool_alloc_index(_sgl_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    }
+    else {
+        /* pool exhausted */
+        return _SGL_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _sgl_pool_free_index(_sgl_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SGL_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    /* debug check against double-free */
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+static void _sgl_reset_pipeline(_sgl_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    memset(pip, 0, sizeof(_sgl_pipeline_t));
+}
+
+static void _sgl_setup_pipeline_pool(const sgl_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    /* note: the pools here will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SGL_MAX_POOL_SIZE));
+    _sgl_init_pool(&_sgl.pip_pool.pool, desc->pipeline_pool_size);
+    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * _sgl.pip_pool.pool.size;
+    _sgl.pip_pool.pips = (_sgl_pipeline_t*) SOKOL_MALLOC(pool_byte_size);
+    SOKOL_ASSERT(_sgl.pip_pool.pips);
+    memset(_sgl.pip_pool.pips, 0, pool_byte_size);
+}
+
+static void _sgl_discard_pipeline_pool(void) {
+    SOKOL_FREE(_sgl.pip_pool.pips); _sgl.pip_pool.pips = 0;
+    _sgl_discard_pool(&_sgl.pip_pool.pool);
+}
+
+/* allocate the slot at slot_index:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the resource id
+*/
+static uint32_t _sgl_slot_alloc(_sgl_pool_t* pool, _sgl_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SGL_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SGL_SLOT_SHIFT)|(slot_index & _SGL_SLOT_MASK); 
+    slot->state = SG_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+/* extract slot index from id */
+static int _sgl_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SGL_SLOT_MASK);
+    SOKOL_ASSERT(_SGL_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+/* get pipeline pointer without id-check */
+static _sgl_pipeline_t* _sgl_pipeline_at(uint32_t pip_id) {
+    SOKOL_ASSERT(SG_INVALID_ID != pip_id);
+    int slot_index = _sgl_slot_index(pip_id);
+    SOKOL_ASSERT((slot_index > _SGL_INVALID_SLOT_INDEX) && (slot_index < _sgl.pip_pool.pool.size));
+    return &_sgl.pip_pool.pips[slot_index];
+}
+
+/* get pipeline pointer with id-check, returns 0 if no match */
+static _sgl_pipeline_t* _sgl_lookup_pipeline(uint32_t pip_id) {
+    if (SG_INVALID_ID != pip_id) {
+        _sgl_pipeline_t* pip = _sgl_pipeline_at(pip_id);
+        if (pip->slot.id == pip_id) {
+            return pip;
+        }
+    }
+    return 0;
+}
+
+static sgl_pipeline _sgl_alloc_pipeline(void) {
+    sgl_pipeline res;
+    int slot_index = _sgl_pool_alloc_index(&_sgl.pip_pool.pool);
+    if (_SGL_INVALID_SLOT_INDEX != slot_index) {
+        res.id =_sgl_slot_alloc(&_sgl.pip_pool.pool, &_sgl.pip_pool.pips[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        res.id = SG_INVALID_ID;
+    }
+    return res;
+}
+
+static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_desc) {
+    SOKOL_ASSERT((pip_id.id != SG_INVALID_ID) && in_desc);
+
+    /* create a new desc with 'patched' shader and pixel format state */
+    sg_pipeline_desc desc = *in_desc;
+    desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
+    {
+        sg_vertex_attr_desc* pos = &desc.layout.attrs[0];
+        pos->name = "position";
+        pos->sem_name = "POSITION";
+        pos->offset = offsetof(_sgl_vertex_t, pos);
+        pos->format = SG_VERTEXFORMAT_FLOAT3;
+    }
+    {
+        sg_vertex_attr_desc* uv = &desc.layout.attrs[1];
+        uv->name = "texcoord0";
+        uv->sem_name = "TEXCOORD";
+        uv->offset = offsetof(_sgl_vertex_t, uv);
+        uv->format = SG_VERTEXFORMAT_FLOAT2;
+    }
+    {
+        sg_vertex_attr_desc* rgba = &desc.layout.attrs[2];
+        rgba->name = "color0";
+        rgba->sem_name = "COLOR";
+        rgba->offset = offsetof(_sgl_vertex_t, rgba);
+        rgba->format = SG_VERTEXFORMAT_UBYTE4N;
+    }
+    desc.shader = _sgl.shd;
+    desc.index_type = SG_INDEXTYPE_NONE;
+    desc.blend.color_format = _sgl.desc.color_format;
+    desc.blend.depth_format = _sgl.desc.depth_format;
+    desc.rasterizer.sample_count = _sgl.desc.sample_count;
+    if (desc.rasterizer.face_winding == _SG_FACEWINDING_DEFAULT) {
+        desc.rasterizer.face_winding = _sgl.desc.face_winding;
+    }
+    if (desc.blend.color_write_mask == _SG_COLORMASK_DEFAULT) {
+        desc.blend.color_write_mask = SG_COLORMASK_RGB;
+    }
+
+    _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
+    SOKOL_ASSERT(pip && (pip->slot.state == SG_RESOURCESTATE_ALLOC));
+    pip->slot.state = SG_RESOURCESTATE_VALID;
+    for (int i = 0; i < SGL_NUM_PRIMITIVE_TYPES; i++) {
+        switch (i) {
+            case SGL_PRIMITIVETYPE_POINTS:
+                desc.primitive_type = SG_PRIMITIVETYPE_POINTS;
+                break;
+            case SGL_PRIMITIVETYPE_LINES:
+                desc.primitive_type = SG_PRIMITIVETYPE_LINES;
+                break;
+            case SGL_PRIMITIVETYPE_LINE_STRIP:
+                desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP;
+                break;
+            case SGL_PRIMITIVETYPE_TRIANGLES:
+                desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+                break;
+            case SGL_PRIMITIVETYPE_TRIANGLE_STRIP:
+            case SGL_PRIMITIVETYPE_QUADS:
+                desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
+                break;
+        }
+        if (SGL_PRIMITIVETYPE_QUADS == i) {
+            /* quads are emulated via triangles, use the same pipeline object */
+            pip->pip[i] = pip->pip[SGL_PRIMITIVETYPE_TRIANGLES];
+        }
+        else {
+            pip->pip[i] = sg_make_pipeline(&desc);
+            if (pip->pip[i].id == SG_INVALID_ID) {
+                SOKOL_LOG("sokol_gl.h: failed to create pipeline object");
+                pip->slot.state = SG_RESOURCESTATE_FAILED;
+            }
+        }
+    }
+}
+
+static sgl_pipeline _sgl_make_pipeline(const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(desc);
+    sgl_pipeline pip_id = _sgl_alloc_pipeline();
+    if (pip_id.id != SG_INVALID_ID) {
+        _sgl_init_pipeline(pip_id, desc);
+    }
+    else {
+        SOKOL_LOG("sokol_gl.h: pipeline pool exhausted!");
+    }
+    return pip_id;
+}
+
+static void _sgl_destroy_pipeline(sgl_pipeline pip_id) {
+    _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
+    if (pip) {
+        for (int i = 0; i < SGL_NUM_PRIMITIVE_TYPES; i++) {
+            if (i != SGL_PRIMITIVETYPE_QUADS) {
+                sg_destroy_pipeline(pip->pip[i]);
+            }
+        }
+        _sgl_reset_pipeline(pip);
+        _sgl_pool_free_index(&_sgl.pip_pool.pool, _sgl_slot_index(pip_id.id));
+    }
+}
+
+static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t prim_type) {
+    _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
+    if (pip) {
+        return pip->pip[prim_type];
+    }
+    else {
+        return (sg_pipeline) { SG_INVALID_ID };
+    }
 }
 
 static inline void _sgl_begin(_sgl_primitive_type_t mode) {
     _sgl.in_begin = true;
     _sgl.base_vertex = _sgl.cur_vertex;
     _sgl.vtx_count = 0;
-    _sgl.state_bits = _sgl_set_prim_type(mode, _sgl.state_bits);
+    _sgl.cur_prim_type = mode;
 }
 
 static void _sgl_rewind(void) {
@@ -1151,14 +1462,20 @@ static inline _sgl_command_t* _sgl_next_command(void) {
 }
 
 static inline uint32_t _sgl_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    return (uint32_t)((a<<24)|(b<<16)|(g<<8)|r);
+    return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
+}
+
+static inline float _sgl_clamp(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    else if (v > hi) return hi;
+    else return v;
 }
 
 static inline uint32_t _sgl_pack_rgbaf(float r, float g, float b, float a) {
-    uint8_t r_u8 = (uint8_t) (r * 255.0f);
-    uint8_t g_u8 = (uint8_t) (g * 255.0f);
-    uint8_t b_u8 = (uint8_t) (b * 255.0f);
-    uint8_t a_u8 = (uint8_t) (a * 255.0f);
+    uint8_t r_u8 = (uint8_t) (_sgl_clamp(r, 0.0f, 1.0f) * 255.0f);
+    uint8_t g_u8 = (uint8_t) (_sgl_clamp(g, 0.0f, 1.0f) * 255.0f);
+    uint8_t b_u8 = (uint8_t) (_sgl_clamp(b, 0.0f, 1.0f) * 255.0f);
+    uint8_t a_u8 = (uint8_t) (_sgl_clamp(a, 0.0f, 1.0f) * 255.0f);
     return _sgl_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
 }
 
@@ -1166,7 +1483,7 @@ static inline void _sgl_vtx(float x, float y, float z, float u, float v, uint32_
     SOKOL_ASSERT(_sgl.in_begin);
     _sgl_vertex_t* vtx;
     /* handle non-native primitive types */
-    if ((_sgl_prim_type(_sgl.state_bits) == SGL_PRIMITIVETYPE_QUADS) && ((_sgl.vtx_count & 3) == 3)) {
+    if ((_sgl.cur_prim_type == SGL_PRIMITIVETYPE_QUADS) && ((_sgl.vtx_count & 3) == 3)) {
         /* for quads, before writing the last quad vertex, reuse 
            the first and third vertex to start the second triangle in the quad
         */
@@ -1182,50 +1499,6 @@ static inline void _sgl_vtx(float x, float y, float z, float u, float v, uint32_
         vtx->rgba = rgba;
     }
     _sgl.vtx_count++;
-}
-
-/* set or clear render state bit in 16-bit merged state */
-static inline uint16_t _sgl_set_state(_sgl_state_t state, bool enabled, uint16_t bits) {
-    /* first 3 bits are used by the primitive type */
-    return (bits & ~(8<<state)) | (enabled ? (8<<state) : 0);
-}
-
-/* get render state from merged state bit mask */
-static inline bool _sgl_state(_sgl_state_t state, uint16_t bits) {
-    return 0 != (bits & (8<<state));
-}
-
-/* get pipeline index from merged primitive-type / render state bit mask */
-static inline int _sgl_pipeline_index(uint16_t state) {
-    /* replace emulated primitive types */
-    if (_sgl_prim_type(state) == SGL_PRIMITIVETYPE_QUADS) {
-        state = _sgl_set_prim_type(SGL_PRIMITIVETYPE_TRIANGLES, state);
-    }
-    return (int) (state & (_SGL_MAX_PIPELINES-1));
-}
-
-/* lookup or lazy-create pipeline object */
-static sg_pipeline _sgl_pipeline(uint16_t state_bits) {
-    /* NOTE: emulated primitive types like QUADS are 'redirected' to 
-       a native primitive type in _sgl_pipeline_index
-    */
-    int pip_index = _sgl_pipeline_index(state_bits);
-    if (SG_INVALID_ID == _sgl.pip[pip_index].id) {
-        _sgl.pip_desc.blend.enabled = _sgl_state(SGL_STATE_BLEND, state_bits);
-        _sgl.pip_desc.rasterizer.cull_mode = _sgl_state(SGL_STATE_CULLFACE, state_bits) ? SG_CULLMODE_BACK : SG_CULLMODE_NONE;
-        _sgl.pip_desc.depth_stencil.depth_compare_func = _sgl_state(SGL_STATE_DEPTHTEST, state_bits) ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
-        switch (_sgl_prim_type(state_bits)) {
-            case SGL_PRIMITIVETYPE_POINTS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_POINTS; break;
-            case SGL_PRIMITIVETYPE_LINES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINES; break;
-            case SGL_PRIMITIVETYPE_LINE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_LINE_STRIP; break;
-            case SGL_PRIMITIVETYPE_TRIANGLES: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
-            case SGL_PRIMITIVETYPE_TRIANGLE_STRIP: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP; break;
-            case SGL_PRIMITIVETYPE_QUADS: _sgl.pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES; break;
-            default: SOKOL_UNREACHABLE; break;
-        }
-        _sgl.pip[pip_index] = sg_make_pipeline(&_sgl.pip_desc);
-    }
-    return _sgl.pip[pip_index];
 }
 
 static void _sgl_identity(_sgl_matrix_t* m) {
@@ -1420,22 +1693,22 @@ static void _sgl_lookat(_sgl_matrix_t* dst,
 
 /* current top-of-stack projection matrix */
 static inline _sgl_matrix_t* _sgl_matrix_projection(void) {
-    return &_sgl.matrix_stack[SGL_MATRIXMODE_PROJECTION][_sgl.top_of_stack[SGL_MATRIXMODE_PROJECTION]];
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_PROJECTION][_sgl.matrix_tos[SGL_MATRIXMODE_PROJECTION]];
 }
 
 /* get top-of-stack modelview matrix */
 static inline _sgl_matrix_t* _sgl_matrix_modelview(void) {
-    return &_sgl.matrix_stack[SGL_MATRIXMODE_MODELVIEW][_sgl.top_of_stack[SGL_MATRIXMODE_MODELVIEW]];
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_MODELVIEW][_sgl.matrix_tos[SGL_MATRIXMODE_MODELVIEW]];
 }
 
 /* get top-of-stack texture matrix */
 static inline _sgl_matrix_t* _sgl_matrix_texture(void) {
-    return &_sgl.matrix_stack[SGL_MATRIXMODE_TEXTURE][_sgl.top_of_stack[SGL_MATRIXMODE_TEXTURE]];
+    return &_sgl.matrix_stack[SGL_MATRIXMODE_TEXTURE][_sgl.matrix_tos[SGL_MATRIXMODE_TEXTURE]];
 }
 
 /* get pointer to current top-of-stack of current matrix mode */
 static inline _sgl_matrix_t* _sgl_matrix(void) {
-    return &_sgl.matrix_stack[_sgl.cur_matrix_mode][_sgl.top_of_stack[_sgl.cur_matrix_mode]];
+    return &_sgl.matrix_stack[_sgl.cur_matrix_mode][_sgl.matrix_tos[_sgl.cur_matrix_mode]];
 }
 
 /*== PUBLIC FUNCTIONS ========================================================*/
@@ -1443,10 +1716,15 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_sgl, 0, sizeof(_sgl));
     _sgl.init_cookie = _SGL_INIT_COOKIE;
+    _sgl.desc = *desc;
+    _sgl.desc.pipeline_pool_size = _sgl_def(_sgl.desc.pipeline_pool_size, _SGL_DEFAULT_PIPELINE_POOL_SIZE);
+    _sgl.desc.max_vertices = _sgl_def(_sgl.desc.max_vertices, _SGL_DEFAULT_MAX_VERTICES);
+    _sgl.desc.max_commands = _sgl_def(_sgl.desc.max_commands, _SGL_DEFAULT_MAX_COMMANDS);
+    _sgl.desc.face_winding = _sgl_def(_sgl.desc.face_winding, SG_FACEWINDING_CCW);
 
-    /* allocate buffers */
-    _sgl.num_vertices = _sgl_def(desc->max_vertices, (1<<16));
-    _sgl.num_uniforms = _sgl_def(desc->max_commands, (1<<14));
+    /* allocate buffers and pools */
+    _sgl.num_vertices = _sgl.desc.max_vertices;
+    _sgl.num_uniforms = _sgl.desc.max_commands;
     _sgl.num_commands = _sgl.num_uniforms;
     _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC(_sgl.num_vertices * sizeof(_sgl_vertex_t));
     SOKOL_ASSERT(_sgl.vertices);
@@ -1454,13 +1732,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(_sgl.uniforms);
     _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC(_sgl.num_commands * sizeof(_sgl_command_t));
     SOKOL_ASSERT(_sgl.commands);
-
-    /* default state */
-    _sgl.rgba = 0xFFFFFFFF;
-    for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
-        _sgl_identity(&_sgl.matrix_stack[i][0]);
-    }
-    _sgl.matrix_dirty = true;
+    _sgl_setup_pipeline_pool(&_sgl.desc);
 
     /* create sokol-gfx resource objects */
     sg_push_debug_group("sokol-gl");
@@ -1515,41 +1787,21 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     #endif
     shd_desc.label = "sgl-shader";
     _sgl.shd = sg_make_shader(&shd_desc);
+
+    /* create default pipeline object */
+    sg_pipeline_desc def_pip_desc;
+    memset(&def_pip_desc, 0, sizeof(def_pip_desc));
+    def_pip_desc.depth_stencil.depth_write_enabled = true;
+    _sgl.def_pip = _sgl_make_pipeline(&def_pip_desc);
     sg_pop_debug_group();
 
-    /* template desc for lazy pipeline creation */
-    _sgl.pip_desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
-    {
-        sg_vertex_attr_desc* pos = &_sgl.pip_desc.layout.attrs[0];
-        pos->name = "position";
-        pos->sem_name = "POSITION";
-        pos->offset = offsetof(_sgl_vertex_t, pos);
-        pos->format = SG_VERTEXFORMAT_FLOAT3;
+    /* default state */
+    _sgl.rgba = 0xFFFFFFFF;
+    for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
+        _sgl_identity(&_sgl.matrix_stack[i][0]);
     }
-    {
-        sg_vertex_attr_desc* uv = &_sgl.pip_desc.layout.attrs[1];
-        uv->name = "texcoord0";
-        uv->sem_name = "TEXCOORD";
-        uv->offset = offsetof(_sgl_vertex_t, uv);
-        uv->format = SG_VERTEXFORMAT_FLOAT2;
-    }
-    {
-        sg_vertex_attr_desc* rgba = &_sgl.pip_desc.layout.attrs[2];
-        rgba->name = "color0";
-        rgba->sem_name = "COLOR";
-        rgba->offset = offsetof(_sgl_vertex_t, rgba);
-        rgba->format = SG_VERTEXFORMAT_UBYTE4N;
-    }
-    _sgl.pip_desc.shader = _sgl.shd;
-    _sgl.pip_desc.index_type = SG_INDEXTYPE_NONE;
-    _sgl.pip_desc.depth_stencil.depth_write_enabled = true;
-    _sgl.pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    _sgl.pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    _sgl.pip_desc.blend.color_write_mask = SG_COLORMASK_RGB;
-    _sgl.pip_desc.blend.color_format = desc->color_format;
-    _sgl.pip_desc.blend.depth_format = desc->depth_format;
-    _sgl.pip_desc.rasterizer.sample_count = desc->sample_count;
-    _sgl.pip_desc.rasterizer.face_winding = _sgl_def(desc->face_winding, SG_FACEWINDING_CCW);
+    _sgl.pip_stack[0] = _sgl.def_pip;
+    _sgl.matrix_dirty = true;
 }
 
 SOKOL_API_IMPL void sgl_shutdown(void) {
@@ -1560,10 +1812,8 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_buffer(_sgl.vbuf);
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
-    /* NOTE: calling sg_destroy_*() with an invalid id is valid */
-    for (int i = 0; i < _SGL_MAX_PIPELINES; i++) {
-        sg_destroy_pipeline(_sgl.pip[i]);
-    }
+    _sgl_destroy_pipeline(_sgl.def_pip);
+    _sgl_discard_pipeline_pool();
     _sgl.init_cookie = 0;
 }
 
@@ -1579,42 +1829,62 @@ SOKOL_API_IMPL float sgl_deg(float rad) {
     return (rad * 180.0f) / (float)M_PI;
 }
 
+SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    return _sgl_make_pipeline(desc);
+}
+
+SOKOL_API_IMPL void sgl_destroy_pipeline(sgl_pipeline pip_id) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_destroy_pipeline(pip_id);
+}
+
+SOKOL_API_IMPL void sgl_load_pipeline(sgl_pipeline pip_id) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((_sgl.pip_tos >= 0) && (_sgl.pip_tos < _SGL_MAX_STACK_DEPTH));
+    _sgl.pip_stack[_sgl.pip_tos] = pip_id;
+}
+
+SOKOL_API_IMPL void sgl_default_pipeline(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT((_sgl.pip_tos >= 0) && (_sgl.pip_tos < _SGL_MAX_STACK_DEPTH));
+    _sgl.pip_stack[_sgl.pip_tos] = _sgl.def_pip;
+}
+
+SOKOL_API_IMPL void sgl_push_pipeline(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    if (_sgl.pip_tos < (_SGL_MAX_STACK_DEPTH - 1)) {
+        _sgl.pip_tos++;
+        _sgl.pip_stack[_sgl.pip_tos] = _sgl.pip_stack[_sgl.pip_tos-1];
+    }
+    else {
+        _sgl.error = SGL_ERROR_STACK_OVERFLOW;
+    }
+}
+
+SOKOL_API_IMPL void sgl_pop_pipeline(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    if (_sgl.pip_tos > 0) {
+        _sgl.pip_tos--;
+    }
+    else {
+        _sgl.error = SGL_ERROR_STACK_UNDERFLOW;
+    }
+}
+
 SOKOL_API_IMPL void sgl_defaults(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = 0;
     _sgl.u = 0.0f; _sgl.v = 0.0f;
     _sgl.rgba = 0xFFFFFFFF;
+    _sgl.texturing_enabled = false;
     _sgl.cur_img = _sgl.def_img;
+    sgl_default_pipeline();
     _sgl_identity(_sgl_matrix_texture());
     _sgl_identity(_sgl_matrix_modelview());
     _sgl_identity(_sgl_matrix_projection());
     _sgl.cur_matrix_mode = 0;
     _sgl.matrix_dirty = true;
-}
-
-SOKOL_API_IMPL void sgl_state_depth_test(bool enabled) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_set_state(SGL_STATE_DEPTHTEST, enabled, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_state_blend(bool enabled) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_set_state(SGL_STATE_BLEND, enabled, _sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_state_cull_face(bool enabled) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_set_state(SGL_STATE_CULLFACE, enabled,_sgl.state_bits);
-}
-
-SOKOL_API_IMPL void sgl_state_texture(bool enabled) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.state_bits = _sgl_set_state(SGL_STATE_TEXTURE, enabled, _sgl.state_bits);
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -1643,6 +1913,18 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
         cmd->args.scissor_rect.h = h;
         cmd->args.scissor_rect.origin_top_left = origin_top_left;
     }
+}
+
+SOKOL_API_IMPL void sgl_enable_texture(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.texturing_enabled = true;
+}
+
+SOKOL_API_IMPL void sgl_disable_texture(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.texturing_enabled = false;
 }
 
 SOKOL_API_IMPL void sgl_texture(sg_image img) {
@@ -1712,7 +1994,7 @@ SOKOL_API_IMPL void sgl_end(void) {
         SOKOL_ASSERT(_sgl.cur_uniform > 0);
         cmd->cmd = SGL_COMMAND_DRAW;
         cmd->args.draw.img = _sgl.cur_img;
-        cmd->args.draw.state_bits = _sgl.state_bits;
+        cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
         cmd->args.draw.base_vertex = _sgl.base_vertex;
         cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
         cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
@@ -1933,9 +2215,9 @@ SOKOL_API_DECL void sgl_push_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
     _sgl.matrix_dirty = true;
-    if (_sgl.top_of_stack[_sgl.cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
+    if (_sgl.matrix_tos[_sgl.cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
         const _sgl_matrix_t* src = _sgl_matrix();
-        _sgl.top_of_stack[_sgl.cur_matrix_mode]++;
+        _sgl.matrix_tos[_sgl.cur_matrix_mode]++;
         _sgl_matrix_t* dst = _sgl_matrix();
         *dst = *src;
     }
@@ -1948,8 +2230,8 @@ SOKOL_API_DECL void sgl_pop_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
     _sgl.matrix_dirty = true;
-    if (_sgl.top_of_stack[_sgl.cur_matrix_mode] > 0) {
-        _sgl.top_of_stack[_sgl.cur_matrix_mode]--;
+    if (_sgl.matrix_tos[_sgl.cur_matrix_mode] > 0) {
+        _sgl.matrix_tos[_sgl.cur_matrix_mode]--;
     }
     else {
         _sgl.error = SGL_ERROR_STACK_UNDERFLOW;
@@ -1984,10 +2266,9 @@ SOKOL_API_IMPL void sgl_draw(void) {
                 case SGL_COMMAND_DRAW:
                     {
                         const _sgl_draw_args_t* args = &cmd->args.draw;
-                        sg_pipeline pip = _sgl_pipeline(args->state_bits);
-                        if (pip.id != cur_pip_id) {
-                            sg_apply_pipeline(pip);
-                            cur_pip_id = pip.id;
+                        if (args->pip.id != cur_pip_id) {
+                            sg_apply_pipeline(args->pip);
+                            cur_pip_id = args->pip.id;
                             /* when pipeline changes, also need to re-apply uniforms and bindings */
                             cur_img_id = SG_INVALID_ID;
                             cur_uniform_index = -1;
