@@ -425,7 +425,7 @@ pipeline-state-objects), along with a couple of other minor API tweaks.
 
     A pipeline object is created just like in sokol_gfx.h, but without shaders,
     vertex layout, pixel formats, primitive-type and sample count (these details
-    are filled in by the ```sgl_make_pipeline()``` wrapper functions. For instance
+    are filled in by the ```sgl_make_pipeline()``` wrapper function. For instance
     to create a pipeline object for additive transparency:
 
     ```c
