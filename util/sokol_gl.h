@@ -70,14 +70,10 @@
         - fog
 
     Notable differences to GL:
-        - GL's render state handling through 'fine-grained' functions
-          has been replaced with a 'pipeline stack' (see further below
-          for details)
         - No "enum soup" for render states etc, instead there's a
           'pipeline stack', this is similar to GL's matrix stack,
           for for pipeline-state-objects. The pipeline object at
-          the top of the pipeline stack defines the collection
-          active render states
+          the top of the pipeline stack defines the active set of render states
         - All angles are in radians, not degrees (note the sgl_rad() and
           sgl_deg() conversion functions)
         - No enable/disable state for scissor test, this is always enabled
@@ -122,8 +118,8 @@
         The default winding for front faces is counter-clock-wise. This is 
         the same as OpenGL's default, but different from sokol-gfx.
 
-    --- Optionally create pipeline-state-objects if you need render states
-        the differ from sokol-gl's default state:
+    --- Optionally create pipeline-state-objects if you need render state
+        that differs from sokol-gl's default state:
 
             sgl_pipeline pip = sgl_make_pipeline(const sg_pipeline_desc* desc)
 
@@ -166,7 +162,7 @@
         The current matrix- and pipeline-stack-depths will not be changed by
         sgl_defaults().
 
-    --- change the currently active render-state-set through the
+    --- change the currently active renderstate through the
         pipeline-stack functions, this works similar to the
         traditional GL matrix stack:
 
@@ -178,16 +174,15 @@
 
                 sgl_load_pipeline(sgl_pipeline pip)
 
-            ...push and pop a pipeline on/off the pipeline stack:
-                sgl_push_pipeline(sgl_pipeline pip)
-                sgl_pop_pipeline(void);
+            ...push and pop the pipeline stack:
+                sgl_push_pipeline()
+                sgl_pop_pipeline()
 
-    --- set an sg_image as current texture, this
-        will only be used for texturing, and active or deactivate
-        texturing:
+    --- control texturing with:
 
+            sgl_enable_texture()
+            sgl_disable_texture()
             sgl_texture(sg_image img)
-            sgl_state_texture(bool enabled)
 
     --- set the current viewport and scissor rect with:
 
@@ -464,16 +459,17 @@ SOKOL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 /* render state functions */
 SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
 SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_state_texture(bool enabled);
+SOKOL_API_DECL void sgl_enable_texture(void);
+SOKOL_API_DECL void sgl_disable_texture(void);
 SOKOL_API_DECL void sgl_texture(sg_image img);
 
-/* pipeline stack functions (only valid outside begin/end) */
+/* pipeline stack functions */
 SOKOL_API_DECL void sgl_default_pipeline(void);
 SOKOL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
-SOKOL_API_DECL void sgl_push_pipeline(sgl_pipeline pip);
+SOKOL_API_DECL void sgl_push_pipeline(void);
 SOKOL_API_DECL void sgl_pop_pipeline(void);
 
-/* matrix stack functions (only valid outside begin end) */
+/* matrix stack functions */
 SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
 SOKOL_API_DECL void sgl_matrix_mode_projection(void);
 SOKOL_API_DECL void sgl_matrix_mode_texture(void);
@@ -1855,11 +1851,11 @@ SOKOL_API_IMPL void sgl_default_pipeline(void) {
     _sgl.pip_stack[_sgl.pip_tos] = _sgl.def_pip;
 }
 
-SOKOL_API_IMPL void sgl_push_pipeline(sgl_pipeline pip_id) {
+SOKOL_API_IMPL void sgl_push_pipeline(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     if (_sgl.pip_tos < (_SGL_MAX_STACK_DEPTH - 1)) {
         _sgl.pip_tos++;
-        _sgl.pip_stack[_sgl.pip_tos] = pip_id;
+        _sgl.pip_stack[_sgl.pip_tos] = _sgl.pip_stack[_sgl.pip_tos-1];
     }
     else {
         _sgl.error = SGL_ERROR_STACK_OVERFLOW;
@@ -1891,12 +1887,6 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     _sgl.matrix_dirty = true;
 }
 
-SOKOL_API_IMPL void sgl_state_texture(bool enabled) {
-    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.texturing_enabled = enabled;
-}
-
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
@@ -1923,6 +1913,18 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
         cmd->args.scissor_rect.h = h;
         cmd->args.scissor_rect.origin_top_left = origin_top_left;
     }
+}
+
+SOKOL_API_IMPL void sgl_enable_texture(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.texturing_enabled = true;
+}
+
+SOKOL_API_IMPL void sgl_disable_texture(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl.texturing_enabled = false;
 }
 
 SOKOL_API_IMPL void sgl_texture(sg_image img) {
