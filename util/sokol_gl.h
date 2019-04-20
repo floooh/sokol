@@ -130,7 +130,8 @@
             - shader
             - vertex layout
             - color- and depth-pixel-formats
-            - sample count
+            - primitive type (lines, triangles, ...)
+            - MSAA sample count
         Those will be filled in by sgl_make_pipeline(). Note that each
         call to sgl_make_pipeline() needs to create several sokol-gfx
         pipeline objects (one for each primitive type).
