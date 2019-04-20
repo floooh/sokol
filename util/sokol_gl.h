@@ -37,7 +37,7 @@
     =================
     sokol_gl.h implements a subset of the OpenGLES 1.x feature set useful for
     when you just want to quickly render a bunch of colored triangles or
-    lines without having to mess with buffers, pipeline objects and
+    lines without having to mess with buffers and
     shaders.
 
     The current feature set is mostly useful for debug visualizations
@@ -72,7 +72,7 @@
     Notable differences to GL:
         - No "enum soup" for render states etc, instead there's a
           'pipeline stack', this is similar to GL's matrix stack,
-          for for pipeline-state-objects. The pipeline object at
+          but for pipeline-state-objects. The pipeline object at
           the top of the pipeline stack defines the active set of render states
         - All angles are in radians, not degrees (note the sgl_rad() and
           sgl_deg() conversion functions)
