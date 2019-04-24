@@ -1412,7 +1412,8 @@ static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t 
         return pip->pip[prim_type];
     }
     else {
-        static const sg_pipeline dummy_pip;
+        sg_pipeline dummy_pip;
+        dummy_pip.id = SG_INVALID_ID;
         return dummy_pip;
     }
 }
