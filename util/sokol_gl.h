@@ -1412,7 +1412,8 @@ static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t 
         return pip->pip[prim_type];
     }
     else {
-        return (sg_pipeline) { SG_INVALID_ID };
+        static const sg_pipeline dummy_pip;
+        return dummy_pip;
     }
 }
 
@@ -1591,13 +1592,13 @@ static void _sgl_translate(_sgl_matrix_t* dst, float x, float y, float z) {
     }
 }
 
-static void _sgl_frustum(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float near, float far) {
-    float x = (2.0f * near) / (right - left);
-    float y = (2.0f * near) / (top - bottom);
+static void _sgl_frustum(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float znear, float zfar) {
+    float x = (2.0f * znear) / (right - left);
+    float y = (2.0f * znear) / (top - bottom);
     float a = (right + left) / (right - left);
     float b = (top + bottom) / (top - bottom);
-    float c = -(far + near) / (far - near);
-    float d = -(2.0f * far * near) / (far - near);
+    float c = -(zfar + znear) / (zfar - znear);
+    float d = -(2.0f * zfar * znear) / (zfar - znear);
     _sgl_matrix_t m;
     m.v[0][0] = x;    m.v[0][1] = 0.0f; m.v[0][2] = 0.0f; m.v[0][3] = 0.0f;
     m.v[1][0] = 0.0f; m.v[1][1] = y;    m.v[1][2] = 0.0f; m.v[1][3] = 0.0f;
@@ -1606,7 +1607,7 @@ static void _sgl_frustum(_sgl_matrix_t* dst, float left, float right, float bott
     _sgl_mul(dst, &m);
 }
 
-static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float near, float far) {
+static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom, float top, float znear, float zfar) {
     _sgl_matrix_t m;
     m.v[0][0] = 2.0f / (right - left);
     m.v[1][0] = 0.0f;
@@ -1618,8 +1619,8 @@ static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom
     m.v[3][1] = -(top + bottom) / (top - bottom);
     m.v[0][2] = 0.0f;
     m.v[1][2] = 0.0f;
-    m.v[2][2] = -2.0f / (far - near);
-    m.v[3][2] = -(far + near) / (far - near);
+    m.v[2][2] = -2.0f / (zfar - znear);
+    m.v[3][2] = -(zfar + znear) / (zfar - znear);
     m.v[0][3] = 0.0f;
     m.v[1][3] = 0.0f;
     m.v[2][3] = 0.0f;
@@ -1629,9 +1630,9 @@ static void _sgl_ortho(_sgl_matrix_t* dst, float left, float right, float bottom
 }
 
 /* _sgl_perspective, _sgl_lookat from Regal project.c */
-static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float near, float far) {
+static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float znear, float zfar) {
     float sine = sinf(fovy / 2.0f);
-    float delta_z = far - near;
+    float delta_z = zfar - znear;
     if ((delta_z == 0.0f) || (sine == 0.0f) || (aspect == 0.0f)) {
         return;
     }
@@ -1640,9 +1641,9 @@ static void _sgl_perspective(_sgl_matrix_t* dst, float fovy, float aspect, float
     _sgl_identity(&m);
     m.v[0][0] = cotan / aspect;
     m.v[1][1] = cotan;
-    m.v[2][2] = -(far + near) / delta_z;
+    m.v[2][2] = -(zfar + znear) / delta_z;
     m.v[2][3] = -1.0f;
-    m.v[3][2] = -2.0f * near * far / delta_z;
+    m.v[3][2] = -2.0f * znear * zfar / delta_z;
     m.v[3][3] = 0.0f;
     _sgl_mul(dst, &m);
 }
@@ -1884,7 +1885,7 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     _sgl_identity(_sgl_matrix_texture());
     _sgl_identity(_sgl_matrix_modelview());
     _sgl_identity(_sgl_matrix_projection());
-    _sgl.cur_matrix_mode = 0;
+    _sgl.cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
     _sgl.matrix_dirty = true;
 }
 
