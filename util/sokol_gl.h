@@ -1314,22 +1314,16 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
     desc.layout.buffers[0].stride = sizeof(_sgl_vertex_t);
     {
         sg_vertex_attr_desc* pos = &desc.layout.attrs[0];
-        pos->name = "position";
-        pos->sem_name = "POSITION";
         pos->offset = offsetof(_sgl_vertex_t, pos);
         pos->format = SG_VERTEXFORMAT_FLOAT3;
     }
     {
         sg_vertex_attr_desc* uv = &desc.layout.attrs[1];
-        uv->name = "texcoord0";
-        uv->sem_name = "TEXCOORD";
         uv->offset = offsetof(_sgl_vertex_t, uv);
         uv->format = SG_VERTEXFORMAT_FLOAT2;
     }
     {
         sg_vertex_attr_desc* rgba = &desc.layout.attrs[2];
-        rgba->name = "color0";
-        rgba->sem_name = "COLOR";
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
@@ -1769,6 +1763,12 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
 
     sg_shader_desc shd_desc;
     memset(&shd_desc, 0, sizeof(shd_desc));
+    shd_desc.attrs[0].name = "position";
+    shd_desc.attrs[1].name = "texcoord0";
+    shd_desc.attrs[2].name = "color0";
+    shd_desc.attrs[0].sem_name = "POSITION";
+    shd_desc.attrs[1].sem_name = "TEXCOORD";
+    shd_desc.attrs[2].sem_name = "COLOR";
     sg_shader_uniform_block_desc* ub = &shd_desc.vs.uniform_blocks[0];
     ub->size = sizeof(_sgl_uniform_t);
     ub->uniforms[0].name = "mvp";

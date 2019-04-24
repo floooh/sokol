@@ -284,31 +284,33 @@
                 ...
             };
 
-    --- when creating a pipeline object, GLES2/WebGL need to know the vertex
-        attribute names as used in the vertex shader when describing vertex
-        layouts:
+    --- when creating a shader object, GLES2/WebGL need to know the vertex
+        attribute names as used in the vertex shader:
 
-            sg_pipeline_desc desc = {
-                .layout = {
-                    .attrs = {
-                        [0] = { .name="position", .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .name="color1", .format=SG_VERTEXFORMAT_FLOAT4 }
-                    }
+            sg_shader_desc desc = {
+                .attrs = {
+                    [0] = { .name="position" },
+                    [1] = { .name="color1" }
                 }
             };
+
+        The vertex attribute names provided when creating a shader will be
+        used later in sg_create_pipeline() for matching the vertex layout
+        to vertex shader inputs.
 
     --- on D3D11 you need to provide a semantic name and semantic index in the
-        vertex attribute definition instead (see the D3D11 documentation on
+        shader description struct instead (see the D3D11 documentation on
         D3D11_INPUT_ELEMENT_DESC for details):
 
-            sg_pipeline_desc desc = {
-                .layout = {
-                    .attrs = {
-                        [0] = { .sem_name="POSITION", .sem_index=0, .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .sem_name="COLOR", .sem_index=1, .format=SG_VERTEXFORMAT_FLOAT4 }
-                    }
+            sg_shader_desc desc = {
+                .attrs = {
+                    [0] = { .sem_name="POSITION", .sem_index=0 }
+                    [1] = { .sem_name="COLOR", .sem_index=1 }
                 }
             };
+
+        The provided semantic information will be used later in sg_create_pipeline()
+        to match the vertex layout to vertex shader inputs.
 
     --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute
         name or semantic name, since vertex attributes can be bound by their slot index
@@ -2232,7 +2234,6 @@ typedef struct {
 typedef struct {
     int num_uniform_blocks;
     int num_images;
-    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_shader_stage_t;
@@ -2240,6 +2241,7 @@ typedef struct {
 typedef struct {
     _sg_slot_t slot;
     GLuint gl_prog;
+    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
 } _sg_shader_t;
 
@@ -2850,6 +2852,14 @@ typedef struct {
 static _sg_state_t _sg;
 
 /*-- helper functions --------------------------------------------------------*/
+
+_SOKOL_PRIVATE bool _sg_strempty(const _sg_str_t* str) {
+    return 0 == str->buf[0];
+}
+
+_SOKOL_PRIVATE const char* _sg_strptr(const _sg_str_t* str) {
+    return &str->buf[0];
+}
 
 _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
@@ -4292,6 +4302,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->gl_prog);
     _SG_GL_CHECK_ERROR();
+
+    /* copy vertex attribute names over, these are required for GLES2, and optional for GLES3 and GL3.x */
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        _sg_strcpy(&shd->attrs[i].name, desc->attrs[i].name);
+    }
+
     GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
     GLuint gl_fs = _sg_gl_compile_shader(SG_SHADERSTAGE_FS, desc->fs.source);
     if (!(gl_vs && gl_fs)) {
@@ -4430,8 +4446,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         const sg_vertex_step step_func = l_desc->step_func;
         const int step_rate = l_desc->step_rate;
         GLint attr_loc = attr_index;
-        if (a_desc->name) {
-            attr_loc = glGetAttribLocation(pip->shader->gl_prog, a_desc->name);
+        if (!_sg_strempty(&shd->attrs[attr_index].name)) {
+            attr_loc = glGetAttribLocation(pip->shader->gl_prog, _sg_strptr(&shd->attrs[attr_index].name));
         }
         SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
         if (attr_loc != -1) {
@@ -4454,7 +4470,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         }
         else {
             SOKOL_LOG("Vertex attribute not found in shader: ");
-            SOKOL_LOG(a_desc->name);
+            SOKOL_LOG(_sg_strptr(&shd->attrs[attr_index].name));
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -5520,6 +5536,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
+    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     SOKOL_ASSERT(_sg.d3d11.valid);
     _sg.d3d11.valid = false;
 }
@@ -5920,6 +5937,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     HRESULT hr;
     sg_resource_state result = SG_RESOURCESTATE_FAILED;
 
+    /* copy vertex attribute semantic names and indices */
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        _sg_strcpy(&shd->attrs[i].sem_name, desc->attrs[i].sem_name);
+        shd->attrs[i].sem_index = desc->attrs[i].sem_index;
+    }
+
     /* shader stage uniform blocks and image slots */
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
@@ -6064,8 +6087,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         const sg_vertex_step step_func = l_desc->step_func;
         const int step_rate = l_desc->step_rate;
         D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[attr_index];
-        d3d11_comp->SemanticName = a_desc->sem_name;
-        d3d11_comp->SemanticIndex = a_desc->sem_index;
+        d3d11_comp->SemanticName = _sg_strptr(&shd->attrs[attr_index].sem_name);
+        d3d11_comp->SemanticIndex = shd->attrs[attr_index].sem_index;
         d3d11_comp->Format = _sg_d3d11_vertex_format(a_desc->format);
         d3d11_comp->InputSlot = a_desc->buffer_index;
         d3d11_comp->AlignedByteOffset = a_desc->offset;
@@ -8756,6 +8779,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_SHADERDESC_CANARY);
         #if defined(SOKOL_GLES2)
             SOKOL_VALIDATE(0 != desc->attrs[0].name, _SG_VALIDATE_SHADERDESC_ATTR_NAME);
+        #elif defined(SOKOL_D3D11)
+            SOKOL_VALIDATE(0 != desc->attrs[0].sem_name, _SG_VALIDATE_SHADERDESC_ATTR_SEMANTICS);
         #endif
         #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
             /* on GL, must provide shader source code */
@@ -8769,13 +8794,16 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             /* on D3D11 without shader compiler, must provide byte code */
             SOKOL_VALIDATE(0 != desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
             SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
-            SOKOL_VALIDATE(0 != desc->attrs[0].sem_name, _SG_VALIDATE_SHADERDESC_ATTR_SEMANTICS);
         #else
             /* Dummy Backend, don't require source or bytecode */
         #endif
         for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-            SOKOL_VALIDATE(((desc->attrs[i].name) && (strlen(desc->attr[i].name) < _SG_STRING_SIZE)), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
-            SOKOL_VALIDATE(((desc->attrs[i].sem_name) && (strlen(desc->attr[i].sem_name) < _SG_STRING_SIZE)), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+            if (desc->attrs[i].name) {
+                SOKOL_VALIDATE((strlen(desc->attrs[i].name) < _SG_STRING_SIZE), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+            }
+            if (desc->attrs[i].sem_name) {
+                SOKOL_VALIDATE((strlen(desc->attrs[i].sem_name) < _SG_STRING_SIZE), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+            }
         }
         /* if shader byte code, the size must also be provided */
         if (0 != desc->vs.byte_code) {
