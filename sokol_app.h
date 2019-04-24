@@ -6015,11 +6015,11 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_gl_init_fbconfig(u);
 
         /* Only consider RGBA GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT)) {
             continue;
         }
         /* Only consider window GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT)) {
             if (trust_window_bit) {
                 continue;
             }
