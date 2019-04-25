@@ -17,6 +17,7 @@
     SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_LINUX_WAYLAND - enable wayland compositor support (default: undefined)
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -57,8 +58,8 @@
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
     gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
+    gles2/webgl         | ---     | ---   | YES*  | YES   | YES     | TODO  | YES
+    gles3/webgl2        | ---     | ---   | YES*  | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
@@ -86,8 +87,10 @@
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
+    high-dpi            | YES     | YES   | TODO**| YES   | YES     | TODO  | YES
 
+    - *GLES2/3 is available only for Linux with Wayland or XCB
+    - **Wayland supports high dpi
     - what about bluetooth keyboard / mouse on mobile platforms?
 
     STEP BY STEP
@@ -710,7 +713,11 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
     #endif
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
-    #if !defined(SOKOL_GLCORE33)
+    #if (defined(SOKOL_LINUX_WAYLAND) || defined(SOKOL_LINUX_XCB))
+        #if !defined(SOKOL_GLCORE33) && !defined(SOKOL_GLES3)
+        #error("sokol_app.h: unknown 3D API selected for Linux (Wayland,XCB), must be SOKOL_GLCORE33 or SOKOL_GLES3")
+        #endif
+    #elif !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
 #else
@@ -4851,6 +4858,904 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
 /*== LINUX ==================================================================*/
 #if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+
+// WAYLAND
+#if defined(SOKOL_LINUX_WAYLAND)
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <linux/input-event-codes.h>
+#include <xkbcommon/xkbcommon.h>
+
+#include <wayland-client.h>
+#include <wayland-client-protocol.h>
+#include <wayland-egl.h>
+
+#include <EGL/egl.h>
+
+#ifdef SOKOL_GLCORE33
+#include <GL/gl.h>
+#else
+#include <GLES3/gl3.h>
+#endif
+
+#ifndef SOKOL_XDG_CLIENT_FILE_PATH
+#define SOKOL_XDG_CLIENT_FILE_PATH "xdg-shell-client-protocol.h"
+#endif 
+
+#include SOKOL_XDG_CLIENT_FILE_PATH
+
+static struct wl_shm *_wl_shm = NULL;
+static struct wl_compositor *_wl_compositor = NULL;
+static struct wl_egl_window* _egl_window = NULL;
+
+static struct xdg_wm_base *_xdg_shell = NULL;
+static struct xdg_toplevel *_xdg_shell_toplevel = NULL;
+
+static struct xkb_context *_xkb_context = NULL;
+static struct xkb_keymap *_xkb_keymap = NULL;
+static struct xkb_state *_xkb_state = NULL;
+
+static EGLDisplay _egl_display;
+static EGLConfig *_egl_configs;
+static int32_t _egl_config_id = -1;
+static EGLSurface _egl_surface;
+static EGLContext _egl_context;
+
+struct monitor {
+	int32_t id;
+	int32_t x;
+	int32_t y;
+	int32_t width;
+	int32_t height;
+	int32_t phys_width_mm;
+	int32_t phys_height_mm;
+	int32_t refresh;
+    float diag_in;
+    float dpi;
+	float scale;
+	char name[256];
+};
+
+#define MAX_NUM_MONITORS 4
+static struct monitor _monitors[MAX_NUM_MONITORS] = {0};
+static int32_t _monitor_id = 0;
+
+struct surface {
+	int32_t x;
+	int32_t y;
+	int32_t width;
+	int32_t height;
+};
+
+struct framebuffer {
+	int32_t width;
+	int32_t height;
+};
+
+struct window {
+	struct monitor* mon;
+	struct surface surf;
+	struct framebuffer fbuf;
+};
+
+static struct window _window = {0};
+static bool _running = true;
+static bool _fullscreen = false;
+
+#define MAX_MESSAGE_CHARS 256
+static char _log_message[MAX_MESSAGE_CHARS] = {0};
+static const char* _log_msg_ptr = _log_message;
+
+#define SOKOL_PRINTF(...) {\
+memset(_log_message, 0, MAX_MESSAGE_CHARS);\
+snprintf(_log_message,  MAX_MESSAGE_CHARS, __VA_ARGS__);\
+SOKOL_LOG(_log_msg_ptr);\
+}
+
+#define SOKOL_FAIL(...) {\
+memset(_log_message, 0, MAX_MESSAGE_CHARS);\
+snprintf(_log_message,  MAX_MESSAGE_CHARS, __VA_ARGS__);\
+_sapp_fail(_log_msg_ptr);\
+exit(EXIT_FAILURE);\
+}
+
+_SOKOL_PRIVATE float fast_rsqrt(float number) {
+    long i;
+	float x2, y;
+	const float threehalfs = 1.5F;
+
+	x2 = number * 0.5F;
+	y  = number;
+	i  = * ( long * ) &y;                       // evil floating point bit level hacking
+	i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
+	y  = * ( float * ) &i;
+	y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//	y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+	return y;
+}
+
+_SOKOL_PRIVATE void wl_output_handle_geometry(void *data, struct wl_output *output,
+	int32_t x, int32_t y, int32_t physical_width, int32_t physical_height,
+	int32_t subpixel, const char *make, const char *model, int32_t transform) {
+
+	struct monitor* mon = data;
+	//SOKOL_PRINTF("Monitor %s %s [%p:%p] set", make, model, output, mon);
+
+	if (mon) {
+		mon->x = x;
+		mon->y = y;
+		mon->phys_width_mm = physical_width;
+		mon->phys_height_mm = physical_height;
+
+		snprintf(mon->name, sizeof(mon->name), "%s %s", make, model);
+	}
+}
+
+_SOKOL_PRIVATE void wl_output_handle_mode(void *data, struct wl_output *output,
+	uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+	
+	if (flags == WL_OUTPUT_MODE_CURRENT) {
+		
+		struct monitor* mon = data;
+		//SOKOL_PRINTF("Monitor [%p:%p] mode %dx%d@%d",
+		//	output, mon, width, height, refresh / 1000);
+
+		if (mon) {
+			mon->width = width;
+			mon->height = height;
+			mon->refresh = (int)(refresh / 1000);
+		}
+	}
+}
+
+_SOKOL_PRIVATE void wl_output_handle_scale(void *data, struct wl_output *output, 
+	int32_t factor) {
+
+	struct monitor* mon = data;
+	//SOKOL_PRINTF("Monitor [%p:%p] scaling factor %d", output, mon, factor);
+
+	if (mon) {
+		mon->scale = factor;
+	}
+}
+
+_SOKOL_PRIVATE void print_monitor(struct wl_output *output,
+    struct monitor *mon) {
+	if (mon == NULL) {	
+		SOKOL_PRINTF("Invalid monitor [%p:%p]", output, mon);
+	}
+
+	SOKOL_PRINTF("Monitor [%p:%p (%d)]:\n"
+		"\tname: %s\n"
+		"\tdimensions: %dx%d [mm]\n"
+		"\tposition: %d, %d [px]\n"
+		"\tmode: %dx%d@%d [px@Hz]\n"
+		"\tdiagonal: %.2f [inches]\n"
+		"\tdpi: %.2f\n"
+		"\tdpi scale: %.2f\n",
+		output, mon, mon->id,
+		mon->name,
+		mon->phys_width_mm, mon->phys_height_mm,
+		mon->x, mon->y,
+		mon->width, mon->height, mon->refresh,
+		mon->diag_in, mon->dpi, mon->scale);
+}
+
+_SOKOL_PRIVATE void wl_output_handle_done(
+    void *data, struct wl_output *output) {
+	struct monitor* mon = data;
+	if (mon) {
+
+        // Calculate the diagonal of the screen to work out dpi.
+        float inv_diag_mm = fast_rsqrt(
+            mon->phys_width_mm*mon->phys_width_mm +
+            mon->phys_height_mm*mon->phys_height_mm);
+
+        // Translate millimeters to inches.
+        float inv_diag_in = inv_diag_mm * 25.4f;
+        mon->diag_in = 1.0f / inv_diag_in;
+
+        float diag_px = 1.0f / fast_rsqrt(
+            mon->width*mon->width + mon->height*mon->height);
+
+        // Work out monitor's dpi
+        mon->dpi = diag_px * inv_diag_in;
+
+		print_monitor(output, mon);
+		wl_output_set_user_data(output, mon);
+	}
+}
+
+static const struct wl_output_listener _output_listener = {
+	.geometry = wl_output_handle_geometry,
+	.mode = wl_output_handle_mode,
+	.done = wl_output_handle_done,
+	.scale = wl_output_handle_scale
+};
+
+_SOKOL_PRIVATE void xdg_wm_base_ping(void *data, struct xdg_wm_base *shell,
+	uint32_t serial) {
+	SOKOL_PRINTF("Respond to XDG ping request");
+	xdg_wm_base_pong(shell, serial);
+}
+
+static const struct xdg_wm_base_listener _xdg_wm_base_listener = {
+	.ping = xdg_wm_base_ping
+};
+
+_SOKOL_PRIVATE void resize_window(struct window* win,
+    int32_t width, int32_t height) {
+	
+	if (win == NULL || width <= 0 || height <= 0)	
+		return;
+
+	// Resize surface and frambuffer if necessary
+	win->surf.x = 0;
+	win->surf.y = 0;
+
+	bool resized = false;
+	if (win->surf.width != width || win->surf.height != height) {
+		win->surf.width = width;
+		win->surf.height = height;
+		resized = true;
+	}
+
+	float scale = (win->mon == NULL || !_sapp.desc.high_dpi)
+        ? 1.0f : win->mon->scale;
+
+	int32_t fb_width = width * scale;
+	int32_t fb_height = height * scale;
+	if (fb_width != win->fbuf.width || fb_height != win->fbuf.height) {
+		win->fbuf.width = fb_width;
+		win->fbuf.height = fb_height;
+		resized = true;
+	}
+
+	if (resized) {
+
+        // Update _sapp state
+        _sapp.window_width = win->surf.width;
+        _sapp.window_height = win->surf.height;
+        _sapp.window_width = win->fbuf.width;
+        _sapp.window_height = win->fbuf.height;
+        _sapp.dpi_scale = scale;
+
+        // TODO: call sapp event
+
+		SOKOL_PRINTF("Window [%p] resized to %dx%d (fb: %dx%d@%.2f)", 
+			win, width, height, fb_width, fb_height, scale);
+	}
+}
+
+_SOKOL_PRIVATE void wl_surface_handle_enter(void *data,
+	struct wl_surface *surface, struct wl_output *output) {
+	SOKOL_PRINTF("Surface %p entered monitor %p", surface, output);
+	
+	struct monitor* mon = wl_output_get_user_data(output);
+	if (mon == NULL) {
+		SOKOL_PRINTF("Surface [%p] has entered an unknown monitor!",
+			surface);
+		return;
+	}
+
+	print_monitor(output, mon);
+	
+	struct window* win = data;
+	if (win == NULL) {
+		SOKOL_PRINTF("Can't retrieve surface's [%p] window", surface);
+		return;
+	}
+	
+	// If monitor is changed, the dpi scaling can be changed too,
+	// therefore, call resize_window() to accommodate such eventuality.
+	if (mon != win->mon) {
+		win->mon = mon;
+		resize_window(win, win->surf.width, win->surf.height);
+	}
+}
+
+_SOKOL_PRIVATE void wl_surface_handle_leave(void *data,
+	struct wl_surface *surface, struct wl_output *output) {
+	SOKOL_PRINTF("Surface %p left monitor %p", surface, output);
+}
+
+static const struct wl_surface_listener _wl_surface_listener = {
+	.enter = wl_surface_handle_enter,
+	.leave = wl_surface_handle_leave
+};
+
+_SOKOL_PRIVATE void xdg_surface_handle_configure(void *data,
+	struct xdg_surface *xdg_surface, uint32_t serial) {
+	SOKOL_PRINTF("Surface %p configured %d", xdg_surface, serial);
+	xdg_surface_ack_configure(xdg_surface, serial);
+}
+
+static const struct xdg_surface_listener _xdg_surface_listener = {
+	.configure = xdg_surface_handle_configure,
+};
+
+_SOKOL_PRIVATE void xdg_toplevel_handle_close(void *data,
+	struct xdg_toplevel *_xdg_shell_toplevel) {
+	SOKOL_PRINTF("Close toplevel XDG surface");
+	_running = false;
+}
+
+_SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
+	struct xdg_toplevel *_xdg_shell_toplevel,
+	int32_t width, int32_t height, struct wl_array *states) {
+	SOKOL_PRINTF("Toplevel surface %p configured %dx%d",
+		_xdg_shell_toplevel, width, height);
+
+	// Print toplevel surface states
+	if (states != NULL) {
+		enum xdg_toplevel_state *state = 
+			(enum xdg_toplevel_state*)states->data;
+		wl_array_for_each(state, states) {
+			switch(*state) {
+				case XDG_TOPLEVEL_STATE_MAXIMIZED:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_MAXIMIZED");
+					break;
+				case XDG_TOPLEVEL_STATE_FULLSCREEN:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_FULLSCREEN");
+					break;
+				case XDG_TOPLEVEL_STATE_RESIZING:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_RESIZING");
+					break;
+				case XDG_TOPLEVEL_STATE_ACTIVATED:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_ACTIVATED");
+					break;
+				case XDG_TOPLEVEL_STATE_TILED_LEFT:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_TILED_LEFT");
+					break;
+				case XDG_TOPLEVEL_STATE_TILED_RIGHT:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_TILED_RIGHT");
+					break;
+				case XDG_TOPLEVEL_STATE_TILED_TOP:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_TILED_TOP");
+					break;
+				case XDG_TOPLEVEL_STATE_TILED_BOTTOM:
+					SOKOL_PRINTF("Toplevel surface %p state %s",
+						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_TILED_BOTTOM");
+					break;
+			}
+		}
+	}
+
+	wl_egl_window_resize(_egl_window, width, height, 0, 0);
+	resize_window(data, width, height);
+}
+
+static const struct xdg_toplevel_listener _xdg_toplevel_listener = {
+	.configure = xdg_toplevel_handle_configure,
+	.close = xdg_toplevel_handle_close,
+};
+
+_SOKOL_PRIVATE void pointer_handle_enter(void *data, struct wl_pointer *pointer,
+	uint32_t serial, struct wl_surface *surface,
+	wl_fixed_t sx, wl_fixed_t sy) {
+    // SOKOL_PRINTF("Pointer entered surface %p at %d %d",
+	// 	surface, wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+}
+
+_SOKOL_PRIVATE void pointer_handle_leave(
+    void *data, struct wl_pointer *pointer,
+	uint32_t serial, struct wl_surface *surface) {
+    // SOKOL_PRINTF("Pointer left surface %p", surface);
+}
+
+_SOKOL_PRIVATE void pointer_handle_motion(
+    void *data, struct wl_pointer *pointer,
+	uint32_t time, wl_fixed_t sx, wl_fixed_t sy) {
+    // SOKOL_PRINTF("Pointer moved at %d %d",
+	// 	wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+}
+
+_SOKOL_PRIVATE void pointer_handle_button(
+    void *data, struct wl_pointer *pointer,
+	uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
+	// SOKOL_PRINTF("Pointer button=%d, state=%d", button, state);
+
+	struct wl_seat *seat = data;
+
+	// Being able to grab and move the window around while the left mouse
+	// button is held down on top of the window, providing the window manager
+	// allows for it.
+	if (button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_PRESSED) {
+		xdg_toplevel_move(_xdg_shell_toplevel, seat, serial);
+	}
+}
+
+_SOKOL_PRIVATE void pointer_handle_axis(
+    void *data, struct wl_pointer *wl_pointer,
+	uint32_t time, uint32_t axis, wl_fixed_t value) {
+	// SOKOL_PRINTF("Pointer axis=%d, value=%d",
+	// 	axis, wl_fixed_to_int(value));
+}
+
+static const struct wl_pointer_listener _pointer_listener = {
+	.enter = pointer_handle_enter,
+	.leave = pointer_handle_leave,
+	.motion = pointer_handle_motion,
+	.button = pointer_handle_button,
+	.axis = pointer_handle_axis,
+};
+
+_SOKOL_PRIVATE void keyboard_keymap(void *data, struct wl_keyboard *keyboard,
+	uint32_t format, int32_t fd, uint32_t size) {
+	
+	char *keymap_string = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+	xkb_keymap_unref(_xkb_keymap);
+	SOKOL_PRINTF("Keyboard (%d) mapped", fd);
+
+	_xkb_keymap = xkb_keymap_new_from_string(_xkb_context, keymap_string,
+		XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+
+	if (_xkb_keymap == NULL) {
+		SOKOL_PRINTF("Invalid keymap");
+	}
+
+	munmap(keymap_string, size);
+	close(fd);
+	xkb_state_unref(_xkb_state);
+	_xkb_state = xkb_state_new(_xkb_keymap);
+}
+
+_SOKOL_PRIVATE void keyboard_enter(void *data, struct wl_keyboard *keyboard,
+	uint32_t serial, struct wl_surface *surface, struct wl_array *keys) {
+	
+	SOKOL_PRINTF("Keyboard (%d) entered", serial);
+}
+
+_SOKOL_PRIVATE void keyboard_leave(void *data, struct wl_keyboard *keyboard,
+	uint32_t serial, struct wl_surface *surface) {
+	
+	SOKOL_PRINTF("Keyboard (%d) left", serial);
+}
+
+_SOKOL_PRIVATE void keyboard_key(void *data, struct wl_keyboard *keyboard,
+	uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {
+	
+	xkb_keysym_t keysym = xkb_state_key_get_one_sym(_xkb_state, key+8);
+	if (keysym == XKB_KEY_NoSymbol) {
+		return;
+	}
+		
+	char keyname[64];
+	xkb_keysym_get_name(keysym, keyname, 64);
+	
+	if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		// SOKOL_PRINTF("Key %d (%s) was pressed", key, keyname);
+
+			if (keysym == XKB_KEY_Escape) {
+				_running = false;
+			}
+			else if (keysym == XKB_KEY_Return) {
+				if (_fullscreen == false) {
+					xdg_toplevel_set_fullscreen(_xdg_shell_toplevel, NULL);
+				}
+				else {
+					xdg_toplevel_unset_fullscreen(_xdg_shell_toplevel);
+				}
+				 
+				_fullscreen = !_fullscreen;
+			}
+	}
+	// else if (state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+	// 	SOKOL_PRINTF("Key %d (%s) was released", key, keyname);
+	// }
+
+	// uint32_t utf32 = xkb_keysym_to_utf32(keysym);
+	// if (utf32) {
+	// 	SOKOL_PRINTF("UTF32 key name U+%04X ", utf32);
+	// }
+}
+
+_SOKOL_PRIVATE void keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
+	uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
+	uint32_t mods_locked, uint32_t group) {
+
+	// SOKOL_PRINTF("Keyboard (%d) mods (depressed=%d, latched=%d, locked=%d",
+	// 	serial, mods_depressed, mods_latched, mods_locked);
+	
+	xkb_state_update_mask(_xkb_state, mods_depressed, mods_latched,
+		mods_locked, 0, 0, group);
+}
+
+_SOKOL_PRIVATE void keyboard_repeat_info(void *data,
+    struct wl_keyboard *wl_keyboard, int32_t rate, int32_t delay) {
+
+}
+
+static const struct wl_keyboard_listener _keyboard_listener = {
+	.keymap = keyboard_keymap,
+	.enter = keyboard_enter, 
+	.leave = keyboard_leave, 
+	.key = keyboard_key, 
+	.modifiers = keyboard_modifiers,
+	.repeat_info = keyboard_repeat_info
+};
+
+_SOKOL_PRIVATE void seat_handle_capabilities(void *data, struct wl_seat *seat,
+	uint32_t capabilities) {
+	
+	if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
+		SOKOL_PRINTF("Display has pointer capabilities");
+		struct wl_pointer *pointer = wl_seat_get_pointer(seat);
+		wl_pointer_add_listener(pointer, &_pointer_listener, seat);
+	}
+
+	if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
+		SOKOL_PRINTF("Display has keyboard capabilities");
+		struct wl_keyboard *keyboard = wl_seat_get_keyboard(seat);
+		wl_keyboard_add_listener(keyboard, &_keyboard_listener, seat);
+	}
+
+	if (capabilities & WL_SEAT_CAPABILITY_TOUCH) {
+		SOKOL_PRINTF("Display has touch capabilities");
+	}
+}
+
+_SOKOL_PRIVATE void seat_handle_name(void *data, struct wl_seat *seat, 
+	const char *name) {
+	SOKOL_PRINTF("Seat %p name: %s", seat, name);
+}
+
+static const struct wl_seat_listener _seat_listener = {
+	.capabilities = seat_handle_capabilities,
+	.name  = seat_handle_name
+};
+
+_SOKOL_PRIVATE void handle_global(void *data, struct wl_registry *registry,
+		uint32_t name, const char *interface, uint32_t version) {
+	
+	SOKOL_PRINTF("Got a registry event for %s id %d version %d",
+		interface, name, version);
+	
+	if (strcmp(interface, wl_shm_interface.name) == 0) {
+		_wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, version);
+	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
+		struct wl_seat *seat = wl_registry_bind(registry, name,
+			&wl_seat_interface, 2);
+		wl_seat_add_listener(seat, &_seat_listener, NULL);
+	} else if (strcmp(interface, wl_compositor_interface.name) == 0) {
+		_wl_compositor = wl_registry_bind(registry, name,
+			&wl_compositor_interface, version);
+	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
+		_xdg_shell = wl_registry_bind(
+			registry, name, &xdg_wm_base_interface, version);
+	} else if (strcmp(interface, wl_output_interface.name) == 0) {
+		struct wl_output *output = wl_registry_bind(registry, name,
+			&wl_output_interface, version);
+
+		if (output != NULL) {
+			if (_monitor_id < MAX_NUM_MONITORS) {
+				struct monitor* mon = &_monitors[_monitor_id];
+				mon->scale = 1.0f;
+				mon->id = name;
+
+				// Add output listener to intercept monitor events
+				wl_output_add_listener(output, &_output_listener, mon);
+				_monitor_id++;
+			}
+		}
+	}
+}
+
+_SOKOL_PRIVATE void handle_global_remove(void *data,
+	struct wl_registry *registry, uint32_t name) {
+	SOKOL_PRINTF("Teardown Wayland registry");
+}
+
+static const struct wl_registry_listener _registry_listener = {
+	.global = handle_global,
+	.global_remove = handle_global_remove,
+};
+
+_SOKOL_PRIVATE void print_egl_config(int32_t id) {
+    EGLConfig c = _egl_configs[id];
+    EGLint r, g, b, a, d, s, m, n;
+    if (eglGetConfigAttrib(_egl_display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
+        eglGetConfigAttrib(_egl_display, c, EGL_SAMPLE_BUFFERS, &m) == EGL_TRUE && 
+        eglGetConfigAttrib(_egl_display, c, EGL_SAMPLES, &n) == EGL_TRUE) {
+        
+        SOKOL_PRINTF("EGL config (%d):\n"
+            "\tEGL_RED_SIZE: %d\n"
+            "\tEGL_GREEN_SIZE: %d\n"
+            "\tEGL_BLUE_SIZE: %d\n"
+            "\tEGL_ALPHA_SIZE: %d\n"
+            "\tEGL_DEPTH_SIZE: %d\n"
+            "\tEGL_STENCIL_SIZE: %d\n"
+            "\tEGL_SAMPLE_BUFFERS: %d\n"
+            "\tEGL_SAMPLES: %d\n",
+            id, r, g, b, a, d, s, m, n
+        );
+    }
+}
+
+_SOKOL_PRIVATE void init_egl(struct wl_display *display) {
+    EGLint major, minor, count, n_configs;
+
+#ifdef SOKOL_GLCORE33
+	if (!eglBindAPI(EGL_OPENGL_API)) {
+		SOKOL_FAIL("Unable to bind GL API");
+	}
+#else
+	if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+		SOKOL_FAIL("Unable to bind GLES API");
+	}
+#endif
+    
+    _egl_display = eglGetDisplay((EGLNativeDisplayType) display);
+    if (_egl_display == EGL_NO_DISPLAY) {
+        SOKOL_FAIL("Can't create egl display");
+    }
+
+    if (eglInitialize(_egl_display, &major, &minor) != EGL_TRUE) {
+        SOKOL_FAIL("Can't initialise egl display");
+    }
+
+    SOKOL_PRINTF("EGL major: %d, minor %d", major, minor);
+
+    eglGetConfigs(_egl_display, NULL, 0, &count);
+    SOKOL_PRINTF("EGL has %d configs", count);
+
+	// Allocate space to keep valid configs around
+    _egl_configs = SOKOL_CALLOC(count, sizeof *_egl_configs);
+
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    
+    // Enable MSAA on the default framebuffer if requested
+    EGLint sample_buffers = _sapp.sample_count > 1 ? 1 : 0;
+    EGLint samples = _sapp.sample_count;
+
+    EGLint config_attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+	#ifdef SOKOL_GLCORE33
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+	#else
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+	#endif
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SAMPLE_BUFFERS, sample_buffers,
+        EGL_SAMPLES, samples,
+        EGL_NONE
+    };
+
+    eglChooseConfig(_egl_display, config_attribs,
+        _egl_configs, count, &n_configs);
+    
+    for (int32_t i = 0; i < n_configs; ++i) {
+        EGLConfig c = _egl_configs[i];
+        EGLint r, g, b, a, d, s, m, n;
+        if (eglGetConfigAttrib(_egl_display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_SAMPLE_BUFFERS, &m) == EGL_TRUE &&
+            eglGetConfigAttrib(_egl_display, c, EGL_SAMPLES, &n) == EGL_TRUE &&
+                r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) &&
+                d == 24 && s == 8 && m == sample_buffers && n == samples) {
+            _egl_config_id = i;
+            break;
+        }
+    }
+
+    // If we dindn't find a configuration that satisfy
+    // our requests, then, just pickt he first one.
+    if (_egl_config_id < 0) {
+        SOKOL_PRINTF("WARN: Requested EGL surface config not available.\n"
+            "EGL default config (0) will be picked instead.");
+
+        _egl_config_id = 0;
+    }
+
+    print_egl_config(_egl_config_id);
+
+    EGLint context_attribs[] = {
+	#ifdef SOKOL_GLCORE33
+		EGL_CONTEXT_MAJOR_VERSION, 3,
+		EGL_CONTEXT_MINOR_VERSION, 3,
+		EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+	#else
+        EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+	#endif
+        EGL_NONE
+    };
+
+    _egl_context = eglCreateContext(_egl_display, _egl_configs[_egl_config_id],
+        EGL_NO_CONTEXT, context_attribs);
+
+	if (_egl_context == EGL_NO_CONTEXT) {
+		SOKOL_FAIL("Can't create EGL context");
+	}
+	else {
+		SOKOL_PRINTF("EGL context: %s",
+            eglQueryString(_egl_display, EGL_VERSION));
+	}
+}
+
+_SOKOL_PRIVATE void terminate_egl() {
+	eglTerminate(_egl_display);
+}
+
+_SOKOL_PRIVATE void create_egl_window(struct wl_surface *surface,
+	int32_t width, int32_t height) {
+
+    _egl_window = wl_egl_window_create(surface, width, height);
+
+    if (_egl_window == EGL_NO_SURFACE) {
+        SOKOL_FAIL("Can't create egl window");
+    }
+
+    _egl_surface = eglCreateWindowSurface(_egl_display,
+		_egl_configs[_egl_config_id], _egl_window, NULL);
+
+	if (_egl_surface == EGL_NO_SURFACE) {
+		SOKOL_FAIL("Can't create an EGL surface!");
+	}
+
+	// We can release the list of available configs now
+	SOKOL_FREE(_egl_configs);
+
+    eglSwapInterval(_egl_display, _sapp.swap_interval);
+
+    if (eglMakeCurrent(_egl_display, _egl_surface, _egl_surface,
+        _egl_context)) {
+	#ifdef SOKOL_GLCORE33
+		SOKOL_PRINTF("GL version: %s", glGetString(GL_VERSION));
+	#else
+		SOKOL_PRINTF("GLES version: %s", glGetString(GL_VERSION));
+	#endif
+    } else {
+	    SOKOL_FAIL("EGL context made current failed");
+    }
+}
+
+_SOKOL_PRIVATE void destroy_egl_window() {
+	eglDestroySurface(_egl_display, _egl_surface);
+	eglDestroyContext(_egl_display, _egl_context);
+	wl_egl_window_destroy(_egl_window);
+}
+
+_SOKOL_PRIVATE void draw_egl_window() {
+	glClearColor(0.0, 1.0, 1.0, 1.0);
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+
+_SOKOL_PRIVATE void egl_swap_buffers() {
+	eglSwapBuffers (_egl_display, _egl_surface);
+}
+
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    // This function initialises the _sapp structure
+    _sapp_init_state(desc);
+
+    // XKB (Don't take into account default env variables)
+	_xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	if (_xkb_context == NULL) {
+		SOKOL_FAIL("Can't create xkb context");
+	}
+
+    // WAYLAND
+	struct wl_display *display = wl_display_connect(NULL);
+	if (display == NULL) {
+		SOKOL_FAIL("Failed to create display");
+	}
+
+	struct wl_registry *registry = wl_display_get_registry(display);
+	wl_registry_add_listener(registry, &_registry_listener, NULL);
+	wl_display_dispatch(display);
+	wl_display_roundtrip(display);
+
+	if (_wl_shm == NULL || _wl_compositor == NULL || _xdg_shell == NULL) {
+		SOKOL_FAIL("No wl_shm, wl_compositor or xdg_wm_base support");
+	}
+
+	xdg_wm_base_add_listener(_xdg_shell, &_xdg_wm_base_listener, NULL);
+
+	// Setup surface
+	struct wl_surface *surface = wl_compositor_create_surface(_wl_compositor);
+
+	// Catch surface output (monitor) info
+	wl_surface_add_listener(surface, &_wl_surface_listener, &_window);
+
+	struct xdg_surface *xdg_surface =
+		xdg_wm_base_get_xdg_surface(_xdg_shell, surface);
+	_xdg_shell_toplevel = xdg_surface_get_toplevel(xdg_surface);
+
+	xdg_surface_add_listener(xdg_surface, &_xdg_surface_listener, &_window);
+	xdg_toplevel_add_listener(_xdg_shell_toplevel, &_xdg_toplevel_listener, &_window);
+
+	xdg_toplevel_set_title(_xdg_shell_toplevel, desc->window_title);
+
+	wl_surface_commit(surface);
+	wl_display_roundtrip(display);
+
+	// EGL
+	init_egl(display);
+	create_egl_window(surface, desc->width, desc->height);
+
+    _sapp.valid = true;
+    if (desc->fullscreen) {
+        xdg_toplevel_set_fullscreen(_xdg_shell_toplevel, NULL);
+    }
+
+	while (_running && wl_display_dispatch_pending(display) != -1) {
+		draw_egl_window();
+        _sapp_frame();
+        egl_swap_buffers();
+	}
+
+    _sapp_call_cleanup();
+
+	destroy_egl_window();
+	terminate_egl();
+
+	xkb_state_unref(_xkb_state);
+	xkb_keymap_unref(_xkb_keymap);
+	xkb_context_unref(_xkb_context);
+
+	xdg_toplevel_destroy(_xdg_shell_toplevel);
+	xdg_surface_destroy(xdg_surface);
+
+	wl_surface_destroy(surface);
+    wl_display_disconnect(display);
+
+    SOKOL_PRINTF("Disconnected from wayland display");
+}
+
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+#endif
+
+// XCB
+#elif defined(SOKOL_LINUX_XCB)
+
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+}
+
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+#endif
+
+#else /* X11 */
+
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -6661,6 +7566,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
+#endif /* WAYLAND/XCB/X11 */
 #endif /* LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
