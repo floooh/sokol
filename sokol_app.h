@@ -938,6 +938,9 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #elif defined(SOKOL_GLCORE33)
+#ifndef GL_SILENCE_DEPRECATION
+#define GL_SILENCE_DEPRECATION
+#endif
 #include <Cocoa/Cocoa.h>
 #include <OpenGL/gl3.h>
 #endif
@@ -6015,11 +6018,11 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_gl_init_fbconfig(u);
 
         /* Only consider RGBA GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT)) {
             continue;
         }
         /* Only consider window GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT)) {
             if (trust_window_bit) {
                 continue;
             }
