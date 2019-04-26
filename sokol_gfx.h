@@ -2877,12 +2877,6 @@ _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
     }
 }
 
-_SOKOL_PRIVATE _sg_str_t _sg_make_str(const char* str) {
-    _sg_str_t res;
-    _sg_strcpy(&res, str);
-    return res;
-}
-
 /* return byte size of a vertex format */
 _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     switch (fmt) {
