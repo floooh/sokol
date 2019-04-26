@@ -185,14 +185,14 @@ typedef struct {
     sg_imgui_str_t fs_entry;
     sg_imgui_str_t fs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
     sg_imgui_str_t fs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
+    sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_imgui_str_t attr_sem_name[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_desc desc;
 } sg_imgui_shader_t;
 
 typedef struct {
     sg_pipeline res_id;
     sg_imgui_str_t label;
-    sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_imgui_str_t attr_sem_name[SG_MAX_VERTEX_ATTRIBUTES];
     sg_pipeline_desc desc;
 } sg_imgui_pipeline_t;
 
@@ -1109,6 +1109,17 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     if (shd->desc.fs.byte_code) {
         shd->desc.fs.byte_code = _sg_imgui_bin_dup(shd->desc.fs.byte_code, shd->desc.fs.byte_code_size);
     }
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        sg_shader_attr_desc* ad = &shd->desc.attrs[i];
+        if (ad->name) {
+            shd->attr_name[i] = _sg_imgui_make_str(ad->name);
+            ad->name = shd->attr_name[i].buf;
+        }
+        if (ad->sem_name) {
+            shd->attr_sem_name[i] = _sg_imgui_make_str(ad->sem_name);
+            ad->sem_name = shd->attr_sem_name[i].buf;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_shader_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1140,18 +1151,6 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     pip->label = _sg_imgui_make_str(desc->label);
     pip->desc = *desc;
 
-    /* copy strings in vertex layout to persistent location */
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        sg_vertex_attr_desc* ad = &pip->desc.layout.attrs[i];
-        if (ad->name) {
-            pip->attr_name[i] = _sg_imgui_make_str(ad->name);
-            ad->name = pip->attr_name[i].buf;
-        }
-        if (ad->sem_name) {
-            pip->attr_sem_name[i] = _sg_imgui_make_str(ad->sem_name);
-            ad->sem_name = pip->attr_sem_name[i].buf;
-        }
-    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -2683,6 +2682,18 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
             ImGui::Text("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
             ImGui::Separator();
+            if (ImGui::TreeNode("Attrs")) {
+                for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+                    const sg_shader_attr_desc* a_desc = &shd_ui->desc.attrs[i];
+                    if (a_desc->name || a_desc->sem_index) {
+                        ImGui::Text("#%d:", i);
+                        ImGui::Text("  Name:         %s", a_desc->name ? a_desc->name : "---");
+                        ImGui::Text("  Sem Name:     %s", a_desc->sem_name ? a_desc->sem_name : "---");
+                        ImGui::Text("  Sem Index:    %d", a_desc->sem_index);
+                    }
+                }
+                ImGui::TreePop();
+            }
             if (ImGui::TreeNode("Vertex Shader Stage")) {
                 _sg_imgui_draw_shader_stage(ctx, &shd_ui->desc.vs);
                 ImGui::TreePop();
@@ -2718,9 +2729,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
             if (a_desc->format != SG_VERTEXFORMAT_INVALID) {
                 ImGui::Text("#%d:", i);
                 ImGui::Text("  Format:       %s", _sg_imgui_vertexformat_string(a_desc->format));
-                ImGui::Text("  Name:         %s", a_desc->name ? a_desc->name : "---");
-                ImGui::Text("  Sem Name:     %s", a_desc->sem_name ? a_desc->sem_name : "---");
-                ImGui::Text("  Sem Index:    %d", a_desc->sem_index);
                 ImGui::Text("  Offset:       %d", a_desc->offset);
                 ImGui::Text("  Buffer Index: %d", a_desc->buffer_index);
             }
