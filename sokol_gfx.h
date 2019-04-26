@@ -2382,7 +2382,7 @@ typedef struct {
 } _sg_shader_image_t;
 
 typedef struct {
-    _sg_str sem_name;
+    _sg_str_t sem_name;
     int sem_index;
 } _sg_shader_attr_t;
 
@@ -2397,6 +2397,7 @@ typedef struct {
 
 typedef struct {
     _sg_slot_t slot;
+    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
     ID3D11VertexShader* d3d11_vs;
     ID3D11PixelShader* d3d11_fs;
@@ -5536,7 +5537,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
-    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     SOKOL_ASSERT(_sg.d3d11.valid);
     _sg.d3d11.valid = false;
 }
@@ -8799,10 +8799,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
         #endif
         for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
             if (desc->attrs[i].name) {
-                SOKOL_VALIDATE((strlen(desc->attrs[i].name) < _SG_STRING_SIZE), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+                SOKOL_VALIDATE(strlen(desc->attrs[i].name) < _SG_STRING_SIZE, _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
             }
             if (desc->attrs[i].sem_name) {
-                SOKOL_VALIDATE((strlen(desc->attrs[i].sem_name) < _SG_STRING_SIZE), _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
+                SOKOL_VALIDATE(strlen(desc->attrs[i].sem_name) < _SG_STRING_SIZE, _SG_VALIDATE_SHADERDESC_ATTR_STRING_TOO_LONG);
             }
         }
         /* if shader byte code, the size must also be provided */
@@ -8895,10 +8895,10 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS);
             #if defined(SOKOL_GLES2)
             /* on GLES2, vertex attribute names must be provided */
-            SOKOL_VALIDATE((0 != shd->attrs[attr_index].name), _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
+            SOKOL_VALIDATE(!_sg_strempty(&shd->attrs[attr_index].name), _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
             #elif defined(SOKOL_D3D11)
             /* on D3D11, semantic names (and semantic indices) must be provided */
-            SOKOL_VALIDATE((0 != shd->attrs[attr_index].sem_name), _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+            SOKOL_VALIDATE(!_sg_strempty(&shd->attrs[attr_index].sem_name), _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
             #endif
         }
         return SOKOL_VALIDATE_END();
