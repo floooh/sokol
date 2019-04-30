@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates)
+[See what's new](#updates) (**26-Apr-2019**: breaking change in sokol_gfx.h)
 
 Minimalistic header-only cross-platform libs in C:
 
@@ -94,8 +94,8 @@ int main() {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.source =
             "#version 330\n"
-            "in vec4 position;\n"
-            "in vec4 color0;\n"
+            "layout(location=0) in vec4 position;\n"
+            "layout(location=1) in vec4 color0;\n"
             "out vec4 color;\n"
             "void main() {\n"
             "  gl_Position = position;\n"
@@ -115,8 +115,8 @@ int main() {
         .shader = shd,
         .layout = {
             .attrs = {
-                [0] = { .name="position", .format=SG_VERTEXFORMAT_FLOAT3 },
-                [1] = { .name="color0", .format=SG_VERTEXFORMAT_FLOAT4 }
+                [0].format=SG_VERTEXFORMAT_FLOAT3,
+                [1].format=SG_VERTEXFORMAT_FLOAT4
             }
         }
     });
@@ -399,15 +399,167 @@ Mainly some "missing features" for desktop apps:
 
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
-## Potential new sokol headers:
-
-- system clipboard support
-- query filesystem standard locations
-- simple file access API (at least async file/URL loading)
-- gamepad support
-- simple cross-platform touch gesture recognition
-
 # Updates
+
+- **26-Apr-2019** Small but breaking change in **sokol_gfx.h** how the vertex
+layout definition in sg_pipeline_desc works:
+
+    Vertex component names and semantics (needed by the GLES2 and D3D11 backends) have moved from ```sg_pipeline_desc``` into ```sg_shader_desc```.
+    
+    This may seem like a rather pointless small detail to change, expecially
+    for breaking existing code, but the whole thing will make a bit more
+    sense when the new shader-cross-compiler will be integrated which I'm
+    currently working on (here: https://github.com/floooh/sokol-tools).
+    
+    While working on getting reflection data out of the shaders (e.g. what
+    uniform blocks and textures the shader uses), it occured to me that
+    vertex-attribute-names and -semantics are actually part of the reflection
+    info and belong to the shader, not to the vertex layout in the pipeline
+    object (which only describes how the incoming vertex data maps to
+    vertex-component **slots**. Instead of (optionally) mapping this
+    association through a name, the pipeline's vertex layout is now always
+    strictly defined in terms of numeric 'bind slots' for **all** sokol_gfx.h
+    backends. For 3D APIs where the vertex component slot isn't explicitely
+    defined in the shader language (GLES2/WebGL, D3D11, and optionally
+    GLES3/GL), the shader merely offers a lookup table how vertex-layout
+    slot-indices map to names/semantics (and the underlying 3D API than maps
+    those names back to slot indices, which shows that Metal and GL made the
+    right choice defining the slots right in the shader).
+
+    Here's how the code changes (taken from the triangle-sapp.c sample):
+
+    **OLD**:
+    ```c
+    /* create a shader */
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source = vs_src,
+        .fs.source = fs_src,
+    });
+
+    /* create a pipeline object (default render states are fine for triangle) */
+    pip = sg_make_pipeline(&(sg_pipeline_desc){
+        /* if the vertex layout doesn't have gaps, don't need to provide strides and offsets */
+        .shader = shd,
+        .layout = {
+            .attrs = {
+                [0] = { .name="position", .sem_name="POS", .format=SG_VERTEXFORMAT_FLOAT3 },
+                [1] = { .name="color0", .sem_name="COLOR", .format=SG_VERTEXFORMAT_FLOAT4 }
+            }
+        },
+    });
+    ```
+
+    **NEW**:
+    ```c
+        /* create a shader */
+        sg_shader shd = sg_make_shader(&(sg_shader_desc){
+            .attrs = {
+                [0] = { .name="position", .sem_name="POS" },
+                [1] = { .name="color0", .sem_name="COLOR" }
+            },
+            .vs.source = vs_src,
+            .fs.source = fs_src,
+        });
+
+        /* create a pipeline object (default render states are fine for triangle) */
+        pip = sg_make_pipeline(&(sg_pipeline_desc){
+            /* if the vertex layout doesn't have gaps, don't need to provide strides and offsets */
+            .shader = shd,
+            .layout = {
+                .attrs = {
+                    [0].format=SG_VERTEXFORMAT_FLOAT3,
+                    [1].format=SG_VERTEXFORMAT_FLOAT4
+                }
+            },
+        });
+    ```
+
+    ```sg_shader_desc``` has a new embedded struct ```attrs``` which
+    contains a vertex attribute _name_ (for GLES2/WebGL) and
+    _sem_name/sem_index_ (for D3D11). For the Metal backend this struct is
+    ignored completely, and for GLES3/GL it is optional, and not required
+    when the vertex shader inputs are annotated with ```layout(location=N)```.
+
+    The remaining attribute description members in ```sg_pipeline_desc``` are:
+    - **.format**: the format of input vertex data (this can be different
+          from the vertex shader's inputs when data is extended during
+          vertex fetch (e.g. input can be vec3 while the vertex shader
+          expects vec4)
+    - **.offset**: optional offset of the vertex component data (not needed
+          when the input vertex has no gaps between the components)
+    - **.buffer**: the vertex buffer bind slot if the vertex data is coming
+          from different buffers
+
+    Also check out the various samples:
+
+    - for GLSL (explicit slots via ```layout(location=N)```): https://github.com/floooh/sokol-samples/tree/master/glfw
+    - for D3D11 (semantic names/indices): https://github.com/floooh/sokol-samples/tree/master/d3d11
+    - for GLES2: (vertex attribute names): https://github.com/floooh/sokol-samples/tree/master/html5
+    - for Metal: (explicit slots): https://github.com/floooh/sokol-samples/tree/master/metal
+    - ...and all of the above combined: https://github.com/floooh/sokol-samples/tree/master/sapp
+
+- **19-Apr-2019** I have replaced the rather inflexible render-state handling
+in **sokol_gl.h** with a *pipeline stack* (like the GL matrix stack, but with
+pipeline-state-objects), along with a couple of other minor API tweaks.
+
+    These are the new pipeline-stack functions:
+    ```c
+    sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+    void sgl_destroy_pipeline(sgl_pipeline pip);
+    void sgl_default_pipeline(void);
+    void sgl_load_pipeline(sgl_pipeline pip);
+    void sgl_push_pipeline(void);
+    void sgl_pop_pipeline(void);
+    ```
+
+    A pipeline object is created just like in sokol_gfx.h, but without shaders,
+    vertex layout, pixel formats, primitive-type and sample count (these details
+    are filled in by the ```sgl_make_pipeline()``` wrapper function. For instance
+    to create a pipeline object for additive transparency:
+
+    ```c
+    sgl_pipeline additive_pip = sgl_make_pipeline(&(sg_pipeline_desc){
+        .blend = {
+            .enabled = true,
+            .src_factor_rgb = SG_BLENDFACTOR_ONE,
+            .dst_factor_rgb = SG_BLENDFACTOR_ONE
+        }
+    });
+    ```
+
+    And to render with this, simply call ```sgl_load_pipeline()```:
+
+    ```c
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_triangles();
+    ...
+    sgl_end();
+    ```
+
+    Or to preserve and restore the previously active pipeline state:
+
+    ```c
+    sgl_push_pipeline();
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_quads();
+    ...
+    sgl_end();
+    sgl_pop_pipeline();
+    ```
+
+    You can also load the 'default pipeline' explicitely on the top of the
+    pipeline stack with ```sgl_default_pipeline()```.
+
+    The other API change is:
+
+    - ```sgl_state_texture(bool b)``` has been replaced with ```sgl_enable_texture()```
+      and ```sgl_disable_texture()```
+
+    The code samples have been updated accordingly:
+
+    - [sgl-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-sapp.c)
+    - [sgl-lines-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-lines-sapp.c)
+    - [sgl-microui-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-microui-sapp.c)
 
 - **01-Apr-2019** (not an April Fool's joke): There's a new **sokol_gl.h**
 util header which implements an 'OpenGL-1.x-in-spirit' rendering API on top

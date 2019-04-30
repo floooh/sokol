@@ -755,6 +755,12 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     ub.size = sizeof(_simgui_vs_params_t);
     ub.uniforms[0].name = "disp_size";
     ub.uniforms[0].type = SG_UNIFORMTYPE_FLOAT2;
+    shd_desc.attrs[0].name = "position";
+    shd_desc.attrs[0].sem_name = "POSITION";
+    shd_desc.attrs[1].name = "texcoord0";
+    shd_desc.attrs[1].sem_name  = "TEXCOORD";
+    shd_desc.attrs[2].name  = "color0";
+    shd_desc.attrs[2].sem_name  = "COLOR";
     shd_desc.fs.images[0].name = "tex";
     shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
     #if defined(SOKOL_D3D11)
@@ -774,24 +780,18 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.layout.buffers[0].stride = sizeof(ImDrawVert);
     {
         auto& attr = pip_desc.layout.attrs[0];
-        attr.name       = "position";
-        attr.sem_name   = "POSITION";
-        attr.offset     = offsetof(ImDrawVert, pos);
-        attr.format     = SG_VERTEXFORMAT_FLOAT2;
+        attr.offset = offsetof(ImDrawVert, pos);
+        attr.format = SG_VERTEXFORMAT_FLOAT2;
     }
     {
         auto& attr = pip_desc.layout.attrs[1];
-        attr.name       = "texcoord0";
-        attr.sem_name   = "TEXCOORD";
-        attr.offset     = offsetof(ImDrawVert, uv);
-        attr.format     = SG_VERTEXFORMAT_FLOAT2;
+        attr.offset = offsetof(ImDrawVert, uv);
+        attr.format = SG_VERTEXFORMAT_FLOAT2;
     }
     {
         auto& attr = pip_desc.layout.attrs[2];
-        attr.name       = "color0";
-        attr.sem_name   = "COLOR";
-        attr.offset     = offsetof(ImDrawVert, col);
-        attr.format     = SG_VERTEXFORMAT_UBYTE4N;
+        attr.offset = offsetof(ImDrawVert, col);
+        attr.format = SG_VERTEXFORMAT_UBYTE4N;
     }
     pip_desc.shader = _simgui.shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
