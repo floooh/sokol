@@ -401,7 +401,7 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
-- **02-May-2019** sokol_gfx.h has a new method ```sg_query_backend()```, this
+- **02-May-2019** sokol_gfx.h has a new function ```sg_query_backend()```, this
 will return an enum ```sg_backend``` identifying the backend sokol-gfx is
 currently running on, which is one of the following values:
 
