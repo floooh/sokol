@@ -3351,7 +3351,7 @@ SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
     if (!ctx->buffers.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 280), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 280), ImGuiCond_Once);
     if (ImGui::Begin("Buffers", &ctx->buffers.open)) {
         sg_imgui_draw_buffers_content(ctx);
     }
@@ -3363,7 +3363,7 @@ SOKOL_API_IMPL void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
     if (!ctx->images.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Images", &ctx->images.open)) {
         sg_imgui_draw_images_content(ctx);
     }
@@ -3375,7 +3375,7 @@ SOKOL_API_IMPL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
     if (!ctx->shaders.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Shaders", &ctx->shaders.open)) {
         sg_imgui_draw_shaders_content(ctx);
     }
@@ -3387,7 +3387,7 @@ SOKOL_API_IMPL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     if (!ctx->pipelines.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(540, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(540, 400), ImGuiCond_Once);
     if (ImGui::Begin("Pipelines", &ctx->pipelines.open)) {
         sg_imgui_draw_pipelines_content(ctx);
     }
@@ -3399,7 +3399,7 @@ SOKOL_API_IMPL void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
     if (!ctx->passes.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Passes", &ctx->passes.open)) {
         sg_imgui_draw_passes_content(ctx);
     }
@@ -3411,7 +3411,7 @@ SOKOL_API_IMPL void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     if (!ctx->capture.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(640, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(640, 400), ImGuiCond_Once);
     if (ImGui::Begin("Frame Capture", &ctx->capture.open)) {
         sg_imgui_draw_capture_content(ctx);
     }
