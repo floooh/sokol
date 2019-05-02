@@ -246,6 +246,11 @@
         to sokol_gfx.h internals, and may change more often than other
         public API functions and structs.
 
+    --- you can ask at runtime what backend sokol_gfx.h has been compiled
+        for, or whether the GLES3 backend had to fall back to GLES2 with:
+
+            sg_backend sg_query_backend(void)
+
     BACKEND-SPECIFIC TOPICS:
     ========================
     --- the GL backends need to know about the internal structure of uniform
@@ -489,6 +494,27 @@ enum {
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128
 };
+
+/*
+    sg_backend
+
+    The active 3D-API backend, use the function sg_query_backend()
+    to get the currently active backend.
+
+    For returned value corresponds with the compile-time define to select
+    a backend, with the only exception of SOKOL_GLES3: this may
+    return SG_BACKEND_GLES2 if the backend has to fallback to GLES2 mode
+    because GLES3 isn't supported.
+*/
+typedef enum sg_backend {
+    SG_BACKEND_GLCORE33,
+    SG_BACKEND_GLES2,
+    SG_BACKEND_GLES3,
+    SG_BACKEND_D3D11,
+    SG_BACKEND_METAL_IOS,
+    SG_BACKEND_METAL_MACOS,
+    SG_BACKEND_DUMMY,
+} sg_backend;
 
 /*
     sg_feature
@@ -1735,6 +1761,7 @@ SOKOL_API_DECL void sg_setup(const sg_desc* desc);
 SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL sg_desc sg_query_desc(void);
+SOKOL_API_DECL sg_backend sg_query_backend(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
@@ -9555,6 +9582,26 @@ SOKOL_API_IMPL bool sg_isvalid(void) {
 
 SOKOL_API_IMPL sg_desc sg_query_desc(void) {
     return _sg.desc;
+}
+
+SOKOL_API_IMPL sg_backend sg_query_backend(void) {
+    #if defined(SOKOL_GLCORE33)
+        return SG_BACKEND_GLCORE33;
+    #elif defined(SOKOL_GLES2)
+        return SG_BACKEND_GLES2;
+    #elif defined(SOKOL_GLES3)
+        return _sg.gl.gles2 ? SG_BACKEND_GLES2 : SG_BACKEND_GLES3;
+    #elif defined(SOKOL_D3D11)
+        return SG_BACKEND_D3D11;
+    #elif defined(SOKOL_METAL)
+        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+            return SG_BACKEND_METAL_MACOS;
+        #else
+            return SG_BACKEND_METAL_IOS;
+        #endif
+    #elif defined(SOKOL_DUMMY_BACKEND)
+        return SG_BACKEND_DUMMY;
+    #endif
 }
 
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {

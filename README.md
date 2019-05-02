@@ -401,6 +401,24 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **02-May-2019** sokol_gfx.h has a new method ```sg_query_backend()```, this
+will return an enum ```sg_backend``` identifying the backend sokol-gfx is
+currently running on, which is one of the following values:
+
+    - SG_BACKEND_GLCORE33
+    - SG_BACKEND_GLES2
+    - SG_BACKEND_GLES3
+    - SG_BACKEND_D3D11
+    - SG_BACKEND_METAL_MACOS
+    - SG_BACKEND_METAL_IOS
+
+    When compiled with SOKOL_GLES3, sg_query_backend() may return SG_BACKEND_GLES2
+    when the runtime platform doesn't support GLES3/WebGL2 and had to fallback
+    to GLES2/WebGL2.
+
+    When compiled with SOKOL_METAL, sg_query_backend() will return SG_BACKEND_METAL_MACOS
+    when the compile target is macOS, and SG_BACKEND_METAL_IOS when the target is iOS.
+
 - **26-Apr-2019** Small but breaking change in **sokol_gfx.h** how the vertex
 layout definition in sg_pipeline_desc works:
 
