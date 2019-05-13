@@ -2867,6 +2867,7 @@ typedef int  GLint;
 #define GL_POINTS 0x0000
 #define GL_ONE_MINUS_SRC_COLOR 0x0301
 #define GL_MIRRORED_REPEAT 0x8370
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;

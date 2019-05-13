@@ -1311,7 +1311,7 @@ typedef struct sg_image_desc {
     sg_shader_desc
 
     The structure sg_shader_desc describes the shaders, uniform blocks
-    texture images and vertex-attribute-names/semantics (required 
+    texture images and vertex-attribute-names/semantics (required
     for GLES2 and D3D11) of a shader stage.
 
     TODO: source code vs byte code, 3D backend API specifics.
@@ -2329,19 +2329,28 @@ typedef struct {
 } _sg_gl_cache_attr_t;
 
 typedef struct {
+    GLenum target;
+    GLuint texture;
+} _sg_gl_texture_bind_slot;
+
+typedef struct {
     sg_depth_stencil_state ds;
     sg_blend_state blend;
     sg_rasterizer_state rast;
     bool polygon_offset_enabled;
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    GLuint cur_gl_vb;
-    GLuint cur_gl_ib;
+    GLuint vertex_buffer;
+    GLuint index_buffer;
+    GLuint stored_vertex_buffer;
+    GLuint stored_index_buffer;
+    _sg_gl_texture_bind_slot textures[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_gl_texture_bind_slot stored_texture;
     int cur_ib_offset;
     GLenum cur_primitive_type;
     GLenum cur_index_type;
     _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
-} _sg_state_cache_t;
+} _sg_gl_state_cache_t;
 
 typedef struct {
     bool valid;
@@ -2352,10 +2361,11 @@ typedef struct {
     _sg_context_t* cur_context;
     _sg_pass_t* cur_pass;
     sg_pass cur_pass_id;
-    _sg_state_cache_t cache;
+    _sg_gl_state_cache_t cache;
     bool features[SG_NUM_FEATURES];
     bool ext_anisotropic;
     GLint max_anisotropy;
+    GLint max_combined_texture_image_units;
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -3804,38 +3814,119 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 }
 
 /*-- state cache implementation ----------------------------------------------*/
-_SOKOL_PRIVATE void _sg_gl_bind_buffer(GLenum target, GLuint buffer, _sg_state_cache_t* cache) {
+_SOKOL_PRIVATE void _sg_gl_clear_buffer_bindings(bool force) {
+    if (force || (_sg.gl.cache.vertex_buffer != 0)) {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        _sg.gl.cache.vertex_buffer = 0;
+    }
+    if (force || (_sg.gl.cache.index_buffer != 0)) {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        _sg.gl.cache.index_buffer = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_bind_buffer(GLenum target, GLuint buffer) {
     SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target));
     if (target == GL_ARRAY_BUFFER) {
-        if (cache->cur_gl_vb != buffer) {
-            cache->cur_gl_vb = buffer;
+        if (_sg.gl.cache.vertex_buffer != buffer) {
+            _sg.gl.cache.vertex_buffer = buffer;
             glBindBuffer(target, buffer);
         }
     }
     else {
-        if (cache->cur_gl_ib != buffer) {
-            cache->cur_gl_ib = buffer;
+        if (_sg.gl.cache.index_buffer != buffer) {
+            _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
         }
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache_t* cache) {
-    SOKOL_ASSERT(cache);
+_SOKOL_PRIVATE void _sg_gl_store_buffer_binding(GLenum target) {
+    if (target == GL_ARRAY_BUFFER) {
+        _sg.gl.cache.stored_vertex_buffer = _sg.gl.cache.vertex_buffer;
+    }
+    else {
+        _sg.gl.cache.stored_index_buffer = _sg.gl.cache.index_buffer;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_restore_buffer_binding(GLenum target) {
+    if (target == GL_ARRAY_BUFFER) {
+        _sg_gl_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
+    }
+    else {
+        _sg_gl_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_clear_texture_bindings(bool force) {
+    for (int i = 0; (i < SG_MAX_SHADERSTAGE_IMAGES) && (i < _sg.gl.max_combined_texture_image_units); i++) {
+        if (force || (_sg.gl.cache.textures[i].texture != 0)) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+            #if !defined(SOKOL_GLES2)
+            glBindTexture(GL_TEXTURE_3D, 0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            #endif
+            _sg.gl.cache.textures[i].target = 0;
+            _sg.gl.cache.textures[i].texture = 0;
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_bind_texture(int slot_index, GLenum target, GLuint texture) {
+    /* it's valid to call this function with target=0 and/or texture=0
+       target=0 will unbind the previous binding, texture=0 will clear
+       the new binding
+    */
+    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    if (slot_index >= _sg.gl.max_combined_texture_image_units) {
+        return;
+    }
+    _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.textures[slot_index];
+    if ((slot->target != target) || (slot->texture != texture)) {
+        glActiveTexture(GL_TEXTURE0 + slot_index);
+        /* if the target has changed, clear the previous binding on that target */
+        if ((target != slot->target) && (slot->target != 0)) {
+            glBindTexture(slot->target, 0);
+        }
+        /* apply new binding (texture can be 0 to unbind) */
+        if (target != 0) {
+            glBindTexture(target, texture);
+        }
+        slot->target = target;
+        slot->texture = texture;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_store_texture_binding(int slot_index) {
+    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    _sg.gl.cache.stored_texture = _sg.gl.cache.textures[slot_index];
+}
+
+_SOKOL_PRIVATE void _sg_gl_restore_texture_binding(int slot_index) {
+    SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
+    const _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.stored_texture;
+    _sg_gl_bind_texture(slot_index, slot->target, slot->texture);
+}
+
+_SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     _SG_GL_CHECK_ERROR();
-    memset(cache, 0, sizeof(_sg_state_cache_t));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    memset(&_sg.gl.cache, 0, sizeof(_sg.gl.cache));
+    _sg_gl_clear_buffer_bindings(true);
+    _SG_GL_CHECK_ERROR();
+    _sg_gl_clear_texture_bindings(true);
     _SG_GL_CHECK_ERROR();
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_gl_init_attr(&cache->attrs[i].gl_attr);
+        _sg_gl_init_attr(&_sg.gl.cache.attrs[i].gl_attr);
         glDisableVertexAttribArray(i);
         _SG_GL_CHECK_ERROR();
     }
-    cache->cur_primitive_type = GL_TRIANGLES;
+    _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
 
     /* depth-stencil state */
-    _sg_gl_init_depth_stencil_state(&cache->ds);
+    _sg_gl_init_depth_stencil_state(&_sg.gl.cache.ds);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_FALSE);
@@ -3845,7 +3936,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache_t* cache) {
     glStencilMask(0);
 
     /* blend state */
-    _sg_gl_init_blend_state(&cache->blend);
+    _sg_gl_init_blend_state(&_sg.gl.cache.blend);
     glDisable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
     glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -3853,7 +3944,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_state_cache_t* cache) {
     glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     /* rasterizer state */
-    _sg_gl_init_rasterizer_state(&cache->rast);
+    _sg_gl_init_rasterizer_state(&_sg.gl.cache.rast);
     glPolygonOffset(0.0f, 0.0f);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_CULL_FACE);
@@ -3962,6 +4053,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     if (_sg.gl.ext_anisotropic) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &_sg.gl.max_anisotropy);
     }
+    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &_sg.gl.max_combined_texture_image_units);
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
@@ -3978,7 +4070,7 @@ _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
             _SG_GL_CHECK_ERROR();
         }
         #endif
-        _sg_gl_reset_state_cache(&_sg.gl.cache);
+        _sg_gl_reset_state_cache();
     }
 }
 
@@ -4047,12 +4139,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
         }
         else {
             glGenBuffers(1, &gl_buf);
-            _sg_gl_bind_buffer(gl_target, gl_buf, &_sg.gl.cache);
+            _sg_gl_store_buffer_binding(gl_target);
+            _sg_gl_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->size, 0, gl_usage);
             if (buf->usage == SG_USAGE_IMMUTABLE) {
                 SOKOL_ASSERT(desc->content);
                 glBufferSubData(gl_target, 0, buf->size, desc->content);
             }
+            _sg_gl_restore_buffer_binding(gl_target);
         }
         buf->gl_buf[slot] = gl_buf;
     }
@@ -4183,8 +4277,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             const bool is_compressed = _sg_is_compressed_pixel_format(img->pixel_format);
             for (int slot = 0; slot < img->num_slots; slot++) {
                 glGenTextures(1, &img->gl_tex[slot]);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(img->gl_target, img->gl_tex[slot]);
+                _sg_gl_store_texture_binding(0);
+                _sg_gl_bind_texture(0, img->gl_target, img->gl_tex[slot]);
                 GLenum gl_min_filter = _sg_gl_filter(img->min_filter);
                 GLenum gl_mag_filter = _sg_gl_filter(img->mag_filter);
                 glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
@@ -4269,6 +4363,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                         #endif
                     }
                 }
+                _sg_gl_restore_texture_binding(0);
             }
         }
     }
@@ -5059,8 +5154,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
                 SOKOL_ASSERT(img && img->gl_target);
                 SOKOL_ASSERT((shd_img->gl_tex_slot != -1) && gl_tex);
                 glUniform1i(shd_img->gl_loc, shd_img->gl_tex_slot);
-                glActiveTexture(GL_TEXTURE0+shd_img->gl_tex_slot);
-                glBindTexture(img->gl_target, gl_tex);
+                _sg_gl_bind_texture(shd_img->gl_tex_slot, img->gl_target, gl_tex);
             }
         }
     }
@@ -5068,7 +5162,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
 
     /* index buffer (can be 0) */
     const GLuint gl_ib = ib ? ib->gl_buf[ib->active_slot] : 0;
-    _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib, &_sg.gl.cache);
+    _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     _sg.gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
@@ -5093,7 +5187,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
                 (vb_offset != cache_attr->gl_attr.offset) ||
                 (cache_attr->gl_attr.divisor != attr->divisor))
             {
-                _sg_gl_bind_buffer(GL_ARRAY_BUFFER, gl_vb, &_sg.gl.cache);
+                _sg_gl_bind_buffer(GL_ARRAY_BUFFER, gl_vb);
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
@@ -5200,6 +5294,9 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
 
 _SOKOL_PRIVATE void _sg_commit(void) {
     SOKOL_ASSERT(!_sg.gl.in_pass);
+    /* "soft" clear bindings (only those that are actually bound) */
+    _sg_gl_clear_buffer_bindings(false);
+    _sg_gl_clear_texture_bindings(false);
 }
 
 _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
@@ -5213,8 +5310,10 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
-    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg.gl.cache);
+    _sg_gl_store_buffer_binding(gl_tgt);
+    _sg_gl_bind_buffer(gl_tgt, gl_buf);
     glBufferSubData(gl_tgt, 0, data_size, data_ptr);
+    _sg_gl_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
 }
 
@@ -5230,8 +5329,10 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     GLuint gl_buf = buf->gl_buf[buf->active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
-    _sg_gl_bind_buffer(gl_tgt, gl_buf, &_sg.gl.cache);
+    _sg_gl_store_buffer_binding(gl_tgt);
+    _sg_gl_bind_buffer(gl_tgt, gl_buf);
     glBufferSubData(gl_tgt, buf->append_pos, data_size, data_ptr);
+    _sg_gl_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
 }
 
@@ -5243,7 +5344,8 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* d
     }
     SOKOL_ASSERT(img->active_slot < SG_NUM_INFLIGHT_FRAMES);
     SOKOL_ASSERT(0 != img->gl_tex[img->active_slot]);
-    glBindTexture(img->gl_target, img->gl_tex[img->active_slot]);
+    _sg_gl_store_texture_binding(0);
+    _sg_gl_bind_texture(0, img->gl_target, img->gl_tex[img->active_slot]);
     const GLenum gl_img_format = _sg_gl_teximage_format(img->pixel_format);
     const GLenum gl_img_type = _sg_gl_teximage_type(img->pixel_format);
     const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
@@ -5286,6 +5388,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* d
             #endif
         }
     }
+    _sg_gl_restore_texture_binding(0);
 }
 
 /*== D3D11 BACKEND IMPLEMENTATION ============================================*/
@@ -6458,7 +6561,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     _sg.d3d11.cur_pipeline = pip;
     _sg.d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg.d3d11.use_indexed_draw = (pip->d3d11_index_format != DXGI_FORMAT_UNKNOWN);
-    
+
     ID3D11DeviceContext_RSSetState(_sg.d3d11.ctx, pip->d3d11_rs);
     ID3D11DeviceContext_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11_dss, pip->d3d11_stencil_ref);
     ID3D11DeviceContext_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11_bs, pip->blend_color, 0xFFFFFFFF);
@@ -8116,7 +8219,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
         }
     }
 }
-    
+
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
 _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -8389,7 +8492,7 @@ _SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int s
     SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
     SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
     uint32_t ctr = ++pool->gen_ctrs[slot_index];
-    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK); 
+    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK);
     slot->state = SG_RESOURCESTATE_ALLOC;
     return slot->id;
 }
@@ -10114,7 +10217,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {
-    #if defined(SOKOL_DEBUG) 
+    #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_valid) {
             SOKOL_LOG("attempting to draw without resource bindings");
         }
