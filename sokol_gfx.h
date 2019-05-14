@@ -1310,11 +1310,34 @@ typedef struct sg_image_desc {
 /*
     sg_shader_desc
 
-    The structure sg_shader_desc describes the shaders, uniform blocks
-    texture images and vertex-attribute-names/semantics (required
-    for GLES2 and D3D11) of a shader stage.
+    The structure sg_shader_desc defines all creation parameters
+    for shader programs, used as input to the sg_make_shader() function:
 
-    TODO: source code vs byte code, 3D backend API specifics.
+    - reflection information for vertex attributes (vertex shader inputs):
+        - vertex attribute name (required for GLES2, optional for GLES3 and GL)
+        - a semantic name and index (required for D3D11)
+    - for each vertex- and fragment-shader-stage:
+        - the shader source or bytecode
+        - an optional entry function name
+        - reflection info for each uniform block used by the shader stage:
+            - the size of the uniform block in bytes
+            - reflection info for each uniform block member (only required for GL backends):
+                - member name
+                - member type (SG_UNIFORMTYPE_xxx)
+                - if the member is an array, the number of array items
+        - reflection info for the texture images used by the shader stage:
+            - the image type (SG_IMAGETYPE_xxx)
+            - the name of the texture sampler (required for GLES2, optional everywhere else)
+
+    For all GL backends, shader source-code must be provided. For D3D11 and Metal,
+    either shader source-code or byte-code can be provided. If source code
+    is provided for D3D11, define SOKOL_D3D11_SHADER_COMPILER before
+    including the sokol_gfx.h implementation, this will link the executable
+    with the D3D shader compiler DLL which is required to compile
+    HLSL to D3D bytecode.
+
+    (FIXME: the D3D shader compiler DLL should not be linked, but loaded
+    on demand with LoadLibrary).
 */
 typedef struct sg_shader_attr_desc {
     const char* name;           /* GLSL vertex attribute name (only required for GLES2) */
@@ -1363,7 +1386,7 @@ typedef struct sg_shader_desc {
     for an sg_pipeline object, used as argument to the
     sg_make_pipeline() function:
 
-    - the complete vertex layout for all input vertex buffers
+    - the vertex layout for all input vertex buffers
     - a shader object
     - the 3D primitive type (points, lines, triangles, ...)
     - the index type (none, 16- or 32-bit)
@@ -1389,9 +1412,6 @@ typedef struct sg_shader_desc {
             .buffer_index   0 the vertex buffer bind slot
             .offset         0 (offsets can be omitted if the vertex layout has no gaps)
             .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
-            .name           0 (GLES2 requires an attribute name here)
-            .sem_name       0 (D3D11 requires a semantic name here)
-            .sem_index      0 (D3D11 requires a semantic index here)
     .shader:            0 (must be intilized with a valid sg_shader id!)
     .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
     .index_type:        SG_INDEXTYPE_NONE
