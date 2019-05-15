@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**26-Apr-2019**: breaking change in sokol_gfx.h)
+[See what's new](#updates) (**15-May-2019**: shader cross-compiling for sokol_gfx.h!)
 
 Minimalistic header-only cross-platform libs in C:
 
@@ -50,7 +50,8 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 - simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
-- does *not* provide shader dialect cross-translation
+- does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
+seamlessly integrates with sokol_gfx.h and IDEs: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
 A triangle in C99 with GLFW and FlextGL:
 
@@ -401,6 +402,19 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **15-May-2019** there's now an optional shader-cross-compiler solution for
+sokol_gfx.h: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md).
+This is "V1.0" with two notable features missing:
+
+    - an include-file feature for GLSL shaders
+    - compilation to Metal- and D3D-bytecode (currently
+      only source-code generation is supported)
+
+    The [sokol-app samples](https://floooh.github.io/sokol-html5/) have been
+    ported to the new shader-cross-compilation, follow the ```src``` and
+    ```glsl``` links on the specific sample webpages to see the C- and GLSL-
+    source-code.
+
 - **02-May-2019** sokol_gfx.h has a new function ```sg_query_backend()```, this
 will return an enum ```sg_backend``` identifying the backend sokol-gfx is
 currently running on, which is one of the following values:
@@ -423,12 +437,12 @@ currently running on, which is one of the following values:
 layout definition in sg_pipeline_desc works:
 
     Vertex component names and semantics (needed by the GLES2 and D3D11 backends) have moved from ```sg_pipeline_desc``` into ```sg_shader_desc```.
-    
+
     This may seem like a rather pointless small detail to change, expecially
     for breaking existing code, but the whole thing will make a bit more
     sense when the new shader-cross-compiler will be integrated which I'm
     currently working on (here: https://github.com/floooh/sokol-tools).
-    
+
     While working on getting reflection data out of the shaders (e.g. what
     uniform blocks and textures the shader uses), it occured to me that
     vertex-attribute-names and -semantics are actually part of the reflection
@@ -619,7 +633,7 @@ implementing optional debug-inspection-UI headers on top of Dear ImGui:
       contain a slowly growing set of optional debug-inspection-UI headers
       which allow to peek under the hood of the Sokol headers. The UIs are
       implemented with [Dear ImGui](https://github.com/ocornut/imgui). Again,
-      see the README in the 'imgui' directory and the headers in there 
+      see the README in the 'imgui' directory and the headers in there
       for details, and check out the live demos on the [Sokol Sample Webpage](https://floooh.github.io/sokol-html5/)
       (click on the little UI buttons in the top right corner of each thumbnail)
 
@@ -635,7 +649,7 @@ in https://github.com/floooh/sokol-samples
 sokol_app.h for details and documentation.
 
 - **26-Jan-2019**: sokol_app.h now has an Android backend contributed by
-  [Gustav Olsson](https://github.com/gustavolsson)! 
+  [Gustav Olsson](https://github.com/gustavolsson)!
   See the [sokol-samples readme](https://github.com/floooh/sokol-samples/blob/master/README.md)
   for build instructions.
 
@@ -649,11 +663,11 @@ sokol_app.h for details and documentation.
       repository which mainly tests the resource pool system)
 
 - **12-Jan-2019**: sokol_gfx.h - setting the pipeline state and resource
-bindings now happens in separate calls, specifically: 
+bindings now happens in separate calls, specifically:
     - *sg_apply_draw_state()* has been replaced with *sg_apply_pipeline()* and
     *sg_apply_bindings()*
     - the *sg_draw_state* struct has been replaced with *sg_bindings*
-    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()*
 
 All existing code will still work. See [this blog
 post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
