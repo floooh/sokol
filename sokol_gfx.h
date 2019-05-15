@@ -2,6 +2,8 @@
 /*
     sokol_gfx.h -- simple 3D API wrapper
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -80,6 +82,10 @@
     For complete code examples using the various backend 3D-APIs, see:
 
         https://github.com/floooh/sokol-samples
+
+    For an optional shader-cross-compile solution, see:
+
+        https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md
 
 
     STEP BY STEP
@@ -3886,8 +3892,10 @@ _SOKOL_PRIVATE void _sg_gl_clear_texture_bindings(bool force) {
             glBindTexture(GL_TEXTURE_2D, 0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             #if !defined(SOKOL_GLES2)
-            glBindTexture(GL_TEXTURE_3D, 0);
-            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            if (!_sg.gl.gles2) {
+                glBindTexture(GL_TEXTURE_3D, 0);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            }
             #endif
             _sg.gl.cache.textures[i].target = 0;
             _sg.gl.cache.textures[i].texture = 0;
