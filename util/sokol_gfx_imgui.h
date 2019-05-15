@@ -2,6 +2,8 @@
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_GFX_IMGUI_IMPL
     before you include this file in *one* C++ file to create the
@@ -684,7 +686,7 @@ _SOKOL_PRIVATE void _sg_imgui_snprintf(sg_imgui_str_t* dst, const char* fmt, ...
     SOKOL_ASSERT(dst);
     va_list args;
     va_start(args, fmt);
-    vsnprintf(dst->buf, sizeof(dst->buf), fmt, args); 
+    vsnprintf(dst->buf, sizeof(dst->buf), fmt, args);
     dst->buf[sizeof(dst->buf)-1] = 0;
     va_end(args);
 }
@@ -1270,13 +1272,13 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
     sg_imgui_str_t str = _sg_imgui_make_str(0);
     sg_imgui_str_t res_id = _sg_imgui_make_str(0);
     switch (item->cmd) {
-        case SG_IMGUI_CMD_QUERY_FEATURE: 
+        case SG_IMGUI_CMD_QUERY_FEATURE:
             _sg_imgui_snprintf(&str, "%d: sg_query_feature(feature=%s) => %s",
                 index,
                 _sg_imgui_feature_string(item->args.query_feature.feature),
                 _sg_imgui_bool_string(item->args.query_feature.result));
             break;
-        
+
         case SG_IMGUI_CMD_RESET_STATE_CACHE:
             _sg_imgui_snprintf(&str, "%d: sg_reset_state_cache()", index);
             break;
@@ -1333,7 +1335,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 
         case SG_IMGUI_CMD_UPDATE_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)", 
+            _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)",
                 index, res_id.buf,
                 item->args.update_buffer.data_size);
             break;
@@ -1345,7 +1347,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 
         case SG_IMGUI_CMD_APPEND_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d", 
+            _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d",
                 index, res_id.buf,
                 item->args.append_buffer.data_size,
                 item->args.append_buffer.result);
@@ -2811,7 +2813,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             if (ImGui::TreeNode("Vertex Layout")) {
                 _sg_imgui_draw_vertex_layout(&pip_ui->desc.layout);
                 ImGui::TreePop();
-            } 
+            }
             if (ImGui::TreeNode("Depth Stencil State")) {
                 _sg_imgui_draw_depth_stencil_state(&pip_ui->desc.depth_stencil);
                 ImGui::TreePop();

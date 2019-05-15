@@ -2,6 +2,8 @@
 /*
     sokol_app.h -- cross-platform application wrapper
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -330,9 +332,9 @@
     - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
     - do *not* provide a sokol_main() function
     - instead provide the standard main() function of the platform
-    - from the main function, call the function ```sapp_run()``` which 
+    - from the main function, call the function ```sapp_run()``` which
       takes a pointer to an ```sapp_desc``` structure.
-    - ```sapp_run()``` takes over control and calls the provided init-, frame-, 
+    - ```sapp_run()``` takes over control and calls the provided init-, frame-,
       shutdown- and event-callbacks just like in the default model, it
       will only return when the application quits (or not at all on some
       platforms, like emscripten)
@@ -596,7 +598,7 @@ typedef struct sapp_desc {
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
-    
+
     void* user_data;                        /* these are the user-provided callbacks with user data */
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
@@ -4347,7 +4349,7 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
             SOKOL_ASSERT(egl_result == EGL_TRUE);
             /* NOTE: calling ANativeWindow_setBuffersGeometry() with the same dimensions
                 as the ANativeWindow size results in weird display artefacts, that's
-                why it's only called when the buffer geometry is different from 
+                why it's only called when the buffer geometry is different from
                 the window size
             */
             int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
