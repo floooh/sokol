@@ -543,6 +543,7 @@ typedef enum sg_feature {
     SG_FEATURE_MULTIPLE_RENDER_TARGET,
     SG_FEATURE_IMAGETYPE_3D,
     SG_FEATURE_IMAGETYPE_ARRAY,
+    SG_FEATURE_COMPUTE,
 
     SG_NUM_FEATURES
 } sg_feature;
@@ -4028,6 +4029,10 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
                 _sg.gl.ext_anisotropic = true;
                 continue;
             }
+            else if (strstr(ext, "_compute_shader")) {
+                _sg.gl.features[SG_FEATURE_COMPUTE] = true;
+                continue;
+            }
         }
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
@@ -4057,6 +4062,8 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             strstr(ext, "_compressed_texture_atc");
         _sg.gl.ext_anisotropic =
             strstr(ext, "_texture_filter_anisotropic");
+        _sg.gl.features[SG_FEATURE_COMPUTE] =
+            strstr(ext, "_compute_shader");
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
         _sg.gl.features[SG_FEATURE_INSTANCING] =
