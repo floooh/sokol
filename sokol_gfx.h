@@ -2514,6 +2514,7 @@ typedef struct {
     bool valid;
     ID3D11Device* dev;
     ID3D11DeviceContext* ctx;
+    D3D_FEATURE_LEVEL feature_level;
     const void* (*rtv_cb)(void);
     const void* (*dsv_cb)(void);
     bool in_pass;
@@ -5691,6 +5692,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg.d3d11.valid = true;
     _sg.d3d11.dev = (ID3D11Device*) desc->d3d11_device;
     _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->d3d11_device_context;
+    _sg.d3d11.feature_level = _sg.d3d11.dev->GetFeatureLevel();
     _sg.d3d11.rtv_cb = desc->d3d11_render_target_view_cb;
     _sg.d3d11.dsv_cb = desc->d3d11_depth_stencil_view_cb;
 }
@@ -5712,6 +5714,8 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         case SG_FEATURE_IMAGETYPE_3D:
         case SG_FEATURE_IMAGETYPE_ARRAY:
             return true;
+        case SG_FEATURE_COMPUTE:
+            return _sg.d3d11.feature_level >= D3D_FEATURE_LEVEL_10_0;
         default:
             return false;
     }
@@ -7354,6 +7358,7 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         case SG_FEATURE_MULTIPLE_RENDER_TARGET:
         case SG_FEATURE_IMAGETYPE_3D:
         case SG_FEATURE_IMAGETYPE_ARRAY:
+        case SG_FEATURE_COMPUTE:
             return true;
         default:
             return false;
