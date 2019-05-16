@@ -405,7 +405,7 @@ Mainly some "missing features" for desktop apps:
 - **16-May-2019** two new utility headers: *sokol_cimgui.h* and *sokol_gfx_cimgui.h*,
 those are the same as their counterparts sokol_imgui.h and sokol_gfx_imgui.h, but
 use the [cimgui](https://github.com/cimgui/cimgui) C-API for Dear ImGui. This
-is useful don't want to, or cannot use C++ for creating Dear ImGui UIs.
+is useful if you don't want to - or cannot - use C++ for creating Dear ImGui UIs.
 
     Many thanks to @prime31 for contributing those!
 
