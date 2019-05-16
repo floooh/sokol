@@ -405,8 +405,14 @@ Mainly some "missing features" for desktop apps:
 - **16-May-2019** two new utility headers: *sokol_cimgui.h* and *sokol_gfx_cimgui.h*,
 those are the same as their counterparts sokol_imgui.h and sokol_gfx_imgui.h, but
 use the [cimgui](https://github.com/cimgui/cimgui) C-API for Dear ImGui. This
-is useful don't want to, or cannot use C++ for creating Dear ImGui UIs. Many
-thanks to @prime31 for contributing those!
+is useful don't want to, or cannot use C++ for creating Dear ImGui UIs.
+
+    Many thanks to @prime31 for contributing those!
+
+    sokol_cimgui.h [is used
+here](https://floooh.github.io/sokol-html5/wasm/cimgui-sapp.html), and
+sokol_gfx_cimgui.h is used for the [debugging UI
+here](https://floooh.github.io/sokol-html5/wasm/sgl-microui-sapp-ui.html)
 
 - **15-May-2019** there's now an optional shader-cross-compiler solution for
 sokol_gfx.h: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md).
