@@ -1570,6 +1570,10 @@ typedef struct sg_pass_desc {
     uint32_t _end_canary;
 } sg_pass_desc;
 
+typedef struct sg_pixel_format_info {
+    bool supported;
+} sg_pixel_format_info;
+
 /*
     sg_trace_hooks
 
@@ -1789,6 +1793,7 @@ SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL sg_desc sg_query_desc(void);
 SOKOL_API_DECL sg_backend sg_query_backend(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
+SOKOL_API_DECL sg_pixel_format_info sg_query_pixel_format_info(sg_pixel_format format);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
 SOKOL_API_DECL void sg_push_debug_group(const char* name);
@@ -3157,6 +3162,13 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     _SOKOL_UNUSED(f);
     return true;
+}
+
+_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
+    _SOKOL_UNUSED(format);
+    sg_pixel_format_info info;
+    memset(&info, 0, sizeof(info));
+    return info;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
@@ -9738,6 +9750,12 @@ SOKOL_API_IMPL sg_backend sg_query_backend(void) {
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
     bool res = _sg_query_feature(f);
     _SG_TRACE_ARGS(query_feature, f, res);
+    return res;
+}
+
+SOKOL_API_IMPL sg_pixel_format_info sg_query_pixel_format_info(sg_pixel_format format) {
+    sg_pixel_format_info res = _sg_query_pixel_format_info(format);
+    //_SG_TRACE_ARGS(query_pixel_format_info, format, res);
     return res;
 }
 
