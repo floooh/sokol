@@ -4119,6 +4119,12 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     return _sg.gl.features[f];
 }
 
+_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
+    sg_pixel_format_info info;
+    memset(&info, 0, sizeof(info));
+    return info;
+}
+
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
@@ -5720,6 +5726,12 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
+}
+
+_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
+    sg_pixel_format_info info;
+    memset(&info, 0, sizeof(info));
+    return info;
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
@@ -7363,6 +7375,12 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
+}
+
+_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
+    sg_pixel_format_info info;
+    memset(&info, 0, sizeof(info));
+    return info;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
