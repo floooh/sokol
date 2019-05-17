@@ -1572,6 +1572,9 @@ typedef struct sg_pass_desc {
 
 typedef struct sg_pixel_format_info {
     bool supported;
+    uint32_t max_width;
+    uint32_t max_height;
+    uint32_t max_depth;
 } sg_pixel_format_info;
 
 /*
@@ -4135,7 +4138,33 @@ _SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format 
     memset(&info, 0, sizeof(info));
     switch(format) {
         case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_RGB8:
+        case SG_PIXELFORMAT_RGBA4:
+        case SG_PIXELFORMAT_R5G6B5:
+        case SG_PIXELFORMAT_R5G5B5A1:
+        case SG_PIXELFORMAT_R10G10B10A2:
+        case SG_PIXELFORMAT_RGBA32F:
+        case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_R16F:
+        case SG_PIXELFORMAT_L8:
             info.supported = true;
+            info.max_width = _sg.gl.max_texture_size;
+            info.max_height = _sg.gl.max_texture_size;
+            info.max_depth = _sg.gl.max_cube_texture_size;
+            break;
+        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_DXT5:
+            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
+            if (info.supported) {
+                info.max_width = _sg.gl.max_texture_size;
+                info.max_height = _sg.gl.max_texture_size;
+                info.max_depth = _sg.gl.max_cube_texture_size;
+            }
+            break;
+        default:
+            SOKOL_UNREACHABLE; return 0;
     }
 
     return info;
