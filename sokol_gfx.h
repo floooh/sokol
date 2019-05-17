@@ -4173,6 +4173,36 @@ _SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format 
                 info.max_layers = _sg.gl.max_array_layers;
             }
             break;
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTHSTENCIL:
+            info.supported = true;
+            info.max_width = _sg.gl.max_texture_size;
+            info.max_height = _sg.gl.max_texture_size;
+            info.max_depth = 1;
+            info.max_layers = _sg.gl.max_array_layers;
+            break;
+        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC4_RGBA:
+            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
+            if (info.supported) {
+                info.max_width = _sg.gl.max_texture_size;
+                info.max_height = _sg.gl.max_texture_size;
+                info.max_depth = _sg.gl.max_cube_texture_size;
+                info.max_layers = _sg.gl.max_array_layers;
+            }
+            break;
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_SRGB8:
+            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
+            if (info.supported) {
+                info.max_width = _sg.gl.max_texture_size;
+                info.max_height = _sg.gl.max_texture_size;
+                info.max_depth = _sg.gl.max_cube_texture_size;
+                info.max_layers = _sg.gl.max_array_layers;
+            }
+            break;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
