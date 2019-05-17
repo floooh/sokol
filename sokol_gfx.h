@@ -1575,6 +1575,7 @@ typedef struct sg_pixel_format_info {
     uint32_t max_width;
     uint32_t max_height;
     uint32_t max_depth;
+    uint32_t max_layers;
 } sg_pixel_format_info;
 
 /*
@@ -2403,6 +2404,7 @@ typedef struct {
     GLint max_texture_size;
     GLint max_cube_texture_size;
     GLint max_3d_texture_size;
+    GLint max_array_layers;
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -4050,6 +4052,9 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
         // Get 3D max texture size.
         glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &_sg.gl.max_3d_texture_size);
+
+        // Get max array layers.
+        glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &_sg.gl.max_array_layers);
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
         if (!_sg.gl.gles2) {
@@ -4064,6 +4069,9 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
             // Get 3D max texture size.
             glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &_sg.gl.max_3d_texture_size);
+
+            // Get max array layers.
+            glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &_sg.gl.max_array_layers);
         }
         else {
             _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
@@ -4152,6 +4160,7 @@ _SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format 
             info.max_width = _sg.gl.max_texture_size;
             info.max_height = _sg.gl.max_texture_size;
             info.max_depth = _sg.gl.max_cube_texture_size;
+            info.max_layers = _sg.gl.max_array_layers;
             break;
         case SG_PIXELFORMAT_DXT1:
         case SG_PIXELFORMAT_DXT3:
@@ -4161,6 +4170,7 @@ _SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format 
                 info.max_width = _sg.gl.max_texture_size;
                 info.max_height = _sg.gl.max_texture_size;
                 info.max_depth = _sg.gl.max_cube_texture_size;
+                info.max_layers = _sg.gl.max_array_layers;
             }
             break;
         default:
