@@ -2397,6 +2397,9 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
+    GLint max_texture_size;
+    GLint max_cube_texture_size;
+    GLint max_3d_texture_size;
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -4041,6 +4044,9 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
                 continue;
             }
         }
+
+        // Get 3D max texture size.
+        glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &_sg.gl.max_3d_texture_size);
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
         if (!_sg.gl.gles2) {
@@ -4052,6 +4058,9 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
             _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
             _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+
+            // Get 3D max texture size.
+            glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &_sg.gl.max_3d_texture_size);
         }
         else {
             _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
@@ -4094,6 +4103,8 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &_sg.gl.max_anisotropy);
     }
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &_sg.gl.max_combined_texture_image_units);
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &_sg.gl.max_texture_size);
+    glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &_sg.gl.max_cube_texture_size);
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
@@ -4122,6 +4133,11 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
 _SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
     sg_pixel_format_info info;
     memset(&info, 0, sizeof(info));
+    switch(format) {
+        case SG_PIXELFORMAT_RGBA8:
+            info.supported = true;
+    }
+
     return info;
 }
 
