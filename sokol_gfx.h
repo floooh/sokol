@@ -4020,62 +4020,68 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
         for (int i = 0; i < num_ext; i++) {
             const char* ext = (const char*) glGetStringi(GL_EXTENSIONS, i);
-            if (strstr(ext, "_texture_compression_s3tc")) {
-                _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
-                continue;
-            }
-            else if (strstr(ext, "_texture_filter_anisotropic")) {
-                _sg.gl.ext_anisotropic = true;
-                continue;
+            if( ext ) {
+                if (strstr(ext, "_texture_compression_s3tc")) {
+                    _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
+                    continue;
+                }
+                else if (strstr(ext, "_texture_filter_anisotropic")) {
+                    _sg.gl.ext_anisotropic = true;
+                    continue;
+                }
             }
         }
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        if (!_sg.gl.gles2) {
-            _sg.gl.features[SG_FEATURE_INSTANCING] = true;
-            _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
-            _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
-            _sg.gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
-            _sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
-            _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
-            _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
-            _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+        if( ext ) {
+            if (!_sg.gl.gles2) {
+                _sg.gl.features[SG_FEATURE_INSTANCING] = true;
+                _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
+                _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = true;
+                _sg.gl.features[SG_FEATURE_IMAGETYPE_3D] = true;
+                _sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY] = true;
+                _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
+                _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
+                _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+            }
+            else {
+                _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
+                _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
+                _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+            }
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+                strstr(ext, "_texture_compression_s3tc") ||
+                strstr(ext, "_compressed_texture_s3tc") ||
+                strstr(ext, "texture_compression_dxt1");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+                strstr(ext, "_texture_compression_pvrtc") ||
+                strstr(ext, "_compressed_texture_pvrtc");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
+                strstr(ext, "_compressed_texture_atc");
+            _sg.gl.ext_anisotropic =
+                strstr(ext, "_texture_filter_anisotropic");
         }
-        else {
-            _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
-            _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
-            _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
-        }
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
-            strstr(ext, "_texture_compression_s3tc") ||
-            strstr(ext, "_compressed_texture_s3tc") ||
-            strstr(ext, "texture_compression_dxt1");
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
-            strstr(ext, "_texture_compression_pvrtc") ||
-            strstr(ext, "_compressed_texture_pvrtc");
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
-            strstr(ext, "_compressed_texture_atc");
-        _sg.gl.ext_anisotropic =
-            strstr(ext, "_texture_filter_anisotropic");
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        _sg.gl.features[SG_FEATURE_INSTANCING] =
-            strstr(ext, "_instanced_arrays");
-        _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] =
-            strstr(ext, "_texture_float");
-        _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] =
-            strstr(ext, "_texture_half_float");
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
-            strstr(ext, "_texture_compression_s3tc") ||
-            strstr(ext, "_compressed_texture_s3tc") ||
-            strstr(ext, "texture_compression_dxt1");
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
-            strstr(ext, "_texture_compression_pvrtc") ||
-            strstr(ext, "_compressed_texture_pvrtc");
-        _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
-            strstr(ext, "_compressed_texture_atc");
-        _sg.gl.ext_anisotropic =
-            strstr(ext, "_texture_filter_anisotropic");
+        if( ext ) {
+            _sg.gl.features[SG_FEATURE_INSTANCING] =
+                strstr(ext, "_instanced_arrays");
+            _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] =
+                strstr(ext, "_texture_float");
+            _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] =
+                strstr(ext, "_texture_half_float");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
+                strstr(ext, "_texture_compression_s3tc") ||
+                strstr(ext, "_compressed_texture_s3tc") ||
+                strstr(ext, "texture_compression_dxt1");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC] =
+                strstr(ext, "_texture_compression_pvrtc") ||
+                strstr(ext, "_compressed_texture_pvrtc");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ATC] =
+                strstr(ext, "_compressed_texture_atc");
+            _sg.gl.ext_anisotropic =
+                strstr(ext, "_texture_filter_anisotropic");
+        }
     #endif
     _sg.gl.max_anisotropy = 1;
     if (_sg.gl.ext_anisotropic) {
