@@ -5,6 +5,8 @@ bird of prey than the Eagle (Орёл, Oryol)
 
 [See what's new](#updates) (**15-May-2019**: shader cross-compiling for sokol_gfx.h!)
 
+[Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
+
 Minimalistic header-only cross-platform libs in C:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
@@ -12,9 +14,6 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
-
-These are (mainly) the internal parts of the Oryol C++ framework
-rewritten in pure C as standalone header-only libs.
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
@@ -24,13 +23,9 @@ All headers are standalone and can be used indepedendently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
-asm.js/wasm live demos: https://floooh.github.io/sokol-html5/index.html
+Command line tools: https://github.com/floooh/sokol-tools
 
 Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
-
-Nim bindings: https://github.com/floooh/sokol-nim
-
-Nim samples: https://github.com/floooh/sokol-nim-samples
 
 ### Why C:
 
