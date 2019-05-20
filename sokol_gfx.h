@@ -4020,7 +4020,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
         for (int i = 0; i < num_ext; i++) {
             const char* ext = (const char*) glGetStringi(GL_EXTENSIONS, i);
-            if( ext ) {
+            if (ext) {
                 if (strstr(ext, "_texture_compression_s3tc")) {
                     _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] = true;
                     continue;
@@ -4033,7 +4033,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         }
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        if( ext ) {
+        if (ext) {
             if (!_sg.gl.gles2) {
                 _sg.gl.features[SG_FEATURE_INSTANCING] = true;
                 _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = true;
@@ -4063,7 +4063,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         }
     #elif defined(SOKOL_GLES2)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
-        if( ext ) {
+        if (ext) {
             _sg.gl.features[SG_FEATURE_INSTANCING] =
                 strstr(ext, "_instanced_arrays");
             _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] =
