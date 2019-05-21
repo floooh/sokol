@@ -2,6 +2,8 @@
 /*
     sokol_audio.h -- cross-platform audio-streaming API
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -9,7 +11,7 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_AUDIO_NO_BACKEND  - use a dummy backend
+    SOKOL_DUMMY_BACKEND - use a dummy backend
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
@@ -352,6 +354,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_AUDIO_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -397,6 +400,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_IMPL
+#define SOKOL_AUDIO_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
 #ifndef SOKOL_API_IMPL
@@ -839,7 +843,7 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
 }
 
 /*=== DUMMY BACKEND IMPLEMENTATION ===========================================*/
-#if defined(SOKOL_AUDIO_NO_BACKEND)
+#if defined(SOKOL_DUMMY_BACKEND)
 _SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 

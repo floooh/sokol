@@ -1,2 +1,2 @@
 exports:
-  header-dirs: [ ".", "imgui" ]
+  header-dirs: [ ".", "util" ]
