@@ -408,6 +408,51 @@
     imgui/sokol_gfx_imgui.h header which implements a realtime
     debugging UI for sokol_gfx.h on top of Dear ImGui.
 
+    A NOTE ON PORTABLE PACKED VERTEX FORMATS:
+    =========================================
+    There are two things to consider when using packed
+    vertex formats like UBYTE4, SHORT2, etc which need to work
+    across all backends:
+
+    - D3D11 can only convert *normalized* vertex formats to
+      floating point during vertex fetch, normalized formats
+      have a trailing 'N', and are "normalized" to a range
+      -1.0..+1.0 (for the signed formats) or 0.0..1.0 (for the
+      unsigned formats):
+
+        - SG_VERTEXFORMAT_BYTE4N
+        - SG_VERTEXFORMAT_UBYTE4N
+        - SG_VERTEXFORMAT_SHORT2N
+        - SG_VERTEXFORMAT_SHORT4N
+
+      D3D11 will not convert *non-normalized* vertex formats
+      to floating point vertex shader inputs, those can
+      only use the ivecn formats when D3D11 is used
+      as backend (GL and should Metal can use both formats)
+
+        - SG_VERTEXFORMAT_BYTE4,
+        - SG_VERTEXFORMAT_UBYTE4
+        - SG_VERTEXFORMAT_SHORT2
+        - SG_VERTEXFORMAT_SHORT4
+
+    - WebGL/GLES2 cannot use integer vertex shader inputs (int or ivecn)
+
+    - SG_VERTEXFORMAT_UINT10_N2 is not supported on WebGL/GLES2
+
+    So for a vertex input layout which works on all platforms, only use the following
+    vertex formats, and if needed "expand" the normalized vertex shader
+    inputs in the vertex shader by multiplying with 127.0, 255.0, 32767.0 or
+    65535.0:
+
+        - SG_VERTEXFORMAT_FLOAT,
+        - SG_VERTEXFORMAT_FLOAT2,
+        - SG_VERTEXFORMAT_FLOAT3,
+        - SG_VERTEXFORMAT_FLOAT4,
+        - SG_VERTEXFORMAT_BYTE4N,
+        - SG_VERTEXFORMAT_UBYTE4N,
+        - SG_VERTEXFORMAT_SHORT2N,
+        - SG_VERTEXFORMAT_SHORT4N,
+
     TODO:
     ====
     - talk about asynchronous resource creation
@@ -5582,7 +5627,7 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT2N:   return DXGI_FORMAT_R16G16_SNORM;
         case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
         case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
-        /* FIXME: signed 10-10-10-2 vertex format not supported on d3d11 (only unsigned) */
+        case SG_VERTEXFORMAT_UINT10_N2: return DXGI_FORMAT_R10G10B10A2_UNORM;
         default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
     }
 }
@@ -5710,6 +5755,7 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         case SG_FEATURE_MULTIPLE_RENDER_TARGET:
         case SG_FEATURE_IMAGETYPE_3D:
         case SG_FEATURE_IMAGETYPE_ARRAY:
+        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:
             return true;
         default:
             return false;
