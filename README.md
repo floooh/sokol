@@ -397,6 +397,12 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **24-May-2019** The shader-cross-compiler can now generate Metal byte code
+for macOS or iOS when the build is running on macOS. This is enabled
+automatically with the fips-integration files in [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin),
+see the [sokol-shdc docs](https://github.com/floooh/sokol-tools-bin) for more
+details.
+
 - **16-May-2019** two new utility headers: *sokol_cimgui.h* and *sokol_gfx_cimgui.h*,
 those are the same as their counterparts sokol_imgui.h and sokol_gfx_imgui.h, but
 use the [cimgui](https://github.com/cimgui/cimgui) C-API for Dear ImGui. This
