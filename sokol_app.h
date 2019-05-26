@@ -58,7 +58,7 @@
     =======================
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
-    gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
+    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---   | ---
     gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
