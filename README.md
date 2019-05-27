@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**15-May-2019**: shader cross-compiling for sokol_gfx.h!)
+[See what's new](#updates)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -397,12 +397,16 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
-- **27-May-2019** sokol_gfx.h no longer needs to be compiled with a
-SOKOL_D3D11_SHADER_COMPILER define to enable shader compilation in the D3D11
-backend. Instead, the D3D shader compiler DLL (d3dcompiler_47.dll) will be
-loaded on-demand when the first HLSL shader needs to be compiled. If an
-application only uses D3D shader byte code, the compiler DLL won't be loaded
-into the process.
+- **27-May-2019**: some D3D11 updates:
+    - The shader-cross-compiler can now generate D3D bytecode when
+    running on Windows, see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
+details.
+    - sokol_gfx.h no longer needs to be compiled with a
+    SOKOL_D3D11_SHADER_COMPILER define to enable shader compilation in the
+    D3D11 backend. Instead, the D3D shader compiler DLL (d3dcompiler_47.dll)
+    will be loaded on-demand when the first HLSL shader needs to be compiled.
+    If an application only uses D3D shader byte code, the compiler DLL won't
+    be loaded into the process.
 
 - **24-May-2019** The shader-cross-compiler can now generate Metal byte code
 for macOS or iOS when the build is running on macOS. This is enabled
