@@ -397,6 +397,13 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **27-May-2019** sokol_gfx.h no longer needs to be compiled with a
+SOKOL_D3D11_SHADER_COMPILER define to enable shader compilation in the D3D11
+backend. Instead, the D3D shader compiler DLL (d3dcompiler_47.dll) will be
+loaded on-demand when the first HLSL shader needs to be compiled. If an
+application only uses D3D shader byte code, the compiler DLL won't be loaded
+into the process.
+
 - **24-May-2019** The shader-cross-compiler can now generate Metal byte code
 for macOS or iOS when the build is running on macOS. This is enabled
 automatically with the fips-integration files in [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin),

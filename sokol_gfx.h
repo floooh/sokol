@@ -30,12 +30,6 @@
     stub functions. This is useful for writing tests that need to run on the
     command line.
 
-    To enable shader compilation support in the D3D11 backend:
-        #define SOKOL_D3D11_SHADER_COMPILER
-
-    If SOKOL_D3D11_SHADER_COMPILER is enabled, the executable will link against
-    d3dcompiler.lib (d3dcompiler_47.dll).
-
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
@@ -1381,14 +1375,10 @@ typedef struct sg_image_desc {
             - the name of the texture sampler (required for GLES2, optional everywhere else)
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,
-    either shader source-code or byte-code can be provided. If source code
-    is provided for D3D11, define SOKOL_D3D11_SHADER_COMPILER before
-    including the sokol_gfx.h implementation, this will link the executable
-    with the D3D shader compiler DLL which is required to compile
-    HLSL to D3D bytecode.
+    either shader source-code or byte-code can be provided.
 
-    (FIXME: the D3D shader compiler DLL should not be linked, but loaded
-    on demand with LoadLibrary).
+    For D3D11, if source code is provided, the d3dcompiler_47.dll will be loaded
+    on demand. If this fails, shader creation will fail.
 */
 typedef struct sg_shader_attr_desc {
     const char* name;           /* GLSL vertex attribute name (only required for GLES2) */
@@ -2104,6 +2094,7 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
     #endif
     #include <windows.h>
     #include <d3d11.h>
+    #include <d3dcompiler.h>
     #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
     #pragma comment (lib, "WindowsApp.lib")
     #else
@@ -2111,12 +2102,6 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
     #pragma comment (lib, "dxgi.lib")
     #pragma comment (lib, "d3d11.lib")
     #pragma comment (lib, "dxguid.lib")
-    #endif
-    #if defined(SOKOL_D3D11_SHADER_COMPILER)
-        #include <d3dcompiler.h>
-        #if !(defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #pragma comment (lib, "d3dcompiler.lib")
-        #endif
     #endif
 #elif defined(SOKOL_METAL)
     #if !__has_feature(objc_arc)
@@ -2571,6 +2556,10 @@ typedef struct {
     sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
+    /* on-demand loaded d3dcompiler_47.dll handles */
+    HINSTANCE d3dcompiler_dll;
+    bool d3dcompiler_dll_load_failed;
+    pD3DCompile D3DCompile_func;
     /* the following arrays are used for unbinding resources, they will always contain zeroes */
     ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -6109,11 +6098,41 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
     }
 }
 
-#if defined(SOKOL_D3D11_SHADER_COMPILER)
+_SOKOL_PRIVATE bool _sg_d3d11_load_d3dcompiler_dll(void) {
+    /* on UWP, don't do anything (not tested) */
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+        return true;
+    #else
+        /* load DLL on demand */
+        if ((0 == _sg.d3d11.d3dcompiler_dll) && !_sg.d3d11.d3dcompiler_dll_load_failed) {
+            _sg.d3d11.d3dcompiler_dll = LoadLibraryA("d3dcompiler_47.dll");
+            if (0 == _sg.d3d11.d3dcompiler_dll) {
+                /* don't attempt to load missing DLL in the future */
+                SOKOL_LOG("failed to load d3dcompiler_47.dll!\n");
+                _sg.d3d11.d3dcompiler_dll_load_failed = true;
+                return false;
+            }
+            /* look up function pointers */
+            _sg.d3d11.D3DCompile_func = (pD3DCompile) GetProcAddress(_sg.d3d11.d3dcompiler_dll, "D3DCompile");
+            SOKOL_ASSERT(_sg.d3d11.D3DCompile_func);
+        }
+        return 0 != _sg.d3d11.d3dcompiler_dll;
+    #endif
+}
+
+#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+#define _sg_d3d11_D3DCompile D3DCompile
+#else
+#define _sg_d3d11_D3DCompile _sg.d3d11.D3DCompile_func
+#endif
+
 _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* stage_desc, const char* target) {
+    if (!_sg_d3d11_load_d3dcompiler_dll()) {
+        return NULL;
+    }
     ID3DBlob* output = NULL;
     ID3DBlob* errors = NULL;
-    D3DCompile(
+    _sg_d3d11_D3DCompile(
         stage_desc->source,             /* pSrcData */
         strlen(stage_desc->source),     /* SrcDataSize */
         NULL,                           /* pSourceName */
@@ -6128,10 +6147,10 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
     if (errors) {
         SOKOL_LOG((LPCSTR)ID3D10Blob_GetBufferPointer(errors));
         ID3D10Blob_Release(errors); errors = NULL;
+        return NULL;
     }
     return output;
 }
-#endif
 
 #define _sg_d3d11_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
@@ -6185,9 +6204,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
 
     const void* vs_ptr = 0, *fs_ptr = 0;
     SIZE_T vs_length = 0, fs_length = 0;
-    #if defined(SOKOL_D3D11_SHADER_COMPILER)
     ID3DBlob* vs_blob = 0, *fs_blob = 0;
-    #endif
     if (desc->vs.byte_code && desc->fs.byte_code) {
         /* create from byte code */
         vs_ptr = desc->vs.byte_code;
@@ -6197,7 +6214,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     }
     else {
         /* compile shader code */
-        #if defined(SOKOL_D3D11_SHADER_COMPILER)
         vs_blob = _sg_d3d11_compile_shader(&desc->vs, "vs_5_0");
         fs_blob = _sg_d3d11_compile_shader(&desc->fs, "ps_5_0");
         if (vs_blob && fs_blob) {
@@ -6206,7 +6222,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
             fs_ptr = ID3D10Blob_GetBufferPointer(fs_blob);
             fs_length = ID3D10Blob_GetBufferSize(fs_blob);
         }
-        #endif
     }
     if (vs_ptr && fs_ptr && (vs_length > 0) && (fs_length > 0)) {
         /* create the D3D vertex- and pixel-shader objects */
@@ -6223,14 +6238,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
 
         result = SG_RESOURCESTATE_VALID;
     }
-    #if defined(SOKOL_D3D11_SHADER_COMPILER)
     if (vs_blob) {
         ID3D10Blob_Release(vs_blob); vs_blob = 0;
     }
     if (fs_blob) {
         ID3D10Blob_Release(fs_blob); fs_blob = 0;
     }
-    #endif
     return result;
 }
 
@@ -8990,14 +9003,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             /* on GL, must provide shader source code */
             SOKOL_VALIDATE(0 != desc->vs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
             SOKOL_VALIDATE(0 != desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
-        #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11_SHADER_COMPILER)
-            /* on Metal or D3D with shader compiler, must provide shader source code or byte code */
+        #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+            /* on Metal or D3D11, must provide shader source code or byte code */
             SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-        #elif defined(SOKOL_D3D11)
-            /* on D3D11 without shader compiler, must provide byte code */
-            SOKOL_VALIDATE(0 != desc->vs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
-            SOKOL_VALIDATE(0 != desc->fs.byte_code, _SG_VALIDATE_SHADERDESC_BYTECODE);
         #else
             /* Dummy Backend, don't require source or bytecode */
         #endif
