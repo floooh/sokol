@@ -1872,7 +1872,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 #endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
-EM_JS(void, _sapp_js_create_textfield, (void), {
+EM_JS(void, sapp_js_create_textfield, (void), {
     var _sapp_inp = document.createElement("input");
     _sapp_inp.type = "text";
     _sapp_inp.id = "_sokol_app_input_element";
@@ -1884,11 +1884,11 @@ EM_JS(void, _sapp_js_create_textfield, (void), {
     document.body.append(_sapp_inp);
 });
 
-EM_JS(void, _sapp_js_focus_textfield, (void), {
+EM_JS(void, sapp_js_focus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").focus();
 });
 
-EM_JS(void, _sapp_js_unfocus_textfield, (void), {
+EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
@@ -1901,19 +1901,19 @@ _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
         /* create input text field on demand */
         if (!_sapp_emsc_input_created) {
             _sapp_emsc_input_created = true;
-            _sapp_js_create_textfield();
+            sapp_js_create_textfield();
         }
         /* focus the text input field, this will bring up the keyboard */
         _sapp.onscreen_keyboard_shown = true;
         _sapp_emsc_wants_show_keyboard = false;
-        _sapp_js_focus_textfield();
+        sapp_js_focus_textfield();
     }
     if (_sapp_emsc_wants_hide_keyboard) {
         /* unfocus the text input field */
         if (_sapp_emsc_input_created) {
             _sapp.onscreen_keyboard_shown = false;
             _sapp_emsc_wants_hide_keyboard = false;
-            _sapp_js_unfocus_textfield();
+            sapp_js_unfocus_textfield();
         }
     }
 }

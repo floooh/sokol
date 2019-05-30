@@ -1228,7 +1228,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
 #endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
-EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
+EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
     Module._saudio_context = null;
     Module._saudio_node = null;
     if (typeof AudioContext !== 'undefined') {
@@ -1286,7 +1286,7 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size)
 });
 
 /* get the actual sample rate back from the WebAudio context */
-EM_JS(int, _saudio_js_sample_rate, (void), {
+EM_JS(int, saudio_js_sample_rate, (void), {
     if (Module._saudio_context) {
         return Module._saudio_context.sampleRate;
     }
@@ -1296,7 +1296,7 @@ EM_JS(int, _saudio_js_sample_rate, (void), {
 });
 
 /* get the actual buffer size in number of frames */
-EM_JS(int, _saudio_js_buffer_frames, (void), {
+EM_JS(int, saudio_js_buffer_frames, (void), {
     if (Module._saudio_node) {
         return Module._saudio_node.bufferSize;
     }
@@ -1306,10 +1306,10 @@ EM_JS(int, _saudio_js_buffer_frames, (void), {
 });
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    if (_saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
+    if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
-        _saudio.sample_rate = _saudio_js_sample_rate();
-        _saudio.buffer_frames = _saudio_js_buffer_frames();
+        _saudio.sample_rate = saudio_js_sample_rate();
+        _saudio.buffer_frames = saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
         _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
