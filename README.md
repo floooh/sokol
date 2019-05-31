@@ -397,6 +397,11 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **31-May-2019**: if you're working with emscripten and fips, please note the
+  following changes:
+
+    https://github.com/floooh/fips#public-service-announcements
+
 - **27-May-2019**: some D3D11 updates:
     - The shader-cross-compiler can now generate D3D bytecode when
     running on Windows, see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
