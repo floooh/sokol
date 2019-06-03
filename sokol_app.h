@@ -25,6 +25,14 @@
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 
+    If sokol_app.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     Portions of the Windows and Linux GL initialization and event code have been
     taken from GLFW (http://www.glfw.org/)
 
@@ -389,7 +397,13 @@
 #include <stdbool.h>
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 #ifdef __cplusplus

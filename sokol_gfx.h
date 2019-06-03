@@ -41,8 +41,8 @@
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 
-    If you want to compile sokol_gfx.h is compiled as a DLL, define
-    the following before including the declaration or implementation:
+    If sokol_gfx.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
 
     SOKOL_DLL
 
