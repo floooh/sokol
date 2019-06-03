@@ -41,6 +41,14 @@
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 
+    If you want to compile sokol_gfx.h is compiled as a DLL, define
+    the following before including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     If you want to compile without deprecated structs and functions,
     define:
 
@@ -479,7 +487,13 @@
 #include <stdbool.h>
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 #ifdef __cplusplus
