@@ -6407,6 +6407,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_x11_translate_key(int scancode) {
         case XK_KP_Down:        return SAPP_KEYCODE_KP_2;
         case XK_KP_Page_Down:   return SAPP_KEYCODE_KP_3;
         case XK_KP_Left:        return SAPP_KEYCODE_KP_4;
+        case XK_KP_Begin:       return SAPP_KEYCODE_KP_5;
         case XK_KP_Right:       return SAPP_KEYCODE_KP_6;
         case XK_KP_Home:        return SAPP_KEYCODE_KP_7;
         case XK_KP_Up:          return SAPP_KEYCODE_KP_8;
