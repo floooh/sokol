@@ -592,6 +592,7 @@ typedef struct sapp_event {
     uint32_t frame_count;
     sapp_keycode key_code;
     uint32_t char_code;
+    bool key_repeat;
     uint32_t modifiers;
     sapp_mousebutton mouse_button;
     float mouse_x;
@@ -1290,10 +1291,11 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, uint32_t mod) {
+_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mod;
         _sapp_call_event(&_sapp.event);
     }
@@ -1431,7 +1433,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
-        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), mods);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
@@ -1443,6 +1445,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                     continue;
                 }
                 _sapp.event.char_code = codepoint;
+                _sapp.event.key_repeat = event.isARepeat;
                 _sapp_call_event(&_sapp.event);
             }
         }
@@ -1451,6 +1454,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyUp:(NSEvent*)event {
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
         _sapp_translate_key(event.keyCode),
+        event.isARepeat,
         _sapp_macos_mod(event.modifierFlags));
 }
 - (void)flagsChanged:(NSEvent*)event {
@@ -1478,6 +1482,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (key_code != SAPP_KEYCODE_INVALID) {
         _sapp_macos_key_event(down ? SAPP_EVENTTYPE_KEY_DOWN : SAPP_EVENTTYPE_KEY_UP,
             key_code,
+            event.isARepeat,
             _sapp_macos_mod(event.modifierFlags));
     }
 }
