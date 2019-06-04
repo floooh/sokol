@@ -558,6 +558,7 @@ typedef enum sg_backend {
     SG_BACKEND_D3D11,
     SG_BACKEND_METAL_IOS,
     SG_BACKEND_METAL_MACOS,
+    SG_BACKEND_METAL_SIMULATOR,
     SG_BACKEND_DUMMY,
 } sg_backend;
 
@@ -9789,7 +9790,11 @@ SOKOL_API_IMPL sg_backend sg_query_backend(void) {
         #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
             return SG_BACKEND_METAL_MACOS;
         #else
-            return SG_BACKEND_METAL_IOS;
+            #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
+                return SG_BACKEND_METAL_SIMULATOR;
+            #else
+                return SG_BACKEND_METAL_IOS;
+            #endif
         #endif
     #elif defined(SOKOL_DUMMY_BACKEND)
         return SG_BACKEND_DUMMY;
