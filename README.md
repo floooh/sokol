@@ -397,6 +397,11 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **04-Jun-2019**: All sokol headers now recognize a config-define ```SOKOL_DLL```
+  if sokol should be compiled into a DLL (when used with ```SOKOL_IMPL```)
+  or used as a DLL. On Windows, this will prepend the public function declarations
+  with ```__declspec(dllexport)``` or ```__declspec(dllimport)```.
+
 - **31-May-2019**: if you're working with emscripten and fips, please note the
   following changes:
 

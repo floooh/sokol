@@ -27,7 +27,7 @@
 
     ...before including the sokol_gfx.h implementation.
 
-    Before including the sokol_gfx_imgui.h implementation, optionally
+    Before including the sokol_gfx_cimgui.h implementation, optionally
     override the following macros:
 
         SOKOL_ASSERT(c)     -- your own assert macro, default: assert(c)
@@ -37,6 +37,14 @@
         SOKOL_FREE(p)       -- your own memory free function, default: free(p)
         SOKOL_API_DECL      - public function declaration prefix (default: extern)
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
+
+    If sokol_gfx_cimgui.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
 
     STEP BY STEP:
     =============
@@ -148,7 +156,13 @@
 #endif
 
 #ifndef SOKOL_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
 #define SOKOL_API_DECL extern
+#endif
 #endif
 
 #if defined(__cplusplus)
@@ -690,7 +704,7 @@ _SOKOL_PRIVATE void _sg_cimgui_snprintf(sg_cimgui_str_t* dst, const char* fmt, .
     SOKOL_ASSERT(dst);
     va_list args;
     va_start(args, fmt);
-    vsnprintf(dst->buf, sizeof(dst->buf), fmt, args); 
+    vsnprintf(dst->buf, sizeof(dst->buf), fmt, args);
     dst->buf[sizeof(dst->buf)-1] = 0;
     va_end(args);
 }
@@ -1282,7 +1296,7 @@ _SOKOL_PRIVATE sg_cimgui_str_t _sg_cimgui_capture_item_string(sg_cimgui_t* ctx, 
                 _sg_cimgui_feature_string(item->args.query_feature.feature),
                 _sg_cimgui_bool_string(item->args.query_feature.result));
             break;
-        
+
         case sg_cimgui_CMD_RESET_STATE_CACHE:
             _sg_cimgui_snprintf(&str, "%d: sg_reset_state_cache()", index);
             break;
@@ -2817,7 +2831,7 @@ _SOKOL_PRIVATE void _sg_cimgui_draw_pipeline_panel(sg_cimgui_t* ctx, sg_pipeline
             if (igTreeNodeStr("Vertex Layout")) {
                 _sg_cimgui_draw_vertex_layout(&pip_ui->desc.layout);
                 igTreePop();
-            } 
+            }
             if (igTreeNodeStr("Depth Stencil State")) {
                 _sg_cimgui_draw_depth_stencil_state(&pip_ui->desc.depth_stencil);
                 igTreePop();
