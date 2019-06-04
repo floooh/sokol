@@ -2,6 +2,8 @@
 /*
     sokol_audio.h -- cross-platform audio-streaming API
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -9,7 +11,7 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_AUDIO_NO_BACKEND  - use a dummy backend
+    SOKOL_DUMMY_BACKEND - use a dummy backend
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
@@ -841,7 +843,7 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
 }
 
 /*=== DUMMY BACKEND IMPLEMENTATION ===========================================*/
-#if defined(SOKOL_AUDIO_NO_BACKEND)
+#if defined(SOKOL_DUMMY_BACKEND)
 _SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
@@ -1226,7 +1228,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
 #endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
-EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
+EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
     Module._saudio_context = null;
     Module._saudio_node = null;
     if (typeof AudioContext !== 'undefined') {
@@ -1284,7 +1286,7 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size)
 });
 
 /* get the actual sample rate back from the WebAudio context */
-EM_JS(int, _saudio_js_sample_rate, (void), {
+EM_JS(int, saudio_js_sample_rate, (void), {
     if (Module._saudio_context) {
         return Module._saudio_context.sampleRate;
     }
@@ -1294,7 +1296,7 @@ EM_JS(int, _saudio_js_sample_rate, (void), {
 });
 
 /* get the actual buffer size in number of frames */
-EM_JS(int, _saudio_js_buffer_frames, (void), {
+EM_JS(int, saudio_js_buffer_frames, (void), {
     if (Module._saudio_node) {
         return Module._saudio_node.bufferSize;
     }
@@ -1304,10 +1306,10 @@ EM_JS(int, _saudio_js_buffer_frames, (void), {
 });
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    if (_saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
+    if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
-        _saudio.sample_rate = _saudio_js_sample_rate();
-        _saudio.buffer_frames = _saudio_js_buffer_frames();
+        _saudio.sample_rate = saudio_js_sample_rate();
+        _saudio.buffer_frames = saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
         _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;

@@ -2,6 +2,8 @@
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_GFX_IMGUI_IMPL
     before you include this file in *one* C++ file to create the
@@ -185,14 +187,14 @@ typedef struct {
     sg_imgui_str_t fs_entry;
     sg_imgui_str_t fs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
     sg_imgui_str_t fs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
+    sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
+    sg_imgui_str_t attr_sem_name[SG_MAX_VERTEX_ATTRIBUTES];
     sg_shader_desc desc;
 } sg_imgui_shader_t;
 
 typedef struct {
     sg_pipeline res_id;
     sg_imgui_str_t label;
-    sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_imgui_str_t attr_sem_name[SG_MAX_VERTEX_ATTRIBUTES];
     sg_pipeline_desc desc;
 } sg_imgui_pipeline_t;
 
@@ -680,6 +682,15 @@ _SOKOL_PRIVATE const uint8_t* _sg_imgui_bin_dup(const uint8_t* src, int num_byte
     return (const uint8_t*) dst;
 }
 
+_SOKOL_PRIVATE void _sg_imgui_snprintf(sg_imgui_str_t* dst, const char* fmt, ...) {
+    SOKOL_ASSERT(dst);
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(dst->buf, sizeof(dst->buf), fmt, args);
+    dst->buf[sizeof(dst->buf)-1] = 0;
+    va_end(args);
+}
+
 /*--- STRING CONVERSION ------------------------------------------------------*/
 _SOKOL_PRIVATE const char* _sg_imgui_feature_string(sg_feature f) {
     switch (f) {
@@ -965,10 +976,10 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_res_id_string(uint32_t res_id, const cha
     SOKOL_ASSERT(label);
     sg_imgui_str_t res;
     if (label[0]) {
-        snprintf(res.buf, sizeof(res.buf), "'%s'", label);
+        _sg_imgui_snprintf(&res, "'%s'", label);
     }
     else {
-        snprintf(res.buf, sizeof(res.buf), "0x%08X", res_id);
+        _sg_imgui_snprintf(&res, "0x%08X", res_id);
     }
     return res;
 }
@@ -1109,6 +1120,17 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     if (shd->desc.fs.byte_code) {
         shd->desc.fs.byte_code = _sg_imgui_bin_dup(shd->desc.fs.byte_code, shd->desc.fs.byte_code_size);
     }
+    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+        sg_shader_attr_desc* ad = &shd->desc.attrs[i];
+        if (ad->name) {
+            shd->attr_name[i] = _sg_imgui_make_str(ad->name);
+            ad->name = shd->attr_name[i].buf;
+        }
+        if (ad->sem_name) {
+            shd->attr_sem_name[i] = _sg_imgui_make_str(ad->sem_name);
+            ad->sem_name = shd->attr_sem_name[i].buf;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_shader_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1140,18 +1162,6 @@ _SOKOL_PRIVATE void _sg_imgui_pipeline_created(sg_imgui_t* ctx, sg_pipeline res_
     pip->label = _sg_imgui_make_str(desc->label);
     pip->desc = *desc;
 
-    /* copy strings in vertex layout to persistent location */
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        sg_vertex_attr_desc* ad = &pip->desc.layout.attrs[i];
-        if (ad->name) {
-            pip->attr_name[i] = _sg_imgui_make_str(ad->name);
-            ad->name = pip->attr_name[i].buf;
-        }
-        if (ad->sem_name) {
-            pip->attr_sem_name[i] = _sg_imgui_make_str(ad->sem_name);
-            ad->sem_name = pip->attr_sem_name[i].buf;
-        }
-    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_pipeline_destroyed(sg_imgui_t* ctx, int slot_index) {
@@ -1261,91 +1271,90 @@ _SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const void* 
 _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int index, const sg_imgui_capture_item_t* item) {
     sg_imgui_str_t str = _sg_imgui_make_str(0);
     sg_imgui_str_t res_id = _sg_imgui_make_str(0);
-    const int len = sizeof(str.buf);
     switch (item->cmd) {
-        case SG_IMGUI_CMD_QUERY_FEATURE: 
-            snprintf(str.buf, len, "%d: sg_query_feature(feature=%s) => %s",
+        case SG_IMGUI_CMD_QUERY_FEATURE:
+            _sg_imgui_snprintf(&str, "%d: sg_query_feature(feature=%s) => %s",
                 index,
                 _sg_imgui_feature_string(item->args.query_feature.feature),
                 _sg_imgui_bool_string(item->args.query_feature.result));
             break;
-        
+
         case SG_IMGUI_CMD_RESET_STATE_CACHE:
-            snprintf(str.buf, len, "%d: sg_reset_state_cache()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_reset_state_cache()", index);
             break;
 
         case SG_IMGUI_CMD_MAKE_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.make_buffer.result);
-            snprintf(str.buf, len, "%d: sg_make_buffer(desc=..) => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_make_buffer(desc=..) => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_MAKE_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.make_image.result);
-            snprintf(str.buf, len, "%d: sg_make_image(desc=..) => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_make_image(desc=..) => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_MAKE_SHADER:
             res_id = _sg_imgui_shader_id_string(ctx, item->args.make_shader.result);
-            snprintf(str.buf, len, "%d: sg_make_shader(desc=..) => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_make_shader(desc=..) => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_MAKE_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.make_pipeline.result);
-            snprintf(str.buf, len, "%d: sg_make_pipeline(desc=..) => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_make_pipeline(desc=..) => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_MAKE_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.make_pass.result);
-            snprintf(str.buf, len, "%d: sg_make_pass(desc=..) => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_make_pass(desc=..) => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_DESTROY_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.destroy_buffer.buffer);
-            snprintf(str.buf, len, "%d: sg_destroy_buffer(buf=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_destroy_buffer(buf=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_DESTROY_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.destroy_image.image);
-            snprintf(str.buf, len, "%d: sg_destroy_image(img=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_destroy_image(img=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_DESTROY_SHADER:
             res_id = _sg_imgui_shader_id_string(ctx, item->args.destroy_shader.shader);
-            snprintf(str.buf, len, "%d: sg_destroy_shader(shd=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_destroy_shader(shd=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_DESTROY_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.destroy_pipeline.pipeline);
-            snprintf(str.buf, len, "%d: sg_destroy_pipeline(pip=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_destroy_pipeline(pip=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_DESTROY_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.destroy_pass.pass);
-            snprintf(str.buf, len, "%d: sg_destroy_pass(pass=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_destroy_pass(pass=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_UPDATE_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
-            snprintf(str.buf, len, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)", 
+            _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)",
                 index, res_id.buf,
                 item->args.update_buffer.data_size);
             break;
 
         case SG_IMGUI_CMD_UPDATE_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.update_image.image);
-            snprintf(str.buf, len, "%d: sg_update_image(img=%s, data=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_update_image(img=%s, data=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_APPEND_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
-            snprintf(str.buf, len, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d", 
+            _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d",
                 index, res_id.buf,
                 item->args.append_buffer.data_size,
                 item->args.append_buffer.result);
             break;
 
         case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
-            snprintf(str.buf, len, "%d: sg_begin_default_pass(pass_action=.., width=%d, height=%d)",
+            _sg_imgui_snprintf(&str, "%d: sg_begin_default_pass(pass_action=.., width=%d, height=%d)",
                 index,
                 item->args.begin_default_pass.width,
                 item->args.begin_default_pass.height);
@@ -1353,11 +1362,11 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 
         case SG_IMGUI_CMD_BEGIN_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.begin_pass.pass);
-            snprintf(str.buf, len, "%d: sg_begin_pass(pass=%s, pass_action=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_begin_pass(pass=%s, pass_action=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_APPLY_VIEWPORT:
-            snprintf(str.buf, len, "%d: sg_apply_viewport(x=%d, y=%d, width=%d, height=%d, origin_top_left=%s)",
+            _sg_imgui_snprintf(&str, "%d: sg_apply_viewport(x=%d, y=%d, width=%d, height=%d, origin_top_left=%s)",
                 index,
                 item->args.apply_viewport.x,
                 item->args.apply_viewport.y,
@@ -1367,7 +1376,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_APPLY_SCISSOR_RECT:
-            snprintf(str.buf, len, "%d: sg_apply_scissor_rect(x=%d, y=%d, width=%d, height=%d, origin_top_left=%s)",
+            _sg_imgui_snprintf(&str, "%d: sg_apply_scissor_rect(x=%d, y=%d, width=%d, height=%d, origin_top_left=%s)",
                 index,
                 item->args.apply_scissor_rect.x,
                 item->args.apply_scissor_rect.y,
@@ -1378,15 +1387,15 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 
         case SG_IMGUI_CMD_APPLY_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.apply_pipeline.pipeline);
-            snprintf(str.buf, len, "%d: sg_apply_pipeline(pip=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_apply_pipeline(pip=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_APPLY_BINDINGS:
-            snprintf(str.buf, len, "%d: sg_apply_bindings(bindings=..)", index);
+            _sg_imgui_snprintf(&str, "%d: sg_apply_bindings(bindings=..)", index);
             break;
 
         case SG_IMGUI_CMD_APPLY_UNIFORMS:
-            snprintf(str.buf, len, "%d: sg_apply_uniforms(stage=%s, ub_index=%d, data=.., num_bytes=%d)",
+            _sg_imgui_snprintf(&str, "%d: sg_apply_uniforms(stage=%s, ub_index=%d, data=.., num_bytes=%d)",
                 index,
                 _sg_imgui_shaderstage_string(item->args.apply_uniforms.stage),
                 item->args.apply_uniforms.ub_index,
@@ -1394,7 +1403,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_DRAW:
-            snprintf(str.buf, len, "%d: sg_draw(base_element=%d, num_elements=%d, num_instances=%d)",
+            _sg_imgui_snprintf(&str, "%d: sg_draw(base_element=%d, num_elements=%d, num_instances=%d)",
                 index,
                 item->args.draw.base_element,
                 item->args.draw.num_elements,
@@ -1402,138 +1411,137 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_END_PASS:
-            snprintf(str.buf, len, "%d: sg_end_pass()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_end_pass()", index);
             break;
 
         case SG_IMGUI_CMD_COMMIT:
-            snprintf(str.buf, len, "%d: sg_commit()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_commit()", index);
             break;
 
         case SG_IMGUI_CMD_ALLOC_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.alloc_buffer.result);
-            snprintf(str.buf, len, "%d: sg_alloc_buffer() => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_alloc_buffer() => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_ALLOC_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.alloc_image.result);
-            snprintf(str.buf, len, "%d: sg_alloc_image() => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_alloc_image() => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_ALLOC_SHADER:
             res_id = _sg_imgui_shader_id_string(ctx, item->args.alloc_shader.result);
-            snprintf(str.buf, len, "%d: sg_alloc_shader() => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_alloc_shader() => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_ALLOC_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.alloc_pipeline.result);
-            snprintf(str.buf, len, "%d: sg_alloc_pipeline() => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_alloc_pipeline() => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_ALLOC_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.alloc_pass.result);
-            snprintf(str.buf, len, "%d: sg_alloc_pass() => %s", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_alloc_pass() => %s", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_INIT_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.init_buffer.buffer);
-            snprintf(str.buf, len, "%d: sg_init_buffer(buf=%s, desc=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_init_buffer(buf=%s, desc=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_INIT_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.init_image.image);
-            snprintf(str.buf, len, "%d: sg_init_image(img=%s, desc=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_init_image(img=%s, desc=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_INIT_SHADER:
             res_id = _sg_imgui_shader_id_string(ctx, item->args.init_shader.shader);
-            snprintf(str.buf, len, "%d: sg_init_shader(shd=%s, desc=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_init_shader(shd=%s, desc=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_INIT_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.init_pipeline.pipeline);
-            snprintf(str.buf, len, "%d: sg_init_pipeline(pip=%s, desc=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_init_pipeline(pip=%s, desc=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_INIT_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.init_pass.pass);
-            snprintf(str.buf, len, "%d: sg_init_pass(pass=%s, desc=..)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_init_pass(pass=%s, desc=..)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_FAIL_BUFFER:
             res_id = _sg_imgui_buffer_id_string(ctx, item->args.fail_buffer.buffer);
-            snprintf(str.buf, len, "%d: sg_fail_buffer(buf=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_fail_buffer(buf=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_FAIL_IMAGE:
             res_id = _sg_imgui_image_id_string(ctx, item->args.fail_image.image);
-            snprintf(str.buf, len, "%d: sg_fail_image(img=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_fail_image(img=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_FAIL_SHADER:
             res_id = _sg_imgui_shader_id_string(ctx, item->args.fail_shader.shader);
-            snprintf(str.buf, len, "%d: sg_fail_shader(shd=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_fail_shader(shd=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_FAIL_PIPELINE:
             res_id = _sg_imgui_pipeline_id_string(ctx, item->args.fail_pipeline.pipeline);
-            snprintf(str.buf, len, "%d: sg_fail_pipeline(shd=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_fail_pipeline(shd=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_FAIL_PASS:
             res_id = _sg_imgui_pass_id_string(ctx, item->args.fail_pass.pass);
-            snprintf(str.buf, len, "%d: sg_fail_pass(pass=%s)", index, res_id.buf);
+            _sg_imgui_snprintf(&str, "%d: sg_fail_pass(pass=%s)", index, res_id.buf);
             break;
 
         case SG_IMGUI_CMD_PUSH_DEBUG_GROUP:
-            snprintf(str.buf, len, "%d: sg_push_debug_group(name=%s)", index,
+            _sg_imgui_snprintf(&str, "%d: sg_push_debug_group(name=%s)", index,
                 item->args.push_debug_group.name.buf);
             break;
 
         case SG_IMGUI_CMD_POP_DEBUG_GROUP:
-            snprintf(str.buf, len, "%d: sg_pop_debug_group()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_pop_debug_group()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_BUFFER_POOL_EXHAUSTED:
-            snprintf(str.buf, len, "%d: sg_err_buffer_pool_exhausted()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_buffer_pool_exhausted()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_IMAGE_POOL_EXHAUSTED:
-            snprintf(str.buf, len, "%d: sg_err_image_pool_exhausted()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_image_pool_exhausted()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_SHADER_POOL_EXHAUSTED:
-            snprintf(str.buf, len, "%d: sg_err_shader_pool_exhausted()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_shader_pool_exhausted()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_PIPELINE_POOL_EXHAUSTED:
-            snprintf(str.buf, len, "%d: sg_err_pipeline_pool_exhausted()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_pipeline_pool_exhausted()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_PASS_POOL_EXHAUSTED:
-            snprintf(str.buf, len, "%d: sg_err_pass_pool_exhausted()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_pass_pool_exhausted()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_CONTEXT_MISMATCH:
-            snprintf(str.buf, len, "%d: sg_err_context_mismatch()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_context_mismatch()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_PASS_INVALID:
-            snprintf(str.buf, len, "%d: sg_err_pass_invalid()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_pass_invalid()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_DRAW_INVALID:
-            snprintf(str.buf, len, "%d: sg_err_draw_invalid()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_draw_invalid()", index);
             break;
 
         case SG_IMGUI_CMD_ERR_BINDINGS_INVALID:
-            snprintf(str.buf, len, "%d: sg_err_bindings_invalid()", index);
+            _sg_imgui_snprintf(&str, "%d: sg_err_bindings_invalid()", index);
             break;
 
         default:
-            snprintf(str.buf, len, "%d: ???", index);
+            _sg_imgui_snprintf(&str, "%d: ???", index);
             break;
     }
-    str.buf[len-1] = 0;
     return str;
 }
 
@@ -2321,9 +2329,9 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* 
         res = ImGui::Selectable(label, selected);
     }
     else {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "0x%08X", res_id);
-        res = ImGui::Selectable(buf, selected);
+        sg_imgui_str_t str;
+        _sg_imgui_snprintf(&str, "0x%08X", res_id);
+        res = ImGui::Selectable(str.buf, selected);
     }
     ImGui::PopID();
     return res;
@@ -2331,14 +2339,14 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* 
 
 _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label) {
     SOKOL_ASSERT(label);
-    char buf[32];
+    sg_imgui_str_t str_buf;
     const char* str;
     if (label[0]) {
         str = label;
     }
     else {
-        snprintf(buf, sizeof(buf), "0x%08X", res_id);
-        str = buf;
+        _sg_imgui_snprintf(&str_buf, "0x%08X", res_id);
+        str = str_buf.buf;
     }
     ImGui::PushID((int)res_id);
     bool res = ImGui::SmallButton(str);
@@ -2683,6 +2691,18 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
             ImGui::Text("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
             ImGui::Separator();
+            if (ImGui::TreeNode("Attrs")) {
+                for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+                    const sg_shader_attr_desc* a_desc = &shd_ui->desc.attrs[i];
+                    if (a_desc->name || a_desc->sem_index) {
+                        ImGui::Text("#%d:", i);
+                        ImGui::Text("  Name:         %s", a_desc->name ? a_desc->name : "---");
+                        ImGui::Text("  Sem Name:     %s", a_desc->sem_name ? a_desc->sem_name : "---");
+                        ImGui::Text("  Sem Index:    %d", a_desc->sem_index);
+                    }
+                }
+                ImGui::TreePop();
+            }
             if (ImGui::TreeNode("Vertex Shader Stage")) {
                 _sg_imgui_draw_shader_stage(ctx, &shd_ui->desc.vs);
                 ImGui::TreePop();
@@ -2718,9 +2738,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
             if (a_desc->format != SG_VERTEXFORMAT_INVALID) {
                 ImGui::Text("#%d:", i);
                 ImGui::Text("  Format:       %s", _sg_imgui_vertexformat_string(a_desc->format));
-                ImGui::Text("  Name:         %s", a_desc->name ? a_desc->name : "---");
-                ImGui::Text("  Sem Name:     %s", a_desc->sem_name ? a_desc->sem_name : "---");
-                ImGui::Text("  Sem Index:    %d", a_desc->sem_index);
                 ImGui::Text("  Offset:       %d", a_desc->offset);
                 ImGui::Text("  Buffer Index: %d", a_desc->buffer_index);
             }
@@ -2796,7 +2813,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             if (ImGui::TreeNode("Vertex Layout")) {
                 _sg_imgui_draw_vertex_layout(&pip_ui->desc.layout);
                 ImGui::TreePop();
-            } 
+            }
             if (ImGui::TreeNode("Depth Stencil State")) {
                 _sg_imgui_draw_depth_stencil_state(&pip_ui->desc.depth_stencil);
                 ImGui::TreePop();
@@ -3343,7 +3360,7 @@ SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
     if (!ctx->buffers.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 280), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 280), ImGuiCond_Once);
     if (ImGui::Begin("Buffers", &ctx->buffers.open)) {
         sg_imgui_draw_buffers_content(ctx);
     }
@@ -3355,7 +3372,7 @@ SOKOL_API_IMPL void sg_imgui_draw_images_window(sg_imgui_t* ctx) {
     if (!ctx->images.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Images", &ctx->images.open)) {
         sg_imgui_draw_images_content(ctx);
     }
@@ -3367,7 +3384,7 @@ SOKOL_API_IMPL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx) {
     if (!ctx->shaders.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Shaders", &ctx->shaders.open)) {
         sg_imgui_draw_shaders_content(ctx);
     }
@@ -3379,7 +3396,7 @@ SOKOL_API_IMPL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx) {
     if (!ctx->pipelines.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(540, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(540, 400), ImGuiCond_Once);
     if (ImGui::Begin("Pipelines", &ctx->pipelines.open)) {
         sg_imgui_draw_pipelines_content(ctx);
     }
@@ -3391,7 +3408,7 @@ SOKOL_API_IMPL void sg_imgui_draw_passes_window(sg_imgui_t* ctx) {
     if (!ctx->passes.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
     if (ImGui::Begin("Passes", &ctx->passes.open)) {
         sg_imgui_draw_passes_content(ctx);
     }
@@ -3403,7 +3420,7 @@ SOKOL_API_IMPL void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     if (!ctx->capture.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(640, 400), ImGuiSetCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(640, 400), ImGuiCond_Once);
     if (ImGui::Begin("Frame Capture", &ctx->capture.open)) {
         sg_imgui_draw_capture_content(ctx);
     }

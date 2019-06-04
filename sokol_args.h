@@ -2,6 +2,8 @@
 /*
     sokol_args.h    -- cross-platform key/value arg-parsing for web and native
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the

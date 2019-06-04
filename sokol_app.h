@@ -2,6 +2,8 @@
 /*
     sokol_app.h -- cross-platform application wrapper
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -56,7 +58,7 @@
     =======================
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
-    gl 3.x              | YES     | ---   | YES   | ---   | ---     | ---   | ---
+    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---   | ---
     gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
@@ -330,9 +332,9 @@
     - define SOKOL_NO_ENTRY before including the sokol_app.h implementation
     - do *not* provide a sokol_main() function
     - instead provide the standard main() function of the platform
-    - from the main function, call the function ```sapp_run()``` which 
+    - from the main function, call the function ```sapp_run()``` which
       takes a pointer to an ```sapp_desc``` structure.
-    - ```sapp_run()``` takes over control and calls the provided init-, frame-, 
+    - ```sapp_run()``` takes over control and calls the provided init-, frame-,
       shutdown- and event-callbacks just like in the default model, it
       will only return when the application quits (or not at all on some
       platforms, like emscripten)
@@ -596,7 +598,7 @@ typedef struct sapp_desc {
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
-    
+
     void* user_data;                        /* these are the user-provided callbacks with user data */
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
@@ -938,6 +940,9 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #elif defined(SOKOL_GLCORE33)
+#ifndef GL_SILENCE_DEPRECATION
+#define GL_SILENCE_DEPRECATION
+#endif
 #include <Cocoa/Cocoa.h>
 #include <OpenGL/gl3.h>
 #endif
@@ -1326,6 +1331,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     [self setNeedsDisplay:YES];
 }
 - (void)prepareOpenGL {
+    [super prepareOpenGL];
     GLint swapInt = 1;
     NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
@@ -1866,7 +1872,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 #endif
 
 /* Javascript helper functions for mobile virtual keyboard input */
-EM_JS(void, _sapp_js_create_textfield, (void), {
+EM_JS(void, sapp_js_create_textfield, (void), {
     var _sapp_inp = document.createElement("input");
     _sapp_inp.type = "text";
     _sapp_inp.id = "_sokol_app_input_element";
@@ -1878,11 +1884,11 @@ EM_JS(void, _sapp_js_create_textfield, (void), {
     document.body.append(_sapp_inp);
 });
 
-EM_JS(void, _sapp_js_focus_textfield, (void), {
+EM_JS(void, sapp_js_focus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").focus();
 });
 
-EM_JS(void, _sapp_js_unfocus_textfield, (void), {
+EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
@@ -1895,19 +1901,19 @@ _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
         /* create input text field on demand */
         if (!_sapp_emsc_input_created) {
             _sapp_emsc_input_created = true;
-            _sapp_js_create_textfield();
+            sapp_js_create_textfield();
         }
         /* focus the text input field, this will bring up the keyboard */
         _sapp.onscreen_keyboard_shown = true;
         _sapp_emsc_wants_show_keyboard = false;
-        _sapp_js_focus_textfield();
+        sapp_js_focus_textfield();
     }
     if (_sapp_emsc_wants_hide_keyboard) {
         /* unfocus the text input field */
         if (_sapp_emsc_input_created) {
             _sapp.onscreen_keyboard_shown = false;
             _sapp_emsc_wants_hide_keyboard = false;
-            _sapp_js_unfocus_textfield();
+            sapp_js_unfocus_textfield();
         }
     }
 }
@@ -2564,6 +2570,11 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 #endif
 
+/* see https://github.com/floooh/sokol/issues/138 */
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL (0x020E)
+#endif
+
 #ifndef DPI_ENUMS_DECLARED
 typedef enum PROCESS_DPI_AWARENESS
 {
@@ -2858,6 +2869,7 @@ typedef int  GLint;
 #define GL_POINTS 0x0000
 #define GL_ONE_MINUS_SRC_COLOR 0x0301
 #define GL_MIRRORED_REPEAT 0x8370
+#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
@@ -4337,7 +4349,7 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
             SOKOL_ASSERT(egl_result == EGL_TRUE);
             /* NOTE: calling ANativeWindow_setBuffersGeometry() with the same dimensions
                 as the ANativeWindow size results in weird display artefacts, that's
-                why it's only called when the buffer geometry is different from 
+                why it's only called when the buffer geometry is different from
                 the window size
             */
             int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
@@ -6009,11 +6021,11 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_gl_init_fbconfig(u);
 
         /* Only consider RGBA GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_RENDER_TYPE) & GLX_RGBA_BIT)) {
             continue;
         }
         /* Only consider window GLXFBConfigs */
-        if (!_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT) {
+        if (0 == (_sapp_glx_attrib(n, GLX_DRAWABLE_TYPE) & GLX_WINDOW_BIT)) {
             if (trust_window_bit) {
                 continue;
             }
