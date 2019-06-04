@@ -4879,6 +4879,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/Xresource.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/Xmd.h> /* CARD32 */
@@ -6345,19 +6346,21 @@ _SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, uint32_t mods) {
+_SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mods) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, uint32_t mods) {
+_SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, bool repeat, uint32_t mods) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.char_code = chr;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
     }
@@ -6535,29 +6538,38 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
+// XLib manual says keycodes are in the range [8, 255] inclusive.
+// https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
+static bool _sapp_x11_keycodes[256];
+
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
         case KeyPress:
             {
-                const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
+                int keycode = event->xkey.keycode;
+                const sapp_keycode key = _sapp_x11_translate_key(keycode);
+                bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
+                _sapp_x11_keycodes[keycode & 0xFF] = true;
                 const uint32_t mods = _sapp_x11_mod(event->xkey.state);
                 if (key != SAPP_KEYCODE_INVALID) {
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, mods);
+                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
                 }
                 KeySym keysym;
                 XLookupString(&event->xkey, NULL, 0, &keysym, NULL);
                 int32_t chr = _sapp_x11_keysym_to_unicode(keysym);
                 if (chr > 0) {
-                    _sapp_x11_char_event((uint32_t)chr, mods);
+                    _sapp_x11_char_event((uint32_t)chr, repeat, mods);
                 }
             }
             break;
         case KeyRelease:
             {
-                const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
+                int keycode = event->xkey.keycode;
+                const sapp_keycode key = _sapp_x11_translate_key(keycode);
+                _sapp_x11_keycodes[keycode & 0xFF] = false;
                 if (key != SAPP_KEYCODE_INVALID) {
                     const uint32_t mods = _sapp_x11_mod(event->xkey.state);
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, mods);
+                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
                 }
             }
             break;
@@ -6649,6 +6661,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     }
     _sapp_x11_screen = DefaultScreen(_sapp_x11_display);
     _sapp_x11_root = DefaultRootWindow(_sapp_x11_display);
+    XkbSetDetectableAutoRepeat(_sapp_x11_display, true, NULL);
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp_x11_dpi / 96.0f;
     _sapp_x11_init_extensions();
