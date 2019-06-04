@@ -40,6 +40,14 @@
         SOKOL_API_DECL      - public function declaration prefix (default: extern)
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
+    If sokol_gfx_imgui.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     STEP BY STEP:
     =============
     --- create an sg_imgui_t struct (which must be preserved between frames)
@@ -150,7 +158,13 @@
 #endif
 
 #ifndef SOKOL_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
 #define SOKOL_API_DECL extern
+#endif
 #endif
 
 #if defined(__cplusplus)

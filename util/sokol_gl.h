@@ -29,11 +29,19 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
+    If sokol_gl.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     Include the following headers before including sokol_gl.h:
 
         sokol_gfx.h
 
-    Matrix functions are taken from MESA and Regal.
+    Matrix functions have been taken from MESA and Regal.
 
     FEATURE OVERVIEW:
     =================
@@ -416,7 +424,13 @@
 #endif
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
