@@ -3828,20 +3828,22 @@ _SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
+_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool repeat) {
     if (_sapp_events_enabled() && (vk < SAPP_MAX_KEYCODES)) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.key_code = _sapp.keycodes[vk];
+        _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
+_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     if (_sapp_events_enabled() && (c >= 32)) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
+        _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -3948,15 +3950,15 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)), 0.0f);
                 break;
             case WM_CHAR:
-                _sapp_win32_char_event((uint32_t)wParam);
+                _sapp_win32_char_event((uint32_t)wParam, !!(lParam&0x40000000));
                 break;
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
-                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF), !!(lParam&0x40000000));
                 break;
             case WM_KEYUP:
             case WM_SYSKEYUP:
-                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
                 break;
             default:
                 break;
