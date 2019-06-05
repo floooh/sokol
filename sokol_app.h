@@ -89,6 +89,7 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
+    QUIT_REQUESTED      | DONE    | TODO  | TODO  | ---   | ---     | TODO  | ---
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
@@ -443,6 +444,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
+    SAPP_EVENTTYPE_QUIT_REQUESTED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
 } sapp_event_type;
@@ -657,6 +659,9 @@ SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
 SOKOL_API_DECL void* sapp_userdata(void);
 SOKOL_API_DECL sapp_desc sapp_query_desc(void);
+SOKOL_API_DECL void sapp_request_quit(void);
+SOKOL_API_DECL void sapp_deny_quit(void);
+SOKOL_API_DECL void sapp_quit(void);
 
 /* GL/GLES specific functions */
 SOKOL_API_DECL bool sapp_gles2(void);
@@ -811,6 +816,8 @@ typedef struct {
     bool first_frame;
     bool init_called;
     bool cleanup_called;
+    bool quit_requested;
+    bool quit_ordered;
     bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -1161,6 +1168,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp_macos_window_obj performClose:nil];
+    }
 }
 
 @implementation _sapp_macos_app_delegate
@@ -1316,8 +1326,27 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
-    _sapp_call_cleanup();
-    return YES;
+    /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
+    if (!_sapp.quit_ordered) {
+        /* if window should be closed and event handling is enabled, give user code
+           a chance to intervene via sapp_deny_quit()
+        */
+        _sapp.quit_requested = true;
+        if (_sapp_events_enabled()) {
+            _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        }
+        /* user code hasn't intervened, quit the app */
+        if (_sapp.quit_requested) {
+            _sapp.quit_ordered = true;
+        }
+    }
+    if (_sapp.quit_ordered) {
+        _sapp_call_cleanup();
+        return YES;
+    }
+    else {
+        return NO;
+    }
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
@@ -6762,6 +6791,18 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
+}
+
+SOKOL_API_IMPL void sapp_request_quit(void) {
+    _sapp.quit_requested = true;
+}
+
+SOKOL_API_IMPL void sapp_deny_quit(void) {
+    _sapp.quit_requested = false;
+}
+
+SOKOL_API_IMPL void sapp_quit(void) {
+    _sapp.quit_ordered = true;
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
