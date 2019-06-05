@@ -397,6 +397,10 @@ SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
 SOKOL_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
 SOKOL_API_DECL bool saudio_isvalid(void);
+/* return the saudio_desc.user_data pointer */
+SOKOL_API_DECL void* saudio_userdata(void);
+/* return a copy of the original saudio_desc struct */
+SOKOL_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
 SOKOL_API_DECL int saudio_sample_rate(void);
 /* actual backend buffer size */
@@ -1377,6 +1381,14 @@ SOKOL_API_IMPL void saudio_shutdown(void) {
 
 SOKOL_API_IMPL bool saudio_isvalid(void) {
     return _saudio.valid;
+}
+
+SOKOL_API_IMPL void* saudio_userdata(void) {
+    return _saudio.desc.user_data;
+}
+
+SOKOL_API_IMPL saudio_desc saudio_query_desc(void) {
+    return _saudio.desc;
 }
 
 SOKOL_API_IMPL int saudio_sample_rate(void) {
