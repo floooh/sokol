@@ -176,6 +176,12 @@
             can mix those with the standard callbacks that don't have the
             user_data argument.
 
+        The function sapp_userdata() can be used to query the user_data
+        pointer provided in the sapp_desc struct.
+
+        You you can call sapp_query_desc() to get a copy(!) of the
+        original sapp_desc structure.
+
         NOTE that there's also an alternative compile mode where sokol_app.h
         doesn't "hijack" the main() function. Search below for SOKOL_NO_ENTRY.
 
@@ -649,6 +655,8 @@ SOKOL_API_DECL bool sapp_high_dpi(void);
 SOKOL_API_DECL float sapp_dpi_scale(void);
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+SOKOL_API_DECL void* sapp_userdata(void);
+SOKOL_API_DECL sapp_desc sapp_query_desc(void);
 
 /* GL/GLES specific functions */
 SOKOL_API_DECL bool sapp_gles2(void);
@@ -6710,6 +6718,14 @@ SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
 
 SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
+}
+
+SOKOL_API_IMPL void* sapp_userdata(void) {
+    return _sapp.desc.user_data;
+}
+
+SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
+    return _sapp.desc;
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
