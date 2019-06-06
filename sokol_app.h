@@ -1993,7 +1993,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
        In general, due to the HTML5's fullscreen API's flaky nature it is
        recommended to use 'soft fullscreen' (stretching the WebGL canvas
-       over the browser window's client rect) with a CSS definition like this:
+       over the browser windows client rect) with a CSS definition like this:
 
             position: absolute;
             top: 0px;
@@ -3890,7 +3890,23 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
     if (!_sapp_win32_in_create_window) {
         switch (uMsg) {
             case WM_CLOSE:
-                PostQuitMessage(0);
+                /* only give user a chance to intervene when sapp_quit() wasn't already called */
+                if (!_sapp.quit_ordered) {
+                    /* if window should be closed and event handling is enabled, give user code
+                        a change to intervene via sapp_deny_quit()
+                    */
+                   _sapp.quit_requested = true;
+                   if (_sapp_events_enabled()) {
+                       _sapp_win32_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                   }
+                   /* if user code hasn't intervened, quit the app */
+                   if (_sapp.quit_requested) {
+                       _sapp.quit_ordered = true;
+                   }
+                }
+                if (_sapp.quit_ordered) {
+                    PostQuitMessage(0);
+                }
                 return 0;
             case WM_SYSCOMMAND:
                 switch (wParam & 0xFFF0) {
@@ -4129,11 +4145,12 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp.valid = true;
 
     bool done = false;
-    while (!done) {
+    while (!(done || _sapp.quit_ordered)) {
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
                 done = true;
+                continue;
             }
             else {
                 TranslateMessage(&msg);
@@ -4150,6 +4167,9 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_swap_buffers();
         #endif
+        if (_sapp.quit_requested) {
+            PostMessage(_sapp_win32_hwnd, WM_CLOSE, 0, 0);
+        }
     }
     _sapp_call_cleanup();
 
