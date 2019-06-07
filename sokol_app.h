@@ -1332,9 +1332,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
            a chance to intervene via sapp_deny_quit()
         */
         _sapp.quit_requested = true;
-        if (_sapp_events_enabled()) {
-            _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
-        }
+        _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
         /* user code hasn't intervened, quit the app */
         if (_sapp.quit_requested) {
             _sapp.quit_ordered = true;
