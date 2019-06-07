@@ -3895,14 +3895,12 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     /* if window should be closed and event handling is enabled, give user code
                         a change to intervene via sapp_deny_quit()
                     */
-                   _sapp.quit_requested = true;
-                   if (_sapp_events_enabled()) {
-                       _sapp_win32_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
-                   }
-                   /* if user code hasn't intervened, quit the app */
-                   if (_sapp.quit_requested) {
-                       _sapp.quit_ordered = true;
-                   }
+                    _sapp.quit_requested = true;
+                    _sapp_win32_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                    /* if user code hasn't intervened, quit the app */
+                    if (_sapp.quit_requested) {
+                        _sapp.quit_ordered = true;
+                    }
                 }
                 if (_sapp.quit_ordered) {
                     PostQuitMessage(0);
