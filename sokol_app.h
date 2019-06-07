@@ -5002,7 +5002,6 @@ typedef void (*PFNGLXDESTROYWINDOWPROC)(Display*,GLXWindow);
 typedef int (*PFNGLXSWAPINTERVALMESAPROC)(int);
 typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display*,GLXFBConfig,GLXContext,Bool,const int*);
 
-static bool _sapp_x11_quit_requested;
 static Display* _sapp_x11_display;
 static int _sapp_x11_screen;
 static Window _sapp_x11_root;
@@ -6679,7 +6678,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             if (event->xclient.message_type == _sapp_x11_WM_PROTOCOLS) {
                 const Atom protocol = event->xclient.data.l[0];
                 if (protocol == _sapp_x11_WM_DELETE_WINDOW) {
-                    _sapp_x11_quit_requested = true;
+                    _sapp.quit_requested = true;
                 }
             }
             break;
@@ -6690,7 +6689,6 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_x11_quit_requested = false;
     _sapp_x11_window_state = NormalState;
 
     XInitThreads();
@@ -6714,7 +6712,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_x11_show_window();
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp_x11_display);
-    while (!_sapp_x11_quit_requested) {
+    while (!_sapp.quit_ordered) {
         _sapp_glx_make_current();
         int count = XPending(_sapp_x11_display);
         while (count--) {
@@ -6725,6 +6723,15 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp_frame();
         _sapp_glx_swap_buffers();
         XFlush(_sapp_x11_display);
+        /* handle quit-requested, either from window or from sapp_request_quit() */
+        if (_sapp.quit_requested && !_sapp.quit_ordered) {
+            /* give user code a chance to intervene */
+            _sapp_x11_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            /* if user code hasn't intervened, quit the app */
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
     }
     _sapp_call_cleanup();
     _sapp_glx_destroy_context();
