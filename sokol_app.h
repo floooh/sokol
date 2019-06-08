@@ -91,6 +91,7 @@
     RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
@@ -357,9 +358,6 @@
 
     TEMP NOTE DUMP
     ==============
-    - need a way to quit application programmatically (sapp_request_quit())
-    - need a way to intercept a pending quit via UI close button (could be
-      done via frame_cb return value, and a sapp_quit_requested() function)
     - onscreen keyboard support on Android requires Java :(, should we even bother?
     - sapp_desc needs a bool whether to initialize depth-stencil surface
     - GL context initialization needs more control (at least what GL version to initialize)
