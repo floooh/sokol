@@ -399,7 +399,8 @@ Mainly some "missing features" for desktop apps:
 
 - **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
     - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
-    - application code can now initiate a "soft quit" or "hard quit"
+    - application code can now initiate a "soft quit" (interceptable) or
+      "hard quit" (not interceptable)
     - on the web platform, the standard "Leave Site?" dialog box implemented
       by browsers can be shown when the user leaves the site
     - Android and iOS currently don't have any of those features (since the
