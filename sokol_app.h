@@ -311,7 +311,7 @@
     custom shutdown code.
 
     On the web platform, you can call the following function to let the
-    browser open a standard popup dialog before the user wants to leave a side:
+    browser open a standard popup dialog before the user wants to leave a site:
 
         sapp_html5_ask_leave_site(bool ask);
 
