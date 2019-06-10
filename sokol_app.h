@@ -89,7 +89,7 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
-    QUIT_REQUESTED      | DONE    | TODO  | TODO  | ---   | ---     | TODO  | ---
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | TODO  | ---
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
@@ -248,13 +248,15 @@
             - the mouse was moved
             - the mouse has entered or left the application window boundaries
             - low-level, portable multi-touch events (began, moved, ended, cancelled)
-        More types of events will be added in the future (like window
-        minimized, maximized, application life cycle events, etc...)
+            - the application window was resized, iconified or restored
+            - the application was suspended or restored (on mobile platforms)
+            - the user or application code has asked to quit the application
 
     --- Implement the cleanup-callback function, this is called once
-        after the user quits the application (currently there's now way
-        to quite the application programmatically)
-
+        after the user quits the application (see the section
+        "APPLICATION QUIT" for detailed information on quitting
+        behaviour, and how to intercept a pending quit (for instance to show a
+        "Really Quit?" dialog box)
 
     HIGH-DPI RENDERING
     ==================
@@ -294,6 +296,71 @@
     sapp_width      -> 640
     sapp_height     -> 480
     sapp_dpi_scale  -> 1.0
+
+    APPLICATION QUIT
+    ================
+    Without special quit handling, a sokol_app.h application will exist
+    'gracefully' when the user clicks the window close-button. 'Graceful
+    exit' means that the application-provided cleanup callback will be
+    called.
+
+    This 'graceful exit' is only supported on native desktop platforms, on
+    the web and mobile platforms an application may be terminated at any time
+    by the user or browser/OS runtime environment without a chance to run
+    custom shutdown code.
+
+    On the web platform, you can call the following function to let the
+    browser open a standard popup dialog before the user wants to leave a side:
+
+        sapp_html5_ask_leave_site(bool ask);
+
+    The initial state of the associated internal flag can be provided
+    at startup via sapp_desc.html5_ask_leave_site.
+
+    This feature should only be used sparingly in critical situations - for
+    instance when the user would loose data - since popping up modal dialog
+    boxes is considered quite rude in the web world. Note that there's no way
+    to customize the content of this dialog box or run any code as a result
+    of the user's decision. Also note that the user must have interacted with
+    the site before the dialog box will appear. These are all security measures
+    to prevent fishing.
+
+    On native desktop platforms, sokol_app.h provides more control over the
+    application-quit-process. It's possible to initiate a 'programmatic quit'
+    from the application code, and a quit initiated by the application user
+    can be intercepted (for instance to show a custom dialog box).
+
+    This 'programmatic quit protocol' is implemented trough 3 functions
+    and 1 event:
+
+        - sapp_quit(): This function simply quits the application without
+          giving the user a chance to intervene. Usually this might
+          be called when the user clicks the 'Ok' button in a 'Really Quit?'
+          dialog box
+        - sapp_request_quit(): Calling sapp_request_quit() will send the
+          event SAPP_EVENTTYPE_QUIT_REQUESTED to the applications event handler
+          callback, giving the user code a chance to intervene and cancel the
+          pending quit process (for instance to show a 'Really Quit?' dialog
+          box). If the event handler callback does nothing, the application
+          will be quit as usual. To prevent this, call the function
+          sapp_cancel_quit() from inside the event handler.
+        - sapp_cancel_quit(): Cancels a pending quit request, either initiated
+          by the user clicking the window close button, or programmatically
+          by calling sapp_request_quit(). The only place where calling this
+          function makes sense is from inside the event handler callback when
+          the SAPP_EVENTTYPE_QUIT_REQUESTED event has been received.
+        - SAPP_EVENTTYPE_QUIT_REQUESTED: this event is sent when the user
+          clicks the window's close button or application code calls the
+          sapp_request_quit() function. The event handler callback code can handle
+          this event by calling sapp_cancel_quit() to cancel the quit.
+          If the event is ignored, the application will quit as usual.
+
+    The Dear ImGui HighDPI sample contains example code of how to
+    implement a 'Really Quit?' dialog box with Dear ImGui (native desktop
+    platforms only), and for showing the hardwired "Leave Site?" dialog box
+    when running on the web platform:
+
+        https://floooh.github.io/sokol-html5/wasm/imgui-highdpi-sapp.html
 
     FULLSCREEN
     ==========
@@ -358,9 +425,6 @@
 
     TEMP NOTE DUMP
     ==============
-    - need a way to quit application programmatically (sapp_request_quit())
-    - need a way to intercept a pending quit via UI close button (could be
-      done via frame_cb return value, and a sapp_quit_requested() function)
     - onscreen keyboard support on Android requires Java :(, should we even bother?
     - sapp_desc needs a bool whether to initialize depth-stencil surface
     - GL context initialization needs more control (at least what GL version to initialize)
@@ -642,7 +706,7 @@ typedef struct sapp_desc {
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
-    bool html5_ask_leave_site;          /* HTML5 only: if true, open the "Leave site?" popup on back/close tab */
+    bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
@@ -666,6 +730,9 @@ SOKOL_API_DECL void sapp_quit(void);
 
 /* GL/GLES specific functions */
 SOKOL_API_DECL bool sapp_gles2(void);
+
+/* HTML5 specific functions */
+SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 
 /* OSX/Metal specific functions */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
@@ -820,6 +887,7 @@ typedef struct {
     bool quit_requested;
     bool quit_ordered;
     const char* html5_canvas_name;
+    bool html5_ask_leave_site;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
     uint32_t frame_count;
@@ -914,6 +982,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
+    _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     }
@@ -1941,10 +2010,16 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 /*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
+EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
+    return _sapp.html5_ask_leave_site ? 1 : 0;
+}
+
 EM_JS(void, sapp_js_hook_beforeunload, (void), {
     window.addEventListener('beforeunload', function(_sapp_event) {
-        _sapp_event.preventDefault();
-        _sapp_event.returnValue = ' ';
+        if (__sapp_html5_get_ask_leave_site() != 0) {
+            _sapp_event.preventDefault();
+            _sapp_event.returnValue = ' ';
+        }
     });
 });
 
@@ -2475,9 +2550,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
-    if (_sapp.desc.html5_ask_leave_site) {
-        sapp_js_hook_beforeunload();
-    }
+    sapp_js_hook_beforeunload();
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -6936,6 +7009,10 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
+    _sapp.html5_ask_leave_site = ask;
 }
 
 #undef _sapp_def
