@@ -397,6 +397,21 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
+    - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
+    - application code can now initiate a "soft quit" or "hard quit"
+    - on the web platform, the standard "Leave Site?" dialog box implemented
+      by browsers can be shown when the user leaves the site
+    - Android and iOS currently don't have any of those features (since the
+      operating system may decide to terminate mobile applications at any time
+      anyway, if similar features are added they will most likely have
+      similar limitations as the web platform)
+  For details, search for 'APPLICATION QUIT' in the sokol_app.h documentation
+  header: https://github.com/floooh/sokol/blob/master/sokol_app.h
+
+  The [imgui-highdpi-sapp](https://github.com/floooh/sokol-samples/tree/master/sapp)
+  contains sample code for all new quit-related features.
+
 - **08-Jun-2019**: some new stuff in sokol_app.h:
     - the ```sapp_event``` struct has a new field ```bool key_repeat```
     which is true when a keyboard event is a key-repeat (for the
