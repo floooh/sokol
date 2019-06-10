@@ -642,6 +642,7 @@ typedef struct sapp_desc {
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
+    bool html5_ask_leave_site;          /* HTML5 only: if true, open the "Leave site?" popup on back/close tab */
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
@@ -660,7 +661,7 @@ SOKOL_API_DECL bool sapp_keyboard_shown(void);
 SOKOL_API_DECL void* sapp_userdata(void);
 SOKOL_API_DECL sapp_desc sapp_query_desc(void);
 SOKOL_API_DECL void sapp_request_quit(void);
-SOKOL_API_DECL void sapp_deny_quit(void);
+SOKOL_API_DECL void sapp_cancel_quit(void);
 SOKOL_API_DECL void sapp_quit(void);
 
 /* GL/GLES specific functions */
@@ -818,7 +819,6 @@ typedef struct {
     bool cleanup_called;
     bool quit_requested;
     bool quit_ordered;
-    bool html5_canvas_resize;
     const char* html5_canvas_name;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
@@ -914,7 +914,6 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
-    _sapp.html5_canvas_resize = _sapp.desc.html5_canvas_resize;
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     }
@@ -1329,7 +1328,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
     if (!_sapp.quit_ordered) {
         /* if window should be closed and event handling is enabled, give user code
-           a chance to intervene via sapp_deny_quit()
+           a chance to intervene via sapp_cancel_quit()
         */
         _sapp.quit_requested = true;
         _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
@@ -1941,6 +1940,14 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
+/*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
+EM_JS(void, sapp_js_hook_beforeunload, (void), {
+    window.addEventListener('beforeunload', function(_sapp_event) {
+        _sapp_event.preventDefault();
+        _sapp_event.returnValue = ' ';
+    });
+});
+
 /* called from the emscripten event handler to update the keyboard visibility
     state, this must happen from an JS input event handler, otherwise
     the request will be ignored by the browser
@@ -2409,7 +2416,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_emsc_init_keytable();
     double w, h;
-    if (_sapp.html5_canvas_resize) {
+    if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp.desc.width;
         h = (double) _sapp.desc.height;
     }
@@ -2467,6 +2474,10 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
+
+    if (_sapp.desc.html5_ask_leave_site) {
+        sapp_js_hook_beforeunload();
+    }
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -3891,7 +3902,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 /* only give user a chance to intervene when sapp_quit() wasn't already called */
                 if (!_sapp.quit_ordered) {
                     /* if window should be closed and event handling is enabled, give user code
-                        a change to intervene via sapp_deny_quit()
+                        a change to intervene via sapp_cancel_quit()
                     */
                     _sapp.quit_requested = true;
                     _sapp_win32_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
@@ -6820,7 +6831,7 @@ SOKOL_API_IMPL void sapp_request_quit(void) {
     _sapp.quit_requested = true;
 }
 
-SOKOL_API_IMPL void sapp_deny_quit(void) {
+SOKOL_API_IMPL void sapp_cancel_quit(void) {
     _sapp.quit_requested = false;
 }
 
