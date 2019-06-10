@@ -397,6 +397,17 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **08-Jun-2019**: some new stuff in sokol_app.h:
+    - the ```sapp_event``` struct has a new field ```bool key_repeat```
+    which is true when a keyboard event is a key-repeat (for the
+    event types ```SAPP_EVENTTYPE_KEY_DOWN``` and ```SAPP_EVENTTYPE_CHAR```).
+    Many thanks to [Scott Lembcke](https://github.com/slembcke) for
+    the pull request!
+    - a new function to poll the internal frame counter:
+    ```uint64_t sapp_frame_count(void)```, previously the frame counter
+    was only available via ```sapp_event```.
+    - also check out the new [event-inspector sample](https://floooh.github.io/sokol-html5/wasm/events-sapp.html)
+
 - **04-Jun-2019**: All sokol headers now recognize a config-define ```SOKOL_DLL```
   if sokol should be compiled into a DLL (when used with ```SOKOL_IMPL```)
   or used as a DLL. On Windows, this will prepend the public function declarations

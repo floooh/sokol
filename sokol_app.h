@@ -92,6 +92,7 @@
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | TODO  | ---
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
@@ -660,10 +661,11 @@ enum {
 };
 
 typedef struct sapp_event {
+    uint64_t frame_count;
     sapp_event_type type;
-    uint32_t frame_count;
     sapp_keycode key_code;
     uint32_t char_code;
+    bool key_repeat;
     uint32_t modifiers;
     sapp_mousebutton mouse_button;
     float mouse_x;
@@ -714,42 +716,63 @@ typedef struct sapp_desc {
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
-/* sokol_app API functions */
+/* returns true after sokol-app has been initialized */
 SOKOL_API_DECL bool sapp_isvalid(void);
+/* returns the current framebuffer width in pixels */
 SOKOL_API_DECL int sapp_width(void);
+/* returns the current framebuffer height in pixels */
 SOKOL_API_DECL int sapp_height(void);
+/* returns true when high_dpi was requested and actually running in a high-dpi scenario */
 SOKOL_API_DECL bool sapp_high_dpi(void);
+/* returns the dpi scaling factor (window pixels to framebuffer pixels) */
 SOKOL_API_DECL float sapp_dpi_scale(void);
+/* show or hide the mobile device onscreen keyboard */
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
+/* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+/* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_API_DECL void* sapp_userdata(void);
+/* return a copy of the sapp_desc structure */
 SOKOL_API_DECL sapp_desc sapp_query_desc(void);
+/* initiaite a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
 SOKOL_API_DECL void sapp_request_quit(void);
+/* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
 SOKOL_API_DECL void sapp_cancel_quit(void);
+/* intiate a "hard quit" */
 SOKOL_API_DECL void sapp_quit(void);
+/* get the current frame counter (for comparison with sapp_event.frame_count) */
+SOKOL_API_DECL uint64_t sapp_frame_count(void);
 
-/* GL/GLES specific functions */
+/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
+SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
+
+/* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_API_DECL bool sapp_gles2(void);
 
 /* HTML5 specific functions */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 
-/* OSX/Metal specific functions */
+/* Metal: get ARC-bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
+/* Metal: get ARC-bridged pointer to this frame's renderpass descriptor */
 SOKOL_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
+/* Metal: get ARC-bridged pointer to current drawable */
 SOKOL_API_DECL const void* sapp_metal_get_drawable(void);
+/* macOS: get ARC-bridged pointer to macOS NSWindow */
 SOKOL_API_DECL const void* sapp_macos_get_window(void);
+/* iOS: get ARC-bridged pointer to iOS UIWindow */
 SOKOL_API_DECL const void* sapp_ios_get_window(void);
 
-/* Win32/D3D11 specific functions */
+/* D3D11: get pointer to ID3D11Device object */
 SOKOL_API_DECL const void* sapp_d3d11_get_device(void);
+/* D3D11: get pointer to ID3D11DeviceContext object */
 SOKOL_API_DECL const void* sapp_d3d11_get_device_context(void);
+/* D3D11: get pointer to ID3D11RenderTargetView object */
 SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
+/* D3D11: get pointer to ID3D11DepthStencilView */
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
+/* Win32: get the HWND window handle */
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
-
-/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
-SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -890,7 +913,7 @@ typedef struct {
     bool html5_ask_leave_site;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
-    uint32_t frame_count;
+    uint64_t frame_count;
     float mouse_x;
     float mouse_y;
     bool win32_mouse_tracked;
@@ -1376,10 +1399,11 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, uint32_t mod) {
+_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mod;
         _sapp_call_event(&_sapp.event);
     }
@@ -1534,7 +1558,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
-        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), mods);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
@@ -1546,6 +1570,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                     continue;
                 }
                 _sapp.event.char_code = codepoint;
+                _sapp.event.key_repeat = event.isARepeat;
                 _sapp_call_event(&_sapp.event);
             }
         }
@@ -1554,6 +1579,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyUp:(NSEvent*)event {
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
         _sapp_translate_key(event.keyCode),
+        event.isARepeat,
         _sapp_macos_mod(event.modifierFlags));
 }
 - (void)flagsChanged:(NSEvent*)event {
@@ -1581,6 +1607,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (key_code != SAPP_KEYCODE_INVALID) {
         _sapp_macos_key_event(down ? SAPP_EVENTTYPE_KEY_DOWN : SAPP_EVENTTYPE_KEY_UP,
             key_code,
+            false,
             _sapp_macos_mod(event.modifierFlags));
     }
 }
@@ -2239,6 +2266,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
+            _sapp.event.key_repeat = emsc_event->repeat;
             if (emsc_event->ctrlKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
             }
@@ -3942,20 +3970,22 @@ _SOKOL_PRIVATE void _sapp_win32_scroll_event(float x, float y) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk) {
+_SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool repeat) {
     if (_sapp_events_enabled() && (vk < SAPP_MAX_KEYCODES)) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.key_code = _sapp.keycodes[vk];
+        _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c) {
+_SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     if (_sapp_events_enabled() && (c >= 32)) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.char_code = c;
+        _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -4076,15 +4106,15 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_scroll_event((float)((SHORT)HIWORD(wParam)), 0.0f);
                 break;
             case WM_CHAR:
-                _sapp_win32_char_event((uint32_t)wParam);
+                _sapp_win32_char_event((uint32_t)wParam, !!(lParam&0x40000000));
                 break;
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
-                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF));
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_DOWN, (int)(HIWORD(lParam)&0x1FF), !!(lParam&0x40000000));
                 break;
             case WM_KEYUP:
             case WM_SYSKEYUP:
-                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF));
+                _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
                 break;
             default:
                 break;
@@ -5011,6 +5041,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/Xresource.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/Xmd.h> /* CARD32 */
@@ -6476,19 +6507,21 @@ _SOKOL_PRIVATE void _sapp_x11_scroll_event(float x, float y, uint32_t mods) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, uint32_t mods) {
+_SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mods) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, uint32_t mods) {
+_SOKOL_PRIVATE void _sapp_x11_char_event(uint32_t chr, bool repeat, uint32_t mods) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.char_code = chr;
+        _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
     }
@@ -6666,29 +6699,38 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
+// XLib manual says keycodes are in the range [8, 255] inclusive.
+// https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
+static bool _sapp_x11_keycodes[256];
+
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
         case KeyPress:
             {
-                const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
+                int keycode = event->xkey.keycode;
+                const sapp_keycode key = _sapp_x11_translate_key(keycode);
+                bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
+                _sapp_x11_keycodes[keycode & 0xFF] = true;
                 const uint32_t mods = _sapp_x11_mod(event->xkey.state);
                 if (key != SAPP_KEYCODE_INVALID) {
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, mods);
+                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
                 }
                 KeySym keysym;
                 XLookupString(&event->xkey, NULL, 0, &keysym, NULL);
                 int32_t chr = _sapp_x11_keysym_to_unicode(keysym);
                 if (chr > 0) {
-                    _sapp_x11_char_event((uint32_t)chr, mods);
+                    _sapp_x11_char_event((uint32_t)chr, repeat, mods);
                 }
             }
             break;
         case KeyRelease:
             {
-                const sapp_keycode key = _sapp_x11_translate_key(event->xkey.keycode);
+                int keycode = event->xkey.keycode;
+                const sapp_keycode key = _sapp_x11_translate_key(keycode);
+                _sapp_x11_keycodes[keycode & 0xFF] = false;
                 if (key != SAPP_KEYCODE_INVALID) {
                     const uint32_t mods = _sapp_x11_mod(event->xkey.state);
-                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, mods);
+                    _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
                 }
             }
             break;
@@ -6779,6 +6821,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     }
     _sapp_x11_screen = DefaultScreen(_sapp_x11_display);
     _sapp_x11_root = DefaultRootWindow(_sapp_x11_display);
+    XkbSetDetectableAutoRepeat(_sapp_x11_display, true, NULL);
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp_x11_dpi / 96.0f;
     _sapp_x11_init_extensions();
@@ -6862,6 +6905,10 @@ SOKOL_API_IMPL void* sapp_userdata(void) {
 
 SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
     return _sapp.desc;
+}
+
+SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
+    return _sapp.frame_count;
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
