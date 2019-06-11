@@ -3911,13 +3911,8 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp_win32_hwnd, &rect)) {
-        const int cur_width = (int)((float)(rect.right - rect.left) / _sapp_win32_window_scale);
-        const int cur_height = (int)((float)(rect.bottom - rect.top) / _sapp_win32_window_scale);
-        if ((cur_width != _sapp.window_width) || (cur_height != _sapp.window_height)) {
-            _sapp.window_width = cur_width;
-            _sapp.window_height = cur_height;
-        }
-
+        _sapp.window_width = = (int)((float)(rect.right - rect.left) / _sapp_win32_window_scale);
+        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp_win32_window_scale);
         const int fb_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
         const int fb_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
         if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
@@ -3930,7 +3925,6 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
             if (_sapp.framebuffer_height == 0) {
                 _sapp.framebuffer_height = 1;
             }
-
             return true;
         }
     }
