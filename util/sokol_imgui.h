@@ -835,8 +835,8 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
 
 SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize.x = (float) width;
-    io.DisplaySize.y = (float) height;
+    io.DisplaySize.x = ((float) width) / _simgui.desc.dpi_scale;
+    io.DisplaySize.y = ((float) height) / _simgui.desc.dpi_scale;
     io.DeltaTime = (float) delta_time;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
@@ -874,8 +874,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     sg_push_debug_group("sokol-imgui");
     sg_apply_pipeline(_simgui.pip);
     _simgui_vs_params_t vs_params;
-    vs_params.disp_size.x = ImGui::GetIO().DisplaySize.x / dpi_scale;
-    vs_params.disp_size.y = ImGui::GetIO().DisplaySize.y / dpi_scale;
+    vs_params.disp_size.x = ImGui::GetIO().DisplaySize.x;
+    vs_params.disp_size.y = ImGui::GetIO().DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_params, sizeof(vs_params));
     sg_bindings bind = { };
     bind.vertex_buffers[0] = _simgui.vbuf;

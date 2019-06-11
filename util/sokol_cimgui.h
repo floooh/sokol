@@ -825,8 +825,8 @@ SOKOL_API_IMPL void scimgui_shutdown(void) {
 
 SOKOL_API_IMPL void scimgui_new_frame(int width, int height, double delta_time) {
     ImGuiIO* io = igGetIO();
-    io->DisplaySize.x = (float) width;
-    io->DisplaySize.y = (float) height;
+    io->DisplaySize.x = ((float) width) * _scimgui.desc.dpi_scale;
+    io->DisplaySize.y = ((float) height) * _scimgui.desc.dpi_scale;
     io->DeltaTime = (float) delta_time;
     #if !defined(SOKOL_CIMGUI_NO_SOKOL_APP)
     for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
@@ -864,8 +864,8 @@ SOKOL_API_IMPL void scimgui_render(void) {
     sg_push_debug_group("sokol-imgui");
     sg_apply_pipeline(_scimgui.pip);
     _scimgui_vs_params_t vs_params;
-    vs_params.disp_size.x = igGetIO()->DisplaySize.x / dpi_scale;
-    vs_params.disp_size.y = igGetIO()->DisplaySize.y / dpi_scale;
+    vs_params.disp_size.x = igGetIO()->DisplaySize.x;
+    vs_params.disp_size.y = igGetIO()->DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_params, sizeof(vs_params));
     sg_bindings bind;
     _scimgui_clear(bind);
