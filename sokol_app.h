@@ -104,7 +104,7 @@
 
     STEP BY STEP
     ============
-    --- Add a sokol_main() to your code which returns a sapp_desc structure
+    --- Add a sokol_main() function to your code which returns a sapp_desc structure
         with initialization parameters and callback function pointers. This
         function is called very early, usually at the start of the
         platform's entry function (e.g. main or WinMain). You should do as
@@ -181,14 +181,14 @@
         The function sapp_userdata() can be used to query the user_data
         pointer provided in the sapp_desc struct.
 
-        You you can call sapp_query_desc() to get a copy(!) of the
+        You can call sapp_query_desc() to get a copy of the
         original sapp_desc structure.
 
         NOTE that there's also an alternative compile mode where sokol_app.h
         doesn't "hijack" the main() function. Search below for SOKOL_NO_ENTRY.
 
-    --- Implement the initialization callback function, this is called once
-        after the rendering surface, 3D API and swap chain have been
+    --- Implement the initialization callback function (init_cb), this is called
+        once after the rendering surface, 3D API and swap chain have been
         initialized by sokol_app. All sokol-app functions can be called
         from inside the initialization callback, the most useful functions
         at this point are:
@@ -209,18 +209,27 @@
         const void* sapp_metal_get_drawable(void)
             If the Metal backend has been selected, these functions return pointers
             to various Metal API objects required for rendering, otherwise
-            they return a null pointer. Note that the returned pointers
-            to the renderpass-descriptor and drawable may change from one
-            frame to the next!
+            they return a null pointer. These void pointers are actually
+            Objective-C ids converted with an ARC __bridge cast so that
+            they ids can be tunnel through C code. Also note that the returned
+            pointers to the renderpass-descriptor and drawable may change from one
+            frame to the next, only the Metal device object is guaranteed to
+            stay the same.
 
         const void* sapp_macos_get_window(void)
             On macOS, get the NSWindow object pointer, otherwise a null pointer.
+            Before being used as Objective-C object, the void* must be converted
+            back with an ARC __bridge cast.
 
         const void* sapp_ios_get_window(void)
             On iOS, get the UIWindow object pointer, otherwise a null pointer.
+            Before being used as Objective-C object, the void* must be converted
+            back with an ARC __bridge cast.
 
         const void* sapp_win32_get_hwnd(void)
-            On Windows, get the window's HWND, otherwise a null pointer.
+            On Windows, get the window's HWND, otherwise a null pointer. The
+            HWND has been cast to a void pointer in order to be tunneled
+            through code which doesn't include Windows.h.
 
         const void* sapp_d3d11_get_device(void);
         const void* sapp_d3d11_get_device_context(void);
@@ -236,9 +245,9 @@
     --- Implement the frame-callback function, this function will be called
         on the same thread as the init callback, but might be on a different
         thread than the sokol_main() function. Note that the size of
-        the rendering framebuffer might have change since the frame callback
+        the rendering framebuffer might have changed since the frame callback
         was called last. Call the functions sapp_width() and sapp_height()
-        to get the current size.
+        each frame to get the current size.
 
     --- Optionally implement the event-callback to handle input events.
         sokol-app provides the following type of input events:
@@ -257,7 +266,8 @@
         after the user quits the application (see the section
         "APPLICATION QUIT" for detailed information on quitting
         behaviour, and how to intercept a pending quit (for instance to show a
-        "Really Quit?" dialog box)
+        "Really Quit?" dialog box). Note that the cleanup-callback isn't
+        called on the web and mobile platforms.
 
     HIGH-DPI RENDERING
     ==================
@@ -734,11 +744,11 @@ SOKOL_API_DECL bool sapp_keyboard_shown(void);
 SOKOL_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
 SOKOL_API_DECL sapp_desc sapp_query_desc(void);
-/* initiaite a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
+/* initiate a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
 SOKOL_API_DECL void sapp_request_quit(void);
 /* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
 SOKOL_API_DECL void sapp_cancel_quit(void);
-/* intiate a "hard quit" */
+/* intiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
 SOKOL_API_DECL void sapp_quit(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_API_DECL uint64_t sapp_frame_count(void);
@@ -749,7 +759,7 @@ SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_API_DECL bool sapp_gles2(void);
 
-/* HTML5 specific functions */
+/* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 
 /* Metal: get ARC-bridged pointer to Metal device object */
