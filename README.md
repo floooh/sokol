@@ -381,9 +381,6 @@ A list of things I'd like to do next:
 
 Mainly some "missing features" for desktop apps:
 
-- allow 'programmatic quit' requested by the application
-- allow to intercept the window close button, so that the app can show
-  a 'do you really want to quit?' dialog box
 - define an application icon
 - change the window title on existing window
 - allow to programmatically activate and deactivate fullscreen
