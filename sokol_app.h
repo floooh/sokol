@@ -2136,13 +2136,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
-        w *= _sapp.dpi_scale;
-        h *= _sapp.dpi_scale;
     }
-    _sapp.framebuffer_width = (int) w;
-    _sapp.framebuffer_height = (int) h;
+    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
         _sapp_call_event(&_sapp.event);
@@ -2539,12 +2537,13 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
-        w *= _sapp.dpi_scale;
-        h *= _sapp.dpi_scale;
     }
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, w, h);
-    _sapp.framebuffer_width = (int) w;
-    _sapp.framebuffer_height = (int) h;
+    _sapp.window_width = (int) w;
+    _sapp.window_height = (int) h;
+    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
+
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     attrs.alpha = _sapp.desc.alpha;
