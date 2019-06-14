@@ -456,7 +456,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #endif
 
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-    #include "pthread.h"
+    #include <pthread.h>
 #elif defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN

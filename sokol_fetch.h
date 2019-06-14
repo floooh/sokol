@@ -69,9 +69,13 @@
 extern "C" {
 #endif
 
+/* an active request handle */
+typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
+
 /* a request goes through the following states, ping-ponging between IO and user thread */
 typedef enum sfetch_state_t {
-    SFETCH_STATE_OPENING = 0,   /* IO thread: waiting to be opened */
+    SFETCH_STATE_INITIAL = 0,   /* user thread: request has just been initialized */
+    SFETCH_STATE_OPENING,       /* IO thread: waiting to be opened */
     SFETCH_STATE_OPENED,        /* user thread: opened, size and status valid, waiting for buffer */
     SFETCH_STATE_FETCHING,      /* IO thread: waiting for data to be fetched */
     SFETCH_STATE_FETCHED,       /* user thread: processing fetched data */
@@ -79,8 +83,9 @@ typedef enum sfetch_state_t {
     SFETCH_STATE_CLOSED,        /* user thread: user-side cleanup */
 } sfetch_state_t;
 
+#define SFETCH_MAX_PATH_LEN (512)
 typedef struct sfetch_path_t {
-    char buf[512];
+    char buf[SFETCH_MAX_PATH_LEN];
 } sfetch_path_t;
 
 typedef struct sfetch_buffer_t {
@@ -89,19 +94,17 @@ typedef struct sfetch_buffer_t {
 } sfetch_buffer_t;
 
 typedef struct sfetch_request_t {
-    bool (*callback)(sfetch_request_t*);
     void* user_data;
     sfetch_buffer_t buffer;
     sfetch_path_t path;
-    sfetch_state_t state;
 } sfetch_request_t;
 
 /* create a path 'object' from a string */
-sfetch_path_t sfetch_make_path(const char* str);
-/* build a new path by appending a string to an existing path, inserts '/' if needed */
-sfetch_path_t sfetch_append_path(const sio_path_t* path, const char* str);
+SOKOL_API_DECL sfetch_path_t sfetch_make_path(const char* str);
+/* return true if an id is valid */
+SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
 /* send a fetch-request */
-void sfetch_request(const sfetch_request_t* request);
+SOKOL_API_DECL sfetch_handle_t sfetch_request(const sfetch_request_t* request);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -110,6 +113,7 @@ void sfetch_request(const sfetch_request_t* request);
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
+#include <string.h> /* memset, memcpy */
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -145,15 +149,58 @@ void sfetch_request(const sfetch_request_t* request);
     #endif
 #endif
 
-/*=== threading primitives ===================================================*/
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-#define _SFETCH_PTHREAD (1)
+    #include <pthread.h>
+    #define _SFETCH_PTHREADS (1)
+#elif defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+    #define _SFETCH_WINTHREADS (1)
+#else
+    #define _SFETCH_NOTHREADS (1)
+#endif
+
+/*=== general helper functions ===============================================*/
+_SOKOL_PRIVATE void _sfetch_path_copy(sfetch_path_t* dst, const char* src) {
+    SOKOL_ASSERT(dst);
+    if (src) {
+        #if defined(_MSC_VER)
+        strncpy_s(dst->buf, SFETCH_MAX_PATH_LEN, src, (SFETCH_MAX_PATH_LEN-1));
+        #else
+        strncpy(dst->buf, src, SFETCH_MAX_PATH_LEN);
+        #endif
+        dst->buf[SFETCH_MAX_PATH_LEN-1] = 0;
+    }
+    else {
+        memset(dst->buf, 0, SFETCH_MAX_PATH_LEN);
+    }
+}
+
+_SOKOL_PRIVATE sfetch_path_t _sfetch_path_make(const char* str) {
+    sfetch_path_t res;
+    _sfetch_path_copy(&res, str);
+    return res;
+}
+
+_SOKOL_PRIVATE sfetch_handle_t _sfetch_make_handle(uint32_t index, uint32_t gen_ctr) {
+    sfetch_handle_t h = { (gen_ctr<<16) | (index & 0xFFFF) };
+    return h;
+}
+
+_SOKOL_PRIVATE uint32_t _sfetch_handle_index(sfetch_handle_t handle) {
+    return handle.id & 0xFFFF;
+}
+
+/*=== threading primitives ===================================================*/
+#if defined(_SFETCH_PTHREADS)
 typedef struct {
     pthread_mutex_t mutex;
 } _sfetch_mutex_t;
 
 _SOKOL_PRIVATE void _sfetch_mutex_init(_sfetch_mutex_t* m) {
-    pthread_mutex_attr_t attr;
+    pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutex_init(&m->mutex, &attr);
 }
@@ -169,8 +216,7 @@ _SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) {
 _SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) {
     pthread_mutex_unlock(&m->mutex);
 }
-#elif defined(_WIN32)
-#define _SFETCH_WINTHREAD (1)
+#elif defined(_SFETCH_WINTHREADS)
 typedef struct {
     CRITICAL_SECTION critsec;
 } _sfetch_mutex_t;
@@ -190,13 +236,11 @@ _SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) {
 _SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) {
     LeaveCriticalSection(&m->critsect);
 #else
-#define _SFETCH_NOTHREAD (1)
 typedef struct { } _sio_mutex_t;
 _SOKOL_PRIVATE void _sfetch_mutex_init(_sfetch_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _sfetch_mutex_destroy(_sfetch_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) { (void)m; }
-#endif
 #endif
 
 /*=== request pool implementation ============================================*/
@@ -204,59 +248,71 @@ _SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) { (void)m; }
 /* internal per-request item (request plus private data) */
 typedef struct {
     sfetch_request_t request;
-    bool valid;
+    sfetch_handle_t handle;
+    sfetch_state_t state;
 } _sfetch_item_t;
 
-_SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, const sfetch_request_t* request) {
-    SOKOL_ASSERT(item && !item->valid);
+_SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, sfetch_handle_t handle, const sfetch_request_t* request) {
+    SOKOL_ASSERT(item && (0 == item->handle.id));
     SOKOL_ASSERT(request);
     item->request = *request;
-    item->valid = true;
+    item->handle = handle;
+    item->state = SFETCH_STATE_INITIAL;
 }
 
 _SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
-    SOKOL_ASSERT(item && item->valid);
+    SOKOL_ASSERT(item && (0 != item->handle.id));
     memset(item, 0, sizeof(_sfetch_item_t));
 }
 
 typedef struct {
-    int size;
-    int free_top;
+    uint32_t size;
+    uint32_t free_top;
     _sfetch_item_t* items;
-    int* free_slots;
+    uint32_t* free_slots;
+    uint32_t* gen_ctrs;
     bool valid;
 } _sfetch_pool_t;
 
 _SOKOL_PRIVATE void _sfetch_pool_discard(_sfetch_pool_t* pool) {
     SOKOL_ASSERT(pool);
-    if (pool->items) {
-        SOKOL_FREE(pool->items);
-        pool->items = 0;
-    }
     if (pool->free_slots) {
         SOKOL_FREE(pool->free_slots);
         pool->free_slots = 0;
+    }
+    if (pool->gen_ctrs) {
+        SOKOL_FREE(pool->gen_ctrs);
+        pool->gen_ctrs = 0;
+    }
+    if (pool->items) {
+        SOKOL_FREE(pool->items);
+        pool->items = 0;
     }
     pool->size = 0;
     pool->free_top = 0;
     pool->valid = false;
 }
 
-_SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, int num_items) {
-    SOKOL_ASSERT(pool && (num_items > 0));
+_SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, uint32_t num_items) {
+    SOKOL_ASSERT(pool && (num_items > 0) && (num_items < ((1<<16)-1)));
     SOKOL_ASSERT(0 == pool->items);
     /* NOTE: item slot 0 is reserved for the special "invalid" item index 0*/
     pool->size = num_items + 1;
     pool->free_top = 0;
-    const int items_size = pool->size * sizeof(_sfetch_item_t);
+    const size_t items_size = pool->size * sizeof(_sfetch_item_t);
     pool->items = (_sfetch_item_t*) SOKOL_MALLOC(items_size);
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    const size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
     /* NOTE: it's not a bug to only reserve num_items here */
-    const int free_slots_size = num_items * sizeof(int);
-    pool->free_slots = (int*) SOKOL_MALLOC(free_slots_size);
+    const size_t free_slots_size = num_items * sizeof(int);
+    pool->free_slots = (uint32_t*) SOKOL_MALLOC(free_slots_size);
     if (pool->items && pool->free_slots) {
         memset(pool->items, 0, items_size);
+        memset(pool->gen_ctrs, 0, gen_ctrs_size);
         /* never allocate the 0-th item, this is the reserved 'invalid item' */
-        for (int i = pool->size - 1; i >= 1; i--) {
+        for (uint32_t i = pool->size - 1; i >= 1; i--) {
             pool->free_slots[pool->free_top++] = i;
         }
         pool->valid = true;
@@ -264,35 +320,38 @@ _SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, int num_items) {
     else {
         /* allocation error */
         _sfetch_pool_discard(pool);
-        return false;
     }
+    return pool->valid;
 }
 
-_SOKOL_PRIVATE int _sfetch_pool_alloc_item(_sfetch_pool_t* pool, const sfetch_request_t* request) {
+_SOKOL_PRIVATE sfetch_handle_t _sfetch_pool_alloc_item(_sfetch_pool_t* pool, const sfetch_request_t* request) {
     SOKOL_ASSERT(pool && pool->valid);
     if (pool->free_top > 0) {
-        int item_index = pool->free_slots[--pool->free_top];
+        uint32_t item_index = pool->free_slots[--pool->free_top];
         SOKOL_ASSERT((item_index > 0) && (item_index < pool->size));
-        _sfetch_item_init(&pool->items[item_index], request);
-        return item_index;
+        sfetch_handle_t handle = _sfetch_make_handle(item_index, ++pool->gen_ctrs[item_index]);
+        _sfetch_item_init(&pool->items[item_index], handle, request);
+        return _sfetch_make_handle(item_index, ++pool->gen_ctrs[item_index]);
     }
     else {
-        /* pool exhausted, return the 'invalid index' */
-        return 0;
+        /* pool exhausted, return the 'invalid handle' */
+        return _sfetch_make_handle(0, 0);
     }
 }
 
-_SOKOL_PRIVATE void _sfetch_pool_free_item(_sfetch_pool_t* pool, int item_index) {
+_SOKOL_PRIVATE void _sfetch_pool_free_item(_sfetch_pool_t* pool, sfetch_handle_t h) {
     SOKOL_ASSERT(pool && pool->valid);
+    uint32_t item_index = _sfetch_handle_index(h);
     SOKOL_ASSERT((item_index > 0) && (item_index < pool->size));
+    SOKOL_ASSERT(pool->items[item_index].handle.id == h.id);
     #ifdef SOKOL_DEBUG
     /* debug check against double-free */
-    for (int i = 0; i < pool->free_top; i++) {
+    for (uint32_t i = 0; i < pool->free_top; i++) {
         SOKOL_ASSERT(pool->free_slots[i] != item_index);
     }
     #endif
     _sfetch_item_discard(&pool->items[item_index]);
-    pool->free_slots[pool->free_top++] = slot_index;
+    pool->free_slots[pool->free_top++] = item_index;
     SOKOL_ASSERT(pool->free_top <= (pool->size - 1));
 }
 
@@ -328,7 +387,7 @@ typedef struct {
     int head;
     int tail;
     int num;
-    int* queue;
+    sfetch_handle_t* queue;
 } _sfetch_ring_t;
 
 _SOKOL_PRIVATE int _sfetch_ring_index(const _sfetch_ring_t* rb, int i) {
@@ -353,8 +412,10 @@ _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, int num_slots) {
     rb->tail = 0;
     /* one slot reserved to detect full vs empty */
     rb->num = num_slots + 1;
-    rb->queue = (int*) SOKOL_MALLOC(rb->num * sizeof(int));
+    const size_t queue_size = rb->num * sizeof(sfetch_handle_t);
+    rb->queue = (sfetch_handle_t*) SOKOL_MALLOC(queue_size);
     if (rb->queue) {
+        memset(rb->queue, 0, queue_size);
         return true;
     }
     else {
@@ -376,29 +437,29 @@ _SOKOL_PRIVATE bool _sfetch_ring_empty(const _sfetch_ring_t* rb) {
 _SOKOL_PRIVATE bool _sfetch_ring_count(const _sfetch_ring_t* rb) {
     SOKOL_ASSERT(rb && rb->queue);
     int count;
-    if (ring->head >= ring->tail) {
-        count = ring->head - ring->tail;
+    if (rb->head >= rb->tail) {
+        count = rb->head - rb->tail;
     }
     else {
-        count = (ring->head + ring->num) - ring->tail;
+        count = (rb->head + rb->num) - rb->tail;
     }
-    SOKOL_ASSERT((count >= 0) && (count < ring->num));
+    SOKOL_ASSERT((count >= 0) && (count < rb->num));
     return count;
 }
 
-_SOKOL_PRIVATE void _sfetch_ring_enqueue(_sfetch_ring_t* rb, int val) {
+_SOKOL_PRIVATE void _sfetch_ring_enqueue(_sfetch_ring_t* rb, sfetch_handle_t h) {
     SOKOL_ASSERT(rb && rb->queue);
-    SOKOL_ASSERT(!_saudio_ring_full(rb));
+    SOKOL_ASSERT(!_sfetch_ring_full(rb));
     SOKOL_ASSERT((rb->head >= 0) && (rb->head < rb->num));
-    rb->queue[rb->head] = val;
+    rb->queue[rb->head] = h;
     rb->head = _sfetch_ring_index(rb, rb->head + 1);
 }
 
-_SOKOL_PRIVATE int _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
+_SOKOL_PRIVATE sfetch_handle_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
     SOKOL_ASSERT(rb && rb->queue);
-    SOKOL_ASSERT(!_saudio_ring_empty(rb));
+    SOKOL_ASSERT(!_sfetch_ring_empty(rb));
     SOKOL_ASSERT((rb->tail >= 0) && (rb->tail < rb->num));
-    int res = rb->queue[rb->tail];
+    sfetch_handle_t res = rb->queue[rb->tail];
     rb->tail = _sfetch_ring_index(rb, rb->tail + 1);
     return res;
 }
@@ -413,7 +474,7 @@ typedef struct {
     bool valid;
 } _sfetch_queue_t;
 
-_SOKOL_PRIVATE void _sfetch_queue_discard(_sio_queue* queue) {
+_SOKOL_PRIVATE void _sfetch_queue_discard(_sfetch_queue_t* queue) {
     SOKOL_ASSERT(queue);
     _sfetch_ring_discard(&queue->waiting);
     _sfetch_ring_discard(&queue->incoming);
@@ -427,8 +488,8 @@ _SOKOL_PRIVATE bool _fetch_queue_init(_sfetch_queue_t* queue, int num_items) {
     SOKOL_ASSERT(queue && (num_items > 0));
     SOKOL_ASSERT(!queue->valid);
     bool valid = true;
-    valid &= _sfetch_mutex_init(&queue->incoming_mutex);
-    valid &= _sfetch_mutex_init(&queue->outgoing_mutex);
+    _sfetch_mutex_init(&queue->incoming_mutex);
+    _sfetch_mutex_init(&queue->outgoing_mutex);
     valid &= _sfetch_ring_init(&queue->waiting, num_items);
     valid &= _sfetch_ring_init(&queue->incoming, num_items);
     valid &= _sfetch_ring_init(&queue->outgoing, num_items);
@@ -437,9 +498,18 @@ _SOKOL_PRIVATE bool _fetch_queue_init(_sfetch_queue_t* queue, int num_items) {
         return true;
     }
     else {
-        _sio_queue_discard(queue);
+        _sfetch_queue_discard(queue);
         return false;
     }
+}
+
+/*=== PUBLIC API FUNCTIONS ===================================================*/
+SOKOL_API_IMPL sfetch_path_t sfetch_make_path(const char* str) {
+    return _sfetch_path_make(str);
+}
+
+SOKOL_API_IMPL bool sfetch_handle_valid(sfetch_handle_t h) {
+    return 0 != h.id;
 }
 
 #endif /* SOKOL_IMPL */
