@@ -102,6 +102,7 @@ typedef struct sfetch_buffer_t {
 } sfetch_buffer_t;
 
 typedef struct sfetch_request_t {
+    uint32_t channel;
     const char* path;
     void (*state_changed_cb)(sfetch_handle_t, sfetch_state_t);  /* optional, can also use a polling model */
     sfetch_buffer_t buffer;     /* it's optional to provide a buffer upfront, can also happen in OPENED state */
@@ -205,11 +206,71 @@ SOKOL_API_DECL void sfetch_advance_state(sfetch_handle_t req);
     #define _SFETCH_NOTHREADS (1)
 #endif
 
-/*=== general helper functions ===============================================*/
+/*=== private type definitions ===============================================*/
 typedef struct _sfetch_path_t {
     char buf[SFETCH_MAX_PATH];
 } _sfetch_path_t;
 
+/* a thread with incoming and outgoing message queue syncing */
+#if defined(_SFETCH_PTHREADS)
+typedef struct {
+    pthread_t thread;
+    pthread_cond_t incoming_cond;
+    pthread_mutex_t incoming_mutex;
+    pthread_mutex_t outgoing_mutex;
+    bool stop_requested;
+    bool valid;
+} _sfetch_thread_t;
+#elif defined(_SFETCH_WINTHREADS)
+#error "FIXME WIndows"
+#else
+typedef struct { } _sfetch_thread_t;
+#endif
+
+/* internal per-request item */
+typedef struct {
+    sfetch_handle_t handle;
+    sfetch_state_t state;
+    void (*callback)(sfetch_handle_t, sfetch_state_t);
+    sfetch_buffer_t buffer;
+    _sfetch_path_t path;
+    int user_data_size;
+    uint64_t user_data[SFETCH_MAX_USERDATA_UINT64];
+} _sfetch_item_t;
+
+/* a pool of internal per-request items */
+typedef struct {
+    uint32_t size;
+    uint32_t free_top;
+    _sfetch_item_t* items;
+    uint32_t* free_slots;
+    uint32_t* gen_ctrs;
+    bool valid;
+} _sfetch_pool_t;
+
+/* a ringbuffer for pool-slot ids */
+typedef struct {
+    uint32_t head;
+    uint32_t tail;
+    uint32_t num;
+    uint32_t* queue;
+} _sfetch_ring_t;
+
+/* an IO queue (associated with an IO thread) */
+typedef struct {
+    _sfetch_ring_t incoming;
+    _sfetch_ring_t outgoing;
+    _sfetch_thread_t thread;
+    bool valid;
+} _sfetch_queue_t;
+
+/* an IO channel is a thread with an IO queue */
+typedef struct {
+    _sfetch_queue_t queue;
+    _sfetch_thread_t thread;
+} _sfetch_channel_t;
+
+/*=== general helper functions ===============================================*/
 _SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
     if (src && (strlen(src) < SFETCH_MAX_PATH)) {
@@ -239,69 +300,177 @@ _SOKOL_PRIVATE uint32_t _sfetch_slot_index(uint32_t slot_id) {
     return slot_id & 0xFFFF;
 }
 
-/*=== threading primitives ===================================================*/
-#if defined(_SFETCH_PTHREADS)
-typedef struct {
-    pthread_mutex_t mutex;
-} _sfetch_mutex_t;
+_SOKOL_PRIVATE uint32_t _sfetch_ring_index(const _sfetch_ring_t* rb, uint32_t i) {
+    return i % rb->num;
+}
 
-_SOKOL_PRIVATE void _sfetch_mutex_init(_sfetch_mutex_t* m) {
+_SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
+    SOKOL_ASSERT(rb);
+    if (rb->queue) {
+        SOKOL_FREE(rb->queue);
+        rb->queue = 0;
+    }
+    rb->head = 0;
+    rb->tail = 0;
+    rb->num = 0;
+}
+
+/*=== a message circular queue ===============================================*/
+_SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
+    SOKOL_ASSERT(rb && (num_slots > 0));
+    SOKOL_ASSERT(0 == rb->queue);
+    rb->head = 0;
+    rb->tail = 0;
+    /* one slot reserved to detect full vs empty */
+    rb->num = num_slots + 1;
+    const size_t queue_size = rb->num * sizeof(sfetch_handle_t);
+    rb->queue = (uint32_t*) SOKOL_MALLOC(queue_size);
+    if (rb->queue) {
+        memset(rb->queue, 0, queue_size);
+        return true;
+    }
+    else {
+        _sfetch_ring_discard(rb);
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE bool _sfetch_ring_full(const _sfetch_ring_t* rb) {
+    SOKOL_ASSERT(rb && rb->queue);
+    return _sfetch_ring_index(rb, rb->head + 1) == rb->tail;
+}
+
+_SOKOL_PRIVATE bool _sfetch_ring_empty(const _sfetch_ring_t* rb) {
+    SOKOL_ASSERT(rb && rb->queue);
+    return rb->head == rb->tail;
+}
+
+_SOKOL_PRIVATE uint32_t _sfetch_ring_count(const _sfetch_ring_t* rb) {
+    SOKOL_ASSERT(rb && rb->queue);
+    uint32_t count;
+    if (rb->head >= rb->tail) {
+        count = rb->head - rb->tail;
+    }
+    else {
+        count = (rb->head + rb->num) - rb->tail;
+    }
+    SOKOL_ASSERT((count >= 0) && (count < rb->num));
+    return count;
+}
+
+_SOKOL_PRIVATE void _sfetch_ring_enqueue(_sfetch_ring_t* rb, uint32_t slot_id) {
+    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(!_sfetch_ring_full(rb));
+    SOKOL_ASSERT((rb->head >= 0) && (rb->head < rb->num));
+    rb->queue[rb->head] = slot_id;
+    rb->head = _sfetch_ring_index(rb, rb->head + 1);
+}
+
+_SOKOL_PRIVATE uint32_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
+    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(!_sfetch_ring_empty(rb));
+    SOKOL_ASSERT((rb->tail >= 0) && (rb->tail < rb->num));
+    uint32_t slot_id = rb->queue[rb->tail];
+    rb->tail = _sfetch_ring_index(rb, rb->tail + 1);
+    return slot_id;
+}
+
+/*=== threading wrappers =====================================================*/
+#if defined(_SFETCH_PTHREADS)
+
+_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
+    SOKOL_ASSERT(thread && (thread->thread == 0));
+
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-    pthread_mutex_init(&m->mutex, &attr);
+    pthread_mutex_init(&thread->incoming_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&thread->outgoing_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+
+    pthread_condattr_t cond_attr;
+    pthread_condattr_init(&cond_attr);
+    pthread_cond_init(&thread->incoming_cond, &cond_attr);
+    pthread_condattr_destroy(&cond_attr);
+
+    thread->stop_requested = false;
+    int res = pthread_create(&thread->thread, 0, thread_func, thread_arg);
+    thread->valid = (0 == res);
+    return thread->valid;
 }
 
-_SOKOL_PRIVATE void _sfetch_mutex_discard(_sfetch_mutex_t* m) {
-    pthread_mutex_destroy(&m->mutex);
+_SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
+    SOKOL_ASSERT(thread && (thread->thread != 0));
+    pthread_mutex_lock(&thread->incoming_mutex);
+    thread->stop_requested = true;
+    pthread_cond_signal(&thread->incoming_cond);
+    pthread_mutex_unlock(&thread->incoming_mutex);
+    pthread_join(thread->thread, 0);
 }
 
-_SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) {
-    pthread_mutex_lock(&m->mutex);
+_SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming, _sfetch_ring_t* src) {
+    /* called from user thread */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(incoming && incoming->queue);
+    SOKOL_ASSERT(src && src->queue);
+    pthread_mutex_lock(&thread->incoming_mutex);
+    while (!_sfetch_ring_full(incoming) && !_sfetch_ring_empty(src)) {
+        _sfetch_ring_enqueue(incoming, _sfetch_ring_dequeue(src));
+    }
+    pthread_cond_signal(&thread->incoming_cond);
+    pthread_mutex_unlock(&thread->incoming_mutex);
 }
 
-_SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) {
-    pthread_mutex_unlock(&m->mutex);
+_SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming) {
+    /* called from thread function */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(incoming && incoming->queue);
+    pthread_mutex_lock(&thread->incoming_mutex);
+    while (_sfetch_ring_empty(incoming) && !thread->stop_requested) {
+        pthread_cond_wait(&thread->incoming_cond, &thread->incoming_mutex);
+    }
+    uint32_t item = 0;
+    if (!thread->stop_requested) {
+        item = _sfetch_ring_dequeue(incoming);
+    }
+    pthread_mutex_unlock(&thread->incoming_mutex);
+    return item;
 }
+
+_SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
+    /* called from thread function */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(outgoing && outgoing->queue);
+    pthread_mutex_lock(&thread->outgoing_mutex);
+    bool result = false;
+    if (!_sfetch_ring_full(outgoing)) {
+        _sfetch_ring_enqueue(outgoing, item);
+    }
+    pthread_mutex_unlock(&thread->outgoing_mutex);
+    return result;
+}
+
+_SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
+    /* called from user thread */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(outgoing && outgoing->queue);
+    SOKOL_ASSERT(dst && dst->queue);
+    pthread_mutex_lock(&thread->outgoing_mutex);
+    while (!_sfetch_ring_full(dst) && !_sfetch_ring_empty(outgoing)) {
+        _sfetch_ring_enqueue(dst, _sfetch_ring_dequeue(outgoing));
+    }
+    pthread_mutex_unlock(&thread->outgoing_mutex);
+}
+
 #elif defined(_SFETCH_WINTHREADS)
-typedef struct {
-    CRITICAL_SECTION critsec;
-} _sfetch_mutex_t;
-
-_SOKOL_PRIVATE void _sfetch_mutex_init(_sfetch_mutex_t* m) {
-    InitializeCriticalSection(&m->critsect);
-}
-
-_SOKOL_PRIVATE void _sfetch_mutex_discard(_sfetch_mutex_t* m) {
-    DeleteCriticalSection(&m->critsect);
-}
-
-_SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) {
-    EnterCriticalSection(&m->critsect);
-}
-
-_SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) {
-    LeaveCriticalSection(&m->critsect);
+#error "FIXME Windows"
 #else
-typedef struct { } _sio_mutex_t;
-_SOKOL_PRIVATE void _sfetch_mutex_init(_sfetch_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _sfetch_mutex_destroy(_sfetch_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _sfetch_mutex_lock(_sfetch_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) { (void)m; }
+#error "FIXME Emscripten"
 #endif
 
 /*=== request pool implementation ============================================*/
-
-/* internal per-request item */
-typedef struct {
-    sfetch_handle_t handle;
-    sfetch_state_t state;
-    void (*callback)(sfetch_handle_t, sfetch_state_t);
-    sfetch_buffer_t buffer;
-    _sfetch_path_t path;
-    int user_data_size;
-    uint64_t user_data[SFETCH_MAX_USERDATA_UINT64];
-} _sfetch_item_t;
-
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
     SOKOL_ASSERT(item && (0 == item->handle.id));
     SOKOL_ASSERT(request && request->path);
@@ -323,15 +492,6 @@ _SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
     SOKOL_ASSERT(item && (0 != item->handle.id));
     memset(item, 0, sizeof(_sfetch_item_t));
 }
-
-typedef struct {
-    uint32_t size;
-    uint32_t free_top;
-    _sfetch_item_t* items;
-    uint32_t* free_slots;
-    uint32_t* gen_ctrs;
-    bool valid;
-} _sfetch_pool_t;
 
 _SOKOL_PRIVATE void _sfetch_pool_discard(_sfetch_pool_t* pool) {
     SOKOL_ASSERT(pool);
@@ -437,141 +597,42 @@ _SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_lookup(_sfetch_pool_t* pool, ui
 
 /*=== IO QUEUE implementation ================================================*/
 
-/*
-    An IO queue is a set of request items waiting to be processed by
-    an IO thread, or the user thread which issued the request.
-
-    The user thread own a single IO queue with items waiting to
-    be processed by the user callback (request states
-    OPENED, FETCHED, CLOSED).
-
-    Each IO thread owns a single IO queue with items waiting to
-    be worked on (OPENING, FETCHING, CLOSING).
-
-    Queue items are indices into the global item pool.
-
-    Each IO queue has 3 internal 'sub-queues' of:
-        - waiting: items waiting to be processed (that's basically the main-queue)
-        - incoming: incoming items to be added to the waiting queue
-        - outgoing: processed items from the waiting queue
-    The incoming and outgoing queues exist to reduce and simplify
-    thread-locking.
-
-    FIXME: maybe implement support for multiple user threads later?
-    This would allow to issue IO requests from multiple user threads
-    into multiple IO threads.
-*/
-
-/* a ringbuffer for the actual internal queues */
-typedef struct {
-    uint32_t head;
-    uint32_t tail;
-    uint32_t num;
-    uint32_t* queue;
-} _sfetch_ring_t;
-
-_SOKOL_PRIVATE uint32_t _sfetch_ring_index(const _sfetch_ring_t* rb, uint32_t i) {
-    return i % rb->num;
-}
-
-_SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb);
-    if (rb->queue) {
-        SOKOL_FREE(rb->queue);
-        rb->queue = 0;
+_SOKOL_PRIVATE void* _sfetch_queue_thread_func(void* arg) {
+    _sfetch_queue_t* queue = (_sfetch_queue_t*) arg;
+    while (!queue->thread.stop_requested) {
+        /* block until work arrives */
+        uint32_t slot_id = _sfetch_thread_dequeue_incoming(&queue->thread, &queue->incoming);
+        // FIXME: process request
+        /* slot_id will be invalid if the thread was woken up to join */
+        if (!queue->thread.stop_requested) {
+            if (!_sfetch_thread_enqueue_outgoing(&queue->thread, &queue->outgoing, slot_id)) {
+                // FIXME: what to do if outgoing queue is overflowing because
+                // the user thread doesn't empty it?
+            }
+        }
     }
-    rb->head = 0;
-    rb->tail = 0;
-    rb->num = 0;
+    return 0;
 }
-
-_SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
-    SOKOL_ASSERT(rb && (num_slots > 0));
-    SOKOL_ASSERT(0 == rb->queue);
-    rb->head = 0;
-    rb->tail = 0;
-    /* one slot reserved to detect full vs empty */
-    rb->num = num_slots + 1;
-    const size_t queue_size = rb->num * sizeof(sfetch_handle_t);
-    rb->queue = (uint32_t*) SOKOL_MALLOC(queue_size);
-    if (rb->queue) {
-        memset(rb->queue, 0, queue_size);
-        return true;
-    }
-    else {
-        _sfetch_ring_discard(rb);
-        return false;
-    }
-}
-
-_SOKOL_PRIVATE bool _sfetch_ring_full(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
-    return _sfetch_ring_index(rb, rb->head + 1) == rb->tail;
-}
-
-_SOKOL_PRIVATE bool _sfetch_ring_empty(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
-    return rb->head == rb->tail;
-}
-
-_SOKOL_PRIVATE uint32_t _sfetch_ring_count(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
-    uint32_t count;
-    if (rb->head >= rb->tail) {
-        count = rb->head - rb->tail;
-    }
-    else {
-        count = (rb->head + rb->num) - rb->tail;
-    }
-    SOKOL_ASSERT((count >= 0) && (count < rb->num));
-    return count;
-}
-
-_SOKOL_PRIVATE void _sfetch_ring_enqueue(_sfetch_ring_t* rb, uint32_t slot_id) {
-    SOKOL_ASSERT(rb && rb->queue);
-    SOKOL_ASSERT(!_sfetch_ring_full(rb));
-    SOKOL_ASSERT((rb->head >= 0) && (rb->head < rb->num));
-    rb->queue[rb->head] = slot_id;
-    rb->head = _sfetch_ring_index(rb, rb->head + 1);
-}
-
-_SOKOL_PRIVATE uint32_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
-    SOKOL_ASSERT(!_sfetch_ring_empty(rb));
-    SOKOL_ASSERT((rb->tail >= 0) && (rb->tail < rb->num));
-    uint32_t slot_id = rb->queue[rb->tail];
-    rb->tail = _sfetch_ring_index(rb, rb->tail + 1);
-    return slot_id;
-}
-
-/* the actual IO queue implementation */
-typedef struct {
-    _sfetch_ring_t incoming;
-    _sfetch_ring_t outgoing;
-    _sfetch_mutex_t incoming_mutex;
-    _sfetch_mutex_t outgoing_mutex;
-    bool valid;
-} _sfetch_queue_t;
 
 _SOKOL_PRIVATE void _sfetch_queue_discard(_sfetch_queue_t* queue) {
     SOKOL_ASSERT(queue);
     _sfetch_ring_discard(&queue->incoming);
     _sfetch_ring_discard(&queue->outgoing);
-    _sfetch_mutex_discard(&queue->incoming_mutex);
-    _sfetch_mutex_discard(&queue->outgoing_mutex);
+    if (queue->valid) {
+        _sfetch_thread_join(&queue->thread);
+    }
     queue->valid = false;
 }
 
 _SOKOL_PRIVATE bool _sfetch_queue_init(_sfetch_queue_t* queue, uint32_t num_items) {
     SOKOL_ASSERT(queue && (num_items > 0));
     SOKOL_ASSERT(!queue->valid);
-    _sfetch_mutex_init(&queue->incoming_mutex);
-    _sfetch_mutex_init(&queue->outgoing_mutex);
     bool valid = true;
     valid &= _sfetch_ring_init(&queue->incoming, num_items);
     valid &= _sfetch_ring_init(&queue->outgoing, num_items);
     if (valid) {
         queue->valid = true;
+        _sfetch_thread_init(&queue->thread, _sfetch_queue_thread_func, queue);
         return true;
     }
     else {
@@ -585,59 +646,20 @@ _SOKOL_PRIVATE bool _sfetch_queue_init(_sfetch_queue_t* queue, uint32_t num_item
     changed from a user-thread-state into a IO-thread-state back into the
     IO thread.
 */
-_SOKOL_PRIVATE void _sfetch_queue_enqueue_incoming(_sfetch_queue_t* queue, _sfetch_ring_t* src) {
+_SOKOL_PRIVATE void _sfetch_queue_push(_sfetch_queue_t* queue, _sfetch_ring_t* src) {
     SOKOL_ASSERT(queue && queue->valid);
     SOKOL_ASSERT(src && src->queue);
-    _sfetch_mutex_lock(&queue->incoming_mutex);
-    while (!_sfetch_ring_full(&queue->incoming) && !_sfetch_ring_empty(src)) {
-        _sfetch_ring_enqueue(&queue->incoming, _sfetch_ring_dequeue(src));
-    }
-    _sfetch_mutex_unlock(&queue->incoming_mutex);
-}
-
-/* Dequeue the next item from the incoming queue, this is called by the
-    the queue's IO thread when it is ready to process the next item. Returns
-    a null-handle if the incoming queue is empty.
-*/
-_SOKOL_PRIVATE uint32_t _sfetch_queue_dequeue_incoming(_sfetch_queue_t* queue) {
-    SOKOL_ASSERT(queue && queue->valid);
-    uint32_t slot_id = _sfetch_make_id(0, 0);
-    _sfetch_mutex_lock(&queue->incoming_mutex);
-    if (!_sfetch_ring_empty(&queue->incoming)) {
-        slot_id = _sfetch_ring_dequeue(&queue->incoming);
-    }
-    _sfetch_mutex_unlock(&queue->incoming_mutex);
-    return slot_id;
-}
-
-/* Add an item to the outgoing queue, this is called by an IO thread when
-   an item switches from an IO-thread-state into a user-thread-state. Returns
-   false if the outgoing queue is full.
-*/
-_SOKOL_PRIVATE bool _sfetch_queue_enqueue_outgoing(_sfetch_queue_t* queue, uint32_t slot_id) {
-    SOKOL_ASSERT(queue && queue->valid);
-    _sfetch_mutex_lock(&queue->outgoing_mutex);
-    bool result = false;
-    if (!_sfetch_ring_full(&queue->outgoing)) {
-        _sfetch_ring_enqueue(&queue->outgoing, slot_id);
-        result = true;
-    }
-    _sfetch_mutex_unlock(&queue->outgoing_mutex);
-    return result;
+    _sfetch_thread_enqueue_incoming(&queue->thread, &queue->incoming, src);
 }
 
 /* Move items from the outgoing ringbuffer into an destination ringbuffer until
     either the outgoing queue is empty or the destination ringbuffer is full.
     This is called once per frame from the user thread.
 */
-_SOKOL_PRIVATE void _sfetch_queue_dequeue_outgoing(_sfetch_queue_t* queue, _sfetch_ring_t* dst) {
+_SOKOL_PRIVATE void _sfetch_queue_pop(_sfetch_queue_t* queue, _sfetch_ring_t* dst) {
     SOKOL_ASSERT(queue && queue->valid);
     SOKOL_ASSERT(dst && dst->queue);
-    _sfetch_mutex_lock(&queue->outgoing_mutex);
-    while (!_sfetch_ring_empty(&queue->outgoing) && !_sfetch_ring_full(dst)) {
-        _sfetch_ring_enqueue(dst, _sfetch_ring_dequeue(&queue->outgoing));
-    }
-    _sfetch_mutex_unlock(&queue->outgoing_mutex);
+    _sfetch_thread_dequeue_outgoing(&queue->thread, &queue->outgoing, dst);
 }
 
 /*=== validation functions ===================================================*/
