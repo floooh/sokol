@@ -11,13 +11,17 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
+    SOKOL_MALLOC(s)             - your own malloc function (default: malloc(s))
+    SOKOL_FREE(p)               - your own free function (default: free(p))
+    SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
+    SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
+    SOKOL_API_DECL              - public function declaration prefix (default: extern)
+    SOKOL_API_IMPL              - public function implementation prefix (default: -)
+    SFETCH_MAX_PATH             - max length of UTF-8 filesystem path / URL (default: 512 bytes)
+    SFETCH_MAX_USERDATA_UINT64  - max size of embedded userdata in number of uint64_t, userdata
+                                  will be copied into an 8-byte aligned memory region associated
+                                  with each in-flight request, default value is 16 (== 128 bytes)
 
     If sokol_fetch.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -69,7 +73,15 @@
 extern "C" {
 #endif
 
-/* an active request handle */
+/* configuration values for sfetch_setup() */
+typedef struct sfetch_desc_t {
+    int num_channels;                   /* number of channels to fetch requests in parallel, default is 1 */
+    int max_active_requests;            /* max number of requests 'in flight' */
+    int state_change_timeout_frames;    /* number of frames until request is discarded in polling mode if
+                                           user code doesn't respond to a request state change */
+} sfetch_desc_t;
+
+/* a request handle to identify an active fetch request */
 typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
 
 /* a request goes through the following states, ping-ponging between IO and user thread */
@@ -83,28 +95,53 @@ typedef enum sfetch_state_t {
     SFETCH_STATE_CLOSED,        /* user thread: user-side cleanup */
 } sfetch_state_t;
 
-#define SFETCH_MAX_PATH_LEN (512)
-typedef struct sfetch_path_t {
-    char buf[SFETCH_MAX_PATH_LEN];
-} sfetch_path_t;
-
 typedef struct sfetch_buffer_t {
     uint8_t* ptr;
     uint32_t num_bytes;
 } sfetch_buffer_t;
 
 typedef struct sfetch_request_t {
-    void* user_data;
-    sfetch_buffer_t buffer;
-    sfetch_path_t path;
+    const char* path;
+    void (*state_changed_cb)(sfetch_handle_t, sfetch_state_t);  /* optional, can also use a polling model */
+    sfetch_buffer_t buffer;     /* it's optional to provide a buffer upfront, can also happen in OPENED state */
+    void* user_data;            /* optional user-data will be memcpy'ed into a memory region set aside for each request */
+    int user_data_size;
 } sfetch_request_t;
 
-/* create a path 'object' from a string */
-SOKOL_API_DECL sfetch_path_t sfetch_make_path(const char* str);
-/* return true if an id is valid */
-SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
+/* setup sokol-fetch (FIXME: per-thread contexts?) */
+SOKOL_API_DECL void sfetch_setup(const sfetch_desc_t* desc);
+/* discard a sokol-fetch context */
+SOKOL_API_DECL void sfetch_shutdown(void);
+/* return true if sokol-fetch has been setup */
+SOKOL_API_DECL bool sfetch_valid(void);
+/* get the desc struct that was passed to sfetch_setup() */
+SOKOL_API_DECL sfetch_desc_t sfetch_desc(void);
+/* return the max userdata size in number of bytes (SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) */
+SOKOL_API_DECL int sfetch_max_userdata(void);
+/* return the value of the SFETCH_MAX_PATH implementation config value */
+SOKOL_API_DECL int sfetch_max_path(void);
+
 /* send a fetch-request */
 SOKOL_API_DECL sfetch_handle_t sfetch_request(const sfetch_request_t* request);
+/* return true if an id is valid */
+SOKOL_API_DECL bool sfetch_valid_handle(sfetch_handle_t h);
+/* get pointer to user data (fetch request must be in OPENED, FETCHED, CLOSED state */
+SOKOL_API_DECL void* sfetch_user_data(sfetch_handle_t req);
+/* get the path of a request */
+SOKOL_API_DECL const char* sfetch_path(sfetch_handle_t req);
+/* set the data buffer associated with a request in OPENED state */
+SOKOL_API_DECL void sfetch_set_buffer(sfetch_handle_t req, const sfetch_buffer_t* buffer);
+/* get the buffer currently associated with a request */
+SOKOL_API_DECL sfetch_buffer_t sfetch_buffer(sfetch_handle_t req);
+/* get the fetched buffer content of a request in FETCHED state */
+SOKOL_API_DECL sfetch_buffer_t sfetch_content(sfetch_handle_t req);
+
+/* polling API: check if a request has changed state and must be processed by user code */
+SOKOL_API_DECL bool sfetch_state_changed(sfetch_handle_t req);
+/* get the current state of a request */
+SOKOL_API_DECL sfetch_state_t sfetch_state(sfetch_handle_t req);
+/* polling API: advance request to next state (returns control over request to sokol-fetch) */
+SOKOL_API_DECL void sfetch_advance_state(sfetch_handle_t req);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -114,6 +151,13 @@ SOKOL_API_DECL sfetch_handle_t sfetch_request(const sfetch_request_t* request);
 #ifdef SOKOL_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
+
+#ifndef SFETCH_MAX_PATH
+#define SFETCH_MAX_PATH (512)
+#endif
+#ifndef SFETCH_MAX_USERDATA_UINT64
+#define SFETCH_MAX_USERDATA_UINT64 (16)
+#endif
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -163,23 +207,27 @@ SOKOL_API_DECL sfetch_handle_t sfetch_request(const sfetch_request_t* request);
 #endif
 
 /*=== general helper functions ===============================================*/
-_SOKOL_PRIVATE void _sfetch_path_copy(sfetch_path_t* dst, const char* src) {
+typedef struct _sfetch_path_t {
+    char buf[SFETCH_MAX_PATH];
+} _sfetch_path_t;
+
+_SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
-    if (src) {
+    if (src && (strlen(src) < SFETCH_MAX_PATH)) {
         #if defined(_MSC_VER)
-        strncpy_s(dst->buf, SFETCH_MAX_PATH_LEN, src, (SFETCH_MAX_PATH_LEN-1));
+        strncpy_s(dst->buf, SFETCH_MAX_PATH, src, (SFETCH_MAX_PATH-1));
         #else
-        strncpy(dst->buf, src, SFETCH_MAX_PATH_LEN);
+        strncpy(dst->buf, src, SFETCH_MAX_PATH);
         #endif
-        dst->buf[SFETCH_MAX_PATH_LEN-1] = 0;
+        dst->buf[SFETCH_MAX_PATH-1] = 0;
     }
     else {
-        memset(dst->buf, 0, SFETCH_MAX_PATH_LEN);
+        memset(dst->buf, 0, SFETCH_MAX_PATH);
     }
 }
 
-_SOKOL_PRIVATE sfetch_path_t _sfetch_path_make(const char* str) {
-    sfetch_path_t res;
+_SOKOL_PRIVATE _sfetch_path_t _sfetch_path_make(const char* str) {
+    _sfetch_path_t res;
     _sfetch_path_copy(&res, str);
     return res;
 }
@@ -245,19 +293,32 @@ _SOKOL_PRIVATE void _sfetch_mutex_unlock(_sfetch_mutex_t* m) { (void)m; }
 
 /*=== request pool implementation ============================================*/
 
-/* internal per-request item (request plus private data) */
+/* internal per-request item */
 typedef struct {
-    sfetch_request_t request;
     sfetch_handle_t handle;
     sfetch_state_t state;
+    void (*callback)(sfetch_handle_t, sfetch_state_t);
+    sfetch_buffer_t buffer;
+    _sfetch_path_t path;
+    int user_data_size;
+    uint64_t user_data[SFETCH_MAX_USERDATA_UINT64];
 } _sfetch_item_t;
 
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, sfetch_handle_t handle, const sfetch_request_t* request) {
     SOKOL_ASSERT(item && (0 == item->handle.id));
-    SOKOL_ASSERT(request);
-    item->request = *request;
+    SOKOL_ASSERT(request && request->path);
     item->handle = handle;
     item->state = SFETCH_STATE_INITIAL;
+    item->buffer = request->buffer;
+    item->path = _sfetch_path_make(request->path);
+    item->callback = request->state_changed_cb;
+    if (request->user_data &&
+        (request->user_data_size > 0) &&
+        (request->user_data_size <= (SFETCH_MAX_USERDATA_UINT64*8)))
+    {
+        item->user_data_size = request->user_data_size;
+        memcpy(item->user_data, request->user_data, request->user_data_size);
+    }
 }
 
 _SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
@@ -503,12 +564,35 @@ _SOKOL_PRIVATE bool _fetch_queue_init(_sfetch_queue_t* queue, int num_items) {
     }
 }
 
-/*=== PUBLIC API FUNCTIONS ===================================================*/
-SOKOL_API_IMPL sfetch_path_t sfetch_make_path(const char* str) {
-    return _sfetch_path_make(str);
+/*=== validation functions ===================================================*/
+_SOKOL_PRIVATE bool _sfetch_validate_request(sfetch_request_t* req) {
+    // FIXME
+    return true;
 }
 
-SOKOL_API_IMPL bool sfetch_handle_valid(sfetch_handle_t h) {
+/*=== PUBLIC API FUNCTIONS ===================================================*/
+SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
+    // FIXME
+}
+
+SOKOL_API_IMPL void sfetch_shutdown(void) {
+    // FIXME
+}
+
+SOKOL_API_IMPL bool sfetch_valid(void) {
+    // FIXME
+    return false;
+}
+
+SOKOL_API_IMPL int sfetch_max_userdata(void) {
+    return SFETCH_MAX_USERDATA_UINT64 * 8;
+}
+
+SOKOL_API_DECL int sfetch_max_path(void) {
+    return SFETCH_MAX_PATH;
+}
+
+SOKOL_API_IMPL bool sfetch_valid_handle(sfetch_handle_t h) {
     return 0 != h.id;
 }
 
