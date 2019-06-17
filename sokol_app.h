@@ -5000,11 +5000,10 @@ _SOKOL_PRIVATE void wl_output_handle_geometry(void *data, struct wl_output *outp
 }
 
 _SOKOL_PRIVATE void wl_output_handle_mode(void *data, struct wl_output *output,
-	uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
-	
-	if (flags == WL_OUTPUT_MODE_CURRENT) {
+	uint32_t flags, int32_t width, int32_t height, int32_t refresh) {	
+	struct monitor* mon = data;
+	if (flags & WL_OUTPUT_MODE_CURRENT) {
 		
-		struct monitor* mon = data;
 		//SOKOL_PRINTF("Monitor [%p:%p] mode %dx%d@%d",
 		//	output, mon, width, height, refresh / 1000);
 
@@ -5013,7 +5012,7 @@ _SOKOL_PRIVATE void wl_output_handle_mode(void *data, struct wl_output *output,
 			mon->height = height;
 			mon->refresh = (int)(refresh / 1000);
 		}
-	}
+    }
 }
 
 _SOKOL_PRIVATE void wl_output_handle_scale(void *data, struct wl_output *output, 
@@ -5091,9 +5090,75 @@ static const struct xdg_wm_base_listener _xdg_wm_base_listener = {
 	.ping = xdg_wm_base_ping
 };
 
+_SOKOL_PRIVATE uint32_t _sapp_xcb_mod(const struct xkb_state* state) {
+    uint32_t mods = 0;
+    
+    if (xkb_state_mod_name_is_active(
+        state, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods |= SAPP_MODIFIER_SHIFT;
+    }
+
+    if (xkb_state_mod_name_is_active(
+        state, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods |= SAPP_MODIFIER_CTRL;
+    }
+
+    if (xkb_state_mod_name_is_active(
+        state, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods |= SAPP_MODIFIER_ALT;
+    }
+
+    if (xkb_state_mod_name_is_active(
+        state, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0) {
+        mods |= SAPP_MODIFIER_SUPER;
+    }
+
+    return mods;
+}
+
+_SOKOL_PRIVATE void _sapp_wl_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE sapp_mousebutton _sapp_wl_translate_mouse_button(
+    uint32_t button) {
+    switch (button) {
+        case BTN_LEFT: return SAPP_MOUSEBUTTON_LEFT;
+        case BTN_MIDDLE: return SAPP_MOUSEBUTTON_MIDDLE;
+        case BTN_RIGHT: return SAPP_MOUSEBUTTON_RIGHT;
+        default:      return SAPP_MOUSEBUTTON_INVALID;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_mouse_event(
+    sapp_event_type type, sapp_mousebutton btn, uint32_t mods) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.mouse_button = btn;
+        _sapp.event.modifiers = mods;
+        _sapp.event.mouse_x = _sapp.mouse_x;
+        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_scroll_event(
+    float x, float y, uint32_t mods) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp.event.modifiers = mods;
+        _sapp.event.scroll_x = x;
+        _sapp.event.scroll_y = y;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE void resize_window(struct window* win,
     int32_t width, int32_t height) {
-	
+
 	if (win == NULL || width <= 0 || height <= 0)	
 		return;
 
@@ -5128,9 +5193,10 @@ _SOKOL_PRIVATE void resize_window(struct window* win,
         _sapp.window_height = win->fbuf.height;
         _sapp.dpi_scale = scale;
 
-        // TODO: call sapp event
+        // Send event to sapp
+        _sapp_wl_app_event(SAPP_EVENTTYPE_RESIZED);
 
-		SOKOL_PRINTF("Window [%p] resized to %dx%d (fb: %dx%d@%.2f)", 
+		SOKOL_PRINTF("Window [%p] resized to %dx%d (fb: %dx%d:%.2f)", 
 			win, width, height, fb_width, fb_height, scale);
 	}
 }
@@ -5194,6 +5260,8 @@ _SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
 	SOKOL_PRINTF("Toplevel surface %p configured %dx%d",
 		_xdg_shell_toplevel, width, height);
 
+    bool activated = false;
+
 	// Print toplevel surface states
 	if (states != NULL) {
 		enum xdg_toplevel_state *state = 
@@ -5213,6 +5281,7 @@ _SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
 						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_RESIZING");
 					break;
 				case XDG_TOPLEVEL_STATE_ACTIVATED:
+                    activated = true;
 					SOKOL_PRINTF("Toplevel surface %p state %s",
 						_xdg_shell_toplevel, "XDG_TOPLEVEL_STATE_ACTIVATED");
 					break;
@@ -5236,6 +5305,9 @@ _SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
 		}
 	}
 
+    _sapp_wl_app_event(activated ? 
+        SAPP_EVENTTYPE_RESUMED : SAPP_EVENTTYPE_SUSPENDED);
+
 	wl_egl_window_resize(_egl_window, width, height, 0, 0);
 	resize_window(data, width, height);
 }
@@ -5248,14 +5320,22 @@ static const struct xdg_toplevel_listener _xdg_toplevel_listener = {
 _SOKOL_PRIVATE void pointer_handle_enter(void *data, struct wl_pointer *pointer,
 	uint32_t serial, struct wl_surface *surface,
 	wl_fixed_t sx, wl_fixed_t sy) {
-    // SOKOL_PRINTF("Pointer entered surface %p at %d %d",
-	// 	surface, wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+    SOKOL_PRINTF("Pointer entered surface %p at %d %d",
+	 	surface, wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+
+    _sapp_wl_mouse_event(
+        SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID,
+        _sapp_xcb_mod(_xkb_state));
 }
 
 _SOKOL_PRIVATE void pointer_handle_leave(
     void *data, struct wl_pointer *pointer,
 	uint32_t serial, struct wl_surface *surface) {
-    // SOKOL_PRINTF("Pointer left surface %p", surface);
+    SOKOL_PRINTF("Pointer left surface %p", surface);
+
+    _sapp_wl_mouse_event(
+        SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID,
+        _sapp_xcb_mod(_xkb_state));
 }
 
 _SOKOL_PRIVATE void pointer_handle_motion(
@@ -5263,6 +5343,12 @@ _SOKOL_PRIVATE void pointer_handle_motion(
 	uint32_t time, wl_fixed_t sx, wl_fixed_t sy) {
     // SOKOL_PRINTF("Pointer moved at %d %d",
 	// 	wl_fixed_to_int(sx), wl_fixed_to_int(sy));
+
+    _sapp.mouse_x = (float)wl_fixed_to_int(sx);
+    _sapp.mouse_y = (float)wl_fixed_to_int(sy);
+    _sapp_wl_mouse_event(
+        SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID,
+        _sapp_xcb_mod(_xkb_state));
 }
 
 _SOKOL_PRIVATE void pointer_handle_button(
@@ -5272,12 +5358,32 @@ _SOKOL_PRIVATE void pointer_handle_button(
 
 	struct wl_seat *seat = data;
 
-	// Being able to grab and move the window around while the left mouse
-	// button is held down on top of the window, providing the window manager
-	// allows for it.
-	if (button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_PRESSED) {
+	// Being able to grab and move the window around while the left
+    // mouse button is held down on top of the window, providing the
+    // window manager allows for it.
+	if (button == BTN_MIDDLE && state == WL_POINTER_BUTTON_STATE_PRESSED) {
 		xdg_toplevel_move(_xdg_shell_toplevel, seat, serial);
 	}
+
+    // Forward mouse button events to sapp
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        const sapp_mousebutton btn = 
+            _sapp_wl_translate_mouse_button(button);
+
+        if (btn != SAPP_MOUSEBUTTON_INVALID) {
+            _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn,
+            _sapp_xcb_mod(_xkb_state));
+        }
+    }
+    else if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        const sapp_mousebutton btn = 
+            _sapp_wl_translate_mouse_button(button);
+
+        if (btn != SAPP_MOUSEBUTTON_INVALID) {
+            _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn,
+            _sapp_xcb_mod(_xkb_state));
+        }
+    }
 }
 
 _SOKOL_PRIVATE void pointer_handle_axis(
@@ -5285,6 +5391,14 @@ _SOKOL_PRIVATE void pointer_handle_axis(
 	uint32_t time, uint32_t axis, wl_fixed_t value) {
 	// SOKOL_PRINTF("Pointer axis=%d, value=%d",
 	// 	axis, wl_fixed_to_int(value));
+
+    const uint32_t mods = _sapp_xcb_mod(_xkb_state);
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        _sapp_wl_scroll_event(0.0f, wl_fixed_to_int(value), mods);
+    }
+    else if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+        _sapp_wl_scroll_event(wl_fixed_to_int(value), 0.0f, mods);
+    }
 }
 
 static const struct wl_pointer_listener _pointer_listener = {
@@ -5645,11 +5759,6 @@ _SOKOL_PRIVATE void destroy_egl_window() {
 	wl_egl_window_destroy(_egl_window);
 }
 
-_SOKOL_PRIVATE void draw_egl_window() {
-	glClearColor(0.0, 1.0, 1.0, 1.0);
-	glClear(GL_COLOR_BUFFER_BIT);
-}
-
 _SOKOL_PRIVATE void egl_swap_buffers() {
 	eglSwapBuffers (_egl_display, _egl_surface);
 }
@@ -5709,7 +5818,6 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     }
 
 	while (_running && wl_display_dispatch_pending(display) != -1) {
-		draw_egl_window();
         _sapp_frame();
         egl_swap_buffers();
 	}
