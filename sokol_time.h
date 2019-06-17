@@ -2,6 +2,8 @@
 /*
     sokol_time.h    -- simple cross-platform time measurement
 
+    Project URL: https://github.com/floooh/sokol
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
