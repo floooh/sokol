@@ -256,19 +256,13 @@ typedef struct {
     uint32_t* queue;
 } _sfetch_ring_t;
 
-/* an IO queue (associated with an IO thread) */
+/* an IO queue with its own IO thread */
 typedef struct {
     _sfetch_ring_t incoming;
     _sfetch_ring_t outgoing;
     _sfetch_thread_t thread;
     bool valid;
 } _sfetch_queue_t;
-
-/* an IO channel is a thread with an IO queue */
-typedef struct {
-    _sfetch_queue_t queue;
-    _sfetch_thread_t thread;
-} _sfetch_channel_t;
 
 /*=== general helper functions ===============================================*/
 _SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
@@ -300,6 +294,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_slot_index(uint32_t slot_id) {
     return slot_id & 0xFFFF;
 }
 
+/*=== a circular message queue ===============================================*/
 _SOKOL_PRIVATE uint32_t _sfetch_ring_index(const _sfetch_ring_t* rb, uint32_t i) {
     return i % rb->num;
 }
@@ -315,7 +310,6 @@ _SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
     rb->num = 0;
 }
 
-/*=== a message circular queue ===============================================*/
 _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
     SOKOL_ASSERT(rb && (num_slots > 0));
     SOKOL_ASSERT(0 == rb->queue);
@@ -379,7 +373,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
 #if defined(_SFETCH_PTHREADS)
 
 _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
-    SOKOL_ASSERT(thread && (thread->thread == 0));
+    SOKOL_ASSERT(thread && !thread->valid);
 
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -402,12 +396,18 @@ _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
-    SOKOL_ASSERT(thread && (thread->thread != 0));
-    pthread_mutex_lock(&thread->incoming_mutex);
-    thread->stop_requested = true;
-    pthread_cond_signal(&thread->incoming_cond);
-    pthread_mutex_unlock(&thread->incoming_mutex);
-    pthread_join(thread->thread, 0);
+    SOKOL_ASSERT(thread);
+    if (thread->valid) {
+        pthread_mutex_lock(&thread->incoming_mutex);
+        thread->stop_requested = true;
+        pthread_cond_signal(&thread->incoming_cond);
+        pthread_mutex_unlock(&thread->incoming_mutex);
+        pthread_join(thread->thread, 0);
+        thread->valid = false;
+    }
+    pthread_mutex_destroy(&thread->incoming_mutex);
+    pthread_mutex_destroy(&thread->outgoing_mutex);
+    pthread_cond_destroy(&thread->incoming_cond);
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming, _sfetch_ring_t* src) {
@@ -602,9 +602,9 @@ _SOKOL_PRIVATE void* _sfetch_queue_thread_func(void* arg) {
     while (!queue->thread.stop_requested) {
         /* block until work arrives */
         uint32_t slot_id = _sfetch_thread_dequeue_incoming(&queue->thread, &queue->incoming);
-        // FIXME: process request
         /* slot_id will be invalid if the thread was woken up to join */
         if (!queue->thread.stop_requested) {
+            // FIXME: process request
             if (!_sfetch_thread_enqueue_outgoing(&queue->thread, &queue->outgoing, slot_id)) {
                 // FIXME: what to do if outgoing queue is overflowing because
                 // the user thread doesn't empty it?
