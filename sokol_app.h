@@ -5096,7 +5096,7 @@ static const struct xdg_wm_base_listener _xdg_wm_base_listener = {
 	.ping = xdg_wm_base_ping
 };
 
-_SOKOL_PRIVATE uint32_t _sapp_xcb_mod(const struct xkb_state* state) {
+_SOKOL_PRIVATE uint32_t _sapp_xcb_mod(struct xkb_state* state) {
     uint32_t mods = 0;
     
     if (xkb_state_mod_name_is_active(
@@ -5195,15 +5195,17 @@ _SOKOL_PRIVATE void resize_window(struct window* win,
         // Update _sapp state
         _sapp.window_width = win->surf.width;
         _sapp.window_height = win->surf.height;
-        _sapp.window_width = win->fbuf.width;
-        _sapp.window_height = win->fbuf.height;
+        _sapp.framebuffer_width = win->fbuf.width;
+        _sapp.framebuffer_height = win->fbuf.height;
         _sapp.dpi_scale = scale;
 
         // Send event to sapp
         _sapp_wl_app_event(SAPP_EVENTTYPE_RESIZED);
 
 		SOKOL_PRINTF("Window [%p] resized to %dx%d (fb: %dx%d:%.2f)", 
-			win, width, height, fb_width, fb_height, scale);
+			win, _sapp.window_width, _sapp.window_height, 
+            _sapp.framebuffer_width, _sapp.framebuffer_height,
+            _sapp.dpi_scale);
 	}
 }
 
