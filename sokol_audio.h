@@ -19,6 +19,14 @@
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
+    If sokol_audio.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     FEATURE OVERVIEW
     ================
     You provide a mono- or stereo-stream of 32-bit float samples, which
@@ -359,7 +367,13 @@
 #include <stdbool.h>
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -383,6 +397,10 @@ SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
 SOKOL_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
 SOKOL_API_DECL bool saudio_isvalid(void);
+/* return the saudio_desc.user_data pointer */
+SOKOL_API_DECL void* saudio_userdata(void);
+/* return a copy of the original saudio_desc struct */
+SOKOL_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
 SOKOL_API_DECL int saudio_sample_rate(void);
 /* actual backend buffer size */
@@ -1228,7 +1246,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
 #endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
-EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
+EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
     Module._saudio_context = null;
     Module._saudio_node = null;
     if (typeof AudioContext !== 'undefined') {
@@ -1286,7 +1304,7 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size)
 });
 
 /* get the actual sample rate back from the WebAudio context */
-EM_JS(int, _saudio_js_sample_rate, (void), {
+EM_JS(int, saudio_js_sample_rate, (void), {
     if (Module._saudio_context) {
         return Module._saudio_context.sampleRate;
     }
@@ -1296,7 +1314,7 @@ EM_JS(int, _saudio_js_sample_rate, (void), {
 });
 
 /* get the actual buffer size in number of frames */
-EM_JS(int, _saudio_js_buffer_frames, (void), {
+EM_JS(int, saudio_js_buffer_frames, (void), {
     if (Module._saudio_node) {
         return Module._saudio_node.bufferSize;
     }
@@ -1306,10 +1324,10 @@ EM_JS(int, _saudio_js_buffer_frames, (void), {
 });
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    if (_saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
+    if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
-        _saudio.sample_rate = _saudio_js_sample_rate();
-        _saudio.buffer_frames = _saudio_js_buffer_frames();
+        _saudio.sample_rate = saudio_js_sample_rate();
+        _saudio.buffer_frames = saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
         _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
@@ -1363,6 +1381,14 @@ SOKOL_API_IMPL void saudio_shutdown(void) {
 
 SOKOL_API_IMPL bool saudio_isvalid(void) {
     return _saudio.valid;
+}
+
+SOKOL_API_IMPL void* saudio_userdata(void) {
+    return _saudio.desc.user_data;
+}
+
+SOKOL_API_IMPL saudio_desc saudio_query_desc(void) {
+    return _saudio.desc;
 }
 
 SOKOL_API_IMPL int saudio_sample_rate(void) {
