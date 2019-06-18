@@ -772,17 +772,6 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(const sfetch_request_t* req) {
     return true;
 }
 
-/* update a request-item's current state, this must only be called from the user-thread */
-_SOKOL_PRIVATE void _sfetch_set_state(uint32_t slot_id, sfetch_state_t state) {
-    _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, slot_id);
-    SOKOL_ASSERT(item);
-    /* check that this is a valid state transition */
-    #if defined(SOKOL_DEBUG)
-    SOKOL_ASSERT(state == ((item->state + 1) % _SFETCH_STATE_NUM));
-    #endif
-    item->state = state;
-}
-
 /* this goes through all items in the user-incoming queues and updates their
    state right before they're moved into the IO-threads
 */
@@ -972,6 +961,11 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
 
     /* upate state of items which moved from IO-threads into user-thread */
     _sfetch_update_outgoing_states();
+
+    // FIXME: dequeue outgoing items, if item has a callback, call the
+    // callback, and put back into user_incoming queue (unless state is
+    // "DONE", otherwise put the item into the user_pending queue
+    // waiting to be processed by polling code.
 }
 
 #endif /* SOKOL_IMPL */
