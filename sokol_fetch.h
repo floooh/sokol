@@ -307,6 +307,7 @@ typedef struct {
     _sfetch_pool_t pool;
     _sfetch_ring_t user_incoming[SFETCH_MAX_CHANNELS];
     _sfetch_ring_t user_outgoing;
+    _sfetch_ring_t user_pending;        /* items without callback waiting for user-polling */
     _sfetch_channel_t chn[SFETCH_MAX_CHANNELS];
 } _sfetch_t;
 static _sfetch_t _sfetch;
@@ -913,7 +914,6 @@ _SOKOL_PRIVATE void _sfetch_update_outgoing_states(void) {
         uint32_t slot_id = _sfetch_ring_peek(rb, i);
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, slot_id);
         if (item) {
-            // FIXME: handle items in failed state
             SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
             SOKOL_ASSERT(item->state != SFETCH_STATE_ALLOCATED);
             SOKOL_ASSERT(item->state != SFETCH_STATE_OPENED);
@@ -1053,10 +1053,34 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     /* upate state of items which moved from IO-threads into user-thread */
     _sfetch_update_outgoing_states();
 
-    // FIXME: dequeue outgoing items, if item has a callback, call the
-    // callback, and put back into user_incoming queue (unless state is
-    // "DONE", otherwise put the item into the user_pending queue
-    // waiting to be processed by polling code.
+    /* for each item coming out of the IO thread, either call the user callback,
+       or put it into the pending queue for polling
+    */
+    while (!_sfetch_ring_empty(&_sfetch.user_outgoing)) {
+        uint32_t slot_id = _sfetch_ring_dequeue(&_sfetch.user_outgoing);
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, slot_id);
+        SOKOL_ASSERT(item);
+        if (item->callback) {
+            item->callback(item->handle, item->state);
+            /* either put the handled item back into the user_incoming queue
+               to proceed to the next state, or delete it when it has arrived
+               at the last state.
+            */
+            if (item->state == SFETCH_STATE_CLOSED) {
+                _sfetch_pool_item_free(&_sfetch.pool, slot_id);
+            }
+            else {
+                _sfetch_ring_enqueue(&_sfetch.user_incoming[item->channel], slot_id);
+            }
+        }
+        else {
+            SOKOL_ASSERT(!_sfetch_ring_full(&_sfetch.user_pending));
+            _sfetch_ring_enqueue(&_sfetch.user_pending, slot_id);
+        }
+    }
+
+    // FIXME: there needs to be a "garbage collection" for items in the user_pending
+    // queue when user code "forgets" to handle the item.
 }
 
 #endif /* SOKOL_IMPL */
