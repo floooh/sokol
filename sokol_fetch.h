@@ -575,7 +575,7 @@ _SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
-    fseek(h, offset, num_bytes);
+    fseek(h, offset, SEEK_SET);
     uint64_t bytes_read = fread(ptr, num_bytes, 1, h);
     return bytes_read == num_bytes;
 }
