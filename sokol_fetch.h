@@ -103,7 +103,7 @@ typedef enum sfetch_state_t {
 
 typedef struct sfetch_buffer_t {
     uint8_t* ptr;
-    uint32_t num_bytes;
+    uint64_t num_bytes;
 } sfetch_buffer_t;
 
 typedef struct sfetch_request_t {
@@ -206,17 +206,18 @@ SOKOL_API_DECL void sfetch_advance_state(sfetch_handle_t req);
     #endif
 #endif
 
-#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-    #include <pthread.h>
-    #define _SFETCH_PTHREADS (1)
+#if defined(__EMSCRIPTEN__)
+    #define SFETCH_PLATFORM_EMSCRIPTEN (1)
 #elif defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
     #include <windows.h>
-    #define _SFETCH_WINTHREADS (1)
+    #define _SFETCH_PLATFORM_WINDOWS (1)
 #else
-    #define _SFETCH_NOTHREADS (1)
+    #include <pthread.h>
+    #include <stdio.h>  /* fopen, fread, fseek, fclose */
+    #define _SFETCH_PLATFORM_POSIX (1)
 #endif
 
 /*=== private type definitions ===============================================*/
@@ -225,7 +226,7 @@ typedef struct _sfetch_path_t {
 } _sfetch_path_t;
 
 /* a thread with incoming and outgoing message queue syncing */
-#if defined(_SFETCH_PTHREADS)
+#if defined(_SFETCH_PLATFORM_POSIX)
 typedef struct {
     pthread_t thread;
     pthread_cond_t incoming_cond;
@@ -235,10 +236,19 @@ typedef struct {
     bool stop_requested;
     bool valid;
 } _sfetch_thread_t;
-#elif defined(_SFETCH_WINTHREADS)
+#elif defined(_SFETCH_PLATFORM_WINDOWS)
 #error "FIXME WIndows"
 #else
 typedef struct { } _sfetch_thread_t;
+#endif
+
+/* file handle abstraction */
+#if defined(_SFETCH_PLATFORM_POSIX)
+typedef FILE* _sfetch_file_handle_t;
+#elif defined(_SFETCH_PLATFORM_WINDOWS)
+typedef HANDLE _sfetch_file_handle_t;
+#else
+#error "FIXME: file handle emscripten"
 #endif
 
 /* internal per-request item */
@@ -250,10 +260,11 @@ typedef struct {
     sfetch_buffer_t buffer;
 
     /* updated by IO thread */
-    uint32_t num_content_bytes; // set after OPENING
-    uint32_t num_fetched_bytes; // overall fetched bytes
-    uint32_t num_buffer_bytes;  // currently valid fetched bytes in buffer
-    bool failed;                // FIXME: should be an error code
+    uint64_t num_content_bytes;         // set after OPENING
+    uint64_t num_fetched_bytes;         // overall fetched bytes
+    uint64_t num_buffer_bytes;          // currently valid fetched bytes in buffer
+    bool failed;                        // FIXME: should be an error code
+    _sfetch_file_handle_t file_handle;
 
     /* big stuff at the end */
     _sfetch_path_t path;
@@ -422,7 +433,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(_sfetch_ring_t* rb, uint32_t index) {
 }
 
 /*=== threading wrappers =====================================================*/
-#if defined(_SFETCH_PTHREADS)
+#if defined(_SFETCH_PLATFORM_POSIX)
 
 _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
     SOKOL_ASSERT(thread && !thread->valid);
@@ -536,11 +547,45 @@ _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _s
     pthread_mutex_unlock(&thread->outgoing_mutex);
 }
 
-#elif defined(_SFETCH_WINTHREADS)
+#elif defined(_SFETCH_PLATFORM_WINDOWS)
 #error "FIXME Windows"
 #else
 #error "FIXME Emscripten"
 #endif
+
+/*=== file I/O wrappers ======================================================*/
+#if defined(_SFETCH_PLATFORM_POSIX)
+_SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
+    SOKOL_ASSERT(path && (path->buf[0] != 0));
+    return fopen(path->buf, "rb");
+}
+
+_SOKOL_PRIVATE void _sfetch_file_close(_sfetch_file_handle_t h) {
+    fclose(h);
+}
+
+_SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
+    return h != 0;
+}
+
+_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
+    fseek(h, 0, SEEK_END);
+    return ftell(h);
+}
+
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+    fseek(h, offset, num_bytes);
+    uint64_t bytes_read = fread(ptr, num_bytes, 1, h);
+    return bytes_read == num_bytes;
+}
+
+#elif defined(_SFETCH_PLATFORM_WINDOWS)
+// FIXME: on Windows, convert UTF-8 paths with MultiByteToWideChar(), and
+// use the native Windows file IO functions
+#else
+
+#endif
+
 
 /*=== request pool implementation ============================================*/
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
@@ -670,7 +715,53 @@ _SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_lookup(_sfetch_pool_t* pool, ui
 
 /*=== IO CHANNEL implementation ==============================================*/
 _SOKOL_PRIVATE void _sfetch_channel_worker(uint32_t slot_id) {
-    //  FIXME
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, slot_id);
+    if (!item) {
+        return;
+    }
+    if (item->failed) {
+        // FIXME: should this be a hard error?
+        return;
+    }
+    SOKOL_ASSERT((item->state == SFETCH_STATE_OPENING) ||
+                 (item->state == SFETCH_STATE_FETCHING) ||
+                 (item->state == SFETCH_STATE_CLOSING));
+    if (item->state == SFETCH_STATE_OPENING) {
+        SOKOL_ASSERT(!_sfetch_file_handle_valid(item->file_handle));
+        SOKOL_ASSERT(item->path.buf[0]);
+        SOKOL_ASSERT(item->num_content_bytes == 0);
+        SOKOL_ASSERT(item->num_fetched_bytes == 0);
+        SOKOL_ASSERT(item->num_buffer_bytes == 0);
+        item->file_handle = _sfetch_file_open(&item->path);
+        if (_sfetch_file_handle_valid(item->file_handle)) {
+            item->num_content_bytes = _sfetch_file_size(item->file_handle);
+        }
+        else {
+            item->failed = true;
+        }
+    }
+    else if (item->state == SFETCH_STATE_FETCHING) {
+        SOKOL_ASSERT(_sfetch_file_handle_valid(item->file_handle));
+        SOKOL_ASSERT(item->num_content_bytes > item->num_fetched_bytes);
+        SOKOL_ASSERT(item->buffer.ptr && (item->buffer.ptr > 0));
+        uint64_t bytes_to_read = item->num_content_bytes - item->num_fetched_bytes;
+        if (bytes_to_read > item->buffer.num_bytes) {
+            bytes_to_read = item->buffer.num_bytes;
+        }
+        const uint64_t offset = item->num_fetched_bytes;
+        if (_sfetch_file_read(item->file_handle, offset, bytes_to_read, item->buffer.ptr)) {
+            item->num_buffer_bytes = bytes_to_read;
+            item->num_fetched_bytes += bytes_to_read;
+        }
+        else {
+            item->failed = true;
+        }
+    }
+    else if (item->state == SFETCH_STATE_CLOSING) {
+        SOKOL_ASSERT(_sfetch_file_handle_valid(item->file_handle));
+        _sfetch_file_close(item->file_handle);
+        item->file_handle = 0;
+    }
 }
 
 _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
