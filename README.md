@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**15-May-2019**: shader cross-compiling for sokol_gfx.h!)
+[See what's new](#updates)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -381,9 +381,6 @@ A list of things I'd like to do next:
 
 Mainly some "missing features" for desktop apps:
 
-- allow 'programmatic quit' requested by the application
-- allow to intercept the window close button, so that the app can show
-  a 'do you really want to quit?' dialog box
 - define an application icon
 - change the window title on existing window
 - allow to programmatically activate and deactivate fullscreen
@@ -396,6 +393,60 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
+    - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
+    - application code can now initiate a "soft quit" (interceptable) or
+      "hard quit" (not interceptable)
+    - on the web platform, the standard "Leave Site?" dialog box implemented
+      by browsers can be shown when the user leaves the site
+    - Android and iOS currently don't have any of those features (since the
+      operating system may decide to terminate mobile applications at any time
+      anyway, if similar features are added they will most likely have
+      similar limitations as the web platform)
+  For details, search for 'APPLICATION QUIT' in the sokol_app.h documentation
+  header: https://github.com/floooh/sokol/blob/master/sokol_app.h
+
+  The [imgui-highdpi-sapp](https://github.com/floooh/sokol-samples/tree/master/sapp)
+  contains sample code for all new quit-related features.
+
+- **08-Jun-2019**: some new stuff in sokol_app.h:
+    - the ```sapp_event``` struct has a new field ```bool key_repeat```
+    which is true when a keyboard event is a key-repeat (for the
+    event types ```SAPP_EVENTTYPE_KEY_DOWN``` and ```SAPP_EVENTTYPE_CHAR```).
+    Many thanks to [Scott Lembcke](https://github.com/slembcke) for
+    the pull request!
+    - a new function to poll the internal frame counter:
+    ```uint64_t sapp_frame_count(void)```, previously the frame counter
+    was only available via ```sapp_event```.
+    - also check out the new [event-inspector sample](https://floooh.github.io/sokol-html5/wasm/events-sapp.html)
+
+- **04-Jun-2019**: All sokol headers now recognize a config-define ```SOKOL_DLL```
+  if sokol should be compiled into a DLL (when used with ```SOKOL_IMPL```)
+  or used as a DLL. On Windows, this will prepend the public function declarations
+  with ```__declspec(dllexport)``` or ```__declspec(dllimport)```.
+
+- **31-May-2019**: if you're working with emscripten and fips, please note the
+  following changes:
+
+    https://github.com/floooh/fips#public-service-announcements
+
+- **27-May-2019**: some D3D11 updates:
+    - The shader-cross-compiler can now generate D3D bytecode when
+    running on Windows, see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
+details.
+    - sokol_gfx.h no longer needs to be compiled with a
+    SOKOL_D3D11_SHADER_COMPILER define to enable shader compilation in the
+    D3D11 backend. Instead, the D3D shader compiler DLL (d3dcompiler_47.dll)
+    will be loaded on-demand when the first HLSL shader needs to be compiled.
+    If an application only uses D3D shader byte code, the compiler DLL won't
+    be loaded into the process.
+
+- **24-May-2019** The shader-cross-compiler can now generate Metal byte code
+for macOS or iOS when the build is running on macOS. This is enabled
+automatically with the fips-integration files in [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin),
+see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
+details.
 
 - **16-May-2019** two new utility headers: *sokol_cimgui.h* and *sokol_gfx_cimgui.h*,
 those are the same as their counterparts sokol_imgui.h and sokol_gfx_imgui.h, but
