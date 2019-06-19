@@ -450,7 +450,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
     return slot_id;
 }
 
-_SOKOL_PRIVATE uint32_t _sfetch_ring_peek(_sfetch_ring_t* rb, uint32_t index) {
+_SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t index) {
     SOKOL_ASSERT(rb && rb->buf);
     SOKOL_ASSERT(!_sfetch_ring_empty(rb));
     SOKOL_ASSERT(index < _sfetch_ring_count(rb));
