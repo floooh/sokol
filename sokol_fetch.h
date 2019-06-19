@@ -97,6 +97,7 @@ typedef enum sfetch_state_t {
     SFETCH_STATE_FETCHED,       /* user thread: processing fetched data */
     SFETCH_STATE_CLOSING,       /* IO thread: waiting to be closed */
     SFETCH_STATE_CLOSED,        /* user thread: user-side cleanup */
+    SFETCH_STATE_FAILED,        /* follow state of OPENING or FETCHING if something went wrong */
     SFETCH_STATE_INVALID,       /* returned by sfetch_state() when request is no longer alive */
 
     _SFETCH_STATE_NUM,
@@ -140,8 +141,6 @@ SOKOL_API_DECL void sfetch_dowork(void);
 
 /* get the current state of a request */
 SOKOL_API_DECL sfetch_state_t sfetch_state(sfetch_handle_t req);
-/* return true if a request has failed */
-SOKOL_API_DECL bool sfetch_failed(sfetch_handle_t req);
 
 /* get pointer to user data associated with request */
 SOKOL_API_DECL void* sfetch_user_data(sfetch_handle_t req);
@@ -263,7 +262,6 @@ typedef struct {
     uint64_t num_content_bytes;
     uint64_t num_fetched_bytes;
     uint64_t num_buffer_bytes;
-    bool request_failed;
     /* user thread only */
     int user_data_size;
     uint64_t user_data[SFETCH_MAX_USERDATA_UINT64];
@@ -314,7 +312,7 @@ typedef struct {
     uint32_t head;
     uint32_t tail;
     uint32_t num;
-    uint32_t* queue;
+    uint32_t* buf;
 } _sfetch_ring_t;
 
 /* an IO channel with its own IO thread */
@@ -378,15 +376,15 @@ _SOKOL_PRIVATE uint32_t _sfetch_slot_index(uint32_t slot_id) {
 }
 
 /*=== a circular message queue ===============================================*/
-_SOKOL_PRIVATE uint32_t _sfetch_ring_index(const _sfetch_ring_t* rb, uint32_t i) {
+_SOKOL_PRIVATE uint32_t _sfetch_ring_wrap(const _sfetch_ring_t* rb, uint32_t i) {
     return i % rb->num;
 }
 
 _SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
     SOKOL_ASSERT(rb);
-    if (rb->queue) {
-        SOKOL_FREE(rb->queue);
-        rb->queue = 0;
+    if (rb->buf) {
+        SOKOL_FREE(rb->buf);
+        rb->buf = 0;
     }
     rb->head = 0;
     rb->tail = 0;
@@ -395,15 +393,15 @@ _SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
 
 _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
     SOKOL_ASSERT(rb && (num_slots > 0));
-    SOKOL_ASSERT(0 == rb->queue);
+    SOKOL_ASSERT(0 == rb->buf);
     rb->head = 0;
     rb->tail = 0;
     /* one slot reserved to detect full vs empty */
     rb->num = num_slots + 1;
     const size_t queue_size = rb->num * sizeof(sfetch_handle_t);
-    rb->queue = (uint32_t*) SOKOL_MALLOC(queue_size);
-    if (rb->queue) {
-        memset(rb->queue, 0, queue_size);
+    rb->buf = (uint32_t*) SOKOL_MALLOC(queue_size);
+    if (rb->buf) {
+        memset(rb->buf, 0, queue_size);
         return true;
     }
     else {
@@ -413,17 +411,17 @@ _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
 }
 
 _SOKOL_PRIVATE bool _sfetch_ring_full(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
-    return _sfetch_ring_index(rb, rb->head + 1) == rb->tail;
+    SOKOL_ASSERT(rb && rb->buf);
+    return _sfetch_ring_wrap(rb, rb->head + 1) == rb->tail;
 }
 
 _SOKOL_PRIVATE bool _sfetch_ring_empty(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(rb && rb->buf);
     return rb->head == rb->tail;
 }
 
 _SOKOL_PRIVATE uint32_t _sfetch_ring_count(const _sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(rb && rb->buf);
     uint32_t count;
     if (rb->head >= rb->tail) {
         count = rb->head - rb->tail;
@@ -431,33 +429,33 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_count(const _sfetch_ring_t* rb) {
     else {
         count = (rb->head + rb->num) - rb->tail;
     }
-    SOKOL_ASSERT((count >= 0) && (count < rb->num));
+    SOKOL_ASSERT(count < rb->num);
     return count;
 }
 
 _SOKOL_PRIVATE void _sfetch_ring_enqueue(_sfetch_ring_t* rb, uint32_t slot_id) {
-    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(rb && rb->buf);
     SOKOL_ASSERT(!_sfetch_ring_full(rb));
-    SOKOL_ASSERT((rb->head >= 0) && (rb->head < rb->num));
-    rb->queue[rb->head] = slot_id;
-    rb->head = _sfetch_ring_index(rb, rb->head + 1);
+    SOKOL_ASSERT(rb->head < rb->num);
+    rb->buf[rb->head] = slot_id;
+    rb->head = _sfetch_ring_wrap(rb, rb->head + 1);
 }
 
 _SOKOL_PRIVATE uint32_t _sfetch_ring_dequeue(_sfetch_ring_t* rb) {
-    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(rb && rb->buf);
     SOKOL_ASSERT(!_sfetch_ring_empty(rb));
-    SOKOL_ASSERT((rb->tail >= 0) && (rb->tail < rb->num));
-    uint32_t slot_id = rb->queue[rb->tail];
-    rb->tail = _sfetch_ring_index(rb, rb->tail + 1);
+    SOKOL_ASSERT(rb->tail < rb->num);
+    uint32_t slot_id = rb->buf[rb->tail];
+    rb->tail = _sfetch_ring_wrap(rb, rb->tail + 1);
     return slot_id;
 }
 
 _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(_sfetch_ring_t* rb, uint32_t index) {
-    SOKOL_ASSERT(rb && rb->queue);
+    SOKOL_ASSERT(rb && rb->buf);
     SOKOL_ASSERT(!_sfetch_ring_empty(rb));
     SOKOL_ASSERT(index < _sfetch_ring_count(rb));
-    uint32_t rb_index = _sfetch_ring_index(rb, rb->tail + index);
-    return rb->queue[rb_index];
+    uint32_t rb_index = _sfetch_ring_wrap(rb, rb->tail + index);
+    return rb->buf[rb_index];
 }
 
 /*=== threading wrappers =====================================================*/
@@ -524,8 +522,8 @@ _SOKOL_PRIVATE void _sfetch_thread_leaving(_sfetch_thread_t* thread) {
 _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming, _sfetch_ring_t* src) {
     /* called from user thread */
     SOKOL_ASSERT(thread && thread->valid);
-    SOKOL_ASSERT(incoming && incoming->queue);
-    SOKOL_ASSERT(src && src->queue);
+    SOKOL_ASSERT(incoming && incoming->buf);
+    SOKOL_ASSERT(src && src->buf);
     pthread_mutex_lock(&thread->incoming_mutex);
     while (!_sfetch_ring_full(incoming) && !_sfetch_ring_empty(src)) {
         _sfetch_ring_enqueue(incoming, _sfetch_ring_dequeue(src));
@@ -537,7 +535,7 @@ _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _s
 _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming) {
     /* called from thread function */
     SOKOL_ASSERT(thread && thread->valid);
-    SOKOL_ASSERT(incoming && incoming->queue);
+    SOKOL_ASSERT(incoming && incoming->buf);
     pthread_mutex_lock(&thread->incoming_mutex);
     while (_sfetch_ring_empty(incoming) && !thread->stop_requested) {
         pthread_cond_wait(&thread->incoming_cond, &thread->incoming_mutex);
@@ -553,7 +551,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread
 _SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
     /* called from thread function */
     SOKOL_ASSERT(thread && thread->valid);
-    SOKOL_ASSERT(outgoing && outgoing->queue);
+    SOKOL_ASSERT(outgoing && outgoing->buf);
     pthread_mutex_lock(&thread->outgoing_mutex);
     bool result = false;
     if (!_sfetch_ring_full(outgoing)) {
@@ -566,8 +564,8 @@ _SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _s
 _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
     /* called from user thread */
     SOKOL_ASSERT(thread && thread->valid);
-    SOKOL_ASSERT(outgoing && outgoing->queue);
-    SOKOL_ASSERT(dst && dst->queue);
+    SOKOL_ASSERT(outgoing && outgoing->buf);
+    SOKOL_ASSERT(dst && dst->buf);
     pthread_mutex_lock(&thread->outgoing_mutex);
     while (!_sfetch_ring_full(dst) && !_sfetch_ring_empty(outgoing)) {
         _sfetch_ring_enqueue(dst, _sfetch_ring_dequeue(outgoing));
@@ -855,7 +853,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, uint32_t num_it
 */
 _SOKOL_PRIVATE void _sfetch_channel_push(_sfetch_channel_t* chn, _sfetch_ring_t* src) {
     SOKOL_ASSERT(chn && chn->valid);
-    SOKOL_ASSERT(src && src->queue);
+    SOKOL_ASSERT(src && src->buf);
     _sfetch_thread_enqueue_incoming(&chn->thread, &chn->incoming, src);
 }
 
@@ -865,7 +863,7 @@ _SOKOL_PRIVATE void _sfetch_channel_push(_sfetch_channel_t* chn, _sfetch_ring_t*
 */
 _SOKOL_PRIVATE void _sfetch_channel_pop(_sfetch_channel_t* chn, _sfetch_ring_t* dst) {
     SOKOL_ASSERT(chn && chn->valid);
-    SOKOL_ASSERT(dst && dst->queue);
+    SOKOL_ASSERT(dst && dst->buf);
     _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->outgoing, dst);
 }
 
@@ -961,9 +959,8 @@ _SOKOL_PRIVATE void _sfetch_update_outgoing(void) {
             item->user.num_content_bytes = item->thread.num_content_bytes;
             item->user.num_fetched_bytes = item->thread.num_fetched_bytes;
             item->user.num_buffer_bytes  = item->thread.num_buffer_bytes;
-            item->user.request_failed    = item->thread.request_failed;
-            if (item->user.request_failed) {
-                item->state = SFETCH_STATE_CLOSED;
+            if (item->thread.request_failed) {
+                item->state = SFETCH_STATE_FAILED;
             }
             else {
                 switch (item->state) {
@@ -1118,7 +1115,7 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
                to proceed to the next state, or delete it when it has arrived
                at the last state.
             */
-            if (item->state == SFETCH_STATE_CLOSED) {
+            if ((item->state == SFETCH_STATE_CLOSED) || (item->state == SFETCH_STATE_FAILED)) {
                 _sfetch_pool_item_free(&_sfetch.pool, slot_id);
             }
             else {
@@ -1143,17 +1140,6 @@ SOKOL_API_IMPL sfetch_state_t sfetch_state(sfetch_handle_t h) {
     }
     else {
         return SFETCH_STATE_INVALID;
-    }
-}
-
-SOKOL_API_IMPL bool sfetch_failed(sfetch_handle_t h) {
-    SOKOL_ASSERT(_sfetch.setup);
-    const _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
-    if (item) {
-        return item->user.request_failed;
-    }
-    else {
-        return true;
     }
 }
 #endif /* SOKOL_IMPL */
