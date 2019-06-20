@@ -151,10 +151,9 @@ SOKOL_API_DECL void sfetch_set_buffer(sfetch_handle_t req, const sfetch_buffer_t
 /* get the buffer currently associated with a request */
 SOKOL_API_DECL sfetch_buffer_t sfetch_buffer(sfetch_handle_t req);
 /* get the fetched buffer content of a request (request must be in FETCHED or CLOSED state) */
-SOKOL_API_DECL sfetch_buffer_t sfetch_content(sfetch_handle_t req);
-
-/* polling API: check if a request has changed state and must be processed by user code */
-SOKOL_API_DECL bool sfetch_poll(sfetch_handle_t req);
+SOKOL_API_DECL sfetch_buffer_t sfetch_fetched_data(sfetch_handle_t req);
+/* get the content size of the file that has been opened (valid in OPENED, FETCHED, CLOSED state) */
+SOKOL_API_DECL uint64_t sfetch_content_size(sfetch_handle_t req);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -332,8 +331,8 @@ typedef struct {
     _sfetch_pool_t pool;
     _sfetch_ring_t user_incoming[SFETCH_MAX_CHANNELS];
     _sfetch_ring_t user_outgoing;
-    _sfetch_ring_t user_pending;        /* items without callback waiting for user-polling */
     _sfetch_channel_t chn[SFETCH_MAX_CHANNELS];
+    sfetch_buffer_t null_buffer;
 } _sfetch_t;
 static _sfetch_t _sfetch;
 
@@ -601,7 +600,7 @@ _SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
     fseek(h, offset, SEEK_SET);
-    uint64_t bytes_read = fread(ptr, num_bytes, 1, h);
+    uint64_t bytes_read = fread(ptr, 1, num_bytes, h);
     return bytes_read == num_bytes;
 }
 
@@ -882,6 +881,10 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(const sfetch_request_t* req) {
         SOKOL_LOG("_sfetch_validate_request: request.path is too long (must be < SFETCH_MAX_PATH-1)");
         return false;
     }
+    if (!req->callback) {
+        SOKOL_LOG("_sfetch_validate_request: request.callback missing");
+        return false;
+    }
     if (req->user_data && (req->user_data_size == 0)) {
         SOKOL_LOG("_sfetch_validate_request: request.user_data is set, but req.user_data_size is null");
         return false;
@@ -1048,7 +1051,7 @@ SOKOL_API_IMPL int sfetch_max_path(void) {
 }
 
 SOKOL_API_IMPL bool sfetch_handle_valid(sfetch_handle_t h) {
-    SOKOL_ASSERT(_sfetch.setup);
+    SOKOL_ASSERT(_sfetch.valid);
     /* shortcut invalid handle */
     if (h.id == 0) {
         return false;
@@ -1057,7 +1060,7 @@ SOKOL_API_IMPL bool sfetch_handle_valid(sfetch_handle_t h) {
 }
 
 SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
-    SOKOL_ASSERT(_sfetch.setup);
+    SOKOL_ASSERT(_sfetch.valid);
     SOKOL_ASSERT(request && (request->_start_canary == 0) && (request->_end_canary == 0));
 
     const sfetch_handle_t invalid_handle = _sfetch_make_handle(0);
@@ -1083,7 +1086,7 @@ SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
 }
 
 SOKOL_API_IMPL void sfetch_dowork(void) {
-    SOKOL_ASSERT(_sfetch.setup);
+    SOKOL_ASSERT(_sfetch.valid);
     if (!_sfetch.valid) {
         return;
     }
@@ -1102,38 +1105,27 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     /* upate state of items which moved from IO-threads into user-thread */
     _sfetch_update_outgoing();
 
-    /* for each item coming out of the IO thread, either call the user callback,
-       or put it into the pending queue for polling
-    */
+    /* call the user callback for each item coming out of the IO thread */
     while (!_sfetch_ring_empty(&_sfetch.user_outgoing)) {
         uint32_t slot_id = _sfetch_ring_dequeue(&_sfetch.user_outgoing);
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, slot_id);
-        SOKOL_ASSERT(item);
-        if (item->callback) {
-            item->callback(item->handle);
-            /* either put the handled item back into the user_incoming queue
-               to proceed to the next state, or delete it when it has arrived
-               at the last state.
-            */
-            if ((item->state == SFETCH_STATE_CLOSED) || (item->state == SFETCH_STATE_FAILED)) {
-                _sfetch_pool_item_free(&_sfetch.pool, slot_id);
-            }
-            else {
-                _sfetch_ring_enqueue(&_sfetch.user_incoming[item->channel], slot_id);
-            }
+        SOKOL_ASSERT(item && item->callback);
+        item->callback(item->handle);
+        /* either put the handled item back into the user_incoming queue
+           to proceed to the next state, or delete it when it has arrived
+           at the last state.
+        */
+        if ((item->state == SFETCH_STATE_CLOSED) || (item->state == SFETCH_STATE_FAILED)) {
+            _sfetch_pool_item_free(&_sfetch.pool, slot_id);
         }
         else {
-            SOKOL_ASSERT(!_sfetch_ring_full(&_sfetch.user_pending));
-            _sfetch_ring_enqueue(&_sfetch.user_pending, slot_id);
+            _sfetch_ring_enqueue(&_sfetch.user_incoming[item->channel], slot_id);
         }
     }
-
-    // FIXME: there needs to be a "garbage collection" for items in the user_pending
-    // queue when user code "forgets" to handle the item.
 }
 
 SOKOL_API_IMPL sfetch_state_t sfetch_state(sfetch_handle_t h) {
-    SOKOL_ASSERT(_sfetch.setup);
+    SOKOL_ASSERT(_sfetch.valid);
     const _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
     if (item) {
         return item->state;
@@ -1142,5 +1134,53 @@ SOKOL_API_IMPL sfetch_state_t sfetch_state(sfetch_handle_t h) {
         return SFETCH_STATE_INVALID;
     }
 }
+
+SOKOL_API_IMPL void sfetch_set_buffer(sfetch_handle_t h, const sfetch_buffer_t* buf) {
+    SOKOL_ASSERT(_sfetch.valid);
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
+    if (item) {
+        // FIXME: should we simply allow overwriting if a buffer was already
+        // set? This would allow more 'streaming strategies' like ping-ponging
+        // between separate buffers, but also encourage memory leaks!
+        item->user.buffer = *buf;
+    }
+}
+
+SOKOL_API_IMPL sfetch_buffer_t sfetch_buffer(sfetch_handle_t h) {
+    SOKOL_ASSERT(_sfetch.setup);
+    const _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
+    if (item) {
+        return item->user.buffer;
+    }
+    else {
+        return _sfetch.null_buffer;
+    }
+}
+
+SOKOL_API_IMPL sfetch_buffer_t sfetch_fetched_data(sfetch_handle_t h) {
+    SOKOL_ASSERT(_sfetch.valid);
+    const _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
+    if (item) {
+        sfetch_buffer_t buf;
+        buf.ptr = item->user.buffer.ptr;
+        buf.num_bytes = item->user.num_buffer_bytes;
+        return buf;
+    }
+    else {
+        return _sfetch.null_buffer;
+    }
+}
+
+SOKOL_API_IMPL uint64_t sfetch_content_size(sfetch_handle_t h) {
+    SOKOL_ASSERT(_sfetch.valid);
+    const _sfetch_item_t* item = _sfetch_pool_item_lookup(&_sfetch.pool, h.id);
+    if (item) {
+        return item->user.num_content_bytes;
+    }
+    else {
+        return 0;
+    }
+}
+
 #endif /* SOKOL_IMPL */
 
