@@ -1,5 +1,20 @@
 #pragma once
 /*
+    BRAIN DUMP
+        - throttle requests in flight per channel to prevent spikes,
+          and make it possible to provide a fixed number of memory buffers
+        - a queue of "flight-tickets", each request going into a channel
+          gets a tickets, completed/failed requests put their ticket back
+          into the flight-ticket-queue, if the queue is empty, no new
+          requests are fed into the channel
+        - simplify and shorten state transitions to reduce the time a
+          requests spends on a channel (if a request already has a buffer,
+          skip the OPENED state, etc...)
+        - a request must be cancellable (putting it into the FAILED state)
+        - there shouldn't be a separate CLOSED state, instead only FETCHED,
+          and a separate sfetch_completed(h) function which compares the
+          number of fetched bytes vs overall content bytes.
+
     sokol_fetch.h -- asynchronous data loading
 
     Project URL: https://github.com/floooh/sokol
@@ -78,7 +93,8 @@ extern "C" {
 typedef struct sfetch_desc_t {
     uint32_t _start_canary;
     uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
-    uint32_t max_requests;          /* max number of requests 'in flight' */
+    uint32_t max_requests;          /* max number of active requests across all channels */
+    uint32_t max_inflight;          /* max number of requests currently "in flight" on a single channel */
     uint32_t timeout_num_frames;    /* number of frames until request is discarded in polling mode if
                                        user code doesn't respond to a request state change */
     uint32_t _end_canary;
