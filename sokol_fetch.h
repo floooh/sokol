@@ -804,18 +804,22 @@ _SOKOL_PRIVATE void _sfetch_channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
     if (state == SFETCH_STATE_FETCHING) {
         SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
         SOKOL_ASSERT(thread->content_size > thread->fetched_size);
-        SOKOL_ASSERT(thread->buffer.ptr && (thread->buffer.ptr > 0));
-        uint64_t bytes_to_read = thread->content_size - thread->fetched_size;
-        if (bytes_to_read > thread->buffer.size) {
-            bytes_to_read = thread->buffer.size;
-        }
-        const uint64_t offset = thread->fetched_size;
-        if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, thread->buffer.ptr)) {
-            thread->chunk_size = bytes_to_read;
-            thread->fetched_size += bytes_to_read;
+        if ((thread->buffer.ptr == 0) || (thread->buffer.size == 0)) {
+            thread->failed = true;
         }
         else {
-            thread->failed = true;
+            uint64_t bytes_to_read = thread->content_size - thread->fetched_size;
+            if (bytes_to_read > thread->buffer.size) {
+                bytes_to_read = thread->buffer.size;
+            }
+            const uint64_t offset = thread->fetched_size;
+            if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, thread->buffer.ptr)) {
+                thread->chunk_size = bytes_to_read;
+                thread->fetched_size += bytes_to_read;
+            }
+            else {
+                thread->failed = true;
+            }
         }
         if (thread->failed || (thread->fetched_size >= thread->content_size)) {
             _sfetch_file_close(thread->file_handle);
