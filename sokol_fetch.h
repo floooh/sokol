@@ -80,8 +80,6 @@ typedef struct sfetch_desc_t {
     uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
     uint32_t num_lanes;             /* max number of requests active on the same channel, default is 16 */
     uint32_t max_requests;          /* max number of active requests across all channels */
-    uint32_t timeout_num_frames;    /* number of frames until request is discarded in polling mode if
-                                       user code doesn't respond to a request state change */
     uint32_t _end_canary;
 } sfetch_desc_t;
 
@@ -239,6 +237,7 @@ typedef struct {
     pthread_mutex_t incoming_mutex;
     pthread_mutex_t outgoing_mutex;
     pthread_mutex_t running_mutex;
+    pthread_mutex_t stop_mutex;
     bool stop_requested;
     bool valid;
 } _sfetch_thread_t;
@@ -478,7 +477,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t ind
 #if defined(_SFETCH_PLATFORM_POSIX)
 
 _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
-    SOKOL_ASSERT(thread && !thread->valid);
+    SOKOL_ASSERT(thread && !thread->valid && !thread->stop_requested);
 
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -493,6 +492,10 @@ _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_
     pthread_mutex_init(&thread->running_mutex, &attr);
     pthread_mutexattr_destroy(&attr);
 
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&thread->stop_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+
     pthread_condattr_t cond_attr;
     pthread_condattr_init(&cond_attr);
     pthread_cond_init(&thread->incoming_cond, &cond_attr);
@@ -500,23 +503,36 @@ _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_
 
     /* FIXME: in debug mode, the threads should be named */
     pthread_mutex_lock(&thread->running_mutex);
-    thread->stop_requested = false;
     int res = pthread_create(&thread->thread, 0, thread_func, thread_arg);
     thread->valid = (0 == res);
     pthread_mutex_unlock(&thread->running_mutex);
     return thread->valid;
 }
 
+_SOKOL_PRIVATE void _sfetch_thread_request_stop(_sfetch_thread_t* thread) {
+    pthread_mutex_lock(&thread->stop_mutex);
+    thread->stop_requested = true;
+    pthread_mutex_unlock(&thread->stop_mutex);
+}
+
+_SOKOL_PRIVATE bool _sfetch_thread_stop_requested(_sfetch_thread_t* thread) {
+    pthread_mutex_lock(&thread->stop_mutex);
+    bool stop_requested = thread->stop_requested;
+    pthread_mutex_unlock(&thread->stop_mutex);
+    return stop_requested;
+}
+
 _SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
     SOKOL_ASSERT(thread);
     if (thread->valid) {
         pthread_mutex_lock(&thread->incoming_mutex);
-        thread->stop_requested = true;
+        _sfetch_thread_request_stop(thread);
         pthread_cond_signal(&thread->incoming_cond);
         pthread_mutex_unlock(&thread->incoming_mutex);
         pthread_join(thread->thread, 0);
         thread->valid = false;
     }
+    pthread_mutex_destroy(&thread->stop_mutex);
     pthread_mutex_destroy(&thread->running_mutex);
     pthread_mutex_destroy(&thread->incoming_mutex);
     pthread_mutex_destroy(&thread->outgoing_mutex);
@@ -832,11 +848,11 @@ _SOKOL_PRIVATE void _sfetch_channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
 _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
     _sfetch_channel_t* chn = (_sfetch_channel_t*) arg;
     _sfetch_thread_entered(&chn->thread);
-    while (!chn->thread.stop_requested) {
+    while (!_sfetch_thread_stop_requested(&chn->thread)) {
         /* block until work arrives */
         uint32_t slot_id = _sfetch_thread_dequeue_incoming(&chn->thread, &chn->thread_incoming);
         /* slot_id will be invalid if the thread was woken up to join */
-        if (!chn->thread.stop_requested) {
+        if (!_sfetch_thread_stop_requested(&chn->thread)) {
             chn->work_func(chn->ctx, slot_id);
             if (!_sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id)) {
                 // FIXME: what to do if outgoing queue is overflowing because
@@ -1076,7 +1092,6 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
         ctx->desc.num_channels = SFETCH_MAX_CHANNELS;
         SOKOL_LOG("sfetch_setup: clamping num_channels to SFETCH_MAX_CHANNELS");
     }
-    ctx->desc.timeout_num_frames = _sfetch_def(ctx->desc.timeout_num_frames, 30);
 
     /* setup the global request item pool */
     ctx->valid &= _sfetch_pool_init(&ctx->pool, ctx->desc.max_requests);
