@@ -286,10 +286,12 @@ typedef struct {
 } _sfetch_item_thread_t;
 
 /* an internal request item */
+#define _SFETCH_INVALID_LANE (0xFFFFFFFF)
 typedef struct {
     sfetch_handle_t handle;
     sfetch_state_t state;
     uint32_t channel;
+    uint32_t lane;
     sfetch_callback_t callback;
 
     /* updated by IO-thread, off-limits to user thead */
@@ -325,8 +327,12 @@ struct _sfetch_t;
 typedef struct {
     struct _sfetch_t* ctx; /* this is a backpointer to the thread-local _sfetch_t state,
                               needed as argument for the worker thread */
-    _sfetch_ring_t incoming;
-    _sfetch_ring_t outgoing;
+    _sfetch_ring_t free_lanes;
+    _sfetch_ring_t user_sent;
+    _sfetch_ring_t user_incoming;
+    _sfetch_ring_t thread_incoming;
+    _sfetch_ring_t thread_outgoing;
+    _sfetch_ring_t user_outgoing;
     _sfetch_thread_t thread;
     void (*work_func)(struct _sfetch_t* ctx, uint32_t slot_id);
     bool valid;
@@ -338,8 +344,6 @@ typedef struct _sfetch_t {
     bool valid;
     sfetch_desc_t desc;
     _sfetch_pool_t pool;
-    _sfetch_ring_t user_incoming[SFETCH_MAX_CHANNELS];
-    _sfetch_ring_t user_outgoing;
     _sfetch_channel_t chn[SFETCH_MAX_CHANNELS];
     sfetch_buffer_t null_buffer;
 } _sfetch_t;
@@ -536,12 +540,14 @@ _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _s
     SOKOL_ASSERT(thread && thread->valid);
     SOKOL_ASSERT(incoming && incoming->buf);
     SOKOL_ASSERT(src && src->buf);
-    pthread_mutex_lock(&thread->incoming_mutex);
-    while (!_sfetch_ring_full(incoming) && !_sfetch_ring_empty(src)) {
-        _sfetch_ring_enqueue(incoming, _sfetch_ring_dequeue(src));
+    if (!_sfetch_ring_empty(src)) {
+        pthread_mutex_lock(&thread->incoming_mutex);
+        while (!_sfetch_ring_full(incoming) && !_sfetch_ring_empty(src)) {
+            _sfetch_ring_enqueue(incoming, _sfetch_ring_dequeue(src));
+        }
+        pthread_cond_signal(&thread->incoming_cond);
+        pthread_mutex_unlock(&thread->incoming_mutex);
     }
-    pthread_cond_signal(&thread->incoming_cond);
-    pthread_mutex_unlock(&thread->incoming_mutex);
 }
 
 _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming) {
@@ -632,6 +638,7 @@ _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, co
     item->handle.id = slot_id;
     item->state = SFETCH_STATE_INITIAL;
     item->channel = request->channel;
+    item->lane = _SFETCH_INVALID_LANE;
     item->user.buffer = request->buffer;
     item->path = _sfetch_path_make(request->path);
     item->callback = request->callback;
@@ -823,11 +830,11 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
     _sfetch_thread_entered(&chn->thread);
     while (!chn->thread.stop_requested) {
         /* block until work arrives */
-        uint32_t slot_id = _sfetch_thread_dequeue_incoming(&chn->thread, &chn->incoming);
+        uint32_t slot_id = _sfetch_thread_dequeue_incoming(&chn->thread, &chn->thread_incoming);
         /* slot_id will be invalid if the thread was woken up to join */
         if (!chn->thread.stop_requested) {
             chn->work_func(chn->ctx, slot_id);
-            if (!_sfetch_thread_enqueue_outgoing(&chn->thread, &chn->outgoing, slot_id)) {
+            if (!_sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id)) {
                 // FIXME: what to do if outgoing queue is overflowing because
                 // the user thread doesn't empty it?
             }
@@ -842,19 +849,31 @@ _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     if (chn->valid) {
         _sfetch_thread_join(&chn->thread);
     }
-    _sfetch_ring_discard(&chn->incoming);
-    _sfetch_ring_discard(&chn->outgoing);
+    _sfetch_ring_discard(&chn->free_lanes);
+    _sfetch_ring_discard(&chn->user_sent);
+    _sfetch_ring_discard(&chn->user_incoming);
+    _sfetch_ring_discard(&chn->thread_incoming);
+    _sfetch_ring_discard(&chn->thread_outgoing);
+    _sfetch_ring_discard(&chn->user_outgoing);
+    _sfetch_ring_discard(&chn->free_lanes);
     chn->valid = false;
 }
 
-_SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx, uint32_t num_items, void (*work_func)(_sfetch_t* ctx, uint32_t)) {
+_SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx, uint32_t num_items, uint32_t num_lanes, void (*work_func)(_sfetch_t* ctx, uint32_t)) {
     SOKOL_ASSERT(chn && (num_items > 0) && work_func);
     SOKOL_ASSERT(!chn->valid);
     bool valid = true;
     chn->work_func = work_func;
     chn->ctx = ctx;
-    valid &= _sfetch_ring_init(&chn->incoming, num_items);
-    valid &= _sfetch_ring_init(&chn->outgoing, num_items);
+    valid &= _sfetch_ring_init(&chn->free_lanes, num_lanes);
+    for (uint32_t lane = 0; lane < num_lanes; lane++) {
+        _sfetch_ring_enqueue(&chn->free_lanes, lane);
+    }
+    valid &= _sfetch_ring_init(&chn->user_sent, num_items);
+    valid &= _sfetch_ring_init(&chn->user_incoming, num_lanes);
+    valid &= _sfetch_ring_init(&chn->thread_incoming, num_lanes);
+    valid &= _sfetch_ring_init(&chn->thread_outgoing, num_lanes);
+    valid &= _sfetch_ring_init(&chn->user_outgoing, num_lanes);
     if (valid) {
         chn->valid = true;
         _sfetch_thread_init(&chn->thread, _sfetch_channel_thread_func, chn);
@@ -866,25 +885,135 @@ _SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx,
     }
 }
 
-/* Move items from a source ringbuffer into the incoming ringbuffer, this
-    is called once per frame from the user-thread to move all items that
-    changed from a user-thread-state into a IO-thread-state back into the
-    IO thread.
+/* put a request into the channels sent-queue, this is where all new requests
+   are stored until a lane becomes free.
 */
-_SOKOL_PRIVATE void _sfetch_channel_push(_sfetch_channel_t* chn, _sfetch_ring_t* src) {
+_SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_id) {
     SOKOL_ASSERT(chn && chn->valid);
-    SOKOL_ASSERT(src && src->buf);
-    _sfetch_thread_enqueue_incoming(&chn->thread, &chn->incoming, src);
+    if (!_sfetch_ring_full(&chn->user_sent)) {
+        _sfetch_ring_enqueue(&chn->user_sent, slot_id);
+        return true;
+    }
+    else {
+        SOKOL_LOG("sfetch_send: user_sent queue is full)");
+        return false;
+    }
 }
 
-/* Move items from the outgoing ringbuffer into an destination ringbuffer until
-    either the outgoing queue is empty or the destination ringbuffer is full.
-    This is called once per frame from the user thread.
-*/
-_SOKOL_PRIVATE void _sfetch_channel_pop(_sfetch_channel_t* chn, _sfetch_ring_t* dst) {
-    SOKOL_ASSERT(chn && chn->valid);
-    SOKOL_ASSERT(dst && dst->buf);
-    _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->outgoing, dst);
+/* per-frame channel stuff: move requests in and out of the IO threads, call reponse callbacks */
+_SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
+
+    /* move items from sent- to incoming-queue permitting free lanes */
+    const uint32_t num_sent = _sfetch_ring_count(&chn->user_sent);
+    const uint32_t avail_lanes = _sfetch_ring_count(&chn->free_lanes);
+    const uint32_t num_move = (num_sent < avail_lanes) ? num_sent : avail_lanes;
+    for (uint32_t i = 0; i < num_move; i++) {
+        const uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_sent);
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
+        SOKOL_ASSERT(item);
+        item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
+        _sfetch_ring_enqueue(&chn->user_incoming, slot_id);
+    }
+
+    /* prepare incoming items for being moved into the IO thread */
+    const uint32_t num_incoming = _sfetch_ring_count(&chn->user_incoming);
+    for (uint32_t i = 0; i < num_incoming; i++) {
+        const uint32_t slot_id = _sfetch_ring_peek(&chn->user_incoming, i);
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
+        SOKOL_ASSERT(item);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_OPENING);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_FETCHING);
+        /* transfer input params from user- to thread-data */
+        item->thread.buffer = item->user.buffer;
+        switch (item->state) {
+            case SFETCH_STATE_ALLOCATED:
+                item->state = SFETCH_STATE_OPENING;
+                break;
+            case SFETCH_STATE_OPENED:
+            case SFETCH_STATE_FETCHED:
+                item->state = SFETCH_STATE_FETCHING;
+                break;
+            default: break;
+        }
+    }
+
+    /* move new items into the IO threads and processed items out of IO threads */
+    _sfetch_thread_enqueue_incoming(&chn->thread, &chn->thread_incoming, &chn->user_incoming);
+    _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->thread_outgoing, &chn->user_outgoing);
+
+    /* drain the outgoing queue, prepare items for invoking the response
+       callback, and finally call the response callback, free finished items
+    */
+    sfetch_response_t response;
+    memset(&response, 0, sizeof(response));
+    while (!_sfetch_ring_empty(&chn->user_outgoing)) {
+        const uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_outgoing);
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
+        SOKOL_ASSERT(item && item->callback);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_ALLOCATED);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_OPENED);
+        SOKOL_ASSERT(item->state != SFETCH_STATE_FETCHED);
+        /* transfer output params from thread- to user-data */
+        item->user.content_size = item->thread.content_size;
+        item->user.fetched_size = item->thread.fetched_size;
+        item->user.chunk_size  = item->thread.chunk_size;
+        if (item->thread.finished) {
+            item->user.finished = true;
+        }
+        /* state transition */
+        if (item->thread.failed) {
+            item->state = SFETCH_STATE_FAILED;
+        }
+        else {
+            switch (item->state) {
+                case SFETCH_STATE_OPENING:
+                    /* if the request already had a buffer provided, the
+                       OPENING state already has fetched data and we shortcut
+                       to the first FETCHED state to shorten the time a request occupies
+                       a lane, otherwise, invoke the callback with OPENED state
+                       so it can provide a buffer
+                    */
+                    if (item->user.fetched_size > 0) {
+                        item->state = SFETCH_STATE_FETCHED;
+                    }
+                    else {
+                        item->state = SFETCH_STATE_OPENED;
+                    }
+                    break;
+                case SFETCH_STATE_FETCHING:
+                    item->state = SFETCH_STATE_FETCHED;
+                    break;
+                default:
+                    break;
+            }
+        }
+        /* invoke response callback */
+        response.handle.id = slot_id;
+        response.finished = item->user.finished;
+        response.state = item->state;
+        response.channel = item->channel;
+        response.lane = item->lane;
+        response.path = item->path.buf;
+        response.user_data = item->user.user_data;
+        response.content_size = item->user.content_size;
+        response.chunk_offset = item->user.fetched_size - item->user.chunk_size;
+        response.chunk.ptr = item->user.buffer.ptr;
+        response.chunk.size = item->user.chunk_size;
+        item->callback(response);
+
+        /* when the request is finish, free the lane for another request,
+           otherwise feed it back into the incoming queue
+        */
+        if (item->user.finished) {
+            _sfetch_ring_enqueue(&chn->free_lanes, item->lane);
+            _sfetch_pool_item_free(pool, slot_id);
+        }
+        else {
+            _sfetch_ring_enqueue(&chn->user_incoming, slot_id);
+        }
+    }
 }
 
 /*=== private high-level functions ===========================================*/
@@ -922,124 +1051,6 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
     return true;
 }
 
-/* this goes through all items in the user-incoming queues and updates their
-   state right before they're moved into the IO-threads
-*/
-_SOKOL_PRIVATE void _sfetch_update_incoming(_sfetch_t* ctx) {
-    for (uint32_t chn_index = 0; chn_index < ctx->desc.num_channels; chn_index++) {
-        _sfetch_ring_t* rb = &ctx->user_incoming[chn_index];
-        const uint32_t count = _sfetch_ring_count(rb);
-        for (uint32_t i = 0; i < count; i++) {
-            uint32_t slot_id = _sfetch_ring_peek(rb, i);
-            _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
-            if (item) {
-                // FIXME: handle items in failed state
-                SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
-                SOKOL_ASSERT(item->state != SFETCH_STATE_OPENING);
-                SOKOL_ASSERT(item->state != SFETCH_STATE_FETCHING);
-                /* transfer input params from user- to thread-data */
-                item->thread.buffer = item->user.buffer;
-                switch (item->state) {
-                    case SFETCH_STATE_ALLOCATED:
-                        item->state = SFETCH_STATE_OPENING;
-                        break;
-                    case SFETCH_STATE_OPENED:
-                        item->state = SFETCH_STATE_FETCHING;
-                        break;
-                    case SFETCH_STATE_FETCHED:
-                        item->state = SFETCH_STATE_FETCHING;
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-    }
-}
-
-/* this goes through all items in the user-outgoing queue and updates their
-   state after they've moved from the IO-thread into the user-thread
-*/
-_SOKOL_PRIVATE void _sfetch_update_outgoing(_sfetch_t* ctx) {
-    _sfetch_ring_t* rb = &ctx->user_outgoing;
-    const uint32_t count = _sfetch_ring_count(rb);
-    for (uint32_t i = 0; i < count; i++) {
-        uint32_t slot_id = _sfetch_ring_peek(rb, i);
-        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
-        if (item) {
-            SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
-            SOKOL_ASSERT(item->state != SFETCH_STATE_ALLOCATED);
-            SOKOL_ASSERT(item->state != SFETCH_STATE_OPENED);
-            SOKOL_ASSERT(item->state != SFETCH_STATE_FETCHED);
-            /* transfer output params from thread- to user-data */
-            item->user.content_size = item->thread.content_size;
-            item->user.fetched_size = item->thread.fetched_size;
-            item->user.chunk_size  = item->thread.chunk_size;
-            if (item->thread.finished) {
-                item->user.finished = true;
-            }
-            if (item->thread.failed) {
-                item->state = SFETCH_STATE_FAILED;
-            }
-            else {
-                switch (item->state) {
-                    case SFETCH_STATE_OPENING:
-                        /* if the request already had a buffer provided, the
-                           OPENING state already has fetched data and we shortcut
-                           to the first FETCHED state to shorten the time a request occupies
-                           a lane, otherwise, invoke the callback with OPENED state
-                           so it can provide a buffer
-                        */
-                        if (item->user.fetched_size > 0) {
-                            item->state = SFETCH_STATE_FETCHED;
-                        }
-                        else {
-                            item->state = SFETCH_STATE_OPENED;
-                        }
-                        break;
-                    case SFETCH_STATE_FETCHING:
-                        item->state = SFETCH_STATE_FETCHED;
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-    }
-}
-
-_SOKOL_PRIVATE void _sfetch_handle_outgoing(_sfetch_t* ctx) {
-    sfetch_response_t response;
-    memset(&response, 0, sizeof(response));
-    while (!_sfetch_ring_empty(&ctx->user_outgoing)) {
-        uint32_t slot_id = _sfetch_ring_dequeue(&ctx->user_outgoing);
-        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
-        SOKOL_ASSERT(item && item->callback);
-        response.handle.id = slot_id;
-        response.finished = item->user.finished;
-        response.state = item->state;
-        response.channel = item->channel;
-        response.lane = 0xABADCAFE; // FIXME
-        response.path = item->path.buf;
-        response.user_data = item->user.user_data;
-        response.content_size = item->user.content_size;
-        response.chunk_offset = item->user.fetched_size - item->user.chunk_size;
-        response.chunk.ptr = item->user.buffer.ptr;
-        response.chunk.size = item->user.chunk_size;
-        item->callback(response);
-        /* either put the handled item back into the user_incoming queue
-           to proceed to the next state, or delete it when it has arrived
-           at the last state.
-        */
-        if (item->user.finished) {
-            _sfetch_pool_item_free(&ctx->pool, slot_id);
-        }
-        else {
-            _sfetch_ring_enqueue(&ctx->user_incoming[item->channel], slot_id);
-        }
-    }
-}
-
 /*=== PUBLIC API FUNCTIONS ===================================================*/
 SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -1066,15 +1077,9 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
     /* setup the global request item pool */
     ctx->valid &= _sfetch_pool_init(&ctx->pool, ctx->desc.max_requests);
 
-    /* setup user-side message queues */
-    for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        ctx->valid &= _sfetch_ring_init(&ctx->user_incoming[i], ctx->desc.max_requests);
-    }
-    ctx->valid &= _sfetch_ring_init(&ctx->user_outgoing, ctx->desc.max_requests);
-
     /* setup IO channels (one thread per channel) */
     for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        ctx->valid &= _sfetch_channel_init(&ctx->chn[i], ctx, ctx->desc.max_requests, _sfetch_channel_worker);
+        ctx->valid &= _sfetch_channel_init(&ctx->chn[i], ctx, ctx->desc.max_requests, ctx->desc.num_lanes, _sfetch_channel_worker);
     }
 }
 
@@ -1086,10 +1091,6 @@ SOKOL_API_IMPL void sfetch_shutdown(void) {
         if (ctx->chn[i].valid) {
             _sfetch_channel_discard(&ctx->chn[i]);
         }
-    }
-    _sfetch_ring_discard(&ctx->user_outgoing);
-    for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        _sfetch_ring_discard(&ctx->user_incoming[i]);
     }
     _sfetch_pool_discard(&ctx->pool);
     ctx->valid = false;
@@ -1146,11 +1147,11 @@ SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
         SOKOL_LOG("sfetch_send: request pool exhausted (too many active requests)");
         return invalid_handle;
     }
-    if (_sfetch_ring_full(&ctx->user_incoming[request->channel])) {
-        SOKOL_LOG("sfetch_send: user_incoming queue is full)");
+    if (!_sfetch_channel_send(&ctx->chn[request->channel], slot_id)) {
+        /* send failed because the channels sent-queue overflowed */
+        _sfetch_pool_item_free(&ctx->pool, slot_id);
         return invalid_handle;
     }
-    _sfetch_ring_enqueue(&ctx->user_incoming[request->channel], slot_id);
     return _sfetch_make_handle(slot_id);
 }
 
@@ -1160,29 +1161,9 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     if (!ctx->valid) {
         return;
     }
-
-    // FIXME: there must be a separate queue before incoming with all the
-    // waiting requests, requests will only move to incoming if a lane
-    // has become free
-
-    /* update state of items moving from user- into IO-threads */
-    _sfetch_update_incoming(ctx);
-
-    /* move new requests into the IO channels and processed requests into the user-thread */
     for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        if (!_sfetch_ring_empty(&ctx->user_incoming[i])) {
-            _sfetch_channel_push(&ctx->chn[i], &ctx->user_incoming[i]);
-        }
-        _sfetch_channel_pop(&ctx->chn[i], &ctx->user_outgoing);
+        _sfetch_channel_dowork(&ctx->chn[i], &ctx->pool);
     }
-
-    /* upate state of items which moved from IO-threads into user-thread */
-    _sfetch_update_outgoing(ctx);
-
-    /* call the user callback for each item coming out of the IO thread,
-       and free completed requests
-    */
-    _sfetch_handle_outgoing(ctx);
 }
 
 SOKOL_API_IMPL void sfetch_set_buffer(sfetch_handle_t h, const sfetch_buffer_t* buf) {
