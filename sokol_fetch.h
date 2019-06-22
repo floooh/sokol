@@ -156,6 +156,12 @@ SOKOL_API_DECL void sfetch_dowork(void);
 
 /* update the IO buffer associated with a request (usually from inside response-callback) */
 SOKOL_API_DECL void sfetch_set_buffer(sfetch_handle_t h, const sfetch_buffer_t* buf);
+/* cancel a request that's in flight (will call response callback in FAILED state) */
+SOKOL_API_DECL void sfetch_cancel(sfetch_handle_t h);
+/* pause a request (will call response callback each frame in PAUSED state) */
+SOKOL_API_DECL void sfetch_pause(sfetch_handle_t h);
+/* continue a paused request */
+SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 
 #ifdef __cplusplus
 } /* extern "C" */
