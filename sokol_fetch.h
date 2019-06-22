@@ -817,6 +817,7 @@ _SOKOL_PRIVATE void _sfetch_channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
             thread->finished = true;
         }
     }
+    /* may fall through from OPENING if a buffer was provided upfront */
     if (state == SFETCH_STATE_FETCHING) {
         SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
         SOKOL_ASSERT(thread->content_size > thread->fetched_size);
