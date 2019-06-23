@@ -69,7 +69,7 @@
     - No memory will be allocated after sfetch_setup() is called. More specifically, all
       data is loaded into user-provided buffers (which may be provided "on demand"
       in the OPENED state of a request (since only then the file size is known),
-      or upfront (in streaming-scenarios, or some maximum file size is known upfront).
+      or upfront (in streaming-scenarios, or a maximum file size is known upfront).
 
     - A provided buffer can be smaller than the file content, in that case,
       the response callback will be called multiple times with partially
