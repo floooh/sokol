@@ -37,6 +37,8 @@
 
     - TL;DR:
         - asynchronous requests with response-callbacks
+        - only reading, not writing (thus the name "sokol_fetch.h", instead
+          of "sokol_io.h")
         - not limited to "main thread" or a single thread
         - "channels" for parallelization/prioritization, "lanes" for automatic rate-limiting
         - user-provided buffers, no allocations past initialization
@@ -62,7 +64,7 @@
       changes to a state which needs 'user-code attention' (you can think
       of a request as ping-ponging between the user-thread and an IO-thread
       multiple times, although the lib does its best to avoid any unnecessary
-      'ping-ponging' so keep the 'latency' of a single request low).
+      'ping-ponging' to keep the 'latency' of a single request low).
 
     - No memory will be allocated after sfetch_setup() is called. More specifically, all
       data is loaded into user-provided buffers (which may be provided "on demand"
