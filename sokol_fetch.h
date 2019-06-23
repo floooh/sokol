@@ -77,9 +77,9 @@ extern "C" {
 /* configuration values for sfetch_setup() */
 typedef struct sfetch_desc_t {
     uint32_t _start_canary;
+    uint32_t max_requests;          /* max number of active requests across all channels */
     uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
     uint32_t num_lanes;             /* max number of requests active on the same channel, default is 16 */
-    uint32_t max_requests;          /* max number of active requests across all channels */
     uint32_t _end_canary;
 } sfetch_desc_t;
 
@@ -343,7 +343,7 @@ typedef struct {
     bool valid;
 } _sfetch_channel_t;
 
-/* the sfetch global state (FIXME: allow per-thread contexts) */
+/* the sfetch global state */
 typedef struct _sfetch_t {
     bool setup;
     bool valid;
@@ -861,10 +861,8 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
         /* slot_id will be invalid if the thread was woken up to join */
         if (!_sfetch_thread_stop_requested(&chn->thread)) {
             chn->work_func(chn->ctx, slot_id);
-            if (!_sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id)) {
-                // FIXME: what to do if outgoing queue is overflowing because
-                // the user thread doesn't empty it?
-            }
+            SOKOL_ASSERT(!_sfetch_ring_full(&chn->thread_outgoing));
+            _sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id);
         }
     }
     _sfetch_thread_leaving(&chn->thread);
@@ -1187,8 +1185,14 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     if (!ctx->valid) {
         return;
     }
-    for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        _sfetch_channel_dowork(&ctx->chn[i], &ctx->pool);
+    /* we're pumping each channel 2x so that unfinished request items coming out the
+       IO threads can be moved back into the IO-thread immediately without
+       having to wait a frame
+     */
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t chn_index = 0; chn_index < ctx->desc.num_channels; chn_index++) {
+            _sfetch_channel_dowork(&ctx->chn[chn_index], &ctx->pool);
+        }
     }
 }
 
