@@ -32,6 +32,120 @@
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
+    TEMP NOTE DUMP
+    ==============
+
+    - TL;DR:
+        - asynchronous requests with response-callbacks
+        - not limited to "main thread" or a single thread
+        - "channels" for parallelization/prioritization, "lanes" for automatic rate-limiting
+        - user-provided buffers, no allocations past initialization
+
+    - Asynchronously load complete files, or stream data chunks from the local
+      filesystem (on "native" platforms), or via HTTP (on WASM) while giving
+      user-code full control over memory.
+
+    - sfetch_setup() can be called on any thread, or multiple threads, each
+      call sets up a complete thread-local context along with its own set of IO
+      threads.
+
+    - Call "sfetch_send(const sfetch_request_t* request)" to start
+      an asynchronous fetch-request. At the minimum the request-struct contains a
+      file path/URL and a 'response callback'. sfetch_send() returns an opaque
+      'request handle' of type sfetch_handle_t.
+
+    - The sfetch_dowork() function is called once per "frame" and pumps messages
+      in and out of IO threads, and invokes response-callbacks.
+
+    - An active request calls the user-provided response callback on the same
+      thread it was sent once or multiple times when the request
+      changes to a state which needs 'user-code attention' (you can think
+      of a request as ping-ponging between the user-thread and an IO-thread
+      multiple times, although the lib does its best to avoid any unnecessary
+      'ping-ponging' so keep the 'latency' of a single request low).
+
+    - No memory will be allocated after sfetch_setup() is called. More specifically, all
+      data is loaded into user-provided buffers (which may be provided "on demand"
+      in the OPENED state of a request (since only then the file size is known),
+      or upfront (in streaming-scenarios, or some maximum file size is known upfront).
+
+    - A provided buffer can be smaller than the file content, in that case,
+      the response callback will be called multiple times with partially
+      fetched data until the whole file content has been loaded. This is
+      useful for streaming scenarios, or generally to limit overall memory usage
+      if loaded data can be processed in chunks.
+
+    - Requests are distributed to IO "channels" for parallelization and per-channel
+      "lanes" for rate-limiting. Channel indices are user-provided in the
+      request struct, lanes are assigned automatically.
+
+    - Channels can be used to prioritize requests or separate requests by
+      system. For instance, big and slow fetches can be issued to a different
+      channel than small and fast downloads.
+
+    - Per-channel lanes are used to limit the maximum number of requests that are
+      processed on a channel. Each request on a channel occupies a lane until the
+      entire request is completed.
+
+    - Since channels and lanes guarantee that only a max number of requests is
+      processed at any one time, user-code can provide a fixed number of upfront-
+      allocated IO buffers.
+
+    - On native platforms, each channel owns one thread where "traditional"
+      blocking IO functions are called (fopen/fread/fclose on POSIX-ish
+      platforms, CreateFileW etc... on Windows). On WASM, XmlHttpRequests on
+      the browser thread are used, and the server is expected to support HTTP
+      range-requests (POSIX-style threading support may be added later for WASM
+      if it makes sense).
+
+    - Fetch-requests go through states, and a request's response-callback is called
+      during sfetch_dowork() when a request enters certain states
+      (FIXME: this needs some ASCII flowgraph-graphics):
+        - OPENING: File is currently being opened by the IO thread, if file
+          doesn't exist, transition to FAILED, otherwise get the overall
+          size of the file. If a buffer was provided upfront, immediately
+          go into FETCHING state, otherwise OPENED.
+        - OPENED: If no buffer was provided upfront, a request goes into the
+          OPENED state and the response callback is called so that the user-code
+          can provide a buffer via sfetch_set_buffer() from inside the callback.
+          The overall file size is available in the response structure passed
+          to the callback.
+        - FETCHING: an IO thread is currently loading data into the provided buffer,
+          may transition into FETCHED or FAILED
+        - FETCHED: IO thread has completed loading data into the buffer, either
+          because the buffer is full, or all file content has been loaded.
+          The response callback will be called so that the user code can
+          process the data. If the whole file content has been loaded,
+          a 'finished' flag will be set in the callback's response argument.
+        - FAILED: The IO request has failed, the response callback will be called
+          to give user-code a chance to cleanup. This happens when:
+            - OPENING the file has failed, in this case the request goes
+              into the FAILED state, instead of OPENED
+            - When some errors occurs during FETCHING after the file was
+              successfully opened. In that case, the request will transition
+              into FAILED instead of FETCHING.
+        - PAUSED (TODO): a request may go into PAUSED state when the response
+          callback calls the function sfetch_pause() for a request. This is
+          useful for 'dynamic rate limiting' in streaming scenaiors (e.g. when
+          the
+
+        NOTE how all states which are processed on the user-side in the
+        response callback end with -ED (OPENED, FETCHED, PAUSED, FAILED),
+        while all states which are currently processed on the IO-thread-side
+        end with -ING (OPENING, FETCHING)
+
+    - (TODO) A request can be cancelled both from in- or outside-the response callback.
+      A cancelled request will go into the FAILED state and the response-callback will
+      be called so the user-code has a chance to react.
+
+    - Planned for "Version 2.0":
+        - Pluggable request handler code, for instance to implement HTTP
+          downloads on "native platforms" via libcurl etc..., or load from
+          any other "data source".
+        - A polling-API as an alternative to the response-callback. I postponed
+          this because the callback-API simplifies handling some potentially
+          situations (like accessing buffer data while a thread overwrites it,
+          or 'forgotten' requests clogging up the system).
 
     zlib/libpng license
 
@@ -88,13 +202,14 @@ typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
 
 /* a request goes through the following states, ping-ponging between IO and user thread */
 typedef enum sfetch_state_t {
-    SFETCH_STATE_INITIAL = 0,   /* user thread: request has just been initialized */
-    SFETCH_STATE_ALLOCATED,     /* user thread: request has been allocated from internal pool */
+    SFETCH_STATE_INITIAL = 0,   /* internal: request has just been initialized */
+    SFETCH_STATE_ALLOCATED,     /* internal: request has been allocated from internal pool */
+
     SFETCH_STATE_OPENING,       /* IO thread: waiting to be opened */
     SFETCH_STATE_OPENED,        /* user thread: follow state of OPENING if no buffer was provided */
     SFETCH_STATE_FETCHING,      /* IO thread: waiting for data to be fetched */
     SFETCH_STATE_FETCHED,       /* user thread: fetched data available */
-    SFETCH_STATE_FAILED,        /* follow state of OPENING or FETCHING if something went wrong */
+    SFETCH_STATE_FAILED,        /* user thread: follow state of OPENING or FETCHING if something went wrong */
 
     _SFETCH_STATE_NUM,
 } sfetch_state_t;
