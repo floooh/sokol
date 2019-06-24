@@ -5114,7 +5114,7 @@ struct monitor {
 };
 
 #define MAX_NUM_MONITORS 4
-static struct monitor _monitors[MAX_NUM_MONITORS] = {0};
+static struct monitor _monitors[MAX_NUM_MONITORS];
 static int32_t _monitor_id = 0;
 
 struct surface {
@@ -5135,8 +5135,7 @@ struct window {
 	struct framebuffer fbuf;
 };
 
-static struct window _window = {0};
-static bool _fullscreen = false;
+static struct window _window;
 
 #define MAX_MESSAGE_CHARS 256
 static char _log_message[MAX_MESSAGE_CHARS] = {0};
@@ -5175,7 +5174,7 @@ _SOKOL_PRIVATE void wl_output_handle_geometry(void *data, struct wl_output *outp
 	int32_t x, int32_t y, int32_t physical_width, int32_t physical_height,
 	int32_t subpixel, const char *make, const char *model, int32_t transform) {
 
-	struct monitor* mon = data;
+	struct monitor* mon = (struct monitor*)data;
 	//SOKOL_PRINTF("Monitor %s %s [%p:%p] set", make, model, output, mon);
 
 	if (mon) {
@@ -5190,7 +5189,7 @@ _SOKOL_PRIVATE void wl_output_handle_geometry(void *data, struct wl_output *outp
 
 _SOKOL_PRIVATE void wl_output_handle_mode(void *data, struct wl_output *output,
 	uint32_t flags, int32_t width, int32_t height, int32_t refresh) {	
-	struct monitor* mon = data;
+	struct monitor* mon = (struct monitor*)data;
 	if (flags & WL_OUTPUT_MODE_CURRENT) {
 		
 		//SOKOL_PRINTF("Monitor [%p:%p] mode %dx%d@%d",
@@ -5207,7 +5206,7 @@ _SOKOL_PRIVATE void wl_output_handle_mode(void *data, struct wl_output *output,
 _SOKOL_PRIVATE void wl_output_handle_scale(void *data, struct wl_output *output, 
 	int32_t factor) {
 
-	struct monitor* mon = data;
+	struct monitor* mon = (struct monitor*)data;
 	//SOKOL_PRINTF("Monitor [%p:%p] scaling factor %d", output, mon, factor);
 
     // The scale factor passed in is an integer, which 
@@ -5242,7 +5241,7 @@ _SOKOL_PRIVATE void print_monitor(struct wl_output *output,
 
 _SOKOL_PRIVATE void wl_output_handle_done(
     void *data, struct wl_output *output) {
-	struct monitor* mon = data;
+	struct monitor* mon = (struct monitor*)data;
 	if (mon) {
 
         // Calculate the diagonal of the screen to work out dpi.
@@ -5416,7 +5415,7 @@ _SOKOL_PRIVATE void wl_surface_handle_enter(void *data,
 	struct wl_surface *surface, struct wl_output *output) {
 	SOKOL_PRINTF("Surface %p entered monitor %p", surface, output);
 	
-	struct monitor* mon = wl_output_get_user_data(output);
+	struct monitor* mon = (struct monitor*)wl_output_get_user_data(output);
 	if (mon == NULL) {
 		SOKOL_PRINTF("Surface [%p] has entered an unknown monitor!",
 			surface);
@@ -5425,7 +5424,7 @@ _SOKOL_PRIVATE void wl_surface_handle_enter(void *data,
 
 	print_monitor(output, mon);
 	
-	struct window* win = data;
+	struct window* win = (struct window*)data;
 	if (win == NULL) {
 		SOKOL_PRINTF("Can't retrieve surface's [%p] window", surface);
 		return;
@@ -5476,9 +5475,10 @@ _SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
 
 	// Print toplevel surface states
 	if (states != NULL) {
-		enum xdg_toplevel_state *state = 
-			(enum xdg_toplevel_state*)states->data;
-		wl_array_for_each(state, states) {
+		void *state_ptr = states->data;
+		wl_array_for_each(state_ptr, states) {
+            enum xdg_toplevel_state *state = 
+                (enum xdg_toplevel_state*)state_ptr;
 			switch(*state) {
 				case XDG_TOPLEVEL_STATE_MAXIMIZED:
 					SOKOL_PRINTF("Toplevel surface %p state %s",
@@ -5517,10 +5517,11 @@ _SOKOL_PRIVATE void xdg_toplevel_handle_configure(void *data,
 		}
 	}
 
-    _sapp_wl_app_event(activated ? 
-        SAPP_EVENTTYPE_RESUMED : SAPP_EVENTTYPE_SUSPENDED);
+    _sapp_wl_app_event(activated 
+        ? SAPP_EVENTTYPE_RESUMED : SAPP_EVENTTYPE_SUSPENDED);
 
-	_sapp_wl_resize_window(data, width, height);
+    struct window* win = (struct window*)data;
+	_sapp_wl_resize_window(win, width, height);
 }
 
 static const struct xdg_toplevel_listener _xdg_toplevel_listener = {
@@ -5567,7 +5568,7 @@ _SOKOL_PRIVATE void pointer_handle_button(
 	uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
 	// SOKOL_PRINTF("Pointer button=%d, state=%d", button, state);
 
-	struct wl_seat *seat = data;
+	struct wl_seat *seat = (struct wl_seat*)data;
 
 	// Being able to grab and move the window around while the left
     // mouse button is held down on top of the window, providing the
@@ -5618,12 +5619,16 @@ static const struct wl_pointer_listener _pointer_listener = {
 	.motion = pointer_handle_motion,
 	.button = pointer_handle_button,
 	.axis = pointer_handle_axis,
+    .frame = NULL,
+    .axis_source = NULL,
+    .axis_stop = NULL,
+    .axis_discrete = NULL
 };
 
 _SOKOL_PRIVATE void keyboard_keymap(void *data, struct wl_keyboard *keyboard,
 	uint32_t format, int32_t fd, uint32_t size) {
 	
-	char *keymap_string = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+	char *keymap_string = (char*)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
 
 	xkb_keymap_unref(_xkb_keymap);
 	SOKOL_PRINTF("Keyboard (%d) mapped", fd);
@@ -5926,20 +5931,21 @@ _SOKOL_PRIVATE void handle_global(void *data, struct wl_registry *registry,
 		interface, name, version);
 	
 	if (strcmp(interface, wl_shm_interface.name) == 0) {
-		_wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, version);
+		_wl_shm = (struct wl_shm*)wl_registry_bind(registry, name,
+            &wl_shm_interface, version);
 	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
-		struct wl_seat *seat = wl_registry_bind(registry, name,
-			&wl_seat_interface, 2);
+		struct wl_seat *seat = (struct wl_seat*)
+        wl_registry_bind(registry, name, &wl_seat_interface, 2);
 		wl_seat_add_listener(seat, &_seat_listener, NULL);
 	} else if (strcmp(interface, wl_compositor_interface.name) == 0) {
-		_wl_compositor = wl_registry_bind(registry, name,
+		_wl_compositor = (struct wl_compositor*)wl_registry_bind(registry, name,
 			&wl_compositor_interface, version);
 	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
-		_xdg_shell = wl_registry_bind(
-			registry, name, &xdg_wm_base_interface, version);
+		_xdg_shell = (struct xdg_wm_base*)wl_registry_bind(registry, name, 
+            &xdg_wm_base_interface, version);
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
-		struct wl_output *output = wl_registry_bind(registry, name,
-			&wl_output_interface, version);
+		struct wl_output *output = (struct wl_output*)wl_registry_bind(registry,
+            name, &wl_output_interface, version);
 
 		if (output != NULL) {
 			if (_monitor_id < MAX_NUM_MONITORS) {
@@ -6019,7 +6025,7 @@ _SOKOL_PRIVATE void init_egl(struct wl_display *display) {
     SOKOL_PRINTF("EGL has %d configs", count);
 
 	// Allocate space to keep valid configs around
-    _egl_configs = SOKOL_CALLOC(count, sizeof *_egl_configs);
+    _egl_configs = (EGLConfig*)SOKOL_CALLOC(count, sizeof(EGLConfig));
 
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     EGLint sample_buffers = _sapp.sample_count > 1 ? 1 : 0;
