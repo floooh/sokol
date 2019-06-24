@@ -193,7 +193,7 @@ extern "C" {
 /* configuration values for sfetch_setup() */
 typedef struct sfetch_desc_t {
     uint32_t _start_canary;
-    uint32_t max_requests;          /* max number of active requests across all channels */
+    uint32_t max_requests;          /* max number of active requests across all channels, default is 128 */
     uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
     uint32_t num_lanes;             /* max number of requests active on the same channel, default is 16 */
     uint32_t _end_canary;
@@ -334,17 +334,26 @@ SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 #endif
 
 #if defined(__EMSCRIPTEN__)
-    #define SFETCH_PLATFORM_EMSCRIPTEN (1)
+    #define _SFETCH_PLATFORM_EMSCRIPTEN (1)
+    #define _SFETCH_PLATFORM_WINDOWS (0)
+    #define _SFETCH_PLATFORM_POSIX (0)
+    #define _SFETCH_HAS_THREADS (0)
 #elif defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
     #include <windows.h>
     #define _SFETCH_PLATFORM_WINDOWS (1)
+    #define _SFETCH_PLATFORM_EMSCRIPTEN (0)
+    #define _SFETCH_PLATFORM_POSIX (0)
+    #define _SFETCH_HAS_THREADS (1)
 #else
     #include <pthread.h>
     #include <stdio.h>  /* fopen, fread, fseek, fclose */
     #define _SFETCH_PLATFORM_POSIX (1)
+    #define _SFETCH_PLATFORM_EMSCRIPTEN (0)
+    #define _SFETCH_PLATFORM_WINDOWS (0)
+    #define _SFETCH_HAS_THREADS (1)
 #endif
 
 /*=== private type definitions ===============================================*/
@@ -353,7 +362,7 @@ typedef struct _sfetch_path_t {
 } _sfetch_path_t;
 
 /* a thread with incoming and outgoing message queue syncing */
-#if defined(_SFETCH_PLATFORM_POSIX)
+#if _SFETCH_PLATFORM_POSIX
 typedef struct {
     pthread_t thread;
     pthread_cond_t incoming_cond;
@@ -364,19 +373,15 @@ typedef struct {
     bool stop_requested;
     bool valid;
 } _sfetch_thread_t;
-#elif defined(_SFETCH_PLATFORM_WINDOWS)
+#elif _SFETCH_PLATFORM_WINDOWS
 #error "FIXME WIndows"
-#else
-typedef struct { } _sfetch_thread_t;
 #endif
 
 /* file handle abstraction */
-#if defined(_SFETCH_PLATFORM_POSIX)
+#if _SFETCH_PLATFORM_POSIX
 typedef FILE* _sfetch_file_handle_t;
-#elif defined(_SFETCH_PLATFORM_WINDOWS)
+#elif _SFETCH_PLATFORM_WINDOWS
 typedef HANDLE _sfetch_file_handle_t;
-#else
-#error "FIXME: file handle emscripten"
 #endif
 
 /* user-side per-request state */
@@ -404,7 +409,9 @@ typedef struct {
     bool failed;
     bool finished;
     /* IO thread only */
+    #if !_SFETCH_PLATFORM_EMSCRIPTEN
     _sfetch_file_handle_t file_handle;
+    #endif
 } _sfetch_item_thread_t;
 
 /* an internal request item */
@@ -455,8 +462,10 @@ typedef struct {
     _sfetch_ring_t thread_incoming;
     _sfetch_ring_t thread_outgoing;
     _sfetch_ring_t user_outgoing;
+    #if _SFETCH_HAS_THREADS
     _sfetch_thread_t thread;
-    void (*work_func)(struct _sfetch_t* ctx, uint32_t slot_id);
+    #endif
+    void (*request_handler)(struct _sfetch_t* ctx, uint32_t slot_id);
     bool valid;
 } _sfetch_channel_t;
 
@@ -596,8 +605,156 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t ind
     return rb->buf[rb_index];
 }
 
-/*=== threading wrappers =====================================================*/
-#if defined(_SFETCH_PLATFORM_POSIX)
+/*=== request pool implementation ============================================*/
+_SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
+    SOKOL_ASSERT(item && (0 == item->handle.id));
+    SOKOL_ASSERT(request && request->path);
+    item->handle.id = slot_id;
+    item->state = SFETCH_STATE_INITIAL;
+    item->channel = request->channel;
+    item->lane = _SFETCH_INVALID_LANE;
+    item->user.buffer = request->buffer;
+    item->path = _sfetch_path_make(request->path);
+    item->callback = request->callback;
+    if (request->user_data &&
+        (request->user_data_size > 0) &&
+        (request->user_data_size <= (SFETCH_MAX_USERDATA_UINT64*8)))
+    {
+        item->user.user_data_size = request->user_data_size;
+        memcpy(item->user.user_data, request->user_data, request->user_data_size);
+    }
+}
+
+_SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
+    SOKOL_ASSERT(item && (0 != item->handle.id));
+    memset(item, 0, sizeof(_sfetch_item_t));
+}
+
+_SOKOL_PRIVATE void _sfetch_pool_discard(_sfetch_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    if (pool->free_slots) {
+        SOKOL_FREE(pool->free_slots);
+        pool->free_slots = 0;
+    }
+    if (pool->gen_ctrs) {
+        SOKOL_FREE(pool->gen_ctrs);
+        pool->gen_ctrs = 0;
+    }
+    if (pool->items) {
+        SOKOL_FREE(pool->items);
+        pool->items = 0;
+    }
+    pool->size = 0;
+    pool->free_top = 0;
+    pool->valid = false;
+}
+
+_SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, uint32_t num_items) {
+    SOKOL_ASSERT(pool && (num_items > 0) && (num_items < ((1<<16)-1)));
+    SOKOL_ASSERT(0 == pool->items);
+    /* NOTE: item slot 0 is reserved for the special "invalid" item index 0*/
+    pool->size = num_items + 1;
+    pool->free_top = 0;
+    const size_t items_size = pool->size * sizeof(_sfetch_item_t);
+    pool->items = (_sfetch_item_t*) SOKOL_MALLOC(items_size);
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    const size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
+    /* NOTE: it's not a bug to only reserve num_items here */
+    const size_t free_slots_size = num_items * sizeof(int);
+    pool->free_slots = (uint32_t*) SOKOL_MALLOC(free_slots_size);
+    if (pool->items && pool->free_slots) {
+        memset(pool->items, 0, items_size);
+        memset(pool->gen_ctrs, 0, gen_ctrs_size);
+        /* never allocate the 0-th item, this is the reserved 'invalid item' */
+        for (uint32_t i = pool->size - 1; i >= 1; i--) {
+            pool->free_slots[pool->free_top++] = i;
+        }
+        pool->valid = true;
+    }
+    else {
+        /* allocation error */
+        _sfetch_pool_discard(pool);
+    }
+    return pool->valid;
+}
+
+_SOKOL_PRIVATE uint32_t _sfetch_pool_item_alloc(_sfetch_pool_t* pool, const sfetch_request_t* request) {
+    SOKOL_ASSERT(pool && pool->valid);
+    if (pool->free_top > 0) {
+        uint32_t slot_index = pool->free_slots[--pool->free_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        uint32_t slot_id = _sfetch_make_id(slot_index, ++pool->gen_ctrs[slot_index]);
+        _sfetch_item_init(&pool->items[slot_index], slot_id, request);
+        pool->items[slot_index].state = SFETCH_STATE_ALLOCATED;
+        return slot_id;
+    }
+    else {
+        /* pool exhausted, return the 'invalid handle' */
+        return _sfetch_make_id(0, 0);
+    }
+}
+
+_SOKOL_PRIVATE void _sfetch_pool_item_free(_sfetch_pool_t* pool, uint32_t slot_id) {
+    SOKOL_ASSERT(pool && pool->valid);
+    uint32_t slot_index = _sfetch_slot_index(slot_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool->items[slot_index].handle.id == slot_id);
+    #if defined(SOKOL_DEBUG)
+    /* debug check against double-free */
+    for (uint32_t i = 0; i < pool->free_top; i++) {
+        SOKOL_ASSERT(pool->free_slots[i] != slot_index);
+    }
+    #endif
+    _sfetch_item_discard(&pool->items[slot_index]);
+    pool->free_slots[pool->free_top++] = slot_index;
+    SOKOL_ASSERT(pool->free_top <= (pool->size - 1));
+}
+
+/* return pointer to item by handle without matching id check */
+_SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_at(_sfetch_pool_t* pool, uint32_t slot_id) {
+    SOKOL_ASSERT(pool && pool->valid);
+    uint32_t slot_index = _sfetch_slot_index(slot_id);
+    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+    return &pool->items[slot_index];
+}
+
+/* return pointer to item by handle with matching id check */
+_SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_lookup(_sfetch_pool_t* pool, uint32_t slot_id) {
+    SOKOL_ASSERT(pool && pool->valid);
+    if (0 != slot_id) {
+        _sfetch_item_t* item = _sfetch_pool_item_at(pool, slot_id);
+        if (item->handle.id == slot_id) {
+            return item;
+        }
+    }
+    return 0;
+}
+
+/*=== PLATFORM WRAPPER FUNCTIONS =============================================*/
+#if _SFETCH_PLATFORM_POSIX
+_SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
+    return fopen(path->buf, "rb");
+}
+
+_SOKOL_PRIVATE void _sfetch_file_close(_sfetch_file_handle_t h) {
+    fclose(h);
+}
+
+_SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
+    return h != 0;
+}
+
+_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
+    fseek(h, 0, SEEK_END);
+    return ftell(h);
+}
+
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+    fseek(h, offset, SEEK_SET);
+    return num_bytes == fread(ptr, 1, num_bytes, h);
+}
 
 _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
     SOKOL_ASSERT(thread && !thread->valid && !thread->stop_requested);
@@ -729,177 +886,90 @@ _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _s
     }
     pthread_mutex_unlock(&thread->outgoing_mutex);
 }
+#endif /* _SFETCH_PLATFORM_POSIX */
 
-#elif defined(_SFETCH_PLATFORM_WINDOWS)
-#error "FIXME Windows"
-#else
-#error "FIXME Emscripten"
-#endif
-
-/*=== file I/O wrappers ======================================================*/
-#if defined(_SFETCH_PLATFORM_POSIX)
+#if _SFETCH_PLATFORM_WINDOWS
 _SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
-    SOKOL_ASSERT(path && (path->buf[0] != 0));
-    return fopen(path->buf, "rb");
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
 _SOKOL_PRIVATE void _sfetch_file_close(_sfetch_file_handle_t h) {
-    fclose(h);
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
-    return h != 0;
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
 _SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
-    fseek(h, 0, SEEK_END);
-    return ftell(h);
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
-    fseek(h, offset, SEEK_SET);
-    uint64_t bytes_read = fread(ptr, 1, num_bytes, h);
-    return bytes_read == num_bytes;
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-#elif defined(_SFETCH_PLATFORM_WINDOWS)
-// FIXME: on Windows, convert UTF-8 paths with MultiByteToWideChar(), and
-// use the native Windows file IO functions
-#else
-
-#endif
-
-
-/*=== request pool implementation ============================================*/
-_SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
-    SOKOL_ASSERT(item && (0 == item->handle.id));
-    SOKOL_ASSERT(request && request->path);
-    item->handle.id = slot_id;
-    item->state = SFETCH_STATE_INITIAL;
-    item->channel = request->channel;
-    item->lane = _SFETCH_INVALID_LANE;
-    item->user.buffer = request->buffer;
-    item->path = _sfetch_path_make(request->path);
-    item->callback = request->callback;
-    if (request->user_data &&
-        (request->user_data_size > 0) &&
-        (request->user_data_size <= (SFETCH_MAX_USERDATA_UINT64*8)))
-    {
-        item->user.user_data_size = request->user_data_size;
-        memcpy(item->user.user_data, request->user_data, request->user_data_size);
-    }
+_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-_SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
-    SOKOL_ASSERT(item && (0 != item->handle.id));
-    memset(item, 0, sizeof(_sfetch_item_t));
+_SOKOL_PRIVATE void _sfetch_thread_request_stop(_sfetch_thread_t* thread) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-_SOKOL_PRIVATE void _sfetch_pool_discard(_sfetch_pool_t* pool) {
-    SOKOL_ASSERT(pool);
-    if (pool->free_slots) {
-        SOKOL_FREE(pool->free_slots);
-        pool->free_slots = 0;
-    }
-    if (pool->gen_ctrs) {
-        SOKOL_FREE(pool->gen_ctrs);
-        pool->gen_ctrs = 0;
-    }
-    if (pool->items) {
-        SOKOL_FREE(pool->items);
-        pool->items = 0;
-    }
-    pool->size = 0;
-    pool->free_top = 0;
-    pool->valid = false;
+_SOKOL_PRIVATE bool _sfetch_thread_stop_requested(_sfetch_thread_t* thread) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-_SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, uint32_t num_items) {
-    SOKOL_ASSERT(pool && (num_items > 0) && (num_items < ((1<<16)-1)));
-    SOKOL_ASSERT(0 == pool->items);
-    /* NOTE: item slot 0 is reserved for the special "invalid" item index 0*/
-    pool->size = num_items + 1;
-    pool->free_top = 0;
-    const size_t items_size = pool->size * sizeof(_sfetch_item_t);
-    pool->items = (_sfetch_item_t*) SOKOL_MALLOC(items_size);
-    /* generation counters indexable by pool slot index, slot 0 is reserved */
-    const size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
-    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
-    SOKOL_ASSERT(pool->gen_ctrs);
-    /* NOTE: it's not a bug to only reserve num_items here */
-    const size_t free_slots_size = num_items * sizeof(int);
-    pool->free_slots = (uint32_t*) SOKOL_MALLOC(free_slots_size);
-    if (pool->items && pool->free_slots) {
-        memset(pool->items, 0, items_size);
-        memset(pool->gen_ctrs, 0, gen_ctrs_size);
-        /* never allocate the 0-th item, this is the reserved 'invalid item' */
-        for (uint32_t i = pool->size - 1; i >= 1; i--) {
-            pool->free_slots[pool->free_top++] = i;
-        }
-        pool->valid = true;
-    }
-    else {
-        /* allocation error */
-        _sfetch_pool_discard(pool);
-    }
-    return pool->valid;
+_SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-_SOKOL_PRIVATE uint32_t _sfetch_pool_item_alloc(_sfetch_pool_t* pool, const sfetch_request_t* request) {
-    SOKOL_ASSERT(pool && pool->valid);
-    if (pool->free_top > 0) {
-        uint32_t slot_index = pool->free_slots[--pool->free_top];
-        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-        uint32_t slot_id = _sfetch_make_id(slot_index, ++pool->gen_ctrs[slot_index]);
-        _sfetch_item_init(&pool->items[slot_index], slot_id, request);
-        pool->items[slot_index].state = SFETCH_STATE_ALLOCATED;
-        return slot_id;
-    }
-    else {
-        /* pool exhausted, return the 'invalid handle' */
-        return _sfetch_make_id(0, 0);
-    }
+_SOKOL_PRIVATE void _sfetch_thread_entered(_sfetch_thread_t* thread) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-_SOKOL_PRIVATE void _sfetch_pool_item_free(_sfetch_pool_t* pool, uint32_t slot_id) {
-    SOKOL_ASSERT(pool && pool->valid);
-    uint32_t slot_index = _sfetch_slot_index(slot_id);
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-    SOKOL_ASSERT(pool->items[slot_index].handle.id == slot_id);
-    #ifdef SOKOL_DEBUG
-    /* debug check against double-free */
-    for (uint32_t i = 0; i < pool->free_top; i++) {
-        SOKOL_ASSERT(pool->free_slots[i] != slot_index);
-    }
-    #endif
-    _sfetch_item_discard(&pool->items[slot_index]);
-    pool->free_slots[pool->free_top++] = slot_index;
-    SOKOL_ASSERT(pool->free_top <= (pool->size - 1));
+_SOKOL_PRIVATE void _sfetch_thread_leaving(_sfetch_thread_t* thread) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-/* return pointer to item by handle without matching id check */
-_SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_at(_sfetch_pool_t* pool, uint32_t slot_id) {
-    SOKOL_ASSERT(pool && pool->valid);
-    uint32_t slot_index = _sfetch_slot_index(slot_id);
-    SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-    return &pool->items[slot_index];
+_SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming, _sfetch_ring_t* src) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
 
-/* return pointer to item by handle with matching id check */
-_SOKOL_PRIVATE _sfetch_item_t* _sfetch_pool_item_lookup(_sfetch_pool_t* pool, uint32_t slot_id) {
-    SOKOL_ASSERT(pool && pool->valid);
-    if (0 != slot_id) {
-        _sfetch_item_t* item = _sfetch_pool_item_at(pool, slot_id);
-        if (item->handle.id == slot_id) {
-            return item;
-        }
-    }
-    return 0;
+_SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming) {
+    // FIXME
+    SOKOL_ASSERT(false);
 }
+
+_SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
+    // FIXME
+    SOKOL_ASSERT(false);
+}
+
+_SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
+    // FIXME
+    SOKOL_ASSERT(false);
+}
+#endif /* _SFETCH_PLATFORM_WINDOWS */
 
 /*=== IO CHANNEL implementation ==============================================*/
-_SOKOL_PRIVATE void _sfetch_channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
-    /* careful to only access constant and thread-owned data */
+
+/* per-channel request handler for native platforms accessing the local filesystem */
+#if _SFETCH_HAS_THREADS
+_SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     sfetch_state_t state;
     _sfetch_path_t* path;
     _sfetch_item_thread_t* thread;
@@ -968,7 +1038,6 @@ _SOKOL_PRIVATE void _sfetch_channel_worker(_sfetch_t* ctx, uint32_t slot_id) {
         }
     }
 }
-
 _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
     _sfetch_channel_t* chn = (_sfetch_channel_t*) arg;
     _sfetch_thread_entered(&chn->thread);
@@ -977,7 +1046,7 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
         uint32_t slot_id = _sfetch_thread_dequeue_incoming(&chn->thread, &chn->thread_incoming);
         /* slot_id will be invalid if the thread was woken up to join */
         if (!_sfetch_thread_stop_requested(&chn->thread)) {
-            chn->work_func(chn->ctx, slot_id);
+            chn->request_handler(chn->ctx, slot_id);
             SOKOL_ASSERT(!_sfetch_ring_full(&chn->thread_outgoing));
             _sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id);
         }
@@ -985,12 +1054,21 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
     _sfetch_thread_leaving(&chn->thread);
     return 0;
 }
+#endif /* _SFETCH_HAS_THREADS */
+
+#if _SFETCH_PLATFORM_EMSCRIPTEN
+_SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
+    // FIXME
+}
+#endif
 
 _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     SOKOL_ASSERT(chn);
+    #if _SFETCH_HAS_THREADS
     if (chn->valid) {
         _sfetch_thread_join(&chn->thread);
     }
+    #endif
     _sfetch_ring_discard(&chn->free_lanes);
     _sfetch_ring_discard(&chn->user_sent);
     _sfetch_ring_discard(&chn->user_incoming);
@@ -1001,11 +1079,11 @@ _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     chn->valid = false;
 }
 
-_SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx, uint32_t num_items, uint32_t num_lanes, void (*work_func)(_sfetch_t* ctx, uint32_t)) {
-    SOKOL_ASSERT(chn && (num_items > 0) && work_func);
+_SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx, uint32_t num_items, uint32_t num_lanes, void (*request_handler)(_sfetch_t* ctx, uint32_t)) {
+    SOKOL_ASSERT(chn && (num_items > 0) && request_handler);
     SOKOL_ASSERT(!chn->valid);
     bool valid = true;
-    chn->work_func = work_func;
+    chn->request_handler = request_handler;
     chn->ctx = ctx;
     valid &= _sfetch_ring_init(&chn->free_lanes, num_lanes);
     for (uint32_t lane = 0; lane < num_lanes; lane++) {
@@ -1018,7 +1096,9 @@ _SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx,
     valid &= _sfetch_ring_init(&chn->user_outgoing, num_lanes);
     if (valid) {
         chn->valid = true;
+        #if _SFETCH_HAS_THREADS
         _sfetch_thread_init(&chn->thread, _sfetch_channel_thread_func, chn);
+        #endif
         return true;
     }
     else {
@@ -1081,8 +1161,10 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
     }
 
     /* move new items into the IO threads and processed items out of IO threads */
+    #if _SFETCH_HAS_THREADS
     _sfetch_thread_enqueue_incoming(&chn->thread, &chn->thread_incoming, &chn->user_incoming);
     _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->thread_outgoing, &chn->user_outgoing);
+    #endif
 
     /* drain the outgoing queue, prepare items for invoking the response
        callback, and finally call the response callback, free finished items
@@ -1220,7 +1302,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
 
     /* setup IO channels (one thread per channel) */
     for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
-        ctx->valid &= _sfetch_channel_init(&ctx->chn[i], ctx, ctx->desc.max_requests, ctx->desc.num_lanes, _sfetch_channel_worker);
+        ctx->valid &= _sfetch_channel_init(&ctx->chn[i], ctx, ctx->desc.max_requests, ctx->desc.num_lanes, _sfetch_request_handler);
     }
 }
 
