@@ -334,6 +334,7 @@ SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 #endif
 
 #if defined(__EMSCRIPTEN__)
+    #include <emscripten/emscripten.h>
     #define _SFETCH_PLATFORM_EMSCRIPTEN (1)
     #define _SFETCH_PLATFORM_WINDOWS (0)
     #define _SFETCH_PLATFORM_POSIX (0)
@@ -459,10 +460,10 @@ typedef struct {
     _sfetch_ring_t free_lanes;
     _sfetch_ring_t user_sent;
     _sfetch_ring_t user_incoming;
-    _sfetch_ring_t thread_incoming;
-    _sfetch_ring_t thread_outgoing;
     _sfetch_ring_t user_outgoing;
     #if _SFETCH_HAS_THREADS
+    _sfetch_ring_t thread_incoming;
+    _sfetch_ring_t thread_outgoing;
     _sfetch_thread_t thread;
     #endif
     void (*request_handler)(struct _sfetch_t* ctx, uint32_t slot_id);
@@ -1057,23 +1058,83 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 #endif /* _SFETCH_HAS_THREADS */
 
 #if _SFETCH_PLATFORM_EMSCRIPTEN
+#ifdef __cplusplus
+extern "C" {
+#endif
+EMSCRIPTEN_KEEPALIVE void sfetch_emsc_head_response( ) {
+
+}
+
+EMSCRIPTEN_KEEPALIVE void sfech_emsc_fetch_response( ) {
+
+}
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
+    var path = UTF8ToString(path_cstr);
+    console.log('sfetch_js_send_head_request: ' + slot_id + ' ' + path_str);
+});
+
+EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int bytes_to_read, void* buf_ptr), {
+    var path = UTF8ToString(path_cstr);
+    console.log('sfetch_js_send_fetch_request: ' + slot_id);
+});
+
 _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
-    // FIXME
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+    if (!item) {
+        return;
+    }
+    if (item->thread.failed) {
+        return;
+    }
+    if (item->state == SFETCH_STATE_OPENING) {
+        SOKOL_ASSERT(item->path.buf[0]);
+        /* We need to query the content-size first with a separate HEAD request,
+            no matter if a buffer was provided or not (because sending a too big
+            range request speculatively doesnt work). With the response, we can
+            also check whether the server actually supports range requests
+        */
+        sfetch_js_send_head_request(slot_id, item->path.buf);
+    }
+    if (item->state == SFETCH_STATE_FETCHING) {
+        SOKOL_ASSERT(item->thread.content_size > item->thread.fetched_size);
+        if ((item->thread.buffer.ptr == 0) || (item->thread.buffer.size == 0)) {
+            item->thread.failed = true;
+        }
+        else {
+            /* send a regular HTTP range request to fetch the next chunk of data
+                FIXME: need to figure out a way to use 64-bit sizes here
+            */
+            uint32_t bytes_to_read = item->thread.content_size - item->thread.fetched_size;
+            if (bytes_to_read > item->thread.buffer.size) {
+                bytes_to_read = item->thread.buffer.size;
+            }
+            const uint32_t offset = item->thread.fetched_size;
+            sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.buffer.ptr);
+        }
+    }
+    if (item->thread.failed) {
+        item->thread.finished = true;
+    }
 }
 #endif
 
 _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     SOKOL_ASSERT(chn);
     #if _SFETCH_HAS_THREADS
-    if (chn->valid) {
-        _sfetch_thread_join(&chn->thread);
-    }
+        if (chn->valid) {
+            _sfetch_thread_join(&chn->thread);
+        }
+        _sfetch_ring_discard(&chn->thread_incoming);
+        _sfetch_ring_discard(&chn->thread_outgoing);
     #endif
     _sfetch_ring_discard(&chn->free_lanes);
     _sfetch_ring_discard(&chn->user_sent);
     _sfetch_ring_discard(&chn->user_incoming);
-    _sfetch_ring_discard(&chn->thread_incoming);
-    _sfetch_ring_discard(&chn->thread_outgoing);
     _sfetch_ring_discard(&chn->user_outgoing);
     _sfetch_ring_discard(&chn->free_lanes);
     chn->valid = false;
@@ -1091,9 +1152,11 @@ _SOKOL_PRIVATE bool _sfetch_channel_init(_sfetch_channel_t* chn, _sfetch_t* ctx,
     }
     valid &= _sfetch_ring_init(&chn->user_sent, num_items);
     valid &= _sfetch_ring_init(&chn->user_incoming, num_lanes);
-    valid &= _sfetch_ring_init(&chn->thread_incoming, num_lanes);
-    valid &= _sfetch_ring_init(&chn->thread_outgoing, num_lanes);
     valid &= _sfetch_ring_init(&chn->user_outgoing, num_lanes);
+    #if _SFETCH_HAS_THREADS
+        valid &= _sfetch_ring_init(&chn->thread_incoming, num_lanes);
+        valid &= _sfetch_ring_init(&chn->thread_outgoing, num_lanes);
+    #endif
     if (valid) {
         chn->valid = true;
         #if _SFETCH_HAS_THREADS
@@ -1160,10 +1223,19 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         }
     }
 
-    /* move new items into the IO threads and processed items out of IO threads */
     #if _SFETCH_HAS_THREADS
-    _sfetch_thread_enqueue_incoming(&chn->thread, &chn->thread_incoming, &chn->user_incoming);
-    _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->thread_outgoing, &chn->user_outgoing);
+        /* move new items into the IO threads and processed items out of IO threads */
+        _sfetch_thread_enqueue_incoming(&chn->thread, &chn->thread_incoming, &chn->user_incoming);
+        _sfetch_thread_dequeue_outgoing(&chn->thread, &chn->thread_outgoing, &chn->user_outgoing);
+    #else
+        /* without threading just directly dequeue items from the user_incoming queue and
+           call the request handler, the user_outgoing queue will be filled as the
+           asynchronous HTTP requests sent by the request handler are completed
+        */
+        while (!_sfetch_ring_empty(&chn->user_incoming)) {
+            uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_incoming);
+            _sfetch_request_handler(chn->ctx, slot_id);
+        }
     #endif
 
     /* drain the outgoing queue, prepare items for invoking the response
