@@ -479,13 +479,17 @@ typedef struct _sfetch_t {
     _sfetch_channel_t chn[SFETCH_MAX_CHANNELS];
     sfetch_buffer_t null_buffer;
 } _sfetch_t;
-static __thread _sfetch_t* _sfetch_thread_local;
+#if _SFETCH_HAS_THREADS
+static __thread _sfetch_t* _sfetch;
+#else
+static _sfetch_t* _sfetch;
+#endif
 
 /*=== general helper functions and macros =====================================*/
 #define _sfetch_def(val, def) (((val) == 0) ? (def) : (val))
 
 _SOKOL_PRIVATE _sfetch_t* _sfetch_ctx(void) {
-    return _sfetch_thread_local;
+    return _sfetch;
 }
 
 _SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
@@ -1058,30 +1062,133 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 #endif /* _SFETCH_HAS_THREADS */
 
 #if _SFETCH_PLATFORM_EMSCRIPTEN
+/*=== embedded Javascript helper functions ===================================*/
+EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
+    var path_str = UTF8ToString(path_cstr);
+    console.log('sfetch_js_send_head_request: slot_id=' + slot_id + ' path=' + path_str);
+    var req = new XMLHttpRequest();
+    req.open('HEAD', path_str);
+    req.onreadystatechange = function() {
+        if (this.readyState == this.DONE) {
+            if (this.status == 200) {
+                var content_length = this.getResponseHeader('Content-Length');
+                console.log('content-length: ' + content_length);
+                __sfetch_emsc_head_response(slot_id, content_length);
+            }
+            else {
+                console.log('status: ' + this.status);
+                __sfetch_emsc_failed(slot_id);
+            }
+        }
+    };
+    req.send();
+});
+
+EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int num_bytes, int content_length, void* buf_ptr), {
+    var path_str = UTF8ToString(path_cstr);
+    console.log('sfetch_js_send_fetch_request: slot_id='+slot_id+' path='+path_str+' offset='+offset+' bytes='+num_bytes+' content_lenth='+content_length);
+    var req = new XMLHttpRequest();
+    req.open('GET', path_str);
+    req.responseType = 'arraybuffer';
+    var need_range_request = !((offset == 0) && (num_bytes == content_length));
+    if (need_range_request) {
+        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+num_bytes));
+    }
+    req.onreadystatechange = function() {
+        if (this.readyState == this.DONE) {
+            console.log('slot_id='+slot_id+' status='+this.status+' need_range_request='+need_range_request);
+            if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
+                var u8_array = new Uint8Array(req.response);
+                HEAPU8.set(u8_array, buf_ptr);
+                __sfetch_emsc_range_response(slot_id, num_bytes);
+            }
+            else {
+                __sfetch_emsc_failed(slot_id);
+            }
+        }
+    };
+    req.send();
+});
+
+/*=== emscripten specific C helper functions =================================*/
 #ifdef __cplusplus
 extern "C" {
 #endif
-EMSCRIPTEN_KEEPALIVE void sfetch_emsc_head_response( ) {
-
+void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
+    SOKOL_ASSERT(item->thread.content_size > item->thread.fetched_size);
+    if ((item->thread.buffer.ptr == 0) || (item->thread.buffer.size == 0)) {
+        item->thread.failed = true;
+    }
+    else {
+        /* send a regular HTTP range request to fetch the next chunk of data
+            FIXME: need to figure out a way to use 64-bit sizes here
+        */
+        uint32_t bytes_to_read = item->thread.content_size - item->thread.fetched_size;
+        if (bytes_to_read > item->thread.buffer.size) {
+            bytes_to_read = item->thread.buffer.size;
+        }
+        const uint32_t offset = item->thread.fetched_size;
+        sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.content_size, item->thread.buffer.ptr);
+    }
 }
 
-EMSCRIPTEN_KEEPALIVE void sfech_emsc_fetch_response( ) {
-
+/* called by JS when the initial HEAD request finished successfully */
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t content_length) {
+    //printf("sfetch_emsc_head_response(slot_id=%d content_length=%d)\n", slot_id, content_length);
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.content_size = content_length;
+            if (item->thread.buffer.ptr) {
+                /* if a buffer was provided, continue immediate with fetching the first
+                    chunk, instead of passing the request back to the channel
+                */
+                _sfetch_emsc_send_range_request(slot_id, item);
+            }
+            else {
+                /* if no buffer was provided upfront pass back to the channel so
+                    that the response-user-callback can be called
+                */
+                _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+            }
+        }
+    }
 }
 
+/* called by JS when a followup GET request finished successfully */
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t num_bytes_read) {
+    //printf("sfetch_emsc_range_response(slot_id=%d, num_bytes_read=%d)\n", slot_id, num_bytes_read);
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.chunk_size = num_bytes_read;
+            item->thread.fetched_size += num_bytes_read;
+            if (item->thread.fetched_size >= item->thread.content_size) {
+                item->thread.finished = true;
+            }
+            _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+        }
+    }
+}
+
+/* called by JS when an error occured */
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed(uint32_t slot_id) {
+    //printf("sfetch_emsc_failed(slot_id=%d)\n", slot_id);
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.failed = true;
+            item->thread.finished = true;
+            _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+        }
+    }
+}
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
-    var path = UTF8ToString(path_cstr);
-    console.log('sfetch_js_send_head_request: ' + slot_id + ' ' + path_str);
-});
-
-EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int bytes_to_read, void* buf_ptr), {
-    var path = UTF8ToString(path_cstr);
-    console.log('sfetch_js_send_fetch_request: ' + slot_id);
-});
 
 _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
@@ -1099,23 +1206,10 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             also check whether the server actually supports range requests
         */
         sfetch_js_send_head_request(slot_id, item->path.buf);
+        /* see _sfetch_emsc_head_response() for the rest... */
     }
     if (item->state == SFETCH_STATE_FETCHING) {
-        SOKOL_ASSERT(item->thread.content_size > item->thread.fetched_size);
-        if ((item->thread.buffer.ptr == 0) || (item->thread.buffer.size == 0)) {
-            item->thread.failed = true;
-        }
-        else {
-            /* send a regular HTTP range request to fetch the next chunk of data
-                FIXME: need to figure out a way to use 64-bit sizes here
-            */
-            uint32_t bytes_to_read = item->thread.content_size - item->thread.fetched_size;
-            if (bytes_to_read > item->thread.buffer.size) {
-                bytes_to_read = item->thread.buffer.size;
-            }
-            const uint32_t offset = item->thread.fetched_size;
-            sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.buffer.ptr);
-        }
+        _sfetch_emsc_send_range_request(slot_id, item);
     }
     if (item->thread.failed) {
         item->thread.finished = true;
@@ -1351,10 +1445,10 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
 SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
-    SOKOL_ASSERT(0 == _sfetch_thread_local);
-    _sfetch_thread_local = SOKOL_MALLOC(sizeof(_sfetch_t));
-    SOKOL_ASSERT(_sfetch_thread_local);
-    memset(_sfetch_thread_local, 0, sizeof(_sfetch_t));
+    SOKOL_ASSERT(0 == _sfetch);
+    _sfetch = SOKOL_MALLOC(sizeof(_sfetch_t));
+    SOKOL_ASSERT(_sfetch);
+    memset(_sfetch, 0, sizeof(_sfetch_t));
     _sfetch_t* ctx = _sfetch_ctx();
     ctx->desc = *desc;
     ctx->setup = true;
@@ -1381,6 +1475,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
 SOKOL_API_IMPL void sfetch_shutdown(void) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->setup);
+    ctx->valid = false;
     /* IO threads must be shutdown first */
     for (uint32_t i = 0; i < ctx->desc.num_channels; i++) {
         if (ctx->chn[i].valid) {
@@ -1388,10 +1483,9 @@ SOKOL_API_IMPL void sfetch_shutdown(void) {
         }
     }
     _sfetch_pool_discard(&ctx->pool);
-    ctx->valid = false;
     ctx->setup = false;
     SOKOL_FREE(ctx);
-    _sfetch_thread_local = 0;
+    _sfetch = 0;
 }
 
 SOKOL_API_IMPL bool sfetch_valid(void) {
