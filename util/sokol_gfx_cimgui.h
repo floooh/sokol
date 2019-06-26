@@ -15,7 +15,7 @@
 
         sokol_gfx.h
 
-    Additionally, include the following files(s) beforing including
+    Additionally, include the following files(s) before including
     the implementation of sokol_gfx_imgui.h:
 
         imgui.h
