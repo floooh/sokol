@@ -110,7 +110,7 @@
 
     If you want to use the callback-model, you need to provide a stream
     callback function either in saudio_desc.stream_cb or saudio_desc.stream_userdata_cb,
-    otherwised keep both function pointers zero-initialized.
+    otherwise keep both function pointers zero-initialized.
 
     Use push model and default playback parameters:
 
@@ -168,7 +168,7 @@
     plugging in a bluetooth headset, this case is currently not handled in
     Sokol Audio).
 
-    You can check if audio initialization was successfull with
+    You can check if audio initialization was successful with
     saudio_isvalid(). If backend initialization failed for some reason
     (for instance when there's no audio device in the machine), this
     will return false. Not checking for success won't do any harm, all

@@ -19,7 +19,7 @@ WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
 minimal footprint on the web platform while still being useful.
 
-All headers are standalone and can be used indepedendently from each other.
+All headers are standalone and can be used independently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
@@ -502,7 +502,7 @@ layout definition in sg_pipeline_desc works:
     currently working on (here: https://github.com/floooh/sokol-tools).
 
     While working on getting reflection data out of the shaders (e.g. what
-    uniform blocks and textures the shader uses), it occured to me that
+    uniform blocks and textures the shader uses), it occurred to me that
     vertex-attribute-names and -semantics are actually part of the reflection
     info and belong to the shader, not to the vertex layout in the pipeline
     object (which only describes how the incoming vertex data maps to

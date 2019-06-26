@@ -224,7 +224,7 @@
             sgl_scale(float x, float y, float z)
 
         NOTE that all angles in sokol-gl are in radians, not in degree.
-        Convert between radians and degree with the helper funtions:
+        Convert between radians and degree with the helper functions:
 
             float sgl_rad(float deg)        - degrees to radians
             float sgl_deg(float rad)        - radians to degrees
@@ -315,7 +315,7 @@
 
         ...which can return the following error codes:
 
-        SGL_NO_ERROR                - all OK, no error occurded since last sgl_draw()
+        SGL_NO_ERROR                - all OK, no error occurred since last sgl_draw()
         SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
         SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
         SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())

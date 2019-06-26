@@ -24,7 +24,7 @@
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 
-    Optionally provide the following macros before including the implementatuon
+    Optionally provide the following macros before including the implementation
     to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
