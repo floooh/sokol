@@ -128,7 +128,7 @@
               into FAILED instead of FETCHING.
         - PAUSED (TODO): a request may go into PAUSED state when the response
           callback calls the function sfetch_pause() for a request. This is
-          useful for 'dynamic rate limiting' in streaming scenaiors (e.g. when
+          useful for 'dynamic rate limiting' in streaming scenarios (e.g. when
           the
 
         NOTE how all states which are processed on the user-side in the
@@ -1185,7 +1185,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
     }
 }
 
-/* per-frame channel stuff: move requests in and out of the IO threads, call reponse callbacks */
+/* per-frame channel stuff: move requests in and out of the IO threads, call response callbacks */
 _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
 
     /* move items from sent- to incoming-queue permitting free lanes */
