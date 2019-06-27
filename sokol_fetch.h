@@ -211,6 +211,7 @@ typedef enum sfetch_state_t {
     SFETCH_STATE_OPENED,        /* user thread: follow state of OPENING if no buffer was provided */
     SFETCH_STATE_FETCHING,      /* IO thread: waiting for data to be fetched */
     SFETCH_STATE_FETCHED,       /* user thread: fetched data available */
+    SFETCH_STATE_PAUSED,        /* user thread: request has been paused via sfetch_pause() */
     SFETCH_STATE_FAILED,        /* user thread: follow state of OPENING or FETCHING if something went wrong */
 
     _SFETCH_STATE_NUM,
@@ -389,6 +390,8 @@ typedef HANDLE _sfetch_file_handle_t;
 typedef struct {
     /* transfer user => IO thread */
     sfetch_buffer_t buffer;
+    bool pause;                 /* switch item to PAUSED state if true */
+    bool cont;                  /* switch item back to FETCHING if true */
     /* transfer IO => user thread */
     uint64_t content_size;      /* overall file size */
     uint64_t fetched_size;      /* number of bytes fetched so far */
@@ -984,7 +987,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             return;
         }
         state = item->state;
-        SOKOL_ASSERT((state == SFETCH_STATE_OPENING) || (state == SFETCH_STATE_FETCHING));
+        SOKOL_ASSERT((state == SFETCH_STATE_OPENING) || (state == SFETCH_STATE_FETCHING) || (state == SFETCH_STATE_PAUSED));
         path = &item->path;
         thread = &item->thread;
     }
@@ -1042,6 +1045,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             thread->finished = true;
         }
     }
+    /* ignore items in PAUSED state */
 }
 _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
     _sfetch_channel_t* chn = (_sfetch_channel_t*) arg;
@@ -1065,18 +1069,15 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
 /*=== embedded Javascript helper functions ===================================*/
 EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cstr), {
     var path_str = UTF8ToString(path_cstr);
-    console.log('sfetch_js_send_head_request: slot_id=' + slot_id + ' path=' + path_str);
     var req = new XMLHttpRequest();
     req.open('HEAD', path_str);
     req.onreadystatechange = function() {
         if (this.readyState == this.DONE) {
             if (this.status == 200) {
                 var content_length = this.getResponseHeader('Content-Length');
-                console.log('content-length: ' + content_length);
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
-                console.log('status: ' + this.status);
                 __sfetch_emsc_failed(slot_id);
             }
         }
@@ -1086,7 +1087,6 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
 
 EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int num_bytes, int content_length, void* buf_ptr), {
     var path_str = UTF8ToString(path_cstr);
-    console.log('sfetch_js_send_fetch_request: slot_id='+slot_id+' path='+path_str+' offset='+offset+' bytes='+num_bytes+' content_lenth='+content_length);
     var req = new XMLHttpRequest();
     req.open('GET', path_str);
     req.responseType = 'arraybuffer';
@@ -1096,7 +1096,6 @@ EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cs
     }
     req.onreadystatechange = function() {
         if (this.readyState == this.DONE) {
-            console.log('slot_id='+slot_id+' status='+this.status+' need_range_request='+need_range_request);
             if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
                 var u8_array = new Uint8Array(req.response);
                 HEAPU8.set(u8_array, buf_ptr);
@@ -1211,6 +1210,10 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (item->state == SFETCH_STATE_FETCHING) {
         _sfetch_emsc_send_range_request(slot_id, item);
     }
+    if (item->state == SFETCH_STATE_PAUSED) {
+        /* paused items are just passed-through to the outgoing queue */
+        _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+    }
     if (item->thread.failed) {
         item->thread.finished = true;
     }
@@ -1305,6 +1308,16 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item->state != SFETCH_STATE_FETCHING);
         /* transfer input params from user- to thread-data */
         item->thread.buffer = item->user.buffer;
+        if (item->user.pause) {
+            item->state = SFETCH_STATE_PAUSED;
+            item->user.pause = false;
+        }
+        if (item->user.cont) {
+            if (item->state == SFETCH_STATE_PAUSED) {
+                item->state = SFETCH_STATE_FETCHED;
+            }
+            item->user.cont = false;
+        }
         switch (item->state) {
             case SFETCH_STATE_ALLOCATED:
                 item->state = SFETCH_STATE_OPENING;
@@ -1573,5 +1586,24 @@ SOKOL_API_IMPL void sfetch_set_buffer(sfetch_handle_t h, const sfetch_buffer_t* 
     }
 }
 
+SOKOL_API_IMPL void sfetch_pause(sfetch_handle_t h) {
+    _sfetch_t* ctx = _sfetch_ctx();
+    SOKOL_ASSERT(ctx && ctx->valid);
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
+    if (item) {
+        item->user.pause = true;
+        item->user.cont = false;
+    }
+}
+
+SOKOL_API_IMPL void sfetch_continue(sfetch_handle_t h) {
+    _sfetch_t* ctx = _sfetch_ctx();
+    SOKOL_ASSERT(ctx && ctx->valid);
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
+    if (item) {
+        item->user.cont = true;
+        item->user.pause = false;
+    }
+}
 #endif /* SOKOL_IMPL */
 
