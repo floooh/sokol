@@ -1,6 +1,6 @@
 #pragma once
 /*
-    sokol_fetch.h -- asynchronous data loading
+    sokol_fetch.h -- asynchronous data loading/streaming
 
     Project URL: https://github.com/floooh/sokol
 
@@ -31,6 +31,57 @@
 
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
+
+    FEATURE OVERVIEW
+    ================
+
+    - Asynchronously load entire files, or stream files incrementally via
+      HTTP (on web platform), or the local file system (on native platforms)
+
+    - Request / response-callback model, user code "sends" a request
+      to initiate a file-load, sokol_fetch.h calls the response callback
+      on the same thread when data is ready, or user-code needs to respond
+
+    - Not limited to the main-thread or a single-thread: A sokol-fetch
+      "context" can live on any thread, and multiple context
+      can operate side-by-side on different threads.
+
+    - Memory management for data buffers is entirely the responsibility of
+      the application, sokol_fetch.h will never allocate memory during
+      operation.
+
+    - Automatic "rate-limiting" guarantees that only a maximum number of
+      requests is processed at any one time, allowing a "zero-allocation
+      model", where all data is streamed into fixed-size, pre-allocated
+      buffers.
+
+    - Active Requests can be paused, continued and cancelled from anywhere
+      in the user-thread which sent this request.
+
+    - (Reasonably) memory-safe:
+        - The sokol-fetch API never passes pointers back to the user, only
+          integer-handles and structs by value.
+        - Requests are identified through "generation-counted index-handles",
+          allowing to detect dangling accesses, passing handles into the
+          API which are not currently associated with a valid request will
+          not do any harm (same idea as in sokol_gfx.h and other sokol-headers)
+        - All data passed via pointers *into* the sokol-fetch API will be
+          copied as needed (most notably the path/URL string, and any user-data
+          associated with a request)
+
+    CONCEPTS:
+    =========
+
+    REQUEST-STATES AND CALLBACKS
+    ----------------------------
+
+    CHANNELS AND LANES
+    ------------------
+
+
+
+
+
 
     TEMP NOTE DUMP
     ==============
