@@ -630,14 +630,27 @@ typedef struct {
     bool valid;
 } _sfetch_thread_t;
 #elif _SFETCH_PLATFORM_WINDOWS
-#error "FIXME WIndows"
+typedef struct {
+    HANDLE thread;
+    HANDLE incoming_event;
+    CRITICAL_SECTION incoming_critsec;
+    CRITICAL_SECTION outgoing_critsec;
+    CRITICAL_SECTION running_critsec;
+    CRITICAL_SECTION stop_critsec;
+    bool stop_requested;
+    bool valid;
+} _sfetch_thread_t;
 #endif
 
 /* file handle abstraction */
 #if _SFETCH_PLATFORM_POSIX
 typedef FILE* _sfetch_file_handle_t;
+#define _SFETCH_INVALID_FILE_HANDLE (0)
+typedef void*(*_sfetch_thread_func_t)(void*);
 #elif _SFETCH_PLATFORM_WINDOWS
 typedef HANDLE _sfetch_file_handle_t;
+#define _SFETCH_INVALID_FILE_HANDLE (INVALID_HANDLE_VALUE)
+typedef LPTHREAD_START_ROUTINE _sfetch_thread_func_t;
 #endif
 
 /* user-side per-request state */
@@ -737,7 +750,11 @@ typedef struct _sfetch_t {
     sfetch_buffer_t null_buffer;
 } _sfetch_t;
 #if _SFETCH_HAS_THREADS
+#if defined(_MSC_VER)
+static __declspec(thread) _sfetch_t* _sfetch;
+#else
 static __thread _sfetch_t* _sfetch;
+#endif
 #else
 static _sfetch_t* _sfetch;
 #endif
@@ -878,6 +895,9 @@ _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, co
     item->user.buffer = request->buffer;
     item->path = _sfetch_path_make(request->path);
     item->callback = request->callback;
+    #if !_SFETCH_PLATFORM_EMSCRIPTEN
+    item->thread.file_handle = _SFETCH_INVALID_FILE_HANDLE;
+    #endif
     if (request->user_data &&
         (request->user_data_size > 0) &&
         (request->user_data_size <= (SFETCH_MAX_USERDATA_UINT64*8)))
@@ -1005,7 +1025,7 @@ _SOKOL_PRIVATE void _sfetch_file_close(_sfetch_file_handle_t h) {
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
-    return h != 0;
+    return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
 _SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
@@ -1018,7 +1038,7 @@ _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, 
     return num_bytes == fread(ptr, 1, num_bytes, h);
 }
 
-_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
+_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, _sfetch_thread_func_t thread_func, void* thread_arg) {
     SOKOL_ASSERT(thread && !thread->valid && !thread->stop_requested);
 
     pthread_mutexattr_t attr;
@@ -1128,6 +1148,7 @@ _SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _s
     /* called from thread function */
     SOKOL_ASSERT(thread && thread->valid);
     SOKOL_ASSERT(outgoing && outgoing->buf);
+    SOKOL_ASSERT(0 != item);
     pthread_mutex_lock(&thread->outgoing_mutex);
     bool result = false;
     if (!_sfetch_ring_full(outgoing)) {
@@ -1151,79 +1172,182 @@ _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _s
 #endif /* _SFETCH_PLATFORM_POSIX */
 
 #if _SFETCH_PLATFORM_WINDOWS
+_SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
+    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
+    memset(dst, 0, dst_num_bytes);
+    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
+    const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
+    if ((dst_needed > 0) && (dst_needed < dst_chars)) {
+        MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
+        return true;
+    }
+    else {
+        /* input string doesn't fit into destination buffer */
+        return false;
+    }
+}
+
 _SOKOL_PRIVATE _sfetch_file_handle_t _sfetch_file_open(const _sfetch_path_t* path) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    wchar_t w_path[SFETCH_MAX_PATH];
+    if (!_sfetch_win32_utf8_to_wide(path->buf, w_path, sizeof(w_path))) {
+        SOKOL_LOG("_sfetch_file_open: error converting UTF-8 path to wide string");
+        return 0;
+    }
+    _sfetch_file_handle_t h = CreateFileW(
+        w_path,                 /* lpFileName */
+        GENERIC_READ,           /* dwDesiredAccess */
+        FILE_SHARE_READ,        /* dwShareMode */
+        NULL,                   /* lpSecurityAttributes */
+        OPEN_EXISTING,          /* dwCreationDisposition */
+        FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,    /* dwFlagsAndAttributes */
+        NULL);                  /* hTemplateFile */
+    return h;
 }
 
 _SOKOL_PRIVATE void _sfetch_file_close(_sfetch_file_handle_t h) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    CloseHandle(h);
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
 _SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    LARGE_INTEGER file_size;
+    file_size.QuadPart = 0;
+    GetFileSizeEx(h, &file_size);
+    return file_size.QuadPart;
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    LARGE_INTEGER offset_li;
+    offset_li.QuadPart = offset;
+    BOOL seek_res = SetFilePointerEx(h, offset_li, NULL, FILE_BEGIN);
+    if (seek_res) {
+        DWORD bytes_read = 0;
+        BOOL read_res = ReadFile(h, ptr, (DWORD)num_bytes, &bytes_read, NULL);
+        return read_res && (bytes_read == num_bytes);
+    }
+    else {
+        return false;
+    }
 }
 
-_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, void*(*thread_func)(void*), void* thread_arg) {
-    // FIXME
-    SOKOL_ASSERT(false);
+_SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, _sfetch_thread_func_t thread_func, void* thread_arg) {
+    SOKOL_ASSERT(thread && !thread->valid && !thread->stop_requested);
+
+    thread->incoming_event = CreateEventA(NULL, FALSE, FALSE, NULL);
+    SOKOL_ASSERT(NULL != thread->incoming_event);
+    InitializeCriticalSection(&thread->incoming_critsec);
+    InitializeCriticalSection(&thread->outgoing_critsec);
+    InitializeCriticalSection(&thread->running_critsec);
+    InitializeCriticalSection(&thread->stop_critsec);
+
+    EnterCriticalSection(&thread->running_critsec);
+    const SIZE_T stack_size = 512 * 1024;
+    thread->thread = CreateThread(NULL, 512*1024, thread_func, thread_arg, 0, NULL);
+    thread->valid = (NULL != thread->thread);
+    LeaveCriticalSection(&thread->running_critsec);
+    return thread->valid;
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_request_stop(_sfetch_thread_t* thread) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    EnterCriticalSection(&thread->stop_critsec);
+    thread->stop_requested = true;
+    LeaveCriticalSection(&thread->stop_critsec);
 }
 
 _SOKOL_PRIVATE bool _sfetch_thread_stop_requested(_sfetch_thread_t* thread) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    EnterCriticalSection(&thread->stop_critsec);
+    bool stop_requested = thread->stop_requested;
+    LeaveCriticalSection(&thread->stop_critsec);
+    return stop_requested;
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    if (thread->valid) {
+        EnterCriticalSection(&thread->incoming_critsec);
+        _sfetch_thread_request_stop(thread);
+        BOOL set_event_res = SetEvent(thread->incoming_event);
+        SOKOL_ASSERT(set_event_res);
+        LeaveCriticalSection(&thread->incoming_critsec);
+        WaitForSingleObject(thread->thread, INFINITE);
+        CloseHandle(thread->thread);
+        thread->valid = false;
+    }
+    CloseHandle(thread->incoming_event);
+    DeleteCriticalSection(&thread->stop_critsec);
+    DeleteCriticalSection(&thread->running_critsec);
+    DeleteCriticalSection(&thread->outgoing_critsec);
+    DeleteCriticalSection(&thread->incoming_critsec);
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_entered(_sfetch_thread_t* thread) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    EnterCriticalSection(&thread->running_critsec);
 }
 
+/* called by the thread-func right before it is left */
 _SOKOL_PRIVATE void _sfetch_thread_leaving(_sfetch_thread_t* thread) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    LeaveCriticalSection(&thread->running_critsec);
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming, _sfetch_ring_t* src) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    /* called from user thread */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(incoming && incoming->buf);
+    SOKOL_ASSERT(src && src->buf);
+    if (!_sfetch_ring_empty(src)) {
+        EnterCriticalSection(&thread->incoming_critsec);
+        while (!_sfetch_ring_full(incoming) && !_sfetch_ring_empty(src)) {
+            _sfetch_ring_enqueue(incoming, _sfetch_ring_dequeue(src));
+        }
+        LeaveCriticalSection(&thread->incoming_critsec);
+        BOOL set_event_res = SetEvent(thread->incoming_event);
+        SOKOL_ASSERT(set_event_res);
+    }
 }
 
 _SOKOL_PRIVATE uint32_t _sfetch_thread_dequeue_incoming(_sfetch_thread_t* thread, _sfetch_ring_t* incoming) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    /* called from thread function */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(incoming && incoming->buf);
+    EnterCriticalSection(&thread->incoming_critsec);
+    while (_sfetch_ring_empty(incoming) && !thread->stop_requested) {
+        LeaveCriticalSection(&thread->incoming_critsec);
+        WaitForSingleObject(&thread->incoming_event, INFINITE);
+        EnterCriticalSection(&thread->incoming_critsec);
+    }
+    uint32_t item = 0;
+    if (!thread->stop_requested) {
+        item = _sfetch_ring_dequeue(incoming);
+    }
+    LeaveCriticalSection(&thread->incoming_critsec);
+    return item;
 }
 
 _SOKOL_PRIVATE bool _sfetch_thread_enqueue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, uint32_t item) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    /* called from thread function */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(outgoing && outgoing->buf);
+    EnterCriticalSection(&thread->outgoing_critsec);
+    bool result = false;
+    if (!_sfetch_ring_full(outgoing)) {
+        _sfetch_ring_enqueue(outgoing, item);
+    }
+    LeaveCriticalSection(&thread->outgoing_critsec);
+    return result;
 }
 
 _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _sfetch_ring_t* outgoing, _sfetch_ring_t* dst) {
-    // FIXME
-    SOKOL_ASSERT(false);
+    /* called from user thread */
+    SOKOL_ASSERT(thread && thread->valid);
+    SOKOL_ASSERT(outgoing && outgoing->buf);
+    SOKOL_ASSERT(dst && dst->buf);
+    EnterCriticalSection(&thread->outgoing_critsec);
+    while (!_sfetch_ring_full(dst) && !_sfetch_ring_empty(outgoing)) {
+        _sfetch_ring_enqueue(dst, _sfetch_ring_dequeue(outgoing));
+    }
+    LeaveCriticalSection(&thread->outgoing_critsec);
 }
 #endif /* _SFETCH_PLATFORM_WINDOWS */
 
@@ -1301,7 +1425,12 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     }
     /* ignore items in PAUSED state */
 }
+
+#if _SFETCH_PLATFORM_WINDOWS
+_SOKOL_PRIVATE DWORD WINAPI _sfetch_channel_thread_func(LPVOID arg) {
+#else
 _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
+#endif
     _sfetch_channel_t* chn = (_sfetch_channel_t*) arg;
     _sfetch_thread_entered(&chn->thread);
     while (!_sfetch_thread_stop_requested(&chn->thread)) {
@@ -1309,6 +1438,7 @@ _SOKOL_PRIVATE void* _sfetch_channel_thread_func(void* arg) {
         uint32_t slot_id = _sfetch_thread_dequeue_incoming(&chn->thread, &chn->thread_incoming);
         /* slot_id will be invalid if the thread was woken up to join */
         if (!_sfetch_thread_stop_requested(&chn->thread)) {
+            SOKOL_ASSERT(0 != slot_id);
             chn->request_handler(chn->ctx, slot_id);
             SOKOL_ASSERT(!_sfetch_ring_full(&chn->thread_outgoing));
             _sfetch_thread_enqueue_outgoing(&chn->thread, &chn->thread_outgoing, slot_id);
@@ -1606,6 +1736,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
     memset(&response, 0, sizeof(response));
     while (!_sfetch_ring_empty(&chn->user_outgoing)) {
         const uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_outgoing);
+        SOKOL_ASSERT(slot_id);
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item && item->callback);
         SOKOL_ASSERT(item->state != SFETCH_STATE_INITIAL);
