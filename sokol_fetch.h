@@ -18,7 +18,7 @@
     SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
     SOKOL_API_DECL              - public function declaration prefix (default: extern)
     SOKOL_API_IMPL              - public function implementation prefix (default: -)
-    SFETCH_MAX_PATH             - max length of UTF-8 filesystem path / URL (default: 512 bytes)
+    SFETCH_MAX_PATH             - max length of UTF-8 filesystem path / URL (default: 1024 bytes)
     SFETCH_MAX_USERDATA_UINT64  - max size of embedded userdata in number of uint64_t, userdata
                                   will be copied into an 8-byte aligned memory region associated
                                   with each in-flight request, default value is 16 (== 128 bytes)
@@ -31,6 +31,14 @@
 
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
+
+    TODO:
+    =====
+    - sftech_cancel()
+    - Windows support
+    - documentation
+    - code cleanup
+    - tests for pause/continue/cancel
 
     FEATURE OVERVIEW
     ================
@@ -69,18 +77,213 @@
           copied as needed (most notably the path/URL string, and any user-data
           associated with a request)
 
-    CONCEPTS:
+    API USAGE
     =========
 
-    REQUEST-STATES AND CALLBACKS
-    ----------------------------
+    void sfetch_setup(const sfetch_desc_t* desc)
+    --------------------------------------------
+    First call sfetch_setup(const sfetch_desc_t*) on any thread before calling
+    any other sokol-fetch functions on the same thread.
+
+    sfetch_setup() takes a pointer to an sfetch_desc_t struct with setup
+    parameters (any parameters that are not provided must be zero-initialized):
+
+        - max_requests (uint32_t):
+            The maximum number of requests that can be alive at any time, the
+            default is 128.
+
+        - num_channels (uint32_t):
+            The number of "IO channels" used to parallelize and prioritize
+            requests, the default is 1.
+
+        - num_lanes (uint32_t):
+            The number of "lanes" on a single channel. Each request this is
+            currently 'inflight' on a channel occupies one lane until the
+            request is finished. This is used for automated rate-limiting
+            (search below for CHANNELS AND LANES for more details). The
+            default number of lanes is 16.
+
+    For example, to setup sokol-fetch for max 1024 active requests, 4 channels,
+    and 8 lanes per channel in C99:
+
+        sfetch_setup(&(sfetch_desc_t){
+            .max_requests = 1024,
+            .num_channels = 4,
+            .num_lanes = 8
+        });
+
+    sfetch_setup() is the only place where sokol-fetch will allocate memory
+    (you can override SOKOL_MALLOC and SOKOL_FREE before including the
+    implementation to hook in your own memory allocation functions).
+
+    sfetch_handle_t sfetch_send(const sfetch_request_t* request)
+    ------------------------------------------------------------
+    sokol-fetch is now ready for accepting fetch-requests. Call sfetch_send()
+    to start a fetch operation, the function takes a pointer to an
+    sfetch_request_t struct with request parameters and returns a
+    sfetch_handle_t identifying the request for later calls:
+
+        sfetch_handle_t h = sfetch_send(&(sfetch_request_t){
+            ...
+        });
+
+    sfetch_send() will return an invalid handle if no request can be allocated
+    from the internal pool (more requests are in flight than sfetch_desc_t.max_requests).
+
+    The sfetch_request_t struct contains the following parameters (any parameters
+    that are not provided must be zero-initialized):
+
+        - path (const char*, required)
+            Pointer to an UTF-8 encoded C string describing the filesystem
+            path or HTTP URL. The string will be copied into an internal data
+            structure, and passed "as is" (apart from any required
+            encoding-conversions) to fopen(), CreateFileW() or
+            XMLHttpRequest. The maximum length of the string is defined by
+            the SFETCH_MAX_PATH config define, the default is 1024 bytes
+            including the 0-terminator.
+
+        - callback (sfetch_callback_t, required)
+            Pointer to a response-callback function which is called when the
+            request needs "user code attention". Search below for REQUEST
+            STATES AND THE RESPONSE CALLBACK for detailed information about
+            handling responses in the response callback.
+
+        - channel (uint32_t, optional)
+            Index of the IO channel where the request should be processed.
+            Channels are used to parallelize and prioritize requests relative
+            to each other. Search below for CHANNELS AND LANES for more
+            information.
+
+        - buffer (sfetch_buffer_t, optional)
+            This is a pointer/size pair describing a chunk of memory where
+            data will be loaded into. Providing a buffer "upfront" in
+            sfetch_request() is optional, and makes sense in the following
+            two situations:
+                (1) a maximum file size is known for the request, so that
+                    is guaranteed that the entire file content will fit
+                    into the buffer
+                (2) ...or the file should be streamed in small chunks, with the
+                    resonse-callback being called after each chunk to
+                    'process' the partial file data
+            Search below for BUFFER MANAGEMENT for more detailed information.
+
+        - user_data, user_data_size (const void*, uint32_t, both optional)
+            user_data and user_data_size describe an optional POD (plain-old-data)
+            associated with the request which will be copied(!) into an internal
+            memory block. The maximum default size of this memory block is
+            128 bytes (but can be overriden by defining SFETCH_MAX_USERDATA_UINT64
+            before including the notification, note that this define is in
+            "number of uint64_t", not number of bytes). The user_data
+            block is 8-byte aligned, and will be copied via memcpy() (so don't
+            put any C++ "smart members" in there).
+
+    NOTE that request handles are strictly thread-local and only unique
+    within the thread the handle was created on, and all function calls
+    involving a request handle must happen on that same thread.
+
+    bool sfetch_handle_valid(sfetch_handle_t request)
+    -------------------------------------------------
+    This checks if the provided handle is valid, and is associated with
+    a currently active request. It will return false if:
+
+        - sfetch_send() returned an invalid handle because it couldn't allocate
+          a new request from the internal request pool (because they're all
+          in flight)
+        - the request associated with the handle is no longer alive (because
+          it either finished successfully, or the request failed for some
+          reason)
+
+    void sfetch_dowork(void)
+    ------------------------
+    Call sfetch_dowork(void) on in regular intervals (for instance once per frame)
+    on the same thread as sfetch_setup() to "turn the gears". If you are sending
+    requests but never hear back from them in the response callback function, then
+    the most likely reason is that you forgot to add the call to sfetch_dowork()
+    in the per-frame function.
+
+    sfetch_dowork() roughly performs the following work:
+
+        - any new requests that have been sent with sfetch_send() since the
+          last call to sfetch_dowork() will be dispatched to their IO channels,
+          permitting that any lanes on that specific IO channel are free
+          (otherwise, incoming requests are waiting until another request
+          request on the same channel is finished, freeing up a lane)
+
+        - a state transition from "user side" to "IO side" happens for
+          each new request that has been dispatched to a channel.
+
+        - requests dispatched to a channel are either forwarded into that
+          channel's worker thread (on native platforms), or cause an
+          HTTP request to be sent via an asynchronous XMLHttpRequest
+          (on the web platform)
+
+        - for any requests for which their current async operation has finished,
+          a state transition from "IO side" to "user side" is performed and
+          the response callback is called
+
+        - requests which are finished (either because the entire file content has
+          been loaded, or they are in the FAILED state) are freed (this
+          just changes their state in the 'request pool', no actual
+          memory is freed)
+
+        - requests which are not yet finished are fed back into the 'incoming'
+          queue of their channel, and the whole cycle starts again
+
+    void sfetch_cancel(sfetch_handle_t request)
+    -------------------------------------------
+    This cancels a request at the next possible convenience, puts
+    it into the FAILED state and calls the response callback with
+    (response.state == SFETCH_STATE_FAILED) and (response.finished == true)
+    to give user-code a chance to do any cleanup work for the request.
+    If sfetch_cancel() is called for a request that is no longer alive,
+    nothing bad will happen (the call will simply do nothing).
+
+    void sfetch_pause(sfetch_handle_t request)
+    ------------------------------------------
+    This pauses an active request at the next possible convenience, puts it
+    into the PAUSED state. For all requests in PAUSED state, the response
+    callback will be called in each call to sfetch_dowork() to give user-code
+    a chance to CONTINUE the request (by calling sfetch_continue()). Pausing
+    a request makes sense for dynamic rate-limiting in streaming scenarios
+    (like video/audio streaming with a fixed number of streaming buffers. As
+    soon as all available buffers are filled with download data, downloading
+    more data must be prevented to allow video/audio playback to catch up and
+    free up empty buffers for new download data.
+
+    void sfetch_continue(sftech_handle_t request)
+    ---------------------------------------------
+    Continues a paused request, counterpart to the sfetch_pause() function.
+
+    void sfetch_set_buffer(sfetch_handle_t request, const sfetch_buffer_t* buffer)
+    ------------------------------------------------------------------------------
+    Associates a new buffer (pointer/size pair) with an active request. The
+    function can be called at any time from inside or outside the response
+    callback. Search below for BUFFER MANAGEMENT for more detailed
+    information.
+
+    sfetch_desc_t sfetch_desc(void)
+    -------------------------------
+    sfetch_desc() returns a copy of the sfetch_desc_t struct that was
+    passed to sfetch_setup(). Useful for checking the max_requests,
+    num_channels and num_lanes items sokol-fetch was configured with.
+
+    int sfetch_max_userdata_bytes(void)
+    -----------------------------------
+    This returns the value of the SFETCH_MAX_USERDATA_UINT64 implementation
+    define, but in number of bytes (so SFETCH_MAX_USERDATA_UINT64*8).
+
+    int sfetch_max_path(void)
+    -------------------------
+    Returns the value of the SFETCH_MAX_PATH implementation define.
+
+    REQUEST STATES AND THE RESPONSE CALLBACK
+    ========================================
 
     CHANNELS AND LANES
-    ------------------
+    ==================
 
-
-
-
+    BUFFER MANAGEMENT
+    =================
 
 
     TEMP NOTE DUMP
@@ -342,7 +545,7 @@ SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 #include <string.h> /* memset, memcpy */
 
 #ifndef SFETCH_MAX_PATH
-#define SFETCH_MAX_PATH (512)
+#define SFETCH_MAX_PATH (1024)
 #endif
 #ifndef SFETCH_MAX_USERDATA_UINT64
 #define SFETCH_MAX_USERDATA_UINT64 (16)
