@@ -8171,9 +8171,8 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
     [_sg_mtl_cmd_buffer presentDrawable:cur_drawable];
-    __block dispatch_semaphore_t sem = _sg_mtl_sem;
     [_sg_mtl_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
-        dispatch_semaphore_signal(sem);
+        dispatch_semaphore_signal(_sg_mtl_sem);
     }];
     [_sg_mtl_cmd_buffer commit];
 
