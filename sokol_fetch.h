@@ -399,10 +399,67 @@
 
     CHANNELS AND LANES
     ==================
+    Channels and lanes are (somewhat artificial) concepts to manage
+    parallelization, priorities and rate-limiting.
+
+    A channel owns its own IO thread and message queues for pumping
+    messages in and out of its IO threads. When a request is sent
+    by calling sfetch_send(const sfetch_request_t* req), the channel
+    where the request will be processed is selected by the user
+    through the sfetch_request_t.channel member.
+
+    The number of channels is configured in once at startup in sfetch_setup()
+    and cannot be changed afterwards.
+
+    Channels work independently from each other, and a request will never
+    "hop" from one channel to another.
+
+    Channels can be used to parallelize message processing for better
+    'pipeline throughput', and to prioritize messages: user-code could
+    reserve one channel for "small and big" streaming downloads,
+    another channel for "regular" downloads and yet another high-priority channel
+    which would only be used for small files which need to start loading
+    immediately.
+
+    Each channel has a number of lanes for automatic rate limiting in the
+    sense that there will be no unexpected massive "traffic spikes" when
+    many requests are sent into sokol-fetch in very short time (which is
+    usually the case in scenarios like loading a new game map / level).
+
+    When a request is sent via sfetch_send(), a "free lane" will be picked
+    and assigned to the request. The request will occupy this lane for
+    its entire life time (also while it is paused). If all lanes of a channel
+    are currently occupied, the request will need to wait until a lane
+    becomes free (when another request on that channel is finished).
+
+    Since the number of channels and lanes is known upfront, it is guaranteed
+    that there will never be more than "num_channels * num_lanes" requests
+    in flight at any one time.
+
+    This guarantee allows to streamline memory buffer usage: user code
+    can inspect the channel and lane of a request in the response callback
+    (through the callback argument members response.channel and response.lane)
+    and select from a set of pre-allocated buffers. In the most simple
+    scenario, the user code could use statically preallocated buffers like this:
+
+        uint8_t buffer[NUM_CHANNELS][NUM_LANES][MAX_FILE_SIZE];
+
+    Then in the user callback pick a buffer by channel and lane,
+    and associate it with the request like this:
+
+        if (response.state == SFETCH_STATE_OPENING) {
+            sfetch_set_buffer(response.handle, &(sfetch_buffer_t){
+                .ptr = buf[response.channel][response.lane],
+                .size = MAX_FILE_SIZE
+            });
+        }
+
 
     BUFFER MANAGEMENT
     =================
 
+    NOTES ON OPTIMIZING PIPELINE LATENCY AND THROUGHPUT
+    ===================================================
 
 
     TEMP NOTE DUMP
