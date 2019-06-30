@@ -19,6 +19,8 @@
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
+    SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)
+
     If sokol_audio.h is compiled as a DLL, define the following before
     including the declaration or implementation:
 
@@ -516,7 +518,10 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #define _SAUDIO_DEFAULT_BUFFER_FRAMES (2048)
 #define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
 #define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*4)
-#define _SAUDIO_RING_MAX_SLOTS (128)
+
+#ifndef SAUDIO_RING_MAX_SLOTS
+#define SAUDIO_RING_MAX_SLOTS (1024)
+#endif
 
 /*=== MUTEX WRAPPER DECLARATIONS =============================================*/
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
@@ -595,7 +600,7 @@ typedef struct {
     int head;  /* next slot to write to */
     int tail;  /* next slot to read from */
     int num;   /* number of slots in queue */
-    int queue[_SAUDIO_RING_MAX_SLOTS];
+    int queue[SAUDIO_RING_MAX_SLOTS];
 } _saudio_ring_t;
 
 /* a packet FIFO structure */
@@ -692,7 +697,7 @@ _SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring_t* ring, int i) {
 }
 
 _SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, int num_slots) {
-    SOKOL_ASSERT((num_slots + 1) <= _SAUDIO_RING_MAX_SLOTS);
+    SOKOL_ASSERT((num_slots + 1) <= SAUDIO_RING_MAX_SLOTS);
     ring->head = 0;
     ring->tail = 0;
     /* one slot reserved to detect 'full' vs 'empty' */
