@@ -278,12 +278,131 @@
 
     REQUEST STATES AND THE RESPONSE CALLBACK
     ========================================
+    A request switches between states during its lifetime, and "ownership"
+    of the request changes between an IO-thread (on native platforms only),
+    and the thread where the request was sent from. You can think of
+    a request as "ping-ponging" between the IO thread and user thread,
+    any actual IO work is done on the IO thread, while invocations of the
+    response-callback happen on the user-thread.
+
+    State transitions and invoking the response-callback
+    happens inside sfetch_dowork().
+
+    An active request goes through the following states:
+
+    ALLOCATED (user-thread)
+
+        The request has been allocated in sfetch_send() and is
+        waiting to be dispatched into its IO channel. When this
+        happens, the request will transition into the OPENING state.
+
+    OPENING (IO thread)
+
+        The request is currently being opened on the IO thread. After the
+        file has been opened, its overall content-size will be queried.
+
+        If a buffer was provided in sfetch_send() the request will
+        immediately transition into the FETCHING state and start loading
+        data into the buffer.
+
+        If no buffer was provided in sfetch_send(), the request will
+        transition into the OPENED state.
+
+        If opening the file failed, the request will transition into
+        the FAILED state.
+
+    OPENED (user thread)
+
+        A request will go into the OPENED state after its file has been
+        opened successfully, but not buffer was provided to load data
+        into.
+
+        In the OPENED state, the response-callback will be called so that
+        the user-code can have a look at the file's content-size and
+        provide a buffer for the request by calling sfetch_set_buffer().
+
+        After the response callback has been called, and a buffer was provided,
+        the request will transition into the FETCHING state.
+
+        If no buffer was provided in the response callback, the request
+        will transition into the FAILED state.
+
+    FETCHING (IO thread)
+
+        While a request in in the FETCHING state, data will be loaded into
+        the user-provided buffer.
+
+        If the buffer is full, or the entire file content has been loaded,
+        the request will transition into the FETCHED state.
+
+        If something went wrong during loading (less bytes could be
+        read than expected), the request will transition into the FAILED
+        state.
+
+    FETCHED (user thread)
+
+        The request goes into the FETCHED state either when the request's
+        buffer has been completely filled with loaded data, or the entire
+        file content has been loaded.
+
+        The response callback will be called so that the user-code can
+        process the loaded data.
+
+        If all file data has been loaded, the 'finished' flag will be set
+        in the response callback's sfetch_response_t argument.
+
+        After the user callback returns, and all file data has been loaded
+        (response.finished flag is set) the request has reached its end-of-life
+        and will recycled.
+
+        Otherwise, if there's still data to load (because the buffer size
+        is smaller than the file's content-size), the request will switch
+        back to the FETCHING state to load the next chunk of data.
+
+        Note that it is ok to associate a different buffer or buffer-size
+        with the request by calling sfetch_set_buffer() in the response-callback.
+
+    FAILED (user thread)
+
+        A request will transition in the FAILED state in the following situations:
+
+            - during OPENING if the file doesn't exist or couldn't be
+              opened for other reasons
+            - during FETCHING when no buffer is currently associated
+              with the request
+            - during FETCHING if less than the expected number of bytes
+              could be read
+            - if a request has been cancelled via sfetch_cancel()
+
+        The response callback will be called once after a request goes
+        into the FAILED state, with the response.finished flag set to
+        true. This gives the user-code a chance to cleanup any resources
+        associated with the request.
+
+    PAUSED (user thread)
+
+        A request will transition into the PAUSED state after user-code
+        calls the function sfetch_pause() on the request's handle. Usually
+        this happens from within response-callback in streaming scenarios
+        when the data streaming needs to wait for a data decoder (like
+        a video/audio player) to catch up.
+
+        While a request is in PAUSED state, the response-callback will be
+        called in each sfetch_dowork(), so that the user-code can either
+        continue the request by calling sfetch_continue(), or cancel
+        the request by calling sfetch_cancel().
+
+        When calling sfetch_continue() on a paused request, the request will
+        transition into the FETCHING state. Otherwise if sfetch_cancel() is
+        called, the request will switch into the FAILED state.
+
 
     CHANNELS AND LANES
     ==================
 
     BUFFER MANAGEMENT
     =================
+
 
 
     TEMP NOTE DUMP
