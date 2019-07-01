@@ -656,6 +656,7 @@ typedef struct sfetch_response_t {
     sfetch_handle_t handle;         /* request handle this response belongs to */
     sfetch_state_t state;           /* current request state */
     bool finished;                  /* this is the last response for this request */
+    bool cancelled;                 /* the request was cancelled (always set together with finished) */
     uint32_t channel;               /* the IO channel where this request 'lives' */
     uint32_t lane;                  /* the IO lane in its channel this request was assigned to */
     const char* path;               /* the original filesystem path of the request */
@@ -835,6 +836,7 @@ typedef struct {
     sfetch_buffer_t buffer;
     bool pause;                 /* switch item to PAUSED state if true */
     bool cont;                  /* switch item back to FETCHING if true */
+    bool cancel;                /* cancel the request, switch into FAILED state */
     /* transfer IO => user thread */
     uint64_t content_size;      /* overall file size */
     uint64_t fetched_size;      /* number of bytes fetched so far */
@@ -1541,12 +1543,14 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             return;
         }
         state = item->state;
-        SOKOL_ASSERT((state == SFETCH_STATE_OPENING) || (state == SFETCH_STATE_FETCHING) || (state == SFETCH_STATE_PAUSED));
+        SOKOL_ASSERT((state == SFETCH_STATE_OPENING) ||
+                     (state == SFETCH_STATE_FETCHING) ||
+                     (state == SFETCH_STATE_PAUSED) ||
+                     (state == SFETCH_STATE_FAILED));
         path = &item->path;
         thread = &item->thread;
     }
     if (thread->failed) {
-        // FIXME: should this be a hard error?
         return;
     }
     if (state == SFETCH_STATE_OPENING) {
@@ -1599,7 +1603,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             thread->finished = true;
         }
     }
-    /* ignore items in PAUSED state */
+    /* ignore items in PAUSED or FAILED state */
 }
 
 #if _SFETCH_PLATFORM_WINDOWS
@@ -1754,9 +1758,6 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (!item) {
         return;
     }
-    if (item->thread.failed) {
-        return;
-    }
     if (item->state == SFETCH_STATE_OPENING) {
         SOKOL_ASSERT(item->path.buf[0]);
         /* We need to query the content-size first with a separate HEAD request,
@@ -1767,11 +1768,13 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         sfetch_js_send_head_request(slot_id, item->path.buf);
         /* see _sfetch_emsc_head_response() for the rest... */
     }
-    if (item->state == SFETCH_STATE_FETCHING) {
+    else if (item->state == SFETCH_STATE_FETCHING) {
         _sfetch_emsc_send_range_request(slot_id, item);
     }
-    if (item->state == SFETCH_STATE_PAUSED) {
-        /* paused items are just passed-through to the outgoing queue */
+    else {
+        /* just move all other items (e.g. paused or cancelled)
+           into the outgoing queue, so they wont get lost
+        */
         _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
     }
     if (item->thread.failed) {
@@ -1878,6 +1881,10 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             }
             item->user.cont = false;
         }
+        if (item->user.cancel) {
+            item->state = SFETCH_STATE_FAILED;
+            item->user.finished = true;
+        }
         switch (item->state) {
             case SFETCH_STATE_ALLOCATED:
                 item->state = SFETCH_STATE_OPENING;
@@ -1956,6 +1963,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         /* invoke response callback */
         response.handle.id = slot_id;
         response.finished = item->user.finished;
+        response.cancelled = item->user.cancel;
         response.state = item->state;
         response.channel = item->channel;
         response.lane = item->lane;
@@ -2166,5 +2174,17 @@ SOKOL_API_IMPL void sfetch_continue(sfetch_handle_t h) {
         item->user.pause = false;
     }
 }
+
+SOKOL_API_IMPL void sfetch_cancel(sfetch_handle_t h) {
+    _sfetch_t* ctx = _sfetch_ctx();
+    SOKOL_ASSERT(ctx && ctx->valid);
+    _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
+    if (item) {
+        item->user.cont = false;
+        item->user.pause = false;
+        item->user.cancel = true;
+    }
+}
+
 #endif /* SOKOL_IMPL */
 
