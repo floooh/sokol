@@ -34,7 +34,7 @@
 
     TODO:
     =====
-    - sftech_cancel()
+    - sfetch_cancel()
     - Windows support
     - documentation
     - code cleanup
@@ -163,7 +163,7 @@
                     is guaranteed that the entire file content will fit
                     into the buffer
                 (2) ...or the file should be streamed in small chunks, with the
-                    resonse-callback being called after each chunk to
+                    response-callback being called after each chunk to
                     'process' the partial file data
             Search below for BUFFER MANAGEMENT for more detailed information.
 
@@ -171,7 +171,7 @@
             user_data and user_data_size describe an optional POD (plain-old-data)
             associated with the request which will be copied(!) into an internal
             memory block. The maximum default size of this memory block is
-            128 bytes (but can be overriden by defining SFETCH_MAX_USERDATA_UINT64
+            128 bytes (but can be overridden by defining SFETCH_MAX_USERDATA_UINT64
             before including the notification, note that this define is in
             "number of uint64_t", not number of bytes). The user_data
             block is 8-byte aligned, and will be copied via memcpy() (so don't
@@ -250,7 +250,7 @@
     more data must be prevented to allow video/audio playback to catch up and
     free up empty buffers for new download data.
 
-    void sfetch_continue(sftech_handle_t request)
+    void sfetch_continue(sfetch_handle_t request)
     ---------------------------------------------
     Continues a paused request, counterpart to the sfetch_pause() function.
 
@@ -870,7 +870,7 @@ typedef struct {
     uint32_t lane;
     sfetch_callback_t callback;
 
-    /* updated by IO-thread, off-limits to user thead */
+    /* updated by IO-thread, off-limits to user thread */
     _sfetch_item_thread_t thread;
 
     /* accessible by user-thread, off-limits to IO thread */
@@ -1732,7 +1732,7 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t
     }
 }
 
-/* called by JS when an error occured */
+/* called by JS when an error occurred */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed(uint32_t slot_id) {
     //printf("sfetch_emsc_failed(slot_id=%d)\n", slot_id);
     _sfetch_t* ctx = _sfetch_ctx();
@@ -1761,7 +1761,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         SOKOL_ASSERT(item->path.buf[0]);
         /* We need to query the content-size first with a separate HEAD request,
             no matter if a buffer was provided or not (because sending a too big
-            range request speculatively doesnt work). With the response, we can
+            range request speculatively doesn't work). With the response, we can
             also check whether the server actually supports range requests
         */
         sfetch_js_send_head_request(slot_id, item->path.buf);
