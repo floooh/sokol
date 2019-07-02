@@ -32,10 +32,6 @@
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
-    TODO:
-    =====
-    - documentation
-
     NOTE: The following documentation talks a lot about "IO threads". Actual
     threads are only used on platforms where threads are available. The web
     version (emscripten/wasm) doesn't use POSIX-style threads, but instead
@@ -80,8 +76,14 @@
           copied as needed (most notably the path/URL string, and any user-data
           associated with a request)
 
-    API USAGE
-    =========
+
+    A STEP-BY-STEP EXAMPLE
+    ======================
+    [TODO]
+
+
+    API DOCUMENTATION
+    =================
 
     void sfetch_setup(const sfetch_desc_t* desc)
     --------------------------------------------
@@ -481,130 +483,224 @@
             ...
         }
 
+
     BUFFER MANAGEMENT
     =================
+    Some additional suggested buffer management strategies:
+
+    Dynamic allocation per request
+    ------------------------------
+    This might be an option if you don't know a maximum file size upfront,
+    or don't have to load a lot of files (I wouldn't recommend dynamic
+    allocation per request for loading hundreds or thousands of files):
+
+    (1) don't provide a buffer in the request
+
+        sfetch_send(&(sfetch_request_t){
+            .path = "my_file.txt",
+            .callback = response_callback
+        });
+
+    (2) in the response-callback, allocate a buffer big enough for the entire
+        file when the request is in the OPENED state, and free it when the
+        finished-flag is set (this makes sure that the buffer is freed both on
+        success or failure):
+
+        void response_callback(sfetch_response_t response) {
+            if (response.state == SFETCH_STATE_OPENED) {
+                // allocate a buffer with the file's content-size
+                void* buf = malloc(response.content_size);
+                sfetch_bind_buffer(response.handle, buf, response.content_size);
+            }
+            else if (response.state == SFETCH_STATE_FETCHED) {
+                // file-content has been loaded, do something with the
+                // loaded file data...
+                const void* ptr = response.buffer_ptr;
+                uint64_t num_bytes = response.fetched_size;
+                ...
+            }
+
+            // if the request is finished (no matter if success or failed),
+            // free the buffer
+            if (response.finished) {
+                if (response.buffer_ptr) {
+                    free(response.buffer_ptr);
+                }
+            }
+        }
+
+    Streaming huge files into a small buffer
+    ----------------------------------------
+    If you want to load a huge file, it may be best to load and process
+    the data in small chunks. The response-callback will be called whenever
+    the buffer has been completely filled with data, and maybe one last time
+    with a partially filled buffer.
+
+    In this example I'm using a dynamically allocated buffer which is freed
+    when the request is finished:
+
+    (1) Allocate a buffer that's smaller than the file size, and provide it
+        in the request:
+
+        const int buf_size = 64 * 1024;
+        void* buf_ptr = malloc(buf_ptr);
+        sfetch_send(&(sfetch_request_t){
+            .path = "my_huge_file.mpg",
+            .callback = response_callback,
+            .buffer_ptr = buf_ptr,
+            .buffer_size = buf_size
+        });
+
+    (2) In the response callback, note that there's no handling for the
+        OPENED state. If a buffer was provided upfront, the OPENED state
+        will be skipped, and the first state the callback will hear from
+        is the FETCHED state (unless something went wrong, than it
+        would be FAILED).
+
+        void response_callback(sfetch_response_t response) {
+            if (response.state == SFETCH_STATE_FETCHED) {
+                // process the next chunk of data:
+                const void* ptr = response.buffer_ptr;
+                uint64_t num_bytes = response.fetched_size;
+                ...
+            }
+
+            // don't forget to free the allocated buffer when request is finished:
+            if (response.finished) {
+                free(response.buffer_ptr);
+            }
+        }
+
+    Using statically allocated buffers
+    ----------------------------------
+    Sometimes it's best to not deal with dynamic memory allocation at all
+    and use static buffers, you just need to make sure that requests
+    from different channels and lanes don't scribble over the same memory.
+
+    This is best done by providing a separate buffer for each channel/lane
+    combination:
+
+        #define NUM_CHANNELS (4)
+        #define NUM_LANES (8)
+        #define MAX_FILE_SIZE (1000000)
+        static uint8_t buf[NUM_CHANNELS][NUM_LANES][MAX_FILE_SIZE]
+        ...
+
+        // setup sokol-fetch with the right number of channels and lanes:
+        sfetch_setup(&(sfetch_desc_t){
+            .num_channels = NUM_CHANNELS,
+            .num_lanes = NUM_LANES
+        };
+        ...
+
+        // we can't provide the buffer upfront in sfetch_send(), because
+        // we don't know the lane where the request will land, so binding
+        // the buffer needs to happen in the response callback:
+
+        void response_callback(sfetch_response_t response) {
+            if (response.state == SFETCH_STATE_OPENED) {
+                // select buffer by channel and lane:
+                void* buf_ptr = buf[response.channel][response.lane];
+                sfetch_bind_buffer(response.handle, buf_ptr, MAX_FILE_SIZE);
+            }
+            else if (response.state == SFETCH_STATE_FETCHED) {
+                // process the data as usual...
+                const void* buf_ptr = response.buffer_ptr;
+                uint64_t num_bytes = response.fetched_size;
+                ...
+            }
+            // since the buffer is statically allocated, we don't need to
+            // care about freeing any memory...
+        }
+
+
+    Loading a file header first
+    ---------------------------
+    Let's say you want to load a file format with a fixed-size header block
+    first, then create some resource which has its own memory buffer,
+    and than load the rest of the file data directly into the resource's
+    owned memory.
+
+    I'm using per-request dynamically allocated memory again for demonstration
+    purposes, but memory management can be quite tricky in this scenario,
+    especially for the failure case, so I would *really* recommand using
+    a static-buffer scenario here as described above.
+
+    (1) send the request with a buffer of the size of the file header, the
+        response callback will then be called as soon as the header is loaded:
+
+        void* buf_ptr = malloc(sizeof(image_header_t));
+        sfetch_send(&(sfetch_request_t){
+            .path = "my_image_file.img",
+            .callback = response_callback,
+            .buffer_ptr = buf_ptr,
+            .buffer_size = sizeof(image_header_t)
+        });
+
+    (2) in the response callback, use the content_offset member to
+        differentiate between the image header and actual image data:
+
+        void response_callback(sfetch_response_t response) {
+            if (response.state == SFETCH_STATE_FETCHED) {
+                if (response.content_offset == 0) {
+                    // this is the file header...
+                    assert(sizeof(image_header_t) == response.fetched_size);
+                    const image_header_t* img_hdr = (const image_header_t*) response.buffer_ptr;
+
+                    // create an image resource...
+                    image_t img = image_create(img_hdr);
+
+                    // re-bind the fetch buffer so that the remaining
+                    // data is loaded directly into the image's pixel buffer,
+                    // NOTE the sequence of unbinding and freeing the old
+                    // image-header buffer (since this was dynamically allocated)
+                    // and then rebinding the image's pixel buffer:
+                    sfetch_unbind_buffer(response.handle);
+                    free(response.buffer_ptr);
+                    void* pixel_buffer = image_get_pixel_buffer(img);
+                    uint64_t pixel_buffer_size = image_get_pixel_buffer_size(img);
+                    sfetch_bind_buffer(response.handle, pixel_buffer, pixel_buffer_size);
+                }
+                else if (response.content_offset == sizeof(image_header_t)) {
+                    // this is where the actual pixel data was loaded
+                    // into the image's pixel buffer, we don't need to do
+                    // anything here...
+                }
+            }
+            // we still need to handle the failure-case when something went
+            // wrong while data was loaded into the dynamically allocated
+            // buffer for the image-header... in that case the memory
+            // allocated for the header must be freed:
+            if (response.state == SFETCH_STATE_FAILED) {
+                // ...is this the header data block? (content_offset is 0)
+                if (response.buffer_ptr && (response.content_offset == 0)) {
+                    free(response.buffer_ptr);
+                }
+            }
+        }
+
 
     NOTES ON OPTIMIZING PIPELINE LATENCY AND THROUGHPUT
     ===================================================
+    [TODO, TL;DR: careful because one frame latency is added whenever
+    the user-callback is called, improve overall through-put by using
+    multiple channels and lanes, and keep them properly filled)
 
 
-    TEMP NOTE DUMP
-    ==============
+    FUTURE PLANS / V2.0 IDEA DUMP
+    =============================
+    - an optional polling API (as alternative to callback API)
+    - some buffer-management helper functions, the "manual management"
+      can be quite tricky especially for dynamic allocation scenarios
+    - pluggable request handlers to load data from other "sources"
+      (especially HTTP downloads on native platforms via e.g. libcurl
+      would be useful)
+    - Allow control over the file offset where data is read from? This
+      would need a "manual close" function though.
 
-    - TL;DR:
-        - asynchronous requests with response-callbacks
-        - only reading, not writing (thus the name "sokol_fetch.h", instead
-          of "sokol_io.h")
-        - not limited to "main thread" or a single thread
-        - "channels" for parallelization/prioritization, "lanes" for automatic rate-limiting
-        - user-provided buffers, no allocations past initialization
 
-    - Asynchronously load complete files, or stream data chunks from the local
-      filesystem (on "native" platforms), or via HTTP (on WASM) while giving
-      user-code full control over memory.
-
-    - sfetch_setup() can be called on any thread, or multiple threads, each
-      call sets up a complete thread-local context along with its own set of IO
-      threads.
-
-    - Call "sfetch_send(const sfetch_request_t* request)" to start
-      an asynchronous fetch-request. At the minimum the request-struct contains a
-      file path/URL and a 'response callback'. sfetch_send() returns an opaque
-      'request handle' of type sfetch_handle_t.
-
-    - The sfetch_dowork() function is called once per "frame" and pumps messages
-      in and out of IO threads, and invokes response-callbacks.
-
-    - An active request calls the user-provided response callback on the same
-      thread it was sent once or multiple times when the request
-      changes to a state which needs 'user-code attention' (you can think
-      of a request as ping-ponging between the user-thread and an IO-thread
-      multiple times, although the lib does its best to avoid any unnecessary
-      'ping-ponging' to keep the 'latency' of a single request low).
-
-    - No memory will be allocated after sfetch_setup() is called. More specifically, all
-      data is loaded into user-provided buffers (which may be provided "on demand"
-      in the OPENED state of a request (since only then the file size is known),
-      or upfront (in streaming-scenarios, or a maximum file size is known upfront).
-
-    - A provided buffer can be smaller than the file content, in that case,
-      the response callback will be called multiple times with partially
-      fetched data until the whole file content has been loaded. This is
-      useful for streaming scenarios, or generally to limit overall memory usage
-      if loaded data can be processed in chunks.
-
-    - Requests are distributed to IO "channels" for parallelization and per-channel
-      "lanes" for rate-limiting. Channel indices are user-provided in the
-      request struct, lanes are assigned automatically.
-
-    - Channels can be used to prioritize requests or separate requests by
-      system. For instance, big and slow fetches can be issued to a different
-      channel than small and fast downloads.
-
-    - Per-channel lanes are used to limit the maximum number of requests that are
-      processed on a channel. Each request on a channel occupies a lane until the
-      entire request is completed.
-
-    - Since channels and lanes guarantee that only a max number of requests is
-      processed at any one time, user-code can provide a fixed number of upfront-
-      allocated IO buffers.
-
-    - On native platforms, each channel owns one thread where "traditional"
-      blocking IO functions are called (fopen/fread/fclose on POSIX-ish
-      platforms, CreateFileW etc... on Windows). On WASM, XmlHttpRequests on
-      the browser thread are used, and the server is expected to support HTTP
-      range-requests (POSIX-style threading support may be added later for WASM
-      if it makes sense).
-
-    - Fetch-requests go through states, and a request's response-callback is called
-      during sfetch_dowork() when a request enters certain states
-      (FIXME: this needs some ASCII flowgraph-graphics):
-        - OPENING: File is currently being opened by the IO thread, if file
-          doesn't exist, transition to FAILED, otherwise get the overall
-          size of the file. If a buffer was provided upfront, immediately
-          go into FETCHING state, otherwise OPENED.
-        - OPENED: If no buffer was provided upfront, a request goes into the
-          OPENED state and the response callback is called so that the user-code
-          can provide a buffer via sfetch_bind_buffer() from inside the callback.
-          The overall file size is available in the response structure passed
-          to the callback.
-        - FETCHING: an IO thread is currently loading data into the provided buffer,
-          may transition into FETCHED or FAILED
-        - FETCHED: IO thread has completed loading data into the buffer, either
-          because the buffer is full, or all file content has been loaded.
-          The response callback will be called so that the user code can
-          process the data. If the whole file content has been loaded,
-          a 'finished' flag will be set in the callback's response argument.
-        - FAILED: The IO request has failed, the response callback will be called
-          to give user-code a chance to cleanup. This happens when:
-            - OPENING the file has failed, in this case the request goes
-              into the FAILED state, instead of OPENED
-            - When some errors occurs during FETCHING after the file was
-              successfully opened. In that case, the request will transition
-              into FAILED instead of FETCHING.
-        - PAUSED (TODO): a request may go into PAUSED state when the response
-          callback calls the function sfetch_pause() for a request. This is
-          useful for 'dynamic rate limiting' in streaming scenarios (e.g. when
-          the
-
-        NOTE how all states which are processed on the user-side in the
-        response callback end with -ED (OPENED, FETCHED, PAUSED, FAILED),
-        while all states which are currently processed on the IO-thread-side
-        end with -ING (OPENING, FETCHING)
-
-    - (TODO) A request can be cancelled both from in- or outside-the response callback.
-      A cancelled request will go into the FAILED state and the response-callback will
-      be called so the user-code has a chance to react.
-
-    - Planned for "Version 2.0":
-        - Pluggable request handler code, for instance to implement HTTP
-          downloads on "native platforms" via libcurl etc..., or load from
-          any other "data source".
-        - A polling-API as an alternative to the response-callback. I postponed
-          this because the callback-API simplifies handling some potentially
-          situations (like accessing buffer data while a thread overwrites it,
-          or 'forgotten' requests clogging up the system).
-
+    LICENSE
+    =======
     zlib/libpng license
 
     Copyright (c) 2019 Andre Weissflog
