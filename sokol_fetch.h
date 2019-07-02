@@ -1096,7 +1096,7 @@ _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, co
     item->state = SFETCH_STATE_INITIAL;
     item->channel = request->channel;
     item->lane = _SFETCH_INVALID_LANE;
-    item->user.buffer.ptr = request->buffer_ptr;
+    item->user.buffer.ptr = (uint8_t*) request->buffer_ptr;
     item->user.buffer.size = request->buffer_size;
     item->path = _sfetch_path_make(request->path);
     item->callback = request->callback;
@@ -2056,7 +2056,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT(0 == _sfetch);
-    _sfetch = SOKOL_MALLOC(sizeof(_sfetch_t));
+    _sfetch = (_sfetch_t*) SOKOL_MALLOC(sizeof(_sfetch_t));
     SOKOL_ASSERT(_sfetch);
     memset(_sfetch, 0, sizeof(_sfetch_t));
     _sfetch_t* ctx = _sfetch_ctx();
@@ -2177,7 +2177,7 @@ SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint
     _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
     if (item) {
         SOKOL_ASSERT((0 == item->user.buffer.ptr) && (0 == item->user.buffer.size));
-        item->user.buffer.ptr = buffer_ptr;
+        item->user.buffer.ptr = (uint8_t*) buffer_ptr;
         item->user.buffer.size = buffer_size;
     }
 }
