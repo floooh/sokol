@@ -34,33 +34,37 @@
 
     TODO:
     =====
-    - sfetch_cancel()
-    - Windows support
     - documentation
     - code cleanup
-    - tests for pause/continue/cancel
+
+    NOTE: The following documentation talks a lot about "IO threads". Actual
+    threads are only used on platforms where threads are available. The web
+    version (emscripten/wasm) doesn't use POSIX-style threads, but instead
+    asynchronous Javascript calls chained together by callbacks. The actual
+    source code differences between the two approaches have been kept to
+    a minimum though.
 
     FEATURE OVERVIEW
     ================
 
-    - Asynchronously load entire files, or stream files incrementally via
+    - Asynchronously load complete files, or stream files incrementally via
       HTTP (on web platform), or the local file system (on native platforms)
 
-    - Request / response-callback model, user code "sends" a request
+    - Request / response-callback model, user code sends a request
       to initiate a file-load, sokol_fetch.h calls the response callback
-      on the same thread when data is ready, or user-code needs to respond
+      on the same thread when data is ready, or user-code needs
+      to respond otherwise
 
-    - Not limited to the main-thread or a single-thread: A sokol-fetch
-      "context" can live on any thread, and multiple context
+    - Not limited to the main-thread or a single thread: A sokol-fetch
+      "context" can live on any thread, and multiple contexts
       can operate side-by-side on different threads.
 
-    - Memory management for data buffers is entirely the responsibility of
-      the application, sokol_fetch.h will never allocate memory during
-      operation.
+    - Memory management for data buffers is under full control of user code.
+      sokol_fetch.h won't allocate memory after it has been setup.
 
-    - Automatic "rate-limiting" guarantees that only a maximum number of
-      requests is processed at any one time, allowing a "zero-allocation
-      model", where all data is streamed into fixed-size, pre-allocated
+    - Automatic rate-limiting guarantees that only a maximum number of
+      requests is processed at any one time, allowing a zero-allocation
+      model, where all data is streamed into fixed-size, pre-allocated
       buffers.
 
     - Active Requests can be paused, continued and cancelled from anywhere
@@ -83,10 +87,13 @@
     void sfetch_setup(const sfetch_desc_t* desc)
     --------------------------------------------
     First call sfetch_setup(const sfetch_desc_t*) on any thread before calling
-    any other sokol-fetch functions on the same thread.
+    any other sokol-fetch functions on the same thread. sfetch_setup()
+    can be called on multiple threads, each thread will get its own local
+    context.
 
     sfetch_setup() takes a pointer to an sfetch_desc_t struct with setup
-    parameters (any parameters that are not provided must be zero-initialized):
+    parameters. Parameters which should use their default values must
+    be zero-initialized:
 
         - max_requests (uint32_t):
             The maximum number of requests that can be alive at any time, the
@@ -97,9 +104,9 @@
             requests, the default is 1.
 
         - num_lanes (uint32_t):
-            The number of "lanes" on a single channel. Each request this is
+            The number of "lanes" on a single channel. Each request which is
             currently 'inflight' on a channel occupies one lane until the
-            request is finished. This is used for automated rate-limiting
+            request is finished. This is used for automatic rate-limiting
             (search below for CHANNELS AND LANES for more details). The
             default number of lanes is 16.
 
@@ -112,26 +119,27 @@
             .num_lanes = 8
         });
 
-    sfetch_setup() is the only place where sokol-fetch will allocate memory
-    (you can override SOKOL_MALLOC and SOKOL_FREE before including the
-    implementation to hook in your own memory allocation functions).
+    sfetch_setup() is the only place where sokol-fetch will allocate memory.
 
     sfetch_handle_t sfetch_send(const sfetch_request_t* request)
     ------------------------------------------------------------
     sokol-fetch is now ready for accepting fetch-requests. Call sfetch_send()
     to start a fetch operation, the function takes a pointer to an
     sfetch_request_t struct with request parameters and returns a
-    sfetch_handle_t identifying the request for later calls:
+    sfetch_handle_t identifying the request for later calls. At least
+    a path/URL and callback must be provided:
 
         sfetch_handle_t h = sfetch_send(&(sfetch_request_t){
-            ...
+            .path = "my_file.txt",
+            .callback = my_response_callback
         });
 
     sfetch_send() will return an invalid handle if no request can be allocated
-    from the internal pool (more requests are in flight than sfetch_desc_t.max_requests).
+    from the internal pool (more requests are in flight than
+    sfetch_desc_t.max_requests).
 
-    The sfetch_request_t struct contains the following parameters (any parameters
-    that are not provided must be zero-initialized):
+    The sfetch_request_t struct contains the following parameters (optional
+    parameters that are not provided must be zero-initialized):
 
         - path (const char*, required)
             Pointer to an UTF-8 encoded C string describing the filesystem
@@ -139,8 +147,8 @@
             structure, and passed "as is" (apart from any required
             encoding-conversions) to fopen(), CreateFileW() or
             XMLHttpRequest. The maximum length of the string is defined by
-            the SFETCH_MAX_PATH config define, the default is 1024 bytes
-            including the 0-terminator.
+            the SFETCH_MAX_PATH configuration define, the default is 1024 bytes
+            including the 0-terminator byte.
 
         - callback (sfetch_callback_t, required)
             Pointer to a response-callback function which is called when the
@@ -152,7 +160,7 @@
             Index of the IO channel where the request should be processed.
             Channels are used to parallelize and prioritize requests relative
             to each other. Search below for CHANNELS AND LANES for more
-            information.
+            information. The default channel is 0.
 
         - buffer (sfetch_buffer_t, optional)
             This is a pointer/size pair describing a chunk of memory where
@@ -164,7 +172,7 @@
                     into the buffer
                 (2) ...or the file should be streamed in small chunks, with the
                     response-callback being called after each chunk to
-                    'process' the partial file data
+                    process the partial file data
             Search below for BUFFER MANAGEMENT for more detailed information.
 
         - user_data, user_data_size (const void*, uint32_t, both optional)
@@ -183,7 +191,7 @@
 
     bool sfetch_handle_valid(sfetch_handle_t request)
     -------------------------------------------------
-    This checks if the provided handle is valid, and is associated with
+    This checks if the provided request handle is valid, and is associated with
     a currently active request. It will return false if:
 
         - sfetch_send() returned an invalid handle because it couldn't allocate
@@ -195,7 +203,7 @@
 
     void sfetch_dowork(void)
     ------------------------
-    Call sfetch_dowork(void) on in regular intervals (for instance once per frame)
+    Call sfetch_dowork(void) in regular intervals (for instance once per frame)
     on the same thread as sfetch_setup() to "turn the gears". If you are sending
     requests but never hear back from them in the response callback function, then
     the most likely reason is that you forgot to add the call to sfetch_dowork()
@@ -204,51 +212,51 @@
     sfetch_dowork() roughly performs the following work:
 
         - any new requests that have been sent with sfetch_send() since the
-          last call to sfetch_dowork() will be dispatched to their IO channels,
-          permitting that any lanes on that specific IO channel are free
-          (otherwise, incoming requests are waiting until another request
-          request on the same channel is finished, freeing up a lane)
+        last call to sfetch_dowork() will be dispatched to their IO channels,
+        permitting that any lanes on that specific channel are available (if
+        all lanes are occuped, incoming requests are queued until a lane
+        becomes available)
 
-        - a state transition from "user side" to "IO side" happens for
-          each new request that has been dispatched to a channel.
+        - a state transition from "user side" to "IO thread side" happens for
+        each new request that has been dispatched to a channel.
 
         - requests dispatched to a channel are either forwarded into that
-          channel's worker thread (on native platforms), or cause an
-          HTTP request to be sent via an asynchronous XMLHttpRequest
-          (on the web platform)
+        channel's worker thread (on native platforms), or cause an HTTP
+        request to be sent via an asynchronous XMLHttpRequest (on the web
+        platform)
 
-        - for any requests for which their current async operation has finished,
-          a state transition from "IO side" to "user side" is performed and
-          the response callback is called
+        - for all requests which have finished their current IO operation a
+        state transition from "IO thread side" to "user side" happens,
+        and the the response callback is called
 
-        - requests which are finished (either because the entire file content has
-          been loaded, or they are in the FAILED state) are freed (this
-          just changes their state in the 'request pool', no actual
-          memory is freed)
+        - requests which are completely finished (either because the entire
+        file content has been loaded, or they are in the FAILED state) are
+        freed (this just changes their state in the 'request pool', no actual
+        memory is freed)
 
-        - requests which are not yet finished are fed back into the 'incoming'
-          queue of their channel, and the whole cycle starts again
+        - requests which are not yet finished are fed back into the
+        'incoming' queue of their channel, and the cycle starts again
 
     void sfetch_cancel(sfetch_handle_t request)
     -------------------------------------------
-    This cancels a request at the next possible convenience, puts
-    it into the FAILED state and calls the response callback with
-    (response.state == SFETCH_STATE_FAILED) and (response.finished == true)
-    to give user-code a chance to do any cleanup work for the request.
-    If sfetch_cancel() is called for a request that is no longer alive,
-    nothing bad will happen (the call will simply do nothing).
+    This cancels a request at the next possible time, puts it into the FAILED
+    state and calls the response callback with (response.state ==
+    SFETCH_STATE_FAILED) and (response.finished == true) to give user-code a
+    chance to do any cleanup work for the request. If sfetch_cancel() is
+    called for a request that is no longer alive, nothing bad will happen
+    (the call will simply do nothing).
 
     void sfetch_pause(sfetch_handle_t request)
     ------------------------------------------
-    This pauses an active request at the next possible convenience, puts it
-    into the PAUSED state. For all requests in PAUSED state, the response
-    callback will be called in each call to sfetch_dowork() to give user-code
-    a chance to CONTINUE the request (by calling sfetch_continue()). Pausing
-    a request makes sense for dynamic rate-limiting in streaming scenarios
-    (like video/audio streaming with a fixed number of streaming buffers. As
-    soon as all available buffers are filled with download data, downloading
-    more data must be prevented to allow video/audio playback to catch up and
-    free up empty buffers for new download data.
+    This pauses an active request at the next possible time and puts it into
+    the PAUSED state. For all requests in PAUSED state, the response callback
+    will be called in each call to sfetch_dowork() to give user-code a chance
+    to CONTINUE the request (by calling sfetch_continue()). Pausing a request
+    makes sense for dynamic rate-limiting in streaming scenarios (like
+    video/audio streaming with a fixed number of streaming buffers. As soon
+    as all available buffers are filled with download data, downloading more
+    data must be prevented to allow video/audio playback to catch up and free
+    up empty buffers for new download data.
 
     void sfetch_continue(sfetch_handle_t request)
     ---------------------------------------------
@@ -263,30 +271,32 @@
 
     sfetch_desc_t sfetch_desc(void)
     -------------------------------
-    sfetch_desc() returns a copy of the sfetch_desc_t struct that was
-    passed to sfetch_setup(). Useful for checking the max_requests,
-    num_channels and num_lanes items sokol-fetch was configured with.
+    sfetch_desc() returns a copy of the sfetch_desc_t struct passed to
+    sfetch_setup(), with zero-inititialized values replaced with
+    their default values.
 
     int sfetch_max_userdata_bytes(void)
     -----------------------------------
-    This returns the value of the SFETCH_MAX_USERDATA_UINT64 implementation
+    This returns the value of the SFETCH_MAX_USERDATA_UINT64 config
     define, but in number of bytes (so SFETCH_MAX_USERDATA_UINT64*8).
 
     int sfetch_max_path(void)
     -------------------------
-    Returns the value of the SFETCH_MAX_PATH implementation define.
+    Returns the value of the SFETCH_MAX_PATH config define.
+
 
     REQUEST STATES AND THE RESPONSE CALLBACK
     ========================================
-    A request switches between states during its lifetime, and "ownership"
-    of the request changes between an IO-thread (on native platforms only),
-    and the thread where the request was sent from. You can think of
-    a request as "ping-ponging" between the IO thread and user thread,
-    any actual IO work is done on the IO thread, while invocations of the
-    response-callback happen on the user-thread.
+    A request goes through a number of states during its lifetime. Depending
+    on the current state of a request, it will be 'owned' either by the
+    "user-thread" (where the code was sent), and an IO thread.
 
-    State transitions and invoking the response-callback
-    happens inside sfetch_dowork().
+    You can think of a request as "ping-ponging" between the IO thread and
+    user thread, any actual IO work is done on the IO thread, while
+    invocations of the response-callback happen on the user-thread.
+
+    All state transitions and callback invokations happen inside the
+    sfetch_dowork() function.
 
     An active request goes through the following states:
 
@@ -299,7 +309,7 @@
     OPENING (IO thread)
 
         The request is currently being opened on the IO thread. After the
-        file has been opened, its overall content-size will be queried.
+        file has been opened, its file-size will be obtained.
 
         If a buffer was provided in sfetch_send() the request will
         immediately transition into the FETCHING state and start loading
@@ -314,12 +324,12 @@
     OPENED (user thread)
 
         A request will go into the OPENED state after its file has been
-        opened successfully, but not buffer was provided to load data
+        opened successfully, but no buffer was provided to load data
         into.
 
-        In the OPENED state, the response-callback will be called so that
-        the user-code can have a look at the file's content-size and
-        provide a buffer for the request by calling sfetch_set_buffer().
+        In the OPENED state, the response-callback will be called so that the
+        user-code can inspect the file-size and provide a matching buffer for
+        the request by calling sfetch_set_buffer().
 
         After the response callback has been called, and a buffer was provided,
         the request will transition into the FETCHING state.
@@ -342,13 +352,13 @@
     FETCHED (user thread)
 
         The request goes into the FETCHED state either when the request's
-        buffer has been completely filled with loaded data, or the entire
-        file content has been loaded.
+        buffer has been completely filled with loaded data, or all file
+        data has been loaded.
 
         The response callback will be called so that the user-code can
         process the loaded data.
 
-        If all file data has been loaded, the 'finished' flag will be set
+        Once all file data has been loaded, the 'finished' flag will be set
         in the response callback's sfetch_response_t argument.
 
         After the user callback returns, and all file data has been loaded
@@ -364,7 +374,7 @@
 
     FAILED (user thread)
 
-        A request will transition in the FAILED state in the following situations:
+        A request will transition into the FAILED state in the following situations:
 
             - during OPENING if the file doesn't exist or couldn't be
               opened for other reasons
@@ -400,19 +410,23 @@
     CHANNELS AND LANES
     ==================
     Channels and lanes are (somewhat artificial) concepts to manage
-    parallelization, priorities and rate-limiting.
+    parallelization, prioritization and rate-limiting.
 
-    A channel owns its own IO thread and message queues for pumping
-    messages in and out of its IO threads. When a request is sent
-    by calling sfetch_send(const sfetch_request_t* req), the channel
-    where the request will be processed is selected by the user
-    through the sfetch_request_t.channel member.
+    Each channel comes with its own IO thread and message queues for pumping
+    messages in and out of the thread. The channel where a request is
+    processed is selected manually when sending a message:
 
-    The number of channels is configured in once at startup in sfetch_setup()
-    and cannot be changed afterwards.
+        sfetch_send(&(sfetch_request_t){
+            .path = "my_file.txt",
+            .callback = my_reponse_callback,
+            .channel = 2
+        });
 
-    Channels work independently from each other, and a request will never
-    "hop" from one channel to another.
+    The number of channels is configured at startup in sfetch_setup() and
+    cannot be changed afterwards.
+
+    Channels are completely separate from each other, and a request will
+    never "hop" from one channel to another.
 
     Channels can be used to parallelize message processing for better
     'pipeline throughput', and to prioritize messages: user-code could
@@ -421,39 +435,41 @@
     which would only be used for small files which need to start loading
     immediately.
 
-    Each channel has a number of lanes for automatic rate limiting in the
-    sense that there will be no unexpected massive "traffic spikes" when
-    many requests are sent into sokol-fetch in very short time (which is
-    usually the case in scenarios like loading a new game map / level).
+    Each channel consists of a fixed number of "lanes" for automatic rate
+    limiting:
 
-    When a request is sent via sfetch_send(), a "free lane" will be picked
-    and assigned to the request. The request will occupy this lane for
-    its entire life time (also while it is paused). If all lanes of a channel
-    are currently occupied, the request will need to wait until a lane
-    becomes free (when another request on that channel is finished).
+    When a request is sent to a channel via sfetch_send(), a "free lane" will
+    be picked and assigned to the request. The request will occupy this lane
+    for its entire life time (also while it is paused). If all lanes of a
+    channel are currently occupied, the request will need to wait until a
+    lane becomes unoccupied.
 
     Since the number of channels and lanes is known upfront, it is guaranteed
     that there will never be more than "num_channels * num_lanes" requests
     in flight at any one time.
 
-    This guarantee allows to streamline memory buffer usage: user code
-    can inspect the channel and lane of a request in the response callback
-    (through the callback argument members response.channel and response.lane)
-    and select from a set of pre-allocated buffers. In the most simple
-    scenario, the user code could use statically preallocated buffers like this:
+    This guarantee eliminates unexpected load- and memory-spikes when
+    many requests are sent in very short time, and it allows to pre-allocate
+    a fixed number of memory buffers which can be reused for the entire
+    "lifetime" of a sokol-fetch context.
+
+    In the most simple scenario - when a maximum file size is known - buffers
+    can be statically allocated like this:
 
         uint8_t buffer[NUM_CHANNELS][NUM_LANES][MAX_FILE_SIZE];
 
     Then in the user callback pick a buffer by channel and lane,
     and associate it with the request like this:
 
-        if (response.state == SFETCH_STATE_OPENING) {
-            sfetch_set_buffer(response.handle, &(sfetch_buffer_t){
-                .ptr = buf[response.channel][response.lane],
-                .size = MAX_FILE_SIZE
-            });
+        void response_callback(sfetch_response_t response) {
+            if (response.state == SFETCH_STATE_OPENING) {
+                sfetch_set_buffer(response.handle, &(sfetch_buffer_t){
+                    .ptr = buf[response.channel][response.lane],
+                    .size = MAX_FILE_SIZE
+                });
+            }
+            ...
         }
-
 
     BUFFER MANAGEMENT
     =================
