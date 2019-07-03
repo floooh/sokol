@@ -121,6 +121,10 @@
             }
         }
 
+    (4) finally, call sfetch_shutdown() at the end of the application:
+
+        sfetch_shutdown()
+
     There's many other loading-scenarios, for instance one doesn't have to
     provide a buffer upfront, but instead can check in the response-callback
     when the file has been opened, inspect it's 'content-size' and only then
@@ -186,6 +190,10 @@
     will get its own thread-local sokol-fetch instance, which will work
     independently from sokol-fetch instances on other threads.
 
+    void sfetch_shutdown(void)
+    --------------------------
+    Call sfetch_shutdown() at the end of the application to stop any
+    IO threads and free all memory that was allocated in sfetch_setup().
 
     sfetch_handle_t sfetch_send(const sfetch_request_t* request)
     ------------------------------------------------------------
