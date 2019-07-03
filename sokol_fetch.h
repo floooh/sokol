@@ -77,9 +77,63 @@
           associated with a request)
 
 
-    A STEP-BY-STEP EXAMPLE
-    ======================
-    [TODO]
+    TL;DR EXAMPLE CODE
+    ==================
+    This is the most-simple example code to load a single data file with a
+    known maximum size:
+
+    (1) initialize sokol-fetch with default parameters (but NOTE that the
+        default setup parameters provide a safe-but-slow "serialized"
+        operation):
+
+        sfetch_setup(&(sfetch_desc_t){ 0 });
+
+    (2) send a fetch-request to load a file from the current directory:
+
+        static uint8_t buf[MAX_FILE_SIZE];
+
+        sfetch_send(&(sfetch_request_t){
+            .path = "my_file.txt",
+            .callback = response_callback,
+            .buffer_ptr = buf,
+            .buffer_size = sizeof(buf)
+        });
+
+    (3) write a 'response-callback' function, this will be called whenever
+        the user-code must respond to state changes of the request
+        (most importantly when data has been loaded):
+
+        void response_callback(const sfetch_response_t* response) {
+            if (response->fetched) {
+                // data has been loaded, and is available via
+                // .buffer_ptr and .fetched_size:
+                const void* data = response->buffer_ptr;
+                uint64_t num_bytes = response->fetched_size;
+            }
+            if (response.finished) {
+                // the .finished-flag is the catch-all flag for when the request
+                // is finished, no matter if loading was successful of failed,
+                // so any cleanup-work should happen here...
+            }
+            if (response.failed) {
+                // .failed is true if something went wrong (file doesn't exist,
+                // or less bytes could be read from the file than expected)
+            }
+        }
+
+    There's many other loading-scenarios, for instance one doesn't have to
+    provide a buffer upfront, but instead can check in the response-callback
+    when the file has been opened, inspect it's 'content-size' and only then
+    provide a matching buffer.
+
+    Or it's possible to stream huge files into small fixed-size buffer,
+    complete with pausing and continuing the download.
+
+    It's also possible to improve the 'pipeline throughput' by fetching
+    multiple files in parallel, but at the same time limit the maximum
+    number of requests that can be 'in-flight'.
+
+    For how this all works, please read the following documentation sections :)
 
 
     API DOCUMENTATION
@@ -88,9 +142,7 @@
     void sfetch_setup(const sfetch_desc_t* desc)
     --------------------------------------------
     First call sfetch_setup(const sfetch_desc_t*) on any thread before calling
-    any other sokol-fetch functions on the same thread. sfetch_setup()
-    can be called on multiple threads, each thread will get its own local
-    context.
+    any other sokol-fetch functions on the same thread.
 
     sfetch_setup() takes a pointer to an sfetch_desc_t struct with setup
     parameters. Parameters which should use their default values must
@@ -130,10 +182,14 @@
     frame. Search for LATENCY AND THROUGHPUT below for more information on
     how to increase throughput.
 
+    NOTE that you can call sfetch_setup() on multiple threads, each thread
+    will get its own thread-local sokol-fetch instance, which will work
+    independently from sokol-fetch instances on other threads.
+
+
     sfetch_handle_t sfetch_send(const sfetch_request_t* request)
     ------------------------------------------------------------
-    sokol-fetch is now ready for accepting fetch-requests. Call sfetch_send()
-    to start a fetch operation, the function takes a pointer to an
+    Call sfetch_send() to start loading data, the function takes a pointer to an
     sfetch_request_t struct with request parameters and returns a
     sfetch_handle_t identifying the request for later calls. At least
     a path/URL and callback must be provided:
@@ -144,8 +200,7 @@
         });
 
     sfetch_send() will return an invalid handle if no request can be allocated
-    from the internal pool (more requests are in flight than
-    sfetch_desc_t.max_requests).
+    from the internal pool because all available request items are 'in-flight'.
 
     The sfetch_request_t struct contains the following parameters (optional
     parameters that are not provided must be zero-initialized):
@@ -249,8 +304,8 @@
     void sfetch_cancel(sfetch_handle_t request)
     -------------------------------------------
     This cancels a request at the next possible time, puts it into the FAILED
-    state and calls the response callback with (response.state ==
-    SFETCH_STATE_FAILED) and (response.finished == true) to give user-code a
+    state and calls the response callback with (response.failed == true)
+    and (response.finished == true) to give user-code a
     chance to do any cleanup work for the request. If sfetch_cancel() is
     called for a request that is no longer alive, nothing bad will happen
     (the call will simply do nothing).
@@ -359,6 +414,16 @@
         If no buffer was provided in the response callback, the request
         will transition into the FAILED state.
 
+        To check in the response-callback if a request is in OPENED state:
+
+            void response_callback(const sfetch_response_t* response) {
+                if (response->opened) {
+                    // request is in OPENED state, can now inspect the
+                    // file's content-size:
+                    uint64_t size = response->content_size;
+                }
+            }
+
     FETCHING (IO thread)
 
         While a request in in the FETCHING state, data will be loaded into
@@ -394,6 +459,26 @@
         Note that it is ok to associate a different buffer or buffer-size
         with the request by calling sfetch_bind_buffer() in the response-callback.
 
+        To check in the response callback for the FETCHED state, and
+        independently whether the request is finished:
+
+            void response_callback(const sfetch_response_t* response) {
+                if (response->fetched) {
+                    // request is in FETCHED state, the loaded data is available
+                    // in .buffer_ptr, and the number of bytes that have been
+                    // loaded in .fetched_size:
+                    const void* data = response->buffer_ptr;
+                    const uint64_t num_bytes = response->fetched_size;
+                }
+                if (response->finished) {
+                    // the finished flag is set either when all data
+                    // has been loaded, the request has been cancelled,
+                    // or the file operation has failed, this is where
+                    // any required per-request cleanup work should happen
+                }
+            }
+
+
     FAILED (user thread)
 
         A request will transition into the FAILED state in the following situations:
@@ -407,9 +492,23 @@
             - if a request has been cancelled via sfetch_cancel()
 
         The response callback will be called once after a request goes
-        into the FAILED state, with the response.finished flag set to
+        into the FAILED state, with the response->finished flag set to
         true. This gives the user-code a chance to cleanup any resources
         associated with the request.
+
+        To check for the failed state in the response callback:
+
+            void response_callback(const sfetch_response_t* response) {
+                if (response->failed) {
+                    // specifically check for the failed state...
+                }
+                // or you can do a catch-all check via the finished-flag:
+                if (response->finished) {
+                    if (response->failed) {
+                        ...
+                    }
+                }
+            }
 
     PAUSED (user thread)
 
@@ -427,6 +526,18 @@
         When calling sfetch_continue() on a paused request, the request will
         transition into the FETCHING state. Otherwise if sfetch_cancel() is
         called, the request will switch into the FAILED state.
+
+        To check for the PAUSED state in the response callback:
+
+            void response_callback(const sfetch_response_t* response) {
+                if (response->paused) {
+                    // we can check here whether the request should
+                    // continue to load data:
+                    if (should_continue(response->handle)) {
+                        sfetch_continue(response->handle);
+                    }
+                }
+            }
 
 
     CHANNELS AND LANES
@@ -697,7 +808,7 @@
 
     FUTURE PLANS / V2.0 IDEA DUMP
     =============================
-    - an optional polling API (as alternative to callback API)
+    - An optional polling API (as alternative to callback API)
     - Move buffer-management into the API? The "manual management"
       can be quite tricky especially for dynamic allocation scenarios,
       API support for buffer management would simplify cases like
@@ -705,7 +816,7 @@
       an automatic garbage collection for dynamically allocated buffers,
       or automatically falling back to dynamic allocation if static
       buffers aren't big enough.
-    - pluggable request handlers to load data from other "sources"
+    - Pluggable request handlers to load data from other "sources"
       (especially HTTP downloads on native platforms via e.g. libcurl
       would be useful)
     - Allow control over the file offset where data is read from? This
