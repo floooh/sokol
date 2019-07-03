@@ -109,7 +109,7 @@
             currently 'inflight' on a channel occupies one lane until the
             request is finished. This is used for automatic rate-limiting
             (search below for CHANNELS AND LANES for more details). The
-            default number of lanes is 16.
+            default number of lanes is 1.
 
     For example, to setup sokol-fetch for max 1024 active requests, 4 channels,
     and 8 lanes per channel in C99:
@@ -121,6 +121,14 @@
         });
 
     sfetch_setup() is the only place where sokol-fetch will allocate memory.
+
+    NOTE that the default setup parameters of 1 channel and 1 lane per channel
+    has a very poor 'pipeline throughput' since this essentially serializes
+    IO requests (a new request will only be processed when the last one has
+    finished), and since each request needs at least one roundtrip between
+    the user- and IO-thread the throughput will be at most one request per
+    frame. Search for LATENCY AND THROUGHPUT below for more information on
+    how to increase throughput.
 
     sfetch_handle_t sfetch_send(const sfetch_request_t* request)
     ------------------------------------------------------------
@@ -617,9 +625,9 @@
     Loading a file header first
     ---------------------------
     Let's say you want to load a file format with a fixed-size header block
-    first, then create some resource which has its own memory buffer,
-    and than load the rest of the file data directly into the resource's
-    owned memory.
+    first, then create some resource which has its own memory buffer from
+    the header attributes and finally load the rest of the file data directly
+    into the resource's owned memory chunk.
 
     I'm using per-request dynamically allocated memory again for demonstration
     purposes, but memory management can be quite tricky in this scenario,
@@ -690,8 +698,13 @@
     FUTURE PLANS / V2.0 IDEA DUMP
     =============================
     - an optional polling API (as alternative to callback API)
-    - some buffer-management helper functions, the "manual management"
-      can be quite tricky especially for dynamic allocation scenarios
+    - Move buffer-management into the API? The "manual management"
+      can be quite tricky especially for dynamic allocation scenarios,
+      API support for buffer management would simplify cases like
+      preventing that requests scribble over each other's buffers, or
+      an automatic garbage collection for dynamically allocated buffers,
+      or automatically falling back to dynamic allocation if static
+      buffers aren't big enough.
     - pluggable request handlers to load data from other "sources"
       (especially HTTP downloads on native platforms via e.g. libcurl
       would be useful)
@@ -747,7 +760,7 @@ typedef struct sfetch_desc_t {
     uint32_t _start_canary;
     uint32_t max_requests;          /* max number of active requests across all channels, default is 128 */
     uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
-    uint32_t num_lanes;             /* max number of requests active on the same channel, default is 16 */
+    uint32_t num_lanes;             /* max number of requests active on the same channel, default is 1 */
     uint32_t _end_canary;
 } sfetch_desc_t;
 
@@ -2163,7 +2176,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
     /* replace zero-init items with default values */
     ctx->desc.max_requests = _sfetch_def(ctx->desc.max_requests, 128);
     ctx->desc.num_channels = _sfetch_def(ctx->desc.num_channels, 1);
-    ctx->desc.num_lanes = _sfetch_def(ctx->desc.num_lanes, 16);
+    ctx->desc.num_lanes = _sfetch_def(ctx->desc.num_lanes, 1);
     if (ctx->desc.num_channels > SFETCH_MAX_CHANNELS) {
         ctx->desc.num_channels = SFETCH_MAX_CHANNELS;
         SOKOL_LOG("sfetch_setup: clamping num_channels to SFETCH_MAX_CHANNELS");
