@@ -337,22 +337,44 @@
     void sfetch_bind_buffer(sfetch_handle_t request, void* buffer_ptr, uint64_t buffer_size)
     ----------------------------------------------------------------------------------------
     This "binds" a new buffer (pointer/size pair) to an active request. The
-    request must not currently have a buffer assigned, otherwise the function
-    will throw a SOKOL_ASSERT. To bind a new buffer to a request which
-    already has a buffer bound, call sfetch_unbind_buffer() first (this should
-    make it somewhat less likely to accidently introduce memory leaks
-    if buffers are dynamically allocated by simply overwriting a previous
-    buffer pointer).
+    function *must* be called from inside the response-callback, and there
+    must not already be another buffer bound.
 
     Search below for BUFFER MANAGEMENT for more detailed information on
     different buffer-management strategies.
 
-    void sfetch_unbind_buffer(sfetch_handle_t request)
-    --------------------------------------------------
-    This will remove the previous buffer association from the request, so
-    that binding a new buffer doesn't throw a SOKOL_ASSERT. It's still
-    the responsibility of user-code to actually free the buffer memory
-    (if dynamic memory allocation was used for the buffer).
+    void* sfetch_unbind_buffer(sfetch_handle_t request)
+    ---------------------------------------------------
+    This removes the current buffer binding from the request and returns
+    a pointer to the previous buffer (useful if the buffer was dynamically
+    allocated and it must be freed).
+
+    sfetch_unbind_buffer() *must* be called from inside the response callback.
+
+    The usual code sequence to bind a different buffer in the response
+    callback might look like this:
+
+        void response_callback(const sfetch_response_t* response) {
+            if (response.fetched) {
+                ...
+                // switch to a different buffer (in the FETCHED state it is
+                // guaranteed that the request has a buffer, otherwise it
+                // would have gone into the FAILED state
+                void* old_buf_ptr = sfetch_unbind_buffer(response.handle);
+                free(old_buf_ptr);
+                void* new_buf_ptr = malloc(new_buf_size);
+                sfetch_bind_buffer(response.handle, new_buf_ptr, new_buf_size);
+            }
+            if (response.finished) {
+                // unbind and free the currently associated buffer,
+                // the buffer pointer could be null if the request has failed
+                void* buf_ptr = sfetch_unbind_buffer(response.handle);
+                if (buf_ptr) {
+                    free(buf_ptr);
+                }
+            }
+        }
+
 
     sfetch_desc_t sfetch_desc(void)
     -------------------------------
@@ -782,8 +804,8 @@
                     // NOTE the sequence of unbinding and freeing the old
                     // image-header buffer (since this was dynamically allocated)
                     // and then rebinding the image's pixel buffer:
-                    sfetch_unbind_buffer(response->handle);
-                    free(response->buffer_ptr);
+                    void* header_buffer = sfetch_unbind_buffer(response->handle);
+                    free(header_buffer);
                     void* pixel_buffer = image_get_pixel_buffer(img);
                     uint64_t pixel_buffer_size = image_get_pixel_buffer_size(img);
                     sfetch_bind_buffer(response->handle, pixel_buffer, pixel_buffer_size);
@@ -800,8 +822,9 @@
             // allocated for the header must be freed:
             if (response->failed) {
                 // ...is this the header data block? (content_offset is 0)
-                if (response->buffer_ptr && (response->content_offset == 0)) {
-                    free(response->buffer_ptr);
+                void* buf_ptr = sfetch_unbind_buffer(response.handle);
+                if (buf_ptr && (response->content_offset == 0)) {
+                    free(buf_ptr);
                 }
             }
         }
@@ -946,10 +969,10 @@ SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
 /* do per-frame work, moves requests into and out of IO threads, and invokes response-callbacks */
 SOKOL_API_DECL void sfetch_dowork(void);
 
-/* bind a data buffer to a request (request must not currently have a buffer bound) */
+/* bind a data buffer to a request (request must not currently have a buffer bound, must be called from response callback */
 SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size);
-/* clear the 'buffer binding' of a request */
-SOKOL_API_DECL void sfetch_unbind_buffer(sfetch_handle_t h);
+/* clear the 'buffer binding' of a request, returns previous buffer pointer (can be 0), must be called from response callback */
+SOKOL_API_DECL void* sfetch_unbind_buffer(sfetch_handle_t h);
 /* cancel a request that's in flight (will call response callback with .cancelled + .finished) */
 SOKOL_API_DECL void sfetch_cancel(sfetch_handle_t h);
 /* pause a request (will call response callback each frame with .paused) */
@@ -1082,8 +1105,6 @@ typedef LPTHREAD_START_ROUTINE _sfetch_thread_func_t;
 
 /* user-side per-request state */
 typedef struct {
-    /* transfer user => IO thread */
-    _sfetch_buffer_t buffer;
     bool pause;                 /* switch item to PAUSED state if true */
     bool cont;                  /* switch item back to FETCHING if true */
     bool cancel;                /* cancel the request, switch into FAILED state */
@@ -1099,8 +1120,6 @@ typedef struct {
 
 /* thread-side per-request state */
 typedef struct {
-    /* transfer user => IO thread */
-    _sfetch_buffer_t buffer;
     /* transfer IO => user thread */
     uint64_t content_size;
     uint64_t content_offset;
@@ -1133,6 +1152,7 @@ typedef struct {
     uint32_t channel;
     uint32_t lane;
     sfetch_callback_t callback;
+    _sfetch_buffer_t buffer;
 
     /* updated by IO-thread, off-limits to user thread */
     _sfetch_item_thread_t thread;
@@ -1184,6 +1204,7 @@ typedef struct {
 typedef struct _sfetch_t {
     bool setup;
     bool valid;
+    bool in_callback;
     sfetch_desc_t desc;
     _sfetch_pool_t pool;
     _sfetch_channel_t chn[SFETCH_MAX_CHANNELS];
@@ -1332,8 +1353,8 @@ _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, co
     item->channel = request->channel;
     item->lane = _SFETCH_INVALID_LANE;
     item->callback = request->callback;
-    item->user.buffer.ptr = (uint8_t*) request->buffer_ptr;
-    item->user.buffer.size = request->buffer_size;
+    item->buffer.ptr = (uint8_t*) request->buffer_ptr;
+    item->buffer.size = request->buffer_size;
     item->path = _sfetch_path_make(request->path);
     #if !_SFETCH_PLATFORM_EMSCRIPTEN
     item->thread.file_handle = _SFETCH_INVALID_FILE_HANDLE;
@@ -1799,6 +1820,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     _sfetch_state_t state;
     _sfetch_path_t* path;
     _sfetch_item_thread_t* thread;
+    _sfetch_buffer_t* buffer;
     {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (!item) {
@@ -1811,6 +1833,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                      (state == _SFETCH_STATE_FAILED));
         path = &item->path;
         thread = &item->thread;
+        buffer = &item->buffer;
     }
     if (thread->failed) {
         return;
@@ -1829,7 +1852,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                 file size and provide a matching buffer), and instead start fetching
                 data data immediately
             */
-            if (thread->buffer.ptr) {
+            if (buffer->ptr) {
                 state = _SFETCH_STATE_FETCHING;
             }
         }
@@ -1842,16 +1865,16 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (state == _SFETCH_STATE_FETCHING) {
         SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
         SOKOL_ASSERT(thread->content_size > thread->content_offset);
-        if ((thread->buffer.ptr == 0) || (thread->buffer.size == 0)) {
+        if ((buffer->ptr == 0) || (buffer->size == 0)) {
             thread->failed = true;
         }
         else {
             uint64_t bytes_to_read = thread->content_size - thread->content_offset;
-            if (bytes_to_read > thread->buffer.size) {
-                bytes_to_read = thread->buffer.size;
+            if (bytes_to_read > buffer->size) {
+                bytes_to_read = buffer->size;
             }
             const uint64_t offset = thread->content_offset;
-            if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, thread->buffer.ptr)) {
+            if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, buffer->ptr)) {
                 thread->fetched_size = bytes_to_read;
                 thread->content_offset += bytes_to_read;
             }
@@ -1941,7 +1964,7 @@ extern "C" {
 #endif
 void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
     SOKOL_ASSERT(item->thread.content_size > item->thread.content_offset);
-    if ((item->thread.buffer.ptr == 0) || (item->thread.buffer.size == 0)) {
+    if ((item->buffer.ptr == 0) || (item->buffer.size == 0)) {
         item->thread.failed = true;
     }
     else {
@@ -1949,11 +1972,11 @@ void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
             FIXME: need to figure out a way to use 64-bit sizes here
         */
         uint32_t bytes_to_read = item->thread.content_size - item->thread.content_offset;
-        if (bytes_to_read > item->thread.buffer.size) {
-            bytes_to_read = item->thread.buffer.size;
+        if (bytes_to_read > item->buffer.size) {
+            bytes_to_read = item->buffer.size;
         }
         const uint32_t offset = item->thread.content_offset;
-        sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.content_size, item->thread.buffer.ptr);
+        sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.content_size, item->buffer.ptr);
     }
 }
 
@@ -1965,7 +1988,7 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t 
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
             item->thread.content_size = content_length;
-            if (item->thread.buffer.ptr) {
+            if (item->buffer.ptr) {
                 /* if a buffer was provided, continue immediate with fetching the first
                     chunk, instead of passing the request back to the channel
                 */
@@ -2020,7 +2043,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (!item) {
         return;
     }
-    if (item->state == SFETCH_STATE_OPENING) {
+    if (item->state == _SFETCH_STATE_OPENING) {
         SOKOL_ASSERT(item->path.buf[0]);
         /* We need to query the content-size first with a separate HEAD request,
             no matter if a buffer was provided or not (because sending a too big
@@ -2030,7 +2053,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         sfetch_js_send_head_request(slot_id, item->path.buf);
         /* see _sfetch_emsc_head_response() for the rest... */
     }
-    else if (item->state == SFETCH_STATE_FETCHING) {
+    else if (item->state == _SFETCH_STATE_FETCHING) {
         _sfetch_emsc_send_range_request(slot_id, item);
     }
     else {
@@ -2132,7 +2155,6 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENING);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHING);
         /* transfer input params from user- to thread-data */
-        item->thread.buffer = item->user.buffer;
         if (item->user.pause) {
             item->state = _SFETCH_STATE_PAUSED;
             item->user.pause = false;
@@ -2237,8 +2259,8 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         response.content_size = item->user.content_size;
         response.content_offset = item->user.content_offset - item->user.fetched_size;
         response.fetched_size = item->user.fetched_size;
-        response.buffer_ptr = item->user.buffer.ptr;
-        response.buffer_size = item->user.buffer.size;
+        response.buffer_ptr = item->buffer.ptr;
+        response.buffer_size = item->buffer.size;
         item->callback(&response);
 
         /* when the request is finish, free the lane for another request,
@@ -2402,31 +2424,40 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
        IO threads can be moved back into the IO-thread immediately without
        having to wait a frame
      */
+    ctx->in_callback = true;
     for (int pass = 0; pass < 2; pass++) {
         for (uint32_t chn_index = 0; chn_index < ctx->desc.num_channels; chn_index++) {
             _sfetch_channel_dowork(&ctx->chn[chn_index], &ctx->pool);
         }
     }
+    ctx->in_callback = false;
 }
 
 SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->valid);
+    SOKOL_ASSERT(ctx->in_callback);
     _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
     if (item) {
-        SOKOL_ASSERT((0 == item->user.buffer.ptr) && (0 == item->user.buffer.size));
-        item->user.buffer.ptr = (uint8_t*) buffer_ptr;
-        item->user.buffer.size = buffer_size;
+        SOKOL_ASSERT((0 == item->buffer.ptr) && (0 == item->buffer.size));
+        item->buffer.ptr = (uint8_t*) buffer_ptr;
+        item->buffer.size = buffer_size;
     }
 }
 
-SOKOL_API_IMPL void sfetch_unbind_buffer(sfetch_handle_t h) {
+SOKOL_API_IMPL void* sfetch_unbind_buffer(sfetch_handle_t h) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->valid);
+    SOKOL_ASSERT(ctx->in_callback);
     _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, h.id);
     if (item) {
-        item->user.buffer.ptr = 0;
-        item->user.buffer.size = 0;
+        void* prev_buf_ptr = item->buffer.ptr;
+        item->buffer.ptr = 0;
+        item->buffer.size = 0;
+        return prev_buf_ptr;
+    }
+    else {
+        return 0;
     }
 }
 
