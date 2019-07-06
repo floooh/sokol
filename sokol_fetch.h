@@ -448,7 +448,7 @@
 
     FETCHING (IO thread)
 
-        While a request in in the FETCHING state, data will be loaded into
+        While a request is in the FETCHING state, data will be loaded into
         the user-provided buffer.
 
         If the buffer is full, or the entire file content has been loaded,
