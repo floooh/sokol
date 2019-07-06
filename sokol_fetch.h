@@ -47,7 +47,7 @@
 
     - Request / response-callback model, user code sends a request
       to initiate a file-load, sokol_fetch.h calls the response callback
-      on the same thread when data is ready, or user-code needs
+      on the same thread when data is ready or user-code needs
       to respond otherwise
 
     - Not limited to the main-thread or a single thread: A sokol-fetch
@@ -64,17 +64,6 @@
 
     - Active Requests can be paused, continued and cancelled from anywhere
       in the user-thread which sent this request.
-
-    - (Reasonably) memory-safe:
-        - The sokol-fetch API never passes pointers to internal data structures
-          back to the user.
-        - Requests are identified through "generation-counted index-handles",
-          allowing to detect dangling accesses, passing handles into the
-          API which are not currently associated with a valid request will
-          not do any harm (same idea as in sokol_gfx.h and other sokol-headers)
-        - All data passed via pointers *into* the sokol-fetch API will be
-          copied as needed (most notably the path/URL string, and any user-data
-          associated with a request)
 
 
     TL;DR EXAMPLE CODE
@@ -114,10 +103,12 @@
                 // the .finished-flag is the catch-all flag for when the request
                 // is finished, no matter if loading was successful of failed,
                 // so any cleanup-work should happen here...
-            }
-            if (response.failed) {
-                // .failed is true if something went wrong (file doesn't exist,
-                // or less bytes could be read from the file than expected)
+                ...
+                if (response.failed) {
+                    // .failed is true in (addition to .finished) if something
+                    // went wrong (file doesn't exist, or less bytes could be
+                    // read from the file than expected)
+                }
             }
         }
 
@@ -126,9 +117,9 @@
         sfetch_shutdown()
 
     There's many other loading-scenarios, for instance one doesn't have to
-    provide a buffer upfront, but instead can check in the response-callback
-    when the file has been opened, inspect it's 'content-size' and only then
-    provide a matching buffer.
+    provide a buffer upfront, but instead inspect the file's content-size
+    in the response callback, allocate a matching buffer and 'bind' that
+    to the request.
 
     Or it's possible to stream huge files into small fixed-size buffer,
     complete with pausing and continuing the download.
@@ -832,9 +823,104 @@
 
     NOTES ON OPTIMIZING PIPELINE LATENCY AND THROUGHPUT
     ===================================================
-    [TODO, TL;DR: careful because one frame latency is added whenever
-    the user-callback is called, improve overall through-put by using
-    multiple channels and lanes, and keep them properly filled)
+    With the default configuration of 1 channel and 1 lane per channel,
+    sokol_fetch.h will appear to have a shockingly bad loading performance
+    if several files are loaded.
+
+    This has two reasons:
+
+        (1) all parallelization when loading data has been disabled. A new
+        request will only be processed, when the last request has finished.
+
+        (2) every invocation of the response-callback adds one frame of latency
+        to the request
+
+    sokol-fetch takes a few shortcuts to improve step (2) and reduce
+    the 'inherent latency' of a request:
+
+        - if a buffer is provided upfront, the response-callback won't be
+        called in the OPENED state, but start right with the FETCHED state
+        where data has already been loaded into the buffer
+
+        - there is no separate CLOSED state where the callback is invoked
+        separately when loading has finished (or the request has failed),
+        instead the finished and failed flags will be set as part of
+        the last FETCHED invocation
+
+    This means providing a big-enough buffer to fit the entire file is the
+    best case, the response callback will only be called once, ideally in
+    the next frame (or two calls to sfetch_dowork()).
+
+    If no buffer is provided upfront, one frame of latency is added because
+    the response callback needs to be invoked in the OPENED state so that
+    the user code can bind a buffer.
+
+    This means the best case for a request without an upfront-provided
+    buffer is 2 frames (or 3 calls to sfetch_dowork()).
+
+    That's about what can be done to improve the latency for a single request,
+    but the really important step is to improve overall throughput. If you
+    need to load thousands of files you don't want that to be completely
+    serialized.
+
+    The most important action to increase throughput is to increase the
+    number of lanes per channel. This defines how many requests can be
+    'in flight' on a single channel at the same time. The guiding decision
+    factor for how many lanes you "afford" is the memory size you want
+    to set aside for buffers. Each lane needs its own buffer so that
+    the data loaded for one request doesn't scribble over the data
+    loaded for another request.
+
+    Here's a simple example of sending 4 requests without upfront buffer
+    on a channel with 1, 2 and 4 lanes, each line is one frame:
+
+        1 LANE (8 frames):
+            Lane 0:
+            -------------
+            REQ 0 OPENED
+            REQ 0 FETCHED
+            REQ 1 OPENED
+            REQ 1 FETCHED
+            REQ 2 OPENED
+            REQ 2 FETCHED
+            REQ 3 OPENED
+            REQ 3 FETCHED
+
+    Note how the request don't overlap, so they can all use the same buffer.
+
+        2 LANES (4 frames):
+            Lane 0:         Lane 1:
+            ---------------------------------
+            REQ 0 OPENED    REQ 1 OPENED
+            REQ 0 FETCHED   REQ 1 FETCHED
+            REQ 2 OPENED    REQ 3 OPENED
+            REQ 2 FETCHED   REQ 3 FETCHED
+
+    This reduces the overall time to 4 frames, but now you need 2 buffers so
+    that requests don't scribble over each other.
+
+        4 LANES (2 frames):
+            Lane 0:         Lane 1:         Lane 2:         Lane 3:
+            -------------------------------------------------------------
+            REQ 0 OPENED    REQ 1 OPENED    REQ 2 OPENED    REQ 3 OPENED
+            REQ 0 FETCHED   REQ 1 FETCHED   REQ 2 FETCHED   REQ 3 FETCHED
+
+    Now we're down to the same 'best-case' latency as sending a single
+    request.
+
+    Apart from the memory requirements for the streaming buffers (which is
+    under your control), you can be generous with the number of channels,
+    they don't add any processing overhead.
+
+    The last option for tweaking latency and throughput is channels. Each
+    channel works independently from other channels, so while one
+    channel is busy working through a large number of requests (or one
+    very long streaming download), you can keep a high-priority channel
+    for requests that need to start as soon as possible.
+
+    On platforms with threading support, each channel runs on its own
+    thread, but this is mainly an implementation detail to work around
+    the blocking traditional file IO functions, not for performance reasons.
 
 
     FUTURE PLANS / V2.0 IDEA DUMP
@@ -947,7 +1033,6 @@ typedef struct sfetch_request_t {
     uint32_t user_data_size;        /* size of user-data block (optional) */
     uint32_t _end_canary;
 } sfetch_request_t;
-
 
 /* setup sokol-fetch (can be called on multiple threads) */
 SOKOL_API_DECL void sfetch_setup(const sfetch_desc_t* desc);
