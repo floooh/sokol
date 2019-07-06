@@ -695,7 +695,7 @@
     (2) In the response callback, note that there's no handling for the
         OPENED state. If a buffer was provided upfront, the OPENED state
         will be skipped, and the first state the callback will hear from
-        is the FETCHED state (unless something went wrong, than it
+        is the FETCHED state (unless something went wrong, then it
         would be FAILED).
 
         void response_callback(const sfetch_response_t* response) {
@@ -735,7 +735,7 @@
         ...
 
         // we can't provide the buffer upfront in sfetch_send(), because
-        // we don't know the lane where the request will land, so binding
+        // we don't know the lane where the request will land on, so binding
         // the buffer needs to happen in the response callback:
 
         void response_callback(const sfetch_response_t* response) {
@@ -760,7 +760,7 @@
     Let's say you want to load a file format with a fixed-size header block
     first, then create some resource which has its own memory buffer from
     the header attributes and finally load the rest of the file data directly
-    into the resource's owned memory chunk.
+    into the resource's own memory chunk.
 
     I'm using per-request dynamically allocated memory again for demonstration
     purposes, but memory management can be quite tricky in this scenario,
@@ -834,7 +834,8 @@
         request will only be processed, when the last request has finished.
 
         (2) every invocation of the response-callback adds one frame of latency
-        to the request
+        to the request, because callbacks will only be called from within
+        sfetch_dowork()
 
     sokol-fetch takes a few shortcuts to improve step (2) and reduce
     the 'inherent latency' of a request:
@@ -867,7 +868,7 @@
     The most important action to increase throughput is to increase the
     number of lanes per channel. This defines how many requests can be
     'in flight' on a single channel at the same time. The guiding decision
-    factor for how many lanes you "afford" is the memory size you want
+    factor for how many lanes you can "afford" is the memory size you want
     to set aside for buffers. Each lane needs its own buffer so that
     the data loaded for one request doesn't scribble over the data
     loaded for another request.
@@ -916,7 +917,7 @@
     The last option for tweaking latency and throughput is channels. Each
     channel works independently from other channels, so while one
     channel is busy working through a large number of requests (or one
-    very long streaming download), you can keep a high-priority channel
+    very long streaming download), you can set aside a high-priority channel
     for requests that need to start as soon as possible.
 
     On platforms with threading support, each channel runs on its own
