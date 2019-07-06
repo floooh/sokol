@@ -388,7 +388,7 @@
     ========================================
     A request goes through a number of states during its lifetime. Depending
     on the current state of a request, it will be 'owned' either by the
-    "user-thread" (where the code was sent) or an IO thread.
+    "user-thread" (where the request was sent) or an IO thread.
 
     You can think of a request as "ping-ponging" between the IO thread and
     user thread, any actual IO work is done on the IO thread, while
