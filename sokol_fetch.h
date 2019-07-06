@@ -95,17 +95,17 @@
         void response_callback(const sfetch_response_t* response) {
             if (response->fetched) {
                 // data has been loaded, and is available via
-                // .buffer_ptr and .fetched_size:
+                // 'buffer_ptr' and 'fetched_size':
                 const void* data = response->buffer_ptr;
                 uint64_t num_bytes = response->fetched_size;
             }
-            if (response.finished) {
-                // the .finished-flag is the catch-all flag for when the request
+            if (response->finished) {
+                // the 'finished'-flag is the catch-all flag for when the request
                 // is finished, no matter if loading was successful of failed,
                 // so any cleanup-work should happen here...
                 ...
-                if (response.failed) {
-                    // .failed is true in (addition to .finished) if something
+                if (response->failed) {
+                    // 'failed' is true in (addition to 'finished') if something
                     // went wrong (file doesn't exist, or less bytes could be
                     // read from the file than expected)
                 }
