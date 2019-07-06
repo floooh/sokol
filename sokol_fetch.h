@@ -302,24 +302,23 @@
 
     void sfetch_cancel(sfetch_handle_t request)
     -------------------------------------------
-    This cancels a request at the next possible time, puts it into the FAILED
-    state and calls the response callback with (response.failed == true)
-    and (response.finished == true) to give user-code a
-    chance to do any cleanup work for the request. If sfetch_cancel() is
-    called for a request that is no longer alive, nothing bad will happen
-    (the call will simply do nothing).
+    This cancels a request in the next sfetch_dowork() call and invokes the
+    response callback with (response.failed == true) and (response.finished
+    == true) to give user-code a chance to do any cleanup work for the
+    request. If sfetch_cancel() is called for a request that is no longer
+    alive, nothing bad will happen (the call will simply do nothing).
 
     void sfetch_pause(sfetch_handle_t request)
     ------------------------------------------
-    This pauses an active request at the next possible time and puts it into
-    the PAUSED state. For all requests in PAUSED state, the response callback
-    will be called in each call to sfetch_dowork() to give user-code a chance
-    to CONTINUE the request (by calling sfetch_continue()). Pausing a request
-    makes sense for dynamic rate-limiting in streaming scenarios (like
-    video/audio streaming with a fixed number of streaming buffers. As soon
-    as all available buffers are filled with download data, downloading more
-    data must be prevented to allow video/audio playback to catch up and free
-    up empty buffers for new download data.
+    This pauses an active request in the next sfetch_dowork() call and puts
+    it into the PAUSED state. For all requests in PAUSED state, the response
+    callback will be called in each call to sfetch_dowork() to give user-code
+    a chance to CONTINUE the request (by calling sfetch_continue()). Pausing
+    a request makes sense for dynamic rate-limiting in streaming scenarios
+    (like video/audio streaming with a fixed number of streaming buffers. As
+    soon as all available buffers are filled with download data, downloading
+    more data must be prevented to allow video/audio playback to catch up and
+    free up empty buffers for new download data.
 
     void sfetch_continue(sfetch_handle_t request)
     ---------------------------------------------
