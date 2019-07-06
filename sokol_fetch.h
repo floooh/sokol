@@ -359,10 +359,11 @@
             if (response.finished) {
                 // unbind and free the currently associated buffer,
                 // the buffer pointer could be null if the request has failed
+                // NOTE that it is legal to call free() with a nullptr,
+                // this happens if the request failed to open its file
+                // and never goes into the OPENED state
                 void* buf_ptr = sfetch_unbind_buffer(response.handle);
-                if (buf_ptr) {
-                    free(buf_ptr);
-                }
+                free(buf_ptr);
             }
         }
 
@@ -387,7 +388,7 @@
     ========================================
     A request goes through a number of states during its lifetime. Depending
     on the current state of a request, it will be 'owned' either by the
-    "user-thread" (where the code was sent), and an IO thread.
+    "user-thread" (where the code was sent) or an IO thread.
 
     You can think of a request as "ping-ponging" between the IO thread and
     user thread, any actual IO work is done on the IO thread, while
