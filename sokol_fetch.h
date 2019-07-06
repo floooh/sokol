@@ -536,7 +536,7 @@
 
         A request will transition into the PAUSED state after user-code
         calls the function sfetch_pause() on the request's handle. Usually
-        this happens from within response-callback in streaming scenarios
+        this happens from within the response-callback in streaming scenarios
         when the data streaming needs to wait for a data decoder (like
         a video/audio player) to catch up.
 
@@ -567,6 +567,13 @@
     Channels and lanes are (somewhat artificial) concepts to manage
     parallelization, prioritization and rate-limiting.
 
+    Channels can be used to parallelize message processing for better
+    'pipeline throughput', and to prioritize messages: user-code could
+    reserve one channel for "small and big" streaming downloads,
+    another channel for "regular" downloads and yet another high-priority channel
+    which would only be used for small files which need to start loading
+    immediately.
+
     Each channel comes with its own IO thread and message queues for pumping
     messages in and out of the thread. The channel where a request is
     processed is selected manually when sending a message:
@@ -583,20 +590,13 @@
     Channels are completely separate from each other, and a request will
     never "hop" from one channel to another.
 
-    Channels can be used to parallelize message processing for better
-    'pipeline throughput', and to prioritize messages: user-code could
-    reserve one channel for "small and big" streaming downloads,
-    another channel for "regular" downloads and yet another high-priority channel
-    which would only be used for small files which need to start loading
-    immediately.
-
     Each channel consists of a fixed number of "lanes" for automatic rate
     limiting:
 
     When a request is sent to a channel via sfetch_send(), a "free lane" will
     be picked and assigned to the request. The request will occupy this lane
     for its entire life time (also while it is paused). If all lanes of a
-    channel are currently occupied, the request will need to wait until a
+    channel are currently occupied, new requests will need to wait until a
     lane becomes unoccupied.
 
     Since the number of channels and lanes is known upfront, it is guaranteed
