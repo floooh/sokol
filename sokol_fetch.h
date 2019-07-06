@@ -290,7 +290,7 @@
 
         - for all requests which have finished their current IO operation a
         state transition from "IO thread side" to "user side" happens,
-        and the the response callback is called
+        and the response callback is called
 
         - requests which are completely finished (either because the entire
         file content has been loaded, or they are in the FAILED state) are
