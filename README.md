@@ -304,7 +304,7 @@ static void init(void) {
     // setup sokol-fetch with default config:
     sfetch_setup(&(sfetch_desc_t){0});
 
-    // start loading a file, provide at least a path and responce callback:
+    // start loading a file, provide at least a path and response callback:
     sfetch_send(&(sfetch_request_t){
         .path = "hello_world.txt",
         .callback = response_callback
