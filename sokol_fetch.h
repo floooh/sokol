@@ -394,7 +394,7 @@
     user thread, any actual IO work is done on the IO thread, while
     invocations of the response-callback happen on the user-thread.
 
-    All state transitions and callback invokations happen inside the
+    All state transitions and callback invocations happen inside the
     sfetch_dowork() function.
 
     An active request goes through the following states:
