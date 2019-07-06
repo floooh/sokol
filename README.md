@@ -13,6 +13,7 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
+- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
 
 WebAssembly is a 'first-class citizen', one important motivation for the
@@ -285,6 +286,71 @@ int main() {
 }
 ```
 
+# sokol_fetch.h
+
+Load entire files, or stream data asynchronously over HTTP (emscripten/wasm)
+or the local filesystem (all native platforms).
+
+Simple C99 example with a dynamically allocated buffer:
+
+```c
+#include "sokol_fetch.h"
+
+static void response_callback(const sfetch_response*);
+
+// application init
+static void init(void) {
+    ...
+    // setup sokol-fetch with default config:
+    sfetch_setup(&(sfetch_desc_t){0});
+
+    // start loading a file, provide at least a path and responce callback:
+    sfetch_send(&(sfetch_request_t){
+        .path = "hello_world.txt",
+        .callback = response_callback
+    });
+}
+
+// per frame...
+static void frame(void) {
+    ...
+    // need to call sfetch_dowork() once per frame to 'turn the gears':
+    sfetch_dowork();
+    ...
+}
+
+// the response callback is where the interesting stuff happens:
+static void reponse_callback(const sfetch_response_t* response) {
+    if (response->opened) {
+        // file size is known here, bind a buffer to load data into
+        void* buf_ptr = malloc(response->content_size);
+        sfetch_bind_buffer(response->handle, buf_ptr, response->content_size);
+    }
+    else if (response->fetched) {
+        // data has been loaded into the provided buffer, do something
+        // with the data...
+        const void* data = response->buffer_ptr;
+        uint64_t data_size = response->fetched_size;
+    }
+    // the finished flag is set both on success and failure
+    if (response->finished) {
+        if (response->failed) {
+            // oops, something went wrong
+        }
+        // in any case, free the allocated buffer (NOTE that free can be
+        // called with a nullptr, a request might fail even before the OPENED state
+        free(sfetch_unbind_buffer(response->handle));
+    }
+}
+
+// application shutdown
+static void shutdown(void) {
+    ...
+    sfetch_shutdown();
+    ...
+}
+```
+
 # sokol_time.h:
 
 Simple cross-platform time measurement:
@@ -393,6 +459,12 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **06-Jul-2019**:
+    - new header sokol_fetch.h for asynchronously loading data.
+        (TODO: add link to header and samples)
+    - sokol_gfx.h: increased SG_MAX_SHADERSTAGE_BUFFERS configuration constant
+      from 4 to 8.
 
 - **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
     - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
