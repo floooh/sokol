@@ -464,7 +464,7 @@ Mainly some "missing features" for desktop apps:
     - new header [sokol_fetch.h](https://github.com/floooh/sokol/blob/master/sokol_fetch.h) for asynchronously loading data.
         - make sure to carefully read the embedded documentation
         for making the best use of the header
-        - two new samples: [simple PNG file loadng with stb_image.h](https://floooh.github.io/sokol-html5/wasm/loadpng-sapp.html) and  [MPEG1 streaming with pl_mpeg.h](https://floooh.github.io/sokol-html5/wasm/plmpeg-sapp.html)
+        - two new samples: [simple PNG file loadng with stb_image.h](https://floooh.github.io/sokol-html5/loadpng-sapp.html) and  [MPEG1 streaming with pl_mpeg.h](https://floooh.github.io/sokol-html5/plmpeg-sapp.html)
     - sokol_gfx.h: increased SG_MAX_SHADERSTAGE_BUFFERS configuration
     constant from 4 to 8.
 
