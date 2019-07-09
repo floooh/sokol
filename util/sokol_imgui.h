@@ -861,6 +861,13 @@ SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
 
 SOKOL_API_IMPL void simgui_render(void) {
     ImGui::Render();
+
+    /* reset viewport to a defined state */
+    const float dpi_scale = _simgui.desc.dpi_scale;
+    const int fb_width = (const int) (ImGui::GetIO().DisplaySize.x * dpi_scale);
+    const int fb_height = (const int) (ImGui::GetIO().DisplaySize.y * dpi_scale);
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (nullptr == draw_data) {
         return;
@@ -868,7 +875,6 @@ SOKOL_API_IMPL void simgui_render(void) {
     if (draw_data->CmdListsCount == 0) {
         return;
     }
-    const float dpi_scale = _simgui.desc.dpi_scale;
 
     /* render the ImGui command list */
     sg_push_debug_group("sokol-imgui");

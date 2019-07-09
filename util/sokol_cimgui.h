@@ -851,6 +851,13 @@ SOKOL_API_IMPL void scimgui_new_frame(int width, int height, double delta_time) 
 
 SOKOL_API_IMPL void scimgui_render(void) {
     igRender();
+
+    /* reset viewport to a defined state */
+    const float dpi_scale = _scimgui.desc.dpi_scale;
+    const int fb_width = (const int) (igGetIO()->DisplaySize.x * dpi_scale);
+    const int fb_height = (const int) (igGetIO()->DisplaySize.y * dpi_scale);
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+
     ImDrawData* draw_data = igGetDrawData();
     if (draw_data == NULL) {
         return;
@@ -858,7 +865,6 @@ SOKOL_API_IMPL void scimgui_render(void) {
     if (draw_data->CmdListsCount == 0) {
         return;
     }
-    const float dpi_scale = _scimgui.desc.dpi_scale;
 
     /* render the ImGui command list */
     sg_push_debug_group("sokol-imgui");
