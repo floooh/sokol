@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates)
+[See what's new](#updates) (11-Jul-2019: don't use sokol_fetch.h yet)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -13,7 +13,7 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
-- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
+- ~~**sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem~~ (see the [What's New section](#updates))
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
 
 WebAssembly is a 'first-class citizen', one important motivation for the
@@ -459,6 +459,15 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **11-Jul-2019**:
+    - Don't use sokol_fetch.h for now, the current version assumes that
+      it is possible to obtain the content size of a file from the
+      HTTP server without downloading the entire file first. Turns out
+      that's not possible with vanilla HTTP when the web server serves
+      files compressed (in that case the Content-Length is the _compressed_
+      size, yet JS/WASM only has access to the uncompressed data).
+      Long story short, I need to go back to the drawing board :)
 
 - **06-Jul-2019**:
     - new header [sokol_fetch.h](https://github.com/floooh/sokol/blob/master/sokol_fetch.h) for asynchronously loading data.

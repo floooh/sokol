@@ -4,6 +4,18 @@
 
     Project URL: https://github.com/floooh/sokol
 
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    DON'T USE THIS UNTIL FURTHER NOTICE
+
+    - Don't use sokol_fetch.h for now, the current version assumes that
+      it is possible to obtain the content size of a file from the
+      HTTP server without downloading the entire file first. Turns out
+      that's not possible with vanilla HTTP when the web server serves
+      files compressed (in that case the Content-Length is the _compressed_
+      size, yet JS/WASM only has access to the uncompressed data).
+      Long story short, I need to go back to the drawing board :)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
