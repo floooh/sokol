@@ -852,12 +852,6 @@ SOKOL_API_IMPL void scimgui_new_frame(int width, int height, double delta_time) 
 SOKOL_API_IMPL void scimgui_render(void) {
     igRender();
 
-    /* reset viewport to a defined state */
-    const float dpi_scale = _scimgui.desc.dpi_scale;
-    const int fb_width = (const int) (igGetIO()->DisplaySize.x * dpi_scale);
-    const int fb_height = (const int) (igGetIO()->DisplaySize.y * dpi_scale);
-    sg_apply_viewport(0, 0, fb_width, fb_height, true);
-
     ImDrawData* draw_data = igGetDrawData();
     if (draw_data == NULL) {
         return;
@@ -868,6 +862,12 @@ SOKOL_API_IMPL void scimgui_render(void) {
 
     /* render the ImGui command list */
     sg_push_debug_group("sokol-imgui");
+    const float dpi_scale = _scimgui.desc.dpi_scale;
+    const int fb_width = (const int) (igGetIO()->DisplaySize.x * dpi_scale);
+    const int fb_height = (const int) (igGetIO()->DisplaySize.y * dpi_scale);
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
+
     sg_apply_pipeline(_scimgui.pip);
     _scimgui_vs_params_t vs_params;
     vs_params.disp_size.x = igGetIO()->DisplaySize.x;
@@ -926,6 +926,8 @@ SOKOL_API_IMPL void scimgui_render(void) {
             base_element += pcmd.ElemCount;
         }
     }
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
     sg_pop_debug_group();
 }
 
