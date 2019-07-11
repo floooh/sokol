@@ -2569,6 +2569,10 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp.gles2_fallback = true;
     }
     emscripten_webgl_make_context_current(ctx);
+
+    /* some WebGL extension are not enabled automatically by emscripten */
+    emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
+
     _sapp.valid = true;
     emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
