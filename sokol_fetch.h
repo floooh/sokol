@@ -1011,6 +1011,16 @@ typedef struct sfetch_desc_t {
 /* a request handle to identify an active fetch request, returned by sfetch_send() */
 typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
 
+/* error codes */
+typedef enum {
+    SFETCH_ERROR_NO_ERROR,
+    SFETCH_ERROR_FILE_NOT_FOUND,
+    SFETCH_ERROR_NO_BUFFER,
+    SFETCH_ERROR_BUFFER_TO_SMALL,
+    SFETCH_ERROR_UNEXPECTED_EOF,
+    SFETCH_ERROR_INVALID_REQUEST
+} sfetch_error_t;
+
 /* the response struct passed to the response callback */
 typedef struct sfetch_response_t {
     sfetch_handle_t handle;         /* request handle this response belongs to */
@@ -1020,15 +1030,15 @@ typedef struct sfetch_response_t {
     bool finished;                  /* this is the last response for this request */
     bool failed;                    /* request has failed (always set together with 'finished') */
     bool cancelled;                 /* request was cancelled (always set together with 'finished') */
+    sfetch_error_t error_code;      /* more detailed error code when failed is true */
     uint32_t channel;               /* the channel which processes this request */
     uint32_t lane;                  /* the lane this request occupies on its channel */
     const char* path;               /* the original filesystem path of the request (FIXME: this is unsafe, wrap in API call?) */
     void* user_data;                /* pointer to read/write user-data area (FIXME: this is unsafe, wrap in API call?) */
-    uint64_t content_size;          /* overall file size in bytes */
-    uint64_t content_offset;        /* current offset of fetched data chunk in file */
-    uint64_t fetched_size;          /* size of fetched data chunk in number of bytes */
+    uint32_t fetched_offset;        /* current offset of fetched data chunk in file data */
+    uint32_t fetched_size;          /* size of fetched data chunk in number of bytes */
     void* buffer_ptr;               /* pointer to buffer with fetched data */
-    uint64_t buffer_size;           /* overall buffer size (may be >= than fetched_size!) */
+    uint32_t buffer_size;           /* overall buffer size (may be >= than fetched_size!) */
 } sfetch_response_t;
 
 /* response callback function signature */
@@ -1041,7 +1051,8 @@ typedef struct sfetch_request_t {
     const char* path;               /* filesystem path or HTTP URL (required) */
     sfetch_callback_t callback;     /* response callback function pointer (required) */
     void* buffer_ptr;               /* buffer pointer where data will be loaded into (optional) */
-    uint64_t buffer_size;           /* buffer size in number of bytes (optional) */
+    uint32_t buffer_size;           /* buffer size in number of bytes (optional) */
+    uint32_t chunk_size;            /* number of bytes to load per stream-block (optional) */
     const void* user_data_ptr;      /* pointer to a POD user-data block which will be memcpy'd(!) (optional) */
     uint32_t user_data_size;        /* size of user-data block (optional) */
     uint32_t _end_canary;
@@ -1207,9 +1218,9 @@ typedef struct {
     bool cont;                  /* switch item back to FETCHING if true */
     bool cancel;                /* cancel the request, switch into FAILED state */
     /* transfer IO => user thread */
-    uint64_t content_size;      /* overall file size */
-    uint64_t content_offset;    /* number of bytes fetched so far */
-    uint64_t fetched_size;      /* size of last fetched chunk */
+    uint32_t fetched_offset;    /* number of bytes fetched so far */
+    uint32_t fetched_size;      /* size of last fetched chunk */
+    sfetch_error_t error_code;
     bool finished;
     /* user thread only */
     uint32_t user_data_size;
@@ -1219,15 +1230,16 @@ typedef struct {
 /* thread-side per-request state */
 typedef struct {
     /* transfer IO => user thread */
-    uint64_t content_size;
-    uint64_t content_offset;
-    uint64_t fetched_size;
+    uint32_t fetched_offset;
+    uint32_t fetched_size;
+    sfetch_error_t error_code;
     bool failed;
     bool finished;
     /* IO thread only */
     #if !_SFETCH_PLATFORM_EMSCRIPTEN
     _sfetch_file_handle_t file_handle;
     #endif
+    uint32_t content_size;
 } _sfetch_item_thread_t;
 
 /* a request goes through the following states, ping-ponging between IO and user thread */
@@ -1249,6 +1261,7 @@ typedef struct {
     _sfetch_state_t state;
     uint32_t channel;
     uint32_t lane;
+    uint32_t chunk_size;
     sfetch_callback_t callback;
     _sfetch_buffer_t buffer;
 
@@ -1446,9 +1459,11 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t ind
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
     SOKOL_ASSERT(item && (0 == item->handle.id));
     SOKOL_ASSERT(request && request->path);
+    memset(item, 0, sizeof(_sfetch_item_t));
     item->handle.id = slot_id;
     item->state = _SFETCH_STATE_INITIAL;
     item->channel = request->channel;
+    item->chunk_size = request->chunk_size;
     item->lane = _SFETCH_INVALID_LANE;
     item->callback = request->callback;
     item->buffer.ptr = (uint8_t*) request->buffer_ptr;
@@ -1919,6 +1934,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     _sfetch_path_t* path;
     _sfetch_item_thread_t* thread;
     _sfetch_buffer_t* buffer;
+    uint32_t chunk_size;
     {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (!item) {
@@ -1932,6 +1948,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         path = &item->path;
         thread = &item->thread;
         buffer = &item->buffer;
+        chunk_size = item->chunk_size;
     }
     if (thread->failed) {
         return;
@@ -1939,8 +1956,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (state == _SFETCH_STATE_OPENING) {
         SOKOL_ASSERT(!_sfetch_file_handle_valid(thread->file_handle));
         SOKOL_ASSERT(path->buf[0]);
-        SOKOL_ASSERT(thread->content_size == 0);
-        SOKOL_ASSERT(thread->content_offset == 0);
+        SOKOL_ASSERT(thread->fetched_offset == 0);
         SOKOL_ASSERT(thread->fetched_size == 0);
         thread->file_handle = _sfetch_file_open(path);
         if (_sfetch_file_handle_valid(thread->file_handle)) {
@@ -1955,6 +1971,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             }
         }
         else {
+            thread->error_code = SFETCH_ERROR_FILE_NOT_FOUND;
             thread->failed = true;
             thread->finished = true;
         }
@@ -1962,25 +1979,52 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     /* may fall through from OPENING if a buffer was provided upfront */
     if (state == _SFETCH_STATE_FETCHING) {
         SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
-        SOKOL_ASSERT(thread->content_size > thread->content_offset);
         if ((buffer->ptr == 0) || (buffer->size == 0)) {
+            thread->error_code = SFETCH_ERROR_NO_BUFFER;
             thread->failed = true;
         }
         else {
-            uint64_t bytes_to_read = thread->content_size - thread->content_offset;
-            if (bytes_to_read > buffer->size) {
-                bytes_to_read = buffer->size;
-            }
-            const uint64_t offset = thread->content_offset;
-            if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, buffer->ptr)) {
-                thread->fetched_size = bytes_to_read;
-                thread->content_offset += bytes_to_read;
+            uint32_t read_offset = 0;
+            uint32_t bytes_to_read = 0;
+            if (chunk_size == 0) {
+                /* load entire file */
+                if (thread->content_size <= buffer->size) {
+                    bytes_to_read = thread->content_size;
+                    read_offset = 0;
+                }
+                else {
+                    /* provided buffer to small to fit entire file */
+                    thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                    thread->failed = true;
+                }
             }
             else {
-                thread->failed = true;
+                if (chunk_size <= buffer->size) {
+                    bytes_to_read = chunk_size;
+                    read_offset = thread->fetched_offset;
+                    if ((read_offset + bytes_to_read) > thread->content_size) {
+                        bytes_to_read = thread->content_size - read_offset;
+                    }
+                }
+                else {
+                    /* provided buffer to small to fit next chunk */
+                    thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                    thread->failed = true;
+                }
+            }
+            if (!thread->failed) {
+                if (_sfetch_file_read(thread->file_handle, read_offset, bytes_to_read, buffer->ptr)) {
+                    thread->fetched_size = bytes_to_read;
+                    thread->fetched_offset += bytes_to_read;
+                }
+                else {
+                    thread->error_code = SFETCH_ERROR_UNEXPECTED_EOF;
+                    thread->failed = true;
+                }
             }
         }
-        if (thread->failed || (thread->content_offset >= thread->content_size)) {
+        SOKOL_ASSERT(thread->fetched_offset <= thread->content_size);
+        if (thread->failed || (thread->fetched_offset == thread->content_size)) {
             _sfetch_file_close(thread->file_handle);
             thread->file_handle = 0;
             thread->finished = true;
@@ -2063,6 +2107,7 @@ extern "C" {
 void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
     SOKOL_ASSERT(item->thread.content_size > item->thread.content_offset);
     if ((item->buffer.ptr == 0) || (item->buffer.size == 0)) {
+        item->thread.error_code = SFETCH_ERROR_NO_BUFFER;
         item->thread.failed = true;
     }
     else {
@@ -2126,6 +2171,7 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed(uint32_t slot_id) {
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
+            item->thread.error_code = SFETCH_ERROR_INVALID_REQUEST;
             item->thread.failed = true;
             item->thread.finished = true;
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
@@ -2307,9 +2353,9 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENED);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHED);
         /* transfer output params from thread- to user-data */
-        item->user.content_size = item->thread.content_size;
-        item->user.content_offset = item->thread.content_offset;
-        item->user.fetched_size  = item->thread.fetched_size;
+        item->user.fetched_offset = item->thread.fetched_offset;
+        item->user.fetched_size = item->thread.fetched_size;
+        item->user.error_code = item->thread.error_code;
         if (item->thread.finished) {
             item->user.finished = true;
         }
@@ -2326,7 +2372,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
                        a lane, otherwise, invoke the callback with OPENED state
                        so it can provide a buffer
                     */
-                    if (item->user.content_offset > 0) {
+                    if (item->user.fetched_offset > 0) {
                         item->state = _SFETCH_STATE_FETCHED;
                     }
                     else {
@@ -2350,12 +2396,12 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         response.finished = item->user.finished;
         response.failed = (item->state == _SFETCH_STATE_FAILED);
         response.cancelled = item->user.cancel;
+        response.error_code = item->user.error_code;
         response.channel = item->channel;
         response.lane = item->lane;
         response.path = item->path.buf;
         response.user_data = item->user.user_data;
-        response.content_size = item->user.content_size;
-        response.content_offset = item->user.content_offset - item->user.fetched_size;
+        response.fetched_offset = item->user.fetched_offset - item->user.fetched_size;
         response.fetched_size = item->user.fetched_size;
         response.buffer_ptr = item->buffer.ptr;
         response.buffer_size = item->buffer.size;
@@ -2391,6 +2437,10 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
     }
     if (!req->callback) {
         SOKOL_LOG("_sfetch_validate_request: request.callback missing");
+        return false;
+    }
+    if (req->chunk_size > req->buffer_size) {
+        SOKOL_LOG("_sfetch_validate_request: request.stream_size is greater request.buffer_size)");
         return false;
     }
     if (req->user_data_ptr && (req->user_data_size == 0)) {
