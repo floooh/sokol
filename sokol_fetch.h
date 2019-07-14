@@ -1024,7 +1024,7 @@ typedef enum {
 /* the response struct passed to the response callback */
 typedef struct sfetch_response_t {
     sfetch_handle_t handle;         /* request handle this response belongs to */
-    bool opened;                    /* true when request is in OPENED state (content_size is available) */
+    bool enqueued;                  /* true when request is in ENQUEUED state (lane has been assigned) */
     bool fetched;                   /* true when request is in FETCHED state (fetched data is available) */
     bool paused;                    /* request is currently in paused state */
     bool finished;                  /* this is the last response for this request */
@@ -1246,12 +1246,11 @@ typedef struct {
 typedef enum _sfetch_state_t {
     _SFETCH_STATE_INITIAL,      /* internal: request has just been initialized */
     _SFETCH_STATE_ALLOCATED,    /* internal: request has been allocated from internal pool */
-    _SFETCH_STATE_OPENING,      /* IO thread: waiting to be opened */
-    _SFETCH_STATE_OPENED,       /* user thread: follow state of OPENING if no buffer was provided */
+    _SFETCH_STATE_ENQUEUED,     /* user thread: request has been enqueued on its IO channel */
     _SFETCH_STATE_FETCHING,     /* IO thread: waiting for data to be fetched */
     _SFETCH_STATE_FETCHED,      /* user thread: fetched data available */
     _SFETCH_STATE_PAUSED,       /* user thread: request has been paused via sfetch_pause() */
-    _SFETCH_STATE_FAILED,       /* user thread: follow state of OPENING or FETCHING if something went wrong */
+    _SFETCH_STATE_FAILED,       /* user thread: follow state or FETCHING if something went wrong */
 } _sfetch_state_t;
 
 /* an internal request item */
@@ -1941,8 +1940,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
             return;
         }
         state = item->state;
-        SOKOL_ASSERT((state == _SFETCH_STATE_OPENING) ||
-                     (state == _SFETCH_STATE_FETCHING) ||
+        SOKOL_ASSERT((state == _SFETCH_STATE_FETCHING) ||
                      (state == _SFETCH_STATE_PAUSED) ||
                      (state == _SFETCH_STATE_FAILED));
         path = &item->path;
@@ -1953,80 +1951,73 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (thread->failed) {
         return;
     }
-    if (state == _SFETCH_STATE_OPENING) {
-        SOKOL_ASSERT(!_sfetch_file_handle_valid(thread->file_handle));
-        SOKOL_ASSERT(path->buf[0]);
-        SOKOL_ASSERT(thread->fetched_offset == 0);
-        SOKOL_ASSERT(thread->fetched_size == 0);
-        thread->file_handle = _sfetch_file_open(path);
-        if (_sfetch_file_handle_valid(thread->file_handle)) {
-            thread->content_size = _sfetch_file_size(thread->file_handle);
-            /* if we already have a buffer associated with the request, skip
-                the OPENED state (which only exists so the user code can look at the
-                file size and provide a matching buffer), and instead start fetching
-                data data immediately
-            */
-            if (buffer->ptr) {
-                state = _SFETCH_STATE_FETCHING;
-            }
-        }
-        else {
-            thread->error_code = SFETCH_ERROR_FILE_NOT_FOUND;
-            thread->failed = true;
-            thread->finished = true;
-        }
-    }
-    /* may fall through from OPENING if a buffer was provided upfront */
     if (state == _SFETCH_STATE_FETCHING) {
-        SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
         if ((buffer->ptr == 0) || (buffer->size == 0)) {
             thread->error_code = SFETCH_ERROR_NO_BUFFER;
             thread->failed = true;
         }
         else {
-            uint32_t read_offset = 0;
-            uint32_t bytes_to_read = 0;
-            if (chunk_size == 0) {
-                /* load entire file */
-                if (thread->content_size <= buffer->size) {
-                    bytes_to_read = thread->content_size;
-                    read_offset = 0;
+            /* open file if not happened yet */
+            if (!_sfetch_file_handle_valid(thread->file_handle)) {
+                SOKOL_ASSERT(path->buf[0]);
+                SOKOL_ASSERT(thread->fetched_offset == 0);
+                SOKOL_ASSERT(thread->fetched_size == 0);
+                thread->file_handle = _sfetch_file_open(path);
+                if (_sfetch_file_handle_valid(thread->file_handle)) {
+                    thread->content_size = _sfetch_file_size(thread->file_handle);
                 }
                 else {
-                    /* provided buffer to small to fit entire file */
-                    thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
-                    thread->failed = true;
-                }
-            }
-            else {
-                if (chunk_size <= buffer->size) {
-                    bytes_to_read = chunk_size;
-                    read_offset = thread->fetched_offset;
-                    if ((read_offset + bytes_to_read) > thread->content_size) {
-                        bytes_to_read = thread->content_size - read_offset;
-                    }
-                }
-                else {
-                    /* provided buffer to small to fit next chunk */
-                    thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                    thread->error_code = SFETCH_ERROR_FILE_NOT_FOUND;
                     thread->failed = true;
                 }
             }
             if (!thread->failed) {
-                if (_sfetch_file_read(thread->file_handle, read_offset, bytes_to_read, buffer->ptr)) {
-                    thread->fetched_size = bytes_to_read;
-                    thread->fetched_offset += bytes_to_read;
+                uint32_t read_offset = 0;
+                uint32_t bytes_to_read = 0;
+                if (chunk_size == 0) {
+                    /* load entire file */
+                    if (thread->content_size <= buffer->size) {
+                        bytes_to_read = thread->content_size;
+                        read_offset = 0;
+                    }
+                    else {
+                        /* provided buffer to small to fit entire file */
+                        thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                        thread->failed = true;
+                    }
                 }
                 else {
-                    thread->error_code = SFETCH_ERROR_UNEXPECTED_EOF;
-                    thread->failed = true;
+                    if (chunk_size <= buffer->size) {
+                        bytes_to_read = chunk_size;
+                        read_offset = thread->fetched_offset;
+                        if ((read_offset + bytes_to_read) > thread->content_size) {
+                            bytes_to_read = thread->content_size - read_offset;
+                        }
+                    }
+                    else {
+                        /* provided buffer to small to fit next chunk */
+                        thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                        thread->failed = true;
+                    }
+                }
+                if (!thread->failed) {
+                    if (_sfetch_file_read(thread->file_handle, read_offset, bytes_to_read, buffer->ptr)) {
+                        thread->fetched_size = bytes_to_read;
+                        thread->fetched_offset += bytes_to_read;
+                    }
+                    else {
+                        thread->error_code = SFETCH_ERROR_UNEXPECTED_EOF;
+                        thread->failed = true;
+                    }
                 }
             }
         }
         SOKOL_ASSERT(thread->fetched_offset <= thread->content_size);
         if (thread->failed || (thread->fetched_offset == thread->content_size)) {
-            _sfetch_file_close(thread->file_handle);
-            thread->file_handle = 0;
+            if (_sfetch_file_handle_valid(thread->file_handle)) {
+                _sfetch_file_close(thread->file_handle);
+                thread->file_handle = _SFETCH_INVALID_FILE_HANDLE;
+            }
             thread->finished = true;
         }
     }
@@ -2274,6 +2265,28 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
     }
 }
 
+_SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
+    sfetch_response_t response;
+    memset(&response, 0, sizeof(response));
+    response.handle = item->handle;
+    response.enqueued = (item->state == _SFETCH_STATE_ENQUEUED);
+    response.fetched = (item->state == _SFETCH_STATE_FETCHED);
+    response.paused = (item->state == _SFETCH_STATE_PAUSED);
+    response.finished = item->user.finished;
+    response.failed = (item->state == _SFETCH_STATE_FAILED);
+    response.cancelled = item->user.cancel;
+    response.error_code = item->user.error_code;
+    response.channel = item->channel;
+    response.lane = item->lane;
+    response.path = item->path.buf;
+    response.user_data = item->user.user_data;
+    response.fetched_offset = item->user.fetched_offset - item->user.fetched_size;
+    response.fetched_size = item->user.fetched_size;
+    response.buffer_ptr = item->buffer.ptr;
+    response.buffer_size = item->buffer.size;
+    item->callback(&response);
+}
+
 /* per-frame channel stuff: move requests in and out of the IO threads, call response callbacks */
 _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
 
@@ -2285,7 +2298,13 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         const uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_sent);
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
+        SOKOL_ASSERT(item->state == _SFETCH_STATE_ALLOCATED);
+        item->state = _SFETCH_STATE_ENQUEUED;
         item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
+        /* if no buffer provided yet, invoke response callback to do so */
+        if (0 == item->buffer.ptr) {
+            _sfetch_invoke_response_callback(item);
+        }
         _sfetch_ring_enqueue(&chn->user_incoming, slot_id);
     }
 
@@ -2296,7 +2315,6 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_INITIAL);
-        SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENING);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHING);
         /* transfer input params from user- to thread-data */
         if (item->user.pause) {
@@ -2314,10 +2332,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             item->user.finished = true;
         }
         switch (item->state) {
-            case _SFETCH_STATE_ALLOCATED:
-                item->state = _SFETCH_STATE_OPENING;
-                break;
-            case _SFETCH_STATE_OPENED:
+            case _SFETCH_STATE_ENQUEUED:
             case _SFETCH_STATE_FETCHED:
                 item->state = _SFETCH_STATE_FETCHING;
                 break;
@@ -2350,7 +2365,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item && item->callback);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_INITIAL);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_ALLOCATED);
-        SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENED);
+        SOKOL_ASSERT(item->state != _SFETCH_STATE_ENQUEUED);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHED);
         /* transfer output params from thread- to user-data */
         item->user.fetched_offset = item->thread.fetched_offset;
@@ -2363,49 +2378,10 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         if (item->thread.failed) {
             item->state = _SFETCH_STATE_FAILED;
         }
-        else {
-            switch (item->state) {
-                case _SFETCH_STATE_OPENING:
-                    /* if the request already had a buffer provided, the
-                       OPENING state already has fetched data and we shortcut
-                       to the first FETCHED state to shorten the time a request occupies
-                       a lane, otherwise, invoke the callback with OPENED state
-                       so it can provide a buffer
-                    */
-                    if (item->user.fetched_offset > 0) {
-                        item->state = _SFETCH_STATE_FETCHED;
-                    }
-                    else {
-                        item->state = _SFETCH_STATE_OPENED;
-                    }
-                    break;
-                case _SFETCH_STATE_FETCHING:
-                    item->state = _SFETCH_STATE_FETCHED;
-                    break;
-                default:
-                    break;
-            }
+        else if (item->state == _SFETCH_STATE_FETCHING) {
+            item->state = _SFETCH_STATE_FETCHED;
         }
-        /* invoke response callback */
-        sfetch_response_t response;
-        memset(&response, 0, sizeof(response));
-        response.handle.id = slot_id;
-        response.opened = (item->state == _SFETCH_STATE_OPENED);
-        response.fetched = (item->state == _SFETCH_STATE_FETCHED);
-        response.paused = (item->state == _SFETCH_STATE_PAUSED);
-        response.finished = item->user.finished;
-        response.failed = (item->state == _SFETCH_STATE_FAILED);
-        response.cancelled = item->user.cancel;
-        response.error_code = item->user.error_code;
-        response.channel = item->channel;
-        response.lane = item->lane;
-        response.path = item->path.buf;
-        response.user_data = item->user.user_data;
-        response.fetched_offset = item->user.fetched_offset - item->user.fetched_size;
-        response.fetched_size = item->user.fetched_size;
-        response.buffer_ptr = item->buffer.ptr;
-        response.buffer_size = item->buffer.size;
-        item->callback(&response);
+        _sfetch_invoke_response_callback(item);
 
         /* when the request is finish, free the lane for another request,
            otherwise feed it back into the incoming queue
