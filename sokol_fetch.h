@@ -1016,9 +1016,9 @@ typedef enum {
     SFETCH_ERROR_NO_ERROR,
     SFETCH_ERROR_FILE_NOT_FOUND,
     SFETCH_ERROR_NO_BUFFER,
-    SFETCH_ERROR_BUFFER_TO_SMALL,
+    SFETCH_ERROR_BUFFER_TOO_SMALL,
     SFETCH_ERROR_UNEXPECTED_EOF,
-    SFETCH_ERROR_INVALID_REQUEST
+    SFETCH_ERROR_INVALID_HTTP_STATUS
 } sfetch_error_t;
 
 /* the response struct passed to the response callback */
@@ -1079,7 +1079,7 @@ SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
 SOKOL_API_DECL void sfetch_dowork(void);
 
 /* bind a data buffer to a request (request must not currently have a buffer bound, must be called from response callback */
-SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size);
+SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size);
 /* clear the 'buffer binding' of a request, returns previous buffer pointer (can be 0), must be called from response callback */
 SOKOL_API_DECL void* sfetch_unbind_buffer(sfetch_handle_t h);
 /* cancel a request that's in flight (will call response callback with .cancelled + .finished) */
@@ -1173,7 +1173,7 @@ typedef struct _sfetch_path_t {
 
 typedef struct _sfetch_buffer_t {
     uint8_t* ptr;
-    uint64_t size;
+    uint32_t size;
 } _sfetch_buffer_t;
 
 /* a thread with incoming and outgoing message queue syncing */
@@ -1236,7 +1236,9 @@ typedef struct {
     bool failed;
     bool finished;
     /* IO thread only */
-    #if !_SFETCH_PLATFORM_EMSCRIPTEN
+    #if _SFETCH_PLATFORM_EMSCRIPTEN
+    uint32_t http_range_offset;
+    #else
     _sfetch_file_handle_t file_handle;
     #endif
     uint32_t content_size;
@@ -1601,12 +1603,12 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
     return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
-_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
+_SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
     fseek(h, 0, SEEK_END);
     return ftell(h);
 }
 
-_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
     fseek(h, offset, SEEK_SET);
     return num_bytes == fread(ptr, 1, num_bytes, h);
 }
@@ -1785,14 +1787,14 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
     return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
-_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
+_SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
     LARGE_INTEGER file_size;
     file_size.QuadPart = 0;
     GetFileSizeEx(h, &file_size);
     return file_size.QuadPart;
 }
 
-_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
     LARGE_INTEGER offset_li;
     offset_li.QuadPart = offset;
     BOOL seek_res = SetFilePointerEx(h, offset_li, NULL, FILE_BEGIN);
@@ -1982,7 +1984,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                     }
                     else {
                         /* provided buffer to small to fit entire file */
-                        thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                        thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
                         thread->failed = true;
                     }
                 }
@@ -1996,7 +1998,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
                     }
                     else {
                         /* provided buffer to small to fit next chunk */
-                        thread->error_code = SFETCH_ERROR_BUFFER_TO_SMALL;
+                        thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
                         thread->failed = true;
                     }
                 }
@@ -2067,24 +2069,31 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
     req.send();
 });
 
-EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int num_bytes, int content_length, void* buf_ptr), {
+/* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
+EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, int offset, int bytes_to_read, void* buf_ptr, int buf_size), {
     var path_str = UTF8ToString(path_cstr);
     var req = new XMLHttpRequest();
     req.open('GET', path_str);
     req.responseType = 'arraybuffer';
-    var need_range_request = !((offset == 0) && (num_bytes == content_length));
+    var need_range_request = (bytes_to_read > 0);
     if (need_range_request) {
-        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+num_bytes));
+        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read));
     }
     req.onreadystatechange = function() {
         if (this.readyState == this.DONE) {
             if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
                 var u8_array = new Uint8Array(req.response);
-                HEAPU8.set(u8_array, buf_ptr);
-                __sfetch_emsc_range_response(slot_id, num_bytes);
+                var content_fetched_size = u8_array.length;
+                if (content_fetched_size <= buf_size) {
+                    HEAPU8.set(u8_array, buf_ptr);
+                    __sfetch_emsc_get_response(slot_id, bytes_to_read, content_fetched_size);
+                }
+                else {
+                    __sfetch_emsc_failed_buffer_too_small(slot_id);
+                }
             }
             else {
-                __sfetch_emsc_failed(slot_id);
+                __sfetch_emsc_failed_http_status(slot_id, this.status);
             }
         }
     };
@@ -2095,59 +2104,59 @@ EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cs
 #ifdef __cplusplus
 extern "C" {
 #endif
-void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
-    SOKOL_ASSERT(item->thread.content_size > item->thread.content_offset);
+void _sfetch_emsc_send_get_request(uint32_t slot_id, _sfetch_item_t* item) {
     if ((item->buffer.ptr == 0) || (item->buffer.size == 0)) {
         item->thread.error_code = SFETCH_ERROR_NO_BUFFER;
         item->thread.failed = true;
     }
     else {
-        /* send a regular HTTP range request to fetch the next chunk of data
-            FIXME: need to figure out a way to use 64-bit sizes here
-        */
-        uint32_t bytes_to_read = item->thread.content_size - item->thread.content_offset;
-        if (bytes_to_read > item->buffer.size) {
-            bytes_to_read = item->buffer.size;
+        uint32_t offset = 0;
+        uint32_t bytes_to_read = 0;
+        if (item->chunk_size > 0) {
+            /* send HTTP range request */
+            SOKOL_ASSERT(item->thread.content_size > 0);
+            SOKOL_ASSERT(item->thread.http_range_offset < item->thread.content_size);
+            uint32_t bytes_to_read = item->thread.content_size - item->thread.http_range_offset;
+            if (bytes_to_read > item->chunk_size) {
+                bytes_to_read = item->chunk_size;
+            }
+            SOKOL_ASSERT(bytes_to_read > 0);
+            offset = item->thread.http_range_offset;
         }
-        const uint32_t offset = item->thread.content_offset;
-        sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.content_size, item->buffer.ptr);
+        printf("sfetch_js_send_get_request(slot_id:%d, path:%s, offset:%d, bytes_to_read:%d, buf_ptr:%p, buf_size:%d\n",
+            slot_id, item->path.buf, offset, bytes_to_read, item->buffer.ptr, item->buffer.size);
+        sfetch_js_send_get_request(slot_id, item->path.buf, offset, bytes_to_read, item->buffer.ptr, item->buffer.size);
     }
 }
 
-/* called by JS when the initial HEAD request finished successfully */
+/* called by JS when an initial HEAD request finished successfully (only when streaming chunks) */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t content_length) {
-    //printf("sfetch_emsc_head_response(slot_id=%d content_length=%d)\n", slot_id, content_length);
+    printf("sfetch_emsc_head_response(slot_id=%d content_length=%d)\n", slot_id, content_length);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
+            SOKOL_ASSERT(item->buffer.ptr && (item->buffer.size > 0));
             item->thread.content_size = content_length;
-            if (item->buffer.ptr) {
-                /* if a buffer was provided, continue immediate with fetching the first
-                    chunk, instead of passing the request back to the channel
-                */
-                _sfetch_emsc_send_range_request(slot_id, item);
-            }
-            else {
-                /* if no buffer was provided upfront pass back to the channel so
-                    that the response-user-callback can be called
-                */
-                _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
-            }
+            _sfetch_emsc_send_get_request(slot_id, item);
         }
     }
 }
 
 /* called by JS when a followup GET request finished successfully */
-EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t num_bytes_read) {
-    //printf("sfetch_emsc_range_response(slot_id=%d, num_bytes_read=%d)\n", slot_id, num_bytes_read);
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_get_response(uint32_t slot_id, uint32_t range_fetched_size, uint32_t content_fetched_size) {
+    printf("sfetch_emsc_get_response(slot_id=%d, range_fetched_size=%d, content_fetched_size=%d)\n", slot_id, range_fetched_size, content_fetched_size);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
-            item->thread.fetched_size = num_bytes_read;
-            item->thread.content_offset += num_bytes_read;
-            if (item->thread.content_offset >= item->thread.content_size) {
+            item->thread.fetched_size = content_fetched_size;
+            item->thread.fetched_offset += content_fetched_size;
+            item->thread.http_range_offset += range_fetched_size;
+            if (item->chunk_size == 0) {
+                item->thread.finished = true;
+            }
+            else if (item->thread.http_range_offset >= item->thread.content_size) {
                 item->thread.finished = true;
             }
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
@@ -2156,19 +2165,39 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t
 }
 
 /* called by JS when an error occurred */
-EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed(uint32_t slot_id) {
-    //printf("sfetch_emsc_failed(slot_id=%d)\n", slot_id);
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_http_status(uint32_t slot_id, uint32_t http_status) {
+    printf("sfetch_emsc_failed_http_status(slot_id=%d, http_status=%d)\n", slot_id, http_status);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
-            item->thread.error_code = SFETCH_ERROR_INVALID_REQUEST;
+            if (http_status == 404) {
+                item->thread.error_code = SFETCH_ERROR_FILE_NOT_FOUND;
+            }
+            else {
+                item->thread.error_code = SFETCH_ERROR_INVALID_HTTP_STATUS;
+            }
             item->thread.failed = true;
             item->thread.finished = true;
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
         }
     }
 }
+
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_buffer_too_small(uint32_t slot_id) {
+    printf("sfetch_emsc_failed_buffer_too_small(slot_id=%d)\n", slot_id);
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
+            item->thread.failed = true;
+            item->thread.finished = true;
+            _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+        }
+    }
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -2178,18 +2207,19 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (!item) {
         return;
     }
-    if (item->state == _SFETCH_STATE_OPENING) {
-        SOKOL_ASSERT(item->path.buf[0]);
-        /* We need to query the content-size first with a separate HEAD request,
-            no matter if a buffer was provided or not (because sending a too big
-            range request speculatively doesn't work). With the response, we can
-            also check whether the server actually supports range requests
-        */
-        sfetch_js_send_head_request(slot_id, item->path.buf);
-        /* see _sfetch_emsc_head_response() for the rest... */
-    }
-    else if (item->state == _SFETCH_STATE_FETCHING) {
-        _sfetch_emsc_send_range_request(slot_id, item);
+    if (item->state == _SFETCH_STATE_FETCHING) {
+        if ((item->chunk_size > 0) && (item->thread.content_size == 0)) {
+            /* if streaming download is requested, and the content-length isn't known
+               yet, need to send a HEAD request first
+             */
+            sfetch_js_send_head_request(slot_id, item->path.buf);
+        }
+        else {
+            /* otherwise, this is either a request to load the entire file, or
+               to load the next streaming chunk
+             */
+            _sfetch_emsc_send_get_request(slot_id, item);
+        }
     }
     else {
         /* just move all other items (e.g. paused or cancelled)
@@ -2201,7 +2231,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         item->thread.finished = true;
     }
 }
-#endif
+#endif /* _SFETCH_PLATFORM_EMSCRIPTEN */
 
 _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     SOKOL_ASSERT(chn);
@@ -2557,7 +2587,7 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     ctx->in_callback = false;
 }
 
-SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size) {
+SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->valid);
     SOKOL_ASSERT(ctx->in_callback);
