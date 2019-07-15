@@ -2062,7 +2062,7 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
-                __sfetch_emsc_failed(slot_id);
+                __sfetch_emsc_failed_http_status(slot_id, this.status);
             }
         }
     };
