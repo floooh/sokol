@@ -2116,22 +2116,19 @@ void _sfetch_emsc_send_get_request(uint32_t slot_id, _sfetch_item_t* item) {
             /* send HTTP range request */
             SOKOL_ASSERT(item->thread.content_size > 0);
             SOKOL_ASSERT(item->thread.http_range_offset < item->thread.content_size);
-            uint32_t bytes_to_read = item->thread.content_size - item->thread.http_range_offset;
+            bytes_to_read = item->thread.content_size - item->thread.http_range_offset;
             if (bytes_to_read > item->chunk_size) {
                 bytes_to_read = item->chunk_size;
             }
             SOKOL_ASSERT(bytes_to_read > 0);
             offset = item->thread.http_range_offset;
         }
-        printf("sfetch_js_send_get_request(slot_id:%d, path:%s, offset:%d, bytes_to_read:%d, buf_ptr:%p, buf_size:%d\n",
-            slot_id, item->path.buf, offset, bytes_to_read, item->buffer.ptr, item->buffer.size);
         sfetch_js_send_get_request(slot_id, item->path.buf, offset, bytes_to_read, item->buffer.ptr, item->buffer.size);
     }
 }
 
 /* called by JS when an initial HEAD request finished successfully (only when streaming chunks) */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t content_length) {
-    printf("sfetch_emsc_head_response(slot_id=%d content_length=%d)\n", slot_id, content_length);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
@@ -2145,7 +2142,6 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t 
 
 /* called by JS when a followup GET request finished successfully */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_get_response(uint32_t slot_id, uint32_t range_fetched_size, uint32_t content_fetched_size) {
-    printf("sfetch_emsc_get_response(slot_id=%d, range_fetched_size=%d, content_fetched_size=%d)\n", slot_id, range_fetched_size, content_fetched_size);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
@@ -2166,7 +2162,6 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_get_response(uint32_t slot_id, uint32_t r
 
 /* called by JS when an error occurred */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_http_status(uint32_t slot_id, uint32_t http_status) {
-    printf("sfetch_emsc_failed_http_status(slot_id=%d, http_status=%d)\n", slot_id, http_status);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
@@ -2185,7 +2180,6 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_http_status(uint32_t slot_id, uint
 }
 
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_buffer_too_small(uint32_t slot_id) {
-    printf("sfetch_emsc_failed_buffer_too_small(slot_id=%d)\n", slot_id);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
