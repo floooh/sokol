@@ -4,18 +4,6 @@
 
     Project URL: https://github.com/floooh/sokol
 
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    DON'T USE THIS UNTIL FURTHER NOTICE
-
-    - Don't use sokol_fetch.h for now, the current version assumes that
-      it is possible to obtain the content size of a file from the
-      HTTP server without downloading the entire file first. Turns out
-      that's not possible with vanilla HTTP when the web server serves
-      files compressed (in that case the Content-Length is the _compressed_
-      size, yet JS/WASM only has access to the uncompressed data).
-      Long story short, I need to go back to the drawing board :)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -89,7 +77,8 @@
 
         sfetch_setup(&(sfetch_desc_t){ 0 });
 
-    (2) send a fetch-request to load a file from the current directory:
+    (2) send a fetch-request to load a file from the current directory
+        into a buffer big enough to hold the entire file content:
 
         static uint8_t buf[MAX_FILE_SIZE];
 
@@ -113,7 +102,7 @@
             }
             if (response->finished) {
                 // the 'finished'-flag is the catch-all flag for when the request
-                // is finished, no matter if loading was successful of failed,
+                // is finished, no matter if loading was successful or failed,
                 // so any cleanup-work should happen here...
                 ...
                 if (response->failed) {
@@ -129,9 +118,7 @@
         sfetch_shutdown()
 
     There's many other loading-scenarios, for instance one doesn't have to
-    provide a buffer upfront, but instead inspect the file's content-size
-    in the response callback, allocate a matching buffer and 'bind' that
-    to the request.
+    provide a buffer upfront, this can also happen in the response callback.
 
     Or it's possible to stream huge files into small fixed-size buffer,
     complete with pausing and continuing the download.
@@ -237,18 +224,23 @@
             to each other. Search below for CHANNELS AND LANES for more
             information. The default channel is 0.
 
+        - chunk_size (uint32_t, optional)
+            The chunk_size member is used for streaming data incrementally
+            in small chunks. After 'chunk_size' bytes have been loaded into
+            to the streaming buffer, the response callback will be called
+            with the buffer containing the fetched data for the current chunk.
+            If chunk_size is 0 (the default), than the whole file will be loaded.
+            Please search below for CHUNK SIZE AND HTTP COMPRESSION for
+            important information how streaming works if the web server
+            is serving compressed data.
+
         - buffer_ptr, buffer_size (void*, uint64_t, optional)
-            This is a pointer/size pair describing a chunk of memory where
-            data will be loaded into. Providing a buffer "upfront" in
-            sfetch_request() is optional, and makes sense in the following
-            two situations:
-                (1) a maximum file size is known for the request, so that
-                    is guaranteed that the entire file content will fit
-                    into the buffer
-                (2) ...or the file should be streamed in small chunks, with the
-                    response-callback being called after each chunk to
-                    process the partial file data
-            Search below for BUFFER MANAGEMENT for more detailed information.
+            This is a optional pointer/size pair describing a chunk of memory where
+            data will be loaded into (if no buffer is provided upfront, this
+            must happen in the response callback). If a buffer is provided,
+            it must be big enough to either hold the entire file (if chunk_size
+            is zero), or the *uncompressed* data for one downloaded chunk
+            (if chunk_size is > 0).
 
         - user_data_ptr, user_data_size (const void*, uint32_t, both optional)
             user_data_ptr and user_data_size describe an optional POD (plain-old-data)
@@ -287,10 +279,16 @@
     sfetch_dowork() roughly performs the following work:
 
         - any new requests that have been sent with sfetch_send() since the
-        last call to sfetch_dowork() will be dispatched to their IO channels,
-        permitting that any lanes on that specific channel are available (if
-        all lanes are occuped, incoming requests are queued until a lane
-        becomes available)
+        last call to sfetch_dowork() will be dispatched to their IO channels
+        and assigned a free lane. If all lanes on that channel are occupied
+        by requests 'in flight', incoming requests must wait until
+        a lane becomes avaible
+
+        - for all new requests which have been enquened on a channel which
+        don't already have a buffer assigned the response callback will be
+        called with (response->dispatched == true) so that the response
+        callback can inspect the dynamically assigned lane and bind a buffer
+        to the request (search below for CHANNELS AND LANE for more info)
 
         - a state transition from "user side" to "IO thread side" happens for
         each new request that has been dispatched to a channel.
@@ -302,7 +300,8 @@
 
         - for all requests which have finished their current IO operation a
         state transition from "IO thread side" to "user side" happens,
-        and the response callback is called
+        and the response callback is called so that the fetched data
+        can be processed.
 
         - requests which are completely finished (either because the entire
         file content has been loaded, or they are in the FAILED state) are
@@ -310,7 +309,9 @@
         memory is freed)
 
         - requests which are not yet finished are fed back into the
-        'incoming' queue of their channel, and the cycle starts again
+        'incoming' queue of their channel, and the cycle starts again, this
+        only happens for requests which perform data streaming (not load
+        the entire file at once).
 
     void sfetch_cancel(sfetch_handle_t request)
     -------------------------------------------
@@ -414,9 +415,9 @@
 
         The request has been allocated in sfetch_send() and is
         waiting to be dispatched into its IO channel. When this
-        happens, the request will transition into the OPENING state.
+        happens, the request will transition into the DISPATCHED state.
 
-    OPENING (IO thread)
+    DISPATCHED (IO thread)
 
         The request is currently being opened on the IO thread. After the
         file has been opened, its file-size will be obtained.
@@ -572,6 +573,9 @@
                 }
             }
 
+    CHUNK SIZE AND HTTP COMPRESSION
+    ===============================
+    [TODO]
 
     CHANNELS AND LANES
     ==================
@@ -1024,7 +1028,7 @@ typedef enum {
 /* the response struct passed to the response callback */
 typedef struct sfetch_response_t {
     sfetch_handle_t handle;         /* request handle this response belongs to */
-    bool enqueued;                  /* true when request is in ENQUEUED state (lane has been assigned) */
+    bool dispatched;                /* true when request is in DISPATCHED state (lane has been assigned) */
     bool fetched;                   /* true when request is in FETCHED state (fetched data is available) */
     bool paused;                    /* request is currently in paused state */
     bool finished;                  /* this is the last response for this request */
@@ -1248,7 +1252,7 @@ typedef struct {
 typedef enum _sfetch_state_t {
     _SFETCH_STATE_INITIAL,      /* internal: request has just been initialized */
     _SFETCH_STATE_ALLOCATED,    /* internal: request has been allocated from internal pool */
-    _SFETCH_STATE_ENQUEUED,     /* user thread: request has been enqueued on its IO channel */
+    _SFETCH_STATE_DISPATCHED,   /* user thread: request has been dispatched to its IO channel */
     _SFETCH_STATE_FETCHING,     /* IO thread: waiting for data to be fetched */
     _SFETCH_STATE_FETCHED,      /* user thread: fetched data available */
     _SFETCH_STATE_PAUSED,       /* user thread: request has been paused via sfetch_pause() */
@@ -2290,7 +2294,7 @@ _SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
     sfetch_response_t response;
     memset(&response, 0, sizeof(response));
     response.handle = item->handle;
-    response.enqueued = (item->state == _SFETCH_STATE_ENQUEUED);
+    response.dispatched = (item->state == _SFETCH_STATE_DISPATCHED);
     response.fetched = (item->state == _SFETCH_STATE_FETCHED);
     response.paused = (item->state == _SFETCH_STATE_PAUSED);
     response.finished = item->user.finished;
@@ -2320,7 +2324,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
         SOKOL_ASSERT(item->state == _SFETCH_STATE_ALLOCATED);
-        item->state = _SFETCH_STATE_ENQUEUED;
+        item->state = _SFETCH_STATE_DISPATCHED;
         item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
         /* if no buffer provided yet, invoke response callback to do so */
         if (0 == item->buffer.ptr) {
@@ -2353,7 +2357,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             item->user.finished = true;
         }
         switch (item->state) {
-            case _SFETCH_STATE_ENQUEUED:
+            case _SFETCH_STATE_DISPATCHED:
             case _SFETCH_STATE_FETCHED:
                 item->state = _SFETCH_STATE_FETCHING;
                 break;
@@ -2386,7 +2390,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item && item->callback);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_INITIAL);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_ALLOCATED);
-        SOKOL_ASSERT(item->state != _SFETCH_STATE_ENQUEUED);
+        SOKOL_ASSERT(item->state != _SFETCH_STATE_DISPATCHED);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHED);
         /* transfer output params from thread- to user-data */
         item->user.fetched_offset = item->thread.fetched_offset;
