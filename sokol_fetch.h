@@ -419,65 +419,62 @@
 
     DISPATCHED (IO thread)
 
-        The request is currently being opened on the IO thread. After the
-        file has been opened, its file-size will be obtained.
+        The request has been dispatched into its IO channel, and a
+        lane has been assigned to the request.
 
         If a buffer was provided in sfetch_send() the request will
         immediately transition into the FETCHING state and start loading
         data into the buffer.
 
-        If no buffer was provided in sfetch_send(), the request will
-        transition into the OPENED state.
+        If no buffer was provided in sfetch_send(), the response
+        callback will be called with (response->dispatched == true),
+        so that the response callback can bind a buffer to the
+        request. Binding the buffer in the response callback makes
+        sense if the buffer isn't dynamically allocated, but instead
+        a pre-allocated buffer must be selected from the request's
+        channel and lane.
+
+        Note that it isn't possible to get a file size in the response callback
+        which would help with allocating a buffer of the right size, this is
+        because it isn't possible in HTTP to query the file size before the
+        entire file is downloaded (...when the web server serves files compressed).
 
         If opening the file failed, the request will transition into
-        the FAILED state.
-
-    OPENED (user thread)
-
-        A request will go into the OPENED state after its file has been
-        opened successfully, but no buffer was provided to load data
-        into.
-
-        In the OPENED state, the response-callback will be called so that the
-        user-code can inspect the file-size and provide a matching buffer for
-        the request by calling sfetch_bind_buffer().
-
-        After the response callback has been called, and a buffer was provided,
-        the request will transition into the FETCHING state.
-
-        If no buffer was provided in the response callback, the request
-        will transition into the FAILED state.
-
-        To check in the response-callback if a request is in OPENED state:
-
-            void response_callback(const sfetch_response_t* response) {
-                if (response->opened) {
-                    // request is in OPENED state, can now inspect the
-                    // file's content-size:
-                    uint64_t size = response->content_size;
-                }
-            }
+        the FAILED state with the error code SFETCH_ERROR_FILE_NOT_FOUND.
 
     FETCHING (IO thread)
 
         While a request is in the FETCHING state, data will be loaded into
         the user-provided buffer.
 
-        If the buffer is full, or the entire file content has been loaded,
-        the request will transition into the FETCHED state.
+        If no buffer was provided, the request will go into the FAILED
+        state with the error code SFETCH_ERROR_NO_BUFFER.
 
-        If something went wrong during loading (less bytes could be
-        read than expected), the request will transition into the FAILED
-        state.
+        If a buffer was provided, but it is too small to contain the
+        fetched data, the request will go into the FAILED state with
+        error code SFETCH_ERROR_BUFFER_TOO_SMALL.
+
+        If less data can be read from the file than expected, the request
+        will go into the FAILED state with error code SFETCH_ERROR_UNEXPECTED_EOF.
+
+        If loading data into the provided buffer works as expected, the
+        request will go into the FETCHED state.
 
     FETCHED (user thread)
 
-        The request goes into the FETCHED state either when the request's
-        buffer has been completely filled with loaded data, or all file
-        data has been loaded.
+        The request goes into the FETCHED state either when the entire file
+        has been loaded into the provided buffer (when request.chunk_size == 0),
+        or a chunk has been loaded (and optionally decompressed) into the
+        buffer (when request.chunk_size > 0).
 
         The response callback will be called so that the user-code can
-        process the loaded data.
+        process the loaded data using the following sfetch_response_t struct members:
+
+            - fetched_size: the number of bytes in the provided buffer
+            - buffer_ptr: pointer to the start of fetched data
+            - fetched_offset: the byte offset of the loaded data chunk in the
+              overall file (this is only set to a non-zero value in a streaming
+              scenario)
 
         Once all file data has been loaded, the 'finished' flag will be set
         in the response callback's sfetch_response_t argument.
@@ -486,9 +483,9 @@
         (response.finished flag is set) the request has reached its end-of-life
         and will recycled.
 
-        Otherwise, if there's still data to load (because the buffer size
-        is smaller than the file's content-size), the request will switch
-        back to the FETCHING state to load the next chunk of data.
+        Otherwise, if there's still data to load (because streaming was
+        requested by providing a non-zero request.chunk_size), the request
+        will switch back to the FETCHING state to load the next chunk of data.
 
         Note that it is ok to associate a different buffer or buffer-size
         with the request by calling sfetch_bind_buffer() in the response-callback.
@@ -517,18 +514,24 @@
 
         A request will transition into the FAILED state in the following situations:
 
-            - during OPENING if the file doesn't exist or couldn't be
-              opened for other reasons
-            - during FETCHING when no buffer is currently associated
-              with the request
-            - during FETCHING if less than the expected number of bytes
-              could be read
+            - if the file doesn't exist or couldn't be opened for other
+              reasons (SFETCH_ERROR_FILE_NOT_FOUND)
+            - if no buffer is associated with the request in the FETCHING state
+              (SFETCH_ERROR_NO_BUFFER)
+            - if the provided buffer is too small to hold the entire file
+              (if request.chunk_size == 0), or the (potentially decompressed)
+              partial data chunk (SFETCH_ERROR_BUFFER_TOO_SMALL)
+            - if less bytes could be read from the file then expected
+              (SFETCH_ERROR_UNEXPECTED_EOF)
             - if a request has been cancelled via sfetch_cancel()
+              (SFETCH_ERROR_CANCELLED)
 
-        The response callback will be called once after a request goes
-        into the FAILED state, with the response->finished flag set to
-        true. This gives the user-code a chance to cleanup any resources
-        associated with the request.
+        The response callback will be called once after a request goes into
+        the FAILED state, with the 'response->finished' and
+        'response->failed' flags set to true.
+
+        This gives the user-code a chance to cleanup any resources associated
+        with the request.
 
         To check for the failed state in the response callback:
 
@@ -539,7 +542,10 @@
                 // or you can do a catch-all check via the finished-flag:
                 if (response->finished) {
                     if (response->failed) {
-                        ...
+                        // if more detailed error handling is needed:
+                        switch (response->error_code) {
+                            ...
+                        }
                     }
                 }
             }
@@ -1022,7 +1028,8 @@ typedef enum {
     SFETCH_ERROR_NO_BUFFER,
     SFETCH_ERROR_BUFFER_TOO_SMALL,
     SFETCH_ERROR_UNEXPECTED_EOF,
-    SFETCH_ERROR_INVALID_HTTP_STATUS
+    SFETCH_ERROR_INVALID_HTTP_STATUS,
+    SFETCH_ERROR_CANCELLED
 } sfetch_error_t;
 
 /* the response struct passed to the response callback */
@@ -2395,7 +2402,12 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         /* transfer output params from thread- to user-data */
         item->user.fetched_offset = item->thread.fetched_offset;
         item->user.fetched_size = item->thread.fetched_size;
-        item->user.error_code = item->thread.error_code;
+        if (item->user.cancel) {
+            item->user.error_code = SFETCH_ERROR_CANCELLED;
+        }
+        else {
+            item->user.error_code = item->thread.error_code;
+        }
         if (item->thread.finished) {
             item->user.finished = true;
         }
