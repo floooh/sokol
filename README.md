@@ -13,7 +13,7 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
-- ~~**sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem~~ (see the [What's New section](#updates))
+- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
 
 WebAssembly is a 'first-class citizen', one important motivation for the
@@ -298,16 +298,21 @@ Simple C99 example with a dynamically allocated buffer:
 
 static void response_callback(const sfetch_response*);
 
+#define MAX_FILE_SIZE (1024*1024)
+static uint8_t buffer[MAX_FILE_SIZE];
+
 // application init
 static void init(void) {
     ...
     // setup sokol-fetch with default config:
     sfetch_setup(&(sfetch_desc_t){0});
 
-    // start loading a file, provide at least a path and response callback:
+    // start loading a file into a statically allocated buffer:
     sfetch_send(&(sfetch_request_t){
         .path = "hello_world.txt",
         .callback = response_callback
+        .buffer_ptr = buffer,
+        .buffer_size = sizeof(buffer)
     });
 }
 
@@ -321,25 +326,20 @@ static void frame(void) {
 
 // the response callback is where the interesting stuff happens:
 static void reponse_callback(const sfetch_response_t* response) {
-    if (response->opened) {
-        // file size is known here, bind a buffer to load data into
-        void* buf_ptr = malloc(response->content_size);
-        sfetch_bind_buffer(response->handle, buf_ptr, response->content_size);
-    }
-    else if (response->fetched) {
+    if (response->fetched) {
         // data has been loaded into the provided buffer, do something
         // with the data...
         const void* data = response->buffer_ptr;
         uint64_t data_size = response->fetched_size;
     }
     // the finished flag is set both on success and failure
-    if (response->finished) {
-        if (response->failed) {
-            // oops, something went wrong
+    if (response->failed) {
+        // oops, something went wrong
+        switch (response->error_code) {
+            SFETCH_ERROR_FILE_NOT_FOUND: ...
+            SFETCH_ERROR_BUFFER_TOO_SMALL: ...
+            ...
         }
-        // in any case, free the allocated buffer (NOTE that free can be
-        // called with a nullptr, a request might fail even before the OPENED state
-        free(sfetch_unbind_buffer(response->handle));
     }
 }
 

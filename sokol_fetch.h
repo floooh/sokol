@@ -343,9 +343,6 @@
     function *must* be called from inside the response-callback, and there
     must not already be another buffer bound.
 
-    Search below for BUFFER MANAGEMENT for more detailed information on
-    different buffer-management strategies.
-
     void* sfetch_unbind_buffer(sfetch_handle_t request)
     ---------------------------------------------------
     This removes the current buffer binding from the request and returns
@@ -378,7 +375,6 @@
                 free(buf_ptr);
             }
         }
-
 
     sfetch_desc_t sfetch_desc(void)
     -------------------------------
@@ -579,9 +575,46 @@
                 }
             }
 
+
     CHUNK SIZE AND HTTP COMPRESSION
     ===============================
-    [TODO]
+    TL;DR: for streaming scenarios, the provided chunk-size must be smaller
+    than the provided buffer-size because the web server may decide to
+    serve the data compressed and the chunk-size must be given in 'compressed
+    bytes' while the buffer receives 'uncompressed bytes'. It's not possible
+    in HTTP to query the uncompressed size for a compressed download until
+    that download has finished.
+
+    With vanilla HTTP, it is not possible to query the actual size of a file
+    without downloading the entire file first (the Content-Length response
+    header only provides the compressed size). Furthermore, for HTTP
+    range-requests, the range is given on the compressed data, not the
+    uncompressed data. So if the web server decides to server the data
+    compressed, the content-length and range-request parameters don't
+    correspond to the uncompressed data that's arriving in the sokol-fetch
+    buffers, and there's no way from JS or WASM to either force uncompressed
+    downloads (e.g. by setting the Accept-Encoding field), or access the
+    compressed data.
+
+    This has some implications for sokol_fetch.h, most notably that buffers
+    can't be provided in the exactly right size, because that size can't
+    be queried from HTTP before the data is actually downloaded.
+
+    When downloading whole files at once, it is basically expected that you
+    know the maximum files size upfront through other means (for instance
+    through a separate meta-data-file which contains the file sizes and
+    other meta-data for each file that needs to be loaded).
+
+    For streaming downloads the situation is a bit more complicated. These
+    use HTTP range-requests, and those ranges are defined on the (potentially)
+    compressed data which the JS/WASM side doesn't have access to. However,
+    the JS/WASM side only ever sees the uncompressed data, and it's not possible
+    to query the uncompressed size of a range request before that range request
+    has finished.
+
+    If the provided buffer is too small to contain the uncompressed data,
+    the request will fail with error code SFETCH_ERROR_BUFFER_TOO_SMALL.
+
 
     CHANNELS AND LANES
     ==================
@@ -638,208 +671,11 @@
     and associate it with the request like this:
 
         void response_callback(const sfetch_response_t* response) {
-            if (response->opening) {
+            if (response->dispatched) {
                 void* ptr = buffer[response->channel][response->lane];
                 sfetch_bind_buffer(response->handle, ptr, MAX_FILE_SIZE);
             }
             ...
-        }
-
-
-    BUFFER MANAGEMENT
-    =================
-    Some additional suggested buffer management strategies:
-
-    Dynamic allocation per request
-    ------------------------------
-    This might be an option if you don't know a maximum file size upfront,
-    or don't have to load a lot of files (I wouldn't recommend dynamic
-    allocation per request for loading hundreds or thousands of files):
-
-    (1) don't provide a buffer in the request
-
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_file.txt",
-            .callback = response_callback
-        });
-
-    (2) in the response-callback, allocate a buffer big enough for the entire
-        file when the request is in the OPENED state, and free it when the
-        finished-flag is set (this makes sure that the buffer is freed both on
-        success or failure):
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->opened) {
-                // allocate a buffer with the file's content-size
-                void* buf = malloc(response->content_size);
-                sfetch_bind_buffer(response->handle, buf, response->content_size);
-            }
-            else if (response->fetched) {
-                // file-content has been loaded, do something with the
-                // loaded file data...
-                const void* ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-
-            // if the request is finished (no matter if success or failed),
-            // free the buffer
-            if (response->finished) {
-                if (response->buffer_ptr) {
-                    free(response->buffer_ptr);
-                }
-            }
-        }
-
-    Streaming huge files into a small buffer
-    ----------------------------------------
-    If you want to load a huge file, it may be best to load and process
-    the data in small chunks. The response-callback will be called whenever
-    the buffer has been completely filled with data, and maybe one last time
-    with a partially filled buffer.
-
-    In this example I'm using a dynamically allocated buffer which is freed
-    when the request is finished:
-
-    (1) Allocate a buffer that's smaller than the file size, and provide it
-        in the request:
-
-        const int buf_size = 64 * 1024;
-        void* buf_ptr = malloc(buf_ptr);
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_huge_file.mpg",
-            .callback = response_callback,
-            .buffer_ptr = buf_ptr,
-            .buffer_size = buf_size
-        });
-
-    (2) In the response callback, note that there's no handling for the
-        OPENED state. If a buffer was provided upfront, the OPENED state
-        will be skipped, and the first state the callback will hear from
-        is the FETCHED state (unless something went wrong, then it
-        would be FAILED).
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->fetched) {
-                // process the next chunk of data:
-                const void* ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-
-            // don't forget to free the allocated buffer when request is finished:
-            if (response->finished) {
-                free(response->buffer_ptr);
-            }
-        }
-
-    Using statically allocated buffers
-    ----------------------------------
-    Sometimes it's best to not deal with dynamic memory allocation at all
-    and use static buffers, you just need to make sure that requests
-    from different channels and lanes don't scribble over the same memory.
-
-    This is best done by providing a separate buffer for each channel/lane
-    combination:
-
-        #define NUM_CHANNELS (4)
-        #define NUM_LANES (8)
-        #define MAX_FILE_SIZE (1000000)
-        static uint8_t buf[NUM_CHANNELS][NUM_LANES][MAX_FILE_SIZE]
-        ...
-
-        // setup sokol-fetch with the right number of channels and lanes:
-        sfetch_setup(&(sfetch_desc_t){
-            .num_channels = NUM_CHANNELS,
-            .num_lanes = NUM_LANES
-        };
-        ...
-
-        // we can't provide the buffer upfront in sfetch_send(), because
-        // we don't know the lane where the request will land on, so binding
-        // the buffer needs to happen in the response callback:
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->opened) {
-                // select buffer by channel and lane:
-                void* buf_ptr = buf[response->channel][response->lane];
-                sfetch_bind_buffer(response->handle, buf_ptr, MAX_FILE_SIZE);
-            }
-            else if (response->fetched) {
-                // process the data as usual...
-                const void* buf_ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-            // since the buffer is statically allocated, we don't need to
-            // care about freeing any memory...
-        }
-
-
-    Loading a file header first
-    ---------------------------
-    Let's say you want to load a file format with a fixed-size header block
-    first, then create some resource which has its own memory buffer from
-    the header attributes and finally load the rest of the file data directly
-    into the resource's own memory chunk.
-
-    I'm using per-request dynamically allocated memory again for demonstration
-    purposes, but memory management can be quite tricky in this scenario,
-    especially for the failure case, so I would *really* recommand using
-    a static-buffer scenario here as described above.
-
-    (1) send the request with a buffer of the size of the file header, the
-        response callback will then be called as soon as the header is loaded:
-
-        void* buf_ptr = malloc(sizeof(image_header_t));
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_image_file.img",
-            .callback = response_callback,
-            .buffer_ptr = buf_ptr,
-            .buffer_size = sizeof(image_header_t)
-        });
-
-    (2) in the response callback, use the content_offset member to
-        differentiate between the image header and actual image data:
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->fetched) {
-                if (response->content_offset == 0) {
-                    // this is the file header...
-                    assert(sizeof(image_header_t) == response->fetched_size);
-                    const image_header_t* img_hdr = (const image_header_t*) response->buffer_ptr;
-
-                    // create an image resource...
-                    image_t img = image_create(img_hdr);
-
-                    // re-bind the fetch buffer so that the remaining
-                    // data is loaded directly into the image's pixel buffer,
-                    // NOTE the sequence of unbinding and freeing the old
-                    // image-header buffer (since this was dynamically allocated)
-                    // and then rebinding the image's pixel buffer:
-                    void* header_buffer = sfetch_unbind_buffer(response->handle);
-                    free(header_buffer);
-                    void* pixel_buffer = image_get_pixel_buffer(img);
-                    uint64_t pixel_buffer_size = image_get_pixel_buffer_size(img);
-                    sfetch_bind_buffer(response->handle, pixel_buffer, pixel_buffer_size);
-                }
-                else if (response->content_offset == sizeof(image_header_t)) {
-                    // this is where the actual pixel data was loaded
-                    // into the image's pixel buffer, we don't need to do
-                    // anything here...
-                }
-            }
-            // we still need to handle the failure-case when something went
-            // wrong while data was loaded into the dynamically allocated
-            // buffer for the image-header... in that case the memory
-            // allocated for the header must be freed:
-            if (response->failed) {
-                // ...is this the header data block? (content_offset is 0)
-                void* buf_ptr = sfetch_unbind_buffer(response.handle);
-                if (buf_ptr && (response->content_offset == 0)) {
-                    free(buf_ptr);
-                }
-            }
         }
 
 
@@ -959,8 +795,6 @@
     - Pluggable request handlers to load data from other "sources"
       (especially HTTP downloads on native platforms via e.g. libcurl
       would be useful)
-    - Allow control over the file offset where data is read from? This
-      would need a "manual close" function though.
     - I'm currently not happy how the user-data block is handled, this
       should getting and updating the user-data should be wrapped by
       API functions (similar to bind/unbind buffer)
