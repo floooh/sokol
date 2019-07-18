@@ -4,18 +4,6 @@
 
     Project URL: https://github.com/floooh/sokol
 
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    DON'T USE THIS UNTIL FURTHER NOTICE
-
-    - Don't use sokol_fetch.h for now, the current version assumes that
-      it is possible to obtain the content size of a file from the
-      HTTP server without downloading the entire file first. Turns out
-      that's not possible with vanilla HTTP when the web server serves
-      files compressed (in that case the Content-Length is the _compressed_
-      size, yet JS/WASM only has access to the uncompressed data).
-      Long story short, I need to go back to the drawing board :)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     Do this:
         #define SOKOL_IMPL
     before you include this file in *one* C or C++ file to create the
@@ -89,7 +77,8 @@
 
         sfetch_setup(&(sfetch_desc_t){ 0 });
 
-    (2) send a fetch-request to load a file from the current directory:
+    (2) send a fetch-request to load a file from the current directory
+        into a buffer big enough to hold the entire file content:
 
         static uint8_t buf[MAX_FILE_SIZE];
 
@@ -113,7 +102,7 @@
             }
             if (response->finished) {
                 // the 'finished'-flag is the catch-all flag for when the request
-                // is finished, no matter if loading was successful of failed,
+                // is finished, no matter if loading was successful or failed,
                 // so any cleanup-work should happen here...
                 ...
                 if (response->failed) {
@@ -129,9 +118,7 @@
         sfetch_shutdown()
 
     There's many other loading-scenarios, for instance one doesn't have to
-    provide a buffer upfront, but instead inspect the file's content-size
-    in the response callback, allocate a matching buffer and 'bind' that
-    to the request.
+    provide a buffer upfront, this can also happen in the response callback.
 
     Or it's possible to stream huge files into small fixed-size buffer,
     complete with pausing and continuing the download.
@@ -237,18 +224,23 @@
             to each other. Search below for CHANNELS AND LANES for more
             information. The default channel is 0.
 
+        - chunk_size (uint32_t, optional)
+            The chunk_size member is used for streaming data incrementally
+            in small chunks. After 'chunk_size' bytes have been loaded into
+            to the streaming buffer, the response callback will be called
+            with the buffer containing the fetched data for the current chunk.
+            If chunk_size is 0 (the default), than the whole file will be loaded.
+            Please search below for CHUNK SIZE AND HTTP COMPRESSION for
+            important information how streaming works if the web server
+            is serving compressed data.
+
         - buffer_ptr, buffer_size (void*, uint64_t, optional)
-            This is a pointer/size pair describing a chunk of memory where
-            data will be loaded into. Providing a buffer "upfront" in
-            sfetch_request() is optional, and makes sense in the following
-            two situations:
-                (1) a maximum file size is known for the request, so that
-                    is guaranteed that the entire file content will fit
-                    into the buffer
-                (2) ...or the file should be streamed in small chunks, with the
-                    response-callback being called after each chunk to
-                    process the partial file data
-            Search below for BUFFER MANAGEMENT for more detailed information.
+            This is a optional pointer/size pair describing a chunk of memory where
+            data will be loaded into (if no buffer is provided upfront, this
+            must happen in the response callback). If a buffer is provided,
+            it must be big enough to either hold the entire file (if chunk_size
+            is zero), or the *uncompressed* data for one downloaded chunk
+            (if chunk_size is > 0).
 
         - user_data_ptr, user_data_size (const void*, uint32_t, both optional)
             user_data_ptr and user_data_size describe an optional POD (plain-old-data)
@@ -287,10 +279,16 @@
     sfetch_dowork() roughly performs the following work:
 
         - any new requests that have been sent with sfetch_send() since the
-        last call to sfetch_dowork() will be dispatched to their IO channels,
-        permitting that any lanes on that specific channel are available (if
-        all lanes are occuped, incoming requests are queued until a lane
-        becomes available)
+        last call to sfetch_dowork() will be dispatched to their IO channels
+        and assigned a free lane. If all lanes on that channel are occupied
+        by requests 'in flight', incoming requests must wait until
+        a lane becomes avaible
+
+        - for all new requests which have been enquened on a channel which
+        don't already have a buffer assigned the response callback will be
+        called with (response->dispatched == true) so that the response
+        callback can inspect the dynamically assigned lane and bind a buffer
+        to the request (search below for CHANNELS AND LANE for more info)
 
         - a state transition from "user side" to "IO thread side" happens for
         each new request that has been dispatched to a channel.
@@ -302,7 +300,8 @@
 
         - for all requests which have finished their current IO operation a
         state transition from "IO thread side" to "user side" happens,
-        and the response callback is called
+        and the response callback is called so that the fetched data
+        can be processed.
 
         - requests which are completely finished (either because the entire
         file content has been loaded, or they are in the FAILED state) are
@@ -310,7 +309,9 @@
         memory is freed)
 
         - requests which are not yet finished are fed back into the
-        'incoming' queue of their channel, and the cycle starts again
+        'incoming' queue of their channel, and the cycle starts again, this
+        only happens for requests which perform data streaming (not load
+        the entire file at once).
 
     void sfetch_cancel(sfetch_handle_t request)
     -------------------------------------------
@@ -341,9 +342,6 @@
     This "binds" a new buffer (pointer/size pair) to an active request. The
     function *must* be called from inside the response-callback, and there
     must not already be another buffer bound.
-
-    Search below for BUFFER MANAGEMENT for more detailed information on
-    different buffer-management strategies.
 
     void* sfetch_unbind_buffer(sfetch_handle_t request)
     ---------------------------------------------------
@@ -377,7 +375,6 @@
                 free(buf_ptr);
             }
         }
-
 
     sfetch_desc_t sfetch_desc(void)
     -------------------------------
@@ -414,69 +411,66 @@
 
         The request has been allocated in sfetch_send() and is
         waiting to be dispatched into its IO channel. When this
-        happens, the request will transition into the OPENING state.
+        happens, the request will transition into the DISPATCHED state.
 
-    OPENING (IO thread)
+    DISPATCHED (IO thread)
 
-        The request is currently being opened on the IO thread. After the
-        file has been opened, its file-size will be obtained.
+        The request has been dispatched into its IO channel, and a
+        lane has been assigned to the request.
 
         If a buffer was provided in sfetch_send() the request will
         immediately transition into the FETCHING state and start loading
         data into the buffer.
 
-        If no buffer was provided in sfetch_send(), the request will
-        transition into the OPENED state.
+        If no buffer was provided in sfetch_send(), the response
+        callback will be called with (response->dispatched == true),
+        so that the response callback can bind a buffer to the
+        request. Binding the buffer in the response callback makes
+        sense if the buffer isn't dynamically allocated, but instead
+        a pre-allocated buffer must be selected from the request's
+        channel and lane.
+
+        Note that it isn't possible to get a file size in the response callback
+        which would help with allocating a buffer of the right size, this is
+        because it isn't possible in HTTP to query the file size before the
+        entire file is downloaded (...when the web server serves files compressed).
 
         If opening the file failed, the request will transition into
-        the FAILED state.
-
-    OPENED (user thread)
-
-        A request will go into the OPENED state after its file has been
-        opened successfully, but no buffer was provided to load data
-        into.
-
-        In the OPENED state, the response-callback will be called so that the
-        user-code can inspect the file-size and provide a matching buffer for
-        the request by calling sfetch_bind_buffer().
-
-        After the response callback has been called, and a buffer was provided,
-        the request will transition into the FETCHING state.
-
-        If no buffer was provided in the response callback, the request
-        will transition into the FAILED state.
-
-        To check in the response-callback if a request is in OPENED state:
-
-            void response_callback(const sfetch_response_t* response) {
-                if (response->opened) {
-                    // request is in OPENED state, can now inspect the
-                    // file's content-size:
-                    uint64_t size = response->content_size;
-                }
-            }
+        the FAILED state with the error code SFETCH_ERROR_FILE_NOT_FOUND.
 
     FETCHING (IO thread)
 
         While a request is in the FETCHING state, data will be loaded into
         the user-provided buffer.
 
-        If the buffer is full, or the entire file content has been loaded,
-        the request will transition into the FETCHED state.
+        If no buffer was provided, the request will go into the FAILED
+        state with the error code SFETCH_ERROR_NO_BUFFER.
 
-        If something went wrong during loading (less bytes could be
-        read than expected), the request will transition into the FAILED
-        state.
+        If a buffer was provided, but it is too small to contain the
+        fetched data, the request will go into the FAILED state with
+        error code SFETCH_ERROR_BUFFER_TOO_SMALL.
+
+        If less data can be read from the file than expected, the request
+        will go into the FAILED state with error code SFETCH_ERROR_UNEXPECTED_EOF.
+
+        If loading data into the provided buffer works as expected, the
+        request will go into the FETCHED state.
 
     FETCHED (user thread)
 
-        The request goes into the FETCHED state either when the request's
-        buffer has been completely filled with loaded data, or all file
-        data has been loaded.
+        The request goes into the FETCHED state either when the entire file
+        has been loaded into the provided buffer (when request.chunk_size == 0),
+        or a chunk has been loaded (and optionally decompressed) into the
+        buffer (when request.chunk_size > 0).
 
         The response callback will be called so that the user-code can
-        process the loaded data.
+        process the loaded data using the following sfetch_response_t struct members:
+
+            - fetched_size: the number of bytes in the provided buffer
+            - buffer_ptr: pointer to the start of fetched data
+            - fetched_offset: the byte offset of the loaded data chunk in the
+              overall file (this is only set to a non-zero value in a streaming
+              scenario)
 
         Once all file data has been loaded, the 'finished' flag will be set
         in the response callback's sfetch_response_t argument.
@@ -485,9 +479,9 @@
         (response.finished flag is set) the request has reached its end-of-life
         and will recycled.
 
-        Otherwise, if there's still data to load (because the buffer size
-        is smaller than the file's content-size), the request will switch
-        back to the FETCHING state to load the next chunk of data.
+        Otherwise, if there's still data to load (because streaming was
+        requested by providing a non-zero request.chunk_size), the request
+        will switch back to the FETCHING state to load the next chunk of data.
 
         Note that it is ok to associate a different buffer or buffer-size
         with the request by calling sfetch_bind_buffer() in the response-callback.
@@ -516,18 +510,24 @@
 
         A request will transition into the FAILED state in the following situations:
 
-            - during OPENING if the file doesn't exist or couldn't be
-              opened for other reasons
-            - during FETCHING when no buffer is currently associated
-              with the request
-            - during FETCHING if less than the expected number of bytes
-              could be read
+            - if the file doesn't exist or couldn't be opened for other
+              reasons (SFETCH_ERROR_FILE_NOT_FOUND)
+            - if no buffer is associated with the request in the FETCHING state
+              (SFETCH_ERROR_NO_BUFFER)
+            - if the provided buffer is too small to hold the entire file
+              (if request.chunk_size == 0), or the (potentially decompressed)
+              partial data chunk (SFETCH_ERROR_BUFFER_TOO_SMALL)
+            - if less bytes could be read from the file then expected
+              (SFETCH_ERROR_UNEXPECTED_EOF)
             - if a request has been cancelled via sfetch_cancel()
+              (SFETCH_ERROR_CANCELLED)
 
-        The response callback will be called once after a request goes
-        into the FAILED state, with the response->finished flag set to
-        true. This gives the user-code a chance to cleanup any resources
-        associated with the request.
+        The response callback will be called once after a request goes into
+        the FAILED state, with the 'response->finished' and
+        'response->failed' flags set to true.
+
+        This gives the user-code a chance to cleanup any resources associated
+        with the request.
 
         To check for the failed state in the response callback:
 
@@ -538,7 +538,10 @@
                 // or you can do a catch-all check via the finished-flag:
                 if (response->finished) {
                     if (response->failed) {
-                        ...
+                        // if more detailed error handling is needed:
+                        switch (response->error_code) {
+                            ...
+                        }
                     }
                 }
             }
@@ -571,6 +574,46 @@
                     }
                 }
             }
+
+
+    CHUNK SIZE AND HTTP COMPRESSION
+    ===============================
+    TL;DR: for streaming scenarios, the provided chunk-size must be smaller
+    than the provided buffer-size because the web server may decide to
+    serve the data compressed and the chunk-size must be given in 'compressed
+    bytes' while the buffer receives 'uncompressed bytes'. It's not possible
+    in HTTP to query the uncompressed size for a compressed download until
+    that download has finished.
+
+    With vanilla HTTP, it is not possible to query the actual size of a file
+    without downloading the entire file first (the Content-Length response
+    header only provides the compressed size). Furthermore, for HTTP
+    range-requests, the range is given on the compressed data, not the
+    uncompressed data. So if the web server decides to server the data
+    compressed, the content-length and range-request parameters don't
+    correspond to the uncompressed data that's arriving in the sokol-fetch
+    buffers, and there's no way from JS or WASM to either force uncompressed
+    downloads (e.g. by setting the Accept-Encoding field), or access the
+    compressed data.
+
+    This has some implications for sokol_fetch.h, most notably that buffers
+    can't be provided in the exactly right size, because that size can't
+    be queried from HTTP before the data is actually downloaded.
+
+    When downloading whole files at once, it is basically expected that you
+    know the maximum files size upfront through other means (for instance
+    through a separate meta-data-file which contains the file sizes and
+    other meta-data for each file that needs to be loaded).
+
+    For streaming downloads the situation is a bit more complicated. These
+    use HTTP range-requests, and those ranges are defined on the (potentially)
+    compressed data which the JS/WASM side doesn't have access to. However,
+    the JS/WASM side only ever sees the uncompressed data, and it's not possible
+    to query the uncompressed size of a range request before that range request
+    has finished.
+
+    If the provided buffer is too small to contain the uncompressed data,
+    the request will fail with error code SFETCH_ERROR_BUFFER_TOO_SMALL.
 
 
     CHANNELS AND LANES
@@ -628,208 +671,11 @@
     and associate it with the request like this:
 
         void response_callback(const sfetch_response_t* response) {
-            if (response->opening) {
+            if (response->dispatched) {
                 void* ptr = buffer[response->channel][response->lane];
                 sfetch_bind_buffer(response->handle, ptr, MAX_FILE_SIZE);
             }
             ...
-        }
-
-
-    BUFFER MANAGEMENT
-    =================
-    Some additional suggested buffer management strategies:
-
-    Dynamic allocation per request
-    ------------------------------
-    This might be an option if you don't know a maximum file size upfront,
-    or don't have to load a lot of files (I wouldn't recommend dynamic
-    allocation per request for loading hundreds or thousands of files):
-
-    (1) don't provide a buffer in the request
-
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_file.txt",
-            .callback = response_callback
-        });
-
-    (2) in the response-callback, allocate a buffer big enough for the entire
-        file when the request is in the OPENED state, and free it when the
-        finished-flag is set (this makes sure that the buffer is freed both on
-        success or failure):
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->opened) {
-                // allocate a buffer with the file's content-size
-                void* buf = malloc(response->content_size);
-                sfetch_bind_buffer(response->handle, buf, response->content_size);
-            }
-            else if (response->fetched) {
-                // file-content has been loaded, do something with the
-                // loaded file data...
-                const void* ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-
-            // if the request is finished (no matter if success or failed),
-            // free the buffer
-            if (response->finished) {
-                if (response->buffer_ptr) {
-                    free(response->buffer_ptr);
-                }
-            }
-        }
-
-    Streaming huge files into a small buffer
-    ----------------------------------------
-    If you want to load a huge file, it may be best to load and process
-    the data in small chunks. The response-callback will be called whenever
-    the buffer has been completely filled with data, and maybe one last time
-    with a partially filled buffer.
-
-    In this example I'm using a dynamically allocated buffer which is freed
-    when the request is finished:
-
-    (1) Allocate a buffer that's smaller than the file size, and provide it
-        in the request:
-
-        const int buf_size = 64 * 1024;
-        void* buf_ptr = malloc(buf_ptr);
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_huge_file.mpg",
-            .callback = response_callback,
-            .buffer_ptr = buf_ptr,
-            .buffer_size = buf_size
-        });
-
-    (2) In the response callback, note that there's no handling for the
-        OPENED state. If a buffer was provided upfront, the OPENED state
-        will be skipped, and the first state the callback will hear from
-        is the FETCHED state (unless something went wrong, then it
-        would be FAILED).
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->fetched) {
-                // process the next chunk of data:
-                const void* ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-
-            // don't forget to free the allocated buffer when request is finished:
-            if (response->finished) {
-                free(response->buffer_ptr);
-            }
-        }
-
-    Using statically allocated buffers
-    ----------------------------------
-    Sometimes it's best to not deal with dynamic memory allocation at all
-    and use static buffers, you just need to make sure that requests
-    from different channels and lanes don't scribble over the same memory.
-
-    This is best done by providing a separate buffer for each channel/lane
-    combination:
-
-        #define NUM_CHANNELS (4)
-        #define NUM_LANES (8)
-        #define MAX_FILE_SIZE (1000000)
-        static uint8_t buf[NUM_CHANNELS][NUM_LANES][MAX_FILE_SIZE]
-        ...
-
-        // setup sokol-fetch with the right number of channels and lanes:
-        sfetch_setup(&(sfetch_desc_t){
-            .num_channels = NUM_CHANNELS,
-            .num_lanes = NUM_LANES
-        };
-        ...
-
-        // we can't provide the buffer upfront in sfetch_send(), because
-        // we don't know the lane where the request will land on, so binding
-        // the buffer needs to happen in the response callback:
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->opened) {
-                // select buffer by channel and lane:
-                void* buf_ptr = buf[response->channel][response->lane];
-                sfetch_bind_buffer(response->handle, buf_ptr, MAX_FILE_SIZE);
-            }
-            else if (response->fetched) {
-                // process the data as usual...
-                const void* buf_ptr = response->buffer_ptr;
-                uint64_t num_bytes = response->fetched_size;
-                ...
-            }
-            // since the buffer is statically allocated, we don't need to
-            // care about freeing any memory...
-        }
-
-
-    Loading a file header first
-    ---------------------------
-    Let's say you want to load a file format with a fixed-size header block
-    first, then create some resource which has its own memory buffer from
-    the header attributes and finally load the rest of the file data directly
-    into the resource's own memory chunk.
-
-    I'm using per-request dynamically allocated memory again for demonstration
-    purposes, but memory management can be quite tricky in this scenario,
-    especially for the failure case, so I would *really* recommand using
-    a static-buffer scenario here as described above.
-
-    (1) send the request with a buffer of the size of the file header, the
-        response callback will then be called as soon as the header is loaded:
-
-        void* buf_ptr = malloc(sizeof(image_header_t));
-        sfetch_send(&(sfetch_request_t){
-            .path = "my_image_file.img",
-            .callback = response_callback,
-            .buffer_ptr = buf_ptr,
-            .buffer_size = sizeof(image_header_t)
-        });
-
-    (2) in the response callback, use the content_offset member to
-        differentiate between the image header and actual image data:
-
-        void response_callback(const sfetch_response_t* response) {
-            if (response->fetched) {
-                if (response->content_offset == 0) {
-                    // this is the file header...
-                    assert(sizeof(image_header_t) == response->fetched_size);
-                    const image_header_t* img_hdr = (const image_header_t*) response->buffer_ptr;
-
-                    // create an image resource...
-                    image_t img = image_create(img_hdr);
-
-                    // re-bind the fetch buffer so that the remaining
-                    // data is loaded directly into the image's pixel buffer,
-                    // NOTE the sequence of unbinding and freeing the old
-                    // image-header buffer (since this was dynamically allocated)
-                    // and then rebinding the image's pixel buffer:
-                    void* header_buffer = sfetch_unbind_buffer(response->handle);
-                    free(header_buffer);
-                    void* pixel_buffer = image_get_pixel_buffer(img);
-                    uint64_t pixel_buffer_size = image_get_pixel_buffer_size(img);
-                    sfetch_bind_buffer(response->handle, pixel_buffer, pixel_buffer_size);
-                }
-                else if (response->content_offset == sizeof(image_header_t)) {
-                    // this is where the actual pixel data was loaded
-                    // into the image's pixel buffer, we don't need to do
-                    // anything here...
-                }
-            }
-            // we still need to handle the failure-case when something went
-            // wrong while data was loaded into the dynamically allocated
-            // buffer for the image-header... in that case the memory
-            // allocated for the header must be freed:
-            if (response->failed) {
-                // ...is this the header data block? (content_offset is 0)
-                void* buf_ptr = sfetch_unbind_buffer(response.handle);
-                if (buf_ptr && (response->content_offset == 0)) {
-                    free(buf_ptr);
-                }
-            }
         }
 
 
@@ -949,8 +795,6 @@
     - Pluggable request handlers to load data from other "sources"
       (especially HTTP downloads on native platforms via e.g. libcurl
       would be useful)
-    - Allow control over the file offset where data is read from? This
-      would need a "manual close" function though.
     - I'm currently not happy how the user-data block is handled, this
       should getting and updating the user-data should be wrapped by
       API functions (similar to bind/unbind buffer)
@@ -1011,24 +855,35 @@ typedef struct sfetch_desc_t {
 /* a request handle to identify an active fetch request, returned by sfetch_send() */
 typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
 
+/* error codes */
+typedef enum {
+    SFETCH_ERROR_NO_ERROR,
+    SFETCH_ERROR_FILE_NOT_FOUND,
+    SFETCH_ERROR_NO_BUFFER,
+    SFETCH_ERROR_BUFFER_TOO_SMALL,
+    SFETCH_ERROR_UNEXPECTED_EOF,
+    SFETCH_ERROR_INVALID_HTTP_STATUS,
+    SFETCH_ERROR_CANCELLED
+} sfetch_error_t;
+
 /* the response struct passed to the response callback */
 typedef struct sfetch_response_t {
     sfetch_handle_t handle;         /* request handle this response belongs to */
-    bool opened;                    /* true when request is in OPENED state (content_size is available) */
+    bool dispatched;                /* true when request is in DISPATCHED state (lane has been assigned) */
     bool fetched;                   /* true when request is in FETCHED state (fetched data is available) */
     bool paused;                    /* request is currently in paused state */
     bool finished;                  /* this is the last response for this request */
     bool failed;                    /* request has failed (always set together with 'finished') */
     bool cancelled;                 /* request was cancelled (always set together with 'finished') */
+    sfetch_error_t error_code;      /* more detailed error code when failed is true */
     uint32_t channel;               /* the channel which processes this request */
     uint32_t lane;                  /* the lane this request occupies on its channel */
     const char* path;               /* the original filesystem path of the request (FIXME: this is unsafe, wrap in API call?) */
     void* user_data;                /* pointer to read/write user-data area (FIXME: this is unsafe, wrap in API call?) */
-    uint64_t content_size;          /* overall file size in bytes */
-    uint64_t content_offset;        /* current offset of fetched data chunk in file */
-    uint64_t fetched_size;          /* size of fetched data chunk in number of bytes */
+    uint32_t fetched_offset;        /* current offset of fetched data chunk in file data */
+    uint32_t fetched_size;          /* size of fetched data chunk in number of bytes */
     void* buffer_ptr;               /* pointer to buffer with fetched data */
-    uint64_t buffer_size;           /* overall buffer size (may be >= than fetched_size!) */
+    uint32_t buffer_size;           /* overall buffer size (may be >= than fetched_size!) */
 } sfetch_response_t;
 
 /* response callback function signature */
@@ -1041,7 +896,8 @@ typedef struct sfetch_request_t {
     const char* path;               /* filesystem path or HTTP URL (required) */
     sfetch_callback_t callback;     /* response callback function pointer (required) */
     void* buffer_ptr;               /* buffer pointer where data will be loaded into (optional) */
-    uint64_t buffer_size;           /* buffer size in number of bytes (optional) */
+    uint32_t buffer_size;           /* buffer size in number of bytes (optional) */
+    uint32_t chunk_size;            /* number of bytes to load per stream-block (optional) */
     const void* user_data_ptr;      /* pointer to a POD user-data block which will be memcpy'd(!) (optional) */
     uint32_t user_data_size;        /* size of user-data block (optional) */
     uint32_t _end_canary;
@@ -1068,7 +924,7 @@ SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
 SOKOL_API_DECL void sfetch_dowork(void);
 
 /* bind a data buffer to a request (request must not currently have a buffer bound, must be called from response callback */
-SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size);
+SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size);
 /* clear the 'buffer binding' of a request, returns previous buffer pointer (can be 0), must be called from response callback */
 SOKOL_API_DECL void* sfetch_unbind_buffer(sfetch_handle_t h);
 /* cancel a request that's in flight (will call response callback with .cancelled + .finished) */
@@ -1162,7 +1018,7 @@ typedef struct _sfetch_path_t {
 
 typedef struct _sfetch_buffer_t {
     uint8_t* ptr;
-    uint64_t size;
+    uint32_t size;
 } _sfetch_buffer_t;
 
 /* a thread with incoming and outgoing message queue syncing */
@@ -1207,9 +1063,9 @@ typedef struct {
     bool cont;                  /* switch item back to FETCHING if true */
     bool cancel;                /* cancel the request, switch into FAILED state */
     /* transfer IO => user thread */
-    uint64_t content_size;      /* overall file size */
-    uint64_t content_offset;    /* number of bytes fetched so far */
-    uint64_t fetched_size;      /* size of last fetched chunk */
+    uint32_t fetched_offset;    /* number of bytes fetched so far */
+    uint32_t fetched_size;      /* size of last fetched chunk */
+    sfetch_error_t error_code;
     bool finished;
     /* user thread only */
     uint32_t user_data_size;
@@ -1219,27 +1075,29 @@ typedef struct {
 /* thread-side per-request state */
 typedef struct {
     /* transfer IO => user thread */
-    uint64_t content_size;
-    uint64_t content_offset;
-    uint64_t fetched_size;
+    uint32_t fetched_offset;
+    uint32_t fetched_size;
+    sfetch_error_t error_code;
     bool failed;
     bool finished;
     /* IO thread only */
-    #if !_SFETCH_PLATFORM_EMSCRIPTEN
+    #if _SFETCH_PLATFORM_EMSCRIPTEN
+    uint32_t http_range_offset;
+    #else
     _sfetch_file_handle_t file_handle;
     #endif
+    uint32_t content_size;
 } _sfetch_item_thread_t;
 
 /* a request goes through the following states, ping-ponging between IO and user thread */
 typedef enum _sfetch_state_t {
     _SFETCH_STATE_INITIAL,      /* internal: request has just been initialized */
     _SFETCH_STATE_ALLOCATED,    /* internal: request has been allocated from internal pool */
-    _SFETCH_STATE_OPENING,      /* IO thread: waiting to be opened */
-    _SFETCH_STATE_OPENED,       /* user thread: follow state of OPENING if no buffer was provided */
+    _SFETCH_STATE_DISPATCHED,   /* user thread: request has been dispatched to its IO channel */
     _SFETCH_STATE_FETCHING,     /* IO thread: waiting for data to be fetched */
     _SFETCH_STATE_FETCHED,      /* user thread: fetched data available */
     _SFETCH_STATE_PAUSED,       /* user thread: request has been paused via sfetch_pause() */
-    _SFETCH_STATE_FAILED,       /* user thread: follow state of OPENING or FETCHING if something went wrong */
+    _SFETCH_STATE_FAILED,       /* user thread: follow state or FETCHING if something went wrong */
 } _sfetch_state_t;
 
 /* an internal request item */
@@ -1249,6 +1107,7 @@ typedef struct {
     _sfetch_state_t state;
     uint32_t channel;
     uint32_t lane;
+    uint32_t chunk_size;
     sfetch_callback_t callback;
     _sfetch_buffer_t buffer;
 
@@ -1446,9 +1305,11 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t ind
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
     SOKOL_ASSERT(item && (0 == item->handle.id));
     SOKOL_ASSERT(request && request->path);
+    memset(item, 0, sizeof(_sfetch_item_t));
     item->handle.id = slot_id;
     item->state = _SFETCH_STATE_INITIAL;
     item->channel = request->channel;
+    item->chunk_size = request->chunk_size;
     item->lane = _SFETCH_INVALID_LANE;
     item->callback = request->callback;
     item->buffer.ptr = (uint8_t*) request->buffer_ptr;
@@ -1587,12 +1448,12 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
     return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
-_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
+_SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
     fseek(h, 0, SEEK_END);
     return ftell(h);
 }
 
-_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
     fseek(h, offset, SEEK_SET);
     return num_bytes == fread(ptr, 1, num_bytes, h);
 }
@@ -1771,14 +1632,11 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
     return h != _SFETCH_INVALID_FILE_HANDLE;
 }
 
-_SOKOL_PRIVATE uint64_t _sfetch_file_size(_sfetch_file_handle_t h) {
-    LARGE_INTEGER file_size;
-    file_size.QuadPart = 0;
-    GetFileSizeEx(h, &file_size);
-    return file_size.QuadPart;
+_SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
+    return GetFileSize(h, NULL);
 }
 
-_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint64_t offset, uint64_t num_bytes, void* ptr) {
+_SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
     LARGE_INTEGER offset_li;
     offset_li.QuadPart = offset;
     BOOL seek_res = SetFilePointerEx(h, offset_li, NULL, FILE_BEGIN);
@@ -1919,70 +1777,91 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     _sfetch_path_t* path;
     _sfetch_item_thread_t* thread;
     _sfetch_buffer_t* buffer;
+    uint32_t chunk_size;
     {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (!item) {
             return;
         }
         state = item->state;
-        SOKOL_ASSERT((state == _SFETCH_STATE_OPENING) ||
-                     (state == _SFETCH_STATE_FETCHING) ||
+        SOKOL_ASSERT((state == _SFETCH_STATE_FETCHING) ||
                      (state == _SFETCH_STATE_PAUSED) ||
                      (state == _SFETCH_STATE_FAILED));
         path = &item->path;
         thread = &item->thread;
         buffer = &item->buffer;
+        chunk_size = item->chunk_size;
     }
     if (thread->failed) {
         return;
     }
-    if (state == _SFETCH_STATE_OPENING) {
-        SOKOL_ASSERT(!_sfetch_file_handle_valid(thread->file_handle));
-        SOKOL_ASSERT(path->buf[0]);
-        SOKOL_ASSERT(thread->content_size == 0);
-        SOKOL_ASSERT(thread->content_offset == 0);
-        SOKOL_ASSERT(thread->fetched_size == 0);
-        thread->file_handle = _sfetch_file_open(path);
-        if (_sfetch_file_handle_valid(thread->file_handle)) {
-            thread->content_size = _sfetch_file_size(thread->file_handle);
-            /* if we already have a buffer associated with the request, skip
-                the OPENED state (which only exists so the user code can look at the
-                file size and provide a matching buffer), and instead start fetching
-                data data immediately
-            */
-            if (buffer->ptr) {
-                state = _SFETCH_STATE_FETCHING;
-            }
-        }
-        else {
-            thread->failed = true;
-            thread->finished = true;
-        }
-    }
-    /* may fall through from OPENING if a buffer was provided upfront */
     if (state == _SFETCH_STATE_FETCHING) {
-        SOKOL_ASSERT(_sfetch_file_handle_valid(thread->file_handle));
-        SOKOL_ASSERT(thread->content_size > thread->content_offset);
         if ((buffer->ptr == 0) || (buffer->size == 0)) {
+            thread->error_code = SFETCH_ERROR_NO_BUFFER;
             thread->failed = true;
         }
         else {
-            uint64_t bytes_to_read = thread->content_size - thread->content_offset;
-            if (bytes_to_read > buffer->size) {
-                bytes_to_read = buffer->size;
+            /* open file if not happened yet */
+            if (!_sfetch_file_handle_valid(thread->file_handle)) {
+                SOKOL_ASSERT(path->buf[0]);
+                SOKOL_ASSERT(thread->fetched_offset == 0);
+                SOKOL_ASSERT(thread->fetched_size == 0);
+                thread->file_handle = _sfetch_file_open(path);
+                if (_sfetch_file_handle_valid(thread->file_handle)) {
+                    thread->content_size = _sfetch_file_size(thread->file_handle);
+                }
+                else {
+                    thread->error_code = SFETCH_ERROR_FILE_NOT_FOUND;
+                    thread->failed = true;
+                }
             }
-            const uint64_t offset = thread->content_offset;
-            if (_sfetch_file_read(thread->file_handle, offset, bytes_to_read, buffer->ptr)) {
-                thread->fetched_size = bytes_to_read;
-                thread->content_offset += bytes_to_read;
-            }
-            else {
-                thread->failed = true;
+            if (!thread->failed) {
+                uint32_t read_offset = 0;
+                uint32_t bytes_to_read = 0;
+                if (chunk_size == 0) {
+                    /* load entire file */
+                    if (thread->content_size <= buffer->size) {
+                        bytes_to_read = thread->content_size;
+                        read_offset = 0;
+                    }
+                    else {
+                        /* provided buffer to small to fit entire file */
+                        thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
+                        thread->failed = true;
+                    }
+                }
+                else {
+                    if (chunk_size <= buffer->size) {
+                        bytes_to_read = chunk_size;
+                        read_offset = thread->fetched_offset;
+                        if ((read_offset + bytes_to_read) > thread->content_size) {
+                            bytes_to_read = thread->content_size - read_offset;
+                        }
+                    }
+                    else {
+                        /* provided buffer to small to fit next chunk */
+                        thread->error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
+                        thread->failed = true;
+                    }
+                }
+                if (!thread->failed) {
+                    if (_sfetch_file_read(thread->file_handle, read_offset, bytes_to_read, buffer->ptr)) {
+                        thread->fetched_size = bytes_to_read;
+                        thread->fetched_offset += bytes_to_read;
+                    }
+                    else {
+                        thread->error_code = SFETCH_ERROR_UNEXPECTED_EOF;
+                        thread->failed = true;
+                    }
+                }
             }
         }
-        if (thread->failed || (thread->content_offset >= thread->content_size)) {
-            _sfetch_file_close(thread->file_handle);
-            thread->file_handle = 0;
+        SOKOL_ASSERT(thread->fetched_offset <= thread->content_size);
+        if (thread->failed || (thread->fetched_offset == thread->content_size)) {
+            if (_sfetch_file_handle_valid(thread->file_handle)) {
+                _sfetch_file_close(thread->file_handle);
+                thread->file_handle = _SFETCH_INVALID_FILE_HANDLE;
+            }
             thread->finished = true;
         }
     }
@@ -2025,31 +1904,38 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
                 __sfetch_emsc_head_response(slot_id, content_length);
             }
             else {
-                __sfetch_emsc_failed(slot_id);
+                __sfetch_emsc_failed_http_status(slot_id, this.status);
             }
         }
     };
     req.send();
 });
 
-EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cstr, int offset, int num_bytes, int content_length, void* buf_ptr), {
+/* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
+EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, int offset, int bytes_to_read, void* buf_ptr, int buf_size), {
     var path_str = UTF8ToString(path_cstr);
     var req = new XMLHttpRequest();
     req.open('GET', path_str);
     req.responseType = 'arraybuffer';
-    var need_range_request = !((offset == 0) && (num_bytes == content_length));
+    var need_range_request = (bytes_to_read > 0);
     if (need_range_request) {
-        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+num_bytes));
+        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read));
     }
     req.onreadystatechange = function() {
         if (this.readyState == this.DONE) {
             if ((this.status == 206) || ((this.status == 200) && !need_range_request)) {
                 var u8_array = new Uint8Array(req.response);
-                HEAPU8.set(u8_array, buf_ptr);
-                __sfetch_emsc_range_response(slot_id, num_bytes);
+                var content_fetched_size = u8_array.length;
+                if (content_fetched_size <= buf_size) {
+                    HEAPU8.set(u8_array, buf_ptr);
+                    __sfetch_emsc_get_response(slot_id, bytes_to_read, content_fetched_size);
+                }
+                else {
+                    __sfetch_emsc_failed_buffer_too_small(slot_id);
+                }
             }
             else {
-                __sfetch_emsc_failed(slot_id);
+                __sfetch_emsc_failed_http_status(slot_id, this.status);
             }
         }
     };
@@ -2060,58 +1946,55 @@ EM_JS(void, sfetch_js_send_range_request, (uint32_t slot_id, const char* path_cs
 #ifdef __cplusplus
 extern "C" {
 #endif
-void _sfetch_emsc_send_range_request(uint32_t slot_id, _sfetch_item_t* item) {
-    SOKOL_ASSERT(item->thread.content_size > item->thread.content_offset);
+void _sfetch_emsc_send_get_request(uint32_t slot_id, _sfetch_item_t* item) {
     if ((item->buffer.ptr == 0) || (item->buffer.size == 0)) {
+        item->thread.error_code = SFETCH_ERROR_NO_BUFFER;
         item->thread.failed = true;
     }
     else {
-        /* send a regular HTTP range request to fetch the next chunk of data
-            FIXME: need to figure out a way to use 64-bit sizes here
-        */
-        uint32_t bytes_to_read = item->thread.content_size - item->thread.content_offset;
-        if (bytes_to_read > item->buffer.size) {
-            bytes_to_read = item->buffer.size;
+        uint32_t offset = 0;
+        uint32_t bytes_to_read = 0;
+        if (item->chunk_size > 0) {
+            /* send HTTP range request */
+            SOKOL_ASSERT(item->thread.content_size > 0);
+            SOKOL_ASSERT(item->thread.http_range_offset < item->thread.content_size);
+            bytes_to_read = item->thread.content_size - item->thread.http_range_offset;
+            if (bytes_to_read > item->chunk_size) {
+                bytes_to_read = item->chunk_size;
+            }
+            SOKOL_ASSERT(bytes_to_read > 0);
+            offset = item->thread.http_range_offset;
         }
-        const uint32_t offset = item->thread.content_offset;
-        sfetch_js_send_range_request(slot_id, item->path.buf, offset, bytes_to_read, item->thread.content_size, item->buffer.ptr);
+        sfetch_js_send_get_request(slot_id, item->path.buf, offset, bytes_to_read, item->buffer.ptr, item->buffer.size);
     }
 }
 
-/* called by JS when the initial HEAD request finished successfully */
+/* called by JS when an initial HEAD request finished successfully (only when streaming chunks) */
 EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_head_response(uint32_t slot_id, uint32_t content_length) {
-    //printf("sfetch_emsc_head_response(slot_id=%d content_length=%d)\n", slot_id, content_length);
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
+            SOKOL_ASSERT(item->buffer.ptr && (item->buffer.size > 0));
             item->thread.content_size = content_length;
-            if (item->buffer.ptr) {
-                /* if a buffer was provided, continue immediate with fetching the first
-                    chunk, instead of passing the request back to the channel
-                */
-                _sfetch_emsc_send_range_request(slot_id, item);
-            }
-            else {
-                /* if no buffer was provided upfront pass back to the channel so
-                    that the response-user-callback can be called
-                */
-                _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
-            }
+            _sfetch_emsc_send_get_request(slot_id, item);
         }
     }
 }
 
 /* called by JS when a followup GET request finished successfully */
-EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t num_bytes_read) {
-    //printf("sfetch_emsc_range_response(slot_id=%d, num_bytes_read=%d)\n", slot_id, num_bytes_read);
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_get_response(uint32_t slot_id, uint32_t range_fetched_size, uint32_t content_fetched_size) {
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
-            item->thread.fetched_size = num_bytes_read;
-            item->thread.content_offset += num_bytes_read;
-            if (item->thread.content_offset >= item->thread.content_size) {
+            item->thread.fetched_size = content_fetched_size;
+            item->thread.fetched_offset += content_fetched_size;
+            item->thread.http_range_offset += range_fetched_size;
+            if (item->chunk_size == 0) {
+                item->thread.finished = true;
+            }
+            else if (item->thread.http_range_offset >= item->thread.content_size) {
                 item->thread.finished = true;
             }
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
@@ -2120,18 +2003,37 @@ EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_range_response(uint32_t slot_id, uint32_t
 }
 
 /* called by JS when an error occurred */
-EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed(uint32_t slot_id) {
-    //printf("sfetch_emsc_failed(slot_id=%d)\n", slot_id);
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_http_status(uint32_t slot_id, uint32_t http_status) {
     _sfetch_t* ctx = _sfetch_ctx();
     if (ctx && ctx->valid) {
         _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
         if (item) {
+            if (http_status == 404) {
+                item->thread.error_code = SFETCH_ERROR_FILE_NOT_FOUND;
+            }
+            else {
+                item->thread.error_code = SFETCH_ERROR_INVALID_HTTP_STATUS;
+            }
             item->thread.failed = true;
             item->thread.finished = true;
             _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
         }
     }
 }
+
+EMSCRIPTEN_KEEPALIVE void _sfetch_emsc_failed_buffer_too_small(uint32_t slot_id) {
+    _sfetch_t* ctx = _sfetch_ctx();
+    if (ctx && ctx->valid) {
+        _sfetch_item_t* item = _sfetch_pool_item_lookup(&ctx->pool, slot_id);
+        if (item) {
+            item->thread.error_code = SFETCH_ERROR_BUFFER_TOO_SMALL;
+            item->thread.failed = true;
+            item->thread.finished = true;
+            _sfetch_ring_enqueue(&ctx->chn[item->channel].user_outgoing, slot_id);
+        }
+    }
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -2141,18 +2043,19 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
     if (!item) {
         return;
     }
-    if (item->state == _SFETCH_STATE_OPENING) {
-        SOKOL_ASSERT(item->path.buf[0]);
-        /* We need to query the content-size first with a separate HEAD request,
-            no matter if a buffer was provided or not (because sending a too big
-            range request speculatively doesn't work). With the response, we can
-            also check whether the server actually supports range requests
-        */
-        sfetch_js_send_head_request(slot_id, item->path.buf);
-        /* see _sfetch_emsc_head_response() for the rest... */
-    }
-    else if (item->state == _SFETCH_STATE_FETCHING) {
-        _sfetch_emsc_send_range_request(slot_id, item);
+    if (item->state == _SFETCH_STATE_FETCHING) {
+        if ((item->chunk_size > 0) && (item->thread.content_size == 0)) {
+            /* if streaming download is requested, and the content-length isn't known
+               yet, need to send a HEAD request first
+             */
+            sfetch_js_send_head_request(slot_id, item->path.buf);
+        }
+        else {
+            /* otherwise, this is either a request to load the entire file, or
+               to load the next streaming chunk
+             */
+            _sfetch_emsc_send_get_request(slot_id, item);
+        }
     }
     else {
         /* just move all other items (e.g. paused or cancelled)
@@ -2164,7 +2067,7 @@ _SOKOL_PRIVATE void _sfetch_request_handler(_sfetch_t* ctx, uint32_t slot_id) {
         item->thread.finished = true;
     }
 }
-#endif
+#endif /* _SFETCH_PLATFORM_EMSCRIPTEN */
 
 _SOKOL_PRIVATE void _sfetch_channel_discard(_sfetch_channel_t* chn) {
     SOKOL_ASSERT(chn);
@@ -2228,6 +2131,28 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
     }
 }
 
+_SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
+    sfetch_response_t response;
+    memset(&response, 0, sizeof(response));
+    response.handle = item->handle;
+    response.dispatched = (item->state == _SFETCH_STATE_DISPATCHED);
+    response.fetched = (item->state == _SFETCH_STATE_FETCHED);
+    response.paused = (item->state == _SFETCH_STATE_PAUSED);
+    response.finished = item->user.finished;
+    response.failed = (item->state == _SFETCH_STATE_FAILED);
+    response.cancelled = item->user.cancel;
+    response.error_code = item->user.error_code;
+    response.channel = item->channel;
+    response.lane = item->lane;
+    response.path = item->path.buf;
+    response.user_data = item->user.user_data;
+    response.fetched_offset = item->user.fetched_offset - item->user.fetched_size;
+    response.fetched_size = item->user.fetched_size;
+    response.buffer_ptr = item->buffer.ptr;
+    response.buffer_size = item->buffer.size;
+    item->callback(&response);
+}
+
 /* per-frame channel stuff: move requests in and out of the IO threads, call response callbacks */
 _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_t* pool) {
 
@@ -2239,7 +2164,13 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         const uint32_t slot_id = _sfetch_ring_dequeue(&chn->user_sent);
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
+        SOKOL_ASSERT(item->state == _SFETCH_STATE_ALLOCATED);
+        item->state = _SFETCH_STATE_DISPATCHED;
         item->lane = _sfetch_ring_dequeue(&chn->free_lanes);
+        /* if no buffer provided yet, invoke response callback to do so */
+        if (0 == item->buffer.ptr) {
+            _sfetch_invoke_response_callback(item);
+        }
         _sfetch_ring_enqueue(&chn->user_incoming, slot_id);
     }
 
@@ -2250,7 +2181,6 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         _sfetch_item_t* item = _sfetch_pool_item_lookup(pool, slot_id);
         SOKOL_ASSERT(item);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_INITIAL);
-        SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENING);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHING);
         /* transfer input params from user- to thread-data */
         if (item->user.pause) {
@@ -2268,10 +2198,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
             item->user.finished = true;
         }
         switch (item->state) {
-            case _SFETCH_STATE_ALLOCATED:
-                item->state = _SFETCH_STATE_OPENING;
-                break;
-            case _SFETCH_STATE_OPENED:
+            case _SFETCH_STATE_DISPATCHED:
             case _SFETCH_STATE_FETCHED:
                 item->state = _SFETCH_STATE_FETCHING;
                 break;
@@ -2304,12 +2231,17 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         SOKOL_ASSERT(item && item->callback);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_INITIAL);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_ALLOCATED);
-        SOKOL_ASSERT(item->state != _SFETCH_STATE_OPENED);
+        SOKOL_ASSERT(item->state != _SFETCH_STATE_DISPATCHED);
         SOKOL_ASSERT(item->state != _SFETCH_STATE_FETCHED);
         /* transfer output params from thread- to user-data */
-        item->user.content_size = item->thread.content_size;
-        item->user.content_offset = item->thread.content_offset;
-        item->user.fetched_size  = item->thread.fetched_size;
+        item->user.fetched_offset = item->thread.fetched_offset;
+        item->user.fetched_size = item->thread.fetched_size;
+        if (item->user.cancel) {
+            item->user.error_code = SFETCH_ERROR_CANCELLED;
+        }
+        else {
+            item->user.error_code = item->thread.error_code;
+        }
         if (item->thread.finished) {
             item->user.finished = true;
         }
@@ -2317,49 +2249,10 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
         if (item->thread.failed) {
             item->state = _SFETCH_STATE_FAILED;
         }
-        else {
-            switch (item->state) {
-                case _SFETCH_STATE_OPENING:
-                    /* if the request already had a buffer provided, the
-                       OPENING state already has fetched data and we shortcut
-                       to the first FETCHED state to shorten the time a request occupies
-                       a lane, otherwise, invoke the callback with OPENED state
-                       so it can provide a buffer
-                    */
-                    if (item->user.content_offset > 0) {
-                        item->state = _SFETCH_STATE_FETCHED;
-                    }
-                    else {
-                        item->state = _SFETCH_STATE_OPENED;
-                    }
-                    break;
-                case _SFETCH_STATE_FETCHING:
-                    item->state = _SFETCH_STATE_FETCHED;
-                    break;
-                default:
-                    break;
-            }
+        else if (item->state == _SFETCH_STATE_FETCHING) {
+            item->state = _SFETCH_STATE_FETCHED;
         }
-        /* invoke response callback */
-        sfetch_response_t response;
-        memset(&response, 0, sizeof(response));
-        response.handle.id = slot_id;
-        response.opened = (item->state == _SFETCH_STATE_OPENED);
-        response.fetched = (item->state == _SFETCH_STATE_FETCHED);
-        response.paused = (item->state == _SFETCH_STATE_PAUSED);
-        response.finished = item->user.finished;
-        response.failed = (item->state == _SFETCH_STATE_FAILED);
-        response.cancelled = item->user.cancel;
-        response.channel = item->channel;
-        response.lane = item->lane;
-        response.path = item->path.buf;
-        response.user_data = item->user.user_data;
-        response.content_size = item->user.content_size;
-        response.content_offset = item->user.content_offset - item->user.fetched_size;
-        response.fetched_size = item->user.fetched_size;
-        response.buffer_ptr = item->buffer.ptr;
-        response.buffer_size = item->buffer.size;
-        item->callback(&response);
+        _sfetch_invoke_response_callback(item);
 
         /* when the request is finish, free the lane for another request,
            otherwise feed it back into the incoming queue
@@ -2391,6 +2284,10 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
     }
     if (!req->callback) {
         SOKOL_LOG("_sfetch_validate_request: request.callback missing");
+        return false;
+    }
+    if (req->chunk_size > req->buffer_size) {
+        SOKOL_LOG("_sfetch_validate_request: request.stream_size is greater request.buffer_size)");
         return false;
     }
     if (req->user_data_ptr && (req->user_data_size == 0)) {
@@ -2531,7 +2428,7 @@ SOKOL_API_IMPL void sfetch_dowork(void) {
     ctx->in_callback = false;
 }
 
-SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint64_t buffer_size) {
+SOKOL_API_IMPL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->valid);
     SOKOL_ASSERT(ctx->in_callback);
