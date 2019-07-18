@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (11-Jul-2019: don't use sokol_fetch.h yet)
+[See what's new](#updates)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,9 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **18-Jul-2019**:
+    - sokol_fetch.h has been fixed and can be used again :)
 
 - **11-Jul-2019**:
     - Don't use sokol_fetch.h for now, the current version assumes that
