@@ -4100,11 +4100,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
                 }
             }
         }
-
-        // Get 3D max texture size.
         glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &_sg.gl.max_3d_texture_size);
-
-        // Get max array layers.
         glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &_sg.gl.max_array_layers);
     #elif defined(SOKOL_GLES3)
         const char* ext = (const char*) glGetString(GL_EXTENSIONS);
