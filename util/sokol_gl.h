@@ -29,11 +29,19 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
+    If sokol_gl.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     Include the following headers before including sokol_gl.h:
 
         sokol_gfx.h
 
-    Matrix functions are taken from MESA and Regal.
+    Matrix functions have been taken from MESA and Regal.
 
     FEATURE OVERVIEW:
     =================
@@ -216,7 +224,7 @@
             sgl_scale(float x, float y, float z)
 
         NOTE that all angles in sokol-gl are in radians, not in degree.
-        Convert between radians and degree with the helper funtions:
+        Convert between radians and degree with the helper functions:
 
             float sgl_rad(float deg)        - degrees to radians
             float sgl_deg(float rad)        - radians to degrees
@@ -307,7 +315,7 @@
 
         ...which can return the following error codes:
 
-        SGL_NO_ERROR                - all OK, no error occurded since last sgl_draw()
+        SGL_NO_ERROR                - all OK, no error occurred since last sgl_draw()
         SGL_ERROR_VERTICES_FULL     - internal vertex buffer is full (checked in sgl_end())
         SGL_ERROR_UNIFORMS_FULL     - the internal uniforms buffer is full (checked in sgl_end())
         SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
@@ -416,7 +424,13 @@
 #endif
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */

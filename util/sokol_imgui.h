@@ -24,12 +24,20 @@
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 
-    Optionally provide the following macros before including the implementatuon
+    Optionally provide the following macros before including the implementation
     to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+
+    If sokol_imgui.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
 
     Include the following headers before sokol_imgui.h (both before including
     the declaration and implementation):
@@ -180,7 +188,13 @@
 #endif
 
 #ifndef SOKOL_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
 #define SOKOL_API_DECL extern
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -821,8 +835,8 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
 
 SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize.x = (float) width;
-    io.DisplaySize.y = (float) height;
+    io.DisplaySize.x = ((float) width) / _simgui.desc.dpi_scale;
+    io.DisplaySize.y = ((float) height) / _simgui.desc.dpi_scale;
     io.DeltaTime = (float) delta_time;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
@@ -847,6 +861,7 @@ SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
 
 SOKOL_API_IMPL void simgui_render(void) {
     ImGui::Render();
+
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (nullptr == draw_data) {
         return;
@@ -854,14 +869,20 @@ SOKOL_API_IMPL void simgui_render(void) {
     if (draw_data->CmdListsCount == 0) {
         return;
     }
-    const float dpi_scale = _simgui.desc.dpi_scale;
 
     /* render the ImGui command list */
     sg_push_debug_group("sokol-imgui");
+
+    const float dpi_scale = _simgui.desc.dpi_scale;
+    const int fb_width = (const int) (ImGui::GetIO().DisplaySize.x * dpi_scale);
+    const int fb_height = (const int) (ImGui::GetIO().DisplaySize.y * dpi_scale);
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
+
     sg_apply_pipeline(_simgui.pip);
     _simgui_vs_params_t vs_params;
-    vs_params.disp_size.x = ImGui::GetIO().DisplaySize.x / dpi_scale;
-    vs_params.disp_size.y = ImGui::GetIO().DisplaySize.y / dpi_scale;
+    vs_params.disp_size.x = ImGui::GetIO().DisplaySize.x;
+    vs_params.disp_size.y = ImGui::GetIO().DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_params, sizeof(vs_params));
     sg_bindings bind = { };
     bind.vertex_buffers[0] = _simgui.vbuf;
@@ -910,6 +931,8 @@ SOKOL_API_IMPL void simgui_render(void) {
             base_element += pcmd.ElemCount;
         }
     }
+    sg_apply_viewport(0, 0, fb_width, fb_height, true);
+    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
     sg_pop_debug_group();
 }
 

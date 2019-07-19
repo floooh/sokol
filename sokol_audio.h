@@ -19,6 +19,16 @@
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
+    SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)
+
+    If sokol_audio.h is compiled as a DLL, define the following before
+    including the declaration or implementation:
+
+    SOKOL_DLL
+
+    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    or __declspec(dllimport) as needed.
+
     FEATURE OVERVIEW
     ================
     You provide a mono- or stereo-stream of 32-bit float samples, which
@@ -102,7 +112,7 @@
 
     If you want to use the callback-model, you need to provide a stream
     callback function either in saudio_desc.stream_cb or saudio_desc.stream_userdata_cb,
-    otherwised keep both function pointers zero-initialized.
+    otherwise keep both function pointers zero-initialized.
 
     Use push model and default playback parameters:
 
@@ -160,7 +170,7 @@
     plugging in a bluetooth headset, this case is currently not handled in
     Sokol Audio).
 
-    You can check if audio initialization was successfull with
+    You can check if audio initialization was successful with
     saudio_isvalid(). If backend initialization failed for some reason
     (for instance when there's no audio device in the machine), this
     will return false. Not checking for success won't do any harm, all
@@ -359,7 +369,13 @@
 #include <stdbool.h>
 
 #ifndef SOKOL_API_DECL
-    #define SOKOL_API_DECL extern
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#define SOKOL_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_API_DECL extern
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -383,6 +399,10 @@ SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
 SOKOL_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
 SOKOL_API_DECL bool saudio_isvalid(void);
+/* return the saudio_desc.user_data pointer */
+SOKOL_API_DECL void* saudio_userdata(void);
+/* return a copy of the original saudio_desc struct */
+SOKOL_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
 SOKOL_API_DECL int saudio_sample_rate(void);
 /* actual backend buffer size */
@@ -438,7 +458,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #endif
 
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-    #include "pthread.h"
+    #include <pthread.h>
 #elif defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
@@ -498,7 +518,10 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #define _SAUDIO_DEFAULT_BUFFER_FRAMES (2048)
 #define _SAUDIO_DEFAULT_PACKET_FRAMES (128)
 #define _SAUDIO_DEFAULT_NUM_PACKETS ((_SAUDIO_DEFAULT_BUFFER_FRAMES/_SAUDIO_DEFAULT_PACKET_FRAMES)*4)
-#define _SAUDIO_RING_MAX_SLOTS (128)
+
+#ifndef SAUDIO_RING_MAX_SLOTS
+#define SAUDIO_RING_MAX_SLOTS (1024)
+#endif
 
 /*=== MUTEX WRAPPER DECLARATIONS =============================================*/
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
@@ -577,7 +600,7 @@ typedef struct {
     int head;  /* next slot to write to */
     int tail;  /* next slot to read from */
     int num;   /* number of slots in queue */
-    int queue[_SAUDIO_RING_MAX_SLOTS];
+    int queue[SAUDIO_RING_MAX_SLOTS];
 } _saudio_ring_t;
 
 /* a packet FIFO structure */
@@ -674,7 +697,7 @@ _SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring_t* ring, int i) {
 }
 
 _SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, int num_slots) {
-    SOKOL_ASSERT((num_slots + 1) <= _SAUDIO_RING_MAX_SLOTS);
+    SOKOL_ASSERT((num_slots + 1) <= SAUDIO_RING_MAX_SLOTS);
     ring->head = 0;
     ring->tail = 0;
     /* one slot reserved to detect 'full' vs 'empty' */
@@ -1094,6 +1117,7 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    REFERENCE_TIME dur;
     if (FAILED(CoInitializeEx(0, COINIT_MULTITHREADED))) {
         SOKOL_LOG("sokol_audio wasapi: CoInitializeEx failed");
         return false;
@@ -1134,7 +1158,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.wBitsPerSample = 16;
     fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
-    REFERENCE_TIME dur = (REFERENCE_TIME)
+    dur = (REFERENCE_TIME)
         (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
     if (FAILED(IAudioClient_Initialize(_saudio.backend.audio_client,
         AUDCLNT_SHAREMODE_SHARED,
@@ -1228,7 +1252,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
 #endif
 
 /* setup the WebAudio context and attach a ScriptProcessorNode */
-EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
+EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size), {
     Module._saudio_context = null;
     Module._saudio_node = null;
     if (typeof AudioContext !== 'undefined') {
@@ -1286,7 +1310,7 @@ EM_JS(int, _saudio_js_init, (int sample_rate, int num_channels, int buffer_size)
 });
 
 /* get the actual sample rate back from the WebAudio context */
-EM_JS(int, _saudio_js_sample_rate, (void), {
+EM_JS(int, saudio_js_sample_rate, (void), {
     if (Module._saudio_context) {
         return Module._saudio_context.sampleRate;
     }
@@ -1296,7 +1320,7 @@ EM_JS(int, _saudio_js_sample_rate, (void), {
 });
 
 /* get the actual buffer size in number of frames */
-EM_JS(int, _saudio_js_buffer_frames, (void), {
+EM_JS(int, saudio_js_buffer_frames, (void), {
     if (Module._saudio_node) {
         return Module._saudio_node.bufferSize;
     }
@@ -1306,10 +1330,10 @@ EM_JS(int, _saudio_js_buffer_frames, (void), {
 });
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    if (_saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
+    if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
-        _saudio.sample_rate = _saudio_js_sample_rate();
-        _saudio.buffer_frames = _saudio_js_buffer_frames();
+        _saudio.sample_rate = saudio_js_sample_rate();
+        _saudio.buffer_frames = saudio_js_buffer_frames();
         const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
         _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
@@ -1363,6 +1387,14 @@ SOKOL_API_IMPL void saudio_shutdown(void) {
 
 SOKOL_API_IMPL bool saudio_isvalid(void) {
     return _saudio.valid;
+}
+
+SOKOL_API_IMPL void* saudio_userdata(void) {
+    return _saudio.desc.user_data;
+}
+
+SOKOL_API_IMPL saudio_desc saudio_query_desc(void) {
+    return _saudio.desc;
 }
 
 SOKOL_API_IMPL int saudio_sample_rate(void) {
