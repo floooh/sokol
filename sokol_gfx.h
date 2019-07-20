@@ -602,6 +602,107 @@ typedef enum sg_feature {
 } sg_feature;
 
 /*
+    sg_pixel_format
+
+    This is a common subset of useful and widely supported pixel formats. The
+    pixel format enum is mainly used when creating an image object in the
+    sg_image_desc.pixel_format member.
+
+    The default pixel format when creating an image is SG_PIXELFORMAT_RGBA8.
+*/
+typedef enum sg_pixel_format {
+    _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
+    SG_PIXELFORMAT_NONE,
+    SG_PIXELFORMAT_RGBA8,
+    SG_PIXELFORMAT_RGB8,
+    SG_PIXELFORMAT_RGBA4,
+    SG_PIXELFORMAT_R5G6B5,
+    SG_PIXELFORMAT_R5G5B5A1,
+    SG_PIXELFORMAT_R10G10B10A2,
+    SG_PIXELFORMAT_RGBA32F,
+    SG_PIXELFORMAT_RGBA16F,
+    SG_PIXELFORMAT_R32F,
+    SG_PIXELFORMAT_R16F,
+    SG_PIXELFORMAT_L8,
+    SG_PIXELFORMAT_DXT1,
+    SG_PIXELFORMAT_DXT3,
+    SG_PIXELFORMAT_DXT5,
+    SG_PIXELFORMAT_DEPTH,
+    SG_PIXELFORMAT_DEPTHSTENCIL,
+    SG_PIXELFORMAT_PVRTC2_RGB,
+    SG_PIXELFORMAT_PVRTC4_RGB,
+    SG_PIXELFORMAT_PVRTC2_RGBA,
+    SG_PIXELFORMAT_PVRTC4_RGBA,
+    SG_PIXELFORMAT_ETC2_RGB8,
+    SG_PIXELFORMAT_ETC2_SRGB8,
+    _SG_PIXELFORMAT_NUM,
+    _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
+} sg_pixel_format;
+
+/*
+    sg_caps
+
+    Information about optional feature support and runtime capabilities.
+    The sg_caps struct is returned by the sg_query_caps() function.
+*/
+typedef struct sg_pixelformat_caps {
+    bool image_2d;              /* pixel format can be used for SG_IMAGETYPE_2D images */
+    bool image_cube;            /* pixel format can be used for SG_IMAGETYPE_CUBE images */
+    bool image_3d;              /* pixel format can be used for SG_IMAGETYPE_3D images */
+    bool image_array;           /* pixel format can be used for SG_IMAGETYPE_ARRAY images */
+    bool vertex;                /* pixel format can be sampled from vertex shader */
+    bool render_target;         /* pixel format can be used as render target */
+    bool msaa;                  /* pixel format can be used as MSAA render target */
+} sg_pixelformat_caps;
+
+typedef struct sg_limits {
+    int max_image_size_2d;      /* max width/height of SG_IMAGETYPE_2D images */
+    int max_image_size_cube;    /* max width/height of SG_IMAGETYPE_CUBE images */
+    int max_image_size_3d;      /* max width/height/depth of SG_IMAGETYPE_3D images */
+    int max_image_size_array;
+    int max_image_array_layers;
+} sg_limits;
+
+typedef struct sg_caps {
+    sg_backend backend;         /* the backend sokol_gfx.h was compiled for */
+    bool instancing;
+    bool origin_top_left;
+    bool multiple_render_targets;
+    bool imagetype_3d;          /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array;       /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    sg_limits limits;
+    union {
+        struct {
+            sg_pixelformat_caps _default;
+            sg_pixelformat_caps none;
+            sg_pixelformat_caps rgba8;
+            sg_pixelformat_caps rgb8;
+            sg_pixelformat_caps rgba4;
+            sg_pixelformat_caps r5g6b5;
+            sg_pixelformat_caps r5g5b5a1;
+            sg_pixelformat_caps r10g10b10a2;
+            sg_pixelformat_caps rgba32f;
+            sg_pixelformat_caps rgba16f;
+            sg_pixelformat_caps r32f;
+            sg_pixelformat_caps r16f;
+            sg_pixelformat_caps l8;
+            sg_pixelformat_caps dxt1;
+            sg_pixelformat_caps dxt3;
+            sg_pixelformat_caps dxt5;
+            sg_pixelformat_caps depth;
+            sg_pixelformat_caps depthstencil;
+            sg_pixelformat_caps pvrtc2_rgb;
+            sg_pixelformat_caps pvrtc4_rgb;
+            sg_pixelformat_caps pvrtc2_rgba;
+            sg_pixelformat_caps pvrtc4_rgba;
+            sg_pixelformat_caps etc2_rgb8;
+            sg_pixelformat_caps etc2_srgb8;
+        } format;
+        sg_pixelformat_caps formats[_SG_PIXELFORMAT_NUM];
+    };
+} sg_caps;
+
+/*
     sg_resource_state
 
     The current state of a resource in its resource pool.
@@ -757,44 +858,6 @@ typedef enum sg_shader_stage {
     SG_SHADERSTAGE_FS,
     _SG_SHADERSTAGE_FORCE_U32 = 0x7FFFFFFF
 } sg_shader_stage;
-
-/*
-    sg_pixel_format
-
-    This is a common subset of useful and widely supported pixel formats. The
-    pixel format enum is mainly used when creating an image object in the
-    sg_image_desc.pixel_format member.
-
-    The default pixel format when creating an image is SG_PIXELFORMAT_RGBA8.
-*/
-typedef enum sg_pixel_format {
-    _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
-    SG_PIXELFORMAT_NONE,
-    SG_PIXELFORMAT_RGBA8,
-    SG_PIXELFORMAT_RGB8,
-    SG_PIXELFORMAT_RGBA4,
-    SG_PIXELFORMAT_R5G6B5,
-    SG_PIXELFORMAT_R5G5B5A1,
-    SG_PIXELFORMAT_R10G10B10A2,
-    SG_PIXELFORMAT_RGBA32F,
-    SG_PIXELFORMAT_RGBA16F,
-    SG_PIXELFORMAT_R32F,
-    SG_PIXELFORMAT_R16F,
-    SG_PIXELFORMAT_L8,
-    SG_PIXELFORMAT_DXT1,
-    SG_PIXELFORMAT_DXT3,
-    SG_PIXELFORMAT_DXT5,
-    SG_PIXELFORMAT_DEPTH,
-    SG_PIXELFORMAT_DEPTHSTENCIL,
-    SG_PIXELFORMAT_PVRTC2_RGB,
-    SG_PIXELFORMAT_PVRTC4_RGB,
-    SG_PIXELFORMAT_PVRTC2_RGBA,
-    SG_PIXELFORMAT_PVRTC4_RGBA,
-    SG_PIXELFORMAT_ETC2_RGB8,
-    SG_PIXELFORMAT_ETC2_SRGB8,
-    _SG_PIXELFORMAT_NUM,
-    _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
-} sg_pixel_format;
 
 /*
     sg_primitive_type
@@ -1620,14 +1683,6 @@ typedef struct sg_pass_desc {
     uint32_t _end_canary;
 } sg_pass_desc;
 
-typedef struct sg_pixel_format_info {
-    bool supported;
-    uint32_t max_width;
-    uint32_t max_height;
-    uint32_t max_depth;
-    uint32_t max_layers;
-} sg_pixel_format_info;
-
 /*
     sg_trace_hooks
 
@@ -1642,6 +1697,7 @@ typedef struct sg_pixel_format_info {
 */
 typedef struct sg_trace_hooks {
     void* user_data;
+    void (*query_caps)(const sg_caps* result, void* user_data);
     void (*query_feature)(sg_feature feature, bool result, void* user_data);
     void (*reset_state_cache)(void* user_data);
     void (*make_buffer)(const sg_buffer_desc* desc, sg_buffer result, void* user_data);
@@ -1845,9 +1901,9 @@ SOKOL_API_DECL void sg_setup(const sg_desc* desc);
 SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL sg_desc sg_query_desc(void);
+SOKOL_API_DECL sg_caps sg_query_caps(void);
 SOKOL_API_DECL sg_backend sg_query_backend(void);
 SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
-SOKOL_API_DECL sg_pixel_format_info sg_query_pixel_format_info(sg_pixel_format format);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
 SOKOL_API_DECL void sg_push_debug_group(const char* name);
@@ -2271,6 +2327,10 @@ typedef struct {
     _sg_slot_t slot;
 } _sg_context_t;
 
+typedef struct {
+    sg_caps caps;
+} _sg_dummy_backend_t;
+
 /*== GL BACKEND DECLARATIONS =================================================*/
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 typedef struct {
@@ -2450,6 +2510,7 @@ typedef struct {
     GLint max_cube_texture_size;
     GLint max_3d_texture_size;
     GLint max_array_layers;
+    sg_caps caps;
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -2584,6 +2645,7 @@ typedef struct {
     sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
+    sg_caps caps;
     /* on-demand loaded d3dcompiler_47.dll handles */
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
@@ -2784,6 +2846,7 @@ typedef struct {
     _sg_mtl_state_cache_t state_cache;
     _sg_mtl_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
+    sg_caps caps;
 } _sg_mtl_backend_t;
 
 /* keep Objective-C 'smart data' in a separate static objects, these can't be in a C struct until Xcode10 or so */
@@ -2964,7 +3027,9 @@ typedef struct {
     _sg_validate_error_t validate_error;
     #endif
     _sg_pools_t pools;
-    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #if defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_backend_t dummy;
+    #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     _sg_gl_backend_t gl;
     #elif defined(SOKOL_METAL)
     _sg_mtl_backend_t mtl;
@@ -3216,16 +3281,13 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     /* empty */
 }
 
+_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
+    return &_sg.dummy.caps;
+}
+
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     _SOKOL_UNUSED(f);
     return true;
-}
-
-_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
-    _SOKOL_UNUSED(format);
-    sg_pixel_format_info info;
-    memset(&info, 0, sizeof(info));
-    return info;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
@@ -4183,78 +4245,13 @@ _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
     }
 }
 
+_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
+    return &_sg.gl.caps;
+}
+
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
     return _sg.gl.features[f];
-}
-
-_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
-    sg_pixel_format_info info;
-    memset(&info, 0, sizeof(info));
-    switch(format) {
-        case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_RGB8:
-        case SG_PIXELFORMAT_RGBA4:
-        case SG_PIXELFORMAT_R5G6B5:
-        case SG_PIXELFORMAT_R5G5B5A1:
-        case SG_PIXELFORMAT_R10G10B10A2:
-        case SG_PIXELFORMAT_RGBA32F:
-        case SG_PIXELFORMAT_RGBA16F:
-        case SG_PIXELFORMAT_R32F:
-        case SG_PIXELFORMAT_R16F:
-        case SG_PIXELFORMAT_L8:
-            info.supported = true;
-            info.max_width = _sg.gl.max_texture_size;
-            info.max_height = _sg.gl.max_texture_size;
-            info.max_depth = _sg.gl.max_cube_texture_size;
-            info.max_layers = _sg.gl.max_array_layers;
-            break;
-        case SG_PIXELFORMAT_DXT1:
-        case SG_PIXELFORMAT_DXT3:
-        case SG_PIXELFORMAT_DXT5:
-            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
-            if (info.supported) {
-                info.max_width = _sg.gl.max_texture_size;
-                info.max_height = _sg.gl.max_texture_size;
-                info.max_depth = _sg.gl.max_cube_texture_size;
-                info.max_layers = _sg.gl.max_array_layers;
-            }
-            break;
-        case SG_PIXELFORMAT_DEPTH:
-        case SG_PIXELFORMAT_DEPTHSTENCIL:
-            info.supported = true;
-            info.max_width = _sg.gl.max_texture_size;
-            info.max_height = _sg.gl.max_texture_size;
-            info.max_depth = 1;
-            info.max_layers = _sg.gl.max_array_layers;
-            break;
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
-            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
-            if (info.supported) {
-                info.max_width = _sg.gl.max_texture_size;
-                info.max_height = _sg.gl.max_texture_size;
-                info.max_depth = _sg.gl.max_cube_texture_size;
-                info.max_layers = _sg.gl.max_array_layers;
-            }
-            break;
-        case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-            info.supported = _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
-            if (info.supported) {
-                info.max_width = _sg.gl.max_texture_size;
-                info.max_height = _sg.gl.max_texture_size;
-                info.max_depth = _sg.gl.max_cube_texture_size;
-                info.max_layers = _sg.gl.max_array_layers;
-            }
-            break;
-        default:
-            SOKOL_UNREACHABLE; return 0;
-    }
-
-    return info;
 }
 
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
@@ -5843,6 +5840,10 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     _sg.d3d11.valid = false;
 }
 
+_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
+    return &_sg.d3d11.caps;
+}
+
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
@@ -5859,12 +5860,6 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
-}
-
-_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
-    sg_pixel_format_info info;
-    memset(&info, 0, sizeof(info));
-    return info;
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
@@ -7512,6 +7507,10 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     _sg_mtl_device = nil;
 }
 
+_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
+    return &_sg.mtl.caps;
+}
+
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
@@ -7532,12 +7531,6 @@ _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
         default:
             return false;
     }
-}
-
-_SOKOL_PRIVATE sg_pixel_format_info _sg_query_pixel_format_info(sg_pixel_format format) {
-    sg_pixel_format_info info;
-    memset(&info, 0, sizeof(info));
-    return info;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
@@ -9921,15 +9914,15 @@ SOKOL_API_IMPL sg_backend sg_query_backend(void) {
     #endif
 }
 
+SOKOL_API_IMPL sg_caps sg_query_caps(void) {
+    const sg_caps caps = *_sg_query_caps();
+    _SG_TRACE_ARGS(query_caps, &caps);
+    return caps;
+}
+
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
     bool res = _sg_query_feature(f);
     _SG_TRACE_ARGS(query_feature, f, res);
-    return res;
-}
-
-SOKOL_API_IMPL sg_pixel_format_info sg_query_pixel_format_info(sg_pixel_format format) {
-    sg_pixel_format_info res = _sg_query_pixel_format_info(format);
-    //FIXME: _SG_TRACE_ARGS(query_pixel_format_info, format, res);
     return res;
 }
 
