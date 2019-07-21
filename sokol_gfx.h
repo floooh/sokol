@@ -641,7 +641,7 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA8SN,
     SG_PIXELFORMAT_RGBA8UI,
     SG_PIXELFORMAT_RGBA8SI,
-    SG_PIXELFORMAT_BGRA8
+    SG_PIXELFORMAT_BGRA8,
     SG_PIXELFORMAT_RGB10A2,
     SG_PIXELFORMAT_R11B10F,
 
@@ -657,10 +657,6 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA32UI,
     SG_PIXELFORMAT_RGBA32SI,
     SG_PIXELFORMAT_RGBA32F,
-
-    SG_PIXELFORMAT_RGBA4,
-    SG_PIXELFORMAT_R5G6B5,
-    SG_PIXELFORMAT_R5G5B5A1,
 
     SG_PIXELFORMAT_DEPTH32F,
     SG_PIXELFORMAT_DEPTH24PLUS,
@@ -687,8 +683,10 @@ typedef enum sg_pixel_format {
     The sg_caps struct is returned by the sg_query_caps() function.
 */
 typedef struct sg_pixelformat_caps {
-    bool renderable;            /* pixel format can be used as render target */
-    bool filterable;            /* pixel format can be sampled with filtering */
+    bool filter;    /* pixel format can be sampled with filtering */
+    bool blend;     /* alpha-blending is supported */
+    bool render;    /* pixel format can be used as render target */
+    bool msaa;      /* pixel format can be used as MSAA render target */
 } sg_pixelformat_caps;
 
 typedef struct sg_limits {
@@ -737,7 +735,7 @@ typedef struct sg_caps {
             sg_pixelformat_caps rgba8sn;
             sg_pixelformat_caps rgba8ui;
             sg_pixelformat_caps rgba8si;
-            sg_pixelformat_caps bgra;
+            sg_pixelformat_caps bgra8;
             sg_pixelformat_caps rgb10a2;
             sg_pixelformat_caps r11b10f;
             sg_pixelformat_caps rg32ui;
@@ -751,9 +749,6 @@ typedef struct sg_caps {
             sg_pixelformat_caps rgba32ui;
             sg_pixelformat_caps rgba32si;
             sg_pixelformat_caps rgba32f;
-            sg_pixelformat_caps rgba4;
-            sg_pixelformat_caps r5g6b5;
-            sg_pixelformat_caps r5g5b5a1;
             sg_pixelformat_caps depth32f;
             sg_pixelformat_caps depth24plus;
             sg_pixelformat_caps depth24plus_stencil8;
@@ -7521,9 +7516,121 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     return new_item->mtl_sampler_state;
 }
 
-/*-- a simple state cache for the resource bindings --------------------------*/
 _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
     memset(&_sg.mtl.state_cache, 0, sizeof(_sg.mtl.state_cache));
+}
+
+/* https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf */
+_SOKOL_PRIVATE void _sg_mtl_fmt_none(sg_pixelformat_caps* c) {
+    c->filter = false;
+    c->blend = false;
+    c->render = false;
+    c->msaa = false;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_fmt_all(sg_pixelformat_caps* c) {
+    c->filter = true;
+    c->blend = true;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_fmt_r(sg_pixelformat_caps* c) {
+    c->filter = false;
+    c->blend = false;
+    c->render = true;
+    c->msaa = false;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_fmt_rm(sg_pixelformat_caps* c) {
+    c->filter = false;
+    c->blend = false;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_fmt_brm(sg_pixelformat_caps* c) {
+    c->filter = false;
+    c->blend = true;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_fmt_br(sg_pixelformat_caps* c) {
+    c->filter = false;
+    c->blend = true;
+    c->render = true;
+    c->msaa = false;
+}
+
+_SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
+    sg_caps* caps = &_sg.mtl.caps;
+    caps->backend = SG_BACKEND_METAL;
+    caps->instancing = true;
+    caps->origin_top_left = true;
+    caps->multiple_render_targets = true;
+    caps->msaa_render_targets = true;
+    caps->imagetype_3d = true;
+    caps->imagetype_3d = true;
+
+    #if defined(TARGET_OS_IPHONE && !TARGET_OS_IPHONE)
+        caps->limits.max_image_size_2d = 16 * 1024;
+        caps->limits.max_image_size_cube = 16 * 1024;
+        caps->limits.max_image_size_3d = 2 * 1024;
+        caps->limits.max_image_size_array = 16 * 1024;
+        caps->limits.max_image_array_layers = 2 * 1024;
+    #else
+        /* newer iOS devices support 16k textures */
+        caps->limits.max_image_size_2d = 8 * 1024;
+        caps->limits.max_image_size_cube = 8 * 1024;
+        caps->limits.max_image_size_3d = 2 * 1024;
+        caps->limits.max_image_size_array = 8 * 1024;
+        caps->limits.max_image_array_layers = 2 * 1024;
+    #endif
+
+    _sg_mtl_fmt_all(&caps.format.r8);
+    _sg_mtl_fmt_all(&caps.format.r8sn);
+    _sg_mtl_fmt_rm(&caps.format.r8ui);
+    _sg_mtl_fmt_rm(&caps.format.r8si);
+    _sg_mtl_fmt_all(&caps.format.r16);
+    _sg_mtl_fmt_all(&caps.format.r16sn);
+    _sg_mtl_fmt_rm(&caps.format.r16ui);
+    _sg_mtl_fmt_rm(&caps.format.r16si);
+    _sg_mtl_fmt_all(&caps.format.r16f);
+    _sg_mtl_fmt_all(&caps.format.rg8);
+    _sg_mtl_fmt_all(&caps.format.rg8sn);
+    _sg_mtl_fmt_rm(&caps.format.rg8ui);
+    _sg_mtl_fmt_rm(&caps.format.rg8si);
+    _sg_mtl_fmt_r(&caps.format.r32ui);
+    _sg_mtl_fmt_r(&caps.format.r32si);
+    _sg_mtl_fmt_brm(&caps.format.r32f);
+    _sg_mtl_fmt_all(&caps.format.rg16)
+    _sg_mtl_fmt_all(&caps.format.rg16sn);
+    _sg_mtl_fmt_rm(&caps.format.rg16ui);
+    _sg_mtl_fmt_rm(&caps.format.rg16si);
+    _sg_mtl_fmt_all(&caps.format.rg16f);
+    _sg_mtl_fmt_all(&caps.format.rgba8);
+    _sg_mtl_fmt_all(&caps.format.rgba8sn);
+    _sg_mtl_fmt_rm(&caps.format.rgba8ui);
+    _sg_mtl_fmt_rm(&caps.format.rgba8si);
+    _sg_mtl_fmt_all(&caps.format.bgra8);
+    _sg_mtl_fmt_all(&caps.format.rgb10a2);
+    _sg_mtl_fmt_all(&caps.format.r11b10f);
+    _sg_mtl_fmt_r(&caps.format.rg32ui);     // FIXME: macOS supports MSAA
+    _sg_mtl_fmt_r(&caps.format.rg32si);
+    _sg_mtl_fmt_br(&caps.format.rg32f);     // FIXME: maxOS support all
+    _sg_mtl_fmt_all(&caps.format.rgba16);
+    _sg_mtl_fmt_all(&caps.format.rgba16sn);
+    _sg_mtl_fmt_rm(&caps.format.rgba16ui);
+    _sg_mtl_fmt_rm(&caps.format.rgba16si);
+    _sg_mtl_fmt_all(&caps.format.rgba16f);
+    _sg_mtl_fmt_r(&caps.format.rgba32ui);   // FIXME: macOS supports rm
+    _sg_mtl_fmt_r(&caps.format.rgba32si);   // FIXME: macOS supports rm
+    _sg_mtl_fmt_r(&caps.format.rgba32f);    // FIXME: macOS supports all
+    _sg_mtl_fmt_rm(&caps.format.depth32f);
+    _sg_mtl_fmt_rm(&caps.format.depth24plus);
+    _sg_mtl_fmt_rm(&caps.format.dpeth24plus_stencil8);
+    // FIXME: compressed formats
 }
 
 /*-- main Metal backend state and functions ----------------------------------*/
@@ -7555,6 +7662,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
             options:res_opts
         ];
     }
+    _sg_mtl_init_caps();
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
