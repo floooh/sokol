@@ -613,28 +613,69 @@ typedef enum sg_feature {
 typedef enum sg_pixel_format {
     _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
     SG_PIXELFORMAT_NONE,
+
+    SG_PIXELFORMAT_R8,
+    SG_PIXELFORMAT_R8SN,
+    SG_PIXELFORMAT_R8UI,
+    SG_PIXELFORMAT_R8SI,
+
+    SG_PIXELFORMAT_R16,
+    SG_PIXELFORMAT_R16SN,
+    SG_PIXELFORMAT_R16UI,
+    SG_PIXELFORMAT_R16SI,
+    SG_PIXELFORMAT_R16F,
+    SG_PIXELFORMAT_RG8,
+    SG_PIXELFORMAT_RG8SN,
+    SG_PIXELFORMAT_RG8UI,
+    SG_PIXELFORMAT_RG8SI,
+
+    SG_PIXELFORMAT_R32UI,
+    SG_PIXELFORMAT_R32SI,
+    SG_PIXELFORMAT_R32F,
+    SG_PIXELFORMAT_RG16,
+    SG_PIXELFORMAT_RG16SN,
+    SG_PIXELFORMAT_RG16UI,
+    SG_PIXELFORMAT_RG16SI,
+    SG_PIXELFORMAT_RG16F,
     SG_PIXELFORMAT_RGBA8,
-    SG_PIXELFORMAT_RGB8,
+    SG_PIXELFORMAT_RGBA8SN,
+    SG_PIXELFORMAT_RGBA8UI,
+    SG_PIXELFORMAT_RGBA8SI,
+    SG_PIXELFORMAT_BGRA8
+    SG_PIXELFORMAT_RGB10A2,
+    SG_PIXELFORMAT_R11B10F,
+
+    SG_PIXELFORMAT_RG32UI,
+    SG_PIXELFORMAT_RG32SI,
+    SG_PIXELFORMAT_RG32F,
+    SG_PIXELFORMAT_RGBA16,
+    SG_PIXELFORMAT_RGBA16SN,
+    SG_PIXELFORMAT_RGBA16UI,
+    SG_PIXELFORMAT_RGBA16SI,
+    SG_PIXELFORMAT_RGBA16F,
+
+    SG_PIXELFORMAT_RGBA32UI,
+    SG_PIXELFORMAT_RGBA32SI,
+    SG_PIXELFORMAT_RGBA32F,
+
     SG_PIXELFORMAT_RGBA4,
     SG_PIXELFORMAT_R5G6B5,
     SG_PIXELFORMAT_R5G5B5A1,
-    SG_PIXELFORMAT_R10G10B10A2,
-    SG_PIXELFORMAT_RGBA32F,
-    SG_PIXELFORMAT_RGBA16F,
-    SG_PIXELFORMAT_R32F,
-    SG_PIXELFORMAT_R16F,
-    SG_PIXELFORMAT_L8,
+
+    SG_PIXELFORMAT_DEPTH32F,
+    SG_PIXELFORMAT_DEPTH24PLUS,
+    SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8,
+
     SG_PIXELFORMAT_DXT1,
     SG_PIXELFORMAT_DXT3,
     SG_PIXELFORMAT_DXT5,
-    SG_PIXELFORMAT_DEPTH,
-    SG_PIXELFORMAT_DEPTHSTENCIL,
     SG_PIXELFORMAT_PVRTC2_RGB,
     SG_PIXELFORMAT_PVRTC4_RGB,
     SG_PIXELFORMAT_PVRTC2_RGBA,
     SG_PIXELFORMAT_PVRTC4_RGBA,
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_SRGB8,
+
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
 } sg_pixel_format;
@@ -646,13 +687,8 @@ typedef enum sg_pixel_format {
     The sg_caps struct is returned by the sg_query_caps() function.
 */
 typedef struct sg_pixelformat_caps {
-    bool image_2d;              /* pixel format can be used for SG_IMAGETYPE_2D images */
-    bool image_cube;            /* pixel format can be used for SG_IMAGETYPE_CUBE images */
-    bool image_3d;              /* pixel format can be used for SG_IMAGETYPE_3D images */
-    bool image_array;           /* pixel format can be used for SG_IMAGETYPE_ARRAY images */
-    bool vertex;                /* pixel format can be sampled from vertex shader */
-    bool render_target;         /* pixel format can be used as render target */
-    bool msaa;                  /* pixel format can be used as MSAA render target */
+    bool renderable;            /* pixel format can be used as render target */
+    bool filterable;            /* pixel format can be sampled with filtering */
 } sg_pixelformat_caps;
 
 typedef struct sg_limits {
@@ -668,29 +704,62 @@ typedef struct sg_caps {
     bool instancing;
     bool origin_top_left;
     bool multiple_render_targets;
+    bool msaa_render_targets;
     bool imagetype_3d;          /* creation of SG_IMAGETYPE_3D images is supported */
     bool imagetype_array;       /* creation of SG_IMAGETYPE_ARRAY images is supported */
     sg_limits limits;
     union {
         struct {
             sg_pixelformat_caps _default;
-            sg_pixelformat_caps none;
+            sg_pixelformat_caps _none;
+            sg_pixelformat_caps r8;
+            sg_pixelformat_caps r8sn;
+            sg_pixelformat_caps r8ui;
+            sg_pixelformat_caps r8si;
+            sg_pixelformat_caps r16;
+            sg_pixelformat_caps r16sn;
+            sg_pixelformat_caps r16ui;
+            sg_pixelformat_caps r16si;
+            sg_pixelformat_caps r16f;
+            sg_pixelformat_caps rg8;
+            sg_pixelformat_caps rg8sn;
+            sg_pixelformat_caps rg8ui;
+            sg_pixelformat_caps rg8si;
+            sg_pixelformat_caps r32ui;
+            sg_pixelformat_caps r32si;
+            sg_pixelformat_caps r32f;
+            sg_pixelformat_caps rg16;
+            sg_pixelformat_caps rg16sn;
+            sg_pixelformat_caps rg16ui;
+            sg_pixelformat_caps rg16si;
+            sg_pixelformat_caps rg16f;
             sg_pixelformat_caps rgba8;
-            sg_pixelformat_caps rgb8;
+            sg_pixelformat_caps rgba8sn;
+            sg_pixelformat_caps rgba8ui;
+            sg_pixelformat_caps rgba8si;
+            sg_pixelformat_caps bgra;
+            sg_pixelformat_caps rgb10a2;
+            sg_pixelformat_caps r11b10f;
+            sg_pixelformat_caps rg32ui;
+            sg_pixelformat_caps rg32si;
+            sg_pixelformat_caps rg32f;
+            sg_pixelformat_caps rgba16;
+            sg_pixelformat_caps rgba16sn;
+            sg_pixelformat_caps rgba16ui;
+            sg_pixelformat_caps rgba16si;
+            sg_pixelformat_caps rgba16f;
+            sg_pixelformat_caps rgba32ui;
+            sg_pixelformat_caps rgba32si;
+            sg_pixelformat_caps rgba32f;
             sg_pixelformat_caps rgba4;
             sg_pixelformat_caps r5g6b5;
             sg_pixelformat_caps r5g5b5a1;
-            sg_pixelformat_caps r10g10b10a2;
-            sg_pixelformat_caps rgba32f;
-            sg_pixelformat_caps rgba16f;
-            sg_pixelformat_caps r32f;
-            sg_pixelformat_caps r16f;
-            sg_pixelformat_caps l8;
+            sg_pixelformat_caps depth32f;
+            sg_pixelformat_caps depth24plus;
+            sg_pixelformat_caps depth24plus_stencil8;
             sg_pixelformat_caps dxt1;
             sg_pixelformat_caps dxt3;
             sg_pixelformat_caps dxt5;
-            sg_pixelformat_caps depth;
-            sg_pixelformat_caps depthstencil;
             sg_pixelformat_caps pvrtc2_rgb;
             sg_pixelformat_caps pvrtc4_rgb;
             sg_pixelformat_caps pvrtc2_rgba;
