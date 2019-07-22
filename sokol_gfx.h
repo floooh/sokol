@@ -662,15 +662,22 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_DEPTH24PLUS,
     SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8,
 
-    SG_PIXELFORMAT_DXT1,
-    SG_PIXELFORMAT_DXT3,
-    SG_PIXELFORMAT_DXT5,
-    SG_PIXELFORMAT_PVRTC2_RGB,
-    SG_PIXELFORMAT_PVRTC4_RGB,
-    SG_PIXELFORMAT_PVRTC2_RGBA,
-    SG_PIXELFORMAT_PVRTC4_RGBA,
+    SG_PIXELFORMAT_BC1_RGBA,
+    SG_PIXELFORMAT_BC2_RGBA,
+    SG_PIXELFORMAT_BC3_RGBA,
+    SG_PIXELFORMAT_BC4_R,
+    SG_PIXELFORMAT_BC4_RSN,
+    SG_PIXELFORMAT_BC5_RG,
+    SG_PIXELFORMAT_BC5_RGSN,
+    SG_PIXELFORMAT_BC6H_RGBF,
+    SG_PIXELFORMAT_BC6H_RGBUF,
+    SG_PIXELFORMAT_BC7_RGBA,
+    SG_PIXELFORMAT_PVRTC_RGB_2BPP,
+    SG_PIXELFORMAT_PVRTC_RGB_4BPP,
+    SG_PIXELFORMAT_PVRTC_RGBA_2BPP,
+    SG_PIXELFORMAT_PVRTC_RGBA_4BPP,
     SG_PIXELFORMAT_ETC2_RGB8,
-    SG_PIXELFORMAT_ETC2_SRGB8,
+    SG_PIXELFORMAT_ETC2_RGB8A1,
 
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -683,10 +690,10 @@ typedef enum sg_pixel_format {
     The sg_caps struct is returned by the sg_query_caps() function.
 */
 typedef struct sg_pixelformat_caps {
-    bool filter;    /* pixel format can be sampled with filtering */
-    bool blend;     /* alpha-blending is supported */
-    bool render;    /* pixel format can be used as render target */
-    bool msaa;      /* pixel format can be used as MSAA render target */
+    bool filter:1;      /* pixel format can be sampled with filtering */
+    bool blend:1;       /* alpha-blending is supported */
+    bool render:1;      /* pixel format can be used as render target */
+    bool msaa:1;        /* pixel format can be used as MSAA render target */
 } sg_pixelformat_caps;
 
 typedef struct sg_limits {
@@ -699,12 +706,12 @@ typedef struct sg_limits {
 
 typedef struct sg_caps {
     sg_backend backend;         /* the backend sokol_gfx.h was compiled for */
-    bool instancing;
-    bool origin_top_left;
-    bool multiple_render_targets;
-    bool msaa_render_targets;
-    bool imagetype_3d;          /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array;       /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool instancing:1;
+    bool origin_top_left:1;
+    bool multiple_render_targets:1;
+    bool msaa_render_targets:1;
+    bool imagetype_3d:1;        /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array:1;     /* creation of SG_IMAGETYPE_ARRAY images is supported */
     sg_limits limits;
     union {
         struct {
@@ -752,15 +759,22 @@ typedef struct sg_caps {
             sg_pixelformat_caps depth32f;
             sg_pixelformat_caps depth24plus;
             sg_pixelformat_caps depth24plus_stencil8;
-            sg_pixelformat_caps dxt1;
-            sg_pixelformat_caps dxt3;
-            sg_pixelformat_caps dxt5;
-            sg_pixelformat_caps pvrtc2_rgb;
-            sg_pixelformat_caps pvrtc4_rgb;
-            sg_pixelformat_caps pvrtc2_rgba;
-            sg_pixelformat_caps pvrtc4_rgba;
+            sg_pixelformat_caps bc1_rgba;
+            sg_pixelformat_caps bc2_rgba;
+            sg_pixelformat_caps bc3_rgba;
+            sg_pixelformat_caps bc4_r;
+            sg_pixelformat_caps bc4_rsn;
+            sg_pixelformat_caps bc5_rg;
+            sg_pixelformat_caps bc5_rgsn;
+            sg_pixelformat_caps bc6h_rgbf;
+            sg_pixelformat_caps bc6h_rgbuf;
+            sg_pixelformat_caps bc7_rgba;
+            sg_pixelformat_caps pvrtc_rgb_2bpp;
+            sg_pixelformat_caps pvrtc_rgb_4bpp;
+            sg_pixelformat_caps pvrtc_rgba_2bpp;
+            sg_pixelformat_caps pvrtc_rgba_4bpp;
             sg_pixelformat_caps etc2_rgb8;
-            sg_pixelformat_caps etc2_srgb8;
+            sg_pixelformat_caps etc2_rgb8a1;
         } format;
         sg_pixelformat_caps formats[_SG_PIXELFORMAT_NUM];
     };
@@ -2253,6 +2267,14 @@ SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, 
     #endif
     #include <TargetConditionals.h>
     #import <Metal/Metal.h>
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #define _SG_TARGET_MACOS (1)
+    #else
+        #define _SG_TARGET_IOS (1)
+        #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
+            #define _SG_TARGET_IOS_SIMULATOR (1)
+        #endif
+    #endif
 #endif
 
 #ifdef _MSC_VER
@@ -2390,10 +2412,6 @@ typedef struct {
 typedef struct {
     _sg_slot_t slot;
 } _sg_context_t;
-
-typedef struct {
-    sg_caps caps;
-} _sg_dummy_backend_t;
 
 /*== GL BACKEND DECLARATIONS =================================================*/
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -2574,7 +2592,6 @@ typedef struct {
     GLint max_cube_texture_size;
     GLint max_3d_texture_size;
     GLint max_array_layers;
-    sg_caps caps;
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -2709,7 +2726,6 @@ typedef struct {
     sg_pipeline cur_pipeline_id;
     ID3D11RenderTargetView* cur_rtvs[SG_MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView* cur_dsv;
-    sg_caps caps;
     /* on-demand loaded d3dcompiler_47.dll handles */
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
@@ -2730,7 +2746,7 @@ typedef struct {
 #elif defined(SOKOL_METAL)
 
 enum {
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
     _SG_MTL_UB_ALIGN = 256,
     #else
     _SG_MTL_UB_ALIGN = 16,
@@ -2910,7 +2926,6 @@ typedef struct {
     _sg_mtl_state_cache_t state_cache;
     _sg_mtl_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
-    sg_caps caps;
 } _sg_mtl_backend_t;
 
 /* keep Objective-C 'smart data' in a separate static objects, these can't be in a C struct until Xcode10 or so */
@@ -3091,9 +3106,8 @@ typedef struct {
     _sg_validate_error_t validate_error;
     #endif
     _sg_pools_t pools;
-    #if defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_backend_t dummy;
-    #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    sg_caps caps;
+    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     _sg_gl_backend_t gl;
     #elif defined(SOKOL_METAL)
     _sg_mtl_backend_t mtl;
@@ -3172,15 +3186,22 @@ _SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
 /* return true if pixel format is a compressed format */
 _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_DXT1:
-        case SG_PIXELFORMAT_DXT3:
-        case SG_PIXELFORMAT_DXT5:
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
+        case SG_PIXELFORMAT_BC1_RGBA:
+        case SG_PIXELFORMAT_BC2_RGBA:
+        case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC4_R:
+        case SG_PIXELFORMAT_BC4_RSN:
+        case SG_PIXELFORMAT_BC5_RG:
+        case SG_PIXELFORMAT_BC5_RGSN:
+        case SG_PIXELFORMAT_BC6H_RGBF:
+        case SG_PIXELFORMAT_BC6H_RGBUF:
+        case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
             return true;
         default:
             return false;
@@ -3189,23 +3210,20 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
 
 /* return true if pixel format is a valid render target format */
 _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_color_format(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_R10G10B10A2:
-        case SG_PIXELFORMAT_RGBA32F:
-        case SG_PIXELFORMAT_RGBA16F:
-            return true;
-        default:
-            return false;
-    }
+    const int fmt_index = (int) fmt;
+    SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
+    return _sg.caps.formats[fmt_index].render;
 }
 
 /* return true if pixel format is a valid depth format */
 _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) {
+    const int fmt_index = (int) fmt;
+    SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
     switch (fmt) {
-        case SG_PIXELFORMAT_DEPTH:
-        case SG_PIXELFORMAT_DEPTHSTENCIL:
-            return true;
+        case SG_PIXELFORMAT_DEPTH32F:
+        case SG_PIXELFORMAT_DEPTH24PLUS:
+        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
+            return _sg.caps.formats[fmt_index].render;
         default:
             return false;
     }
@@ -3213,30 +3231,61 @@ _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) 
 
 /* return true if pixel format is a depth-stencil format */
 _SOKOL_PRIVATE bool _sg_is_depth_stencil_format(sg_pixel_format fmt) {
-    /* FIXME: more depth stencil formats? */
-    return (SG_PIXELFORMAT_DEPTHSTENCIL == fmt);
+    return (SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8 == fmt);
 }
 
 /* return the bytes-per-pixel for a pixel format */
 _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_RGBA32F:
-            return 16;
+        case SG_PIXELFORMAT_R8:
+        case SG_PIXELFORMAT_R8SN:
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_R8SI:
+            return 1;
+
+        case SG_PIXELFORMAT_R16:
+        case SG_PIXELFORMAT_R16SN:
+        case SG_PIXELFORMAT_R16UI:
+        case SG_PIXELFORMAT_R16SI:
+        case SG_PIXELFORMAT_R16F:
+        case SG_PIXELFORMAT_RG8:
+        case SG_PIXELFORMAT_RG8SN:
+        case SG_PIXELFORMAT_RG8UI:
+        case SG_PIXELFORMAT_RG8SI:
+            return 2;
+
+        case SG_PIXELFORMAT_R32UI:
+        case SG_PIXELFORMAT_R32SI:
+        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16SN:
+        case SG_PIXELFORMAT_RG16UI:
+        case SG_PIXELFORMAT_RG16SI:
+        case SG_PIXELFORMAT_RG16F:
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_RGBA8SN:
+        case SG_PIXELFORMAT_RGBA8UI:
+        case SG_PIXELFORMAT_RGBA8SI:
+        case SG_PIXELFORMAT_BGRA8:
+        case SG_PIXELFORMAT_RGB10A2:
+        case SG_PIXELFORMAT_R11B10F:
+            return 4;
+
+        case SG_PIXELFORMAT_RG32UI:
+        case SG_PIXELFORMAT_RG32SI:
+        case SG_PIXELFORMAT_RG32F:
+        case SG_PIXELFORMAT_RGBA16:
+        case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_RGBA16UI:
+        case SG_PIXELFORMAT_RGBA16SI:
         case SG_PIXELFORMAT_RGBA16F:
             return 8;
-        case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_R10G10B10A2:
-        case SG_PIXELFORMAT_R32F:
-            return 4;
-        case SG_PIXELFORMAT_RGB8:
-            return 3;
-        case SG_PIXELFORMAT_R5G5B5A1:
-        case SG_PIXELFORMAT_R5G6B5:
-        case SG_PIXELFORMAT_RGBA4:
-        case SG_PIXELFORMAT_R16F:
-            return 2;
-        case SG_PIXELFORMAT_L8:
-            return 1;
+
+        case SG_PIXELFORMAT_RGBA32UI:
+        case SG_PIXELFORMAT_RGBA32SI:
+        case SG_PIXELFORMAT_RGBA32F:
+            return 16;
+
         default:
             SOKOL_UNREACHABLE;
             return 0;
@@ -3343,10 +3392,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
     /* empty */
-}
-
-_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
-    return &_sg.dummy.caps;
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -4307,10 +4352,6 @@ _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
         #endif
         _sg_gl_reset_state_cache();
     }
-}
-
-_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
-    return &_sg.gl.caps;
 }
 
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
@@ -5904,10 +5945,6 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     _sg.d3d11.valid = false;
 }
 
-_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
-    return &_sg.d3d11.caps;
-}
-
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
@@ -7033,7 +7070,7 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
             return MTLResourceStorageModeShared;
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
-            #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+            #if defined(_SG_TARGET_MACOS)
             return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
             #else
             return MTLCPUCacheModeWriteCombined;
@@ -7091,7 +7128,7 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_texture_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R32F:           return MTLPixelFormatR32Float;
         case SG_PIXELFORMAT_R16F:           return MTLPixelFormatR16Float;
         case SG_PIXELFORMAT_L8:             return MTLPixelFormatR8Unorm;
-        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #if defined(_SG_TARGET_MACOS)
         case SG_PIXELFORMAT_DXT1:           return MTLPixelFormatBC1_RGBA;
         case SG_PIXELFORMAT_DXT3:           return MTLPixelFormatBC2_RGBA;
         case SG_PIXELFORMAT_DXT5:           return MTLPixelFormatBC3_RGBA;
@@ -7564,8 +7601,12 @@ _SOKOL_PRIVATE void _sg_mtl_fmt_br(sg_pixelformat_caps* c) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
-    sg_caps* caps = &_sg.mtl.caps;
-    caps->backend = SG_BACKEND_METAL;
+    sg_caps* caps = &_sg.caps;
+    #if defined(_SG_TARGET_MACOS)
+        caps->backend = SG_BACKEND_METAL_MACOS;
+    #else
+        caps->backend = SG_BACKEND_METAL_IOS;
+    #endif
     caps->instancing = true;
     caps->origin_top_left = true;
     caps->multiple_render_targets = true;
@@ -7573,7 +7614,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     caps->imagetype_3d = true;
     caps->imagetype_3d = true;
 
-    #if defined(TARGET_OS_IPHONE && !TARGET_OS_IPHONE)
+    #if defined(_SG_TARGET_MACOS)
         caps->limits.max_image_size_2d = 16 * 1024;
         caps->limits.max_image_size_cube = 16 * 1024;
         caps->limits.max_image_size_3d = 2 * 1024;
@@ -7588,49 +7629,97 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         caps->limits.max_image_array_layers = 2 * 1024;
     #endif
 
-    _sg_mtl_fmt_all(&caps.format.r8);
-    _sg_mtl_fmt_all(&caps.format.r8sn);
-    _sg_mtl_fmt_rm(&caps.format.r8ui);
-    _sg_mtl_fmt_rm(&caps.format.r8si);
-    _sg_mtl_fmt_all(&caps.format.r16);
-    _sg_mtl_fmt_all(&caps.format.r16sn);
-    _sg_mtl_fmt_rm(&caps.format.r16ui);
-    _sg_mtl_fmt_rm(&caps.format.r16si);
-    _sg_mtl_fmt_all(&caps.format.r16f);
-    _sg_mtl_fmt_all(&caps.format.rg8);
-    _sg_mtl_fmt_all(&caps.format.rg8sn);
-    _sg_mtl_fmt_rm(&caps.format.rg8ui);
-    _sg_mtl_fmt_rm(&caps.format.rg8si);
-    _sg_mtl_fmt_r(&caps.format.r32ui);
-    _sg_mtl_fmt_r(&caps.format.r32si);
-    _sg_mtl_fmt_brm(&caps.format.r32f);
-    _sg_mtl_fmt_all(&caps.format.rg16)
-    _sg_mtl_fmt_all(&caps.format.rg16sn);
-    _sg_mtl_fmt_rm(&caps.format.rg16ui);
-    _sg_mtl_fmt_rm(&caps.format.rg16si);
-    _sg_mtl_fmt_all(&caps.format.rg16f);
-    _sg_mtl_fmt_all(&caps.format.rgba8);
-    _sg_mtl_fmt_all(&caps.format.rgba8sn);
-    _sg_mtl_fmt_rm(&caps.format.rgba8ui);
-    _sg_mtl_fmt_rm(&caps.format.rgba8si);
-    _sg_mtl_fmt_all(&caps.format.bgra8);
-    _sg_mtl_fmt_all(&caps.format.rgb10a2);
-    _sg_mtl_fmt_all(&caps.format.r11b10f);
-    _sg_mtl_fmt_r(&caps.format.rg32ui);     // FIXME: macOS supports MSAA
-    _sg_mtl_fmt_r(&caps.format.rg32si);
-    _sg_mtl_fmt_br(&caps.format.rg32f);     // FIXME: maxOS support all
-    _sg_mtl_fmt_all(&caps.format.rgba16);
-    _sg_mtl_fmt_all(&caps.format.rgba16sn);
-    _sg_mtl_fmt_rm(&caps.format.rgba16ui);
-    _sg_mtl_fmt_rm(&caps.format.rgba16si);
-    _sg_mtl_fmt_all(&caps.format.rgba16f);
-    _sg_mtl_fmt_r(&caps.format.rgba32ui);   // FIXME: macOS supports rm
-    _sg_mtl_fmt_r(&caps.format.rgba32si);   // FIXME: macOS supports rm
-    _sg_mtl_fmt_r(&caps.format.rgba32f);    // FIXME: macOS supports all
-    _sg_mtl_fmt_rm(&caps.format.depth32f);
-    _sg_mtl_fmt_rm(&caps.format.depth24plus);
-    _sg_mtl_fmt_rm(&caps.format.dpeth24plus_stencil8);
-    // FIXME: compressed formats
+    _sg_mtl_fmt_all(&caps->format.r8);
+    _sg_mtl_fmt_all(&caps->format.r8sn);
+    _sg_mtl_fmt_rm(&caps->format.r8ui);
+    _sg_mtl_fmt_rm(&caps->format.r8si);
+    _sg_mtl_fmt_all(&caps->format.r16);
+    _sg_mtl_fmt_all(&caps->format.r16sn);
+    _sg_mtl_fmt_rm(&caps->format.r16ui);
+    _sg_mtl_fmt_rm(&caps->format.r16si);
+    _sg_mtl_fmt_all(&caps->format.r16f);
+    _sg_mtl_fmt_all(&caps->format.rg8);
+    _sg_mtl_fmt_all(&caps->format.rg8sn);
+    _sg_mtl_fmt_rm(&caps->format.rg8ui);
+    _sg_mtl_fmt_rm(&caps->format.rg8si);
+    _sg_mtl_fmt_r(&caps->format.r32ui);
+    _sg_mtl_fmt_r(&caps->format.r32si);
+    _sg_mtl_fmt_brm(&caps->format.r32f);
+    _sg_mtl_fmt_all(&caps->format.rg16);
+    _sg_mtl_fmt_all(&caps->format.rg16sn);
+    _sg_mtl_fmt_rm(&caps->format.rg16ui);
+    _sg_mtl_fmt_rm(&caps->format.rg16si);
+    _sg_mtl_fmt_all(&caps->format.rg16f);
+    _sg_mtl_fmt_all(&caps->format.rgba8);
+    _sg_mtl_fmt_all(&caps->format.rgba8sn);
+    _sg_mtl_fmt_rm(&caps->format.rgba8ui);
+    _sg_mtl_fmt_rm(&caps->format.rgba8si);
+    _sg_mtl_fmt_all(&caps->format.bgra8);
+    _sg_mtl_fmt_all(&caps->format.rgb10a2);
+    _sg_mtl_fmt_all(&caps->format.r11b10f);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_mtl_fmt_rm(&caps->format.rg32ui);
+    #else
+        _sg_mtl_fmt_r(&caps->format.rg32ui);
+    #endif
+    _sg_mtl_fmt_r(&caps->format.rg32si);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_mtl_fmt_all(&caps->format.rg32f);
+    #else
+        _sg_mtl_fmt_br(&caps->format.rg32f);
+    #endif
+    _sg_mtl_fmt_all(&caps->format.rgba16);
+    _sg_mtl_fmt_all(&caps->format.rgba16sn);
+    _sg_mtl_fmt_rm(&caps->format.rgba16ui);
+    _sg_mtl_fmt_rm(&caps->format.rgba16si);
+    _sg_mtl_fmt_all(&caps->format.rgba16f);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_mtl_fmt_rm(&caps->format.rgba32ui);
+        _sg_mtl_fmt_rm(&caps->format.rgba32si);
+        _sg_mtl_fmt_all(&caps->format.rgba32f);
+    #else
+        _sg_mtl_fmt_r(&caps->format.rgba32ui);
+        _sg_mtl_fmt_r(&caps->format.rgba32si);
+        _sg_mtl_fmt_r(&caps->format.rgba32f);
+    #endif
+    _sg_mtl_fmt_rm(&caps->format.depth32f);
+    _sg_mtl_fmt_rm(&caps->format.depth24plus);
+    _sg_mtl_fmt_rm(&caps->format.depth24plus_stencil8);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_mtl_fmt_f(&caps->format.bc1_rgba);
+        _sg_mtl_fmt_f(&caps->format.bc2_rgba);
+        _sg_mtl_fmt_f(&caps->format.bc3_rgba);
+        _sg_mtl_fmt_f(&caps->format.bc4_r);
+        _sg_mtl_fmt_f(&caps->format.bc4_rsn);
+        _sg_mtl_fmt_f(&caps->format.bc5_rg);
+        _sg_mtl_fmt_f(&caps->format.bc5_rgsn);
+        _sg_mtl_fmt_f(&caps->format.bc6h_rgbf);
+        _sg_mtl_fmt_f(&caps->format.bc6h_rgbuf);
+        _sg_mtl_fmt_f(&caps->format.bc7_rgba);
+        _sg_mtl_fmt_none(&caps->format.pvrtc_rgb_2bpp);
+        _sg_mtl_fmt_none(&caps->format.pvrtc_rgb_4bpp);
+        _sg_mtl_fmt_none(&caps->format.pvrtc_rgba_2bpp);
+        _sg_mtl_fmt_none(&caps->format.pvrtc_rgba_4bpp);
+        _sg_mtl_fmt_none(&caps->format.etc2_rgb8);
+        _sg_mtl_fmt_none(&caps->format.etc2_rgb8a1);
+    #else
+        _sg_mtl_fmt_none(&caps->format.bc1_rgba);
+        _sg_mtl_fmt_none(&caps->format.bc2_rgba);
+        _sg_mtl_fmt_none(&caps->format.bc3_rgba);
+        _sg_mtl_fmt_none(&caps->format.bc4_r);
+        _sg_mtl_fmt_none(&caps->format.bc4_rsn);
+        _sg_mtl_fmt_none(&caps->format.bc5_rg);
+        _sg_mtl_fmt_none(&caps->format.bc5_rgsn);
+        _sg_mtl_fmt_none(&caps->format.bc6h_rgbf);
+        _sg_mtl_fmt_none(&caps->format.bc6h_rgbuf);
+        _sg_mtl_fmt_none(&caps->format.bc7_rgba);
+        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgb_2bpp);
+        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgb_4bpp);
+        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgba_2bpp);
+        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgba_4bpp);
+        _sg_mtl_fmt_filter(&caps->format.etc2_rgb8);
+        _sg_mtl_fmt_filter(&caps->format.etc2_rgb8a1);
+    #endif
 }
 
 /*-- main Metal backend state and functions ----------------------------------*/
@@ -7653,7 +7742,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl_device;
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
     res_opts |= MTLResourceStorageModeManaged;
     #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -7684,14 +7773,10 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     _sg_mtl_device = nil;
 }
 
-_SOKOL_PRIVATE const sg_caps* _sg_query_caps(void) {
-    return &_sg.mtl.caps;
-}
-
 _SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
     switch (f) {
         case SG_FEATURE_INSTANCING:
-        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #if defined(_SG_TARGET_MACOS)
         case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
         #else
         case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
@@ -7864,7 +7949,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
     if (img->usage != SG_USAGE_IMMUTABLE) {
         mtl_desc.cpuCacheMode = MTLCPUCacheModeWriteCombined;
     }
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
         /* macOS: use managed textures */
         mtl_desc.resourceOptions = MTLResourceStorageModeManaged;
         mtl_desc.storageMode = MTLStorageModeManaged;
@@ -8441,7 +8526,7 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     SOKOL_ASSERT(nil == _sg_mtl_cmd_encoder);
     SOKOL_ASSERT(nil != _sg_mtl_cmd_buffer);
 
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
     [_sg_mtl_uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg.mtl.cur_ub_offset)];
     #endif
 
@@ -8673,7 +8758,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data, int d
     __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_idpool[buf->mtl_buf[buf->active_slot]];
     void* dst_ptr = [mtl_buf contents];
     memcpy(dst_ptr, data, data_size);
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
     [mtl_buf didModifyRange:NSMakeRange(0, data_size)];
     #endif
 }
@@ -8689,7 +8774,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int d
     uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
     dst_ptr += buf->append_pos;
     memcpy(dst_ptr, data, data_size);
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SG_TARGET_MACOS)
     [mtl_buf didModifyRange:NSMakeRange(buf->append_pos, data_size)];
     #endif
 }
@@ -10077,10 +10162,10 @@ SOKOL_API_IMPL sg_backend sg_query_backend(void) {
     #elif defined(SOKOL_D3D11)
         return SG_BACKEND_D3D11;
     #elif defined(SOKOL_METAL)
-        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #if defined(_SG_TARGET_MACOS)
             return SG_BACKEND_METAL_MACOS;
         #else
-            #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
+            #if defined(_SG_TARGET_IOS_SIMULATOR)
                 return SG_BACKEND_METAL_SIMULATOR;
             #else
                 return SG_BACKEND_METAL_IOS;
@@ -10092,9 +10177,8 @@ SOKOL_API_IMPL sg_backend sg_query_backend(void) {
 }
 
 SOKOL_API_IMPL sg_caps sg_query_caps(void) {
-    const sg_caps caps = *_sg_query_caps();
-    _SG_TRACE_ARGS(query_caps, &caps);
-    return caps;
+    _SG_TRACE_ARGS(query_caps, &_sg.caps);
+    return _sg.caps;
 }
 
 SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
