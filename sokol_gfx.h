@@ -577,31 +577,6 @@ typedef enum sg_backend {
 } sg_backend;
 
 /*
-    sg_feature
-
-    These are optional features, use the function
-    sg_query_feature() to check whether the feature is supported.
-*/
-typedef enum sg_feature {
-    SG_FEATURE_INSTANCING,
-    SG_FEATURE_TEXTURE_COMPRESSION_DXT,
-    SG_FEATURE_TEXTURE_COMPRESSION_PVRTC,
-    SG_FEATURE_TEXTURE_COMPRESSION_ATC,
-    SG_FEATURE_TEXTURE_COMPRESSION_ETC2,
-    SG_FEATURE_TEXTURE_FLOAT,
-    SG_FEATURE_TEXTURE_HALF_FLOAT,
-    SG_FEATURE_ORIGIN_BOTTOM_LEFT,
-    SG_FEATURE_ORIGIN_TOP_LEFT,
-    SG_FEATURE_MSAA_RENDER_TARGETS,
-    SG_FEATURE_PACKED_VERTEX_FORMAT_10_2,
-    SG_FEATURE_MULTIPLE_RENDER_TARGET,
-    SG_FEATURE_IMAGETYPE_3D,
-    SG_FEATURE_IMAGETYPE_ARRAY,
-
-    SG_NUM_FEATURES
-} sg_feature;
-
-/*
     sg_pixel_format
 
     This is a common subset of useful and widely supported pixel formats. The
@@ -658,7 +633,6 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_RGBA32SI,
     SG_PIXELFORMAT_RGBA32F,
 
-    SG_PIXELFORMAT_DEPTH32F,
     SG_PIXELFORMAT_DEPTH24PLUS,
     SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8,
 
@@ -690,10 +664,12 @@ typedef enum sg_pixel_format {
     The sg_caps struct is returned by the sg_query_caps() function.
 */
 typedef struct sg_pixelformat_caps {
+    bool valid:1;       /* pixel format is valid on this backend / platform */
     bool filter:1;      /* pixel format can be sampled with filtering */
     bool blend:1;       /* alpha-blending is supported */
     bool render:1;      /* pixel format can be used as render target */
     bool msaa:1;        /* pixel format can be used as MSAA render target */
+    bool depth;         /* pixel format is a depth format */
 } sg_pixelformat_caps;
 
 typedef struct sg_limits {
@@ -756,7 +732,6 @@ typedef struct sg_caps {
             sg_pixelformat_caps rgba32ui;
             sg_pixelformat_caps rgba32si;
             sg_pixelformat_caps rgba32f;
-            sg_pixelformat_caps depth32f;
             sg_pixelformat_caps depth24plus;
             sg_pixelformat_caps depth24plus_stencil8;
             sg_pixelformat_caps bc1_rgba;
@@ -1776,7 +1751,6 @@ typedef struct sg_pass_desc {
 typedef struct sg_trace_hooks {
     void* user_data;
     void (*query_caps)(const sg_caps* result, void* user_data);
-    void (*query_feature)(sg_feature feature, bool result, void* user_data);
     void (*reset_state_cache)(void* user_data);
     void (*make_buffer)(const sg_buffer_desc* desc, sg_buffer result, void* user_data);
     void (*make_image)(const sg_image_desc* desc, sg_image result, void* user_data);
@@ -1980,8 +1954,6 @@ SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL sg_desc sg_query_desc(void);
 SOKOL_API_DECL sg_caps sg_query_caps(void);
-SOKOL_API_DECL sg_backend sg_query_backend(void);
-SOKOL_API_DECL bool sg_query_feature(sg_feature feature);
 SOKOL_API_DECL void sg_reset_state_cache(void);
 SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
 SOKOL_API_DECL void sg_push_debug_group(const char* name);
@@ -2050,23 +2022,6 @@ SOKOL_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
 SOKOL_API_DECL sg_context sg_setup_context(void);
 SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
-
-/* deprecated structs and functions */
-#ifndef SOKOL_NO_DEPRECATED
-typedef struct sg_draw_state {
-    uint32_t _start_canary;
-    sg_pipeline pipeline;
-    sg_buffer vertex_buffers[SG_MAX_SHADERSTAGE_BUFFERS];
-    int vertex_buffer_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-    sg_buffer index_buffer;
-    int index_buffer_offset;
-    sg_image vs_images[SG_MAX_SHADERSTAGE_IMAGES];
-    sg_image fs_images[SG_MAX_SHADERSTAGE_IMAGES];
-    uint32_t _end_canary;
-} sg_draw_state;
-SOKOL_API_DECL void sg_apply_draw_state(const sg_draw_state* ds);
-SOKOL_API_DECL void sg_apply_uniform_block(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
-#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -2584,7 +2539,6 @@ typedef struct {
     _sg_pass_t* cur_pass;
     sg_pass cur_pass_id;
     _sg_gl_state_cache_t cache;
-    bool features[SG_NUM_FEATURES];
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
@@ -3212,21 +3166,14 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
 _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_color_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
-    return _sg.caps.formats[fmt_index].render;
+    return _sg.caps.formats[fmt_index].render && !_sg.caps.formats[fmt_index].depth;
 }
 
 /* return true if pixel format is a valid depth format */
 _SOKOL_PRIVATE bool _sg_is_valid_rendertarget_depth_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index >= 0) && (fmt_index < _SG_PIXELFORMAT_NUM));
-    switch (fmt) {
-        case SG_PIXELFORMAT_DEPTH32F:
-        case SG_PIXELFORMAT_DEPTH24PLUS:
-        case SG_PIXELFORMAT_DEPTH24PLUS_STENCIL8:
-            return _sg.caps.formats[fmt_index].render;
-        default:
-            return false;
-    }
+    return _sg.caps.formats[fmt_index].render && _sg.caps.formats[fmt_index].depth;
 }
 
 /* return true if pixel format is a depth-stencil format */
@@ -3292,23 +3239,76 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
     }
 }
 
-/* return row pitch for an image */
+/* capability table pixel format helper functions */
+_SOKOL_PRIVATE void _sg_caps_fmt_none(sg_pixelformat_caps* c) {
+    c->valid = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_all(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->filter = true;
+    c->blend = true;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_r(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->render = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_rmd(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->render = true;
+    c->msaa = true;
+    c->depth = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_rm(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_brm(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->blend = true;
+    c->render = true;
+    c->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_caps_fmt_br(sg_pixelformat_caps* c) {
+    c->valid = true;
+    c->blend = true;
+    c->render = true;
+}
+
+/* return row pitch for an image
+    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+*/
 _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
     int pitch;
     switch (fmt) {
-        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_BC1_RGBA:
+        case SG_PIXELFORMAT_BC4_R:
+        case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
             pitch = ((width + 3) / 4) * 8;
             pitch = pitch < 8 ? 8 : pitch;
             break;
-        case SG_PIXELFORMAT_DXT3:
-        case SG_PIXELFORMAT_DXT5:
+        case SG_PIXELFORMAT_BC2_RGBA:
+        case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC5_RG:
+        case SG_PIXELFORMAT_BC5_RGSN:
+        case SG_PIXELFORMAT_BC6H_RGBF:
+        case SG_PIXELFORMAT_BC6H_RGBUF:
+        case SG_PIXELFORMAT_BC7_RGBA:
             pitch = ((width + 3) / 4) * 16;
             pitch = pitch < 16 ? 16 : pitch;
             break;
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
             {
                 const int block_size = 4*4;
                 const int bpp = 4;
@@ -3317,8 +3317,8 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
                 pitch = width_blocks * ((block_size * bpp) / 8);
             }
             break;
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
             {
                 const int block_size = 8*4;
                 const int bpp = 2;
@@ -3334,19 +3334,28 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
     return pitch;
 }
 
-/* return pitch of a 2D subimage / texture slice */
+/* return pitch of a 2D subimage / texture slice
+    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+*/
 _SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height) {
     int num_rows = 0;
     switch (fmt) {
-        case SG_PIXELFORMAT_DXT1:
-        case SG_PIXELFORMAT_DXT3:
-        case SG_PIXELFORMAT_DXT5:
+        case SG_PIXELFORMAT_BC1_RGBA:
+        case SG_PIXELFORMAT_BC4_R:
+        case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
+        case SG_PIXELFORMAT_BC2_RGBA:
+        case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC5_RG:
+        case SG_PIXELFORMAT_BC5_RGSN:
+        case SG_PIXELFORMAT_BC6H_RGBF:
+        case SG_PIXELFORMAT_BC6H_RGBUF:
+        case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
             num_rows = ((height + 3) / 4);
             break;
         default:
@@ -3392,11 +3401,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
     /* empty */
-}
-
-_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    _SOKOL_UNUSED(f);
-    return true;
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
@@ -4352,11 +4356,6 @@ _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
         #endif
         _sg_gl_reset_state_cache();
     }
-}
-
-_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    SOKOL_ASSERT((f>=0) && (f<SG_NUM_FEATURES));
-    return _sg.gl.features[f];
 }
 
 _SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
@@ -5943,24 +5942,6 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
     SOKOL_ASSERT(_sg.d3d11.valid);
     _sg.d3d11.valid = false;
-}
-
-_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    switch (f) {
-        case SG_FEATURE_INSTANCING:
-        case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
-        case SG_FEATURE_TEXTURE_FLOAT:
-        case SG_FEATURE_TEXTURE_HALF_FLOAT:
-        case SG_FEATURE_ORIGIN_TOP_LEFT:
-        case SG_FEATURE_MSAA_RENDER_TARGETS:
-        case SG_FEATURE_MULTIPLE_RENDER_TARGET:
-        case SG_FEATURE_IMAGETYPE_3D:
-        case SG_FEATURE_IMAGETYPE_ARRAY:
-        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:
-            return true;
-        default:
-            return false;
-    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
@@ -7558,48 +7539,6 @@ _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
 }
 
 /* https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf */
-_SOKOL_PRIVATE void _sg_mtl_fmt_none(sg_pixelformat_caps* c) {
-    c->filter = false;
-    c->blend = false;
-    c->render = false;
-    c->msaa = false;
-}
-
-_SOKOL_PRIVATE void _sg_mtl_fmt_all(sg_pixelformat_caps* c) {
-    c->filter = true;
-    c->blend = true;
-    c->render = true;
-    c->msaa = true;
-}
-
-_SOKOL_PRIVATE void _sg_mtl_fmt_r(sg_pixelformat_caps* c) {
-    c->filter = false;
-    c->blend = false;
-    c->render = true;
-    c->msaa = false;
-}
-
-_SOKOL_PRIVATE void _sg_mtl_fmt_rm(sg_pixelformat_caps* c) {
-    c->filter = false;
-    c->blend = false;
-    c->render = true;
-    c->msaa = true;
-}
-
-_SOKOL_PRIVATE void _sg_mtl_fmt_brm(sg_pixelformat_caps* c) {
-    c->filter = false;
-    c->blend = true;
-    c->render = true;
-    c->msaa = true;
-}
-
-_SOKOL_PRIVATE void _sg_mtl_fmt_br(sg_pixelformat_caps* c) {
-    c->filter = false;
-    c->blend = true;
-    c->render = true;
-    c->msaa = false;
-}
-
 _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     sg_caps* caps = &_sg.caps;
     #if defined(_SG_TARGET_MACOS)
@@ -7629,96 +7568,95 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         caps->limits.max_image_array_layers = 2 * 1024;
     #endif
 
-    _sg_mtl_fmt_all(&caps->format.r8);
-    _sg_mtl_fmt_all(&caps->format.r8sn);
-    _sg_mtl_fmt_rm(&caps->format.r8ui);
-    _sg_mtl_fmt_rm(&caps->format.r8si);
-    _sg_mtl_fmt_all(&caps->format.r16);
-    _sg_mtl_fmt_all(&caps->format.r16sn);
-    _sg_mtl_fmt_rm(&caps->format.r16ui);
-    _sg_mtl_fmt_rm(&caps->format.r16si);
-    _sg_mtl_fmt_all(&caps->format.r16f);
-    _sg_mtl_fmt_all(&caps->format.rg8);
-    _sg_mtl_fmt_all(&caps->format.rg8sn);
-    _sg_mtl_fmt_rm(&caps->format.rg8ui);
-    _sg_mtl_fmt_rm(&caps->format.rg8si);
-    _sg_mtl_fmt_r(&caps->format.r32ui);
-    _sg_mtl_fmt_r(&caps->format.r32si);
-    _sg_mtl_fmt_brm(&caps->format.r32f);
-    _sg_mtl_fmt_all(&caps->format.rg16);
-    _sg_mtl_fmt_all(&caps->format.rg16sn);
-    _sg_mtl_fmt_rm(&caps->format.rg16ui);
-    _sg_mtl_fmt_rm(&caps->format.rg16si);
-    _sg_mtl_fmt_all(&caps->format.rg16f);
-    _sg_mtl_fmt_all(&caps->format.rgba8);
-    _sg_mtl_fmt_all(&caps->format.rgba8sn);
-    _sg_mtl_fmt_rm(&caps->format.rgba8ui);
-    _sg_mtl_fmt_rm(&caps->format.rgba8si);
-    _sg_mtl_fmt_all(&caps->format.bgra8);
-    _sg_mtl_fmt_all(&caps->format.rgb10a2);
-    _sg_mtl_fmt_all(&caps->format.r11b10f);
+    _sg_caps_fmt_all(&caps->format.r8);
+    _sg_caps_fmt_all(&caps->format.r8sn);
+    _sg_caps_fmt_rm(&caps->format.r8ui);
+    _sg_caps_fmt_rm(&caps->format.r8si);
+    _sg_caps_fmt_all(&caps->format.r16);
+    _sg_caps_fmt_all(&caps->format.r16sn);
+    _sg_caps_fmt_rm(&caps->format.r16ui);
+    _sg_caps_fmt_rm(&caps->format.r16si);
+    _sg_caps_fmt_all(&caps->format.r16f);
+    _sg_caps_fmt_all(&caps->format.rg8);
+    _sg_caps_fmt_all(&caps->format.rg8sn);
+    _sg_caps_fmt_rm(&caps->format.rg8ui);
+    _sg_caps_fmt_rm(&caps->format.rg8si);
+    _sg_caps_fmt_r(&caps->format.r32ui);
+    _sg_caps_fmt_r(&caps->format.r32si);
+    _sg_caps_fmt_brm(&caps->format.r32f);
+    _sg_caps_fmt_all(&caps->format.rg16);
+    _sg_caps_fmt_all(&caps->format.rg16sn);
+    _sg_caps_fmt_rm(&caps->format.rg16ui);
+    _sg_caps_fmt_rm(&caps->format.rg16si);
+    _sg_caps_fmt_all(&caps->format.rg16f);
+    _sg_caps_fmt_all(&caps->format.rgba8);
+    _sg_caps_fmt_all(&caps->format.rgba8sn);
+    _sg_caps_fmt_rm(&caps->format.rgba8ui);
+    _sg_caps_fmt_rm(&caps->format.rgba8si);
+    _sg_caps_fmt_all(&caps->format.bgra8);
+    _sg_caps_fmt_all(&caps->format.rgb10a2);
+    _sg_caps_fmt_all(&caps->format.r11b10f);
     #if defined(_SG_TARGET_MACOS)
-        _sg_mtl_fmt_rm(&caps->format.rg32ui);
+        _sg_caps_fmt_rm(&caps->format.rg32ui);
     #else
-        _sg_mtl_fmt_r(&caps->format.rg32ui);
+        _sg_caps_fmt_r(&caps->format.rg32ui);
     #endif
-    _sg_mtl_fmt_r(&caps->format.rg32si);
+    _sg_caps_fmt_r(&caps->format.rg32si);
     #if defined(_SG_TARGET_MACOS)
-        _sg_mtl_fmt_all(&caps->format.rg32f);
+        _sg_caps_fmt_all(&caps->format.rg32f);
     #else
-        _sg_mtl_fmt_br(&caps->format.rg32f);
+        _sg_caps_fmt_br(&caps->format.rg32f);
     #endif
-    _sg_mtl_fmt_all(&caps->format.rgba16);
-    _sg_mtl_fmt_all(&caps->format.rgba16sn);
-    _sg_mtl_fmt_rm(&caps->format.rgba16ui);
-    _sg_mtl_fmt_rm(&caps->format.rgba16si);
-    _sg_mtl_fmt_all(&caps->format.rgba16f);
+    _sg_caps_fmt_all(&caps->format.rgba16);
+    _sg_caps_fmt_all(&caps->format.rgba16sn);
+    _sg_caps_fmt_rm(&caps->format.rgba16ui);
+    _sg_caps_fmt_rm(&caps->format.rgba16si);
+    _sg_caps_fmt_all(&caps->format.rgba16f);
     #if defined(_SG_TARGET_MACOS)
-        _sg_mtl_fmt_rm(&caps->format.rgba32ui);
-        _sg_mtl_fmt_rm(&caps->format.rgba32si);
-        _sg_mtl_fmt_all(&caps->format.rgba32f);
+        _sg_caps_fmt_rm(&caps->format.rgba32ui);
+        _sg_caps_fmt_rm(&caps->format.rgba32si);
+        _sg_caps_fmt_all(&caps->format.rgba32f);
     #else
-        _sg_mtl_fmt_r(&caps->format.rgba32ui);
-        _sg_mtl_fmt_r(&caps->format.rgba32si);
-        _sg_mtl_fmt_r(&caps->format.rgba32f);
+        _sg_caps_fmt_r(&caps->format.rgba32ui);
+        _sg_caps_fmt_r(&caps->format.rgba32si);
+        _sg_caps_fmt_r(&caps->format.rgba32f);
     #endif
-    _sg_mtl_fmt_rm(&caps->format.depth32f);
-    _sg_mtl_fmt_rm(&caps->format.depth24plus);
-    _sg_mtl_fmt_rm(&caps->format.depth24plus_stencil8);
+    _sg_caps_fmt_rmd(&caps->format.depth24plus);
+    _sg_caps_fmt_rmd(&caps->format.depth24plus_stencil8);
     #if defined(_SG_TARGET_MACOS)
-        _sg_mtl_fmt_f(&caps->format.bc1_rgba);
-        _sg_mtl_fmt_f(&caps->format.bc2_rgba);
-        _sg_mtl_fmt_f(&caps->format.bc3_rgba);
-        _sg_mtl_fmt_f(&caps->format.bc4_r);
-        _sg_mtl_fmt_f(&caps->format.bc4_rsn);
-        _sg_mtl_fmt_f(&caps->format.bc5_rg);
-        _sg_mtl_fmt_f(&caps->format.bc5_rgsn);
-        _sg_mtl_fmt_f(&caps->format.bc6h_rgbf);
-        _sg_mtl_fmt_f(&caps->format.bc6h_rgbuf);
-        _sg_mtl_fmt_f(&caps->format.bc7_rgba);
-        _sg_mtl_fmt_none(&caps->format.pvrtc_rgb_2bpp);
-        _sg_mtl_fmt_none(&caps->format.pvrtc_rgb_4bpp);
-        _sg_mtl_fmt_none(&caps->format.pvrtc_rgba_2bpp);
-        _sg_mtl_fmt_none(&caps->format.pvrtc_rgba_4bpp);
-        _sg_mtl_fmt_none(&caps->format.etc2_rgb8);
-        _sg_mtl_fmt_none(&caps->format.etc2_rgb8a1);
+        _sg_caps_fmt_f(&caps->format.bc1_rgba);
+        _sg_caps_fmt_f(&caps->format.bc2_rgba);
+        _sg_caps_fmt_f(&caps->format.bc3_rgba);
+        _sg_caps_fmt_f(&caps->format.bc4_r);
+        _sg_caps_fmt_f(&caps->format.bc4_rsn);
+        _sg_caps_fmt_f(&caps->format.bc5_rg);
+        _sg_caps_fmt_f(&caps->format.bc5_rgsn);
+        _sg_caps_fmt_f(&caps->format.bc6h_rgbf);
+        _sg_caps_fmt_f(&caps->format.bc6h_rgbuf);
+        _sg_caps_fmt_f(&caps->format.bc7_rgba);
+        _sg_caps_fmt_none(&caps->format.pvrtc_rgb_2bpp);
+        _sg_caps_fmt_none(&caps->format.pvrtc_rgb_4bpp);
+        _sg_caps_fmt_none(&caps->format.pvrtc_rgba_2bpp);
+        _sg_caps_fmt_none(&caps->format.pvrtc_rgba_4bpp);
+        _sg_caps_fmt_none(&caps->format.etc2_rgb8);
+        _sg_caps_fmt_none(&caps->format.etc2_rgb8a1);
     #else
-        _sg_mtl_fmt_none(&caps->format.bc1_rgba);
-        _sg_mtl_fmt_none(&caps->format.bc2_rgba);
-        _sg_mtl_fmt_none(&caps->format.bc3_rgba);
-        _sg_mtl_fmt_none(&caps->format.bc4_r);
-        _sg_mtl_fmt_none(&caps->format.bc4_rsn);
-        _sg_mtl_fmt_none(&caps->format.bc5_rg);
-        _sg_mtl_fmt_none(&caps->format.bc5_rgsn);
-        _sg_mtl_fmt_none(&caps->format.bc6h_rgbf);
-        _sg_mtl_fmt_none(&caps->format.bc6h_rgbuf);
-        _sg_mtl_fmt_none(&caps->format.bc7_rgba);
-        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgb_2bpp);
-        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgb_4bpp);
-        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgba_2bpp);
-        _sg_mtl_fmt_filter(&caps->format.pvrtc_rgba_4bpp);
-        _sg_mtl_fmt_filter(&caps->format.etc2_rgb8);
-        _sg_mtl_fmt_filter(&caps->format.etc2_rgb8a1);
+        _sg_caps_fmt_none(&caps->format.bc1_rgba);
+        _sg_caps_fmt_none(&caps->format.bc2_rgba);
+        _sg_caps_fmt_none(&caps->format.bc3_rgba);
+        _sg_caps_fmt_none(&caps->format.bc4_r);
+        _sg_caps_fmt_none(&caps->format.bc4_rsn);
+        _sg_caps_fmt_none(&caps->format.bc5_rg);
+        _sg_caps_fmt_none(&caps->format.bc5_rgsn);
+        _sg_caps_fmt_none(&caps->format.bc6h_rgbf);
+        _sg_caps_fmt_none(&caps->format.bc6h_rgbuf);
+        _sg_caps_fmt_none(&caps->format.bc7_rgba);
+        _sg_caps_fmt_filter(&caps->format.pvrtc_rgb_2bpp);
+        _sg_caps_fmt_filter(&caps->format.pvrtc_rgb_4bpp);
+        _sg_caps_fmt_filter(&caps->format.pvrtc_rgba_2bpp);
+        _sg_caps_fmt_filter(&caps->format.pvrtc_rgba_4bpp);
+        _sg_caps_fmt_filter(&caps->format.etc2_rgb8);
+        _sg_caps_fmt_filter(&caps->format.etc2_rgb8a1);
     #endif
 }
 
@@ -7771,28 +7709,6 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
         _sg_mtl_uniform_buffers[i] = nil;
     }
     _sg_mtl_device = nil;
-}
-
-_SOKOL_PRIVATE bool _sg_query_feature(sg_feature f) {
-    switch (f) {
-        case SG_FEATURE_INSTANCING:
-        #if defined(_SG_TARGET_MACOS)
-        case SG_FEATURE_TEXTURE_COMPRESSION_DXT:
-        #else
-        case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:
-        case SG_FEATURE_TEXTURE_COMPRESSION_ETC2:
-        #endif
-        case SG_FEATURE_TEXTURE_FLOAT:
-        case SG_FEATURE_ORIGIN_TOP_LEFT:
-        case SG_FEATURE_MSAA_RENDER_TARGETS:
-        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:
-        case SG_FEATURE_MULTIPLE_RENDER_TARGET:
-        case SG_FEATURE_IMAGETYPE_3D:
-        case SG_FEATURE_IMAGETYPE_ARRAY:
-            return true;
-        default:
-            return false;
-    }
 }
 
 _SOKOL_PRIVATE void _sg_reset_state_cache(void) {
@@ -9322,12 +9238,11 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         const sg_usage usage = desc->usage;
         const bool ext = (0 != desc->gl_textures[0]) || (0 != desc->mtl_textures[0]) || (0 != desc->d3d11_texture);
         if (desc->render_target) {
+            SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             if (desc->sample_count > 1) {
-                SOKOL_VALIDATE(_sg_query_feature(SG_FEATURE_MSAA_RENDER_TARGETS), _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
+                SOKOL_VALIDATE(_sg.caps.formats[fmt].msaa, _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
             }
-            const bool valid_color_fmt = _sg_is_valid_rendertarget_color_format(fmt);
-            const bool valid_depth_fmt = _sg_is_valid_rendertarget_depth_format(fmt);
-            SOKOL_VALIDATE(valid_color_fmt || valid_depth_fmt, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
+            SOKOL_VALIDATE(_sg.caps.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
             SOKOL_VALIDATE(usage == SG_USAGE_IMMUTABLE, _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             SOKOL_VALIDATE(desc->content.subimage[0][0].ptr==0, _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT);
         }
@@ -10152,39 +10067,9 @@ SOKOL_API_IMPL sg_desc sg_query_desc(void) {
     return _sg.desc;
 }
 
-SOKOL_API_IMPL sg_backend sg_query_backend(void) {
-    #if defined(SOKOL_GLCORE33)
-        return SG_BACKEND_GLCORE33;
-    #elif defined(SOKOL_GLES2)
-        return SG_BACKEND_GLES2;
-    #elif defined(SOKOL_GLES3)
-        return _sg.gl.gles2 ? SG_BACKEND_GLES2 : SG_BACKEND_GLES3;
-    #elif defined(SOKOL_D3D11)
-        return SG_BACKEND_D3D11;
-    #elif defined(SOKOL_METAL)
-        #if defined(_SG_TARGET_MACOS)
-            return SG_BACKEND_METAL_MACOS;
-        #else
-            #if defined(_SG_TARGET_IOS_SIMULATOR)
-                return SG_BACKEND_METAL_SIMULATOR;
-            #else
-                return SG_BACKEND_METAL_IOS;
-            #endif
-        #endif
-    #elif defined(SOKOL_DUMMY_BACKEND)
-        return SG_BACKEND_DUMMY;
-    #endif
-}
-
 SOKOL_API_IMPL sg_caps sg_query_caps(void) {
     _SG_TRACE_ARGS(query_caps, &_sg.caps);
     return _sg.caps;
-}
-
-SOKOL_API_IMPL bool sg_query_feature(sg_feature f) {
-    bool res = _sg_query_feature(f);
-    _SG_TRACE_ARGS(query_feature, f, res);
-    return res;
 }
 
 SOKOL_API_IMPL sg_context sg_setup_context(void) {
