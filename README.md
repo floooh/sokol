@@ -5,32 +5,28 @@ bird of prey than the Eagle (Орёл, Oryol)
 
 [See what's new](#updates)
 
+[Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
+
 Minimalistic header-only cross-platform libs in C:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
+- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
-
-These are (mainly) the internal parts of the Oryol C++ framework
-rewritten in pure C as standalone header-only libs.
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
 minimal footprint on the web platform while still being useful.
 
-All headers are standalone and can be used indepedendently from each other.
+All headers are standalone and can be used independently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
-asm.js/wasm live demos: https://floooh.github.io/sokol-html5/index.html
+Command line tools: https://github.com/floooh/sokol-tools
 
 Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
-
-Nim bindings: https://github.com/floooh/sokol-nim
-
-Nim samples: https://github.com/floooh/sokol-nim-samples
 
 ### Why C:
 
@@ -50,7 +46,8 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 - simple, modern wrapper around GLES2/WebGL, GLES3/WebGL2, GL3.3, D3D11 and Metal
 - buffers, images, shaders, pipeline-state-objects and render-passes
 - does *not* handle window creation or 3D API context initialization
-- does *not* provide shader dialect cross-translation
+- does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
+seamlessly integrates with sokol_gfx.h and IDEs: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
 A triangle in C99 with GLFW and FlextGL:
 
@@ -94,8 +91,8 @@ int main() {
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
         .vs.source =
             "#version 330\n"
-            "in vec4 position;\n"
-            "in vec4 color0;\n"
+            "layout(location=0) in vec4 position;\n"
+            "layout(location=1) in vec4 color0;\n"
             "out vec4 color;\n"
             "void main() {\n"
             "  gl_Position = position;\n"
@@ -115,8 +112,8 @@ int main() {
         .shader = shd,
         .layout = {
             .attrs = {
-                [0] = { .name="position", .format=SG_VERTEXFORMAT_FLOAT3 },
-                [1] = { .name="color0", .format=SG_VERTEXFORMAT_FLOAT4 }
+                [0].format=SG_VERTEXFORMAT_FLOAT3,
+                [1].format=SG_VERTEXFORMAT_FLOAT4
             }
         }
     });
@@ -289,6 +286,71 @@ int main() {
 }
 ```
 
+# sokol_fetch.h
+
+Load entire files, or stream data asynchronously over HTTP (emscripten/wasm)
+or the local filesystem (all native platforms).
+
+Simple C99 example with a dynamically allocated buffer:
+
+```c
+#include "sokol_fetch.h"
+
+static void response_callback(const sfetch_response*);
+
+#define MAX_FILE_SIZE (1024*1024)
+static uint8_t buffer[MAX_FILE_SIZE];
+
+// application init
+static void init(void) {
+    ...
+    // setup sokol-fetch with default config:
+    sfetch_setup(&(sfetch_desc_t){0});
+
+    // start loading a file into a statically allocated buffer:
+    sfetch_send(&(sfetch_request_t){
+        .path = "hello_world.txt",
+        .callback = response_callback
+        .buffer_ptr = buffer,
+        .buffer_size = sizeof(buffer)
+    });
+}
+
+// per frame...
+static void frame(void) {
+    ...
+    // need to call sfetch_dowork() once per frame to 'turn the gears':
+    sfetch_dowork();
+    ...
+}
+
+// the response callback is where the interesting stuff happens:
+static void reponse_callback(const sfetch_response_t* response) {
+    if (response->fetched) {
+        // data has been loaded into the provided buffer, do something
+        // with the data...
+        const void* data = response->buffer_ptr;
+        uint64_t data_size = response->fetched_size;
+    }
+    // the finished flag is set both on success and failure
+    if (response->failed) {
+        // oops, something went wrong
+        switch (response->error_code) {
+            SFETCH_ERROR_FILE_NOT_FOUND: ...
+            SFETCH_ERROR_BUFFER_TOO_SMALL: ...
+            ...
+        }
+    }
+}
+
+// application shutdown
+static void shutdown(void) {
+    ...
+    sfetch_shutdown();
+    ...
+}
+```
+
 # sokol_time.h:
 
 Simple cross-platform time measurement:
@@ -385,9 +447,6 @@ A list of things I'd like to do next:
 
 Mainly some "missing features" for desktop apps:
 
-- allow 'programmatic quit' requested by the application
-- allow to intercept the window close button, so that the app can show
-  a 'do you really want to quit?' dialog box
 - define an application icon
 - change the window title on existing window
 - allow to programmatically activate and deactivate fullscreen
@@ -399,15 +458,291 @@ Mainly some "missing features" for desktop apps:
 
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
-## Potential new sokol headers:
-
-- system clipboard support
-- query filesystem standard locations
-- simple file access API (at least async file/URL loading)
-- gamepad support
-- simple cross-platform touch gesture recognition
-
 # Updates
+
+- **18-Jul-2019**:
+    - sokol_fetch.h has been fixed and can be used again :)
+
+- **11-Jul-2019**:
+    - Don't use sokol_fetch.h for now, the current version assumes that
+      it is possible to obtain the content size of a file from the
+      HTTP server without downloading the entire file first. Turns out
+      that's not possible with vanilla HTTP when the web server serves
+      files compressed (in that case the Content-Length is the _compressed_
+      size, yet JS/WASM only has access to the uncompressed data).
+      Long story short, I need to go back to the drawing board :)
+
+- **06-Jul-2019**:
+    - new header [sokol_fetch.h](https://github.com/floooh/sokol/blob/master/sokol_fetch.h) for asynchronously loading data.
+        - make sure to carefully read the embedded documentation
+        for making the best use of the header
+        - two new samples: [simple PNG file loadng with stb_image.h](https://floooh.github.io/sokol-html5/loadpng-sapp.html) and  [MPEG1 streaming with pl_mpeg.h](https://floooh.github.io/sokol-html5/plmpeg-sapp.html)
+    - sokol_gfx.h: increased SG_MAX_SHADERSTAGE_BUFFERS configuration
+    constant from 4 to 8.
+
+- **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
+    - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
+    - application code can now initiate a "soft quit" (interceptable) or
+      "hard quit" (not interceptable)
+    - on the web platform, the standard "Leave Site?" dialog box implemented
+      by browsers can be shown when the user leaves the site
+    - Android and iOS currently don't have any of those features (since the
+      operating system may decide to terminate mobile applications at any time
+      anyway, if similar features are added they will most likely have
+      similar limitations as the web platform)
+  For details, search for 'APPLICATION QUIT' in the sokol_app.h documentation
+  header: https://github.com/floooh/sokol/blob/master/sokol_app.h
+
+  The [imgui-highdpi-sapp](https://github.com/floooh/sokol-samples/tree/master/sapp)
+  contains sample code for all new quit-related features.
+
+- **08-Jun-2019**: some new stuff in sokol_app.h:
+    - the ```sapp_event``` struct has a new field ```bool key_repeat```
+    which is true when a keyboard event is a key-repeat (for the
+    event types ```SAPP_EVENTTYPE_KEY_DOWN``` and ```SAPP_EVENTTYPE_CHAR```).
+    Many thanks to [Scott Lembcke](https://github.com/slembcke) for
+    the pull request!
+    - a new function to poll the internal frame counter:
+    ```uint64_t sapp_frame_count(void)```, previously the frame counter
+    was only available via ```sapp_event```.
+    - also check out the new [event-inspector sample](https://floooh.github.io/sokol-html5/wasm/events-sapp.html)
+
+- **04-Jun-2019**: All sokol headers now recognize a config-define ```SOKOL_DLL```
+  if sokol should be compiled into a DLL (when used with ```SOKOL_IMPL```)
+  or used as a DLL. On Windows, this will prepend the public function declarations
+  with ```__declspec(dllexport)``` or ```__declspec(dllimport)```.
+
+- **31-May-2019**: if you're working with emscripten and fips, please note the
+  following changes:
+
+    https://github.com/floooh/fips#public-service-announcements
+
+- **27-May-2019**: some D3D11 updates:
+    - The shader-cross-compiler can now generate D3D bytecode when
+    running on Windows, see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
+details.
+    - sokol_gfx.h no longer needs to be compiled with a
+    SOKOL_D3D11_SHADER_COMPILER define to enable shader compilation in the
+    D3D11 backend. Instead, the D3D shader compiler DLL (d3dcompiler_47.dll)
+    will be loaded on-demand when the first HLSL shader needs to be compiled.
+    If an application only uses D3D shader byte code, the compiler DLL won't
+    be loaded into the process.
+
+- **24-May-2019** The shader-cross-compiler can now generate Metal byte code
+for macOS or iOS when the build is running on macOS. This is enabled
+automatically with the fips-integration files in [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin),
+see the [sokol-shdc docs](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) for more
+details.
+
+- **16-May-2019** two new utility headers: *sokol_cimgui.h* and *sokol_gfx_cimgui.h*,
+those are the same as their counterparts sokol_imgui.h and sokol_gfx_imgui.h, but
+use the [cimgui](https://github.com/cimgui/cimgui) C-API for Dear ImGui. This
+is useful if you don't want to - or cannot - use C++ for creating Dear ImGui UIs.
+
+    Many thanks to @prime31 for contributing those!
+
+    sokol_cimgui.h [is used
+here](https://floooh.github.io/sokol-html5/wasm/cimgui-sapp.html), and
+sokol_gfx_cimgui.h is used for the [debugging UI
+here](https://floooh.github.io/sokol-html5/wasm/sgl-microui-sapp-ui.html)
+
+- **15-May-2019** there's now an optional shader-cross-compiler solution for
+sokol_gfx.h: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md).
+This is "V1.0" with two notable features missing:
+
+    - an include-file feature for GLSL shaders
+    - compilation to Metal- and D3D-bytecode (currently
+      only source-code generation is supported)
+
+    The [sokol-app samples](https://floooh.github.io/sokol-html5/) have been
+    ported to the new shader-cross-compilation, follow the ```src``` and
+    ```glsl``` links on the specific sample webpages to see the C- and GLSL-
+    source-code.
+
+- **02-May-2019** sokol_gfx.h has a new function ```sg_query_backend()```, this
+will return an enum ```sg_backend``` identifying the backend sokol-gfx is
+currently running on, which is one of the following values:
+
+    - SG_BACKEND_GLCORE33
+    - SG_BACKEND_GLES2
+    - SG_BACKEND_GLES3
+    - SG_BACKEND_D3D11
+    - SG_BACKEND_METAL_MACOS
+    - SG_BACKEND_METAL_IOS
+
+    When compiled with SOKOL_GLES3, sg_query_backend() may return SG_BACKEND_GLES2
+    when the runtime platform doesn't support GLES3/WebGL2 and had to fallback
+    to GLES2/WebGL2.
+
+    When compiled with SOKOL_METAL, sg_query_backend() will return SG_BACKEND_METAL_MACOS
+    when the compile target is macOS, and SG_BACKEND_METAL_IOS when the target is iOS.
+
+- **26-Apr-2019** Small but breaking change in **sokol_gfx.h** how the vertex
+layout definition in sg_pipeline_desc works:
+
+    Vertex component names and semantics (needed by the GLES2 and D3D11 backends) have moved from ```sg_pipeline_desc``` into ```sg_shader_desc```.
+
+    This may seem like a rather pointless small detail to change, expecially
+    for breaking existing code, but the whole thing will make a bit more
+    sense when the new shader-cross-compiler will be integrated which I'm
+    currently working on (here: https://github.com/floooh/sokol-tools).
+
+    While working on getting reflection data out of the shaders (e.g. what
+    uniform blocks and textures the shader uses), it occurred to me that
+    vertex-attribute-names and -semantics are actually part of the reflection
+    info and belong to the shader, not to the vertex layout in the pipeline
+    object (which only describes how the incoming vertex data maps to
+    vertex-component **slots**. Instead of (optionally) mapping this
+    association through a name, the pipeline's vertex layout is now always
+    strictly defined in terms of numeric 'bind slots' for **all** sokol_gfx.h
+    backends. For 3D APIs where the vertex component slot isn't explicitely
+    defined in the shader language (GLES2/WebGL, D3D11, and optionally
+    GLES3/GL), the shader merely offers a lookup table how vertex-layout
+    slot-indices map to names/semantics (and the underlying 3D API than maps
+    those names back to slot indices, which shows that Metal and GL made the
+    right choice defining the slots right in the shader).
+
+    Here's how the code changes (taken from the triangle-sapp.c sample):
+
+    **OLD**:
+    ```c
+    /* create a shader */
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vs.source = vs_src,
+        .fs.source = fs_src,
+    });
+
+    /* create a pipeline object (default render states are fine for triangle) */
+    pip = sg_make_pipeline(&(sg_pipeline_desc){
+        /* if the vertex layout doesn't have gaps, don't need to provide strides and offsets */
+        .shader = shd,
+        .layout = {
+            .attrs = {
+                [0] = { .name="position", .sem_name="POS", .format=SG_VERTEXFORMAT_FLOAT3 },
+                [1] = { .name="color0", .sem_name="COLOR", .format=SG_VERTEXFORMAT_FLOAT4 }
+            }
+        },
+    });
+    ```
+
+    **NEW**:
+    ```c
+        /* create a shader */
+        sg_shader shd = sg_make_shader(&(sg_shader_desc){
+            .attrs = {
+                [0] = { .name="position", .sem_name="POS" },
+                [1] = { .name="color0", .sem_name="COLOR" }
+            },
+            .vs.source = vs_src,
+            .fs.source = fs_src,
+        });
+
+        /* create a pipeline object (default render states are fine for triangle) */
+        pip = sg_make_pipeline(&(sg_pipeline_desc){
+            /* if the vertex layout doesn't have gaps, don't need to provide strides and offsets */
+            .shader = shd,
+            .layout = {
+                .attrs = {
+                    [0].format=SG_VERTEXFORMAT_FLOAT3,
+                    [1].format=SG_VERTEXFORMAT_FLOAT4
+                }
+            },
+        });
+    ```
+
+    ```sg_shader_desc``` has a new embedded struct ```attrs``` which
+    contains a vertex attribute _name_ (for GLES2/WebGL) and
+    _sem_name/sem_index_ (for D3D11). For the Metal backend this struct is
+    ignored completely, and for GLES3/GL it is optional, and not required
+    when the vertex shader inputs are annotated with ```layout(location=N)```.
+
+    The remaining attribute description members in ```sg_pipeline_desc``` are:
+    - **.format**: the format of input vertex data (this can be different
+          from the vertex shader's inputs when data is extended during
+          vertex fetch (e.g. input can be vec3 while the vertex shader
+          expects vec4)
+    - **.offset**: optional offset of the vertex component data (not needed
+          when the input vertex has no gaps between the components)
+    - **.buffer**: the vertex buffer bind slot if the vertex data is coming
+          from different buffers
+
+    Also check out the various samples:
+
+    - for GLSL (explicit slots via ```layout(location=N)```): https://github.com/floooh/sokol-samples/tree/master/glfw
+    - for D3D11 (semantic names/indices): https://github.com/floooh/sokol-samples/tree/master/d3d11
+    - for GLES2: (vertex attribute names): https://github.com/floooh/sokol-samples/tree/master/html5
+    - for Metal: (explicit slots): https://github.com/floooh/sokol-samples/tree/master/metal
+    - ...and all of the above combined: https://github.com/floooh/sokol-samples/tree/master/sapp
+
+- **19-Apr-2019** I have replaced the rather inflexible render-state handling
+in **sokol_gl.h** with a *pipeline stack* (like the GL matrix stack, but with
+pipeline-state-objects), along with a couple of other minor API tweaks.
+
+    These are the new pipeline-stack functions:
+    ```c
+    sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+    void sgl_destroy_pipeline(sgl_pipeline pip);
+    void sgl_default_pipeline(void);
+    void sgl_load_pipeline(sgl_pipeline pip);
+    void sgl_push_pipeline(void);
+    void sgl_pop_pipeline(void);
+    ```
+
+    A pipeline object is created just like in sokol_gfx.h, but without shaders,
+    vertex layout, pixel formats, primitive-type and sample count (these details
+    are filled in by the ```sgl_make_pipeline()``` wrapper function. For instance
+    to create a pipeline object for additive transparency:
+
+    ```c
+    sgl_pipeline additive_pip = sgl_make_pipeline(&(sg_pipeline_desc){
+        .blend = {
+            .enabled = true,
+            .src_factor_rgb = SG_BLENDFACTOR_ONE,
+            .dst_factor_rgb = SG_BLENDFACTOR_ONE
+        }
+    });
+    ```
+
+    And to render with this, simply call ```sgl_load_pipeline()```:
+
+    ```c
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_triangles();
+    ...
+    sgl_end();
+    ```
+
+    Or to preserve and restore the previously active pipeline state:
+
+    ```c
+    sgl_push_pipeline();
+    sgl_load_pipeline(additive_pip);
+    sgl_begin_quads();
+    ...
+    sgl_end();
+    sgl_pop_pipeline();
+    ```
+
+    You can also load the 'default pipeline' explicitely on the top of the
+    pipeline stack with ```sgl_default_pipeline()```.
+
+    The other API change is:
+
+    - ```sgl_state_texture(bool b)``` has been replaced with ```sgl_enable_texture()```
+      and ```sgl_disable_texture()```
+
+    The code samples have been updated accordingly:
+
+    - [sgl-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-sapp.c)
+    - [sgl-lines-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-lines-sapp.c)
+    - [sgl-microui-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/sgl-microui-sapp.c)
+
+- **01-Apr-2019** (not an April Fool's joke): There's a new **sokol_gl.h**
+util header which implements an 'OpenGL-1.x-in-spirit' rendering API on top
+of sokol_gfx.h (vertex specification via begin/end, and a matrix stack). This is
+only a small subset of OpenGL 1.x, mainly intended for debug-visualization or
+simple tasks like 2D UI rendering. As always, sample code is in the
+[sokol-samples](https://github.com/floooh/sokol-samples) project.
 
 - **15-Mar-2019**: various Dear ImGui related changes:
     - there's a new utility header sokol_imgui.h with a simple drop-in
@@ -419,7 +754,7 @@ Mainly some "missing features" for desktop apps:
       directory
     - the implementation macro for sokol_gfx_imgui.h has been changed
       from SOKOL_IMPL to SOKOL_GFX_IMGUI_IMPL (so when you suddenly get
-      unresoled linker errors, that's the reason)
+      unresolved linker errors, that's the reason)
     - all headers now have two preprocessor defines for the declaration
       and implementation (for instance in sokol_gfx.h: SOKOL_GFX_INCLUDED
       and SOKOL_GFX_IMPL_INCLUDED) these are checked in the utility-headers
@@ -442,7 +777,7 @@ implementing optional debug-inspection-UI headers on top of Dear ImGui:
       contain a slowly growing set of optional debug-inspection-UI headers
       which allow to peek under the hood of the Sokol headers. The UIs are
       implemented with [Dear ImGui](https://github.com/ocornut/imgui). Again,
-      see the README in the 'imgui' directory and the headers in there 
+      see the README in the 'imgui' directory and the headers in there
       for details, and check out the live demos on the [Sokol Sample Webpage](https://floooh.github.io/sokol-html5/)
       (click on the little UI buttons in the top right corner of each thumbnail)
 
@@ -458,7 +793,7 @@ in https://github.com/floooh/sokol-samples
 sokol_app.h for details and documentation.
 
 - **26-Jan-2019**: sokol_app.h now has an Android backend contributed by
-  [Gustav Olsson](https://github.com/gustavolsson)! 
+  [Gustav Olsson](https://github.com/gustavolsson)!
   See the [sokol-samples readme](https://github.com/floooh/sokol-samples/blob/master/README.md)
   for build instructions.
 
@@ -472,11 +807,11 @@ sokol_app.h for details and documentation.
       repository which mainly tests the resource pool system)
 
 - **12-Jan-2019**: sokol_gfx.h - setting the pipeline state and resource
-bindings now happens in separate calls, specifically: 
+bindings now happens in separate calls, specifically:
     - *sg_apply_draw_state()* has been replaced with *sg_apply_pipeline()* and
     *sg_apply_bindings()*
     - the *sg_draw_state* struct has been replaced with *sg_bindings*
-    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()* 
+    - *sg_apply_uniform_block()* has been renamed to *sg_apply_uniforms()*
 
 All existing code will still work. See [this blog
 post](https://floooh.github.io/2019/01/12/sokol-apply-pipeline.html) for
