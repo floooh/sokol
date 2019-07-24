@@ -257,7 +257,6 @@ typedef struct {
 
 typedef enum {
     SG_IMGUI_CMD_INVALID,
-    SG_IMGUI_CMD_QUERY_FEATURE,
     SG_IMGUI_CMD_RESET_STATE_CACHE,
     SG_IMGUI_CMD_MAKE_BUFFER,
     SG_IMGUI_CMD_MAKE_IMAGE,
@@ -309,11 +308,6 @@ typedef enum {
     SG_IMGUI_CMD_ERR_DRAW_INVALID,
     SG_IMGUI_CMD_ERR_BINDINGS_INVALID,
 } sg_imgui_cmd_t;
-
-typedef struct {
-    sg_feature feature;
-    bool result;
-} sg_imgui_args_query_feature_t;
 
 typedef struct {
     sg_buffer result;
@@ -479,7 +473,6 @@ typedef struct {
 } sg_imgui_args_push_debug_group_t;
 
 typedef union {
-    sg_imgui_args_query_feature_t query_feature;
     sg_imgui_args_make_buffer_t make_buffer;
     sg_imgui_args_make_image_t make_image;
     sg_imgui_args_make_shader_t make_shader;
@@ -706,26 +699,6 @@ _SOKOL_PRIVATE void _sg_imgui_snprintf(sg_imgui_str_t* dst, const char* fmt, ...
 }
 
 /*--- STRING CONVERSION ------------------------------------------------------*/
-_SOKOL_PRIVATE const char* _sg_imgui_feature_string(sg_feature f) {
-    switch (f) {
-        case SG_FEATURE_INSTANCING:                 return "SG_FEATURE_INSTANCING";
-        case SG_FEATURE_TEXTURE_COMPRESSION_DXT:    return "SG_FEATURE_TEXTURE_COMPRESSION_DXT";
-        case SG_FEATURE_TEXTURE_COMPRESSION_PVRTC:  return "SG_FEATURE_TEXTURE_COMPRESSION_PVRTC";
-        case SG_FEATURE_TEXTURE_COMPRESSION_ATC:    return "SG_FEATURE_TEXTURE_COMPRESSION_ATC";
-        case SG_FEATURE_TEXTURE_COMPRESSION_ETC2:   return "SG_FEATURE_TEXTURE_COMPRESSION_ETC2";
-        case SG_FEATURE_TEXTURE_FLOAT:              return "SG_FEATURE_TEXTURE_FLOAT";
-        case SG_FEATURE_TEXTURE_HALF_FLOAT:         return "SG_FEATURE_TEXTURE_HALF_FLOAT";
-        case SG_FEATURE_ORIGIN_BOTTOM_LEFT:         return "SG_FEATURE_ORIGIN_BOTTOM_LEFT";
-        case SG_FEATURE_ORIGIN_TOP_LEFT:            return "SG_FEATURE_ORIGIN_TOP_LEFT";
-        case SG_FEATURE_MSAA_RENDER_TARGETS:        return "SG_FEATURE_MSAA_RENDER_TARGETS";
-        case SG_FEATURE_PACKED_VERTEX_FORMAT_10_2:  return "SG_FEATURE_PACKED_VERTEX_FORMAT_10_2";
-        case SG_FEATURE_MULTIPLE_RENDER_TARGET:     return "SG_FEATURE_MULTIPLE_RENDER_TARGET";
-        case SG_FEATURE_IMAGETYPE_3D:               return "SG_FEATURE_IMAGETYPE_3D";
-        case SG_FEATURE_IMAGETYPE_ARRAY:            return "SG_FEATURE_IMAGETYPE_ARRAY";
-        default:                                    return "???";
-    }
-}
-
 _SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
     switch (s) {
         case SG_RESOURCESTATE_INITIAL:  return "SG_RESOURCESTATE_INITIAL";
@@ -771,30 +744,65 @@ _SOKOL_PRIVATE const char* _sg_imgui_imagetype_string(sg_image_type t) {
 
 _SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_NONE:           return "SG_PIXELFORMAT_NONE";
-        case SG_PIXELFORMAT_RGBA8:          return "SG_PIXELFORMAT_RGBA8";
-        case SG_PIXELFORMAT_RGB8:           return "SG_PIXELFORMAT_RGB8";
-        case SG_PIXELFORMAT_RGBA4:          return "SG_PIXELFORMAT_RGBA4";
-        case SG_PIXELFORMAT_R5G6B5:         return "SG_PIXELFORMAT_R5G6B5";
-        case SG_PIXELFORMAT_R5G5B5A1:       return "SG_PIXELFORMAT_R5G5B5A1";
-        case SG_PIXELFORMAT_R10G10B10A2:    return "SG_PIXELFORMAT_R10G10B10A2";
-        case SG_PIXELFORMAT_RGBA32F:        return "SG_PIXELFORMAT_RGBA32F";
-        case SG_PIXELFORMAT_RGBA16F:        return "SG_PIXELFORMAT_RGBA16F";
-        case SG_PIXELFORMAT_R32F:           return "SG_PIXELFORMAT_R32F";
-        case SG_PIXELFORMAT_R16F:           return "SG_PIXELFORMAT_R16F";
-        case SG_PIXELFORMAT_L8:             return "SG_PIXELFORMAT_L8";
-        case SG_PIXELFORMAT_DXT1:           return "SG_PIXELFORMAT_DXT1";
-        case SG_PIXELFORMAT_DXT3:           return "SG_PIXELFORMAT_DXT3";
-        case SG_PIXELFORMAT_DXT5:           return "SG_PIXELFORMAT_DXT5";
-        case SG_PIXELFORMAT_DEPTH:          return "SG_PIXELFORMAT_DEPTH";
-        case SG_PIXELFORMAT_DEPTHSTENCIL:   return "SG_PIXELFORMAT_DEPTHSTENCIL";
-        case SG_PIXELFORMAT_PVRTC2_RGB:     return "SG_PIXELFORMAT_PVRTC2_RGB";
-        case SG_PIXELFORMAT_PVRTC4_RGB:     return "SG_PIXELFORMAT_PVRTC4_RGB";
-        case SG_PIXELFORMAT_PVRTC2_RGBA:    return "SG_PIXELFORMAT_PVRTC2_RGBA";
-        case SG_PIXELFORMAT_PVRTC4_RGBA:    return "SG_PIXELFORMAT_PVRTC4_RGBA";
-        case SG_PIXELFORMAT_ETC2_RGB8:      return "SG_PIXELFORMAT_ETC2_RGB8";
-        case SG_PIXELFORMAT_ETC2_SRGB8:     return "SG_PIXELFORMAT_ETC2_SRGB8";
-        default:                            return "???";
+        case SG_PIXELFORMAT_NONE: return "SG_PIXELFORMAT_NONE";
+        case SG_PIXELFORMAT_R8: return "SG_PIXELFORMAT_R8";
+        case SG_PIXELFORMAT_R8SN: return "SG_PIXELFORMAT_R8SN";
+        case SG_PIXELFORMAT_R8UI: return "SG_PIXELFORMAT_R8UI";
+        case SG_PIXELFORMAT_R8SI: return "SG_PIXELFORMAT_R8SI";
+        case SG_PIXELFORMAT_R16: return "SG_PIXELFORMAT_R16";
+        case SG_PIXELFORMAT_R16SN: return "SG_PIXELFORMAT_R16SN";
+        case SG_PIXELFORMAT_R16UI: return "SG_PIXELFORMAT_R16UI";
+        case SG_PIXELFORMAT_R16SI: return "SG_PIXELFORMAT_R16SI";
+        case SG_PIXELFORMAT_R16F: return "SG_PIXELFORMAT_R16F";
+        case SG_PIXELFORMAT_RG8: return "SG_PIXELFORMAT_RG8";
+        case SG_PIXELFORMAT_RG8SN: return "SG_PIXELFORMAT_RG8SN";
+        case SG_PIXELFORMAT_RG8UI: return "SG_PIXELFORMAT_RG8UI";
+        case SG_PIXELFORMAT_RG8SI: return "SG_PIXELFORMAT_RG8SI";
+        case SG_PIXELFORMAT_R32UI: return "SG_PIXELFORMAT_R32UI";
+        case SG_PIXELFORMAT_R32SI: return "SG_PIXELFORMAT_R32SI";
+        case SG_PIXELFORMAT_R32F: return "SG_PIXELFORMAT_R32F";
+        case SG_PIXELFORMAT_RG16: return "SG_PIXELFORMAT_RG16";
+        case SG_PIXELFORMAT_RG16SN: return "SG_PIXELFORMAT_RG16SN";
+        case SG_PIXELFORMAT_RG16UI: return "SG_PIXELFORMAT_RG16UI";
+        case SG_PIXELFORMAT_RG16SI: return "SG_PIXELFORMAT_RG16SI";
+        case SG_PIXELFORMAT_RG16F: return "SG_PIXELFORMAT_RG16F";
+        case SG_PIXELFORMAT_RGBA8: return "SG_PIXELFORMAT_RGBA8";
+        case SG_PIXELFORMAT_RGBA8SN: return "SG_PIXELFORMAT_RGBA8SN";
+        case SG_PIXELFORMAT_RGBA8UI: return "SG_PIXELFORMAT_RGBA8UI";
+        case SG_PIXELFORMAT_RGBA8SI: return "SG_PIXELFORMAT_RGBA8SI";
+        case SG_PIXELFORMAT_BGRA8: return "SG_PIXELFORMAT_BGRA8";
+        case SG_PIXELFORMAT_RGB10A2: return "SG_PIXELFORMAT_RGB10A2";
+        case SG_PIXELFORMAT_RG11B10F: return "SG_PIXELFORMAT_RG11B10F";
+        case SG_PIXELFORMAT_RG32UI: return "SG_PIXELFORMAT_RG32UI";
+        case SG_PIXELFORMAT_RG32SI: return "SG_PIXELFORMAT_RG32SI";
+        case SG_PIXELFORMAT_RG32F: return "SG_PIXELFORMAT_RG32F";
+        case SG_PIXELFORMAT_RGBA16: return "SG_PIXELFORMAT_RGBA16";
+        case SG_PIXELFORMAT_RGBA16SN: return "SG_PIXELFORMAT_RGBA16SN";
+        case SG_PIXELFORMAT_RGBA16UI: return "SG_PIXELFORMAT_RGBA16UI";
+        case SG_PIXELFORMAT_RGBA16SI: return "SG_PIXELFORMAT_RGBA16SI";
+        case SG_PIXELFORMAT_RGBA16F: return "SG_PIXELFORMAT_RGBA16F";
+        case SG_PIXELFORMAT_RGBA32UI: return "SG_PIXELFORMAT_RGBA32UI";
+        case SG_PIXELFORMAT_RGBA32SI: return "SG_PIXELFORMAT_RGBA32SI";
+        case SG_PIXELFORMAT_RGBA32F: return "SG_PIXELFORMAT_RGBA32F";
+        case SG_PIXELFORMAT_DEPTH: return "SG_PIXELFORMAT_DEPTH";
+        case SG_PIXELFORMAT_DEPTH_STENCIL: return "SG_PIXELFORMAT_DEPTH_STENCIL";
+        case SG_PIXELFORMAT_BC1_RGBA: return "SG_PIXELFORMAT_BC1_RGBA";
+        case SG_PIXELFORMAT_BC2_RGBA: return "SG_PIXELFORMAT_BC2_RGBA";
+        case SG_PIXELFORMAT_BC3_RGBA: return "SG_PIXELFORMAT_BC3_RGBA";
+        case SG_PIXELFORMAT_BC4_R: return "SG_PIXELFORMAT_BC4_R";
+        case SG_PIXELFORMAT_BC4_RSN: return "SG_PIXELFORMAT_BC4_RSN";
+        case SG_PIXELFORMAT_BC5_RG: return "SG_PIXELFORMAT_BC5_RG";
+        case SG_PIXELFORMAT_BC5_RGSN: return "SG_PIXELFORMAT_BC5_RGSN";
+        case SG_PIXELFORMAT_BC6H_RGBF: return "SG_PIXELFORMAT_BC6H_RGBF";
+        case SG_PIXELFORMAT_BC6H_RGBUF: return "SG_PIXELFORMAT_BC6H_RGBUF";
+        case SG_PIXELFORMAT_BC7_RGBA: return "SG_PIXELFORMAT_BC7_RGBA";
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP: return "SG_PIXELFORMAT_PVRTC_RGB_2BPP";
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP: return "SG_PIXELFORMAT_PVRTC_RGB_4BPP";
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP: return "SG_PIXELFORMAT_PVRTC_RGBA_2BPP";
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP: return "SG_PIXELFORMAT_PVRTC_RGBA_4BPP";
+        case SG_PIXELFORMAT_ETC2_RGB8: return "SG_PIXELFORMAT_ETC2_RGB8";
+        case SG_PIXELFORMAT_ETC2_RGB8A1: return "SG_PIXELFORMAT_ETC2_RGB8A1";
+        default: return "???";
     }
 }
 
@@ -1286,13 +1294,6 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
     sg_imgui_str_t str = _sg_imgui_make_str(0);
     sg_imgui_str_t res_id = _sg_imgui_make_str(0);
     switch (item->cmd) {
-        case SG_IMGUI_CMD_QUERY_FEATURE:
-            _sg_imgui_snprintf(&str, "%d: sg_query_feature(feature=%s) => %s",
-                index,
-                _sg_imgui_feature_string(item->args.query_feature.feature),
-                _sg_imgui_bool_string(item->args.query_feature.result));
-            break;
-
         case SG_IMGUI_CMD_RESET_STATE_CACHE:
             _sg_imgui_snprintf(&str, "%d: sg_reset_state_cache()", index);
             break;
@@ -1560,21 +1561,6 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
 }
 
 /*--- CAPTURE CALLBACKS ------------------------------------------------------*/
-_SOKOL_PRIVATE void _sg_imgui_query_feature(sg_feature feature, bool result, void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_QUERY_FEATURE;
-        item->color = _SG_IMGUI_COLOR_OTHER;
-        item->args.query_feature.feature = feature;
-        item->args.query_feature.result = result;
-    }
-    if (ctx->hooks.query_feature) {
-        ctx->hooks.query_feature(feature, result, ctx->hooks.user_data);
-    }
-}
-
 _SOKOL_PRIVATE void _sg_imgui_reset_state_cache(void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
@@ -2556,12 +2542,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_imgui_t* ctx, sg_image_type type, sg_pixel_format fmt) {
-    if ((SG_IMAGETYPE_2D != type) || (SG_PIXELFORMAT_DEPTH == fmt) || (SG_PIXELFORMAT_DEPTHSTENCIL == fmt)) {
-        return false;
-    }
-    else {
-        return true;
-    }
+    return sg_query_caps().formats[fmt].valid && !sg_query_caps().formats[fmt].depth;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img, float* scale) {
@@ -3087,8 +3068,6 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
     ImGui::PopStyleColor();
     ImGui::Separator();
     switch (item->cmd) {
-        case SG_IMGUI_CMD_QUERY_FEATURE:
-            break;
         case SG_IMGUI_CMD_RESET_STATE_CACHE:
             break;
         case SG_IMGUI_CMD_MAKE_BUFFER:
@@ -3219,7 +3198,6 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     sg_trace_hooks hooks;
     memset(&hooks, 0, sizeof(hooks));
     hooks.user_data = (void*) ctx;
-    hooks.query_feature = _sg_imgui_query_feature;
     hooks.reset_state_cache = _sg_imgui_reset_state_cache;
     hooks.make_buffer = _sg_imgui_make_buffer;
     hooks.make_image = _sg_imgui_make_image;
