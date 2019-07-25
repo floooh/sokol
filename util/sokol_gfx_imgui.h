@@ -2542,7 +2542,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_imgui_t* ctx, sg_image_type type, sg_pixel_format fmt) {
-    return sg_query_caps().formats[fmt].valid && !sg_query_caps().formats[fmt].depth;
+    return sg_query_pixelformat(fmt).valid && !sg_query_pixelformat(fmt).depth;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img, float* scale) {
