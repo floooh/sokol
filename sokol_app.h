@@ -241,6 +241,10 @@
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
+        
+        const void* sapp_android_get_native_activity(void);
+            On Android, get tne native activity ANativeActivity pointer, otherwise
+            a null pointer.
 
     --- Implement the frame-callback function, this function will be called
         on the same thread as the init callback, but might be on a different
@@ -783,6 +787,9 @@ SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* Win32: get the HWND window handle */
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
+
+/* Android: get native activity handle */
+SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -7060,6 +7067,15 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_WIN32)
         return _sapp_win32_hwnd;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(__ANDROID__)
+        return (void*)_sapp_android_state.activity;
     #else
         return 0;
     #endif
