@@ -2079,6 +2079,30 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
     #ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
     #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
     #endif
+    #ifndef GL_COMPRESSED_RED_RGTC1
+    #define GL_COMPRESSED_RED_RGTC1 0x8DBB
+    #endif
+    #ifndef GL_COMPRESSED_SIGNED_RED_RGTC1
+    #define GL_COMPRESSED_SIGNED_RED_RGTC1 0x8DBC
+    #endif
+    #ifndef GL_COMPRESSED_RED_GREEN_RGTC2
+    #define GL_COMPRESSED_RED_GREEN_RGTC2 0x8DBD
+    #endif
+    #ifndef GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2
+    #define GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2 0x8DBE
+    #endif
+    #ifndef GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
+    #define GL_COMPRESSED_RGBA_BPTC_UNORM_ARB 0x8E8C
+    #endif
+    #ifndef GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB
+    #define GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB 0x8E8D
+    #endif
+    #ifndef GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB
+    #define GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB 0x8E8E
+    #endif
+    #ifndef GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB
+    #define GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB 0x8E8F
+    #endif
     #ifndef GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
     #define GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG 0x8C01
     #endif
@@ -2094,8 +2118,8 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
     #ifndef GL_COMPRESSED_RGB8_ETC2
     #define GL_COMPRESSED_RGB8_ETC2 0x9274
     #endif
-    #ifndef GL_COMPRESSED_SRGB8_ETC2
-    #define GL_COMPRESSED_SRGB8_ETC2 0x9275
+    #ifndef GL_COMPRESSED_RGBA8_ETC2_EAC
+    #define GL_COMPRESSED_RGBA8_ETC2_EAC 0x9278
     #endif
     #ifndef GL_DEPTH24_STENCIL8
     #define GL_DEPTH24_STENCIL8 0x88F0
@@ -2109,6 +2133,10 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
     #endif
+    #ifndef GL_BGRA_EXT
+    #define GL_BGRA_EXT 0x80E1
+    #endif
+
     #ifdef SOKOL_GLES2
     #   ifdef GL_ANGLE_instanced_arrays
     #       define SOKOL_INSTANCING_ENABLED
@@ -3075,6 +3103,21 @@ _SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
     }
 }
 
+/* the default color pixelformat for render targets */
+_SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_colorformat(void) {
+    #if defined(SOKOL_METAL)
+        return SG_PIXELFORMAT_BGRA8;
+    #elif defined(SOKOL_D3D11)
+        return SG_PIXELFORMAT_RGBA8;    /* FIXME: would BGRA be better? */
+    #else
+        return SG_PIXELFORMAT_RGBA8;
+    #endif
+}
+
+_SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_depthformat(void) {
+    return SG_PIXELFORMAT_DEPTH_STENCIL;
+}
+
 /* return true if pixel format is a compressed format */
 _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
     switch (fmt) {
@@ -3269,6 +3312,10 @@ _SOKOL_PRIVATE void _sg_pixelformat_all(sg_pixelformat_info* pfi) {
     pfi->blend = true;
     pfi->render = true;
     pfi->msaa = true;
+}
+
+_SOKOL_PRIVATE void _sg_pixelformat_none(sg_pixelformat_info* pfi) {
+    pfi->valid = true;
 }
 
 _SOKOL_PRIVATE void _sg_pixelformat_f(sg_pixelformat_info* pfi) {
@@ -3814,29 +3861,58 @@ _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
 
 _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_RGBA32F:
-        case SG_PIXELFORMAT_R32F:
-            return GL_FLOAT;
-        case SG_PIXELFORMAT_RGBA16F:
-        case SG_PIXELFORMAT_R16F:
-            return GL_HALF_FLOAT;
+        case SG_PIXELFORMAT_R8:
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_RG8:
+        case SG_PIXELFORMAT_RG8UI:
         case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_RGB8:
-        case SG_PIXELFORMAT_L8:
+        case SG_PIXELFORMAT_RGBA8UI:
+        case SG_PIXELFORMAT_BGRA8:
             return GL_UNSIGNED_BYTE;
-        case SG_PIXELFORMAT_R10G10B10A2:
-            return GL_UNSIGNED_INT_2_10_10_10_REV;
-        case SG_PIXELFORMAT_R5G5B5A1:
-            return GL_UNSIGNED_SHORT_5_5_5_1;
-        case SG_PIXELFORMAT_R5G6B5:
-            return GL_UNSIGNED_SHORT_5_6_5;
-        case SG_PIXELFORMAT_RGBA4:
-            return GL_UNSIGNED_SHORT_4_4_4_4;
-        case SG_PIXELFORMAT_DEPTH:
-            /* FIXME */
+        case SG_PIXELFORMAT_R8SN:
+        case SG_PIXELFORMAT_R8SI:
+        case SG_PIXELFORMAT_RG8SN:
+        case SG_PIXELFORMAT_RG8SI:
+        case SG_PIXELFORMAT_RGBA8SN:
+        case SG_PIXELFORMAT_RGBA8SI:
+            return GL_BYTE;
+        case SG_PIXELFORMAT_R16:
+        case SG_PIXELFORMAT_R16UI:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16UI:
+        case SG_PIXELFORMAT_RGBA16:
+        case SG_PIXELFORMAT_RGBA16UI:
             return GL_UNSIGNED_SHORT;
-        case SG_PIXELFORMAT_DEPTHSTENCIL:
-            /* FIXME */
+        case SG_PIXELFORMAT_R16SN:
+        case SG_PIXELFORMAT_R16SI:
+        case SG_PIXELFORMAT_RG16SN:
+        case SG_PIXELFORMAT_RG16SI:
+        case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_RGBA16SI:
+            return GL_SHORT;
+        case SG_PIXELFORMAT_R16F:
+        case SG_PIXELFORMAT_RG16F:
+        case SG_PIXELFORMAT_RGBA16F:
+            return GL_HALF_FLOAT;
+        case SG_PIXELFORMAT_R32UI:
+        case SG_PIXELFORMAT_RG32UI:
+        case SG_PIXELFORMAT_RGBA32UI:
+            return GL_UNSIGNED_INT;
+        case SG_PIXELFORMAT_R32SI:
+        case SG_PIXELFORMAT_RG32SI:
+        case SG_PIXELFORMAT_RGBA32SI:
+            return GL_INT;
+        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_RG32F:
+        case SG_PIXELFORMAT_RGBA32F:
+            return GL_FLOAT;
+        case SG_PIXELFORMAT_RGB10A2:
+            return GL_UNSIGNED_INT_2_10_10_10_REV;
+        case SG_PIXELFORMAT_RG11B10F:
+            return GL_UNSIGNED_INT_10F_11F_11F_REV;
+        case SG_PIXELFORMAT_DEPTH:
+            return GL_UNSIGNED_SHORT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
             return GL_UNSIGNED_INT_24_8;
         default:
             SOKOL_UNREACHABLE; return 0;
@@ -3845,53 +3921,89 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
 
 _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_NONE:
-            return 0;
-        case SG_PIXELFORMAT_RGBA8:
-        case SG_PIXELFORMAT_R5G5B5A1:
-        case SG_PIXELFORMAT_RGBA4:
-        case SG_PIXELFORMAT_RGBA32F:
-        case SG_PIXELFORMAT_RGBA16F:
-        case SG_PIXELFORMAT_R10G10B10A2:
-            return GL_RGBA;
-        case SG_PIXELFORMAT_RGB8:
-        case SG_PIXELFORMAT_R5G6B5:
-            return GL_RGB;
-        case SG_PIXELFORMAT_L8:
-        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_R8:
+        case SG_PIXELFORMAT_R8SN:
+        case SG_PIXELFORMAT_R16:
+        case SG_PIXELFORMAT_R16SN:
         case SG_PIXELFORMAT_R16F:
-            #if defined(SOKOL_GLES2)
-            return GL_LUMINANCE;
-            #else
-            if (_sg.gl.gles2) {
-                return GL_LUMINANCE;
-            }
-            else {
-                return GL_RED;
-            }
-            #endif
+        case SG_PIXELFORMAT_R32F:
+            return GL_RED;
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_R8SI:
+        case SG_PIXELFORMAT_R16UI:
+        case SG_PIXELFORMAT_R16SI:
+        case SG_PIXELFORMAT_R32UI:
+        case SG_PIXELFORMAT_R32SI:
+            return GL_RED_INTEGER;
+        case SG_PIXELFORMAT_RG8:
+        case SG_PIXELFORMAT_RG8SN:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16SN:
+        case SG_PIXELFORMAT_RG16F:
+        case SG_PIXELFORMAT_RG32F:
+            return GL_RG;
+        case SG_PIXELFORMAT_RG8UI:
+        case SG_PIXELFORMAT_RG8SI:
+        case SG_PIXELFORMAT_RG16UI:
+        case SG_PIXELFORMAT_RG16SI:
+        case SG_PIXELFORMAT_RG32UI:
+        case SG_PIXELFORMAT_RG32SI:
+            return GL_RG_INTEGER;
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_RGBA8SN:
+        case SG_PIXELFORMAT_RGBA16:
+        case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_RGBA32F:
+        case SG_PIXELFORMAT_RGB10A2:
+            return GL_RGBA;
+        case SG_PIXELFORMAT_RGBA8UI:
+        case SG_PIXELFORMAT_RGBA8SI:
+        case SG_PIXELFORMAT_RGBA16UI:
+        case SG_PIXELFORMAT_RGBA16SI:
+        case SG_PIXELFORMAT_RGBA32UI:
+        case SG_PIXELFORMAT_RGBA32SI:
+            return GL_RGBA_INTEGER;
+        case SG_PIXELFORMAT_BGRA8:
+            return GL_BGRA_EXT;
+        case SG_PIXELFORMAT_RG11B10F:
+            return GL_RGB;
         case SG_PIXELFORMAT_DEPTH:
             return GL_DEPTH_COMPONENT;
-        case SG_PIXELFORMAT_DEPTHSTENCIL:
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
             return GL_DEPTH_STENCIL;
-        case SG_PIXELFORMAT_DXT1:
+        case SG_PIXELFORMAT_BC1_RGBA:
             return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-        case SG_PIXELFORMAT_DXT3:
+        case SG_PIXELFORMAT_BC2_RGBA:
             return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
-        case SG_PIXELFORMAT_DXT5:
+        case SG_PIXELFORMAT_BC3_RGBA:
             return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-        case SG_PIXELFORMAT_PVRTC2_RGB:
+        case SG_PIXELFORMAT_BC4_R:
+            return GL_COMPRESSED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC4_RSN:
+            return GL_COMPRESSED_SIGNED_RED_RGTC1;
+        case SG_PIXELFORMAT_BC5_RG:
+            return GL_COMPRESSED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC5_RGSN:
+            return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
+        case SG_PIXELFORMAT_BC6H_RGBF:
+            return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC6H_RGBUF:
+            return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
+        case SG_PIXELFORMAT_BC7_RGBA:
+            return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
             return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC4_RGB:
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
             return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
             return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
             return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
         case SG_PIXELFORMAT_ETC2_RGB8:
             return GL_COMPRESSED_RGB8_ETC2;
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-            return GL_COMPRESSED_SRGB8_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
+            return GL_COMPRESSED_RGBA8_ETC2_EAC;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -3906,59 +4018,64 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
     }
     else {
         switch (fmt) {
-            case SG_PIXELFORMAT_NONE:
-                return 0;
-            case SG_PIXELFORMAT_RGBA8:
-                return GL_RGBA8;
-            case SG_PIXELFORMAT_RGB8:
-                return GL_RGB8;
-            case SG_PIXELFORMAT_RGBA4:
-                return GL_RGBA4;
-            case SG_PIXELFORMAT_R5G6B5:
-                #if defined(SOKOL_GLES3)
-                    return GL_RGB565;
-                #else
-                    return GL_RGB5;
-                #endif
-            case SG_PIXELFORMAT_R5G5B5A1:
-                return GL_RGB5_A1;
-            case SG_PIXELFORMAT_R10G10B10A2:
-                return GL_RGB10_A2;
-            case SG_PIXELFORMAT_RGBA32F:
-                return GL_RGBA32F;
-            case SG_PIXELFORMAT_RGBA16F:
-                return GL_RGBA16F;
-            case SG_PIXELFORMAT_R32F:
-                return GL_R32F;
-            case SG_PIXELFORMAT_R16F:
-                return GL_R16F;
-            case SG_PIXELFORMAT_L8:
-                return GL_R8;
-            case SG_PIXELFORMAT_DEPTH:
-                /* FIXME */
-                return GL_DEPTH_COMPONENT16;
-            case SG_PIXELFORMAT_DEPTHSTENCIL:
-                return GL_DEPTH24_STENCIL8;
-            case SG_PIXELFORMAT_DXT1:
-                return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-            case SG_PIXELFORMAT_DXT3:
-                return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
-            case SG_PIXELFORMAT_DXT5:
-                return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-            case SG_PIXELFORMAT_PVRTC2_RGB:
-                return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC4_RGB:
-                return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC2_RGBA:
-                return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
-            case SG_PIXELFORMAT_PVRTC4_RGBA:
-                return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
-            case SG_PIXELFORMAT_ETC2_RGB8:
-                return GL_COMPRESSED_RGB8_ETC2;
-            case SG_PIXELFORMAT_ETC2_SRGB8:
-                return GL_COMPRESSED_SRGB8_ETC2;
-            default:
-                SOKOL_UNREACHABLE; return 0;
+            case SG_PIXELFORMAT_R8:         return GL_R8;
+            case SG_PIXELFORMAT_R8SN:       return GL_R8_SNORM;
+            case SG_PIXELFORMAT_R8UI:       return GL_R8UI;
+            case SG_PIXELFORMAT_R8SI:       return GL_R8I;
+            case SG_PIXELFORMAT_R16:        return GL_R16;
+            case SG_PIXELFORMAT_R16SN:      return GL_R16_SNORM;
+            case SG_PIXELFORMAT_R16UI:      return GL_R16UI;
+            case SG_PIXELFORMAT_R16SI:      return GL_R16I;
+            case SG_PIXELFORMAT_R16F:       return GL_R16F;
+            case SG_PIXELFORMAT_RG8:        return GL_RG8;
+            case SG_PIXELFORMAT_RG8SN:      return GL_RG8_SNORM;
+            case SG_PIXELFORMAT_RG8UI:      return GL_RG8UI;
+            case SG_PIXELFORMAT_RG8SI:      return GL_RG8I;
+            case SG_PIXELFORMAT_R32UI:      return GL_R32UI;
+            case SG_PIXELFORMAT_R32SI:      return GL_R32I;
+            case SG_PIXELFORMAT_R32F:       return GL_R32F;
+            case SG_PIXELFORMAT_RG16:       return GL_RG16;
+            case SG_PIXELFORMAT_RG16SN:     return GL_RG16_SNORM;
+            case SG_PIXELFORMAT_RG16UI:     return GL_RG16UI;
+            case SG_PIXELFORMAT_RG16SI:     return GL_RG16I;
+            case SG_PIXELFORMAT_RG16F:      return GL_RG16F;
+            case SG_PIXELFORMAT_RGBA8:      return GL_RGBA8;
+            case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
+            case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
+            case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
+            case SG_PIXELFORMAT_BGRA8:      return GL_BGRA_EXT;
+            case SG_PIXELFORMAT_RGB10A2:    return GL_RGB10_A2;
+            case SG_PIXELFORMAT_RG11B10F:   return GL_R11F_G11F_B10F;
+            case SG_PIXELFORMAT_RG32UI:     return GL_RG32UI;
+            case SG_PIXELFORMAT_RG32SI:     return GL_RG32I;
+            case SG_PIXELFORMAT_RG32F:      return GL_RG32F;
+            case SG_PIXELFORMAT_RGBA16:     return GL_RGBA16;
+            case SG_PIXELFORMAT_RGBA16SN:   return GL_RGBA16_SNORM;
+            case SG_PIXELFORMAT_RGBA16UI:   return GL_RGBA16UI;
+            case SG_PIXELFORMAT_RGBA16SI:   return GL_RGBA16I;
+            case SG_PIXELFORMAT_RGBA16F:    return GL_RGBA16F;
+            case SG_PIXELFORMAT_RGBA32UI:   return GL_RGBA32UI;
+            case SG_PIXELFORMAT_RGBA32SI:   return GL_RGBA32I;
+            case SG_PIXELFORMAT_RGBA32F:    return GL_RGBA32F;
+            case SG_PIXELFORMAT_DEPTH:      return GL_DEPTH_COMPONENT16;
+            case SG_PIXELFORMAT_DEPTH_STENCIL:      return GL_DEPTH24_STENCIL8;
+            case SG_PIXELFORMAT_BC1_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            case SG_PIXELFORMAT_BC2_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+            case SG_PIXELFORMAT_BC3_RGBA:           return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            case SG_PIXELFORMAT_BC4_R:              return GL_COMPRESSED_RED_RGTC1;
+            case SG_PIXELFORMAT_BC4_RSN:            return GL_COMPRESSED_SIGNED_RED_RGTC1;
+            case SG_PIXELFORMAT_BC5_RG:             return GL_COMPRESSED_RED_GREEN_RGTC2;
+            case SG_PIXELFORMAT_BC5_RGSN:           return GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2;
+            case SG_PIXELFORMAT_BC6H_RGBF:          return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
+            case SG_PIXELFORMAT_BC6H_RGBUF:         return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB;
+            case SG_PIXELFORMAT_BC7_RGBA:           return GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+            case SG_PIXELFORMAT_PVRTC_RGB_2BPP:     return GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG;
+            case SG_PIXELFORMAT_PVRTC_RGB_4BPP:     return GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG;
+            case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+            case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
+            case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
+            case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGBA8_ETC2_EAC;
+            default: SOKOL_UNREACHABLE; return 0;
         }
     }
     #endif
@@ -3979,7 +4096,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_cubeface_target(int face_index) {
 _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_DEPTH:          return GL_DEPTH_COMPONENT16;
-        case SG_PIXELFORMAT_DEPTHSTENCIL:   return GL_DEPTH24_STENCIL8;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return GL_DEPTH24_STENCIL8;
         default: SOKOL_UNREACHABLE; return 0;
     }
 }
@@ -4020,6 +4137,106 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     s->cull_mode = SG_CULLMODE_NONE;
     s->face_winding = SG_FACEWINDING_CW;
     s->sample_count = 1;
+}
+
+#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+/* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_glcore33_gles3(bool has_bgra, bool has_colorbuffer_float, bool has_colorbuffer_half_float) {
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+    /* _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]); */
+    /* _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]); */
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+    /* _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]); */
+    /*  _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]); */
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+    if (has_bgra) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
+    }
+    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+    /* _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]); */
+    /* _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]); */
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
+    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+}
+#endif
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool has_colorbuffer_half_float) {
+    if (has_colorbuffer_half_float) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+    }
+    else {
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R16F]);
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float) {
+    if (has_colorbuffer_float) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    }
+    else {
+        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_s3tc(void) {
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_rgtc(void) {
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_bptc(void) {
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
+}
+
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
 }
 
 #if defined(SOKOL_GLCORE33)
@@ -4066,6 +4283,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
             }
             else if (strstr(ext, "_texture_filter_anisotropic")) {
                 _sg.gl.ext_anisotropic = true;
+                continue;
             }
         }
     }
@@ -4083,7 +4301,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.limits.max_image_array_layers = gl_int;
     if (_sg.gl.ext_anisotropic) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_int);
-        _sg.gl.max_anisotropy = gl_int
+        _sg.gl.max_anisotropy = gl_int;
     }
     else {
         _sg.gl.max_anisotropy = 1;
@@ -4092,75 +4310,29 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.gl.max_combined_texture_image_units = gl_int;
 
     /* pixel formats */
-// FIXME!
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R32F]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    const bool has_bgra = false;    /* not a bug */
+    const bool has_colorbuffer_float = true;
+    const bool has_colorbuffer_half_float = true;
+    _sg_gl_init_pixelformats_glcore33_gles3(has_bgra, has_colorbuffer_float, has_colorbuffer_half_float);
+    _sg_gl_init_pixelformats_float(true);
+    _sg_gl_init_pixelformats_half_float(true);
     if (has_s3tc) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+        _sg_gl_init_pixelformats_s3tc();
     }
     if (has_rgtc) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
+        _sg_gl_init_pixelformats_rgtc();
     }
     if (has_bptc) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+        _sg_gl_init_pixelformats_bptc();
     }
     if (has_pvrtc) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
+        _sg_gl_init_pixelformats_pvrtc();
     }
     if (has_etc2) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+        _sg_gl_init_pixelformats_etc2();
     }
 }
+#endif
 
 /*-- state cache implementation ----------------------------------------------*/
 _SOKOL_PRIVATE void _sg_gl_clear_buffer_bindings(bool force) {
@@ -4383,7 +4555,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
         }
     #endif
     #if defined(SOKOL_GLCORE33)
-        _sg_gl_init_caps_core33();
+        _sg_gl_init_caps_glcore33();
     #else
     #error "FIXME"
     #endif
@@ -4496,22 +4668,9 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
 }
 
 _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_DXT1:
-        case SG_PIXELFORMAT_DXT3:
-        case SG_PIXELFORMAT_DXT5:
-            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT];
-        case SG_PIXELFORMAT_PVRTC2_RGB:
-        case SG_PIXELFORMAT_PVRTC4_RGB:
-        case SG_PIXELFORMAT_PVRTC2_RGBA:
-        case SG_PIXELFORMAT_PVRTC4_RGBA:
-            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_PVRTC];
-        case SG_PIXELFORMAT_ETC2_RGB8:
-        case SG_PIXELFORMAT_ETC2_SRGB8:
-            return _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2];
-        default:
-            return true;
-    }
+    const int fmt_index = (int) fmt;
+    SOKOL_ASSERT((fmt_index > SG_PIXELFORMAT_NONE) && (fmt_index < _SG_PIXELFORMAT_NUM));
+    return _sg.formats[fmt_index].valid;
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -4536,15 +4695,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(img->pixel_format)) {
-        SOKOL_LOG("compressed texture format not supported by GL context\n");
+        SOKOL_LOG("texture format not supported by GL context\n");
         return SG_RESOURCESTATE_FAILED;
     }
     /* check for optional texture types */
-    if ((img->type == SG_IMAGETYPE_3D) && !_sg.gl.features[SG_FEATURE_IMAGETYPE_3D]) {
+    if ((img->type == SG_IMAGETYPE_3D) && !_sg.features.imagetype_3d) {
         SOKOL_LOG("3D textures not supported by GL context\n");
         return SG_RESOURCESTATE_FAILED;
     }
-    if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg.gl.features[SG_FEATURE_IMAGETYPE_ARRAY]) {
+    if ((img->type == SG_IMAGETYPE_ARRAY) && !_sg.features.imagetype_array) {
         SOKOL_LOG("array textures not supported by GL context\n");
         return SG_RESOURCESTATE_FAILED;
     }
@@ -4557,7 +4716,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     #if !defined(SOKOL_GLES2)
     bool msaa = false;
     if (!_sg.gl.gles2) {
-        msaa = (img->sample_count > 1) && (_sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS]);
+        msaa = (img->sample_count > 1) && (_sg.features.msaa_render_targets);
     }
     #endif
 
@@ -5520,7 +5679,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
                 #ifdef SOKOL_INSTANCING_ENABLED
-                    if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
+                    if (_sg.features.instancing) {
                         glVertexAttribDivisor(attr_index, attr->divisor);
                     }
                 #endif
@@ -5602,7 +5761,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
             glDrawElements(p_type, num_elements, i_type, indices);
         }
         else {
-            if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
+            if (_sg.features.instancing) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
         }
@@ -5613,7 +5772,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
             glDrawArrays(p_type, base_element, num_elements);
         }
         else {
-            if (_sg.gl.features[SG_FEATURE_INSTANCING]) {
+            if (_sg.features.instancing) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
         }
@@ -7656,10 +7815,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
     #if defined(_SG_TARGET_MACOS)
         _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #else
         _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #endif
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #if defined(_SG_TARGET_MACOS)
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
     #else
@@ -9273,10 +9433,10 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         const bool ext = (0 != desc->gl_textures[0]) || (0 != desc->mtl_textures[0]) || (0 != desc->d3d11_texture);
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
+            SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
             if (desc->sample_count > 1) {
                 SOKOL_VALIDATE(_sg.formats[fmt].msaa, _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
             }
-            SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
             SOKOL_VALIDATE(usage == SG_USAGE_IMMUTABLE, _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             SOKOL_VALIDATE(desc->content.subimage[0][0].ptr==0, _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT);
         }
@@ -9572,8 +9732,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         else {
             /* default pass */
             SOKOL_VALIDATE(pip->color_attachment_count == 1, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->color_format == SG_PIXELFORMAT_BGRA8, _SG_VALIDATE_APIP_COLOR_FORMAT);
-            SOKOL_VALIDATE(pip->depth_format == SG_PIXELFORMAT_DEPTH_STENCIL, _SG_VALIDATE_APIP_DEPTH_FORMAT);
+            SOKOL_VALIDATE(pip->color_format == _sg_default_rendertarget_colorformat(), _SG_VALIDATE_APIP_COLOR_FORMAT);
+            SOKOL_VALIDATE(pip->depth_format == _sg_default_rendertarget_depthformat(), _SG_VALIDATE_APIP_DEPTH_FORMAT);
             /* FIXME: hmm, we don't know if the default framebuffer is multisampled here */
         }
         return SOKOL_VALIDATE_END();
@@ -9771,7 +9931,7 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
     if (desc->render_target) {
-        def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_BGRA8);
+        def.pixel_format = _sg_def(def.pixel_format, _sg_default_rendertarget_colorformat());
     }
     else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
@@ -9844,8 +10004,8 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         def.blend.color_write_mask = (uint8_t) _sg_def((sg_color_mask)def.blend.color_write_mask, SG_COLORMASK_RGBA);
     }
     def.blend.color_attachment_count = _sg_def(def.blend.color_attachment_count, 1);
-    def.blend.color_format = _sg_def(def.blend.color_format, SG_PIXELFORMAT_BGRA8);
-    def.blend.depth_format = _sg_def(def.blend.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    def.blend.color_format = _sg_def(def.blend.color_format, _sg_default_rendertarget_colorformat());
+    def.blend.depth_format = _sg_def(def.blend.depth_format, _sg_default_rendertarget_depthformat());
 
     def.rasterizer.cull_mode = _sg_def(def.rasterizer.cull_mode, SG_CULLMODE_NONE);
     def.rasterizer.face_winding = _sg_def(def.rasterizer.face_winding, SG_FACEWINDING_CW);
