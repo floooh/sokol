@@ -4147,76 +4147,127 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
-_SOKOL_PRIVATE void _sg_gl_init_pixelformats_glcore33_gles3(bool has_bgra) {
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra, bool gles2) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
-    #if !defined(SOKOL_GLES3)
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
-    #endif
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    #if !defined(SOKOL_GLES3)
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
-    #endif
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    if (!gles2) {
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+        #if !defined(SOKOL_GLES3)
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+        #endif
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+        #if !defined(SOKOL_GLES3)
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+        #endif
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    }
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+    if (!gles2) {
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+    }
     if (has_bgra) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     }
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
-    #if !defined(SOKOL_GLES3)
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
-    #endif
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+    if (!gles2) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
+        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+        #if !defined(SOKOL_GLES3)
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+        #endif
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+    }
+    // FIXME: WEBGL_depth_texture extension?
     _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 }
 #endif
 
-_SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool has_colorbuffer_half_float) {
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool gles2, bool has_colorbuffer_half_float, bool has_texture_half_float_linear) {
     if (has_colorbuffer_half_float) {
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        if (has_texture_half_float_linear) {
+            if (!gles2) {
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            }
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        }
+        else {
+            if (!gles2) {
+                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            }
+            _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        }
     }
     else {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R16F]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        if (has_texture_half_float_linear) {
+            if (!gles2) {
+                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            }
+            _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        }
+        else {
+            if (!gles2) {
+                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+            }
+            _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+        }
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float) {
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool gles2, bool has_colorbuffer_float, bool has_texture_float_linear) {
     if (has_colorbuffer_float) {
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        if (has_texture_float_linear) {
+            if (!gles2) {
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            }
+            _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        }
+        else {
+            if (!gles2) {
+                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            }
+            _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        }
     }
     else {
-        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R32F]);
-        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-        _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        if (has_texture_float_linear) {
+            if (!gles2) {
+                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            }
+            _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        }
+        else {
+            if (!gles2) {
+                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+            }
+            _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        }
     }
 }
 
@@ -4252,26 +4303,35 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
+    _SG_GL_CHECK_ERROR();
     GLint gl_int;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_int);
+    _SG_GL_CHECK_ERROR();
     _sg.limits.max_image_size_2d = gl_int;
     _sg.limits.max_image_size_array = gl_int;
     glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &gl_int);
+    _SG_GL_CHECK_ERROR();
     _sg.limits.max_image_size_cube = gl_int;
     #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+    if (!_sg.gl.gles2) {
         glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
+        _SG_GL_CHECK_ERROR();
         _sg.limits.max_image_size_3d = gl_int;
         glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &gl_int);
+        _SG_GL_CHECK_ERROR();
         _sg.limits.max_image_array_layers = gl_int;
+    }
     #endif
     if (_sg.gl.ext_anisotropic) {
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_int);
+        _SG_GL_CHECK_ERROR();
         _sg.gl.max_anisotropy = gl_int;
     }
     else {
         _sg.gl.max_anisotropy = 1;
     }
     glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &gl_int);
+    _SG_GL_CHECK_ERROR();
     _sg.gl.max_combined_texture_image_units = gl_int;
 }
 
@@ -4325,9 +4385,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     const bool has_bgra = false;    /* not a bug */
     const bool has_colorbuffer_float = true;
     const bool has_colorbuffer_half_float = true;
-    _sg_gl_init_pixelformats_glcore33_gles3(has_bgra);
-    _sg_gl_init_pixelformats_float(has_colorbuffer_float);
-    _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float);
+    const bool has_texture_float_linear = true; /* FIXME??? */
+    const bool has_texture_half_float_linear = true;
+    _sg_gl_init_pixelformats(has_bgra, false);
+    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
+    _sg_gl_init_pixelformats_half_float(false, has_colorbuffer_half_float, has_texture_half_float_linear);
     if (has_s3tc) {
         _sg_gl_init_pixelformats_s3tc();
     }
@@ -4364,6 +4426,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     bool has_bgra = false;
     bool has_colorbuffer_float = false;
     bool has_colorbuffer_half_float = false;
+    bool has_texture_float_linear = false;
     GLint num_ext = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
     for (int i = 0; i < num_ext; i++) {
@@ -4387,6 +4450,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             else if (strstr(ext, "_color_buffer_half_float")) {
                 has_colorbuffer_half_float = true;
             }
+            else if (strstr(ext, "_texture_float_linear")) {
+                has_texture_float_linear = true;
+            }
             else if (strstr(ext, "_texture_format_BGRA8888")) {
                 has_bgra = true;
             }
@@ -4401,9 +4467,10 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 
     /* pixel formats */
     const bool has_etc2 = true;
-    _sg_gl_init_pixelformats_glcore33_gles3(has_bgra);
-    _sg_gl_init_pixelformats_float(has_colorbuffer_float);
-    _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float);
+    const bool has_texture_half_float_linear = true;
+    _sg_gl_init_pixelformats(has_bgra, _sg.gl.gles2);
+    _sg_gl_init_pixelformats_float(_sg.gl.gles2, has_colorbuffer_float, has_texture_float_linear);
+    _sg_gl_init_pixelformats_half_float(_sg.gl.gles2, has_colorbuffer_half_float, has_texture_half_float_linear);
     if (has_s3tc) {
         _sg_gl_init_pixelformats_s3tc();
     }
@@ -4425,7 +4492,77 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 #if defined(SOKOL_GLES3) || defined(SOKOL_GLES2)
 _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.backend = SG_BACKEND_GLES2;
-    SOKOL_ASSERT(false);
+
+    bool has_s3tc = false;  /* BC1..BC3 */
+    bool has_rgtc = false;  /* BC4 and BC5 */
+    bool has_bptc = false;  /* BC6H and BC7 */
+    bool has_pvrtc = false;
+    bool has_etc2 = false;
+    bool has_bgra = false;
+    bool has_texture_float = false;
+    bool has_texture_half_float = false;
+    bool has_texture_float_linear = false;
+    bool has_texture_half_float_linear = false;
+    bool has_colorbuffer_float = false;
+    bool has_colorbuffer_half_float = false;
+    bool has_instancing = false;
+    const char* ext = (const char*) glGetString(GL_EXTENSIONS);
+    if (ext) {
+        has_s3tc = strstr(ext, "_texture_compression_s3tc");
+        has_rgtc = strstr(ext, "_texture_compression_rgtc");
+        has_bptc = strstr(ext, "_texture_compression_bptc");
+        has_pvrtc = strstr(ext, "_texture_compression_pvrtc");
+        has_etc2 = strstr(ext, "_compressed_texture_etc");
+        has_bgra = strstr(ext, "_texture_format_BGRA8888");
+        has_texture_float = strstr(ext, "_texture_float");
+        has_texture_half_float = strstr(ext, "_texture_half_float");
+        has_texture_float_linear = strstr(ext, "_texture_float_linear");
+        has_texture_half_float_linear = strstr(ext, "_texture_half_float_linear");
+        has_colorbuffer_float = strstr(ext, "_color_buffer_float");
+        has_colorbuffer_half_float = strstr(ext, "_color_buffer_half_float");
+        has_instancing = strstr(ext, "_instanced_arrays");
+        _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
+    }
+
+    _sg.features.origin_top_left = false;
+    #if defined(SOKOL_INSTANCING_ENABLED)
+        _sg.features.instancing = has_instancing;
+    #endif
+    _sg.features.multiple_render_targets = false;
+    _sg.features.msaa_render_targets = false;
+    _sg.features.imagetype_3d = false;
+    _sg.features.imagetype_array = false;
+
+    /* limits */
+    _sg_gl_init_limits();
+
+    /* pixel formats */
+    _sg_gl_init_pixelformats(has_bgra, true);
+    if (has_texture_float) {
+        _sg_gl_init_pixelformats_float(true, has_colorbuffer_float, has_texture_float_linear);
+    }
+    if (has_texture_half_float) {
+        _sg_gl_init_pixelformats_half_float(true, has_colorbuffer_half_float, has_texture_half_float_linear);
+    }
+    if (has_s3tc) {
+        _sg_gl_init_pixelformats_s3tc();
+    }
+    if (has_rgtc) {
+        _sg_gl_init_pixelformats_rgtc();
+    }
+    if (has_bptc) {
+        _sg_gl_init_pixelformats_bptc();
+    }
+    if (has_pvrtc) {
+        _sg_gl_init_pixelformats_pvrtc();
+    }
+    if (has_etc2) {
+        _sg_gl_init_pixelformats_etc2();
+    }
+    /* GLES2 doesn't allow multi-sampled render targets at all */
+    for (int i = 0; i < _SG_PIXELFORMAT_NUM; i++) {
+        _sg.formats[i].msaa = false;
+    }
 }
 #endif
 
@@ -9364,7 +9501,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT:     return "invalid pixel format for render-target image";
         case _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT:  return "invalid pixel format for non-render-target image";
         case _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT:     return "non-render-target images cannot be multisampled";
-        case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA not support for this pixel format";
+        case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA not supported for this pixel format";
         case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
         case _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT:      return "render target images cannot be initialized with content";
         case _SG_VALIDATE_IMAGEDESC_CONTENT:            return "missing or invalid content for immutable image";
@@ -9539,8 +9676,11 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
-            if (desc->sample_count > 1) {
-                SOKOL_VALIDATE(_sg.formats[fmt].msaa, _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
+            /* on GLES2, sample count for render targets is completely ignored */
+            if (!_sg.gl.gles2) {
+                if (desc->sample_count > 1) {
+                    SOKOL_VALIDATE(_sg.features.msaa_render_targets && _sg.formats[fmt].msaa, _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
+                }
             }
             SOKOL_VALIDATE(usage == SG_USAGE_IMMUTABLE, _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             SOKOL_VALIDATE(desc->content.subimage[0][0].ptr==0, _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT);
