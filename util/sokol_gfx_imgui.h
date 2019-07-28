@@ -537,6 +537,10 @@ typedef struct {
 } sg_imgui_capture_t;
 
 typedef struct {
+    bool open;
+} sg_imgui_caps_t;
+
+typedef struct {
     uint32_t init_tag;
     sg_imgui_buffers_t buffers;
     sg_imgui_images_t images;
@@ -544,6 +548,7 @@ typedef struct {
     sg_imgui_pipelines_t pipelines;
     sg_imgui_passes_t passes;
     sg_imgui_capture_t capture;
+    sg_imgui_caps_t caps;
     sg_pipeline cur_pipeline;
     sg_trace_hooks hooks;
 } sg_imgui_t;
@@ -558,6 +563,7 @@ SOKOL_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
 
 SOKOL_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
@@ -565,6 +571,7 @@ SOKOL_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -713,6 +720,20 @@ _SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const sg_slot_info* slot) {
     ImGui::Text("ResId: %08X", slot->res_id);
     ImGui::Text("CtxId: %08X", slot->ctx_id);
     ImGui::Text("State: %s", _sg_imgui_resourcestate_string(slot->state));
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_backend_string(sg_backend b) {
+    switch (b) {
+        case SG_BACKEND_GLCORE33:           return "SG_BACKEND_GLCORE33";
+        case SG_BACKEND_GLES2:              return "SG_BACKEND_GLES2";
+        case SG_BACKEND_GLES3:              return "SG_BACKEND_GLES3";
+        case SG_BACKEND_D3D11:              return "SG_BACKEND_D3D11";
+        case SG_BACKEND_METAL_IOS:          return "SG_BACKEND_METAL_IOS";
+        case SG_BACKEND_METAL_MACOS:        return "SG_BACKEND_METAL_MACOS";
+        case SG_BACKEND_METAL_SIMULATOR:    return "SG_BACKEND_METAL_SIMULATOR";
+        case SG_BACKEND_DUMMY:              return "SG_BACKEND_DUMMY";
+        default: return "???";
+    }
 }
 
 _SOKOL_PRIVATE const char* _sg_imgui_buffertype_string(sg_buffer_type t) {
@@ -2542,7 +2563,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_imgui_t* ctx, sg_image_type type, sg_pixel_format fmt) {
-    return sg_query_pixelformat(fmt).valid && !sg_query_pixelformat(fmt).depth;
+    return sg_query_pixelformat(fmt).sample && !sg_query_pixelformat(fmt).depth;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img, float* scale) {
@@ -3187,6 +3208,30 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
     ImGui::EndChild();
 }
 
+_SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
+    ImGui::Text("Backend: %s\n", _sg_imgui_backend_string(sg_query_backend()));
+    sg_features f = sg_query_features();
+    ImGui::Text("Features:");
+    ImGui::Text("    instancing: %s", _sg_imgui_bool_string(f.instancing));
+    ImGui::Text("    origin_top_left: %s", _sg_imgui_bool_string(f.origin_top_left));
+    ImGui::Text("    multiple_render_targets: %s", _sg_imgui_bool_string(f.multiple_render_targets));
+    ImGui::Text("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
+    ImGui::Text("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
+    ImGui::Text("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
+    ImGui::Text("\nPixelformats:");
+    for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
+        sg_pixel_format fmt = (sg_pixel_format)i;
+        ImGui::Text("  %s:", _sg_imgui_pixelformat_string(fmt));
+        sg_pixelformat_info info = sg_query_pixelformat(fmt);
+        ImGui::Text("    sample: %s", _sg_imgui_bool_string(info.sample));
+        ImGui::Text("    filter: %s", _sg_imgui_bool_string(info.filter));
+        ImGui::Text("    blend: %s", _sg_imgui_bool_string(info.blend));
+        ImGui::Text("    render: %s", _sg_imgui_bool_string(info.render));
+        ImGui::Text("    msaa: %s", _sg_imgui_bool_string(info.msaa));
+        ImGui::Text("    depth: %s", _sg_imgui_bool_string(info.depth));
+    }
+}
+
 /*--- PUBLIC FUNCTIONS -------------------------------------------------------*/
 SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx);
@@ -3345,6 +3390,7 @@ SOKOL_API_IMPL void sg_imgui_draw(sg_imgui_t* ctx) {
     sg_imgui_draw_pipelines_window(ctx);
     sg_imgui_draw_passes_window(ctx);
     sg_imgui_draw_capture_window(ctx);
+    sg_imgui_draw_capabilities_window(ctx);
 }
 
 SOKOL_API_IMPL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx) {
@@ -3419,6 +3465,18 @@ SOKOL_API_IMPL void sg_imgui_draw_capture_window(sg_imgui_t* ctx) {
     ImGui::End();
 }
 
+SOKOL_API_IMPL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    if (!ctx->caps.open) {
+        return;
+    }
+    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
+    if (ImGui::Begin("Capabilities", &ctx->caps.open)) {
+        sg_imgui_draw_capabilities_content(ctx);
+    }
+    ImGui::End();
+}
+
 SOKOL_API_IMPL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {
     SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
     _sg_imgui_draw_buffer_list(ctx);
@@ -3459,6 +3517,11 @@ SOKOL_API_IMPL void sg_imgui_draw_capture_content(sg_imgui_t* ctx) {
     _sg_imgui_draw_capture_list(ctx);
     ImGui::SameLine();
     _sg_imgui_draw_capture_panel(ctx);
+}
+
+SOKOL_API_IMPL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx) {
+    SOKOL_ASSERT(ctx && (ctx->init_tag == 0xABCDABCD));
+    _sg_imgui_draw_caps_panel(ctx);
 }
 
 #endif /* SOKOL_GFX_IMGUI_IMPL */

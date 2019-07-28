@@ -662,10 +662,10 @@ typedef enum sg_pixel_format {
     by sg_query_pixelformat().
 */
 typedef struct sg_pixelformat_info {
-    bool valid:1;       /* pixel format is valid on this backend / platform */
+    bool sample:1;      /* pixel format can be sampled in shaders */
     bool filter:1;      /* pixel format can be sampled with filtering */
-    bool blend:1;       /* alpha-blending is supported */
     bool render:1;      /* pixel format can be used as render target */
+    bool blend:1;       /* alpha-blending is supported */
     bool msaa:1;        /* pixel format can be used as MSAA render target */
     bool depth:1;       /* pixel format is a depth format */
 } sg_pixelformat_info;
@@ -3307,49 +3307,49 @@ _SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height)
 
 /* capability table pixel format helper functions */
 _SOKOL_PRIVATE void _sg_pixelformat_all(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+    pfi->sample = true;
     pfi->filter = true;
     pfi->blend = true;
     pfi->render = true;
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_none(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_s(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_f(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_sf(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->filter = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_r(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_sr(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->render = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_rmd(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_srmd(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->render = true;
     pfi->msaa = true;
     pfi->depth = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_rm(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_srm(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->render = true;
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_brm(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_sbrm(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->blend = true;
     pfi->render = true;
     pfi->msaa = true;
 }
 
-_SOKOL_PRIVATE void _sg_pixelformat_br(sg_pixelformat_info* pfi) {
-    pfi->valid = true;
+_SOKOL_PRIVATE void _sg_pixelformat_sbr(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
     pfi->blend = true;
     pfi->render = true;
 }
@@ -4164,54 +4164,54 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra, bool gles2) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     if (!gles2) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
         #if !defined(SOKOL_GLES3)
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
         #endif
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
         #if !defined(SOKOL_GLES3)
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
         #endif
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
     }
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     if (!gles2) {
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     }
     if (has_bgra) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     }
     if (!gles2) {
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
         #if !defined(SOKOL_GLES3)
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
             _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
         #endif
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
     }
     // FIXME: WEBGL_depth_texture extension?
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool gles2, bool has_colorbuffer_half_float, bool has_texture_half_float_linear) {
@@ -4225,26 +4225,26 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool gles2, bool has_col
         }
         else {
             if (!gles2) {
-                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
             }
-            _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
     }
     else {
         if (has_texture_half_float_linear) {
             if (!gles2) {
-                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG16F]);
             }
-            _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
         else {
             if (!gles2) {
-                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG16F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R16F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG16F]);
             }
-            _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
         }
     }
 }
@@ -4261,59 +4261,59 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool gles2, bool has_colorbuf
         }
         else {
             if (!gles2) {
-                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
             }
-            _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+            _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
     }
     else {
         if (has_texture_float_linear) {
             if (!gles2) {
-                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RG32F]);
             }
-            _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+            _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
         else {
             if (!gles2) {
-                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG32F]);
             }
-            _sg_pixelformat_none(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+            _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
         }
     }
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_s3tc(void) {
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_rgtc(void) {
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_bptc(void) {
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
-    _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
@@ -4937,7 +4937,7 @@ _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
 _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
     const int fmt_index = (int) fmt;
     SOKOL_ASSERT((fmt_index > SG_PIXELFORMAT_NONE) && (fmt_index < _SG_PIXELFORMAT_NUM));
-    return _sg.formats[fmt_index].valid;
+    return _sg.formats[fmt_index].sample;
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -8054,78 +8054,78 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32UI]);
-    _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    _sg_pixelformat_brm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
+    _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
+    _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA8SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA8SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_BGRA8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGB10A2]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG11B10F]);
     #if defined(_SG_TARGET_MACOS)
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #else
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32UI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RG32SI]);
     #endif
     #if defined(_SG_TARGET_MACOS)
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
     #else
-        _sg_pixelformat_br(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
     #endif
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
-    _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
+    _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
     #if defined(_SG_TARGET_MACOS)
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-        _sg_pixelformat_rm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+        _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
     #else
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
-        _sg_pixelformat_r(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32UI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32SI]);
+        _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
     #endif
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
-    _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
+    _sg_pixelformat_srmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
     #if defined(_SG_TARGET_MACOS)
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC1_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC2_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC3_RGBA]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_R]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC4_RSN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RG]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC5_RGSN]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBF]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC6H_RGBUF]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_BC7_RGBA]);
     #else
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
-        _sg_pixelformat_f(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_2BPP]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGB_4BPP]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_2BPP]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
     #endif
 }
 
