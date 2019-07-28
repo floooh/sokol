@@ -4448,6 +4448,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             if (strstr(ext, "_texture_compression_s3tc")) {
                 has_s3tc = true;
             }
+            else if (strstr(ext, "_compressed_texture_s3tc")) {
+                has_s3tc = true;
+            }
             else if (strstr(ext, "_texture_compression_rgtc")) {
                 has_rgtc = true;
             }
@@ -4521,7 +4524,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_instancing = false;
     const char* ext = (const char*) glGetString(GL_EXTENSIONS);
     if (ext) {
-        has_s3tc = strstr(ext, "_texture_compression_s3tc");
+        has_s3tc = strstr(ext, "_texture_compression_s3tc") || strstr(ext, "_compressed_texture_s3tc");
         has_rgtc = strstr(ext, "_texture_compression_rgtc");
         has_bptc = strstr(ext, "_texture_compression_bptc");
         has_pvrtc = strstr(ext, "_texture_compression_pvrtc");
