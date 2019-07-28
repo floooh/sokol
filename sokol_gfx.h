@@ -3906,10 +3906,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_type(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RG32F:
         case SG_PIXELFORMAT_RGBA32F:
             return GL_FLOAT;
+        #if !defined(SOKOL_GLES2)
         case SG_PIXELFORMAT_RGB10A2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         case SG_PIXELFORMAT_RG11B10F:
             return GL_UNSIGNED_INT_10F_11F_11F_REV;
+        #endif
         case SG_PIXELFORMAT_DEPTH:
             return GL_UNSIGNED_SHORT;
         case SG_PIXELFORMAT_DEPTH_STENCIL:
@@ -3927,28 +3929,39 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_R16SN:
         case SG_PIXELFORMAT_R16F:
         case SG_PIXELFORMAT_R32F:
-            return GL_RED;
-        case SG_PIXELFORMAT_R8UI:
-        case SG_PIXELFORMAT_R8SI:
-        case SG_PIXELFORMAT_R16UI:
-        case SG_PIXELFORMAT_R16SI:
-        case SG_PIXELFORMAT_R32UI:
-        case SG_PIXELFORMAT_R32SI:
-            return GL_RED_INTEGER;
-        case SG_PIXELFORMAT_RG8:
-        case SG_PIXELFORMAT_RG8SN:
-        case SG_PIXELFORMAT_RG16:
-        case SG_PIXELFORMAT_RG16SN:
-        case SG_PIXELFORMAT_RG16F:
-        case SG_PIXELFORMAT_RG32F:
-            return GL_RG;
-        case SG_PIXELFORMAT_RG8UI:
-        case SG_PIXELFORMAT_RG8SI:
-        case SG_PIXELFORMAT_RG16UI:
-        case SG_PIXELFORMAT_RG16SI:
-        case SG_PIXELFORMAT_RG32UI:
-        case SG_PIXELFORMAT_RG32SI:
-            return GL_RG_INTEGER;
+            #if defined(SOKOL_GLES2)
+                return GL_LUMINANCE;
+            #else
+            if (_sg.gl.gles2) {
+                return GL_LUMINANCE;
+            }
+            else {
+                return GL_RED;
+            }
+            #endif
+        #if !defined(SOKOL_GLES2)
+            case SG_PIXELFORMAT_R8UI:
+            case SG_PIXELFORMAT_R8SI:
+            case SG_PIXELFORMAT_R16UI:
+            case SG_PIXELFORMAT_R16SI:
+            case SG_PIXELFORMAT_R32UI:
+            case SG_PIXELFORMAT_R32SI:
+                return GL_RED_INTEGER;
+            case SG_PIXELFORMAT_RG8:
+            case SG_PIXELFORMAT_RG8SN:
+            case SG_PIXELFORMAT_RG16:
+            case SG_PIXELFORMAT_RG16SN:
+            case SG_PIXELFORMAT_RG16F:
+            case SG_PIXELFORMAT_RG32F:
+                return GL_RG;
+            case SG_PIXELFORMAT_RG8UI:
+            case SG_PIXELFORMAT_RG8SI:
+            case SG_PIXELFORMAT_RG16UI:
+            case SG_PIXELFORMAT_RG16SI:
+            case SG_PIXELFORMAT_RG32UI:
+            case SG_PIXELFORMAT_RG32SI:
+                return GL_RG_INTEGER;
+        #endif
         case SG_PIXELFORMAT_RGBA8:
         case SG_PIXELFORMAT_RGBA8SN:
         case SG_PIXELFORMAT_RGBA16:
@@ -3957,13 +3970,15 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_RGBA32F:
         case SG_PIXELFORMAT_RGB10A2:
             return GL_RGBA;
-        case SG_PIXELFORMAT_RGBA8UI:
-        case SG_PIXELFORMAT_RGBA8SI:
-        case SG_PIXELFORMAT_RGBA16UI:
-        case SG_PIXELFORMAT_RGBA16SI:
-        case SG_PIXELFORMAT_RGBA32UI:
-        case SG_PIXELFORMAT_RGBA32SI:
-            return GL_RGBA_INTEGER;
+        #if !defined(SOKOL_GLES2)
+            case SG_PIXELFORMAT_RGBA8UI:
+            case SG_PIXELFORMAT_RGBA8SI:
+            case SG_PIXELFORMAT_RGBA16UI:
+            case SG_PIXELFORMAT_RGBA16SI:
+            case SG_PIXELFORMAT_RGBA32UI:
+            case SG_PIXELFORMAT_RGBA32SI:
+                return GL_RGBA_INTEGER;
+        #endif
         case SG_PIXELFORMAT_BGRA8:
             return GL_BGRA_EXT;
         case SG_PIXELFORMAT_RG11B10F:
@@ -4145,7 +4160,6 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
     s->sample_count = 1;
 }
 
-#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra, bool gles2) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
@@ -4199,7 +4213,6 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra, bool gles2) {
     _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH]);
     _sg_pixelformat_rmd(&_sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL]);
 }
-#endif
 
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool gles2, bool has_colorbuffer_half_float, bool has_texture_half_float_linear) {
     if (has_colorbuffer_half_float) {
