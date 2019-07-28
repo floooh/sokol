@@ -3221,14 +3221,15 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
     ImGui::Text("\nPixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
-        ImGui::Text("  %s:", _sg_imgui_pixelformat_string(fmt));
         sg_pixelformat_info info = sg_query_pixelformat(fmt);
-        ImGui::Text("    sample: %s", _sg_imgui_bool_string(info.sample));
-        ImGui::Text("    filter: %s", _sg_imgui_bool_string(info.filter));
-        ImGui::Text("    blend: %s", _sg_imgui_bool_string(info.blend));
-        ImGui::Text("    render: %s", _sg_imgui_bool_string(info.render));
-        ImGui::Text("    msaa: %s", _sg_imgui_bool_string(info.msaa));
-        ImGui::Text("    depth: %s", _sg_imgui_bool_string(info.depth));
+        ImGui::Text("  %s: %s%s%s%s%s%s",
+            _sg_imgui_pixelformat_string(fmt),
+            info.sample ? "SAMPLE ":"",
+            info.filter ? "FILTER ":"",
+            info.blend ? "BLEND ":"",
+            info.render ? "RENDER ":"",
+            info.msaa ? "MSAA ":"",
+            info.depth ? "DEPTH ":"");
     }
 }
 
