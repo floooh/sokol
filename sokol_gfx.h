@@ -4436,6 +4436,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     bool has_rgtc = false;  /* BC4 and BC5 */
     bool has_bptc = false;  /* BC6H and BC7 */
     bool has_pvrtc = false;
+    #if defined(__EMSCRIPTEN__)
+        bool has_etc2 = false;
+    #else
+        bool has_etc2 = true;
+    #endif
     bool has_bgra = false;
     bool has_colorbuffer_float = false;
     bool has_colorbuffer_half_float = false;
@@ -4460,6 +4465,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             else if (strstr(ext, "_texture_compression_pvrtc")) {
                 has_pvrtc = true;
             }
+            else if (strstr(ext, "_compressed_texture_etc")) {
+                has_etc2 = true;
+            }
             else if (strstr(ext, "_color_buffer_float")) {
                 has_colorbuffer_float = true;
             }
@@ -4482,7 +4490,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg_gl_init_limits();
 
     /* pixel formats */
-    const bool has_etc2 = true;
+
     const bool has_texture_half_float_linear = true;
     _sg_gl_init_pixelformats(has_bgra, _sg.gl.gles2);
     _sg_gl_init_pixelformats_float(_sg.gl.gles2, has_colorbuffer_float, has_texture_float_linear);
