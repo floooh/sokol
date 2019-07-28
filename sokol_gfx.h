@@ -4249,6 +4249,7 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool gles2, bool has_col
     }
 }
 
+/* FIXME: EXT_float_blend */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool gles2, bool has_colorbuffer_float, bool has_texture_float_linear) {
     if (has_colorbuffer_float) {
         if (has_texture_float_linear) {
