@@ -4092,11 +4092,13 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
                 _sg.gl.features[SG_FEATURE_MSAA_RENDER_TARGETS] = true;
                 _sg.gl.features[SG_FEATURE_PACKED_VERTEX_FORMAT_10_2] = true;
                 _sg.gl.features[SG_FEATURE_MULTIPLE_RENDER_TARGET] = true;
+                _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2] = true;
             }
             else {
                 _sg.gl.features[SG_FEATURE_INSTANCING] = strstr(ext, "_instanced_arrays");
                 _sg.gl.features[SG_FEATURE_TEXTURE_FLOAT] = strstr(ext, "_texture_float");
                 _sg.gl.features[SG_FEATURE_TEXTURE_HALF_FLOAT] = strstr(ext, "_texture_half_float");
+                _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2] = strstr(ext, "_compressed_ETC2_");
             }
             _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_DXT] =
                 strstr(ext, "_texture_compression_s3tc") ||
@@ -4130,6 +4132,8 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
                 strstr(ext, "_compressed_texture_atc");
             _sg.gl.ext_anisotropic =
                 strstr(ext, "_texture_filter_anisotropic");
+            _sg.gl.features[SG_FEATURE_TEXTURE_COMPRESSION_ETC2] = 
+                strstr(ext, "_compressed_ETC2_");
         }
     #endif
     _sg.gl.max_anisotropy = 1;
