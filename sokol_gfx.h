@@ -4401,7 +4401,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     const bool has_texture_float_linear = true; /* FIXME??? */
     const bool has_texture_half_float_linear = true;
     _sg_gl_init_pixelformats(has_bgra, false);
-    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
+    _sg_gl_init_pixelformats_float(false, has_colorbuffer_float, has_texture_float_linear);
     _sg_gl_init_pixelformats_half_float(false, has_colorbuffer_half_float, has_texture_half_float_linear);
     if (has_s3tc) {
         _sg_gl_init_pixelformats_s3tc();
@@ -9690,11 +9690,15 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
             /* on GLES2, sample count for render targets is completely ignored */
+            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
             if (!_sg.gl.gles2) {
+            #endif
                 if (desc->sample_count > 1) {
                     SOKOL_VALIDATE(_sg.features.msaa_render_targets && _sg.formats[fmt].msaa, _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT);
                 }
+            #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
             }
+            #endif
             SOKOL_VALIDATE(usage == SG_USAGE_IMMUTABLE, _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE);
             SOKOL_VALIDATE(desc->content.subimage[0][0].ptr==0, _SG_VALIDATE_IMAGEDESC_RT_NO_CONTENT);
         }
