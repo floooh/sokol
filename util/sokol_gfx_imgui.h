@@ -3218,18 +3218,20 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
     ImGui::Text("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
     ImGui::Text("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
     ImGui::Text("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
-    ImGui::Text("\nPixelformats:");
+    ImGui::Text("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
         sg_pixelformat_info info = sg_query_pixelformat(fmt);
-        ImGui::Text("  %s: %s%s%s%s%s%s",
-            _sg_imgui_pixelformat_string(fmt),
-            info.sample ? "SAMPLE ":"",
-            info.filter ? "FILTER ":"",
-            info.blend ? "BLEND ":"",
-            info.render ? "RENDER ":"",
-            info.msaa ? "MSAA ":"",
-            info.depth ? "DEPTH ":"");
+        if (info.sample) {
+            ImGui::Text("  %s: %s%s%s%s%s%s",
+                _sg_imgui_pixelformat_string(fmt),
+                info.sample ? "SAMPLE ":"",
+                info.filter ? "FILTER ":"",
+                info.blend ? "BLEND ":"",
+                info.render ? "RENDER ":"",
+                info.msaa ? "MSAA ":"",
+                info.depth ? "DEPTH ":"");
+        }
     }
 }
 
