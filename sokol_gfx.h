@@ -1373,8 +1373,8 @@ typedef struct sg_image_content {
     .label              0       (optional string label for trace hooks)
 
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
-    WebGL/GLES2, use sg_query_feature(SG_FEATURE_IMAGETYPE_ARRAY) and
-    sg_query_feature(SG_FEATURE_IMAGETYPE_3D) at runtime to check
+    WebGL/GLES2, use sg_query_features().imagetype_array and
+    sg_query_features().imagetype_3d at runtime to check
     if array- and 3D-textures are supported.
 
     Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
@@ -3109,10 +3109,8 @@ _SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
 
 /* the default color pixelformat for render targets */
 _SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_colorformat(void) {
-    #if defined(SOKOL_METAL)
+    #if defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         return SG_PIXELFORMAT_BGRA8;
-    #elif defined(SOKOL_D3D11)
-        return SG_PIXELFORMAT_RGBA8;    /* FIXME: would BGRA be better? */
     #else
         return SG_PIXELFORMAT_RGBA8;
     #endif
@@ -6165,47 +6163,61 @@ _SOKOL_PRIVATE UINT _sg_d3d11_cpu_access_flags(sg_usage usg) {
     }
 }
 
-_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_texture_format(sg_pixel_format fmt) {
-    /*
-        NOTE: the following pixel formats are only supported on D3D11.1
-        (we're running on D3D11.0):
-            DXGI_FORMAT_B4G4R4A4_UNORM
-            DXGI_FORMAT_B5G6R5_UNORM
-            DXGI_FORMAT_B5G5R5A1_UNORM
-    */
+_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_pixel_format(sg_pixel_format fmt) {
     switch (fmt) {
-        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case SG_PIXELFORMAT_R10G10B10A2:    return DXGI_FORMAT_R10G10B10A2_UNORM;
-        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
-        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
-        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_R8:             return DXGI_FORMAT_R8_UNORM;
+        case SG_PIXELFORMAT_R8SN:           return DXGI_FORMAT_R8_SNORM;
+        case SG_PIXELFORMAT_R8UI:           return DXGI_FORMAT_R8_UINT;
+        case SG_PIXELFORMAT_R8SI:           return DXGI_FORMAT_R8_SINT;
+        case SG_PIXELFORMAT_R16:            return DXGI_FORMAT_R16_UNORM;
+        case SG_PIXELFORMAT_R16SN:          return DXGI_FORMAT_R16_SNORM;
+        case SG_PIXELFORMAT_R16UI:          return DXGI_FORMAT_R16_UINT;
+        case SG_PIXELFORMAT_R16SI:          return DXGI_FORMAT_R16_SINT;
         case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
-        case SG_PIXELFORMAT_L8:             return DXGI_FORMAT_R8_UNORM;
-        case SG_PIXELFORMAT_DXT1:           return DXGI_FORMAT_BC1_UNORM;
-        case SG_PIXELFORMAT_DXT3:           return DXGI_FORMAT_BC2_UNORM;
-        case SG_PIXELFORMAT_DXT5:           return DXGI_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_RG8:            return DXGI_FORMAT_R8G8_UNORM;
+        case SG_PIXELFORMAT_RG8SN:          return DXGI_FORMAT_R8G8_SNORM;
+        case SG_PIXELFORMAT_RG8UI:          return DXGI_FORMAT_R8G8_UINT;
+        case SG_PIXELFORMAT_RG8SI:          return DXGI_FORMAT_R8G8_SINT;
+        case SG_PIXELFORMAT_R32UI:          return DXGI_FORMAT_R32_UINT;
+        case SG_PIXELFORMAT_R32SI:          return DXGI_FORMAT_R32_SINT;
+        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
+        case SG_PIXELFORMAT_RG16:           return DXGI_FORMAT_R16G16_UNORM;
+        case SG_PIXELFORMAT_RG16SN:         return DXGI_FORMAT_R16G16_SNORM;
+        case SG_PIXELFORMAT_RG16UI:         return DXGI_FORMAT_R16G16_UINT;
+        case SG_PIXELFORMAT_RG16SI:         return DXGI_FORMAT_R16G16_SINT;
+        case SG_PIXELFORMAT_RG16F:          return DXGI_FORMAT_R16G16_FLOAT;
+        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case SG_PIXELFORMAT_RGBA8SN:        return DXGI_FORMAT_R8G8B8A8_SNORM;
+        case SG_PIXELFORMAT_RGBA8UI:        return DXGI_FORMAT_R8G8B8A8_UINT;
+        case SG_PIXELFORMAT_RGBA8SI:        return DXGI_FORMAT_R8G8B8A8_SINT;
+        case SG_PIXELFORMAT_BGRA8:          return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case SG_PIXELFORMAT_RGB10A2:        return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case SG_PIXELFORMAT_RG11B10F:       return DXGI_FORMAT_R11G11B10_FLOAT;
+        case SG_PIXELFORMAT_RG32UI:         return DXGI_FORMAT_R32G32_UINT;
+        case SG_PIXELFORMAT_RG32SI:         return DXGI_FORMAT_R32G32_SINT;
+        case SG_PIXELFORMAT_RG32F:          return DXGI_FORMAT_R32G32_FLOAT;
+        case SG_PIXELFORMAT_RGBA16:         return DXGI_FORMAT_R16G16B16A16_UNORM;
+        case SG_PIXELFORMAT_RGBA16SN:       return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_PIXELFORMAT_RGBA16UI:       return DXGI_FORMAT_R16G16B16A16_UINT;
+        case SG_PIXELFORMAT_RGBA16SI:       return DXGI_FORMAT_R16G16B16A16_SINT;
+        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
+        case SG_PIXELFORMAT_RGBA32UI:       return DXGI_FORMAT_R32G32B32A32_UINT;
+        case SG_PIXELFORMAT_RGBA32SI:       return DXGI_FORMAT_R32G32B32A32_SINT;
+        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_D32_FLOAT;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return DXGI_FORMAT_D24_UNORM_S8_UINT;
+        case SG_PIXELFORMAT_BC1_RGBA:       return DXGI_FORMAT_BC1_UNORM;
+        case SG_PIXELFORMAT_BC2_RGBA:       return DXGI_FORMAT_BC2_UNORM;
+        case SG_PIXELFORMAT_BC3_RGBA:       return DXGI_FORMAT_BC3_UNORM;
+        case SG_PIXELFORMAT_BC4_R:          return DXGI_FORMAT_BC4_UNORM;
+        case SG_PIXELFORMAT_BC4_RSN:        return DXGI_FORMAT_BC4_SNORM;
+        case SG_PIXELFORMAT_BC5_RG:         return DXGI_FORMAT_BC5_UNORM;
+        case SG_PIXELFORMAT_BC5_RGSN:       return DXGI_FORMAT_BC5_SNORM;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return DXGI_FORMAT_BC6H_SF16;
+        case SG_PIXELFORMAT_BC6H_RGBUF:     return DXGI_FORMAT_BC6H_UF16;
+        case SG_PIXELFORMAT_BC7_RGBA:       return DXGI_FORMAT_BC7_UNORM;
         default:                            return DXGI_FORMAT_UNKNOWN;
     };
-}
-
-_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rendertarget_color_format(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_RGBA8:          return DXGI_FORMAT_R8G8B8A8_UNORM;
-        case SG_PIXELFORMAT_RGBA32F:        return DXGI_FORMAT_R32G32B32A32_FLOAT;
-        case SG_PIXELFORMAT_RGBA16F:        return DXGI_FORMAT_R16G16B16A16_FLOAT;
-        case SG_PIXELFORMAT_R32F:           return DXGI_FORMAT_R32_FLOAT;
-        case SG_PIXELFORMAT_R16F:           return DXGI_FORMAT_R16_FLOAT;
-        case SG_PIXELFORMAT_L8:             return DXGI_FORMAT_R8_UNORM;
-        default:                            return DXGI_FORMAT_UNKNOWN;
-    }
-}
-
-_SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_rendertarget_depth_format(sg_pixel_format fmt) {
-    switch (fmt) {
-        case SG_PIXELFORMAT_DEPTH:          return DXGI_FORMAT_D16_UNORM;
-        case SG_PIXELFORMAT_DEPTHSTENCIL:   return DXGI_FORMAT_D24_UNORM_S8_UINT;
-        default:                            return DXGI_FORMAT_UNKNOWN;
-    }
 }
 
 _SOKOL_PRIVATE D3D11_PRIMITIVE_TOPOLOGY _sg_d3d11_primitive_topology(sg_primitive_type prim_type) {
@@ -6389,6 +6401,42 @@ _SOKOL_PRIVATE UINT8 _sg_d3d11_color_write_mask(sg_color_mask m) {
     return res;
 }
 
+/* see: https://docs.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-limits#resource-limits-for-feature-level-11-hardware */
+_SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
+    _sg.backend = SG_BACKEND_D3D11;
+
+    _sg.features.instancing = true;
+    _sg.features.origin_top_left = true;
+    _sg.features.multiple_render_targets = true;
+    _sg.features.msaa_render_targets = true;
+    _sg.features.imagetype_3d = true;
+    _sg.features.imagetype_array = true;
+
+    _sg.limits.max_image_size_2d = 16 * 1024;
+    _sg.limits.max_image_size_cube = 16 * 1024;
+    _sg.limits.max_image_size_3d = 2 * 1024;
+    _sg.limits.max_image_size_array = 16 * 1024;
+    _sg.limits.max_image_array_layers = 2 * 1024;
+
+    /* see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support */
+    UINT dxgi_fmt_caps = 0;
+    for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
+        DXGI_FORMAT dxgi_fmt = _sg_d3d11_pixel_format((sg_pixel_format)fmt);
+        HRESULT hr = ID3D11Device_CheckFormatSupport(_sg.d3d11.dev, dxgi_fmt, &dxgi_fmt_caps);
+        SOKOL_ASSERT(SUCCEEDED(hr));
+        sg_pixelformat_info* info = &_sg.formats[fmt];
+        info->sample = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_TEXTURE2D);
+        info->filter = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE);
+        info->render = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_RENDER_TARGET);
+        info->blend  = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_BLENDABLE);
+        info->msaa   = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET);
+        info->depth  = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL);
+        if (info->depth) {
+            info->render = true;
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     /* assume _sg.d3d11 already is zero-initialized */
     SOKOL_ASSERT(desc);
@@ -6402,6 +6450,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->d3d11_device_context;
     _sg.d3d11.rtv_cb = desc->d3d11_render_target_view_cb;
     _sg.d3d11.dsv_cb = desc->d3d11_depth_stencil_view_cb;
+    _sg_d3d11_init_caps();
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
@@ -6552,9 +6601,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     if (_sg_is_valid_rendertarget_depth_format(img->pixel_format)) {
         /* create only a depth-texture */
         SOKOL_ASSERT(!injected);
-        img->d3d11_format = _sg_d3d11_rendertarget_depth_format(img->pixel_format);
+        img->d3d11_format = _sg_d3d11_pixel_format(img->pixel_format);
         if (img->d3d11_format == DXGI_FORMAT_UNKNOWN) {
-            /* trying to create a texture format that's not supported by D3D */
             SOKOL_LOG("trying to create a D3D11 depth-texture with unsupported pixel format\n");
             return SG_RESOURCESTATE_FAILED;
         }
@@ -6596,7 +6644,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             }
             d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             if (img->render_target) {
-                img->d3d11_format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
+                img->d3d11_format = _sg_d3d11_pixel_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                 if (!msaa) {
@@ -6605,7 +6653,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                 d3d11_tex_desc.CPUAccessFlags = 0;
             }
             else {
-                img->d3d11_format = _sg_d3d11_texture_format(img->pixel_format);
+                img->d3d11_format = _sg_d3d11_pixel_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
@@ -6661,7 +6709,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             d3d11_tex_desc.MipLevels = img->num_mipmaps;
             d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             if (img->render_target) {
-                img->d3d11_format = _sg_d3d11_rendertarget_color_format(img->pixel_format);
+                img->d3d11_format = _sg_d3d11_pixel_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = D3D11_USAGE_DEFAULT;
                 if (!msaa) {
@@ -6670,7 +6718,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                 d3d11_tex_desc.CPUAccessFlags = 0;
             }
             else {
-                img->d3d11_format = _sg_d3d11_texture_format(img->pixel_format);
+                img->d3d11_format = _sg_d3d11_pixel_format(img->pixel_format);
                 d3d11_tex_desc.Format = img->d3d11_format;
                 d3d11_tex_desc.Usage = _sg_d3d11_usage(img->usage);
                 d3d11_tex_desc.CPUAccessFlags = _sg_d3d11_cpu_access_flags(img->usage);
@@ -8017,8 +8065,13 @@ _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
 _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #if defined(_SG_TARGET_MACOS)
         _sg.backend = SG_BACKEND_METAL_MACOS;
+    #else defined(_SG_TARGET_IOS)
+        #if defined(_SG_TARGET_IOS_SIMULATOR)
+            _sg.backend = SG_BACKEND_METAL_IOS_SIMULATOR;
+        #else
+            _sg.backend = SG_BACKEND_METAL_IOS;
+        #endif
     #else
-        _sg.backend = SG_BACKEND_METAL_IOS;
     #endif
     _sg.features.instancing = true;
     _sg.features.origin_top_left = true;
