@@ -3209,7 +3209,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
-    ImGui::Text("Backend: %s\n", _sg_imgui_backend_string(sg_query_backend()));
+    ImGui::Text("Backend: %s\n\n", _sg_imgui_backend_string(sg_query_backend()));
     sg_features f = sg_query_features();
     ImGui::Text("Features:");
     ImGui::Text("    instancing: %s", _sg_imgui_bool_string(f.instancing));
@@ -3218,6 +3218,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
     ImGui::Text("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
     ImGui::Text("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
     ImGui::Text("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
+    sg_limits l = sg_query_limits();
+    ImGui::Text("\nLimits:\n");
+    ImGui::Text("    max_image_size_2d: %d", l.max_image_size_2d);
+    ImGui::Text("    max_image_size_cube: %d", l.max_image_size_cube);
+    ImGui::Text("    max_image_size_3d: %d", l.max_image_size_3d);
+    ImGui::Text("    max_image_size_array: %d", l.max_image_size_array);
+    ImGui::Text("    max_image_array_layers: %d", l.max_image_array_layers);
     ImGui::Text("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
