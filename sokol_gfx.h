@@ -8065,13 +8065,12 @@ _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
 _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #if defined(_SG_TARGET_MACOS)
         _sg.backend = SG_BACKEND_METAL_MACOS;
-    #else defined(_SG_TARGET_IOS)
+    #elif defined(_SG_TARGET_IOS)
         #if defined(_SG_TARGET_IOS_SIMULATOR)
             _sg.backend = SG_BACKEND_METAL_IOS_SIMULATOR;
         #else
             _sg.backend = SG_BACKEND_METAL_IOS;
         #endif
-    #else
     #endif
     _sg.features.instancing = true;
     _sg.features.origin_top_left = true;
