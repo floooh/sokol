@@ -291,7 +291,7 @@ int main() {
 Load entire files, or stream data asynchronously over HTTP (emscripten/wasm)
 or the local filesystem (all native platforms).
 
-Simple C99 example with a dynamically allocated buffer:
+Simple C99 example loading a file into a static buffer:
 
 ```c
 #include "sokol_fetch.h"
