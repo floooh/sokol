@@ -8109,7 +8109,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG8SI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32UI]);
     _sg_pixelformat_sr(&_sg.formats[SG_PIXELFORMAT_R32SI]);
-    _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    #else
+        _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+    #endif
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
