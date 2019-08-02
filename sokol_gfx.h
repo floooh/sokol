@@ -2137,9 +2137,6 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
     #endif
-    #ifndef GL_BGRA_EXT
-    #define GL_BGRA_EXT 0x80E1
-    #endif
 
     #ifdef SOKOL_GLES2
     #   ifdef GL_ANGLE_instanced_arrays
@@ -3981,8 +3978,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_RGBA32SI:
                 return GL_RGBA_INTEGER;
         #endif
-        case SG_PIXELFORMAT_BGRA8:
-            return GL_BGRA_EXT;
         case SG_PIXELFORMAT_RG11B10F:
             return GL_RGB;
         case SG_PIXELFORMAT_DEPTH:
@@ -4064,7 +4059,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_RGBA8SN:    return GL_RGBA8_SNORM;
             case SG_PIXELFORMAT_RGBA8UI:    return GL_RGBA8UI;
             case SG_PIXELFORMAT_RGBA8SI:    return GL_RGBA8I;
-            case SG_PIXELFORMAT_BGRA8:      return GL_BGRA_EXT;
             case SG_PIXELFORMAT_RGB10A2:    return GL_RGB10_A2;
             case SG_PIXELFORMAT_RG11B10F:   return GL_R11F_G11F_B10F;
             case SG_PIXELFORMAT_RG32UI:     return GL_RG32UI;
@@ -4489,7 +4483,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #else
         bool has_etc2 = true;
     #endif
-    bool has_bgra = false;
     bool has_colorbuffer_float = false;
     bool has_colorbuffer_half_float = false;
     bool has_texture_float_linear = false;
@@ -4525,9 +4518,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             else if (strstr(ext, "_texture_float_linear")) {
                 has_texture_float_linear = true;
             }
-            else if (strstr(ext, "_texture_format_BGRA8888")) {
-                has_bgra = true;
-            }
             else if (strstr(ext, "_texture_filter_anisotropic")) {
                 _sg.gl.ext_anisotropic = true;
             }
@@ -4539,6 +4529,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
 
     /* pixel formats */
     const bool has_texture_half_float_linear = true;
+    const bool has_bgra = false;    /* not a bug */
     _sg_gl_init_pixelformats(has_bgra);
     _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
     _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float, has_texture_half_float_linear);
@@ -4569,7 +4560,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_bptc = false;  /* BC6H and BC7 */
     bool has_pvrtc = false;
     bool has_etc2 = false;
-    bool has_bgra = false;
     bool has_texture_float = false;
     bool has_texture_half_float = false;
     bool has_texture_float_linear = false;
@@ -4584,7 +4574,6 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         has_bptc = strstr(ext, "_texture_compression_bptc");
         has_pvrtc = strstr(ext, "_texture_compression_pvrtc");
         has_etc2 = strstr(ext, "_compressed_texture_etc");
-        has_bgra = strstr(ext, "_texture_format_BGRA8888");
         has_texture_float = strstr(ext, "_texture_float");
         has_texture_half_float = strstr(ext, "_texture_half_float");
         has_texture_float_linear = strstr(ext, "_texture_float_linear");
@@ -4608,6 +4597,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg_gl_init_limits();
 
     /* pixel formats */
+    const bool has_bgra = false;    /* not a bug */
     _sg_gl_init_pixelformats(has_bgra);
     if (has_texture_float) {
         _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
@@ -8067,7 +8057,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.backend = SG_BACKEND_METAL_MACOS;
     #elif defined(_SG_TARGET_IOS)
         #if defined(_SG_TARGET_IOS_SIMULATOR)
-            _sg.backend = SG_BACKEND_METAL_IOS_SIMULATOR;
+            _sg.backend = SG_BACKEND_METAL_SIMULATOR;
         #else
             _sg.backend = SG_BACKEND_METAL_IOS;
         #endif
