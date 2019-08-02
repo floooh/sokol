@@ -4158,7 +4158,16 @@ _SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
 
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+    #if !defined(SOKOL_GLES2)
+    if (!_sg.gl.gles2) {
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
+    }
+    else {
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8]);
+    }
+    #else
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8]);
+    #endif
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R8SN]);
@@ -4561,11 +4570,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_pvrtc = false;
     bool has_etc2 = false;
     bool has_texture_float = false;
-    bool has_texture_half_float = false;
     bool has_texture_float_linear = false;
-    bool has_texture_half_float_linear = false;
     bool has_colorbuffer_float = false;
-    bool has_colorbuffer_half_float = false;
     bool has_instancing = false;
     const char* ext = (const char*) glGetString(GL_EXTENSIONS);
     if (ext) {
@@ -4575,11 +4581,13 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         has_pvrtc = strstr(ext, "_texture_compression_pvrtc");
         has_etc2 = strstr(ext, "_compressed_texture_etc");
         has_texture_float = strstr(ext, "_texture_float");
-        has_texture_half_float = strstr(ext, "_texture_half_float");
         has_texture_float_linear = strstr(ext, "_texture_float_linear");
-        has_texture_half_float_linear = strstr(ext, "_texture_half_float_linear");
         has_colorbuffer_float = strstr(ext, "_color_buffer_float");
-        has_colorbuffer_half_float = strstr(ext, "_color_buffer_half_float");
+        /* don't bother with half_float support on WebGL1
+            has_texture_half_float = strstr(ext, "_texture_half_float");
+            has_texture_half_float_linear = strstr(ext, "_texture_half_float_linear");
+            has_colorbuffer_half_float = strstr(ext, "_color_buffer_half_float");
+        */
         has_instancing = strstr(ext, "_instanced_arrays");
         _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
     }
@@ -4598,6 +4606,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
 
     /* pixel formats */
     const bool has_bgra = false;    /* not a bug */
+    const bool has_texture_half_float = false;
+    const bool has_texture_half_float_linear = false;
+    const bool has_colorbuffer_half_float = false;
     _sg_gl_init_pixelformats(has_bgra);
     if (has_texture_float) {
         _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
