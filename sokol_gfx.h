@@ -3353,6 +3353,13 @@ _SOKOL_PRIVATE void _sg_pixelformat_sbr(sg_pixelformat_info* pfi) {
     pfi->render = true;
 }
 
+_SOKOL_PRIVATE void _sg_pixelformat_sfbr(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
+    pfi->filter = true;
+    pfi->blend = true;
+    pfi->render = true;
+}
+
 /* resolve pass action defaults into a new pass action struct */
 _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, sg_pass_action* to) {
     SOKOL_ASSERT(from && to);
@@ -8099,8 +8106,13 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R8SI]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+    #else
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_R16]);
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_R16SN]);
+    #endif
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_R16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R16F]);
@@ -8113,10 +8125,15 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #if defined(_SG_TARGET_MACOS)
         _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
     #else
-        _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+        _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_R32F]);
     #endif
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+    #else
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_RG16]);
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_RG16SN]);
+    #endif
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RG16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG16F]);
@@ -8139,8 +8156,13 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #else
         _sg_pixelformat_sbr(&_sg.formats[SG_PIXELFORMAT_RG32F]);
     #endif
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
-    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+    #if defined(_SG_TARGET_MACOS)
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+        _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+    #else
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_RGBA16]);
+        _sg_pixelformat_sfbr(&_sg.formats[SG_PIXELFORMAT_RGBA16SN]);
+    #endif
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16UI]);
     _sg_pixelformat_srm(&_sg.formats[SG_PIXELFORMAT_RGBA16SI]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
