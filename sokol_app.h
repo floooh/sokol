@@ -1679,7 +1679,7 @@ static GLKViewController* _sapp_ios_view_ctrl_obj;
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     static int argc = 1;
-    static char* argv[] = { "sokol_app" };
+    static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
 }
 
