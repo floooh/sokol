@@ -241,9 +241,9 @@
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
-        
+
         const void* sapp_android_get_native_activity(void);
-            On Android, get tne native activity ANativeActivity pointer, otherwise
+            On Android, get the native activity ANativeActivity pointer, otherwise
             a null pointer.
 
     --- Implement the frame-callback function, this function will be called
