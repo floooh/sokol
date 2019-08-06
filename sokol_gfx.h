@@ -228,9 +228,12 @@
 
             bool sg_query_buffer_overflow(sg_buffer buf)
 
-    --- to check for support of optional features:
+    --- to check at runtime for optional features, limits and pixelformat support,
+        call:
 
-            bool sg_query_feature(sg_feature feature)
+            sg_features sg_query_features()
+            sg_limits sg_query_limits()
+            sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt)
 
     --- if you need to call into the underlying 3D-API directly, you must call:
 
@@ -579,15 +582,52 @@ typedef enum sg_backend {
 /*
     sg_pixel_format
 
-    This is a common subset of useful and widely supported pixel formats. The
-    pixel format enum is mainly used when creating an image object in the
-    sg_image_desc.pixel_format member.
+    sokol_gfx.h basically uses the same pixel formats as WebGPU, since these
+    are supported on most newer GPUs. GLES2 and WebGL has a much smaller
+    subset of available pixel formats. Call sg_query_pixelformat() to check
+    at runtime if a pixel format supports the desired features.
+
+    A pixelformat name consist of three parts:
+
+        - components (R, RG, RGB or RGBA)
+        - bit width per component (8, 16 or 32)
+        - component data type:
+            - unsigned normalized (no postfix)
+            - signed normalized (SN postfix)
+            - unsigned integer (UI postfix)
+            - signed integer (SI postfix)
+            - float (F postfix)
+
+    Not all pixel formats can be used for everything, call sg_query_pixelformat()
+    to inspect the capabilities of a given pixelformat. The function returns
+    an sg_pixelformat_info struct with the following bool members:
+
+        - sample: the pixelformat can be sampled as texture at least with
+                  nearest filtering
+        - filter: the pixelformat can be samples as texture with linear
+                  filtering
+        - render: the pixelformat can be used for render targets
+        - blend:  blending is supported when using the pixelformat for
+                  render targets
+        - msaa:   multisample-antiliasing is supported when using the
+                  pixelformat for render targets
+        - depth:  the pixelformat can be used for depth-stencil attachments
+
+    When targeting GLES2/WebGL, the only safe formats to use
+    as texture are SG_PIXELFORMAT_R8 and SG_PIXELFORMAT_RGBA8. For rendering
+    in GLES2/WebGL, only SG_PIXELFORMAT_RGBA8 is safe. All other formats
+    must be checked via sg_query_pixelformats().
 
     The default pixel format for texture images is SG_PIXELFORMAT_RGBA8.
 
     The default pixel format for render target images is platform-dependent:
         - for Metal and D3D11 it is SG_PIXELFORMAT_BGRA8
         - for GL backends it is SG_PIXELFORMAT_RGBA8
+
+    This is mainly because of the default framebuffer which is setup outside
+    of sokol_gfx.h. On some backends, using BGRA for the default frame buffer
+    allows more efficient frame flips. For your own offscreen-render-targets,
+    use whatever renderable pixel format is convenient for you.
 */
 typedef enum sg_pixel_format {
     _SG_PIXELFORMAT_DEFAULT,    /* value 0 reserved for default-init */
@@ -1359,7 +1399,8 @@ typedef struct sg_image_content {
     .depth/.layers:     1
     .num_mipmaps:       1
     .usage:             SG_USAGE_IMMUTABLE
-    .pixel_format:      SG_PIXELFORMAT_RGBA8
+    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, backend-dependent
+                        for render targets (RGBA8 or BGRA8)
     .sample_count:      1 (only used in render_targets)
     .min_filter:        SG_FILTER_NEAREST
     .mag_filter:        SG_FILTER_NEAREST
