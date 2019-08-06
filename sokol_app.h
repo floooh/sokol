@@ -4060,12 +4060,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                             _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
                         }
                     }
-                    if (_sapp_win32_update_dimensions()) {
-                        #if defined(SOKOL_D3D11)
-                        _sapp_d3d11_resize_default_render_target();
-                        #endif
-                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
-                    }
                 }
                 break;
             case WM_SETCURSOR:
@@ -4291,6 +4285,13 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_swap_buffers();
         #endif
+        /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
+        if (_sapp_win32_update_dimensions()) {
+            #if defined(SOKOL_D3D11)
+            _sapp_d3d11_resize_default_render_target();
+            #endif
+            _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
         if (_sapp.quit_requested) {
             PostMessage(_sapp_win32_hwnd, WM_CLOSE, 0, 0);
         }
