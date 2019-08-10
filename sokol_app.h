@@ -242,6 +242,10 @@
             render-target-view and depth-stencil-view may change from one
             frame to the next!
 
+        const void* sapp_android_get_native_activity(void);
+            On Android, get the native activity ANativeActivity pointer, otherwise
+            a null pointer.
+
     --- Implement the frame-callback function, this function will be called
         on the same thread as the init callback, but might be on a different
         thread than the sokol_main() function. Note that the size of
@@ -784,6 +788,9 @@ SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* Win32: get the HWND window handle */
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
+
+/* Android: get native activity handle */
+SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -4056,12 +4063,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                             _sapp_win32_app_event(SAPP_EVENTTYPE_RESTORED);
                         }
                     }
-                    if (_sapp_win32_update_dimensions()) {
-                        #if defined(SOKOL_D3D11)
-                        _sapp_d3d11_resize_default_render_target();
-                        #endif
-                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
-                    }
                 }
                 break;
             case WM_SETCURSOR:
@@ -4289,6 +4290,13 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_swap_buffers();
         #endif
+        /* check for window resized, this cannot happen in WM_SIZE as it explodes memory usage */
+        if (_sapp_win32_update_dimensions()) {
+            #if defined(SOKOL_D3D11)
+            _sapp_d3d11_resize_default_render_target();
+            #endif
+            _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
         if (_sapp.quit_requested) {
             PostMessage(_sapp_win32_hwnd, WM_CLOSE, 0, 0);
         }
@@ -7066,6 +7074,15 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_WIN32)
         return _sapp_win32_hwnd;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(__ANDROID__)
+        return (void*)_sapp_android_state.activity;
     #else
         return 0;
     #endif
