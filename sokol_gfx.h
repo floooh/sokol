@@ -3381,6 +3381,12 @@ _SOKOL_PRIVATE void _sg_pixelformat_srm(sg_pixelformat_info* pfi) {
     pfi->msaa = true;
 }
 
+_SOKOL_PRIVATE void _sg_pixelformat_sfrm(sg_pixelformat_info* pfi) {
+    pfi->sample = true;
+    pfi->filter = true;
+    pfi->render = true;
+    pfi->msaa = true;
+}
 _SOKOL_PRIVATE void _sg_pixelformat_sbrm(sg_pixelformat_info* pfi) {
     pfi->sample = true;
     pfi->blend = true;
@@ -4328,15 +4334,21 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_half_float(bool has_colorbuffer_hal
     #endif
 }
 
-/* FIXME: EXT_float_blend */
-_SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float, bool has_texture_float_linear) {
+_SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float, bool has_texture_float_linear, bool has_float_blend) {
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
         if (has_texture_float_linear) {
             if (has_colorbuffer_float) {
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                if (has_float_blend) {
+                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                }
+                else {
+                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                }
             }
             else {
                 _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_R32F]);
@@ -4346,14 +4358,14 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float, b
         }
         else {
             if (has_colorbuffer_float) {
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_sbrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
             }
             else {
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R16F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG16F]);
-                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA16F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_R32F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RG32F]);
+                _sg_pixelformat_s(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
             }
         }
     }
@@ -4362,7 +4374,12 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_float(bool has_colorbuffer_float, b
         /* GLES2 can only render to RGBA, and there's no RG format */
         if (has_texture_float_linear) {
             if (has_colorbuffer_float) {
-                _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                if (has_float_blend) {
+                    _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                }
+                else {
+                    _sg_pixelformat_sfrm(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
+                }
             }
             else {
                 _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_RGBA32F]);
@@ -4499,8 +4516,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     const bool has_colorbuffer_half_float = true;
     const bool has_texture_float_linear = true; /* FIXME??? */
     const bool has_texture_half_float_linear = true;
+    const bool has_float_blend = true;
     _sg_gl_init_pixelformats(has_bgra);
-    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
+    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear, has_float_blend);
     _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float, has_texture_half_float_linear);
     if (has_s3tc) {
         _sg_gl_init_pixelformats_s3tc();
@@ -4543,6 +4561,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     bool has_colorbuffer_float = false;
     bool has_colorbuffer_half_float = false;
     bool has_texture_float_linear = false;
+    bool has_float_blend = false;
     GLint num_ext = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
     for (int i = 0; i < num_ext; i++) {
@@ -4575,6 +4594,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             else if (strstr(ext, "_texture_float_linear")) {
                 has_texture_float_linear = true;
             }
+            else if (strstr(ext, "_float_blend")) {
+                has_float_blend = true;
+            }
             else if (strstr(ext, "_texture_filter_anisotropic")) {
                 _sg.gl.ext_anisotropic = true;
             }
@@ -4588,7 +4610,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     const bool has_texture_half_float_linear = true;
     const bool has_bgra = false;    /* not a bug */
     _sg_gl_init_pixelformats(has_bgra);
-    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
+    _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear, has_float_blend);
     _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float, has_texture_half_float_linear);
     if (has_s3tc) {
         _sg_gl_init_pixelformats_s3tc();
@@ -4620,6 +4642,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_texture_float = false;
     bool has_texture_float_linear = false;
     bool has_colorbuffer_float = false;
+    bool has_float_blend = false;
     bool has_instancing = false;
     const char* ext = (const char*) glGetString(GL_EXTENSIONS);
     if (ext) {
@@ -4631,6 +4654,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         has_texture_float = strstr(ext, "_texture_float");
         has_texture_float_linear = strstr(ext, "_texture_float_linear");
         has_colorbuffer_float = strstr(ext, "_color_buffer_float");
+        has_float_blend = strstr(ext, "_float_blend");
         /* don't bother with half_float support on WebGL1
             has_texture_half_float = strstr(ext, "_texture_half_float");
             has_texture_half_float_linear = strstr(ext, "_texture_half_float_linear");
@@ -4659,7 +4683,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     const bool has_colorbuffer_half_float = false;
     _sg_gl_init_pixelformats(has_bgra);
     if (has_texture_float) {
-        _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear);
+        _sg_gl_init_pixelformats_float(has_colorbuffer_float, has_texture_float_linear, has_float_blend);
     }
     if (has_texture_half_float) {
         _sg_gl_init_pixelformats_half_float(has_colorbuffer_half_float, has_texture_half_float_linear);
