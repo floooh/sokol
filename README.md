@@ -483,7 +483,7 @@ Mainly some "missing features" for desktop apps:
           runtime capability information about a pixelformat (for instance
           whether it is supported at all, can be used as render target etc...).
         - Use the new function ```sg_query_limits()``` to query "numeric limits"
-          like maximum tetxure dimensions for different texture types.
+          like maximum texture dimensions for different texture types.
         - The enumeration ```sg_feature``` and the function ```sg_query_feature()```
           has been replaced with the new function ```sg_query_features()```, which
           returns a struct ```sg_features``` (this contains a bool for each
