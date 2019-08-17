@@ -474,7 +474,7 @@ Mainly some "missing features" for desktop apps:
               unsigned-integer (UI postfix) and signed-integer (SI postfix)
               and float (F postfix) component types.
             - special pixel formats BGRA8 (default render target format on
-              Metal and D3D11), RGBA10A2 and RG11B10F
+              Metal and D3D11), RGB10A2 and RG11B10F
             - DXT compressed formats replaced with BC1 to BC7 (BC1 to BC3
               are identical to the old DXT pixel formats)
             - packed 16-bit formats (like RGBA4) have been removed
@@ -492,9 +492,10 @@ Mainly some "missing features" for desktop apps:
           now depends on the backend:
             - for GL backends, the default pixelformat stays the same: RGBA8
             - for the Metal and D3D11 backends, the default pixelformat for
-              render target images is now BGRA8 (the reason is because MTKView's
-              pixelformat was always BGRA8, and for DXGI/D3D11, a BGRA swapchain
-              is more efficient than RGBA)
+            render target images is now BGRA8 (the reason is because
+            MTKView's pixelformat was always BGRA8 but this was "hidden"
+            through an internal hack, and a BGRA swapchain is more efficient
+            than RGBA in D3D11/DXGI)
         - Because of the above RGBA/BGRA change, you may see pixelformat validation
           errors in existing code if the code assumes that a render target image is
           always created with a default pixelformat of RGBA8.
