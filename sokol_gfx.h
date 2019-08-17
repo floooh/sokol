@@ -3436,6 +3436,16 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     _SOKOL_UNUSED(desc);
+    _sg.backend = SG_BACKEND_DUMMY;
+    for (int i = SG_PIXELFORMAT_R8; i < SG_PIXELFORMAT_BC1_RGBA; i++) {
+        _sg.formats[i].sample = true;
+        _sg.formats[i].filter = true;
+        _sg.formats[i].render = true;
+        _sg.formats[i].blend = true;
+        _sg.formats[i].msaa = true;
+    }
+    _sg.formats[SG_PIXELFORMAT_DEPTH].depth = true;
+    _sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL].depth = true;
 }
 
 _SOKOL_PRIVATE void _sg_discard_backend(void) {
