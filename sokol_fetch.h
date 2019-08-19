@@ -1450,7 +1450,7 @@ _SOKOL_PRIVATE bool _sfetch_file_handle_valid(_sfetch_file_handle_t h) {
 
 _SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
     fseek(h, 0, SEEK_END);
-    return ftell(h);
+    return (uint32_t) ftell(h);
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {

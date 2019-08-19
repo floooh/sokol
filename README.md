@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates)
+[See what's new](#updates) (**18-Aug-2019**: breaking changes in sokol_gfx.h: pixelformats, limits and capabilities)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,50 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **18-Aug-2019**:
+    - Pixelformat and runtime capabilities modernization in sokol_gfx.h (breaking changes):
+        - The list of pixel formats supported in sokol_gfx.h has been modernized,
+          many new formats are available, and some formats have been removed. The
+          supported pixel formats are now identical with what WebGPU provides,
+          minus the SRGB formats (if SRGB conversion is needed it should be done
+          in the pixel shader)
+        - The pixel format list is now more "orthogonal":
+            - one, two or four color components (R, RG, RGBA)
+            - 8-, 16- or 32-bit component width
+            - unsigned-normalized (no postfix), signed-normalized (SN postfix),
+              unsigned-integer (UI postfix) and signed-integer (SI postfix)
+              and float (F postfix) component types.
+            - special pixel formats BGRA8 (default render target format on
+              Metal and D3D11), RGB10A2 and RG11B10F
+            - DXT compressed formats replaced with BC1 to BC7 (BC1 to BC3
+              are identical to the old DXT pixel formats)
+            - packed 16-bit formats (like RGBA4) have been removed
+            - packed 24-bit formats (RGB8) have been removed
+        - Use the new function ```sg_query_pixelformat()``` to get detailed
+          runtime capability information about a pixelformat (for instance
+          whether it is supported at all, can be used as render target etc...).
+        - Use the new function ```sg_query_limits()``` to query "numeric limits"
+          like maximum texture dimensions for different texture types.
+        - The enumeration ```sg_feature``` and the function ```sg_query_feature()```
+          has been replaced with the new function ```sg_query_features()```, which
+          returns a struct ```sg_features``` (this contains a bool for each
+          optional feature).
+        - The default pixelformat for render target images and pipeline objects
+          now depends on the backend:
+            - for GL backends, the default pixelformat stays the same: RGBA8
+            - for the Metal and D3D11 backends, the default pixelformat for
+            render target images is now BGRA8 (the reason is because
+            MTKView's pixelformat was always BGRA8 but this was "hidden"
+            through an internal hack, and a BGRA swapchain is more efficient
+            than RGBA in D3D11/DXGI)
+        - Because of the above RGBA/BGRA change, you may see pixelformat validation
+          errors in existing code if the code assumes that a render target image is
+          always created with a default pixelformat of RGBA8.
+    - Changes in sokol_app.h:
+        - The D3D11 backend now creates the DXGI swapchain with BGRA8 pixelformat
+          (previously: RGBA8), this allows more efficient presentation in some
+          situations since no format-conversion-blit needs to happen.
 
 - **18-Jul-2019**:
     - sokol_fetch.h has been fixed and can be used again :)
