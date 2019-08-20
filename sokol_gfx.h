@@ -262,6 +262,20 @@
 
             sg_backend sg_query_backend(void)
 
+    --- you can query the default resource creation parameters through the functions
+
+            sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc)
+            sg_image_desc sg_query_image_defaults(const sg_image_desc* desc)
+            sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
+            sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
+            sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
+
+        These functions take a pointer to a desc structure which may contain
+        zero-initialized items for default values. These zero-init values
+        will be replaced with their concrete values in the returned desc
+        struct.
+
+
     BACKEND-SPECIFIC TOPICS:
     ========================
     --- the GL backends need to know about the internal structure of uniform
@@ -1940,23 +1954,6 @@ SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace
 SOKOL_API_DECL void sg_push_debug_group(const char* name);
 SOKOL_API_DECL void sg_pop_debug_group(void);
 
-/* getting information */
-SOKOL_API_DECL sg_desc sg_query_desc(void);
-SOKOL_API_DECL sg_backend sg_query_backend(void);
-SOKOL_API_DECL sg_features sg_query_features(void);
-SOKOL_API_DECL sg_limits sg_query_limits(void);
-SOKOL_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
-SOKOL_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
-SOKOL_API_DECL sg_resource_state sg_query_image_state(sg_image img);
-SOKOL_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
-SOKOL_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
-SOKOL_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
-SOKOL_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
-SOKOL_API_DECL sg_image_info sg_query_image_info(sg_image img);
-SOKOL_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
-SOKOL_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
-SOKOL_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
-
 /* resource creation, destruction and updating */
 SOKOL_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
 SOKOL_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
@@ -1984,6 +1981,31 @@ SOKOL_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
 SOKOL_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_API_DECL void sg_end_pass(void);
 SOKOL_API_DECL void sg_commit(void);
+
+/* getting information */
+SOKOL_API_DECL sg_desc sg_query_desc(void);
+SOKOL_API_DECL sg_backend sg_query_backend(void);
+SOKOL_API_DECL sg_features sg_query_features(void);
+SOKOL_API_DECL sg_limits sg_query_limits(void);
+SOKOL_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
+/* get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID) */
+SOKOL_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
+SOKOL_API_DECL sg_resource_state sg_query_image_state(sg_image img);
+SOKOL_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
+SOKOL_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
+SOKOL_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
+/* get runtime information about a resource */
+SOKOL_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
+SOKOL_API_DECL sg_image_info sg_query_image_info(sg_image img);
+SOKOL_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
+SOKOL_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
+SOKOL_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
+/* get resource creation desc struct with their default values replaced */
+SOKOL_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
+SOKOL_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
+SOKOL_API_DECL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
+SOKOL_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
+SOKOL_API_DECL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
 
 /* separate resource allocation and initialization (for async setup) */
 SOKOL_API_DECL sg_buffer sg_alloc_buffer(void);
@@ -11464,6 +11486,31 @@ SOKOL_API_IMPL sg_pass_info sg_query_pass_info(sg_pass pass_id) {
         info.slot.ctx_id = pass->slot.ctx_id;
     }
     return info;
+}
+
+SOKOL_API_IMPL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(_sg.valid && desc);
+    return _sg_buffer_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc) {
+    SOKOL_ASSERT(_sg.valid && desc);
+    return _sg_image_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc) {
+    SOKOL_ASSERT(_sg.valid && desc);
+    return _sg_shader_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(_sg.valid && desc);
+    return _sg_pipeline_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
+    SOKOL_ASSERT(_sg.valid && desc);
+    return _sg_pass_desc_defaults(desc);
 }
 
 #ifdef _MSC_VER

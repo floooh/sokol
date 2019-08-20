@@ -460,6 +460,22 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **20-Aug-2019**: sokol_gfx.h has a couple new query functions to inspect the
+  default values of resource-creation desc structures:
+
+    ```c
+    sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
+    sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
+    sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
+    sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
+    sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
+    ```
+  These functions take a pointer to a resource creation desc struct that
+  may contains zero-initialized values (to indicate default values) and
+  return a new struct where the zero-init values have been replaced with
+  concrete values. This is useful to inspect the actual creation attributes
+  of a resource.
+
 - **18-Aug-2019**:
     - Pixelformat and runtime capabilities modernization in sokol_gfx.h (breaking changes):
         - The list of pixel formats supported in sokol_gfx.h has been modernized,
