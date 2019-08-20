@@ -59,7 +59,7 @@
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (RaspberryPi)
+    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android, RaspberryPi
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
@@ -67,19 +67,19 @@
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
+    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | YES   | YES
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES   | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES   | YES
+    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES   | YES
+    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES   | YES
+    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES   | YES
+    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES   | YES
+    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES   | YES
+    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | ???   | YES
+    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | ???   | YES
     TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | ---   | YES
     TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
     TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
@@ -89,16 +89,16 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | TODO  | ---
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | YES   | ---
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES   | YES
+    windowed            | YES     | YES   | YES   | ---   | ---     | NO    | YES
+    fullscreen          | YES     | YES   | TODO  | YES   | YES     | YES   | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    | YES   | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     | ???   | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
@@ -844,6 +844,10 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
     #endif
     #if defined(SOKOL_NO_ENTRY)
     #error("sokol_app.h: SOKOL_NO_ENTRY is not supported on Android")
+    #endif
+#elif defined(__RPI__)
+    #if !defined(SOKOL_GLES2)
+    #error("sokol_app.h: unknown 3D API selected for RaspberryPI, must be SOKOL_GLES2")
     #endif
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
@@ -5104,7 +5108,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 #endif /* Android */
 
 /*== LINUX ==================================================================*/
-#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__RPI__)
 #define GL_GLEXT_PROTOTYPES
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -6936,7 +6940,754 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
-#endif /* LINUX */
+#elif defined(__RPI__)
+
+#include <EGL/egl.h>
+#if defined(SOKOL_GLES3)
+    #include <GLES3/gl3.h>
+#else
+    #ifndef GL_EXT_PROTOTYPES
+        #define GL_GLEXT_PROTOTYPES
+    #endif
+    #include <GLES2/gl2.h>
+    #include <GLES2/gl2ext.h>
+#endif
+
+#include <bcm_host.h>
+#include <fcntl.h>
+#include <linux/input.h>
+#include <dirent.h>
+#include <string.h>
+
+typedef struct {
+    DISPMANX_DISPLAY_HANDLE_T vc_display;
+    DISPMANX_UPDATE_HANDLE_T vc_update;
+    DISPMANX_ELEMENT_HANDLE_T vc_elem;
+    EGL_DISPMANX_WINDOW_T vc_win;
+
+    EGLConfig config;
+    EGLDisplay display;
+    EGLSurface surface;
+    EGLContext context;
+
+    int fd_kb;
+    int fd_mouse;
+
+    char char_table[SAPP_MAX_KEYCODES];
+    char char_table_shift[SAPP_MAX_KEYCODES];
+} _sapp_rpi_state_t;
+
+static _sapp_rpi_state_t _sapp_rpi_state;
+
+_SOKOL_PRIVATE bool _sapp_rpi_init_input_devices(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    state->fd_kb = state->fd_mouse = -1;
+
+    const char* inputs_dir = "/dev/input/by-id";
+    char dev_filepath[256];
+
+    DIR* dirp = opendir(inputs_dir);
+    if (dirp) {
+        struct dirent* de;
+        while ((de = readdir(dirp)) != NULL) {
+            if (state->fd_kb == -1 && strstr(de->d_name, "-event-kbd")) {
+                snprintf(dev_filepath, sizeof(dev_filepath), "%s/%s", inputs_dir, de->d_name);
+                state->fd_kb = open(dev_filepath, O_RDONLY | O_NONBLOCK);
+                if (state->fd_kb != -1) {
+                    ioctl(state->fd_kb, EVIOCGRAB, 1);
+                }
+            } 
+            else if (state->fd_mouse == -1 && strstr(de->d_name, "-event-mouse")) {
+                snprintf(dev_filepath, sizeof(dev_filepath), "%s/%s", inputs_dir, de->d_name);
+                state->fd_mouse = open(dev_filepath, O_RDONLY | O_NONBLOCK);
+                if (state->fd_mouse != -1) {
+                    ioctl(state->fd_mouse, EVIOCGRAB, 1);
+                }                
+            }
+        }
+        closedir(dirp);
+
+        if (state->fd_kb == -1 && state->fd_mouse == -1) {
+            SOKOL_LOG("no input devices found");
+        }
+
+        return true;
+    }
+    else {
+        SOKOL_LOG("failed to open directory: /dev/input/by-id");
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_cleanup_input_devices(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    if (state->fd_kb) {
+        close(state->fd_kb);
+        state->fd_kb = -1;
+    }
+
+    if (state->fd_mouse) {
+        close(state->fd_mouse);
+        state->fd_mouse = -1;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_init_keytable(void) {
+    _sapp.keycodes[KEY_ESC]           = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[KEY_1]	          = SAPP_KEYCODE_1;
+    _sapp.keycodes[KEY_2]	          = SAPP_KEYCODE_2;
+    _sapp.keycodes[KEY_3]	          = SAPP_KEYCODE_3;
+    _sapp.keycodes[KEY_4]	          = SAPP_KEYCODE_4;
+    _sapp.keycodes[KEY_5]             = SAPP_KEYCODE_5;
+    _sapp.keycodes[KEY_6]             = SAPP_KEYCODE_6;
+    _sapp.keycodes[KEY_7]             = SAPP_KEYCODE_7;
+    _sapp.keycodes[KEY_8]             = SAPP_KEYCODE_8;
+    _sapp.keycodes[KEY_9]             = SAPP_KEYCODE_9;
+    _sapp.keycodes[KEY_0]             = SAPP_KEYCODE_0;
+    _sapp.keycodes[KEY_MINUS]	      = SAPP_KEYCODE_MINUS; 	
+    _sapp.keycodes[KEY_EQUAL]         = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[KEY_BACKSPACE]     = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[KEY_TAB]           = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[KEY_Q]             = SAPP_KEYCODE_Q;
+    _sapp.keycodes[KEY_W]             = SAPP_KEYCODE_W;
+    _sapp.keycodes[KEY_E]             = SAPP_KEYCODE_E;
+    _sapp.keycodes[KEY_R]             = SAPP_KEYCODE_R;
+    _sapp.keycodes[KEY_T]             = SAPP_KEYCODE_T;
+    _sapp.keycodes[KEY_Y]             = SAPP_KEYCODE_Y;
+    _sapp.keycodes[KEY_U]             = SAPP_KEYCODE_U;
+    _sapp.keycodes[KEY_I]             = SAPP_KEYCODE_I;
+    _sapp.keycodes[KEY_O]             = SAPP_KEYCODE_O;
+    _sapp.keycodes[KEY_P]             = SAPP_KEYCODE_P;
+    _sapp.keycodes[KEY_LEFTBRACE]     = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[KEY_RIGHTBRACE]    = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[KEY_ENTER]         = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[KEY_LEFTCTRL]      = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[KEY_A]             = SAPP_KEYCODE_A;
+    _sapp.keycodes[KEY_S]             = SAPP_KEYCODE_S;
+    _sapp.keycodes[KEY_D]             = SAPP_KEYCODE_D;
+    _sapp.keycodes[KEY_F]             = SAPP_KEYCODE_F;
+    _sapp.keycodes[KEY_G]             = SAPP_KEYCODE_G;
+    _sapp.keycodes[KEY_H]             = SAPP_KEYCODE_H;
+    _sapp.keycodes[KEY_J]             = SAPP_KEYCODE_J;
+    _sapp.keycodes[KEY_K]             = SAPP_KEYCODE_K;
+    _sapp.keycodes[KEY_L]             = SAPP_KEYCODE_L;
+    _sapp.keycodes[KEY_SEMICOLON]     = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[KEY_APOSTROPHE]    = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[KEY_GRAVE]         = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[KEY_LEFTSHIFT]     = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[KEY_BACKSLASH]     = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[KEY_Z]             = SAPP_KEYCODE_Z;
+    _sapp.keycodes[KEY_X]             = SAPP_KEYCODE_X;     
+    _sapp.keycodes[KEY_C]             = SAPP_KEYCODE_C;
+    _sapp.keycodes[KEY_V]             = SAPP_KEYCODE_V;
+    _sapp.keycodes[KEY_B]             = SAPP_KEYCODE_B;
+    _sapp.keycodes[KEY_N]             = SAPP_KEYCODE_N;
+    _sapp.keycodes[KEY_M]             = SAPP_KEYCODE_M;
+    _sapp.keycodes[KEY_COMMA]         = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[KEY_DOT]           = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[KEY_SLASH]         = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[KEY_RIGHTSHIFT]    = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[KEY_KPASTERISK]    = SAPP_KEYCODE_KP_MULTIPLY; 
+    _sapp.keycodes[KEY_LEFTALT]       = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[KEY_SPACE]         = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[KEY_CAPSLOCK]      = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[KEY_F1]            = SAPP_KEYCODE_F1;
+    _sapp.keycodes[KEY_F2]            = SAPP_KEYCODE_F2;
+    _sapp.keycodes[KEY_F3]            = SAPP_KEYCODE_F3;
+    _sapp.keycodes[KEY_F4]            = SAPP_KEYCODE_F4;
+    _sapp.keycodes[KEY_F5]            = SAPP_KEYCODE_F5;
+    _sapp.keycodes[KEY_F6]            = SAPP_KEYCODE_F6;
+    _sapp.keycodes[KEY_F7]            = SAPP_KEYCODE_F7;
+    _sapp.keycodes[KEY_F8]            = SAPP_KEYCODE_F8;
+    _sapp.keycodes[KEY_F9]            = SAPP_KEYCODE_F9;
+    _sapp.keycodes[KEY_F10]           = SAPP_KEYCODE_F10;
+    _sapp.keycodes[KEY_NUMLOCK]       = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[KEY_SCROLLLOCK]    = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[KEY_KP7]           = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[KEY_KP8]           = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[KEY_KP9]           = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[KEY_KPMINUS]       = SAPP_KEYCODE_KP_SUBTRACT;
+    _sapp.keycodes[KEY_KP4]           = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[KEY_KP5]           = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[KEY_KP6]           = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[KEY_KPPLUS]        = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[KEY_KP1]           = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[KEY_KP2]           = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[KEY_KP3]           = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[KEY_KP0]           = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[KEY_KPDOT]         = SAPP_KEYCODE_KP_DECIMAL; 
+    _sapp.keycodes[KEY_F11]           = SAPP_KEYCODE_F11;
+    _sapp.keycodes[KEY_F12]           = SAPP_KEYCODE_F12;
+    _sapp.keycodes[KEY_KPENTER]       = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[KEY_RIGHTCTRL]     = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[KEY_KPSLASH]       = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[KEY_RIGHTALT]      = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[KEY_HOME]          = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[KEY_UP]            = SAPP_KEYCODE_UP;
+    _sapp.keycodes[KEY_PAGEUP]        = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[KEY_LEFT]          = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[KEY_RIGHT]         = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[KEY_END]           = SAPP_KEYCODE_END;
+    _sapp.keycodes[KEY_DOWN]          = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[KEY_PAGEDOWN]      = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[KEY_INSERT]        = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[KEY_DELETE]        = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[KEY_KPEQUAL]       = SAPP_KEYCODE_KP_EQUAL;
+    _sapp.keycodes[KEY_PAUSE]         = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[KEY_LEFTMETA]      = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[KEY_RIGHTMETA]     = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[KEY_MENU]          = SAPP_KEYCODE_MENU;
+    _sapp.keycodes[KEY_F13]           = SAPP_KEYCODE_F13;
+    _sapp.keycodes[KEY_F14]           = SAPP_KEYCODE_F14;
+    _sapp.keycodes[KEY_F15]           = SAPP_KEYCODE_F15;
+    _sapp.keycodes[KEY_F16]           = SAPP_KEYCODE_F16;
+    _sapp.keycodes[KEY_F17]           = SAPP_KEYCODE_F17;
+    _sapp.keycodes[KEY_F18]           = SAPP_KEYCODE_F18;
+    _sapp.keycodes[KEY_F19]           = SAPP_KEYCODE_F19;
+    _sapp.keycodes[KEY_F20]           = SAPP_KEYCODE_F20;
+    _sapp.keycodes[KEY_F21]           = SAPP_KEYCODE_F21;
+    _sapp.keycodes[KEY_F22]           = SAPP_KEYCODE_F22;
+    _sapp.keycodes[KEY_F23]           = SAPP_KEYCODE_F23;
+    _sapp.keycodes[KEY_F24]           = SAPP_KEYCODE_F24;
+
+    /* map keycodes to chars (US keyboard layout) */
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    state->char_table[KEY_1]	         = '1';
+    state->char_table[KEY_2]	         = '2';
+    state->char_table[KEY_3]	         = '3';
+    state->char_table[KEY_4]	         = '4';
+    state->char_table[KEY_5]             = '5';
+    state->char_table[KEY_6]             = '6';
+    state->char_table[KEY_7]             = '7';
+    state->char_table[KEY_8]             = '8';
+    state->char_table[KEY_9]             = '9';
+    state->char_table[KEY_0]             = '0';
+    state->char_table[KEY_MINUS]	     = '-'; 	
+    state->char_table[KEY_EQUAL]         = '=';
+    state->char_table[KEY_TAB]           = '\t';
+    state->char_table[KEY_Q]             = 'q';
+    state->char_table[KEY_W]             = 'w';
+    state->char_table[KEY_E]             = 'e';
+    state->char_table[KEY_R]             = 'r';
+    state->char_table[KEY_T]             = 't';
+    state->char_table[KEY_Y]             = 'y';
+    state->char_table[KEY_U]             = 'u';
+    state->char_table[KEY_I]             = 'i';
+    state->char_table[KEY_O]             = 'o';
+    state->char_table[KEY_P]             = 'p';
+    state->char_table[KEY_LEFTBRACE]     = '[';
+    state->char_table[KEY_RIGHTBRACE]    = ']';
+    state->char_table[KEY_ENTER]         = '\n';
+    state->char_table[KEY_A]             = 'a';
+    state->char_table[KEY_S]             = 's';
+    state->char_table[KEY_D]             = 'd';
+    state->char_table[KEY_F]             = 'f';
+    state->char_table[KEY_G]             = 'g';
+    state->char_table[KEY_H]             = 'h';
+    state->char_table[KEY_J]             = 'j';
+    state->char_table[KEY_K]             = 'k';
+    state->char_table[KEY_L]             = 'l';
+    state->char_table[KEY_SEMICOLON]     = ';';
+    state->char_table[KEY_APOSTROPHE]    = '\'';
+    state->char_table[KEY_GRAVE]         = '`';
+    state->char_table[KEY_BACKSLASH]     = '\\';
+    state->char_table[KEY_Z]             = 'z';
+    state->char_table[KEY_X]             = 'x';     
+    state->char_table[KEY_C]             = 'c';
+    state->char_table[KEY_V]             = 'v';
+    state->char_table[KEY_B]             = 'b';
+    state->char_table[KEY_N]             = 'n';
+    state->char_table[KEY_M]             = 'm';
+    state->char_table[KEY_COMMA]         = ',';
+    state->char_table[KEY_DOT]           = '.';
+    state->char_table[KEY_SLASH]         = '/';
+    state->char_table[KEY_KPASTERISK]    = '*'; 
+    state->char_table[KEY_SPACE]         = ' ';
+    state->char_table[KEY_KP7]           = '7';
+    state->char_table[KEY_KP8]           = '8';
+    state->char_table[KEY_KP9]           = '9';
+    state->char_table[KEY_KPMINUS]       = '-';
+    state->char_table[KEY_KP4]           = '4';
+    state->char_table[KEY_KP5]           = '5';
+    state->char_table[KEY_KP6]           = '6';
+    state->char_table[KEY_KPPLUS]        = '+';
+    state->char_table[KEY_KP1]           = '1';
+    state->char_table[KEY_KP2]           = '2';
+    state->char_table[KEY_KP3]           = '3';
+    state->char_table[KEY_KP0]           = '0';
+    state->char_table[KEY_KPDOT]         = '.'; 
+    state->char_table[KEY_KPENTER]       = '\n';
+    state->char_table[KEY_KPSLASH]       = '/';
+    state->char_table[KEY_KPEQUAL]       = '=';
+
+    /* char table with shift */
+    state->char_table_shift[KEY_1]	           = '!';
+    state->char_table_shift[KEY_2]	           = '@';
+    state->char_table_shift[KEY_3]	           = '#';
+    state->char_table_shift[KEY_4]	           = '$';
+    state->char_table_shift[KEY_5]             = '%';
+    state->char_table_shift[KEY_6]             = '^';
+    state->char_table_shift[KEY_7]             = '&';
+    state->char_table_shift[KEY_8]             = '*';
+    state->char_table_shift[KEY_9]             = '(';
+    state->char_table_shift[KEY_0]             = ')';
+    state->char_table_shift[KEY_MINUS]	       = '_'; 	
+    state->char_table_shift[KEY_EQUAL]         = '+';
+    state->char_table_shift[KEY_TAB]           = '\t';
+    state->char_table_shift[KEY_Q]             = 'Q';
+    state->char_table_shift[KEY_W]             = 'W';
+    state->char_table_shift[KEY_E]             = 'E';
+    state->char_table_shift[KEY_R]             = 'R';
+    state->char_table_shift[KEY_T]             = 'T';
+    state->char_table_shift[KEY_Y]             = 'Y';
+    state->char_table_shift[KEY_U]             = 'U';
+    state->char_table_shift[KEY_I]             = 'I';
+    state->char_table_shift[KEY_O]             = 'O';
+    state->char_table_shift[KEY_P]             = 'P';
+    state->char_table_shift[KEY_LEFTBRACE]     = '{';
+    state->char_table_shift[KEY_RIGHTBRACE]    = '}';
+    state->char_table_shift[KEY_ENTER]         = '\n';
+    state->char_table_shift[KEY_A]             = 'A';
+    state->char_table_shift[KEY_S]             = 'S';
+    state->char_table_shift[KEY_D]             = 'D';
+    state->char_table_shift[KEY_F]             = 'F';
+    state->char_table_shift[KEY_G]             = 'G';
+    state->char_table_shift[KEY_H]             = 'H';
+    state->char_table_shift[KEY_J]             = 'J';
+    state->char_table_shift[KEY_K]             = 'K';
+    state->char_table_shift[KEY_L]             = 'L';
+    state->char_table_shift[KEY_SEMICOLON]     = ':';
+    state->char_table_shift[KEY_APOSTROPHE]    = '\"';
+    state->char_table_shift[KEY_GRAVE]         = '~';
+    state->char_table_shift[KEY_BACKSLASH]     = '|';
+    state->char_table_shift[KEY_Z]             = 'Z';
+    state->char_table_shift[KEY_X]             = 'X';     
+    state->char_table_shift[KEY_C]             = 'C';
+    state->char_table_shift[KEY_V]             = 'V';
+    state->char_table_shift[KEY_B]             = 'B';
+    state->char_table_shift[KEY_N]             = 'N';
+    state->char_table_shift[KEY_M]             = 'M';
+    state->char_table_shift[KEY_COMMA]         = '<';
+    state->char_table_shift[KEY_DOT]           = '>';
+    state->char_table_shift[KEY_SLASH]         = '?';
+    state->char_table_shift[KEY_KPASTERISK]    = '*'; 
+    state->char_table_shift[KEY_SPACE]         = ' ';
+    state->char_table_shift[KEY_KP7]           = '7';
+    state->char_table_shift[KEY_KP8]           = '8';
+    state->char_table_shift[KEY_KP9]           = '9';
+    state->char_table_shift[KEY_KPMINUS]       = '-';
+    state->char_table_shift[KEY_KP4]           = '4';
+    state->char_table_shift[KEY_KP5]           = '5';
+    state->char_table_shift[KEY_KP6]           = '6';
+    state->char_table_shift[KEY_KPPLUS]        = '+';
+    state->char_table_shift[KEY_KP1]           = '1';
+    state->char_table_shift[KEY_KP2]           = '2';
+    state->char_table_shift[KEY_KP3]           = '3';
+    state->char_table_shift[KEY_KP0]           = '0';
+    state->char_table_shift[KEY_KPDOT]         = '.'; 
+    state->char_table_shift[KEY_KPENTER]       = '\n';
+    state->char_table_shift[KEY_KPSLASH]       = '/';
+    state->char_table_shift[KEY_KPEQUAL]       = '=';    
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_process_kb_event(const struct input_event* e, uint32_t* mods) {
+    SOKOL_ASSERT(e->type == EV_KEY);
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    if (e->code >= SAPP_MAX_KEYCODES) {
+        return;
+    }
+
+    sapp_keycode keycode = _sapp_translate_key(e->code);
+    
+    /* key is pressed */
+    if (e->value != 0) {
+        /* modifier keys */
+        if (keycode == SAPP_KEYCODE_LEFT_SHIFT || keycode == SAPP_KEYCODE_RIGHT_SHIFT) {
+            *mods = (*mods) | SAPP_MODIFIER_SHIFT;
+        }
+
+        if (keycode == SAPP_KEYCODE_LEFT_ALT || keycode == SAPP_KEYCODE_RIGHT_ALT) {
+            *mods = (*mods) | SAPP_MODIFIER_ALT;
+        }
+
+        if (keycode == SAPP_KEYCODE_LEFT_CONTROL || keycode == SAPP_KEYCODE_RIGHT_CONTROL) {
+            (*mods) = (*mods) | SAPP_MODIFIER_CTRL;
+        }
+
+        if (keycode == SAPP_KEYCODE_LEFT_SUPER || keycode == SAPP_KEYCODE_RIGHT_SUPER) {
+            (*mods) = (*mods) | SAPP_MODIFIER_SUPER;
+        }
+
+        if (_sapp_events_enabled()) {
+            /* key_down event */
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+            _sapp.event.modifiers = *mods;
+            _sapp.event.key_code = keycode;
+            _sapp.event.key_repeat = (e->value == 2);
+            _sapp_call_event(&_sapp.event);
+
+            /* char event */
+            char c = (*mods & SAPP_MODIFIER_SHIFT) ? state->char_table_shift[e->code] : state->char_table[e->code];
+            if (c >= 32) {
+                _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+                _sapp.event.modifiers = *mods;
+                _sapp.event.char_code = c;
+                _sapp.event.key_repeat = (e->value == 2);
+                _sapp_call_event(&_sapp.event);
+            }
+        }
+    } 
+    else if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+        _sapp.event.modifiers = *mods;
+        _sapp.event.key_code = keycode;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_process_mouse_event(const struct input_event* e, uint32_t mods) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    if (e->type == EV_KEY) {
+        /* mouse button events */
+        sapp_mousebutton mouse_button;
+
+        switch (e->code) {
+            case BTN_LEFT:      mouse_button = SAPP_MOUSEBUTTON_LEFT;       break;
+            case BTN_RIGHT:     mouse_button = SAPP_MOUSEBUTTON_RIGHT;      break;
+            case BTN_MIDDLE:    mouse_button = SAPP_MOUSEBUTTON_MIDDLE;     break;
+            default:            mouse_button = SAPP_MOUSEBUTTON_INVALID;    break;
+        }
+
+        /* mouse buttons */
+        if (mouse_button != SAPP_MOUSEBUTTON_INVALID && _sapp_events_enabled()) {
+            if (e->value == 1) {
+                _sapp_init_event(SAPP_EVENTTYPE_MOUSE_DOWN);
+                _sapp.event.mouse_button = mouse_button;
+                _sapp.event.modifiers = mods;
+                _sapp.event.mouse_x = _sapp.mouse_x;
+                _sapp.event.mouse_y = _sapp.mouse_y;
+                _sapp_call_event(&_sapp.event);
+            } 
+            else if (e->value == 0) {
+                _sapp_init_event(SAPP_EVENTTYPE_MOUSE_UP);
+                _sapp.event.mouse_button = mouse_button;
+                _sapp.event.modifiers = mods;
+                _sapp.event.mouse_x = _sapp.mouse_x;
+                _sapp.event.mouse_y = _sapp.mouse_y;
+                _sapp_call_event(&_sapp.event);
+            }
+        }
+    }
+    else if (e->type == EV_REL) {
+        if (e->code < 2) {
+            /* mouse move */
+            if (e->code == 0) {
+                _sapp.mouse_x += (float)e->value;
+
+                if (_sapp.mouse_x < 0) {
+                    _sapp.mouse_x = 0;
+                }
+                else if (_sapp.mouse_x > (float)_sapp.window_width) {
+                    _sapp.mouse_x = (float)_sapp.window_width;
+                }
+            }
+            else if (e->code == 1) {
+                _sapp.mouse_y += (float)e->value;
+
+                if (_sapp.mouse_y < 0) {
+                    _sapp.mouse_y = 0;
+                }
+                else if (_sapp.mouse_y > (float)_sapp.window_height) {
+                    _sapp.mouse_y = (float)_sapp.window_height;
+                }
+            }
+
+            if (_sapp_events_enabled()) {
+                _sapp_init_event(SAPP_EVENTTYPE_MOUSE_MOVE);
+                _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
+                _sapp.event.modifiers = mods;
+                _sapp.event.mouse_x = _sapp.mouse_x;
+                _sapp.event.mouse_y = _sapp.mouse_y;
+                _sapp_call_event(&_sapp.event);
+            }
+        }
+        else if (e->code == 8 && _sapp_events_enabled()) {
+            /* scroll */
+            _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+            _sapp.event.modifiers = mods;
+            _sapp.event.scroll_y = (float)e->value; /* value is +1 or -1 */
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_read_input_devices(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    const int max_events = 64;
+    struct input_event events[max_events];
+    uint32_t mods = 0;
+
+    if (state->fd_kb != -1) {
+        int read_bytes;
+        while ((read_bytes = read(state->fd_kb, events, sizeof(events))) > 0) {
+            const int num_events = read_bytes / sizeof(struct input_event);
+            for (int i = 0; i < num_events; i++) {
+                const struct input_event* e = &events[i];
+                if (e->type == EV_KEY) {
+                    _sapp_rpi_process_kb_event(e, &mods);
+                }
+            }
+        } /* if read_bytes > 0 */
+    }
+
+    if (state->fd_mouse != -1) {
+        int read_bytes;
+        while ((read_bytes = read(state->fd_mouse, events, sizeof(events))) > 0) {
+            const int num_events = read_bytes / sizeof(struct input_event);
+            for (int i = 0; i < num_events; i++) {
+                const struct input_event* e = &events[i];
+                if (e->type == EV_KEY || e->type == EV_REL) {
+                    _sapp_rpi_process_mouse_event(e, mods);
+                }
+            }
+        } /* if read_bytes > 0 */        
+    }
+}
+
+
+_SOKOL_PRIVATE void _sapp_rpi_init_egl(void) {
+    EGLint ret;
+    _SOKOL_UNUSED(ret);
+
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    SOKOL_ASSERT(state->display == EGL_NO_DISPLAY);
+    SOKOL_ASSERT(state->context == EGL_NO_CONTEXT);
+
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    SOKOL_ASSERT(display != EGL_NO_DISPLAY);
+
+    ret = eglInitialize(display, NULL, NULL);
+    SOKOL_ASSERT(ret != EGL_FALSE);
+
+    EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
+    const EGLint cfg_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha_size,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE
+    };
+    EGLConfig available_cfgs[32];
+    EGLint cfg_count;
+    eglChooseConfig(display, cfg_attributes, available_cfgs, 32, &cfg_count);
+    SOKOL_ASSERT(cfg_count > 0);
+    SOKOL_ASSERT(cfg_count <= 32);
+
+    /* find config with 8-bit rgb buffer if available, ndk sample does not trust egl spec */
+    EGLConfig config;
+    bool exact_cfg_found = false;
+    for (int i = 0; i < cfg_count; ++i) {
+        EGLConfig c = available_cfgs[i];
+        EGLint r = 0, g = 0, b = 0, a = 0, d = 0;
+        eglGetConfigAttrib(display, c, EGL_RED_SIZE, &r);
+        eglGetConfigAttrib(display, c, EGL_GREEN_SIZE, &g);
+        eglGetConfigAttrib(display, c, EGL_BLUE_SIZE, &b);
+        eglGetConfigAttrib(display, c, EGL_ALPHA_SIZE, &a);
+        eglGetConfigAttrib(display, c, EGL_DEPTH_SIZE, &d);
+        if (r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) && d == 24) {
+            exact_cfg_found = true;
+            config = c;
+            break;
+        }
+    }
+    if (!exact_cfg_found) {
+        SOKOL_LOG("No matching EGL config found, will use the default one");
+        config = available_cfgs[0];
+    }
+
+    ret = eglBindAPI(EGL_OPENGL_ES_API);
+    SOKOL_ASSERT(ret != EGL_FALSE);
+
+    EGLint ctx_attributes[] = {
+        #if defined(SOKOL_GLES3)
+            EGL_CONTEXT_CLIENT_VERSION, _sapp.desc.gl_force_gles2 ? 2 : 3,
+        #else
+            EGL_CONTEXT_CLIENT_VERSION, 2,
+        #endif
+        EGL_NONE
+    };
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attributes);
+    SOKOL_ASSERT(context != EGL_NO_CONTEXT);
+
+    state->config = config;
+    state->display = display;
+    state->context = context;
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_cleanup_egl(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    if (state->display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (state->surface != EGL_NO_SURFACE) {
+            SOKOL_LOG("Destroying egl surface");
+            eglDestroySurface(state->display, state->surface);
+            state->surface = EGL_NO_SURFACE;
+        }
+        if (state->context != EGL_NO_CONTEXT) {
+            SOKOL_LOG("Destroying egl context");
+            eglDestroyContext(state->display, state->context);
+            state->context = EGL_NO_CONTEXT;
+        }
+        SOKOL_LOG("Terminating egl display");
+        eglTerminate(state->display);
+        state->display = EGL_NO_DISPLAY;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_init_egl_surface(void) {
+    EGLint ret;
+    _SOKOL_UNUSED(ret);
+
+     _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    state->surface = eglCreateWindowSurface(state->display, state->config, &state->vc_win, NULL);
+    SOKOL_ASSERT(state->surface != EGL_NO_SURFACE);
+
+    ret = eglMakeCurrent(state->display, state->surface, state->surface, state->context);
+    SOKOL_ASSERT(ret != EGL_FALSE);
+
+    ret = eglSwapInterval(state->display, _sapp.swap_interval);
+    SOKOL_ASSERT(ret != EGL_FALSE);
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_cleanup_egl_surface(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    if (state->display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(state->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (state->surface != EGL_NO_SURFACE) {
+            eglDestroySurface(state->display, state->surface);
+            state->surface = EGL_NO_SURFACE;
+        }
+        state->display = EGL_NO_DISPLAY;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_create_window(void) {
+    int ret;
+    _SOKOL_UNUSED(ret);
+
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    bcm_host_init();
+
+    state->vc_display = vc_dispmanx_display_open(DISPMANX_ID_MAIN_LCD);
+    SOKOL_ASSERT(state->vc_display != DISPMANX_NO_HANDLE);
+
+    DISPMANX_MODEINFO_T info;
+    ret = vc_dispmanx_display_get_info(state->vc_display, &info);
+    SOKOL_ASSERT(ret == 0);
+    /* modify state width/height values */
+    _sapp.window_width = info.width;
+    _sapp.window_height = info.height;
+    _sapp.framebuffer_width = info.width;
+    _sapp.framebuffer_height = info.height;
+
+    state->vc_update = vc_dispmanx_update_start(0);
+    SOKOL_ASSERT(state->vc_update != DISPMANX_NO_HANDLE);
+
+    VC_RECT_T src_rect;
+    VC_RECT_T dst_rect;
+    vc_dispmanx_rect_set(&src_rect, 0, 0, (uint32_t)info.width << 16, (uint32_t)info.height << 16);
+    vc_dispmanx_rect_set(&dst_rect, 0, 0, (uint32_t)info.width, (uint32_t)info.height);
+
+    /* set this option (alpha) to disable blending from current tty framebuffer,
+     * if we set alpha=0, then alpha blending will occur on background terminal pixels too */
+    VC_DISPMANX_ALPHA_T alpha = {DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS, 255,0};    
+    state->vc_elem = vc_dispmanx_element_add(state->vc_update, state->vc_display, 0, &dst_rect, 0,
+                                             &src_rect, DISPMANX_PROTECTION_NONE, &alpha, 0, DISPMANX_NO_ROTATE);
+    SOKOL_ASSERT(state->vc_elem != DISPMANX_NO_HANDLE);
+
+    state->vc_win = (EGL_DISPMANX_WINDOW_T) {
+        .element = state->vc_elem,
+        .width = info.width,
+        .height = info.height,
+    };
+
+    vc_dispmanx_update_submit_sync(state->vc_update);
+}
+
+_SOKOL_PRIVATE void _sapp_rpi_destroy_window(void) {
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+    if (state->vc_elem != DISPMANX_NO_HANDLE) {
+        SOKOL_ASSERT(state->vc_update != DISPMANX_NO_HANDLE);
+        vc_dispmanx_element_remove(state->vc_update, state->vc_elem);
+        state->vc_update = DISPMANX_NO_HANDLE;
+        state->vc_elem = DISPMANX_NO_HANDLE;
+    }
+
+    if (state->vc_display != DISPMANX_NO_HANDLE) {
+        vc_dispmanx_display_close(state->vc_display);
+        state->vc_display = DISPMANX_NO_HANDLE;
+    }
+
+    bcm_host_deinit();
+}
+
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    bool ret;
+    _SOKOL_UNUSED(ret);
+
+    _sapp_rpi_state_t* state = &_sapp_rpi_state;
+
+    _sapp_init_state(desc);
+    _sapp_rpi_init_keytable();
+    _sapp_rpi_init_input_devices();
+    _sapp_rpi_create_window();
+    _sapp_rpi_init_egl();
+    _sapp_rpi_init_egl_surface();
+
+    _sapp.valid = true;
+    _sapp.desc.fullscreen = true;
+
+    while (!_sapp.quit_ordered) {
+        eglMakeCurrent(state->display, state->surface, state->surface, state->context);
+        _sapp_rpi_read_input_devices();
+        _sapp_frame();
+
+        eglSwapBuffers(state->display, state->surface);
+
+        if (_sapp.quit_requested) {
+            _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            _sapp_call_event(&_sapp.event);
+
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+    }
+    _sapp_call_cleanup();
+
+    _sapp_rpi_cleanup_egl_surface();
+    _sapp_rpi_cleanup_egl();
+    _sapp_rpi_destroy_window();
+    _sapp_rpi_cleanup_input_devices();
+}
+
+#if !defined(SOKOL_NO_ENTRY)
+int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+#endif /* SOKOL_NO_ENTRY */
+
+#endif /* __RPI__ */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
