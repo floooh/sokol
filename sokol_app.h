@@ -7035,17 +7035,17 @@ _SOKOL_PRIVATE void _sapp_rpi_cleanup_input_devices(void) {
 
 _SOKOL_PRIVATE void _sapp_rpi_init_keytable(void) {
     _sapp.keycodes[KEY_ESC]           = SAPP_KEYCODE_ESCAPE;
-    _sapp.keycodes[KEY_1]	          = SAPP_KEYCODE_1;
-    _sapp.keycodes[KEY_2]	          = SAPP_KEYCODE_2;
-    _sapp.keycodes[KEY_3]	          = SAPP_KEYCODE_3;
-    _sapp.keycodes[KEY_4]	          = SAPP_KEYCODE_4;
+    _sapp.keycodes[KEY_1]             = SAPP_KEYCODE_1;
+    _sapp.keycodes[KEY_2]             = SAPP_KEYCODE_2;
+    _sapp.keycodes[KEY_3]             = SAPP_KEYCODE_3;
+    _sapp.keycodes[KEY_4]             = SAPP_KEYCODE_4;
     _sapp.keycodes[KEY_5]             = SAPP_KEYCODE_5;
     _sapp.keycodes[KEY_6]             = SAPP_KEYCODE_6;
     _sapp.keycodes[KEY_7]             = SAPP_KEYCODE_7;
     _sapp.keycodes[KEY_8]             = SAPP_KEYCODE_8;
     _sapp.keycodes[KEY_9]             = SAPP_KEYCODE_9;
     _sapp.keycodes[KEY_0]             = SAPP_KEYCODE_0;
-    _sapp.keycodes[KEY_MINUS]	      = SAPP_KEYCODE_MINUS; 	
+    _sapp.keycodes[KEY_MINUS]         = SAPP_KEYCODE_MINUS; 	
     _sapp.keycodes[KEY_EQUAL]         = SAPP_KEYCODE_EQUAL;
     _sapp.keycodes[KEY_BACKSPACE]     = SAPP_KEYCODE_BACKSPACE;
     _sapp.keycodes[KEY_TAB]           = SAPP_KEYCODE_TAB;
@@ -7153,17 +7153,17 @@ _SOKOL_PRIVATE void _sapp_rpi_init_keytable(void) {
 
     /* map keycodes to chars (US keyboard layout) */
     _sapp_rpi_state_t* state = &_sapp_rpi_state;
-    state->char_table[KEY_1]	         = '1';
-    state->char_table[KEY_2]	         = '2';
-    state->char_table[KEY_3]	         = '3';
-    state->char_table[KEY_4]	         = '4';
+    state->char_table[KEY_1]             = '1';
+    state->char_table[KEY_2]             = '2';
+    state->char_table[KEY_3]             = '3';
+    state->char_table[KEY_4]             = '4';
     state->char_table[KEY_5]             = '5';
     state->char_table[KEY_6]             = '6';
     state->char_table[KEY_7]             = '7';
     state->char_table[KEY_8]             = '8';
     state->char_table[KEY_9]             = '9';
     state->char_table[KEY_0]             = '0';
-    state->char_table[KEY_MINUS]	     = '-'; 	
+    state->char_table[KEY_MINUS]         = '-'; 	
     state->char_table[KEY_EQUAL]         = '=';
     state->char_table[KEY_TAB]           = '\t';
     state->char_table[KEY_Q]             = 'q';
