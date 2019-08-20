@@ -471,7 +471,7 @@ Mainly some "missing features" for desktop apps:
     sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
     ```
   These functions take a pointer to a resource creation desc struct that
-  may contains zero-initialized values (to indicate default values) and
+  may contain zero-initialized values (to indicate default values) and
   return a new struct where the zero-init values have been replaced with
   concrete values. This is useful to inspect the actual creation attributes
   of a resource.
