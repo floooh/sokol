@@ -433,6 +433,10 @@
 #endif
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
 typedef struct sgl_pipeline { uint32_t id; } sgl_pipeline;
 
@@ -548,10 +552,6 @@ SOKOL_API_DECL void sgl_end(void);
 
 /* render everything */
 SOKOL_API_DECL void sgl_draw(void);
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #ifdef __cplusplus
 } /* extern "C" */
