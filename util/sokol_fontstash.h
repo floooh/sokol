@@ -641,6 +641,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
     img_desc.width = sfons->width;
     img_desc.height = sfons->height;
     img_desc.min_filter = SG_FILTER_LINEAR;
+    img_desc.mag_filter = SG_FILTER_LINEAR;
     img_desc.usage = SG_USAGE_DYNAMIC;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
     sfons->img = sg_make_image(&img_desc);
