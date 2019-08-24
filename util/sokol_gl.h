@@ -1343,7 +1343,9 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
-    desc.shader = _sgl.shd;
+    if (in_desc->shader.id == SG_INVALID_ID) {
+        desc.shader = _sgl.shd;
+    }
     desc.index_type = SG_INDEXTYPE_NONE;
     desc.blend.color_format = _sgl.desc.color_format;
     desc.blend.depth_format = _sgl.desc.depth_format;
@@ -1832,6 +1834,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
     _sgl_destroy_pipeline(_sgl.def_pip);
+    // FIXME: need to destroy ALL valid pipeline objects in pool here
     _sgl_discard_pipeline_pool();
     _sgl.init_cookie = 0;
 }
