@@ -160,7 +160,7 @@ static const char* _sfons_fs_src =
     "in vec4 color;\n"
     "out vec4 frag_color;\n"
     "void main() {\n"
-    "    frag_color = texture(tex, uv.xy) * color;\n"
+    "    frag_color = vec4(1.0, 1.0, 1.0, texture(tex, uv.xy).r) * color;\n"
     "}\n";
 #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 static const char* _sfons_vs_src =
@@ -182,7 +182,7 @@ static const char* _sfons_fs_src =
     "varying vec4 uv;\n"
     "varying vec4 color;\n"
     "void main() {\n"
-    "    gl_FragColor = texture2D(tex, uv.xy) * color;\n"
+    "    gl_FragColor = vec4(1.0, 1.0, 1.0, texture2D(tex, uv.xy).r) * color;\n"
     "}\n";
 #elif defined(SOKOL_METAL)
 static const char* _sfons_vs_src =
