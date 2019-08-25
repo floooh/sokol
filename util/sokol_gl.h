@@ -1466,6 +1466,15 @@ static inline _sgl_uniform_t* _sgl_next_uniform(void) {
     }
 }
 
+static inline _sgl_command_t* _sgl_prev_command(void) {
+    if (_sgl.cur_command > 0) {
+        return &_sgl.commands[_sgl.cur_command - 1];
+    }
+    else {
+        return 0;
+    }
+}
+
 static inline _sgl_command_t* _sgl_next_command(void) {
     if (_sgl.cur_command < _sgl.num_commands) {
         return &_sgl.commands[_sgl.cur_command++];
@@ -2003,7 +2012,8 @@ SOKOL_API_IMPL void sgl_end(void) {
     if (_sgl.base_vertex == _sgl.cur_vertex) {
         return;
     }
-    if (_sgl.matrix_dirty) {
+    bool matrix_dirty = _sgl.matrix_dirty;
+    if (matrix_dirty) {
         _sgl.matrix_dirty = false;
         _sgl_uniform_t* uni = _sgl_next_uniform();
         if (uni) {
@@ -2011,15 +2021,37 @@ SOKOL_API_IMPL void sgl_end(void) {
             uni->tm = *_sgl_matrix_texture();
         }
     }
-    _sgl_command_t* cmd = _sgl_next_command();
-    if (cmd) {
-        SOKOL_ASSERT(_sgl.cur_uniform > 0);
-        cmd->cmd = SGL_COMMAND_DRAW;
-        cmd->args.draw.img = _sgl.cur_img;
-        cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
-        cmd->args.draw.base_vertex = _sgl.base_vertex;
-        cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
-        cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
+    /* check if command can be merged with previous command */
+    sg_pipeline pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
+    _sgl_command_t* prev_cmd = _sgl_prev_command();
+    bool merge_cmd = false;
+    if (prev_cmd) {
+        if ((prev_cmd->cmd == SGL_COMMAND_DRAW) &&
+            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
+            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
+            !matrix_dirty &&
+            (prev_cmd->args.draw.img.id == _sgl.cur_img.id) &&
+            (prev_cmd->args.draw.pip.id == pip.id))
+        {
+            merge_cmd = true;
+        }
+    }
+    if (merge_cmd) {
+        /* draw command can be merged with the previous command */
+        prev_cmd->args.draw.num_vertices += _sgl.cur_vertex - _sgl.base_vertex;
+    }
+    else {
+        /* append a new draw command */
+        _sgl_command_t* cmd = _sgl_next_command();
+        if (cmd) {
+            SOKOL_ASSERT(_sgl.cur_uniform > 0);
+            cmd->cmd = SGL_COMMAND_DRAW;
+            cmd->args.draw.img = _sgl.cur_img;
+            cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
+            cmd->args.draw.base_vertex = _sgl.base_vertex;
+            cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
+            cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
+        }
     }
 }
 
