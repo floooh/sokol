@@ -2023,6 +2023,7 @@ SOKOL_API_IMPL void sgl_end(void) {
     }
     /* check if command can be merged with previous command */
     sg_pipeline pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
+    sg_image img = _sgl.texturing_enabled ? _sgl.cur_img : _sgl.def_img;
     _sgl_command_t* prev_cmd = _sgl_prev_command();
     bool merge_cmd = false;
     if (prev_cmd) {
@@ -2030,7 +2031,7 @@ SOKOL_API_IMPL void sgl_end(void) {
             (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
             (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
             !matrix_dirty &&
-            (prev_cmd->args.draw.img.id == _sgl.cur_img.id) &&
+            (prev_cmd->args.draw.img.id == img.id) &&
             (prev_cmd->args.draw.pip.id == pip.id))
         {
             merge_cmd = true;
@@ -2046,7 +2047,7 @@ SOKOL_API_IMPL void sgl_end(void) {
         if (cmd) {
             SOKOL_ASSERT(_sgl.cur_uniform > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
-            cmd->args.draw.img = _sgl.cur_img;
+            cmd->args.draw.img = img;
             cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
             cmd->args.draw.base_vertex = _sgl.base_vertex;
             cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
