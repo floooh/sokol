@@ -12,6 +12,8 @@ meaning you can create Dear ImGui UIs from C code
 - **sokol_gfx_imgui.h**: a debug-inspection UI for sokol_gfx.h, this hooks into the sokol-gfx API and lets you inspect resource objects and captured API calls
 - **sokol_gfx_cimgui.h**: same as sokol_gfx_imgui.h, but using [cimgui](https://github.com/cimgui/cimgui)
 - **sokol_gl.h**: an OpenGL 1.x style immediate-mode rendering API
-in top of sokol-gfx
+on top of sokol_gfx.h
+- **sokol_fontstash.h**: a renderer for [fontstash.h](https://github.com/memononen/fontstash) on
+on top of sokol_gl.h
 
 See the embedded header-documentation for build- and usage-details.
