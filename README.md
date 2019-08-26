@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**18-Aug-2019**: breaking changes in sokol_gfx.h: pixelformats, limits and capabilities)
+[See what's new](#updates) (**26-Aug-2019**: new util header: sokol_fontstash.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,26 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **26-Aug-2019**: new utility header for text rendering, and fixes in sokol_gl.h:
+    - a new utility header [**sokol_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h)
+      which implements a renderer for [fontstash.h](https://github.com/memononen/fontstash)
+      on top of sokol_gl.h
+    - **sokol_gl.h** updates:
+        - Optimization: If no relevant state between two begin/end pairs has
+        changed, draw commands will be merged into a single sokol-gfx draw
+        call. This is especially useful for text- and sprite-rendering (previously,
+        each begin/end pair would always result in one draw call).
+        - Bugfix: When calling sgl_disable_texture() the previously active
+        texture would still remain active which could lead to rendering
+        artefacts. This has been fixed.
+        - Feature: It's now possible to provide a custom shader in the
+        'desc' argument of *sgl_make_pipeline()*, as long as the shader
+        is "compatible" with sokol_gl.h, see the sokol_fontstash.h
+        header for an example. This feature isn't "advertised" in the
+        sokol_gl.h documentation because it's a bit brittle (for instance
+        if sokol_gl.h updates uniform block structures, custom shaders
+        would break), but it may still come in handy in some situations.
 
 - **20-Aug-2019**: sokol_gfx.h has a couple new query functions to inspect the
   default values of resource-creation desc structures:
