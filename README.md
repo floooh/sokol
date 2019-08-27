@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**26-Aug-2019**: new util header: sokol_fontstash.h)
+[See what's new](#updates) (**27-Aug-2019**: OpenSLES backend in sokol_audio.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,10 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **27-Aug-2019**: [**sokol_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h)
+  now has an OpenSLES backend for Android. Many thanks to Sepehr Taghdisian (@septag)
+  for the PR!
 
 - **26-Aug-2019**: new utility header for text rendering, and fixes in sokol_gl.h:
     - a new utility header [**sokol_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h)
