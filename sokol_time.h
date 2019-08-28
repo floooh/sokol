@@ -164,6 +164,10 @@ typedef struct {
     double start;
 } _stm_state_t;
 #else /* anything else, this will need more care for non-Linux platforms */
+#ifdef ESP8266
+// On the ESP8266, clock_gettime ignores the first argument and CLOCK_MONOTONIC isn't defined
+#define CLOCK_MONOTONIC 0
+#endif
 #include <time.h>
 typedef struct {
     uint32_t initialized;
