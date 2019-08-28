@@ -3,22 +3,20 @@
     sokol_gfx_cimgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
     Do this:
+
         #define SOKOL_GFX_CIMGUI_IMPL
-    before you include this file in *one* C++ file to create the
+
+    before you include this file in *one* C file to create the
     implementation.
 
-    NOTE that the implementation must be compiled as C++ or Objective-C++
-    because it calls into the ImGui C++ API. The sokol_gfx_imgui.h API
-    itself is plain C though.
-
-    Include the following file(s) before including sokol_gfx_imgui.h:
+    Include the following file(s) before including sokol_gfx_cimgui.h:
 
         sokol_gfx.h
 
     Additionally, include the following files(s) before including
-    the implementation of sokol_gfx_imgui.h:
+    the implementation of sokol_gfx_cimgui.h:
 
-        imgui.h
+        cimgui.h
 
     The sokol_gfx.h implementation must be compiled with debug trace hooks
     enabled by defining:
