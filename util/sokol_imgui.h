@@ -755,13 +755,15 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     sg_push_debug_group("sokol-imgui");
 
     /* NOTE: since we're in C++ mode here we can't use C99 designated init */
-    sg_buffer_desc vb_desc = { };
+    sg_buffer_desc vb_desc;
+    memset(&vb_desc, 0, sizeof(vb_desc));
     vb_desc.usage = SG_USAGE_STREAM;
     vb_desc.size = _simgui.desc.max_vertices * sizeof(ImDrawVert);
     vb_desc.label = "sokol-imgui-vertices";
     _simgui.vbuf = sg_make_buffer(&vb_desc);
 
-    sg_buffer_desc ib_desc = { };
+    sg_buffer_desc ib_desc;
+    memset(&ib_desc, 0, sizeof(ib_desc));
     ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
     ib_desc.usage = SG_USAGE_STREAM;
     ib_desc.size = _simgui.desc.max_vertices * 3 * sizeof(uint16_t);
@@ -778,7 +780,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
             int bytes_per_pixel;
             ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &font_pixels, &font_width, &font_height, &bytes_per_pixel);
         #endif
-        sg_image_desc img_desc = { };
+        sg_image_desc img_desc;
+        memset(&img_desc, 0, sizeof(img_desc));
         img_desc.width = font_width;
         img_desc.height = font_height;
         img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
@@ -794,7 +797,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     }
 
     /* shader object for using the embedded shader source (or bytecode) */
-    sg_shader_desc shd_desc = { };
+    sg_shader_desc shd_desc;
+    memset(&shd_desc, 0, sizeof(shd_desc));
     sg_shader_uniform_block_desc* ub = &shd_desc.vs.uniform_blocks[0];
     ub->size = sizeof(_simgui_vs_params_t);
     ub->uniforms[0].name = "disp_size";
@@ -820,7 +824,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     _simgui.shd = sg_make_shader(&shd_desc);
 
     /* pipeline object for imgui rendering */
-    sg_pipeline_desc pip_desc = { };
+    sg_pipeline_desc pip_desc;
+    memset(&pip_desc, 0, sizeof(pip_desc));
     pip_desc.layout.buffers[0].stride = sizeof(ImDrawVert);
     {
         sg_vertex_attr_desc* attr = &pip_desc.layout.attrs[0];
