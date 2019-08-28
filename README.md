@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**27-Aug-2019**: OpenSLES backend in sokol_audio.h)
+[See what's new](#updates) (**28-Aug-2019**: sokol_cimgui.h merged into sokol_imgui.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,17 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **28-Aug-2019**: The header **sokol_cimgui.h** has been merged into
+[**sokol_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h).
+The sokol_cimgui.h header had been created to implement Dear ImGui UIs from
+pure C applications, instead of having to fall back to C++ just for the UI
+code. However, there was a lot of code duplication between sokol_imgui.h and
+sokol_cimgui.h, so that it made more sense to merge the two headers. The C vs
+C++ code path will be selected automatically: When the implementation of
+sokol_imgui.h is included into a C++ source file, the Dear ImGui C++ API will
+be used. Otherwise, when the implementation is included into a C source file,
+the C API via cimgui.h
 
 - **27-Aug-2019**: [**sokol_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h)
   now has an OpenSLES backend for Android. Many thanks to Sepehr Taghdisian (@septag)
