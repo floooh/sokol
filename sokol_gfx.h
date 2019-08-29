@@ -566,7 +566,7 @@ enum {
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
-    SG_MAX_VERTEX_ATTRIBUTES = 16,
+    SG_MAX_VERTEX_ATTRIBUTES = 16,      /* NOTE: actual max vertex attrs can be less on GLES2, see sg_limits! */
     SG_MAX_MIPMAPS = 16,
     SG_MAX_TEXTUREARRAY_LAYERS = 128
 };
@@ -745,11 +745,12 @@ typedef struct sg_features {
     Runtime information about resource limits, returned by sg_query_limit()
 */
 typedef struct sg_limits {
-    uint32_t max_image_size_2d;      /* max width/height of SG_IMAGETYPE_2D images */
-    uint32_t max_image_size_cube;    /* max width/height of SG_IMAGETYPE_CUBE images */
-    uint32_t max_image_size_3d;      /* max width/height/depth of SG_IMAGETYPE_3D images */
+    uint32_t max_image_size_2d;         /* max width/height of SG_IMAGETYPE_2D images */
+    uint32_t max_image_size_cube;       /* max width/height of SG_IMAGETYPE_CUBE images */
+    uint32_t max_image_size_3d;         /* max width/height/depth of SG_IMAGETYPE_3D images */
     uint32_t max_image_size_array;
     uint32_t max_image_array_layers;
+    uint32_t max_vertex_attrs;          /* <= SG_MAX_VERTEX_ATTRIBUTES (only on some GLES2 impls) */
 } sg_limits;
 
 /*
@@ -4473,6 +4474,12 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
     glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &gl_int);
     _SG_GL_CHECK_ERROR();
     _sg.limits.max_image_size_cube = gl_int;
+    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    if (gl_int > SG_MAX_VERTEX_ATTRIBUTES) {
+        gl_int = SG_MAX_VERTEX_ATTRIBUTES;
+    }
+    _sg.limits.max_vertex_attrs = gl_int;
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
         glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
@@ -4849,7 +4856,7 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     _SG_GL_CHECK_ERROR();
     _sg_gl_clear_texture_bindings(true);
     _SG_GL_CHECK_ERROR();
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+    for (uint32_t i = 0; i < _sg.limits.max_vertex_attrs; i++) {
         _sg_gl_init_attr(&_sg.gl.cache.attrs[i].gl_attr);
         glDisableVertexAttribArray(i);
         _SG_GL_CHECK_ERROR();
@@ -5400,7 +5407,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         pip->gl_attrs[attr_index].vb_index = -1;
     }
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+    for (uint32_t attr_index = 0; attr_index < _sg.limits.max_vertex_attrs; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
         if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
             break;
@@ -5413,7 +5420,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         if (!_sg_strempty(&shd->attrs[attr_index].name)) {
             attr_loc = glGetAttribLocation(pip->shader->gl_prog, _sg_strptr(&shd->attrs[attr_index].name));
         }
-        SOKOL_ASSERT(attr_loc < SG_MAX_VERTEX_ATTRIBUTES);
+        SOKOL_ASSERT(attr_loc < (GLint)_sg.limits.max_vertex_attrs);
         if (attr_loc != -1) {
             _sg_gl_attr_t* gl_attr = &pip->gl_attrs[attr_loc];
             SOKOL_ASSERT(gl_attr->vb_index == -1);
@@ -6013,7 +6020,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     _sg.gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
-    for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+    for (uint32_t attr_index = 0; attr_index < _sg.limits.max_vertex_attrs; attr_index++) {
         _sg_gl_attr_t* attr = &pip->gl_attrs[attr_index];
         _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
@@ -6522,6 +6529,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.limits.max_image_size_3d = 2 * 1024;
     _sg.limits.max_image_size_array = 16 * 1024;
     _sg.limits.max_image_array_layers = 2 * 1024;
+    _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     /* see: https://docs.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_format_support */
     UINT dxgi_fmt_caps = 0;
@@ -8198,6 +8206,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg.limits.max_image_size_array = 8 * 1024;
         _sg.limits.max_image_array_layers = 2 * 1024;
     #endif
+    _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8SN]);
