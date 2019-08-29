@@ -3110,6 +3110,7 @@ typedef int  GLint;
 #define GL_MAX_CUBE_MAP_TEXTURE_SIZE 0x851C
 #define GL_MAX_3D_TEXTURE_SIZE 0x8073
 #define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+#define GL_MAX_VERTEX_ATTRIBS 0x8869
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
