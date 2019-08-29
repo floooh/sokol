@@ -976,21 +976,25 @@ _SOKOL_PRIVATE void _sapp_call_frame(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
-    if (_sapp.desc.cleanup_cb) {
-        _sapp.desc.cleanup_cb();
+    if (!_sapp.cleanup_called) {
+        if (_sapp.desc.cleanup_cb) {
+            _sapp.desc.cleanup_cb();
+        }
+        else if (_sapp.desc.cleanup_userdata_cb) {
+            _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
+        }
+        _sapp.cleanup_called = true;
     }
-    else if (_sapp.desc.cleanup_userdata_cb) {
-        _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
-    }
-    _sapp.cleanup_called = true;
 }
 
 _SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
-    if (_sapp.desc.event_cb) {
-        _sapp.desc.event_cb(e);
-    }
-    else if (_sapp.desc.event_userdata_cb) {
-        _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+    if (!_sapp.cleanup_called) {
+        if (_sapp.desc.event_cb) {
+            _sapp.desc.event_cb(e);
+        }
+        else if (_sapp.desc.event_userdata_cb) {
+            _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+        }
     }
 }
 
@@ -1360,6 +1364,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [_sapp_view_obj updateTrackingAreas];
         if (_sapp.desc.high_dpi) {
             [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
+        }
+        else {
+            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:NO];
         }
 
         _sapp_macos_window_obj.contentView = _sapp_view_obj;
