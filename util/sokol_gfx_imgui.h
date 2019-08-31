@@ -700,6 +700,7 @@ _SOKOL_PRIVATE void igEnd() {
 }
 #else
 #define IMVEC2(x,y) (ImVec2){x,y}
+#define IMVEC4(x,y,z,w) (ImVec4){x,y,z,w}
 #endif
 
 /*--- UTILS ------------------------------------------------------------------*/
