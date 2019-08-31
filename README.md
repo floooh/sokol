@@ -460,6 +460,13 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **31-Aug-2019**: The header **sokol_gfx_cimgui.h** has been merged into
+[**sokol_gfx_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h).
+Same idea as merging sokol_cimgui.h into sokol_imgui.h, the implementation
+is now "bilingual", and can either be included into a C++ file or into a C file.
+When included into a C++ file, the Dear ImGui C++ API will be called directly,
+otherwise the C API bindings via cimgui.h
+
 - **28-Aug-2019**: The header **sokol_cimgui.h** has been merged into
 [**sokol_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h).
 The sokol_cimgui.h header had been created to implement Dear ImGui UIs from

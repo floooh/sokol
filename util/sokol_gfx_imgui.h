@@ -5,22 +5,29 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+
         #define SOKOL_GFX_IMGUI_IMPL
-    before you include this file in *one* C++ file to create the
+
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
-    NOTE that the implementation must be compiled as C++ or Objective-C++
-    because it calls into the ImGui C++ API. The sokol_gfx_imgui.h API
-    itself is plain C though.
+    NOTE that the implementation can be compiled either as C++ or as C.
+    When compiled as C++, sokol_gfx_imgui.h will directly call into the
+    Dear ImGui C++ API. When compiled as C, sokol_gfx_imgui.h will call
+    cimgui.h functions instead.
 
     Include the following file(s) before including sokol_gfx_imgui.h:
 
         sokol_gfx.h
 
-    Additionally, include the following files(s) before including
-    the implementation of sokol_gfx_imgui.h:
+    Additionally, include the following headers before including the
+    implementation:
 
+    If the implementation is compiled as C++:
         imgui.h
+
+    If the implementation is compiled as C:
+        cimgui.h
 
     The sokol_gfx.h implementation must be compiled with debug trace hooks
     enabled by defining:
