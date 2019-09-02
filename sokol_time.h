@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_TIME_INCLUDED
 /*
     sokol_time.h    -- simple cross-platform time measurement
 
@@ -119,6 +119,7 @@ SOKOL_API_DECL double stm_ns(uint64_t ticks);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_TIME_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL

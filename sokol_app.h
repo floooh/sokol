@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_APP_INCLUDED
 /*
     sokol_app.h -- cross-platform application wrapper
 
@@ -794,6 +794,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
