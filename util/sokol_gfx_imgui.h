@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_GFX_IMGUI_INCLUDED
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
@@ -157,6 +157,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_GFX_IMGUI_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -583,9 +584,11 @@ SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif
+#endif /* SOKOL_GFX_IMGUI_INCLUDED */
 
 /*=== IMPLEMENTATION =========================================================*/
-#if defined SOKOL_GFX_IMGUI_IMPL
+#ifdef SOKOL_GFX_IMGUI_IMPL
+#define SOKOL_GFX_IMGUI_IMPL_INCLUDED (1)
 #if defined(__cplusplus)
     #if !defined(IMGUI_VERSION)
     #error "Please include imgui.h before the sokol_imgui.h implementation"

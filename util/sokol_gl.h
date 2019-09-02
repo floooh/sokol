@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_GL_INCLUDED
 /*
     sokol_gl.h -- OpenGL 1.x style rendering on top of sokol_gfx.h
 
@@ -577,6 +577,7 @@ SOKOL_API_DECL void sgl_draw(void);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif /* SOKOL_GL_INCLUDED */
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_GL_IMPL
