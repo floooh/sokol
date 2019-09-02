@@ -298,7 +298,8 @@
             sgl_end()
 
         This will record a new draw command in sokol-gl's internal command
-        list.
+        list, or it will extend the previous draw command if no relevant
+        state has changed since the last sgl_begin/end pair.
 
     --- inside a sokol-gfx rendering pass, call:
 
@@ -386,9 +387,29 @@
                       sg_apply_uniforms()
                     - finally call sg_draw()
 
-    All other functions just modify the internally tracked state, add
+    All other functions only modify the internally tracked state, add
     data to the vertex, uniform and command buffers, or manipulate
     the matrix stack.
+
+    ON DRAW COMMAND MERGING
+    =======================
+    Not every call to sgl_end() will automatically record a new draw command.
+    If possible, the previous draw command will simply be extended,
+    resulting in fewer actual draw calls later in sgl_draw().
+
+    A draw command will be merged with the previous command if "no relevant
+    state has changed" since the last sgl_end(), meaning:
+
+    - no calls to sgl_apply_viewport() and sgl_apply_scissor_rect()
+    - the primitive type hasn't changed
+    - the primitive type isn't a 'strip type' (no line or triangle strip)
+    - the pipeline state object hasn't changed
+    - none of the matrices has changed
+    - none of the texture state has changed
+
+    Merging a draw command simply means that the number of vertices
+    to render in the previous draw command will be incremented by the
+    number of vertices in the new draw command.
 
     LICENSE
     =======
