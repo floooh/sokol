@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_FETCH_INCLUDED
 /*
     sokol_fetch.h -- asynchronous data loading/streaming
 
@@ -937,6 +937,7 @@ SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_FETCH_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL

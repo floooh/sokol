@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_AUDIO_INCLUDED
 /*
     sokol_audio.h -- cross-platform audio-streaming API
 
@@ -418,6 +418,7 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_AUDIO_INCLUDED
 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_IMPL
@@ -569,8 +570,8 @@ typedef struct {
 
 typedef struct {
     pthread_mutex_t mutex;
-    pthread_cond_t cond;  
-    int count;  
+    pthread_cond_t cond;
+    int count;
 } _saudio_semaphore_t;
 
 typedef struct {
@@ -1472,12 +1473,12 @@ _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
         /* get next output buffer, advance, next buffer. */
         int16_t* out_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
         _saudio.backend.active_buffer = (_saudio.backend.active_buffer + 1) % SAUDIO_NUM_BUFFERS;
-        int16_t* next_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];     
+        int16_t* next_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
 
         /* queue this buffer */
         const int buffer_size_bytes = _saudio.buffer_frames * _saudio.num_channels * sizeof(short);
         (*_saudio.backend.player_buffer_queue)->Enqueue(_saudio.backend.player_buffer_queue, out_buffer, buffer_size_bytes);
-        
+
         /* fill the next buffer */
         _saudio_opensles_fill_buffer();
         const int num_samples = _saudio.num_channels * _saudio.buffer_frames;
@@ -1491,7 +1492,7 @@ _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
     return 0;
 }
 
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) { 
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     _saudio.backend.thread_stop = 1;
     pthread_join(_saudio.backend.thread, 0);
 
@@ -1509,11 +1510,11 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; i++) {
         SOKOL_FREE(_saudio.backend.output_buffers[i]);
-    }    
+    }
     SOKOL_FREE(_saudio.backend.src_buffer);
 }
 
-_SOKOL_PRIVATE bool _saudio_backend_init(void) { 
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; ++i) {
@@ -1590,9 +1591,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     /* Output mix. */
     _saudio.backend.out_locator.locatorType = SL_DATALOCATOR_OUTPUTMIX;
     _saudio.backend.out_locator.outputMix = _saudio.backend.output_mix_obj;
-        
+
     _saudio.backend.dst_data_sink.pLocator = &_saudio.backend.out_locator;
-    _saudio.backend.dst_data_sink.pFormat = NULL;    
+    _saudio.backend.dst_data_sink.pFormat = NULL;
 
     /* setup player */
     {
@@ -1600,9 +1601,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         const SLboolean req[] = { SL_BOOLEAN_FALSE, SL_BOOLEAN_TRUE };
 
         (*_saudio.backend.engine)->CreateAudioPlayer(_saudio.backend.engine, &_saudio.backend.player_obj, &src, &_saudio.backend.dst_data_sink, sizeof(ids) / sizeof(ids[0]), ids, req);
-        
+
         (*_saudio.backend.player_obj)->Realize(_saudio.backend.player_obj, SL_BOOLEAN_FALSE);
-    
+
         (*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_PLAY, &_saudio.backend.player);
         (*_saudio.backend.player_obj)->GetInterface(_saudio.backend.player_obj, SL_IID_VOLUME, &_saudio.backend.player_vol);
 

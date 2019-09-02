@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_GFX_INCLUDED
 /*
     sokol_gfx.h -- simple 3D API wrapper
 
@@ -2036,6 +2036,7 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_GFX_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
