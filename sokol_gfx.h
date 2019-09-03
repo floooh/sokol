@@ -739,6 +739,7 @@ typedef struct sg_features {
     bool msaa_render_targets:1;
     bool imagetype_3d:1;        /* creation of SG_IMAGETYPE_3D images is supported */
     bool imagetype_array:1;     /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_border_color:1;
 } sg_features;
 
 /*
@@ -964,6 +965,7 @@ typedef enum sg_wrap {
     _SG_WRAP_DEFAULT,   /* value 0 reserved for default-init */
     SG_WRAP_REPEAT,
     SG_WRAP_CLAMP_TO_EDGE,
+    SG_WRAP_CLAMP_TO_BORDER,
     SG_WRAP_MIRRORED_REPEAT,
     _SG_WRAP_NUM,
     _SG_WRAP_FORCE_U32 = 0x7FFFFFFF
@@ -1469,6 +1471,7 @@ typedef struct sg_image_desc {
     sg_wrap wrap_v;
     sg_wrap wrap_w;
     uint32_t max_anisotropy;
+    float border_color[4];
     float min_lod;
     float max_lod;
     sg_image_content content;
@@ -2608,6 +2611,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    float border_color[4];
     uint32_t max_anisotropy;
     uint32_t upd_frame_index;
     DXGI_FORMAT d3d11_format;
@@ -3940,6 +3944,7 @@ _SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
 _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
     switch (w) {
         case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
+        case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_BORDER;
         case SG_WRAP_REPEAT:            return GL_REPEAT;
         case SG_WRAP_MIRRORED_REPEAT:   return GL_MIRRORED_REPEAT;
         default: SOKOL_UNREACHABLE; return 0;
@@ -4514,6 +4519,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_border_color = false;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -4588,6 +4594,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_border_color = false;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -4712,6 +4719,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.features.msaa_render_targets = false;
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
+    _sg.features.image_border_color = false;
 
     /* limits */
     _sg_gl_init_limits();
@@ -6398,6 +6406,7 @@ _SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
     switch (m) {
         case SG_WRAP_REPEAT:            return D3D11_TEXTURE_ADDRESS_WRAP;
         case SG_WRAP_CLAMP_TO_EDGE:     return D3D11_TEXTURE_ADDRESS_CLAMP;
+        case SG_WRAP_CLAMP_TO_BORDER:   return D3D11_TEXTURE_ADDRESS_BORDER;
         case SG_WRAP_MIRRORED_REPEAT:   return D3D11_TEXTURE_ADDRESS_MIRROR;
         default: SOKOL_UNREACHABLE; return (D3D11_TEXTURE_ADDRESS_MODE) 0;
     }
@@ -6524,6 +6533,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_border_color = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -6706,6 +6716,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->wrap_u = desc->wrap_u;
     img->wrap_v = desc->wrap_v;
     img->wrap_w = desc->wrap_w;
+    img->border_color[0] = desc->border_color[0];
+    img->border_color[1] = desc->border_color[1];
+    img->border_color[2] = desc->border_color[2];
+    img->border_color[3] = desc->border_color[3];
     img->max_anisotropy = desc->max_anisotropy;
     img->upd_frame_index = 0;
     const bool injected = (0 != desc->d3d11_texture);
@@ -6886,6 +6900,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
         d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->wrap_u);
         d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->wrap_v);
         d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->wrap_w);
+        d3d11_smp_desc.BorderColor[0] = img->border_color[0];
+        d3d11_smp_desc.BorderColor[1] = img->border_color[1];
+        d3d11_smp_desc.BorderColor[2] = img->border_color[2];
+        d3d11_smp_desc.BorderColor[3] = img->border_color[3];
         d3d11_smp_desc.MaxAnisotropy = img->max_anisotropy;
         d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         d3d11_smp_desc.MinLOD = desc->min_lod;
@@ -8192,6 +8210,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_border_color = false;
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
