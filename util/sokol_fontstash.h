@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_FONTSTASH_INCLUDED
 /*
     sokol_fontstash.h -- renderer for https://github.com/memononen/fontstash
                          on top of sokol_gl.h
@@ -180,6 +180,7 @@ SOKOL_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif /* SOKOL_FONTSTASH_INCLUDED */
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_FONTSTASH_IMPL

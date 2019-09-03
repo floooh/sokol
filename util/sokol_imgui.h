@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_IMGUI_INCLUDED
 /*
     sokol_imgui.h -- drop-in Dear ImGui renderer/event-handler for sokol_gfx.h
 
@@ -232,6 +232,7 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif /* SOKOL_IMGUI_INCLUDED */
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMGUI_IMPL
