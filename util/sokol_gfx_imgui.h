@@ -941,8 +941,18 @@ _SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
     switch (w) {
         case SG_WRAP_REPEAT:            return "SG_WRAP_REPEAT";
         case SG_WRAP_CLAMP_TO_EDGE:     return "SG_WRAP_CLAMP_TO_EDGE";
+        case SG_WRAP_CLAMP_TO_BORDER:   return "SG_WRAP_CLAMP_TO_BORDER";
         case SG_WRAP_MIRRORED_REPEAT:   return "SG_WRAP_MIRRORED_REPEAT";
         default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_bordercolor_string(sg_border_color bc) {
+    switch (bc) {
+        case SG_BORDERCOLOR_TRANSPARENT_BLACK:  return "SG_BORDERCOLOR_TRANSPARENT_BLACK";
+        case SG_BORDERCOLOR_OPAQUE_BLACK:       return "SG_BORDERCOLOR_OPAQUE_BLACK";
+        case SG_BORDERCOLOR_OPAQUE_WHITE:       return "SG_BORDERCOLOR_OPAQUE_WHITE";
+        default:                                return "???";
     }
 }
 
@@ -2707,6 +2717,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             igText("Wrap U:            %s", _sg_imgui_wrap_string(desc->wrap_u));
             igText("Wrap V:            %s", _sg_imgui_wrap_string(desc->wrap_v));
             igText("Wrap W:            %s", _sg_imgui_wrap_string(desc->wrap_w));
+            igText("Border Color:      %s", _sg_imgui_bordercolor_string(desc->border_color));
             igText("Max Anisotropy:    %d", desc->max_anisotropy);
             igText("Min LOD:           %.3f", desc->min_lod);
             igText("Max LOD:           %.3f", desc->max_lod);
@@ -3316,6 +3327,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
     igText("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
     igText("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
     igText("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
+    igText("    clamp_to_border: %s", _sg_imgui_bool_string(f.clamp_to_border));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
