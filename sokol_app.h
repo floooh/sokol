@@ -3112,6 +3112,8 @@ typedef int  GLint;
 #define GL_MAX_3D_TEXTURE_SIZE 0x8073
 #define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
 #define GL_MAX_VERTEX_ATTRIBS 0x8869
+#define GL_CLAMP_TO_BORDER 0x812D
+#define GL_TEXTURE_BORDER_COLOR 0x1004
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
@@ -3273,6 +3275,8 @@ typedef void  (GL_APIENTRY *PFN_glBlendColor)(GLfloat red, GLfloat green, GLfloa
 static PFN_glBlendColor _sapp_glBlendColor;
 typedef void  (GL_APIENTRY *PFN_glTexParameterf)(GLenum target, GLenum pname, GLfloat param);
 static PFN_glTexParameterf _sapp_glTexParameterf;
+typedef void  (GL_APIENTRY *PFN_glTexParameterfv)(GLenum target, GLenum pname, GLfloat* params);
+static PFN_glTexParameterfv _sapp_glTexParameterfv;
 typedef void  (GL_APIENTRY *PFN_glGetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
 static PFN_glGetShaderInfoLog _sapp_glGetShaderInfoLog;
 typedef void  (GL_APIENTRY *PFN_glDepthFunc)(GLenum func);
@@ -3394,6 +3398,7 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
     _SAPP_GLPROC(glClearColor);
     _SAPP_GLPROC(glBlendColor);
     _SAPP_GLPROC(glTexParameterf);
+    _SAPP_GLPROC(glTexParameterfv);
     _SAPP_GLPROC(glGetShaderInfoLog);
     _SAPP_GLPROC(glDepthFunc);
     _SAPP_GLPROC(glStencilOp);
@@ -3488,6 +3493,7 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
 #define glClearColor _sapp_glClearColor
 #define glBlendColor _sapp_glBlendColor
 #define glTexParameterf _sapp_glTexParameterf
+#define glTexParameterfv _sapp_glTexParameterfv
 #define glGetShaderInfoLog _sapp_glGetShaderInfoLog
 #define glDepthFunc _sapp_glDepthFunc
 #define glStencilOp _sapp_glStencilOp
