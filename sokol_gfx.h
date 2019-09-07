@@ -739,7 +739,7 @@ typedef struct sg_features {
     bool msaa_render_targets:1;
     bool imagetype_3d:1;        /* creation of SG_IMAGETYPE_3D images is supported */
     bool imagetype_array:1;     /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool clamp_to_border:1;     /* border color and clamp-to-border UV-wrap mode is supported */
+    bool image_clamp_to_border:1;   /* border color and clamp-to-border UV-wrap mode is supported */
 } sg_features;
 
 /*
@@ -968,6 +968,17 @@ typedef enum sg_filter {
 
     Platforms which don't support SG_WRAP_CLAMP_TO_BORDER will silently fall back
     to SG_WRAP_CLAMP_TO_EDGE without a validation error.
+
+    Platforms which support clamp-to-border are:
+
+        - all desktop GL platforms
+        - Metal on macOS
+        - D3D11
+
+    Platforms which do not support clamp-to-border:
+
+        - GLES2/3 and WebGL/WebGL2
+        - Metal on iOS
 */
 typedef enum sg_wrap {
     _SG_WRAP_DEFAULT,   /* value 0 reserved for default-init */
@@ -2463,6 +2474,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    sg_border_color border_color;
     uint32_t max_anisotropy;
     GLenum gl_target;
     GLuint gl_depth_render_buffer;
@@ -3971,7 +3983,11 @@ _SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
 _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
     switch (w) {
         case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
+        #if defined(SOKOL_GLCORE33)
         case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_BORDER;
+        #else
+        case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_EDGE;
+        #endif
         case SG_WRAP_REPEAT:            return GL_REPEAT;
         case SG_WRAP_MIRRORED_REPEAT:   return GL_MIRRORED_REPEAT;
         default: SOKOL_UNREACHABLE; return 0;
@@ -4546,7 +4562,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
-    _sg.features.clamp_to_border = false;
+    _sg.features.image_clamp_to_border = true;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -4621,7 +4637,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
-    _sg.features.clamp_to_border = false;
+    _sg.features.image_clamp_to_border = false;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -4746,7 +4762,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.features.msaa_render_targets = false;
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
-    _sg.features.clamp_to_border = false;
+    _sg.features.image_clamp_to_border = false;
 
     /* limits */
     _sg_gl_init_limits();
@@ -5093,6 +5109,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->wrap_u = desc->wrap_u;
     img->wrap_v = desc->wrap_v;
     img->wrap_w = desc->wrap_w;
+    img->border_color = desc->border_color;
     img->max_anisotropy = desc->max_anisotropy;
     img->upd_frame_index = 0;
 
@@ -5192,15 +5209,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                         glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                     }
                     #endif
+                    #if defined(SOKOL_GLCORE33)
+                    float border[4];
+                    switch (img->border_color) {
+                        case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
+                            break;
+                        case SG_BORDERCOLOR_OPAQUE_WHITE:
+                            border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
+                            break;
+                        default:
+                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
+                            break;
+                    }
+                    glTexParameterfv(img->gl_target, GL_TEXTURE_BORDER_COLOR, border);
+                    #endif
                 }
                 #if !defined(SOKOL_GLES2)
-                    if (!_sg.gl.gles2) {
-                        /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
-                        const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-                        const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-                        glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
-                        glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
-                    }
+                if (!_sg.gl.gles2) {
+                    /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
+                    const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
+                    const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
+                    glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
+                    glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
+                }
                 #endif
                 const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
                 int data_index = 0;
@@ -6560,7 +6592,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
-    _sg.features.clamp_to_border = true;
+    _sg.features.image_clamp_to_border = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -8268,9 +8300,9 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     #if defined(_SG_TARGET_MACOS)
-        _sg.features.clamp_to_border = true;
+        _sg.features.image_clamp_to_border = true;
     #else
-        _sg.features.clamp_to_border = false;
+        _sg.features.image_clamp_to_border = false;
     #endif
 
     #if defined(_SG_TARGET_MACOS)
