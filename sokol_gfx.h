@@ -6963,7 +6963,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             case SG_BORDERCOLOR_OPAQUE_WHITE:
                 for (int i = 0; i < 4; i++) {
                     d3d11_smp_desc.BorderColor[i] = 1.0f;
-                    break;
+                }
                 break;
             default:
                 /* opaque black */
