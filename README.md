@@ -3,7 +3,7 @@
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 
-[See what's new](#updates) (**28-Aug-2019**: sokol_cimgui.h merged into sokol_imgui.h)
+[See what's new](#updates) (**08-Sep-2019**: clamp-to-border texture sampling in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,24 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
+    - the enum ```sg_wrap``` has a new member ```SG_WRAP_CLAMP_TO_BORDER```
+    - there's a new enum ```sg_border_color```
+    - the struct ```sg_image_desc``` has a new member ```sg_border_color border_color```
+    - new feature flag in ```sg_features```: ```image_clamp_to_border```
+Note the following caveats:
+    - clamp-to-border is only supported on a subset of platforms, support can
+    be checked at runtime via ```sg_query_features().image_clamp_to_border```
+    (D3D11, desktop-GL and macOS-Metal support clamp-to-border,
+    all other platforms don't)
+    - there are three hardwired border colors: transparent-black,
+    opaque-black and opaque-white (modern 3D APIs have moved away from
+    a freely programmable border color)
+    - if clamp-to-border is not supported, sampling will fall back to
+    clamp-to-edge without a validation warning
+Thanks to @martincohen for suggesting the feature and providing the initial
+D3D11 implementation!
 
 - **31-Aug-2019**: The header **sokol_gfx_cimgui.h** has been merged into
 [**sokol_gfx_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h).
