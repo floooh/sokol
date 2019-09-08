@@ -2735,6 +2735,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
+#pragma comment (lib, "Shell32.lib")
 
 #if defined(SOKOL_D3D11)
 #ifndef D3D11_NO_HELPERS
@@ -4369,6 +4371,32 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_win32_destroy_window();
 }
 
+char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* o_argc) {
+    int argc;
+    LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
+
+    size_t size = wcslen(w_command_line) * 4;
+    char** argv = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (argc + 1) * sizeof(char*) + size);
+    char* args = (char*)&argv[argc + 1];
+    int n;
+    for (int i = 0; i < argc; ++i) {
+        n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, size, NULL, NULL);
+        if (n == 0) {
+            // This happening should be reported as a bug along with the original command line.
+            SOKOL_LOG("Failed to convert all arguments to utf8");
+            break;
+        }
+        argv[i] = args;
+        size -= n;
+        args += n;
+    }
+
+    LocalFree(w_argv);
+
+    *o_argc = argc;
+    return argv;
+}
+
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
@@ -4378,11 +4406,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-    int argc = __argc;
-    char** argv = __argv;
 #endif
+    int argc = 0;
+    char** argv = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc);
+
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_run(&desc);
+
+    HeapFree(GetProcessHeap(), 0, argv);
+
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
