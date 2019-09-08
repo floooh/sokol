@@ -465,7 +465,9 @@ Mainly some "missing features" for desktop apps:
     - there's a new enum ```sg_border_color```
     - the struct ```sg_image_desc``` has a new member ```sg_border_color border_color```
     - new feature flag in ```sg_features```: ```image_clamp_to_border```
-Note the following caveats:
+
+  Note the following caveats:
+
     - clamp-to-border is only supported on a subset of platforms, support can
     be checked at runtime via ```sg_query_features().image_clamp_to_border```
     (D3D11, desktop-GL and macOS-Metal support clamp-to-border,
