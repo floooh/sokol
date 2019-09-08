@@ -6680,6 +6680,59 @@ static const struct wl_registry_listener _registry_listener = {
 	.global_remove = handle_global_remove,
 };
 
+_SOKOL_PRIVATE EGLConfig print_egl_attribs(EGLint attribs[]) {
+    EGLint r, g, b, a, d, s, m, n;
+    EGLint index = 0;
+
+    EGLint attrib = attribs[index];
+    while(attrib != EGL_NONE) {
+        EGLint value = attribs[index + 1];
+        //SOKOL_PRINTF("EGL config attrib (%d): value (%d)\n", attrib, value);
+        switch(attrib)
+        {
+            case EGL_RED_SIZE:
+                r = value;
+                break;
+            case EGL_GREEN_SIZE:
+                g = value;
+                break;
+            case EGL_BLUE_SIZE:
+                b = value;
+                break;
+            case EGL_ALPHA_SIZE:
+                a = value;
+                break;
+            case EGL_DEPTH_SIZE:
+                d = value;
+                break;
+            case EGL_STENCIL_SIZE:
+                s = value;
+                break;
+            case EGL_SAMPLE_BUFFERS:
+                m = value;
+                break;
+            case EGL_SAMPLES:
+                n = value;
+                break;
+        }
+
+        index += 2;
+        attrib = attribs[index];
+    }
+
+    SOKOL_PRINTF(
+        "\tEGL_RED_SIZE: %d\n"
+        "\tEGL_GREEN_SIZE: %d\n"
+        "\tEGL_BLUE_SIZE: %d\n"
+        "\tEGL_ALPHA_SIZE: %d\n"
+        "\tEGL_DEPTH_SIZE: %d\n"
+        "\tEGL_STENCIL_SIZE: %d\n"
+        "\tEGL_SAMPLE_BUFFERS: %d\n"
+        "\tEGL_SAMPLES: %d\n",
+        r, g, b, a, d, s, m, n
+    );
+}
+
 _SOKOL_PRIVATE void print_egl_config(int32_t id) {
     EGLConfig c = _egl_configs[id];
     EGLint r, g, b, a, d, s, m, n;
@@ -6692,7 +6745,7 @@ _SOKOL_PRIVATE void print_egl_config(int32_t id) {
         eglGetConfigAttrib(_egl_display, c, EGL_SAMPLE_BUFFERS, &m) == EGL_TRUE && 
         eglGetConfigAttrib(_egl_display, c, EGL_SAMPLES, &n) == EGL_TRUE) {
         
-        SOKOL_PRINTF("EGL config (%d):\n"
+        SOKOL_PRINTF(
             "\tEGL_RED_SIZE: %d\n"
             "\tEGL_GREEN_SIZE: %d\n"
             "\tEGL_BLUE_SIZE: %d\n"
@@ -6701,7 +6754,7 @@ _SOKOL_PRIVATE void print_egl_config(int32_t id) {
             "\tEGL_STENCIL_SIZE: %d\n"
             "\tEGL_SAMPLE_BUFFERS: %d\n"
             "\tEGL_SAMPLES: %d\n",
-            id, r, g, b, a, d, s, m, n
+            r, g, b, a, d, s, m, n
         );
     }
 }
@@ -6740,7 +6793,7 @@ _SOKOL_PRIVATE void init_egl(struct wl_display *display) {
     EGLint sample_buffers = _sapp.sample_count > 1 ? 1 : 0;
     EGLint samples = _sapp.sample_count;
 
-    EGLint default_config[] = {
+    EGLint config_attribs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
@@ -6762,24 +6815,46 @@ _SOKOL_PRIVATE void init_egl(struct wl_display *display) {
         EGL_NONE
     };
 
-    eglChooseConfig(_egl_display, default_config,
-        _egl_configs, count, &n_configs);
-    
-    for (int32_t i = 0; i < n_configs; ++i) {
-        EGLConfig c = _egl_configs[i];
-        EGLint r, g, b, a, d, s, m, n;
-        if (eglGetConfigAttrib(_egl_display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_SAMPLE_BUFFERS, &m) == EGL_TRUE &&
-            eglGetConfigAttrib(_egl_display, c, EGL_SAMPLES, &n) == EGL_TRUE &&
-                r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) &&
-                d == 24 && s == 8 && m == sample_buffers && n == samples) {
-            _egl_config_id = i;
-            break;
+    SOKOL_PRINTF("EGL requested config:");
+    print_egl_attribs(config_attribs);
+
+    if (EGL_TRUE == eglChooseConfig(_egl_display, config_attribs, _egl_configs, count, &n_configs)) {
+        for (int32_t i = 0; i < n_configs; ++i) {
+            EGLConfig c = _egl_configs[i];
+            EGLint r, g, b, a, d, s, m, n;
+            if (eglGetConfigAttrib(_egl_display, c, EGL_RED_SIZE, &r) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_GREEN_SIZE, &g) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_BLUE_SIZE, &b) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_ALPHA_SIZE, &a) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_DEPTH_SIZE, &d) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_STENCIL_SIZE, &s) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_SAMPLE_BUFFERS, &m) == EGL_TRUE &&
+                eglGetConfigAttrib(_egl_display, c, EGL_SAMPLES, &n) == EGL_TRUE &&
+                    r == 8 && g == 8 && b == 8 && (alpha_size == 0 || a == alpha_size) &&
+                    d == 24 && s == 8 && m == sample_buffers && n == samples) {
+                _egl_config_id = i;
+                break;
+            }
+        }
+    }
+    else {
+        switch(eglGetError()) {
+            case EGL_BAD_DISPLAY:
+                SOKOL_FAIL("EGL_BAD_DISPLAY - display is not an EGL display connection!\n");                
+                return;
+            case EGL_BAD_ATTRIBUTE:
+                SOKOL_FAIL("EGL_BAD_ATTRIBUTE - attribute_list contains an invalid frame buffer "
+                    "configuration attribute or an attribute value that is unrecognized or out of range!\n");
+                return;
+            case EGL_NOT_INITIALIZED:
+                SOKOL_FAIL("EGL_NOT_INITIALIZED - display has not been initialized!\n");
+                return;
+            case EGL_BAD_PARAMETER:
+                SOKOL_FAIL("EGL_BAD_PARAMETER - num_config is NULL!\n");
+                return;
+            default:
+                SOKOL_FAIL("An unknown error occurred while picking the EGL config!\n");
+                return;
         }
     }
 
@@ -6792,6 +6867,7 @@ _SOKOL_PRIVATE void init_egl(struct wl_display *display) {
         _egl_config_id = 0;
     }
 
+    SOKOL_PRINTF("EGL picked config (%d):", _egl_config_id);
     print_egl_config(_egl_config_id);
 
     EGLint context_attribs[] = {
@@ -6809,7 +6885,7 @@ _SOKOL_PRIVATE void init_egl(struct wl_display *display) {
         EGL_NO_CONTEXT, context_attribs);
 
 	if (_egl_context == EGL_NO_CONTEXT) {
-		SOKOL_FAIL("Can't create EGL context");
+		SOKOL_FAIL("Can't create EGL context!\n");
 	}
 	else {
 		SOKOL_PRINTF("EGL context: %s",
