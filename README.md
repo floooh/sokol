@@ -475,7 +475,8 @@ Note the following caveats:
     a freely programmable border color)
     - if clamp-to-border is not supported, sampling will fall back to
     clamp-to-edge without a validation warning
-Thanks to @martincohen for suggesting the feature and providing the initial
+
+  Many thanks to @martincohen for suggesting the feature and providing the initial
 D3D11 implementation!
 
 - **31-Aug-2019**: The header **sokol_gfx_cimgui.h** has been merged into
