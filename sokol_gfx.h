@@ -739,6 +739,7 @@ typedef struct sg_features {
     bool msaa_render_targets:1;
     bool imagetype_3d:1;        /* creation of SG_IMAGETYPE_3D images is supported */
     bool imagetype_array:1;     /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_clamp_to_border:1;   /* border color and clamp-to-border UV-wrap mode is supported */
 } sg_features;
 
 /*
@@ -959,15 +960,52 @@ typedef enum sg_filter {
     and .wrap_w members when creating an image.
 
     The default wrap mode is SG_WRAP_REPEAT.
+
+    NOTE: SG_WRAP_CLAMP_TO_BORDER is not supported on all backends
+    and platforms. To check for support, call sg_query_features()
+    and check the "clamp_to_border" boolean in the returned
+    sg_features struct.
+
+    Platforms which don't support SG_WRAP_CLAMP_TO_BORDER will silently fall back
+    to SG_WRAP_CLAMP_TO_EDGE without a validation error.
+
+    Platforms which support clamp-to-border are:
+
+        - all desktop GL platforms
+        - Metal on macOS
+        - D3D11
+
+    Platforms which do not support clamp-to-border:
+
+        - GLES2/3 and WebGL/WebGL2
+        - Metal on iOS
 */
 typedef enum sg_wrap {
     _SG_WRAP_DEFAULT,   /* value 0 reserved for default-init */
     SG_WRAP_REPEAT,
     SG_WRAP_CLAMP_TO_EDGE,
+    SG_WRAP_CLAMP_TO_BORDER,
     SG_WRAP_MIRRORED_REPEAT,
     _SG_WRAP_NUM,
     _SG_WRAP_FORCE_U32 = 0x7FFFFFFF
 } sg_wrap;
+
+/*
+    sg_border_color
+
+    The border color to use when sampling a texture, and the UV wrap
+    mode is SG_WRAP_CLAMP_TO_BORDER.
+
+    The default border color is SG_BORDERCOLOR_OPAQUE_BLACK
+*/
+typedef enum sg_border_color {
+    _SG_BORDERCOLOR_DEFAULT,    /* value 0 reserved for default-init */
+    SG_BORDERCOLOR_TRANSPARENT_BLACK,
+    SG_BORDERCOLOR_OPAQUE_BLACK,
+    SG_BORDERCOLOR_OPAQUE_WHITE,
+    _SG_BORDERCOLOR_NUM,
+    _SG_BORDERCOLOR_FORCE_U32 = 0x7FFFFFFF
+} sg_border_color;
 
 /*
     sg_vertex_format
@@ -1422,6 +1460,7 @@ typedef struct sg_image_content {
     .wrap_u:            SG_WRAP_REPEAT
     .wrap_v:            SG_WRAP_REPEAT
     .wrap_w:            SG_WRAP_REPEAT (only SG_IMAGETYPE_3D)
+    .border_color       SG_BORDERCOLOR_OPAQUE_BLACK
     .max_anisotropy     1 (must be 1..16)
     .min_lod            0.0f
     .max_lod            FLT_MAX
@@ -1468,6 +1507,7 @@ typedef struct sg_image_desc {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    sg_border_color border_color;
     uint32_t max_anisotropy;
     float min_lod;
     float max_lod;
@@ -2434,6 +2474,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    sg_border_color border_color;
     uint32_t max_anisotropy;
     GLenum gl_target;
     GLuint gl_depth_render_buffer;
@@ -2608,6 +2649,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    sg_border_color border_color;
     uint32_t max_anisotropy;
     uint32_t upd_frame_index;
     DXGI_FORMAT d3d11_format;
@@ -2761,6 +2803,7 @@ typedef struct {
     sg_wrap wrap_u;
     sg_wrap wrap_v;
     sg_wrap wrap_w;
+    sg_border_color border_color;
     uint32_t max_anisotropy;
     int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
     int max_lod;
@@ -3940,6 +3983,11 @@ _SOKOL_PRIVATE GLenum _sg_gl_filter(sg_filter f) {
 _SOKOL_PRIVATE GLenum _sg_gl_wrap(sg_wrap w) {
     switch (w) {
         case SG_WRAP_CLAMP_TO_EDGE:     return GL_CLAMP_TO_EDGE;
+        #if defined(SOKOL_GLCORE33)
+        case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_BORDER;
+        #else
+        case SG_WRAP_CLAMP_TO_BORDER:   return GL_CLAMP_TO_EDGE;
+        #endif
         case SG_WRAP_REPEAT:            return GL_REPEAT;
         case SG_WRAP_MIRRORED_REPEAT:   return GL_MIRRORED_REPEAT;
         default: SOKOL_UNREACHABLE; return 0;
@@ -4514,6 +4562,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_clamp_to_border = true;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -4588,6 +4637,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_clamp_to_border = false;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -4712,6 +4762,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.features.msaa_render_targets = false;
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
+    _sg.features.image_clamp_to_border = false;
 
     /* limits */
     _sg_gl_init_limits();
@@ -5058,6 +5109,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->wrap_u = desc->wrap_u;
     img->wrap_v = desc->wrap_v;
     img->wrap_w = desc->wrap_w;
+    img->border_color = desc->border_color;
     img->max_anisotropy = desc->max_anisotropy;
     img->upd_frame_index = 0;
 
@@ -5157,15 +5209,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                         glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->wrap_w));
                     }
                     #endif
+                    #if defined(SOKOL_GLCORE33)
+                    float border[4];
+                    switch (img->border_color) {
+                        case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 0.0f;
+                            break;
+                        case SG_BORDERCOLOR_OPAQUE_WHITE:
+                            border[0] = 1.0f; border[1] = 1.0f; border[2] = 1.0f; border[3] = 1.0f;
+                            break;
+                        default:
+                            border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
+                            break;
+                    }
+                    glTexParameterfv(img->gl_target, GL_TEXTURE_BORDER_COLOR, border);
+                    #endif
                 }
                 #if !defined(SOKOL_GLES2)
-                    if (!_sg.gl.gles2) {
-                        /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
-                        const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
-                        const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-                        glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
-                        glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
-                    }
+                if (!_sg.gl.gles2) {
+                    /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
+                    const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
+                    const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
+                    glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
+                    glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
+                }
                 #endif
                 const int num_faces = img->type == SG_IMAGETYPE_CUBE ? 6 : 1;
                 int data_index = 0;
@@ -6398,6 +6465,7 @@ _SOKOL_PRIVATE D3D11_TEXTURE_ADDRESS_MODE _sg_d3d11_address_mode(sg_wrap m) {
     switch (m) {
         case SG_WRAP_REPEAT:            return D3D11_TEXTURE_ADDRESS_WRAP;
         case SG_WRAP_CLAMP_TO_EDGE:     return D3D11_TEXTURE_ADDRESS_CLAMP;
+        case SG_WRAP_CLAMP_TO_BORDER:   return D3D11_TEXTURE_ADDRESS_BORDER;
         case SG_WRAP_MIRRORED_REPEAT:   return D3D11_TEXTURE_ADDRESS_MIRROR;
         default: SOKOL_UNREACHABLE; return (D3D11_TEXTURE_ADDRESS_MODE) 0;
     }
@@ -6524,6 +6592,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    _sg.features.image_clamp_to_border = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -6706,6 +6775,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     img->wrap_u = desc->wrap_u;
     img->wrap_v = desc->wrap_v;
     img->wrap_w = desc->wrap_w;
+    img->border_color = desc->border_color;
     img->max_anisotropy = desc->max_anisotropy;
     img->upd_frame_index = 0;
     const bool injected = (0 != desc->d3d11_texture);
@@ -6886,6 +6956,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
         d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->wrap_u);
         d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->wrap_v);
         d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->wrap_w);
+        switch (img->border_color) {
+            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+                /* all 0.0f */
+                break;
+            case SG_BORDERCOLOR_OPAQUE_WHITE:
+                for (int i = 0; i < 4; i++) {
+                    d3d11_smp_desc.BorderColor[i] = 1.0f;
+                }
+                break;
+            default:
+                /* opaque black */
+                d3d11_smp_desc.BorderColor[3] = 1.0f;
+                break;
+        }
         d3d11_smp_desc.MaxAnisotropy = img->max_anisotropy;
         d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         d3d11_smp_desc.MinLOD = desc->min_lod;
@@ -7928,10 +8012,27 @@ _SOKOL_PRIVATE MTLSamplerAddressMode _sg_mtl_address_mode(sg_wrap w) {
     switch (w) {
         case SG_WRAP_REPEAT:            return MTLSamplerAddressModeRepeat;
         case SG_WRAP_CLAMP_TO_EDGE:     return MTLSamplerAddressModeClampToEdge;
+        #if defined(_SG_TARGET_MACOS)
+        case SG_WRAP_CLAMP_TO_BORDER:   return MTLSamplerAddressModeClampToBorderColor;
+        #else
+        /* clamp-to-border not supported on iOS, fall back to clamp-to-edge */
+        case SG_WRAP_CLAMP_TO_BORDER:   return MTLSamplerAddressModeClampToEdge;
+        #endif
         case SG_WRAP_MIRRORED_REPEAT:   return MTLSamplerAddressModeMirrorRepeat;
         default: SOKOL_UNREACHABLE; return (MTLSamplerAddressMode)0;
     }
 }
+
+#if defined(_SG_TARGET_MACOS)
+_SOKOL_PRIVATE MTLSamplerBorderColor _sg_mtl_border_color(sg_border_color c) {
+    switch (c) {
+        case SG_BORDERCOLOR_TRANSPARENT_BLACK: return MTLSamplerBorderColorTransparentBlack;
+        case SG_BORDERCOLOR_OPAQUE_BLACK: return MTLSamplerBorderColorOpaqueBlack;
+        case SG_BORDERCOLOR_OPAQUE_WHITE: return MTLSamplerBorderColorOpaqueWhite;
+        default: SOKOL_UNREACHABLE; return (MTLSamplerBorderColor)0;
+    }
+}
+#endif
 
 _SOKOL_PRIVATE MTLSamplerMinMagFilter _sg_mtl_minmag_filter(sg_filter f) {
     switch (f) {
@@ -8123,6 +8224,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     const sg_wrap wrap_u = img_desc->wrap_u;
     const sg_wrap wrap_v = img_desc->wrap_v;
     const sg_wrap wrap_w = img_desc->wrap_w;
+    const sg_border_color border_color = img_desc->border_color;
     const uint32_t max_anisotropy = img_desc->max_anisotropy;
     /* convert floats to valid int for proper comparison */
     const int min_lod = (int)(img_desc->min_lod * 1000.0f);
@@ -8136,6 +8238,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
             (wrap_v == item->wrap_v) &&
             (wrap_w == item->wrap_w) &&
             (max_anisotropy == item->max_anisotropy) &&
+            (border_color == item->border_color) &&
             (min_lod == item->min_lod) &&
             (max_lod == item->max_lod))
         {
@@ -8153,12 +8256,16 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const s
     new_item->min_lod = min_lod;
     new_item->max_lod = max_lod;
     new_item->max_anisotropy = max_anisotropy;
+    new_item->border_color = border_color;
     MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
     mtl_desc.sAddressMode = _sg_mtl_address_mode(wrap_u);
     mtl_desc.tAddressMode = _sg_mtl_address_mode(wrap_v);
     if (SG_IMAGETYPE_3D == img_desc->type) {
         mtl_desc.rAddressMode = _sg_mtl_address_mode(wrap_w);
     }
+    #if defined(_SG_TARGET_MACOS)
+        mtl_desc.borderColor = _sg_mtl_border_color(border_color);
+    #endif
     mtl_desc.minFilter = _sg_mtl_minmag_filter(min_filter);
     mtl_desc.magFilter = _sg_mtl_minmag_filter(mag_filter);
     mtl_desc.mipFilter = _sg_mtl_mip_filter(min_filter);
@@ -8192,6 +8299,11 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_render_targets = true;
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
+    #if defined(_SG_TARGET_MACOS)
+        _sg.features.image_clamp_to_border = true;
+    #else
+        _sg.features.image_clamp_to_border = false;
+    #endif
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
@@ -10392,6 +10504,7 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.wrap_u = _sg_def(def.wrap_u, SG_WRAP_REPEAT);
     def.wrap_v = _sg_def(def.wrap_v, SG_WRAP_REPEAT);
     def.wrap_w = _sg_def(def.wrap_w, SG_WRAP_REPEAT);
+    def.border_color = _sg_def(def.border_color, SG_BORDERCOLOR_OPAQUE_BLACK);
     def.max_anisotropy = _sg_def(def.max_anisotropy, 1);
     def.max_lod = _sg_def_flt(def.max_lod, FLT_MAX);
     return def;
