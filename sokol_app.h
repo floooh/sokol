@@ -19,6 +19,8 @@
     SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
+    SOKOL_FREE          - your own free function (default: free(p))
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -867,7 +869,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#if !defined(SOKOL_CALLOC) && !defined(SOKOL_FREE)
+#if !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
     #include <stdlib.h>
 #endif
 #if !defined(SOKOL_CALLOC)
@@ -2735,6 +2737,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
+#pragma comment (lib, "Shell32.lib")
 
 #if defined(SOKOL_D3D11)
 #ifndef D3D11_NO_HELPERS
@@ -4375,6 +4379,37 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_win32_destroy_window();
 }
 
+static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* o_argc) {
+    int argc = 0;
+    char** argv;
+    char* args;
+    size_t size;
+
+    LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
+    if (w_argv == NULL) {
+        _sapp_fail("Win32: failed to parse command line");
+    } else {
+        size_t size = wcslen(w_command_line) * 4;
+        argv = SOKOL_CALLOC(1, (argc + 1) * sizeof(char*) + size);
+        args = (char*)&argv[argc + 1];
+        int n;
+        for (int i = 0; i < argc; ++i) {
+            n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, size, NULL, NULL);
+            if (n == 0) {
+                _sapp_fail("Win32: failed to convert all arguments to utf8");
+                break;
+            }
+            argv[i] = args;
+            size -= n;
+            args += n;
+        }
+        LocalFree(w_argv);
+    }
+
+    *o_argc = argc;
+    return argv;
+}
+
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
@@ -4384,11 +4419,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-    int argc = __argc;
-    char** argv = __argv;
 #endif
+    int argc = 0;
+    char** argv = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc);
+
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_run(&desc);
+
+    SOKOL_FREE(argv);
+
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
