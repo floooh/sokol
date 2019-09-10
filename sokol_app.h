@@ -3866,7 +3866,9 @@ _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
 }
 
 _SOKOL_PRIVATE bool _sapp_win32_mouse_shown(void) {
-    CURSORINFO cursor_info = { .cbSize = sizeof(CURSORINFO) };
+    CURSORINFO cursor_info;
+    memset(&cursor_info, 0, sizeof(CURSORINFO));
+    cursor_info.cbSize = sizeof(CURSORINFO);
     GetCursorInfo(&cursor_info);
     return (cursor_info.flags & CURSOR_SHOWING) != 0;
 }
