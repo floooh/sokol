@@ -720,12 +720,12 @@ typedef enum sg_pixel_format {
     by sg_query_pixelformat().
 */
 typedef struct sg_pixelformat_info {
-    bool sample:1;      /* pixel format can be sampled in shaders */
-    bool filter:1;      /* pixel format can be sampled with filtering */
-    bool render:1;      /* pixel format can be used as render target */
-    bool blend:1;       /* alpha-blending is supported */
-    bool msaa:1;        /* pixel format can be used as MSAA render target */
-    bool depth:1;       /* pixel format is a depth format */
+    bool sample;        /* pixel format can be sampled in shaders */
+    bool filter;        /* pixel format can be sampled with filtering */
+    bool render;        /* pixel format can be used as render target */
+    bool blend;         /* alpha-blending is supported */
+    bool msaa;          /* pixel format can be used as MSAA render target */
+    bool depth;         /* pixel format is a depth format */
 } sg_pixelformat_info;
 
 /*
@@ -733,13 +733,13 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing:1;
-    bool origin_top_left:1;
-    bool multiple_render_targets:1;
-    bool msaa_render_targets:1;
-    bool imagetype_3d:1;        /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array:1;     /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool image_clamp_to_border:1;   /* border color and clamp-to-border UV-wrap mode is supported */
+    bool instancing;
+    bool origin_top_left;
+    bool multiple_render_targets;
+    bool msaa_render_targets;
+    bool imagetype_3d;          /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array;       /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_clamp_to_border; /* border color and clamp-to-border UV-wrap mode is supported */
 } sg_features;
 
 /*
