@@ -4383,18 +4383,17 @@ static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* 
     int argc = 0;
     char** argv;
     char* args;
-    size_t size;
 
     LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
     if (w_argv == NULL) {
         _sapp_fail("Win32: failed to parse command line");
     } else {
         size_t size = wcslen(w_command_line) * 4;
-        argv = SOKOL_CALLOC(1, (argc + 1) * sizeof(char*) + size);
+        argv = (char**) SOKOL_CALLOC(1, (argc + 1) * sizeof(char*) + size);
         args = (char*)&argv[argc + 1];
         int n;
         for (int i = 0; i < argc; ++i) {
-            n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, size, NULL, NULL);
+            n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, (int)size, NULL, NULL);
             if (n == 0) {
                 _sapp_fail("Win32: failed to convert all arguments to utf8");
                 break;
@@ -4405,7 +4404,6 @@ static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* 
         }
         LocalFree(w_argv);
     }
-
     *o_argc = argc;
     return argv;
 }
@@ -4413,23 +4411,24 @@ static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* 
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
 #else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-#endif
-    int argc = 0;
-    char** argv = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc);
-
-    sapp_desc desc = sokol_main(argc, argv);
+    int argc_utf8 = 0;
+    char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
+    sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
     _sapp_run(&desc);
-
-    SOKOL_FREE(argv);
-
+    SOKOL_FREE(argv_utf8);
     return 0;
 }
+#endif /* SOKOL_WIN32_FORCE_MAIN */
 #endif /* SOKOL_NO_ENTRY */
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
