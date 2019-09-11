@@ -746,6 +746,10 @@ SOKOL_API_DECL float sapp_dpi_scale(void);
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+/* show or hide the mouse cursor */
+SOKOL_API_DECL void sapp_show_mouse(bool visible);
+/* show or hide the mouse cursor */
+SOKOL_API_DECL bool sapp_mouse_shown();
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -3865,6 +3869,18 @@ _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int 
         /* input string doesn't fit into destination buffer */
         return false;
     }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
+    ShowCursor((BOOL)shown);
+}
+
+_SOKOL_PRIVATE bool _sapp_win32_mouse_shown(void) {
+    CURSORINFO cursor_info;
+    memset(&cursor_info, 0, sizeof(CURSORINFO));
+    cursor_info.cbSize = sizeof(CURSORINFO);
+    GetCursorInfo(&cursor_info);
+    return (cursor_info.flags & CURSOR_SHOWING) != 0;
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
@@ -7065,6 +7081,22 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
+}
+
+SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
+    #if defined(_WIN32)
+    _sapp_win32_show_mouse(shown);
+    #else
+    _SOKOL_UNUSED(shown);
+    #endif
+}
+
+SOKOL_API_IMPL bool sapp_mouse_shown(void) {
+    #if defined(_WIN32)
+    return _sapp_win32_mouse_shown();
+    #else
+    return false;
+    #endif
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
