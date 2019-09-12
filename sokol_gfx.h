@@ -442,7 +442,9 @@
         - SG_VERTEXFORMAT_BYTE4N
         - SG_VERTEXFORMAT_UBYTE4N
         - SG_VERTEXFORMAT_SHORT2N
+        - SG_VERTEXFORMAT_USHORT2N
         - SG_VERTEXFORMAT_SHORT4N
+        - SG_VERTEXFORMAT_USHORT4N
 
       D3D11 will not convert *non-normalized* vertex formats
       to floating point vertex shader inputs, those can
@@ -470,7 +472,9 @@
         - SG_VERTEXFORMAT_BYTE4N,
         - SG_VERTEXFORMAT_UBYTE4N,
         - SG_VERTEXFORMAT_SHORT2N,
+        - SG_VERTEXFORMAT_USHORT2N
         - SG_VERTEXFORMAT_SHORT4N,
+        - SG_VERTEXFORMAT_USHORT4N
 
     TODO:
     ====
@@ -1025,8 +1029,10 @@ typedef enum sg_vertex_format {
     SG_VERTEXFORMAT_UBYTE4N,
     SG_VERTEXFORMAT_SHORT2,
     SG_VERTEXFORMAT_SHORT2N,
+    SG_VERTEXFORMAT_USHORT2N,
     SG_VERTEXFORMAT_SHORT4,
     SG_VERTEXFORMAT_SHORT4N,
+    SG_VERTEXFORMAT_USHORT4N,
     SG_VERTEXFORMAT_UINT10_N2,
     _SG_VERTEXFORMAT_NUM,
     _SG_VERTEXFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -3187,8 +3193,10 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UBYTE4N:   return 4;
         case SG_VERTEXFORMAT_SHORT2:    return 4;
         case SG_VERTEXFORMAT_SHORT2N:   return 4;
+        case SG_VERTEXFORMAT_USHORT2N:  return 4;
         case SG_VERTEXFORMAT_SHORT4:    return 8;
         case SG_VERTEXFORMAT_SHORT4N:   return 8;
+        case SG_VERTEXFORMAT_USHORT4N:  return 8;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         case SG_VERTEXFORMAT_INVALID:   return 0;
         default:
@@ -3845,8 +3853,10 @@ _SOKOL_PRIVATE GLint _sg_gl_vertexformat_size(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UBYTE4N:   return 4;
         case SG_VERTEXFORMAT_SHORT2:    return 2;
         case SG_VERTEXFORMAT_SHORT2N:   return 2;
+        case SG_VERTEXFORMAT_USHORT2N:  return 2;
         case SG_VERTEXFORMAT_SHORT4:    return 4;
         case SG_VERTEXFORMAT_SHORT4N:   return 4;
+        case SG_VERTEXFORMAT_USHORT4N:  return 4;
         case SG_VERTEXFORMAT_UINT10_N2: return 4;
         default: SOKOL_UNREACHABLE; return 0;
     }
@@ -3870,6 +3880,9 @@ _SOKOL_PRIVATE GLenum _sg_gl_vertexformat_type(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_SHORT4:
         case SG_VERTEXFORMAT_SHORT4N:
             return GL_SHORT;
+        case SG_VERTEXFORMAT_USHORT2N:
+        case SG_VERTEXFORMAT_USHORT4N:
+            return GL_UNSIGNED_SHORT;
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_UNSIGNED_INT_2_10_10_10_REV;
         default:
@@ -3882,7 +3895,9 @@ _SOKOL_PRIVATE GLboolean _sg_gl_vertexformat_normalized(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_BYTE4N:
         case SG_VERTEXFORMAT_UBYTE4N:
         case SG_VERTEXFORMAT_SHORT2N:
+        case SG_VERTEXFORMAT_USHORT2N:
         case SG_VERTEXFORMAT_SHORT4N:
+        case SG_VERTEXFORMAT_USHORT4N:
         case SG_VERTEXFORMAT_UINT10_N2:
             return GL_TRUE;
         default:
@@ -6483,8 +6498,10 @@ _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UBYTE4N:   return DXGI_FORMAT_R8G8B8A8_UNORM;
         case SG_VERTEXFORMAT_SHORT2:    return DXGI_FORMAT_R16G16_SINT;
         case SG_VERTEXFORMAT_SHORT2N:   return DXGI_FORMAT_R16G16_SNORM;
+        case SG_VERTEXFORMAT_USHORT2N:  return DXGI_FORMAT_R16G16_UNORM;
         case SG_VERTEXFORMAT_SHORT4:    return DXGI_FORMAT_R16G16B16A16_SINT;
         case SG_VERTEXFORMAT_SHORT4N:   return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case SG_VERTEXFORMAT_USHORT4N:  return DXGI_FORMAT_R16G16B16A16_UNORM;
         case SG_VERTEXFORMAT_UINT10_N2: return DXGI_FORMAT_R10G10B10A2_UNORM;
         default: SOKOL_UNREACHABLE; return (DXGI_FORMAT) 0;
     }
@@ -7793,8 +7810,10 @@ _SOKOL_PRIVATE MTLVertexFormat _sg_mtl_vertex_format(sg_vertex_format fmt) {
         case SG_VERTEXFORMAT_UBYTE4N:   return MTLVertexFormatUChar4Normalized;
         case SG_VERTEXFORMAT_SHORT2:    return MTLVertexFormatShort2;
         case SG_VERTEXFORMAT_SHORT2N:   return MTLVertexFormatShort2Normalized;
+        case SG_VERTEXFORMAT_USHORT2N:  return MTLVertexFormatUShort2Normalized;
         case SG_VERTEXFORMAT_SHORT4:    return MTLVertexFormatShort4;
         case SG_VERTEXFORMAT_SHORT4N:   return MTLVertexFormatShort4Normalized;
+        case SG_VERTEXFORMAT_USHORT4N:  return MTLVertexFormatUShort4Normalized;
         case SG_VERTEXFORMAT_UINT10_N2: return MTLVertexFormatUInt1010102Normalized;
         default: SOKOL_UNREACHABLE; return (MTLVertexFormat)0;
     }
