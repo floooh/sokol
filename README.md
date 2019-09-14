@@ -1,5 +1,7 @@
 # Sokol
 
+[![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
+
 **Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
 bird of prey than the Eagle (Орёл, Oryol)
 

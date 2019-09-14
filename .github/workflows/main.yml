@@ -1,0 +1,73 @@
+name: build_and_test
+
+on: [push, pull_request]
+
+jobs:
+    windows:
+        runs-on: windows-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: Windows
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+            python fips build win64-vstudio-debug
+            python fips build win64-vstudio-release
+            python fips build d3d11-win64-vstudio-debug
+            python fips build d3d11-win64-vstudio-release
+            python fips build sapp-win64-vstudio-debug
+            python fips build sapp-win64-vstudio-release
+            python fips build sapp-d3d11-win64-vstudio-debug
+            python fips build sapp-d3d11-win64-vstudio-release
+            python fips run sokol-test sapp-win64-vstudio-debug
+    mac:
+        runs-on: macos-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: macOS
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+            python fips build osx-make-debug
+            python fips build osx-make-release
+            python fips build metal-osx-make-debug
+            python fips build metal-osx-make-release
+            python fips build sapp-metal-osx-make-debug
+            python fips build sapp-metal-osx-make-release
+            python fips run sokol-test sapp-metal-osx-make-debug
+    linux:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: Linux
+          run: |
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+            python fips build linux-make-debug
+            python fips build linux-make-release
+            python fips build sapp-linux-make-debug
+            python fips build sapp-linux-make-release
+            python fips run sokol-test sapp-linux-make-debug
+    emscripten:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: Emscripten
+          run: |
+            sudo apt-get install ninja-build
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+            python fips emsdk install latest
+            python fips build sapp-webgl2-wasm-ninja-debug
+            python fips build sapp-webgl2-wasm-ninja-release
+
+
