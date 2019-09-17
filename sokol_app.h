@@ -927,6 +927,7 @@ typedef struct {
     int sample_count;
     int swap_interval;
     float dpi_scale;
+    bool color_format_srgb;
     bool gles2_fallback;
     bool first_frame;
     bool init_called;
@@ -1332,7 +1333,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
         _sapp_view_obj.delegate = _sapp_macos_mtk_view_dlg_obj;
         _sapp_view_obj.device = _sapp_mtl_device_obj;
-        _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        _sapp_view_obj.colorPixelFormat = _sapp.color_format_srgb ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
         _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp_view_obj.sampleCount = _sapp.sample_count;
         _sapp_macos_window_obj.contentView = _sapp_view_obj;
@@ -3526,7 +3527,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp_dxgi_swap_chain_desc;
     sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
-    sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sc_desc->BufferDesc.Format = _sapp.color_format_srgb ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_B8G8R8A8_UNORM;
     sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp_win32_hwnd;
