@@ -719,6 +719,7 @@ typedef struct sapp_desc {
     bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
     const char* window_title;           /* the window title as UTF-8 encoded string */
     bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+    bool color_format_srgb;             /* if true, creates backbuffer with sRGB format */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -1033,6 +1034,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp_def(_sapp.desc.sample_count, 1);
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
+    _sapp.color_format_srgb = _sapp_def(_sapp.desc.color_format_srgb, false);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
     if (_sapp.desc.window_title) {
