@@ -4528,6 +4528,11 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint cfg_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+#if defined(SOKOL_GLES3)
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+#else	
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+#endif
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,

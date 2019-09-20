@@ -1519,14 +1519,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; ++i) {
         const int buffer_size_bytes = sizeof(int16_t) * _saudio.num_channels * _saudio.buffer_frames;
-        _saudio.backend.output_buffers[i] = SOKOL_MALLOC(buffer_size_bytes);
+        _saudio.backend.output_buffers[i] = (int16_t *)SOKOL_MALLOC(buffer_size_bytes);
         SOKOL_ASSERT(_saudio.backend.output_buffers[i]);
         memset(_saudio.backend.output_buffers[i], 0x0, buffer_size_bytes);
     }
 
     {
         const int buffer_size_bytes = _saudio.bytes_per_frame * _saudio.buffer_frames;
-        _saudio.backend.src_buffer = SOKOL_MALLOC(buffer_size_bytes);
+        _saudio.backend.src_buffer = (float *)SOKOL_MALLOC(buffer_size_bytes);
         SOKOL_ASSERT(_saudio.backend.src_buffer);
         memset(_saudio.backend.src_buffer, 0x0, buffer_size_bytes);
     }
