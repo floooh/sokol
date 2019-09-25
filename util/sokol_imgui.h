@@ -955,8 +955,8 @@ SOKOL_API_IMPL void simgui_render(void) {
         #else
             const int vtx_size = cl->VtxBuffer.Size * sizeof(ImDrawVert);
             const int idx_size = cl->IdxBuffer.Size * sizeof(ImDrawIdx);
-            const ImDrawVert* vtx_ptr = ImVector_ImDrawVert_front(&cl->VtxBuffer);
-            const ImDrawIdx* idx_ptr = ImVector_ImDrawIdx_front(&cl->IdxBuffer);
+            const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
+            const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
         #endif
         const int vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
         const int ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
