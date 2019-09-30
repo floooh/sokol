@@ -9,7 +9,8 @@ bird of prey than the Eagle (Орёл, Oryol)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
-Minimalistic header-only cross-platform libs in C:
+Minimalistic STB-style cross-platform single-file-libs written in C (or
+rather 'the subset of C which compiles both in C and C++'):
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
@@ -34,12 +35,7 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 - easier integration with other languages
 - easier integration into other projects
-- allows even smaller program binaries than Oryol
-
-Sokol will be a bit less convenient to use than Oryol, but that's ok since
-the Sokol headers are intended to be low-level building blocks.
-
-Eventually Oryol will just be a thin C++ layer over Sokol.
+- adds minimal size overhead to executables
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
