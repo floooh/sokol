@@ -35,7 +35,7 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 - easier integration with other languages
 - easier integration into other projects
-- adds minimal size overhead to executables
+- adds only minimal size overhead to executables
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
