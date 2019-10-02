@@ -1784,12 +1784,12 @@ typedef struct sg_pass_desc {
 /*
     sg_trace_hooks
 
-    Installable callback function to keep track of the sokol_gfx calls,
+    Installable callback functions to keep track of the sokol_gfx calls,
     this is useful for debugging, or keeping track of resource creation
     and destruction.
 
     Trace hooks are installed with sg_install_trace_hooks(), this returns
-    another sg_trace_hooks functions with the previous set of
+    another sg_trace_hooks struct with the previous set of
     trace hook function pointers. These should be invoked by the
     new trace hooks to form a proper call chain.
 */
