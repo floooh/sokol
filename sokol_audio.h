@@ -633,10 +633,10 @@ typedef struct { } _saudio_backend_t;
 
 /* a ringbuffer structure */
 typedef struct {
-    int head;  /* next slot to write to */
-    int tail;  /* next slot to read from */
-    int num;   /* number of slots in queue */
-    int queue[SAUDIO_RING_MAX_SLOTS];
+    uint32_t head;  /* next slot to write to */
+    uint32_t tail;  /* next slot to read from */
+    uint32_t num;   /* number of slots in queue */
+    uint32_t queue[SAUDIO_RING_MAX_SLOTS];
 } _saudio_ring_t;
 
 /* a packet FIFO structure */
@@ -728,11 +728,11 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) { (void)m; }
 #endif
 
 /*=== RING-BUFFER QUEUE IMPLEMENTATION =======================================*/
-_SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring_t* ring, int i) {
+_SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring_t* ring, uint32_t i) {
     return (uint16_t) (i % ring->num);
 }
 
-_SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, int num_slots) {
+_SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, uint32_t num_slots) {
     SOKOL_ASSERT((num_slots + 1) <= SAUDIO_RING_MAX_SLOTS);
     ring->head = 0;
     ring->tail = 0;
@@ -749,26 +749,26 @@ _SOKOL_PRIVATE bool _saudio_ring_empty(_saudio_ring_t* ring) {
 }
 
 _SOKOL_PRIVATE int _saudio_ring_count(_saudio_ring_t* ring) {
-    int count;
+    uint32_t count;
     if (ring->head >= ring->tail) {
         count = ring->head - ring->tail;
     }
     else {
         count = (ring->head + ring->num) - ring->tail;
     }
-    SOKOL_ASSERT((count >= 0) && (count < ring->num));
+    SOKOL_ASSERT(count < ring->num);
     return count;
 }
 
-_SOKOL_PRIVATE void _saudio_ring_enqueue(_saudio_ring_t* ring, int val) {
+_SOKOL_PRIVATE void _saudio_ring_enqueue(_saudio_ring_t* ring, uint32_t val) {
     SOKOL_ASSERT(!_saudio_ring_full(ring));
     ring->queue[ring->head] = val;
     ring->head = _saudio_ring_idx(ring, ring->head + 1);
 }
 
-_SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring_t* ring) {
+_SOKOL_PRIVATE uint32_t _saudio_ring_dequeue(_saudio_ring_t* ring) {
     SOKOL_ASSERT(!_saudio_ring_empty(ring));
-    int val = ring->queue[ring->tail];
+    uint32_t val = ring->queue[ring->tail];
     ring->tail = _saudio_ring_idx(ring, ring->tail + 1);
     return val;
 }
