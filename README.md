@@ -2,15 +2,15 @@
 
 [![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
 
-**Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
-bird of prey than the Eagle (Орёл, Oryol)
+Simple
+[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
+cross-platform libraries for C and C++, written in C.
 
 [See what's new](#updates) (**08-Sep-2019**: clamp-to-border texture sampling in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
-Minimalistic STB-style cross-platform single-file-libs written in C (or
-rather 'the subset of C which compiles both in C and C++'):
+Cross-platform libraries:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
@@ -18,6 +18,14 @@ rather 'the subset of C which compiles both in C and C++'):
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
 - **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
+
+Utility libraries:
+
+- **sokol\_imgui.h**: sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
+
+- **sokol\_gl.h**: OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
+- **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
+- **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
