@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**08-Sep-2019**: clamp-to-border texture sampling in sokol_gfx.h)
+[See what's new](#updates) (**08-Sep-2019**: clamp-to-border-color texture sampling in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
