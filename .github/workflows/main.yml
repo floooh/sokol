@@ -93,6 +93,7 @@ jobs:
         - uses: actions/checkout@v1
         - name: prepare
           run: |
+            sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
             mkdir workspace
             cd workspace
