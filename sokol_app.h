@@ -5925,6 +5925,7 @@ xdg_toplevel_unset_fullscreen(struct xdg_toplevel *xdg_toplevel)
 
 static struct wl_shm *_wl_shm = NULL;
 static struct wl_compositor *_wl_compositor = NULL;
+static struct wl_surface *_wl_surface = NULL;
 static struct wl_egl_window* _egl_window = NULL;
 
 static struct xdg_wm_base *_xdg_shell = NULL;
@@ -6240,8 +6241,10 @@ _SOKOL_PRIVATE void _sapp_wl_resize_window(struct window* win,
         _sapp.framebuffer_width = win->fbuf.width;
         _sapp.framebuffer_height = win->fbuf.height;
         _sapp.dpi_scale = scale;
-       
-        wl_egl_window_resize(_egl_window, sapp_width(), sapp_height(), 0, 0);
+
+        wl_surface_set_buffer_scale(_wl_surface, scale);
+        wl_egl_window_resize(_egl_window, 
+            win->fbuf.width, win->fbuf.height, 0, 0);
 
         // Send event to sapp
         _sapp_wl_app_event(SAPP_EVENTTYPE_RESIZED);
@@ -7061,6 +7064,8 @@ _SOKOL_PRIVATE void create_egl_window(struct wl_surface *surface,
     } else {
 	    SOKOL_FAIL("EGL context made current failed");
     }
+
+    _wl_surface = surface;
 }
 
 _SOKOL_PRIVATE void destroy_egl_window() {
