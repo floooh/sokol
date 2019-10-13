@@ -1,25 +1,36 @@
 # Sokol
 
-**Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
-bird of prey than the Eagle (Орёл, Oryol)
+[![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
 
-[See what's new](#updates)
+Simple
+[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
+cross-platform libraries for C and C++, written in C.
+
+[See what's new](#updates) (**08-Sep-2019**: clamp-to-border texture sampling in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
-Minimalistic header-only cross-platform libs in C:
+Cross-platform libraries:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
 - **sokol\_time.h**: time measurement
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
+- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
+
+Utility libraries:
+
+- **sokol\_imgui.h**: sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
+- **sokol\_gl.h**: OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
+- **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
+- **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
 minimal footprint on the web platform while still being useful.
 
-All headers are standalone and can be used indepedendently from each other.
+All headers are standalone and can be used independently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
@@ -31,12 +42,7 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 - easier integration with other languages
 - easier integration into other projects
-- allows even smaller program binaries than Oryol
-
-Sokol will be a bit less convenient to use than Oryol, but that's ok since
-the Sokol headers are intended to be low-level building blocks.
-
-Eventually Oryol will just be a thin C++ layer over Sokol.
+- adds only minimal size overhead to executables
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
@@ -285,6 +291,71 @@ int main() {
 }
 ```
 
+# sokol_fetch.h
+
+Load entire files, or stream data asynchronously over HTTP (emscripten/wasm)
+or the local filesystem (all native platforms).
+
+Simple C99 example loading a file into a static buffer:
+
+```c
+#include "sokol_fetch.h"
+
+static void response_callback(const sfetch_response*);
+
+#define MAX_FILE_SIZE (1024*1024)
+static uint8_t buffer[MAX_FILE_SIZE];
+
+// application init
+static void init(void) {
+    ...
+    // setup sokol-fetch with default config:
+    sfetch_setup(&(sfetch_desc_t){0});
+
+    // start loading a file into a statically allocated buffer:
+    sfetch_send(&(sfetch_request_t){
+        .path = "hello_world.txt",
+        .callback = response_callback
+        .buffer_ptr = buffer,
+        .buffer_size = sizeof(buffer)
+    });
+}
+
+// per frame...
+static void frame(void) {
+    ...
+    // need to call sfetch_dowork() once per frame to 'turn the gears':
+    sfetch_dowork();
+    ...
+}
+
+// the response callback is where the interesting stuff happens:
+static void reponse_callback(const sfetch_response_t* response) {
+    if (response->fetched) {
+        // data has been loaded into the provided buffer, do something
+        // with the data...
+        const void* data = response->buffer_ptr;
+        uint64_t data_size = response->fetched_size;
+    }
+    // the finished flag is set both on success and failure
+    if (response->failed) {
+        // oops, something went wrong
+        switch (response->error_code) {
+            SFETCH_ERROR_FILE_NOT_FOUND: ...
+            SFETCH_ERROR_BUFFER_TOO_SMALL: ...
+            ...
+        }
+    }
+}
+
+// application shutdown
+static void shutdown(void) {
+    ...
+    sfetch_shutdown();
+    ...
+}
+```
+
 # sokol_time.h:
 
 Simple cross-platform time measurement:
@@ -394,6 +465,149 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
+    - the enum ```sg_wrap``` has a new member ```SG_WRAP_CLAMP_TO_BORDER```
+    - there's a new enum ```sg_border_color```
+    - the struct ```sg_image_desc``` has a new member ```sg_border_color border_color```
+    - new feature flag in ```sg_features```: ```image_clamp_to_border```
+
+  Note the following caveats:
+
+    - clamp-to-border is only supported on a subset of platforms, support can
+    be checked at runtime via ```sg_query_features().image_clamp_to_border```
+    (D3D11, desktop-GL and macOS-Metal support clamp-to-border,
+    all other platforms don't)
+    - there are three hardwired border colors: transparent-black,
+    opaque-black and opaque-white (modern 3D APIs have moved away from
+    a freely programmable border color)
+    - if clamp-to-border is not supported, sampling will fall back to
+    clamp-to-edge without a validation warning
+
+  Many thanks to @martincohen for suggesting the feature and providing the initial
+D3D11 implementation!
+
+- **31-Aug-2019**: The header **sokol_gfx_cimgui.h** has been merged into
+[**sokol_gfx_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h).
+Same idea as merging sokol_cimgui.h into sokol_imgui.h, the implementation
+is now "bilingual", and can either be included into a C++ file or into a C file.
+When included into a C++ file, the Dear ImGui C++ API will be called directly,
+otherwise the C API bindings via cimgui.h
+
+- **28-Aug-2019**: The header **sokol_cimgui.h** has been merged into
+[**sokol_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h).
+The sokol_cimgui.h header had been created to implement Dear ImGui UIs from
+pure C applications, instead of having to fall back to C++ just for the UI
+code. However, there was a lot of code duplication between sokol_imgui.h and
+sokol_cimgui.h, so that it made more sense to merge the two headers. The C vs
+C++ code path will be selected automatically: When the implementation of
+sokol_imgui.h is included into a C++ source file, the Dear ImGui C++ API will
+be used. Otherwise, when the implementation is included into a C source file,
+the C API via cimgui.h
+
+- **27-Aug-2019**: [**sokol_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h)
+  now has an OpenSLES backend for Android. Many thanks to Sepehr Taghdisian (@septag)
+  for the PR!
+
+- **26-Aug-2019**: new utility header for text rendering, and fixes in sokol_gl.h:
+    - a new utility header [**sokol_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h)
+      which implements a renderer for [fontstash.h](https://github.com/memononen/fontstash)
+      on top of sokol_gl.h
+    - **sokol_gl.h** updates:
+        - Optimization: If no relevant state between two begin/end pairs has
+        changed, draw commands will be merged into a single sokol-gfx draw
+        call. This is especially useful for text- and sprite-rendering (previously,
+        each begin/end pair would always result in one draw call).
+        - Bugfix: When calling sgl_disable_texture() the previously active
+        texture would still remain active which could lead to rendering
+        artefacts. This has been fixed.
+        - Feature: It's now possible to provide a custom shader in the
+        'desc' argument of *sgl_make_pipeline()*, as long as the shader
+        is "compatible" with sokol_gl.h, see the sokol_fontstash.h
+        header for an example. This feature isn't "advertised" in the
+        sokol_gl.h documentation because it's a bit brittle (for instance
+        if sokol_gl.h updates uniform block structures, custom shaders
+        would break), but it may still come in handy in some situations.
+
+- **20-Aug-2019**: sokol_gfx.h has a couple new query functions to inspect the
+  default values of resource-creation desc structures:
+
+    ```c
+    sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
+    sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
+    sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
+    sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
+    sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
+    ```
+  These functions take a pointer to a resource creation desc struct that
+  may contain zero-initialized values (to indicate default values) and
+  return a new struct where the zero-init values have been replaced with
+  concrete values. This is useful to inspect the actual creation attributes
+  of a resource.
+
+- **18-Aug-2019**:
+    - Pixelformat and runtime capabilities modernization in sokol_gfx.h (breaking changes):
+        - The list of pixel formats supported in sokol_gfx.h has been modernized,
+          many new formats are available, and some formats have been removed. The
+          supported pixel formats are now identical with what WebGPU provides,
+          minus the SRGB formats (if SRGB conversion is needed it should be done
+          in the pixel shader)
+        - The pixel format list is now more "orthogonal":
+            - one, two or four color components (R, RG, RGBA)
+            - 8-, 16- or 32-bit component width
+            - unsigned-normalized (no postfix), signed-normalized (SN postfix),
+              unsigned-integer (UI postfix) and signed-integer (SI postfix)
+              and float (F postfix) component types.
+            - special pixel formats BGRA8 (default render target format on
+              Metal and D3D11), RGB10A2 and RG11B10F
+            - DXT compressed formats replaced with BC1 to BC7 (BC1 to BC3
+              are identical to the old DXT pixel formats)
+            - packed 16-bit formats (like RGBA4) have been removed
+            - packed 24-bit formats (RGB8) have been removed
+        - Use the new function ```sg_query_pixelformat()``` to get detailed
+          runtime capability information about a pixelformat (for instance
+          whether it is supported at all, can be used as render target etc...).
+        - Use the new function ```sg_query_limits()``` to query "numeric limits"
+          like maximum texture dimensions for different texture types.
+        - The enumeration ```sg_feature``` and the function ```sg_query_feature()```
+          has been replaced with the new function ```sg_query_features()```, which
+          returns a struct ```sg_features``` (this contains a bool for each
+          optional feature).
+        - The default pixelformat for render target images and pipeline objects
+          now depends on the backend:
+            - for GL backends, the default pixelformat stays the same: RGBA8
+            - for the Metal and D3D11 backends, the default pixelformat for
+            render target images is now BGRA8 (the reason is because
+            MTKView's pixelformat was always BGRA8 but this was "hidden"
+            through an internal hack, and a BGRA swapchain is more efficient
+            than RGBA in D3D11/DXGI)
+        - Because of the above RGBA/BGRA change, you may see pixelformat validation
+          errors in existing code if the code assumes that a render target image is
+          always created with a default pixelformat of RGBA8.
+    - Changes in sokol_app.h:
+        - The D3D11 backend now creates the DXGI swapchain with BGRA8 pixelformat
+          (previously: RGBA8), this allows more efficient presentation in some
+          situations since no format-conversion-blit needs to happen.
+
+- **18-Jul-2019**:
+    - sokol_fetch.h has been fixed and can be used again :)
+
+- **11-Jul-2019**:
+    - Don't use sokol_fetch.h for now, the current version assumes that
+      it is possible to obtain the content size of a file from the
+      HTTP server without downloading the entire file first. Turns out
+      that's not possible with vanilla HTTP when the web server serves
+      files compressed (in that case the Content-Length is the _compressed_
+      size, yet JS/WASM only has access to the uncompressed data).
+      Long story short, I need to go back to the drawing board :)
+
+- **06-Jul-2019**:
+    - new header [sokol_fetch.h](https://github.com/floooh/sokol/blob/master/sokol_fetch.h) for asynchronously loading data.
+        - make sure to carefully read the embedded documentation
+        for making the best use of the header
+        - two new samples: [simple PNG file loadng with stb_image.h](https://floooh.github.io/sokol-html5/loadpng-sapp.html) and  [MPEG1 streaming with pl_mpeg.h](https://floooh.github.io/sokol-html5/plmpeg-sapp.html)
+    - sokol_gfx.h: increased SG_MAX_SHADERSTAGE_BUFFERS configuration
+    constant from 4 to 8.
+
 - **10-Jun-2019**: sokol_app.h now has proper "application quit handling":
     - a pending quit can be intercepted, for instance to show a "Really Quit?" dialog box
     - application code can now initiate a "soft quit" (interceptable) or
@@ -502,7 +716,7 @@ layout definition in sg_pipeline_desc works:
     currently working on (here: https://github.com/floooh/sokol-tools).
 
     While working on getting reflection data out of the shaders (e.g. what
-    uniform blocks and textures the shader uses), it occured to me that
+    uniform blocks and textures the shader uses), it occurred to me that
     vertex-attribute-names and -semantics are actually part of the reflection
     info and belong to the shader, not to the vertex layout in the pipeline
     object (which only describes how the incoming vertex data maps to

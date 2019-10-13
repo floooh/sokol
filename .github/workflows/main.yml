@@ -1,0 +1,141 @@
+name: build_and_test
+
+on: [push, pull_request]
+
+jobs:
+    windows:
+        runs-on: windows-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+        - name: win64-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build win64-vstudio-debug
+        - name: win64-vstudio-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build win64-vstudio-release
+        - name: d3d11-win64-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build d3d11-win64-vstudio-debug
+        - name: d3d11-win64-vstudio-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build d3d11-win64-vstudio-release
+        - name: sapp-win64-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-win64-vstudio-debug
+        - name: sapp-win64-vstudio-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-win64-vstudio-release
+        - name: sapp-d3d11-win64-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-d3d11-win64-vstudio-debug
+        - name: sapp-d3d11-win64-vstudio-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-d3d11-win64-vstudio-release
+        - name: sokol-test sapp-win64-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips run sokol-test sapp-win64-vstudio-debug
+    mac:
+        runs-on: macos-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+        - name: osx-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build osx-make-debug
+        - name: osx-make-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build osx-make-release
+        - name: metal-osx-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build metal-osx-make-debug
+        - name: metal-osx-make-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build metal-osx-make-release
+        - name: sapp-metal-osx-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-metal-osx-make-debug
+        - name: sapp-metal-osx-make-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-metal-osx-make-release
+        - name: sokol-test sapp-metal-osx-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips run sokol-test sapp-metal-osx-make-debug
+    linux:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+        - name: linux-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build linux-make-debug
+        - name: linux-make-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build linux-make-release
+        - name: sapp-linux-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-linux-make-debug
+        - name: sapp-linux-make-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-linux-make-release
+        - name: sapp-linux-make-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips run sokol-test sapp-linux-make-debug
+    emscripten:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            sudo apt-get install ninja-build
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+            python fips emsdk install latest
+        - name: sapp-webgl2-wasm-ninja-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-webgl2-wasm-ninja-debug
+        - name: sapp-webgl2-wasm-ninja-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-webgl2-wasm-ninja-release

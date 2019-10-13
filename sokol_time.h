@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_TIME_INCLUDED
 /*
     sokol_time.h    -- simple cross-platform time measurement
 
@@ -119,6 +119,7 @@ SOKOL_API_DECL double stm_ns(uint64_t ticks);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_TIME_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_IMPL
@@ -164,6 +165,10 @@ typedef struct {
     double start;
 } _stm_state_t;
 #else /* anything else, this will need more care for non-Linux platforms */
+#ifdef ESP8266
+// On the ESP8266, clock_gettime ignores the first argument and CLOCK_MONOTONIC isn't defined
+#define CLOCK_MONOTONIC 0
+#endif
 #include <time.h>
 typedef struct {
     uint32_t initialized;
