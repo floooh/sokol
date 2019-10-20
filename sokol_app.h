@@ -1511,7 +1511,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 - (void)drawRect:(NSRect)bound {
     _sapp_macos_frame();
-    glFlush();
     [[_sapp_view_obj openGLContext] flushBuffer];
 }
 #endif
