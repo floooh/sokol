@@ -87,6 +87,40 @@ jobs:
           run: |
             cd workspace/sokol-samples
             python fips run sokol-test sapp-metal-osx-make-debug
+    ios:
+        runs-on: macos-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+        - name: ios-xcode-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        - name: ios-xcode-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build ios-xcode-release -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        - name: metal-ios-xcode-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build metal-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        - name: metal-ios-xcode-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build metal-ios-xcode-release -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        - name: sapp-ios-xcode-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        - name: sapp-metal-ios-xcode-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-metal-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     linux:
         runs-on: ubuntu-latest
         steps:
