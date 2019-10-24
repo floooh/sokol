@@ -714,6 +714,9 @@ typedef enum sg_pixel_format {
     SG_PIXELFORMAT_PVRTC_RGBA_4BPP,
     SG_PIXELFORMAT_ETC2_RGB8,
     SG_PIXELFORMAT_ETC2_RGB8A1,
+    SG_PIXELFORMAT_ETC2_RGBA8,
+    SG_PIXELFORMAT_ETC2_RG11,
+    SG_PIXELFORMAT_ETC2_RG11SN,
 
     _SG_PIXELFORMAT_NUM,
     _SG_PIXELFORMAT_FORCE_U32 = 0x7FFFFFFF
@@ -2236,6 +2239,15 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
     #ifndef GL_COMPRESSED_RGBA8_ETC2_EAC
     #define GL_COMPRESSED_RGBA8_ETC2_EAC 0x9278
     #endif
+    #ifndef GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2
+    #define GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 0x9276
+    #endif
+    #ifndef GL_COMPRESSED_RG11_EAC
+    #define GL_COMPRESSED_RG11_EAC 0x9272
+    #endif
+    #ifndef GL_COMPRESSED_SIGNED_RG11_EAC
+    #define GL_COMPRESSED_SIGNED_RG11_EAC 0x9273
+    #endif
     #ifndef GL_DEPTH24_STENCIL8
     #define GL_DEPTH24_STENCIL8 0x88F0
     #endif
@@ -3252,6 +3264,9 @@ _SOKOL_PRIVATE bool _sg_is_compressed_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_ETC2_RGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
+        case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_RG11:
+        case SG_PIXELFORMAT_ETC2_RG11SN:        
             return true;
         default:
             return false;
@@ -3356,6 +3371,9 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_RG11:
+        case SG_PIXELFORMAT_ETC2_RG11SN:        
             pitch = ((width + 3) / 4) * 16;
             pitch = pitch < 16 ? 16 : pitch;
             break;
@@ -3397,6 +3415,9 @@ _SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height)
         case SG_PIXELFORMAT_BC4_RSN:
         case SG_PIXELFORMAT_ETC2_RGB8:
         case SG_PIXELFORMAT_ETC2_RGB8A1:
+        case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_RG11:
+        case SG_PIXELFORMAT_ETC2_RG11SN:        
         case SG_PIXELFORMAT_BC2_RGBA:
         case SG_PIXELFORMAT_BC3_RGBA:
         case SG_PIXELFORMAT_BC5_RG:
@@ -4166,7 +4187,13 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_ETC2_RGB8:
             return GL_COMPRESSED_RGB8_ETC2;
         case SG_PIXELFORMAT_ETC2_RGB8A1:
+            return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        case SG_PIXELFORMAT_ETC2_RGBA8:
             return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case SG_PIXELFORMAT_ETC2_RG11:
+            return GL_COMPRESSED_RG11_EAC;
+        case SG_PIXELFORMAT_ETC2_RG11SN:
+            return GL_COMPRESSED_SIGNED_RG11_EAC;
         default:
             SOKOL_UNREACHABLE; return 0;
     }
@@ -4242,7 +4269,10 @@ _SOKOL_PRIVATE GLenum _sg_gl_teximage_internal_format(sg_pixel_format fmt) {
             case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:    return GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
             case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:    return GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG;
             case SG_PIXELFORMAT_ETC2_RGB8:          return GL_COMPRESSED_RGB8_ETC2;
-            case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGBA8_ETC2_EAC;
+            case SG_PIXELFORMAT_ETC2_RGB8A1:        return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+            case SG_PIXELFORMAT_ETC2_RGBA8:         return GL_COMPRESSED_RGBA8_ETC2_EAC;
+            case SG_PIXELFORMAT_ETC2_RG11:          return GL_COMPRESSED_RG11_EAC;
+            case SG_PIXELFORMAT_ETC2_RG11SN:        return GL_COMPRESSED_SIGNED_RG11_EAC;
             default: SOKOL_UNREACHABLE; return 0;
         }
     }
@@ -4526,6 +4556,9 @@ _SOKOL_PRIVATE void _sg_gl_init_pixelformats_pvrtc(void) {
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats_etc2(void) {
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
     _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11]);
+    _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
 }
 
 _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
@@ -7891,6 +7924,9 @@ _SOKOL_PRIVATE MTLPixelFormat _sg_mtl_pixel_format(sg_pixel_format fmt) {
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:        return MTLPixelFormatPVRTC_RGBA_4BPP;
         case SG_PIXELFORMAT_ETC2_RGB8:              return MTLPixelFormatETC2_RGB8;
         case SG_PIXELFORMAT_ETC2_RGB8A1:            return MTLPixelFormatETC2_RGB8A1;
+        case SG_PIXELFORMAT_ETC2_RGBA8:             return MTLPixelFormatEAC_RGBA8;
+        case SG_PIXELFORMAT_ETC2_RG11:              return MTLPixelFormatEAC_RG11Unorm;
+        case SG_PIXELFORMAT_ETC2_RG11SN:            return MTLPixelFormatEAC_RG11Snorm;
         #endif
         default: return MTLPixelFormatInvalid;
     }
@@ -8433,6 +8469,9 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_PVRTC_RGBA_4BPP]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8]);
         _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGB8A1]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RGBA8]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11]);
+        _sg_pixelformat_sf(&_sg.formats[SG_PIXELFORMAT_ETC2_RG11SN]);
     #endif
 }
 
