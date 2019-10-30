@@ -719,7 +719,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         if (!_simgui.desc.no_default_font) {
             io->Fonts->AddFontDefault();
         }
-        io->IniFilename = _simgui.desc.ini_filename;
     #else
         igCreateContext(NULL);
         igStyleColorsDark(igGetStyle());
@@ -727,8 +726,9 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         if (!_simgui.desc.no_default_font) {
             ImFontAtlas_AddFontDefault(io->Fonts, NULL);
         }
-        io->IniFilename = _simgui.desc.ini_filename;
     #endif
+    io->IniFilename = _simgui.desc.ini_filename;
+    io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
         io->KeyMap[ImGuiKey_Tab] = SAPP_KEYCODE_TAB;
         io->KeyMap[ImGuiKey_LeftArrow] = SAPP_KEYCODE_LEFT;
@@ -958,8 +958,8 @@ SOKOL_API_IMPL void simgui_render(void) {
             const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
             const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
         #endif
-        const int vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
-        const int ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
+        const uint32_t vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
+        const uint32_t ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
         /* don't render anything if the buffer is in overflow state (this is also
             checked internally in sokol_gfx, draw calls that attempt to draw with
             overflowed buffers will be silently dropped)
@@ -979,15 +979,18 @@ SOKOL_API_IMPL void simgui_render(void) {
         #else
             const int num_cmds = cl->CmdBuffer.Size;
         #endif
+        uint32_t vtx_offset = 0;
         for (int cmd_index = 0; cmd_index < num_cmds; cmd_index++) {
             ImDrawCmd* pcmd = &cl->CmdBuffer.Data[cmd_index];
             if (pcmd->UserCallback) {
                 pcmd->UserCallback(cl, pcmd);
             }
             else {
-                if (tex_id != pcmd->TextureId) {
+                if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = pcmd->TextureId;
+                    vtx_offset = pcmd->VtxOffset * sizeof(ImDrawVert);
                     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
+                    bind.vertex_buffer_offsets[0] = vb_offset + vtx_offset;
                     sg_apply_bindings(&bind);
                 }
                 const int scissor_x = (int) (pcmd->ClipRect.x * dpi_scale);
