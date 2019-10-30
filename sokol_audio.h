@@ -406,8 +406,8 @@ SOKOL_API_DECL void* saudio_userdata(void);
 SOKOL_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
 SOKOL_API_DECL int saudio_sample_rate(void);
-/* actual backend buffer size */
-SOKOL_API_DECL int saudio_buffer_size(void);
+/* return actual backend buffer size in number of frames */
+SOKOL_API_DECL int saudio_buffer_frames(void);
 /* actual number of channels */
 SOKOL_API_DECL int saudio_channels(void);
 /* get current number of frames to fill packet queue */
@@ -903,7 +903,10 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
 
 /*=== DUMMY BACKEND IMPLEMENTATION ===========================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
-_SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
+    return true;
+};
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
 /*=== COREAUDIO BACKEND IMPLEMENTATION =======================================*/
