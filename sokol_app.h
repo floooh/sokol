@@ -1588,7 +1588,13 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
-        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
+            as a workaround, to prevent key presses from sticking we'll also not send
+            key down events.
+        */
+        if (0 == (mods & SAPP_MODIFIER_SUPER)) {
+            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
@@ -2293,6 +2299,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
+            bool ignore_event = false;
             _sapp_init_event(type);
             _sapp.event.key_repeat = emsc_event->repeat;
             if (emsc_event->ctrlKey) {
@@ -2312,6 +2319,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
             else {
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
+                /* Special hack for macOS: if the Super key is pressed, macOS doesn't
+                    send keyUp events. As a workaround, to prevent keys from
+                    "sticking", don't send keyDown events either while Super is
+                    pressed.
+                */
+                if ((_sapp.event.key_code != SAPP_KEYCODE_LEFT_SUPER) &&
+                    (_sapp.event.key_code != SAPP_KEYCODE_RIGHT_SUPER))
+                {
+                    ignore_event = 0 != (_sapp.event.modifiers & SAPP_MODIFIER_SUPER);
+                }
                 /* only forward a certain key ranges to the browser */
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
@@ -2377,7 +2394,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp_call_event(&_sapp.event);
+            if (!ignore_event) {
+                _sapp_call_event(&_sapp.event);
+            }
         }
     }
     _sapp_emsc_update_keyboard_state();
