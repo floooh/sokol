@@ -1075,11 +1075,17 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             io->KeysDown[ev->key_code] = false;
             break;
         case SAPP_EVENTTYPE_CHAR:
-            #if defined(__cplusplus)
-                io->AddInputCharacter((ImWchar)ev->char_code);
-            #else
-                ImGuiIO_AddInputCharacter(io, (ImWchar)ev->char_code);
-            #endif
+            /* on some platforms, special keys may be reported as
+               characters, which may confuse some ImGui widgets,
+               drop those
+            */
+            if ((ev->char_code >= 32) && (ev->char_code != 127)) {
+                #if defined(__cplusplus)
+                    io->AddInputCharacter((ImWchar)ev->char_code);
+                #else
+                    ImGuiIO_AddInputCharacter(io, (ImWchar)ev->char_code);
+                #endif
+            }
             break;
         default:
             break;
