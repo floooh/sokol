@@ -1589,11 +1589,12 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
         /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
-            as a workaround, to prevent key presses from sticking we'll also not send
-            key down events.
+            as a workaround, to prevent key presses from sticking we'll send
+            a keyup event following right after the keydown if SUPER is also pressed
         */
-        if (0 == (mods & SAPP_MODIFIER_SUPER)) {
-            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        if (0 != (mods & SAPP_MODIFIER_SUPER)) {
+            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
         }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
@@ -2299,7 +2300,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
-            bool ignore_event = false;
+            bool send_keyup_followup = false;
             _sapp_init_event(type);
             _sapp.event.key_repeat = emsc_event->repeat;
             if (emsc_event->ctrlKey) {
@@ -2321,13 +2322,15 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
-                    "sticking", don't send keyDown events either while Super is
-                    pressed.
+                    "sticking", we'll send a keyup event following a keydown
+                    when the SUPER key is pressed
                 */
-                if ((_sapp.event.key_code != SAPP_KEYCODE_LEFT_SUPER) &&
-                    (_sapp.event.key_code != SAPP_KEYCODE_RIGHT_SUPER))
+                if ((type == SAPP_EVENTTYPE_KEY_DOWN) &&
+                    (_sapp.event.key_code != SAPP_KEYCODE_LEFT_SUPER) &&
+                    (_sapp.event.key_code != SAPP_KEYCODE_RIGHT_SUPER) &&
+                    (_sapp.event.modifiers & SAPP_MODIFIER_SUPER))
                 {
-                    ignore_event = 0 != (_sapp.event.modifiers & SAPP_MODIFIER_SUPER);
+                    send_keyup_followup = true;
                 }
                 /* only forward a certain key ranges to the browser */
                 switch (_sapp.event.key_code) {
@@ -2394,7 +2397,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            if (!ignore_event) {
+            _sapp_call_event(&_sapp.event);
+            if (send_keyup_followup) {
+                _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
                 _sapp_call_event(&_sapp.event);
             }
         }
