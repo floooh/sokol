@@ -101,6 +101,7 @@
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
+    clipboard           | ---     | YES   | ---   | ---   | ---     | ---   | YES
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
@@ -719,6 +720,8 @@ typedef struct sapp_desc {
     bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
     const char* window_title;           /* the window title as UTF-8 encoded string */
     bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+    bool enable_clipboard;              /* enable clipboard access, default is false */
+    int clipboard_size;                 /* max size of clipboard content in bytes */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -762,6 +765,10 @@ SOKOL_API_DECL void sapp_cancel_quit(void);
 SOKOL_API_DECL void sapp_quit(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_API_DECL uint64_t sapp_frame_count(void);
+/* write string into clipboard */
+SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
+/* read string from clipboard */
+SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -945,6 +952,9 @@ typedef struct {
     sapp_event event;
     sapp_desc desc;
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
+    bool clipboard_enabled;
+    int clipboard_size;
+    char* clipboard;
 } _sapp_state;
 static _sapp_state _sapp;
 
@@ -1034,6 +1044,11 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
+    _sapp.clipboard_enabled = _sapp.desc.enable_clipboard;
+    if (_sapp.clipboard_enabled) {
+        _sapp.clipboard_size = _sapp_def(_sapp.desc.clipboard_size, 8192);
+        _sapp.clipboard = (char*) SOKOL_CALLOC(1, _sapp.clipboard_size);
+    }
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     }
@@ -1041,6 +1056,14 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
         _sapp_strcpy("sokol_app", _sapp.window_title, sizeof(_sapp.window_title));
     }
     _sapp.dpi_scale = 1.0f;
+}
+
+_SOKOL_PRIVATE void _sapp_discard_state(void) {
+    if (_sapp.clipboard_enabled) {
+        SOKOL_ASSERT(_sapp.clipboard);
+        SOKOL_FREE((void*)_sapp.clipboard);
+    }
+    memset(&_sapp, 0, sizeof(_sapp));
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -1254,6 +1277,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     NSApp.delegate = _sapp_macos_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
+    _sapp_discard_state();
 }
 
 /* MacOS entry function */
@@ -1655,6 +1679,31 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
+void _sapp_macos_set_clipboard_string(const char* str) {
+    @autoreleasepool {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
+    }
+}
+
+const char* _sapp_macos_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard);
+    @autoreleasepool {
+        _sapp.clipboard[0] = 0;
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
+            return _sapp.clipboard;
+        }
+        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
+        if (!str) {
+            return _sapp.clipboard;
+        }
+        _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
+        return _sapp.clipboard;
+    }
+}
+
 #endif /* MacOS */
 
 /*== iOS =====================================================================*/
@@ -1708,6 +1757,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+    _sapp_discard_state();
 }
 
 /* iOS entry function */
@@ -2463,6 +2513,26 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
     return retval;
 }
 
+EM_JS(void, _sapp_emsc_js_set_clipboard_string, (const char* c_str), {
+    navigator.permissions.query({name:'clipboard-write'}).then(function(result){
+        if (result.state == 'granted') {
+            var str = UTF8ToString(c_str);
+            navigator.clipboard.writeText(str);
+        }
+    });
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(_sapp.clipboard);
+    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    _sapp_emsc_js_set_clipboard_string(str);
+}
+
+_SOKOL_PRIVATE const char* _sapp_emsc_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard);
+    return _sapp.clipboard;
+}
+
 _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
     _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
@@ -2636,6 +2706,8 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
     sapp_js_hook_beforeunload();
+
+    // NOT A BUG: do not call _sapp_discard_state()
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -4416,6 +4488,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_discard_state();
 }
 
 static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* o_argc) {
@@ -5191,6 +5264,8 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
     SOKOL_LOG("NativeActivity successfully created");
+
+    /* NOT A BUG: do NOT call sapp_discard_state() */
 }
 
 #endif /* Android */
@@ -7019,6 +7094,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
+    _sapp_discard_state();
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -7132,6 +7208,37 @@ SOKOL_API_IMPL void sapp_cancel_quit(void) {
 
 SOKOL_API_IMPL void sapp_quit(void) {
     _sapp.quit_ordered = true;
+}
+
+SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+    if (!_sapp.clipboard_enabled) {
+        return;
+    }
+    SOKOL_ASSERT(str);
+    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        _sapp_macos_set_clipboard_string(str);
+    #elif defined(__EMSCRIPTEN__)
+        _sapp_emsc_set_clipboard_string(str);
+    #elif defined(_WIN32)
+        /* FIXME */
+    #else
+        /* not implemented */
+    #endif
+}
+
+SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+    if (!_sapp.clipboard_enabled) {
+        return "";
+    }
+    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        return _sapp_macos_get_clipboard_string();
+    #elif defined(__EMSCRIPTEN__)
+        return _sapp_emsc_get_clipboard_string();
+    #elif defined(_WIN32)
+        /* FIXME */
+    #else
+        /* not implemented */
+    #endif
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {

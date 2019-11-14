@@ -288,6 +288,8 @@ typedef struct {
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     bool btn_down[SAPP_MAX_MOUSEBUTTONS];
     bool btn_up[SAPP_MAX_MOUSEBUTTONS];
+    bool keys_down[512];
+    bool keys_up[512];
     #endif
 } _simgui_state_t;
 static _simgui_state_t _simgui;
@@ -701,6 +703,16 @@ static const uint8_t _simgui_fs_bin[] = {
 #error "sokol_imgui.h: No sokol_gfx.h backend selected (SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL)"
 #endif
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+static void _simgui_set_clipboard(void* user_data, const char* text) {
+    sapp_set_clipboard_string(text);
+}
+
+static const char* _simgui_get_clipboard(void* user_data) {
+    return sapp_get_clipboard_string();
+}
+#endif
+
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_simgui, 0, sizeof(_simgui));
@@ -750,6 +762,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
         io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
         io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+        io->SetClipboardTextFn = _simgui_set_clipboard;
+        io->GetClipboardTextFn = _simgui_get_clipboard;
     #endif
 
     /* create sokol-gfx resources */
@@ -890,6 +904,20 @@ SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
         else if (_simgui.btn_up[i]) {
             _simgui.btn_up[i] = false;
             io->MouseDown[i] = false;
+        }
+    }
+    for (int i = 0; i < ImGuiKey_COUNT; i++) {
+        int ki = io->KeyMap[i];
+        if (ki == -1) {
+            continue;
+        }
+        if (_simgui.keys_down[ki]) {
+            _simgui.keys_down[ki] = false;
+            io->KeysDown[ki] = true;
+        }
+        else if (_simgui.keys_up[ki]) {
+            _simgui.keys_up[ki] = false;
+            io->KeysDown[ki] = false;
         }
     }
     if (io->WantTextInput && !sapp_keyboard_shown()) {
@@ -1069,17 +1097,21 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui.btn_up[0] = _simgui.btn_down[0] = false;
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
-            io->KeysDown[ev->key_code] = true;
+            _simgui.keys_down[ev->key_code] = true;
             break;
         case SAPP_EVENTTYPE_KEY_UP:
-            io->KeysDown[ev->key_code] = false;
+            _simgui.keys_up[ev->key_code] = true;
             break;
         case SAPP_EVENTTYPE_CHAR:
             /* on some platforms, special keys may be reported as
                characters, which may confuse some ImGui widgets,
-               drop those
+               drop those, also don't forward characters if some
+               modifiers have been pressed
             */
-            if ((ev->char_code >= 32) && (ev->char_code != 127)) {
+            if ((ev->char_code >= 32) &&
+                (ev->char_code != 127) &&
+                (0 == (ev->modifiers & (SAPP_MODIFIER_ALT|SAPP_MODIFIER_CTRL|SAPP_MODIFIER_SUPER))))
+            {
                 #if defined(__cplusplus)
                     io->AddInputCharacter((ImWchar)ev->char_code);
                 #else
