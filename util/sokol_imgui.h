@@ -1090,7 +1090,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         default:
             break;
     }
-    return io->WantCaptureKeyboard;
+    return io->WantCaptureKeyboard || io->WantCaptureMouse;
 }
 #endif
 
