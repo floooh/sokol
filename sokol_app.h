@@ -527,6 +527,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
+    SAPP_EVENTTYPE_CLIPBOARD_CHANGED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -1687,7 +1688,7 @@ void _sapp_macos_set_clipboard_string(const char* str) {
     }
 }
 
-const char* _sapp_macos_get_clipboard_string(void) {
+void _sapp_macos_update_clipboard_string(void) {
     SOKOL_ASSERT(_sapp.clipboard);
     @autoreleasepool {
         _sapp.clipboard[0] = 0;
@@ -1700,7 +1701,6 @@ const char* _sapp_macos_get_clipboard_string(void) {
             return _sapp.clipboard;
         }
         _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
-        return _sapp.clipboard;
     }
 }
 
@@ -2123,6 +2123,14 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
+    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_CHANGED);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 /*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
 EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
     return _sapp.html5_ask_leave_site ? 1 : 0;
@@ -2136,6 +2144,35 @@ EM_JS(void, sapp_js_hook_beforeunload, (void), {
         }
     });
 });
+
+EM_JS(void, sapp_js_init_clipboard, (void), {
+    window.addEventListener('paste', function(event) {
+        var pasted_str = event.clipboardData.getData('text');
+        ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
+    });
+});
+
+EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
+    var str = UTF8ToString(c_str);
+    var ta = document.createElement('textarea');
+    ta.setAttribute('autocomplete', 'off');
+    ta.setAttribute('autocorrect', 'off');
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('spellcheck', 'false');
+    ta.style.left = -100 + 'px';
+    ta.style.top = -100 + 'px';
+    ta.style.height = 1;
+    ta.style.width = 1;
+    ta.value = str;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
+    sapp_js_write_clipboard(str);
+}
 
 /* called from the emscripten event handler to update the keyboard visibility
     state, this must happen from an JS input event handler, otherwise
@@ -2367,6 +2404,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
             if (type == SAPP_EVENTTYPE_CHAR) {
                 _sapp.event.char_code = emsc_event->charCode;
+                /* workaround to make Cmd+V work on Safari */
+                if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) { 
+                    retval = false;
+                }
             }
             else {
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
@@ -2513,26 +2554,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
     return retval;
 }
 
-EM_JS(void, _sapp_emsc_js_set_clipboard_string, (const char* c_str), {
-    navigator.permissions.query({name:'clipboard-write'}).then(function(result){
-        if (result.state == 'granted') {
-            var str = UTF8ToString(c_str);
-            navigator.clipboard.writeText(str);
-        }
-    });
-});
-
-_SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
-    SOKOL_ASSERT(_sapp.clipboard);
-    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
-    _sapp_emsc_js_set_clipboard_string(str);
-}
-
-_SOKOL_PRIVATE const char* _sapp_emsc_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard);
-    return _sapp.clipboard;
-}
-
 _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
     _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
@@ -2637,9 +2658,16 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
+_SOKOL_PRIVATE void _sapp_emsc_init_clipboard(void) {
+    sapp_js_init_clipboard();
+}
+
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_emsc_init_keytable();
+    if (_sapp.clipboard_enabled) {
+        _sapp_emsc_init_clipboard();
+    }
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp.desc.width;
@@ -7210,6 +7238,7 @@ SOKOL_API_IMPL void sapp_quit(void) {
     _sapp.quit_ordered = true;
 }
 
+/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     if (!_sapp.clipboard_enabled) {
         return;
@@ -7224,6 +7253,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #else
         /* not implemented */
     #endif
+    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
@@ -7231,9 +7261,10 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return "";
     }
     #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        return _sapp_macos_get_clipboard_string();
+        _sapp_macos_update_clipboard_string();
+        return _sapp.clipboard;
     #elif defined(__EMSCRIPTEN__)
-        return _sapp_emsc_get_clipboard_string();
+        return _sapp.clipboard;
     #elif defined(_WIN32)
         /* FIXME */
     #else
