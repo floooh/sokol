@@ -527,7 +527,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
-    SAPP_EVENTTYPE_CLIPBOARD_CHANGED,
+    SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -764,11 +764,13 @@ SOKOL_API_DECL void sapp_request_quit(void);
 SOKOL_API_DECL void sapp_cancel_quit(void);
 /* intiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
 SOKOL_API_DECL void sapp_quit(void);
+/* call from inside event callback to consume the current event (don't forward to platform) */
+SOKOL_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_API_DECL uint64_t sapp_frame_count(void);
 /* write string into clipboard */
 SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
-/* read string from clipboard */
+/* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
@@ -941,6 +943,7 @@ typedef struct {
     bool cleanup_called;
     bool quit_requested;
     bool quit_ordered;
+    bool event_consumed;
     const char* html5_canvas_name;
     bool html5_ask_leave_site;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -1005,7 +1008,7 @@ _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
+_SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     if (!_sapp.cleanup_called) {
         if (_sapp.desc.event_cb) {
             _sapp.desc.event_cb(e);
@@ -1013,6 +1016,13 @@ _SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
         else if (_sapp.desc.event_userdata_cb) {
             _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
         }
+    }
+    if (_sapp.event_consumed) {
+        _sapp.event_consumed = false;
+        return true;
+    }
+    else {
+        return false;
     }
 }
 
@@ -2126,7 +2136,7 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
     _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
     if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_CHANGED);
+        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -2488,10 +2498,15 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp_call_event(&_sapp.event);
+            if (_sapp_call_event(&_sapp.event)) {
+                /* consume event via sapp_consume_event() */
+                retval = true;
+            }
             if (send_keyup_followup) {
                 _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
-                _sapp_call_event(&_sapp.event);
+                if (_sapp_call_event(&_sapp.event)) {
+                    retval = true;
+                }
             }
         }
     }
@@ -7236,6 +7251,10 @@ SOKOL_API_IMPL void sapp_cancel_quit(void) {
 
 SOKOL_API_IMPL void sapp_quit(void) {
     _sapp.quit_ordered = true;
+}
+
+SOKOL_API_IMPL void sapp_consume_event(void) {
+    _sapp.event_consumed = true;
 }
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
