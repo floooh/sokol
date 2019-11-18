@@ -1634,9 +1634,10 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             as a workaround, to prevent key presses from sticking we'll send
             a keyup event following right after the keydown if SUPER is also pressed
         */
-        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        const sapp_keycode key_code = _sapp_translate_key(event.keyCode);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, key_code, event.isARepeat, mods);
         if (0 != (mods & SAPP_MODIFIER_SUPER)) {
-            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, key_code, event.isARepeat, mods);
         }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
@@ -1652,6 +1653,11 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                 _sapp.event.key_repeat = event.isARepeat;
                 _sapp_call_event(&_sapp.event);
             }
+        }
+        /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
+        if ((mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1705,7 +1711,7 @@ void _sapp_macos_set_clipboard_string(const char* str) {
     }
 }
 
-void _sapp_macos_update_clipboard_string(void) {
+const char* _sapp_macos_get_clipboard_string(void) {
     SOKOL_ASSERT(_sapp.clipboard);
     @autoreleasepool {
         _sapp.clipboard[0] = 0;
@@ -1719,6 +1725,7 @@ void _sapp_macos_update_clipboard_string(void) {
         }
         _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
     }
+    return _sapp.clipboard;
 }
 
 #endif /* MacOS */
@@ -7287,8 +7294,7 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return "";
     }
     #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        _sapp_macos_update_clipboard_string();
-        return _sapp.clipboard;
+        return _sapp_macos_get_clipboard_string();
     #elif defined(__EMSCRIPTEN__)
         return _sapp.clipboard;
     #elif defined(_WIN32)
