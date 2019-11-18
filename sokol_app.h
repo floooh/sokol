@@ -105,6 +105,13 @@
 
     - what about bluetooth keyboard / mouse on mobile platforms?
 
+    TODO
+    ====
+    - windows (linux?) clipboard support
+    - document clipboard handling
+    - document sapp_consume_event()
+    - sapp_consume_event() on non-web platforms?
+
     STEP BY STEP
     ============
     --- Add a sokol_main() function to your code which returns a sapp_desc structure
