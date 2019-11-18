@@ -219,6 +219,7 @@ typedef struct simgui_desc_t {
     float dpi_scale;
     const char* ini_filename;
     bool no_default_font;
+    bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
 } simgui_desc_t;
 
 SOKOL_API_DECL void simgui_setup(const simgui_desc_t* desc);
@@ -756,12 +757,14 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io->KeyMap[ImGuiKey_Space] = SAPP_KEYCODE_SPACE;
         io->KeyMap[ImGuiKey_Enter] = SAPP_KEYCODE_ENTER;
         io->KeyMap[ImGuiKey_Escape] = SAPP_KEYCODE_ESCAPE;
-        io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
-        io->KeyMap[ImGuiKey_C] = SAPP_KEYCODE_C;
-        io->KeyMap[ImGuiKey_V] = SAPP_KEYCODE_V;
-        io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
-        io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
-        io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+        if (!_simgui.desc.disable_hotkeys) {
+            io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
+            io->KeyMap[ImGuiKey_C] = SAPP_KEYCODE_C;
+            io->KeyMap[ImGuiKey_V] = SAPP_KEYCODE_V;
+            io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
+            io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
+            io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+        }
         io->SetClipboardTextFn = _simgui_set_clipboard;
         io->GetClipboardTextFn = _simgui_get_clipboard;
     #endif
