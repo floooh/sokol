@@ -4023,6 +4023,12 @@ _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int 
     }
 }
 
+_SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
+    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
+    memset(dst, 0, dst_num_bytes);
+    return 0 != WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
+}
+
 _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
     ShowCursor((BOOL)shown);
 }
@@ -4230,6 +4236,11 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
         _sapp.event.key_code = _sapp.keycodes[vk];
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if ((type == SAPP_EVENTTYPE_KEY_DOWN) && (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && (_sapp.event.key_code == SAPP_KEYCODE_V)) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -4479,6 +4490,69 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     if (shcore) {
         FreeLibrary(shcore);
     }
+}
+
+_SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(str);
+    SOKOL_ASSERT(_sapp_win32_hwnd);
+    SOKOL_ASSERT(_sapp.clipboard_enabled && (_sapp.clipboard_size > 0));
+
+    wchar_t* wchar_buf = 0;
+    const int wchar_buf_size = _sapp.clipboard_size * sizeof(wchar_t);
+    HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
+    if (!object) {
+        goto error;
+    }
+    wchar_buf = GlobalLock(object);
+    if (!wchar_buf) {
+        goto error;
+    }
+    if (!_sapp_win32_utf8_to_wide(str, wchar_buf, wchar_buf_size)) {
+        goto error;   
+    }
+    GlobalUnlock(wchar_buf);
+    wchar_buf = 0;
+    if (!OpenClipboard(_sapp_win32_hwnd)) {
+        goto error;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_UNICODETEXT, object);
+    CloseClipboard();
+    return true;
+
+error:
+    if (wchar_buf) {
+        GlobalUnlock(object);
+    }
+    if (object) {
+        GlobalFree(object);
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard_enabled && _sapp.clipboard);
+    SOKOL_ASSERT(_sapp_win32_hwnd);
+    if (!OpenClipboard(_sapp_win32_hwnd)) {
+        /* silently ignore any errors and just return the current
+           content of the local clipboard buffer
+        */
+        return _sapp.clipboard;
+    }
+    HANDLE object = GetClipboardData(CF_UNICODETEXT);
+    if (!object) {
+        CloseClipboard();
+        return _sapp.clipboard;
+    }
+    const wchar_t* wchar_buf = GlobalLock(object);
+    if (!wchar_buf) {
+        CloseClipboard();
+        return _sapp.clipboard;
+    }
+    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard, _sapp.clipboard_size);
+    GlobalUnlock(object);
+    CloseClipboard();
+    return _sapp.clipboard;
 }
 
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
@@ -7282,7 +7356,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #elif defined(__EMSCRIPTEN__)
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_WIN32)
-        /* FIXME */
+        _sapp_win32_set_clipboard_string(str);
     #else
         /* not implemented */
     #endif
@@ -7298,7 +7372,7 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     #elif defined(__EMSCRIPTEN__)
         return _sapp.clipboard;
     #elif defined(_WIN32)
-        /* FIXME */
+        return _sapp_win32_get_clipboard_string();
     #else
         /* not implemented */
     #endif
