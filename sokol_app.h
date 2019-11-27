@@ -6923,6 +6923,11 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if ((type == SAPP_EVENTTYPE_KEY_DOWN) && (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && (_sapp.event.key_code == SAPP_KEYCODE_V)) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -7419,6 +7424,7 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp_win32_get_clipboard_string();
     #else
         /* not implemented */
+        return _sapp.clipboard;
     #endif
 }
 
