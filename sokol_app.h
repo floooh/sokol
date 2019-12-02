@@ -4554,7 +4554,7 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     if (!object) {
         goto error;
     }
-    wchar_buf = GlobalLock(object);
+    wchar_buf = (wchar_t*) GlobalLock(object);
     if (!wchar_buf) {
         goto error;
     }
@@ -4595,7 +4595,7 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
         CloseClipboard();
         return _sapp.clipboard;
     }
-    const wchar_t* wchar_buf = GlobalLock(object);
+    const wchar_t* wchar_buf = (const wchar_t*) GlobalLock(object);
     if (!wchar_buf) {
         CloseClipboard();
         return _sapp.clipboard;
