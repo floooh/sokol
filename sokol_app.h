@@ -292,15 +292,16 @@
 
     Enabling the clipboard buffer will dynamically allocate a clipboard buffer
     for UTF-8 encoded text data of the requested size in bytes, the default
-    size if 8 KBytes.
+    size if 8 KBytes. Strings that don't fit into the clipboard buffer
+    will be silently clipped.
 
     To send data to the clipboard, call sapp_set_clipboard_string() with
     a pointer to an UTF-8 encoded, null-terminated C-string.
 
     NOTE that on the HTML5 platform, sapp_set_clipboard_string() must be
-    called from inside a 'short-lived event handler' (simply place the 
-    call to sapp_set_clipboard_string() into your sokol-app event
-    handler function and it will work as expected).
+    called from inside a 'short-lived event handler', and there are a few
+    other HTML5-specific caveats to workaround. You'll basically have to
+    tinker around until it works in all browsers.
 
     To get data from the clipboard, check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED
     event in your event handler function, and then call sapp_get_clipboard_string()
@@ -1699,7 +1700,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             }
         }
         /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
-        if ((mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+        if (_sapp.clipboard_enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
@@ -2192,10 +2193,12 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
-    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
-        _sapp_call_event(&_sapp.event);
+    if (_sapp.clipboard_enabled) {
+        _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -4281,7 +4284,11 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if ((type == SAPP_EVENTTYPE_KEY_DOWN) && (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && (_sapp.event.key_code == SAPP_KEYCODE_V)) {
+        if (_sapp.clipboard_enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) && 
+            (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && 
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
@@ -6924,7 +6931,11 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if ((type == SAPP_EVENTTYPE_KEY_DOWN) && (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && (_sapp.event.key_code == SAPP_KEYCODE_V)) {
+        if (_sapp.clipboard_enabled && 
+            (type == SAPP_EVENTTYPE_KEY_DOWN) && 
+            (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && 
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
