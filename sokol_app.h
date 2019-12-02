@@ -282,7 +282,7 @@
 
     CLIPBOARD SUPPORT
     =================
-    Applications can send and receive UTF-8 text data from and to the
+    Applications can send and receive UTF-8 encoded text data from and to the
     system clipboard. By default, clipboard support is disabled and
     must be enabled at startup via the following sapp_desc struct 
     members:
@@ -290,10 +290,12 @@
         sapp_desc.enable_clipboard  - set to true to enable clipboard support
         sapp_desc.clipboard_size    - size of the internal clipboard buffer in bytes
 
-    Enabling the clipboard buffer will dynamically allocate a clipboard buffer
+    Enabling the clipboard will dynamically allocate a clipboard buffer
     for UTF-8 encoded text data of the requested size in bytes, the default
     size if 8 KBytes. Strings that don't fit into the clipboard buffer
-    will be silently clipped.
+    (including the terminating zero) will be silently clipped, so it's
+    important that you provide a big enough clipboard size for your
+    use case.
 
     To send data to the clipboard, call sapp_set_clipboard_string() with
     a pointer to an UTF-8 encoded, null-terminated C-string.
@@ -301,7 +303,9 @@
     NOTE that on the HTML5 platform, sapp_set_clipboard_string() must be
     called from inside a 'short-lived event handler', and there are a few
     other HTML5-specific caveats to workaround. You'll basically have to
-    tinker around until it works in all browsers.
+    tinker until it works in all browsers :/ (maybe the situation will
+    improve when all browsers agree on and implement the new 
+    HTML5 navigator.clipboard API).
 
     To get data from the clipboard, check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED
     event in your event handler function, and then call sapp_get_clipboard_string()
