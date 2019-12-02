@@ -476,9 +476,14 @@ Mainly some "missing features" for desktop apps:
     because of the restrictions the web platform puts on clipboard access and
     different behaviours and support levels of the various HTML5 clipboard
     APIs. I'm not really happy with the current HTML5 clipboard
-    implementation. It sorta works, but it sure ain't pretty. Maybe the situation
-    will improve in a few years when all browsers agree on and support
-    the new [permission-based clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
+    implementation. It sorta works, but it sure ain't pretty :) 
+    
+    Maybe the situation will improve in a few years when all browsers agree
+    on and support the new [permission-based clipboard
+    API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
+
+    For documention of the clipboard feature, search for CLIPBOARD SUPPORT
+    in sokol_app.h
 
 - **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
     - the enum ```sg_wrap``` has a new member ```SG_WRAP_CLAMP_TO_BORDER```
