@@ -219,6 +219,7 @@ typedef struct simgui_desc_t {
     float dpi_scale;
     const char* ini_filename;
     bool no_default_font;
+    bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
 } simgui_desc_t;
 
 SOKOL_API_DECL void simgui_setup(const simgui_desc_t* desc);
@@ -251,6 +252,10 @@ SOKOL_API_DECL void simgui_shutdown(void);
 #include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP) && defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 #ifndef SOKOL_API_IMPL
 #define SOKOL_API_IMPL
 #endif
@@ -278,6 +283,8 @@ typedef struct {
     ImVec2 disp_size;
 } _simgui_vs_params_t;
 
+#define SIMGUI_MAX_KEY_VALUE (512)      // same as ImGuis IO.KeysDown array
+
 typedef struct {
     simgui_desc_t desc;
     sg_buffer vbuf;
@@ -288,6 +295,9 @@ typedef struct {
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     bool btn_down[SAPP_MAX_MOUSEBUTTONS];
     bool btn_up[SAPP_MAX_MOUSEBUTTONS];
+    uint8_t keys_down[SIMGUI_MAX_KEY_VALUE];     // bits 0..3 or modifiers, != 0 is key-down
+    uint8_t keys_up[SIMGUI_MAX_KEY_VALUE];       // same is keys_down
+    bool is_osx;                // return true if running on OSX (or HTML5 OSX), needed for copy/paste
     #endif
 } _simgui_state_t;
 static _simgui_state_t _simgui;
@@ -701,12 +711,46 @@ static const uint8_t _simgui_fs_bin[] = {
 #error "sokol_imgui.h: No sokol_gfx.h backend selected (SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL)"
 #endif
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+static void _simgui_set_clipboard(void* user_data, const char* text) {
+    sapp_set_clipboard_string(text);
+}
+
+static const char* _simgui_get_clipboard(void* user_data) {
+    return sapp_get_clipboard_string();
+}
+
+#if defined(__EMSCRIPTEN__)
+EM_JS(int, simgui_js_is_osx, (void), {
+    if (navigator.userAgent.includes('Macintosh')) {
+        return 1;
+    }
+    else {
+        return 0;
+    }
+});
+#endif
+
+static bool _simgui_is_osx(void) {
+    #if defined(__EMSCRIPTEN__)
+    return simgui_js_is_osx();
+    #elif defined(__APPLE__)
+    return true;
+    #else
+    return false;
+    #endif
+}
+#endif
+
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_simgui, 0, sizeof(_simgui));
     _simgui.desc = *desc;
     _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
     _simgui.desc.dpi_scale = _simgui_def(_simgui.desc.dpi_scale, 1.0f);
+    #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+    _simgui.is_osx = _simgui_is_osx();
+    #endif
     /* can keep color_format, depth_format and sample_count as is,
        since sokol_gfx.h will do its own default-value handling
     */
@@ -728,6 +772,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         }
     #endif
     io->IniFilename = _simgui.desc.ini_filename;
+    io->ConfigMacOSXBehaviors = _simgui_is_osx();
     io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
         io->KeyMap[ImGuiKey_Tab] = SAPP_KEYCODE_TAB;
@@ -744,12 +789,18 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io->KeyMap[ImGuiKey_Space] = SAPP_KEYCODE_SPACE;
         io->KeyMap[ImGuiKey_Enter] = SAPP_KEYCODE_ENTER;
         io->KeyMap[ImGuiKey_Escape] = SAPP_KEYCODE_ESCAPE;
-        io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
-        io->KeyMap[ImGuiKey_C] = SAPP_KEYCODE_C;
-        io->KeyMap[ImGuiKey_V] = SAPP_KEYCODE_V;
-        io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
-        io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
-        io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+        if (!_simgui.desc.disable_hotkeys) {
+            io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
+            io->KeyMap[ImGuiKey_C] = SAPP_KEYCODE_C;
+            io->KeyMap[ImGuiKey_V] = SAPP_KEYCODE_V;
+            io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
+            io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
+            io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
+        }
+        #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+        io->SetClipboardTextFn = _simgui_set_clipboard;
+        io->GetClipboardTextFn = _simgui_get_clipboard;
+        #endif
     #endif
 
     /* create sokol-gfx resources */
@@ -872,6 +923,13 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.vbuf);
 }
 
+_SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint8_t mods) {
+    io->KeyAlt = (mods & SAPP_MODIFIER_ALT) != 0;
+    io->KeyCtrl = (mods & SAPP_MODIFIER_CTRL) != 0;
+    io->KeyShift = (mods & SAPP_MODIFIER_SHIFT) != 0;
+    io->KeySuper = (mods & SAPP_MODIFIER_SUPER) != 0;
+}
+
 SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
@@ -890,6 +948,18 @@ SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
         else if (_simgui.btn_up[i]) {
             _simgui.btn_up[i] = false;
             io->MouseDown[i] = false;
+        }
+    }
+    for (int i = 0; i < SIMGUI_MAX_KEY_VALUE; i++) {
+        if (_simgui.keys_down[i]) {
+            io->KeysDown[i] = true;
+            _simgui_set_imgui_modifiers(io, _simgui.keys_down[i]);
+            _simgui.keys_down[i] = 0;
+        }
+        else if (_simgui.keys_up[i]) {
+            io->KeysDown[i] = false;
+            _simgui_set_imgui_modifiers(io, _simgui.keys_up[i]);
+            _simgui.keys_up[i] = 0;
         }
     }
     if (io->WantTextInput && !sapp_keyboard_shown()) {
@@ -1009,6 +1079,15 @@ SOKOL_API_IMPL void simgui_render(void) {
 }
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+_SOKOL_PRIVATE bool _simgui_is_ctrl(uint8_t modifiers) {
+    if (_simgui.is_osx) {
+        return 0 != (modifiers & SAPP_MODIFIER_SUPER);
+    }
+    else {
+        return 0 != (modifiers & SAPP_MODIFIER_CTRL);
+    }
+}
+
 SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     const float dpi_scale = _simgui.desc.dpi_scale;
     #if defined(__cplusplus)
@@ -1016,10 +1095,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     #else
         ImGuiIO* io = igGetIO();
     #endif
-    io->KeyAlt = (ev->modifiers & SAPP_MODIFIER_ALT) != 0;
-    io->KeyCtrl = (ev->modifiers & SAPP_MODIFIER_CTRL) != 0;
-    io->KeyShift = (ev->modifiers & SAPP_MODIFIER_SHIFT) != 0;
-    io->KeySuper = (ev->modifiers & SAPP_MODIFIER_SUPER) != 0;
+    _simgui_set_imgui_modifiers(io, ev->modifiers);
     switch (ev->type) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
             io->MousePos.x = ev->mouse_x / dpi_scale;
@@ -1069,23 +1145,54 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui.btn_up[0] = _simgui.btn_down[0] = false;
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
-            io->KeysDown[ev->key_code] = true;
+            /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
+                break;
+            }
+            /* on web platform, don't forward Ctrl-X, Ctrl-V to the browser */
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_X)) {
+                sapp_consume_event();
+            }
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
+                sapp_consume_event();
+            }
+            _simgui.keys_down[ev->key_code] = 0x80 | ev->modifiers;
             break;
         case SAPP_EVENTTYPE_KEY_UP:
-            io->KeysDown[ev->key_code] = false;
+            /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
+                break;
+            }
+            /* on web platform, don't forward Ctrl-X, Ctrl-V to the browser */
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_X)) {
+                sapp_consume_event();
+            }
+            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
+                sapp_consume_event();
+            }
+            _simgui.keys_up[ev->key_code] = 0x80 | ev->modifiers;
             break;
         case SAPP_EVENTTYPE_CHAR:
             /* on some platforms, special keys may be reported as
                characters, which may confuse some ImGui widgets,
-               drop those
+               drop those, also don't forward characters if some
+               modifiers have been pressed
             */
-            if ((ev->char_code >= 32) && (ev->char_code != 127)) {
+            if ((ev->char_code >= 32) &&
+                (ev->char_code != 127) &&
+                (0 == (ev->modifiers & (SAPP_MODIFIER_ALT|SAPP_MODIFIER_CTRL|SAPP_MODIFIER_SUPER))))
+            {
                 #if defined(__cplusplus)
                     io->AddInputCharacter((ImWchar)ev->char_code);
                 #else
                     ImGuiIO_AddInputCharacter(io, (ImWchar)ev->char_code);
                 #endif
             }
+            break;
+        case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
+            /* simulate a Ctrl-V key down/up */
+            _simgui.keys_down[SAPP_KEYCODE_V] = _simgui.keys_up[SAPP_KEYCODE_V] =
+                0x80 | (_simgui.is_osx ? SAPP_MODIFIER_SUPER:SAPP_MODIFIER_CTRL);
             break;
         default:
             break;

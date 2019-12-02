@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**08-Sep-2019**: clamp-to-border texture sampling in sokol_gfx.h)
+[See what's new](#updates) (**02-Dec-2019**: initial clipboard support in sokol_app.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -464,6 +464,26 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **02-Dec-2019**: Initial clipboard support in sokol_app.h for Windows, macOS
+    and HTML5. This allows to read and write UTF-8 encoded strings from and
+    to the target platform's shared clipboard. 
+    
+    A 'real-world' example usage is in the [Visual6502 Remix project](https://github.com/floooh/v6502r).
+
+    Unfortunately clipboard support on the HTML5 platform comes with a lot of
+    platform-specific caveats which can't be solved in sokol_app.h alone
+    because of the restrictions the web platform puts on clipboard access and
+    different behaviours and support levels of the various HTML5 clipboard
+    APIs. I'm not really happy with the current HTML5 clipboard
+    implementation. It sorta works, but it sure ain't pretty :) 
+    
+    Maybe the situation will improve in a few years when all browsers agree
+    on and support the new [permission-based clipboard
+    API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
+
+    For documention of the clipboard feature, search for CLIPBOARD SUPPORT
+    in sokol_app.h
 
 - **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
     - the enum ```sg_wrap``` has a new member ```SG_WRAP_CLAMP_TO_BORDER```
