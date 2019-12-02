@@ -283,6 +283,8 @@ typedef struct {
     ImVec2 disp_size;
 } _simgui_vs_params_t;
 
+#define SIMGUI_MAX_KEY_VALUE (512)      // same as ImGuis IO.KeysDown array
+
 typedef struct {
     simgui_desc_t desc;
     sg_buffer vbuf;
@@ -293,8 +295,8 @@ typedef struct {
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     bool btn_down[SAPP_MAX_MOUSEBUTTONS];
     bool btn_up[SAPP_MAX_MOUSEBUTTONS];
-    uint8_t keys_down[512];     // bits 0..3 or modifiers, != 0 is key-down
-    uint8_t keys_up[512];       // same is keys_down
+    uint8_t keys_down[SIMGUI_MAX_KEY_VALUE];     // bits 0..3 or modifiers, != 0 is key-down
+    uint8_t keys_up[SIMGUI_MAX_KEY_VALUE];       // same is keys_down
     bool is_osx;                // return true if running on OSX (or HTML5 OSX), needed for copy/paste
     #endif
 } _simgui_state_t;
@@ -948,20 +950,16 @@ SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
             io->MouseDown[i] = false;
         }
     }
-    for (int i = 0; i < ImGuiKey_COUNT; i++) {
-        int ki = io->KeyMap[i];
-        if (ki == -1) {
-            continue;
+    for (int i = 0; i < SIMGUI_MAX_KEY_VALUE; i++) {
+        if (_simgui.keys_down[i]) {
+            io->KeysDown[i] = true;
+            _simgui_set_imgui_modifiers(io, _simgui.keys_down[i]);
+            _simgui.keys_down[i] = 0;
         }
-        if (_simgui.keys_down[ki]) {
-            io->KeysDown[ki] = true;
-            _simgui_set_imgui_modifiers(io, _simgui.keys_down[ki]);
-            _simgui.keys_down[ki] = 0;
-        }
-        else if (_simgui.keys_up[ki]) {
-            io->KeysDown[ki] = false;
-            _simgui_set_imgui_modifiers(io, _simgui.keys_up[ki]);
-            _simgui.keys_up[ki] = 0;
+        else if (_simgui.keys_up[i]) {
+            io->KeysDown[i] = false;
+            _simgui_set_imgui_modifiers(io, _simgui.keys_up[i]);
+            _simgui.keys_up[i] = 0;
         }
     }
     if (io->WantTextInput && !sapp_keyboard_shown()) {
