@@ -2175,6 +2175,13 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #define SG_DEFAULT_CLEAR_STENCIL (0)
 #endif
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable:4115)   /* named type definition in parentheses */
+#pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#endif
+
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
     #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
@@ -2321,13 +2328,6 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
             #define _SG_TARGET_IOS_SIMULATOR (1)
         #endif
     #endif
-#endif
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-#pragma warning(disable:4115)   /* named type definition in parentheses */
-#pragma warning(disable:4505)   /* unreferenced local function has been removed */
 #endif
 
 /*=== PRIVATE DECLS ==========================================================*/

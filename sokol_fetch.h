@@ -1663,7 +1663,7 @@ _SOKOL_PRIVATE bool _sfetch_thread_init(_sfetch_thread_t* thread, _sfetch_thread
 
     EnterCriticalSection(&thread->running_critsec);
     const SIZE_T stack_size = 512 * 1024;
-    thread->thread = CreateThread(NULL, 512*1024, thread_func, thread_arg, 0, NULL);
+    thread->thread = CreateThread(NULL, stack_size, thread_func, thread_arg, 0, NULL);
     thread->valid = (NULL != thread->thread);
     LeaveCriticalSection(&thread->running_critsec);
     return thread->valid;
@@ -2271,38 +2271,41 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
 /*=== private high-level functions ===========================================*/
 _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_request_t* req) {
     #if defined(SOKOL_DEBUG)
-    if (req->channel >= ctx->desc.num_channels) {
-        SOKOL_LOG("_sfetch_validate_request: request.num_channels too big!");
-        return false;
-    }
-    if (!req->path) {
-        SOKOL_LOG("_sfetch_validate_request: request.path is null!");
-        return false;
-    }
-    if (strlen(req->path) >= (SFETCH_MAX_PATH-1)) {
-        SOKOL_LOG("_sfetch_validate_request: request.path is too long (must be < SFETCH_MAX_PATH-1)");
-        return false;
-    }
-    if (!req->callback) {
-        SOKOL_LOG("_sfetch_validate_request: request.callback missing");
-        return false;
-    }
-    if (req->chunk_size > req->buffer_size) {
-        SOKOL_LOG("_sfetch_validate_request: request.stream_size is greater request.buffer_size)");
-        return false;
-    }
-    if (req->user_data_ptr && (req->user_data_size == 0)) {
-        SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is set, but req.user_data_size is null");
-        return false;
-    }
-    if (!req->user_data_ptr && (req->user_data_size > 0)) {
-        SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is null, but req.user_data_size is not");
-        return false;
-    }
-    if (req->user_data_size > SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) {
-        SOKOL_LOG("_sfetch_validate_request: request.user_data_size is too big (see SFETCH_MAX_USERDATA_UINT64");
-        return false;
-    }
+        if (req->channel >= ctx->desc.num_channels) {
+            SOKOL_LOG("_sfetch_validate_request: request.num_channels too big!");
+            return false;
+        }
+        if (!req->path) {
+            SOKOL_LOG("_sfetch_validate_request: request.path is null!");
+            return false;
+        }
+        if (strlen(req->path) >= (SFETCH_MAX_PATH-1)) {
+            SOKOL_LOG("_sfetch_validate_request: request.path is too long (must be < SFETCH_MAX_PATH-1)");
+            return false;
+        }
+        if (!req->callback) {
+            SOKOL_LOG("_sfetch_validate_request: request.callback missing");
+            return false;
+        }
+        if (req->chunk_size > req->buffer_size) {
+            SOKOL_LOG("_sfetch_validate_request: request.stream_size is greater request.buffer_size)");
+            return false;
+        }
+        if (req->user_data_ptr && (req->user_data_size == 0)) {
+            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is set, but req.user_data_size is null");
+            return false;
+        }
+        if (!req->user_data_ptr && (req->user_data_size > 0)) {
+            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is null, but req.user_data_size is not");
+            return false;
+        }
+        if (req->user_data_size > SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) {
+            SOKOL_LOG("_sfetch_validate_request: request.user_data_size is too big (see SFETCH_MAX_USERDATA_UINT64");
+            return false;
+        }
+    #else
+        /* silence unused warnings in release*/
+        (void)(ctx && req);
     #endif
     return true;
 }

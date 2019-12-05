@@ -879,6 +879,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #pragma warning(disable:4054)   /* 'type cast': from function pointer */
 #pragma warning(disable:4055)   /* 'type cast': from data pointer */
 #pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
 #endif
 
 #include <string.h> /* memset */
@@ -4679,7 +4680,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
 
 static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* o_argc) {
     int argc = 0;
-    char** argv;
+    char** argv = 0;
     char* args;
 
     LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
