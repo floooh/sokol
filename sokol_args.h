@@ -419,10 +419,6 @@ _SOKOL_PRIVATE void _sargs_expect_sep(void) {
     _sargs.parse_state = _SARGS_EXPECT_SEP;
 }
 
-_SOKOL_PRIVATE bool _sargs_sep_expected(void) {
-    return 0 != (_sargs.parse_state & _SARGS_EXPECT_SEP);
-}
-
 _SOKOL_PRIVATE bool _sargs_any_expected(void) {
     return 0 != (_sargs.parse_state & (_SARGS_EXPECT_KEY | _SARGS_EXPECT_VAL | _SARGS_EXPECT_SEP));
 }
