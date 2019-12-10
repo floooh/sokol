@@ -713,10 +713,12 @@ static const uint8_t _simgui_fs_bin[] = {
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 static void _simgui_set_clipboard(void* user_data, const char* text) {
+    (void)user_data;
     sapp_set_clipboard_string(text);
 }
 
 static const char* _simgui_get_clipboard(void* user_data) {
+    (void)user_data;
     return sapp_get_clipboard_string();
 }
 
@@ -923,7 +925,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.vbuf);
 }
 
-_SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint8_t mods) {
+_SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint32_t mods) {
     io->KeyAlt = (mods & SAPP_MODIFIER_ALT) != 0;
     io->KeyCtrl = (mods & SAPP_MODIFIER_CTRL) != 0;
     io->KeyShift = (mods & SAPP_MODIFIER_SHIFT) != 0;
@@ -1079,7 +1081,7 @@ SOKOL_API_IMPL void simgui_render(void) {
 }
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-_SOKOL_PRIVATE bool _simgui_is_ctrl(uint8_t modifiers) {
+_SOKOL_PRIVATE bool _simgui_is_ctrl(uint32_t modifiers) {
     if (_simgui.is_osx) {
         return 0 != (modifiers & SAPP_MODIFIER_SUPER);
     }
@@ -1156,7 +1158,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
                 sapp_consume_event();
             }
-            _simgui.keys_down[ev->key_code] = 0x80 | ev->modifiers;
+            _simgui.keys_down[ev->key_code] = 0x80 | (uint8_t)ev->modifiers;
             break;
         case SAPP_EVENTTYPE_KEY_UP:
             /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
@@ -1170,7 +1172,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
                 sapp_consume_event();
             }
-            _simgui.keys_up[ev->key_code] = 0x80 | ev->modifiers;
+            _simgui.keys_up[ev->key_code] = 0x80 | (uint8_t)ev->modifiers;
             break;
         case SAPP_EVENTTYPE_CHAR:
             /* on some platforms, special keys may be reported as

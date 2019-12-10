@@ -284,7 +284,7 @@
     =================
     Applications can send and receive UTF-8 encoded text data from and to the
     system clipboard. By default, clipboard support is disabled and
-    must be enabled at startup via the following sapp_desc struct 
+    must be enabled at startup via the following sapp_desc struct
     members:
 
         sapp_desc.enable_clipboard  - set to true to enable clipboard support
@@ -304,7 +304,7 @@
     called from inside a 'short-lived event handler', and there are a few
     other HTML5-specific caveats to workaround. You'll basically have to
     tinker until it works in all browsers :/ (maybe the situation will
-    improve when all browsers agree on and implement the new 
+    improve when all browsers agree on and implement the new
     HTML5 navigator.clipboard API).
 
     To get data from the clipboard, check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED
@@ -329,7 +329,7 @@
     as follows:
 
         - on macOS: when the Cmd+V key is pressed down
-        - on HTML5: when the browser sends a 'paste' event to the global 'window' object 
+        - on HTML5: when the browser sends a 'paste' event to the global 'window' object
         - on all other platforms: when the Ctrl+V key is pressed down
 
     HIGH-DPI RENDERING
@@ -2481,7 +2481,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             if (type == SAPP_EVENTTYPE_CHAR) {
                 _sapp.event.char_code = emsc_event->charCode;
                 /* workaround to make Cmd+V work on Safari */
-                if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) { 
+                if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
                     retval = false;
                 }
             }
@@ -4564,7 +4564,7 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
         goto error;
     }
     if (!_sapp_win32_utf8_to_wide(str, wchar_buf, wchar_buf_size)) {
-        goto error;   
+        goto error;
     }
     GlobalUnlock(wchar_buf);
     wchar_buf = 0;
@@ -6936,9 +6936,9 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled && 
-            (type == SAPP_EVENTTYPE_KEY_DOWN) && 
-            (_sapp.event.modifiers = SAPP_MODIFIER_CTRL) && 
+        if (_sapp.clipboard_enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
         {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
