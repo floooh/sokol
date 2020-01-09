@@ -7085,8 +7085,8 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         return NULL;
     }
     ID3DBlob* output = NULL;
-    ID3DBlob* errors = NULL;
-    _sg_d3d11_D3DCompile(
+    ID3DBlob* errors_or_warnings = NULL;
+    HRESULT hr = _sg_d3d11_D3DCompile(
         stage_desc->source,             /* pSrcData */
         strlen(stage_desc->source),     /* SrcDataSize */
         NULL,                           /* pSourceName */
@@ -7097,11 +7097,17 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3,   /* Flags1 */
         0,          /* Flags2 */
         &output,    /* ppCode */
-        &errors);   /* ppErrorMsgs */
-    if (errors) {
-        SOKOL_LOG((LPCSTR)ID3D10Blob_GetBufferPointer(errors));
-        ID3D10Blob_Release(errors); errors = NULL;
-        return NULL;
+        &errors_or_warnings);   /* ppErrorMsgs */
+    if (errors_or_warnings) {
+        SOKOL_LOG((LPCSTR)ID3D10Blob_GetBufferPointer(errors_or_warnings));
+        ID3D10Blob_Release(errors_or_warnings); errors_or_warnings = NULL;
+    }
+    if (FAILED(hr)) {
+        /* just in case, usually output is NULL here */
+        if (output) {
+            ID3D10Blob_Release(output);
+            output = NULL;
+        }
     }
     return output;
 }
