@@ -61,7 +61,7 @@
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (RaspberryPi)
+    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (TODO: RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
@@ -106,7 +106,6 @@
     TODO
     ====
     - Linux clipboard support
-    - document sapp_consume_event()
     - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
@@ -272,6 +271,21 @@
             - the application window was resized, iconified or restored
             - the application was suspended or restored (on mobile platforms)
             - the user or application code has asked to quit the application
+            - a string was pasted to the system clipboard
+
+        To explicitely 'consume' an event and prevent that the event is
+        forwarded for further handling to the operating system, call
+        sapp_consume_event() from inside the event handler (NOTE that
+        this behaviour is currently only implemented for some HTML5
+        events, support for other platforms and event types will
+        be added as needed, please open a github ticket and/or provide
+        a PR if needed).
+
+        NOTE: Do *not* call any 3D API functions in the event callback
+        function, since the 3D API context may not be active when the
+        event callback is called (it may work on some platforms and
+        3D APIs, but not others, and the exact behaviour may change
+        between sokol-app versions).
 
     --- Implement the cleanup-callback function, this is called once
         after the user quits the application (see the section
