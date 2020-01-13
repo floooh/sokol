@@ -4259,16 +4259,16 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
 
 _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     uint32_t mods = 0;
-    if (GetKeyState(VK_SHIFT) & (1<<31)) {
+    if (GetKeyState(VK_SHIFT) & (1<<15)) {
         mods |= SAPP_MODIFIER_SHIFT;
     }
-    if (GetKeyState(VK_CONTROL) & (1<<31)) {
+    if (GetKeyState(VK_CONTROL) & (1<<15)) {
         mods |= SAPP_MODIFIER_CTRL;
     }
-    if (GetKeyState(VK_MENU) & (1<<31)) {
+    if (GetKeyState(VK_MENU) & (1<<15)) {
         mods |= SAPP_MODIFIER_ALT;
     }
-    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<31)) {
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<15)) {
         mods |= SAPP_MODIFIER_SUPER;
     }
     return mods;
