@@ -1015,6 +1015,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     bind.index_buffer = _simgui.ibuf;
     ImTextureID tex_id = io->Fonts->TexID;
     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
+    uint32_t vb_offset = 0;
+    uint32_t ib_offset = 0;
     for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++) {
         ImDrawList* cl = draw_data->CmdLists[cl_index];
 
@@ -1030,8 +1032,12 @@ SOKOL_API_IMPL void simgui_render(void) {
             const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
             const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
         #endif
-        const uint32_t vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
-        const uint32_t ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
+        if (vtx_ptr) {
+            vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
+        }
+        if (idx_ptr) {
+            ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
+        }
         /* don't render anything if the buffer is in overflow state (this is also
             checked internally in sokol_gfx, draw calls that attempt to draw with
             overflowed buffers will be silently dropped)
