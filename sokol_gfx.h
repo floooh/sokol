@@ -3647,7 +3647,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
             break;
         }
         SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
-        pip->vertex_layout_valid[a_desc->buffer_index] = true;
+        pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -3669,7 +3669,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
         if (att_desc->image.id != SG_INVALID_ID) {
             pass->num_color_atts++;
             SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
-            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->pixel_format));
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->cmn.pixel_format));
             att = &pass->color_atts[i];
             SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
             att->image = att_images[i];
@@ -3683,7 +3683,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
     if (att_desc->image.id != SG_INVALID_ID) {
         SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
-        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->pixel_format));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->cmn.pixel_format));
         att = &pass->ds_att;
         SOKOL_ASSERT((att->image == 0) && (att->image_id.id == SG_INVALID_ID));
         att->image = att_images[ds_img_index];
@@ -3793,8 +3793,8 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int d
 _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     _SOKOL_UNUSED(data);
-    if (++img->active_slot >= img->num_slots) {
-        img->active_slot = 0;
+    if (++img->cmn.active_slot >= img->cmn.num_slots) {
+        img->cmn.active_slot = 0;
     }
 }
 
