@@ -2437,6 +2437,50 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
 }
 
 typedef struct {
+    int size;
+} _sg_uniform_block_t;
+
+typedef struct {
+    sg_image_type type;
+} _sg_shader_image_t;
+
+typedef struct {
+    int num_uniform_blocks;
+    int num_images;
+    _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
+} _sg_shader_stage_t;
+
+typedef struct {
+    _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+} _sg_shader_common_t;
+
+_SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_shader_desc* desc) {
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
+        _sg_shader_stage_t* stage = &cmn->stage[stage_index];
+        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
+            if (0 == ub_desc->size) {
+                break;
+            }
+            stage->uniform_blocks[ub_index].size = ub_desc->size;
+            stage->num_uniform_blocks++;
+        }
+        SOKOL_ASSERT(stage->num_images == 0);
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
+                break;
+            }
+            stage->images[img_index].type = img_desc->type;
+            stage->num_images++;
+        }
+    }
+}
+
+typedef struct {
     sg_shader shader_id;
     sg_index_type index_type;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
@@ -2483,27 +2527,10 @@ typedef struct {
 typedef _sg_dummy_image_t _sg_image_t;
 
 typedef struct {
-    int size;
-} _sg_dummy_uniform_block_t;
-typedef _sg_dummy_uniform_block_t _sg_uniform_block_t;
-
-typedef struct {
-    sg_image_type type;
-} _sg_dummy_shader_image_t;
-typedef _sg_dummy_shader_image_t _sg_shader_image_t;
-
-typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
-} _sg_dummy_shader_stage_t;
-typedef _sg_dummy_shader_stage_t _sg_shader_stage_t;
-
-typedef struct {
     _sg_slot_t slot;
-    _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+    _sg_shader_common_t cmn;
 } _sg_dummy_shader_t;
+typedef _sg_shader_stage_common_t _sg_shader_stage_t;
 typedef _sg_dummy_shader_t _sg_shader_t;
 
 typedef struct {
@@ -2539,20 +2566,23 @@ typedef _sg_dummy_context_t _sg_context_t;
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
-    GLuint gl_buf[SG_NUM_INFLIGHT_FRAMES];
-    bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
+    struct {
+        GLuint buf[SG_NUM_INFLIGHT_FRAMES];
+        bool ext_buffers;   /* if true, external buffers were injected with sg_buffer_desc.gl_buffers */
+    } gl;
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
 
 typedef struct {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
-    GLenum gl_target;
-    GLuint gl_depth_render_buffer;
-    GLuint gl_msaa_render_buffer;
-    uint32_t upd_frame_index;
-    GLuint gl_tex[SG_NUM_INFLIGHT_FRAMES];
-    bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
+    struct {
+        GLenum target;
+        GLuint depth_render_buffer;
+        GLuint msaa_render_buffer;
+        GLuint tex[SG_NUM_INFLIGHT_FRAMES];
+        bool ext_textures;  /* if true, external textures were injected with sg_image_desc.gl_textures */
+    } gl;
 } _sg_gl_image_t;
 typedef _sg_gl_image_t _sg_image_t;
 
@@ -2562,40 +2592,34 @@ typedef struct {
     uint8_t count;
     uint16_t offset;
 } _sg_gl_uniform_t;
-typedef _sg_gl_uniform_t _sg_uniform_t;
 
 typedef struct {
-    int size;
     int num_uniforms;
-    _sg_uniform_t uniforms[SG_MAX_UB_MEMBERS];
+    _sg_gl_uniform_t uniforms[SG_MAX_UB_MEMBERS];
 } _sg_gl_uniform_block_t;
-typedef _sg_gl_uniform_block_t _sg_uniform_block_t;
 
 typedef struct {
-    sg_image_type type;
     GLint gl_loc;
     int gl_tex_slot;
 } _sg_gl_shader_image_t;
-typedef _sg_gl_shader_image_t _sg_shader_image_t;
 
 typedef struct {
     _sg_str_t name;
 } _sg_gl_shader_attr_t;
-typedef _sg_gl_shader_attr_t _sg_shader_attr_t;
 
 typedef struct {
-    int num_uniform_blocks;
-    int num_images;
-    _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
-    _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
+    _sg_gl_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
+    _sg_gl_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_gl_shader_stage_t;
-typedef _sg_gl_shader_stage_t _sg_shader_stage_t;
 
 typedef struct {
     _sg_slot_t slot;
-    GLuint gl_prog;
-    _sg_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    _sg_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+    _sg_shader_common_t cmn;
+    struct {
+        GLuint prog;
+        _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
+        _sg_gl_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+    } gl;
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
 
@@ -2613,11 +2637,13 @@ typedef struct {
     _sg_slot_t slot;
     _sg_pipeline_common_t cmn;
     _sg_shader_t* shader;
-    _sg_gl_attr_t gl_attrs[SG_MAX_VERTEX_ATTRIBUTES];
-    sg_depth_stencil_state depth_stencil;
-    sg_primitive_type primitive_type;
-    sg_blend_state blend;
-    sg_rasterizer_state rast;
+    struct {
+        _sg_gl_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
+        sg_depth_stencil_state depth_stencil;
+        sg_primitive_type primitive_type;
+        sg_blend_state blend;
+        sg_rasterizer_state rast;
+    } gl;
 } _sg_gl_pipeline_t;
 typedef _sg_gl_pipeline_t _sg_pipeline_t;
 
@@ -3605,30 +3631,7 @@ _SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    /* uniform block sizes and image types */
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-        _sg_shader_stage_t* stage = &shd->stage[stage_index];
-        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
-            if (0 == ub_desc->size) {
-                break;
-            }
-            _sg_uniform_block_t* ub = &stage->uniform_blocks[ub_index];
-            ub->size = ub_desc->size;
-            stage->num_uniform_blocks++;
-        }
-        SOKOL_ASSERT(stage->num_images == 0);
-        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
-            const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
-                break;
-            }
-            stage->images[img_index].type = img_desc->type;
-            stage->num_images++;
-        }
-    }
+    _sg_shader_common_init(&shd->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5064,12 +5067,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
     _sg_buffer_common_init(&buf->cmn, desc);
-    buf->ext_buffers = (0 != desc->gl_buffers[0]);
+    buf->gl.ext_buffers = (0 != desc->gl_buffers[0]);
     GLenum gl_target = _sg_gl_buffer_target(buf->cmn.type);
     GLenum gl_usage  = _sg_gl_usage(buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         GLuint gl_buf = 0;
-        if (buf->ext_buffers) {
+        if (buf->gl.ext_buffers) {
             SOKOL_ASSERT(desc->gl_buffers[slot]);
             gl_buf = desc->gl_buffers[slot];
         }
@@ -5084,7 +5087,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
             }
             _sg_gl_restore_buffer_binding(gl_target);
         }
-        buf->gl_buf[slot] = gl_buf;
+        buf->gl.buf[slot] = gl_buf;
     }
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
@@ -5093,10 +5096,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
 _SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     _SG_GL_CHECK_ERROR();
-    if (!buf->ext_buffers) {
+    if (!buf->gl.ext_buffers) {
         for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
-            if (buf->gl_buf[slot]) {
-                glDeleteBuffers(1, &buf->gl_buf[slot]);
+            if (buf->gl.buf[slot]) {
+                glDeleteBuffers(1, &buf->gl.buf[slot]);
             }
         }
         _SG_GL_CHECK_ERROR();
@@ -5113,7 +5116,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
     _sg_image_common_init(&img->cmn, desc);
-    img->ext_textures = (0 != desc->gl_textures[0]);
+    img->gl.ext_textures = (0 != desc->gl_textures[0]);
 
     /* check if texture format is support */
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
@@ -5140,9 +5143,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
         /* special case depth-stencil-buffer? */
         SOKOL_ASSERT((img->cmn.usage == SG_USAGE_IMMUTABLE) && (img->cmn.num_slots == 1));
-        SOKOL_ASSERT(!img->ext_textures);   /* cannot provide external texture for depth images */
-        glGenRenderbuffers(1, &img->gl_depth_render_buffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, img->gl_depth_render_buffer);
+        SOKOL_ASSERT(!img->gl.ext_textures);   /* cannot provide external texture for depth images */
+        glGenRenderbuffers(1, &img->gl.depth_render_buffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, img->gl.depth_render_buffer);
         GLenum gl_depth_format = _sg_gl_depth_attachment_format(img->cmn.pixel_format);
         #if !defined(SOKOL_GLES2)
         if (!_sg.gl.gles2 && msaa) {
@@ -5156,23 +5159,23 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     }
     else {
         /* regular color texture */
-        img->gl_target = _sg_gl_texture_target(img->cmn.type);
+        img->gl.target = _sg_gl_texture_target(img->cmn.type);
         const GLenum gl_internal_format = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
 
         /* if this is a MSAA render target, need to create a separate render buffer */
         #if !defined(SOKOL_GLES2)
         if (!_sg.gl.gles2 && img->cmn.render_target && msaa) {
-            glGenRenderbuffers(1, &img->gl_msaa_render_buffer);
-            glBindRenderbuffer(GL_RENDERBUFFER, img->gl_msaa_render_buffer);
+            glGenRenderbuffers(1, &img->gl.msaa_render_buffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, img->gl.msaa_render_buffer);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, img->cmn.sample_count, gl_internal_format, img->cmn.width, img->cmn.height);
         }
         #endif
 
-        if (img->ext_textures) {
+        if (img->gl.ext_textures) {
             /* inject externally GL textures */
             for (int slot = 0; slot < img->cmn.num_slots; slot++) {
                 SOKOL_ASSERT(desc->gl_textures[slot]);
-                img->gl_tex[slot] = desc->gl_textures[slot];
+                img->gl.tex[slot] = desc->gl_textures[slot];
             }
         }
         else {
@@ -5180,30 +5183,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
             const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
             const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
             for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-                glGenTextures(1, &img->gl_tex[slot]);
+                glGenTextures(1, &img->gl.tex[slot]);
                 _sg_gl_store_texture_binding(0);
-                _sg_gl_bind_texture(0, img->gl_target, img->gl_tex[slot]);
+                _sg_gl_bind_texture(0, img->gl.target, img->gl.tex[slot]);
                 GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
                 GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
-                glTexParameteri(img->gl_target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
-                glTexParameteri(img->gl_target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+                glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
+                glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
                 if (_sg.gl.ext_anisotropic && (img->cmn.max_anisotropy > 1)) {
                     GLint max_aniso = (GLint) img->cmn.max_anisotropy;
                     if (max_aniso > _sg.gl.max_anisotropy) {
                         max_aniso = _sg.gl.max_anisotropy;
                     }
-                    glTexParameteri(img->gl_target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
+                    glTexParameteri(img->gl.target, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
                 }
                 if (img->cmn.type == SG_IMAGETYPE_CUBE) {
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 }
                 else {
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->cmn.wrap_u));
-                    glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->cmn.wrap_v));
+                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_S, _sg_gl_wrap(img->cmn.wrap_u));
+                    glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_T, _sg_gl_wrap(img->cmn.wrap_v));
                     #if !defined(SOKOL_GLES2)
                     if (!_sg.gl.gles2 && (img->cmn.type == SG_IMAGETYPE_3D)) {
-                        glTexParameteri(img->gl_target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->cmn.wrap_w));
+                        glTexParameteri(img->gl.target, GL_TEXTURE_WRAP_R, _sg_gl_wrap(img->cmn.wrap_w));
                     }
                     #endif
                     #if defined(SOKOL_GLCORE33)
@@ -5219,7 +5222,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                             border[0] = 0.0f; border[1] = 0.0f; border[2] = 0.0f; border[3] = 1.0f;
                             break;
                     }
-                    glTexParameterfv(img->gl_target, GL_TEXTURE_BORDER_COLOR, border);
+                    glTexParameterfv(img->gl.target, GL_TEXTURE_BORDER_COLOR, border);
                     #endif
                 }
                 #if !defined(SOKOL_GLES2)
@@ -5227,15 +5230,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
                     /* GL spec has strange defaults for mipmap min/max lod: -1000 to +1000 */
                     const float min_lod = _sg_clamp(desc->min_lod, 0.0f, 1000.0f);
                     const float max_lod = _sg_clamp(desc->max_lod, 0.0f, 1000.0f);
-                    glTexParameterf(img->gl_target, GL_TEXTURE_MIN_LOD, min_lod);
-                    glTexParameterf(img->gl_target, GL_TEXTURE_MAX_LOD, max_lod);
+                    glTexParameterf(img->gl.target, GL_TEXTURE_MIN_LOD, min_lod);
+                    glTexParameterf(img->gl.target, GL_TEXTURE_MAX_LOD, max_lod);
                 }
                 #endif
                 const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
                 int data_index = 0;
                 for (int face_index = 0; face_index < num_faces; face_index++) {
                     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, data_index++) {
-                        GLenum gl_img_target = img->gl_target;
+                        GLenum gl_img_target = img->gl.target;
                         if (SG_IMAGETYPE_CUBE == img->cmn.type) {
                             gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
@@ -5293,18 +5296,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
 _SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     _SG_GL_CHECK_ERROR();
-    if (!img->ext_textures) {
+    if (!img->gl.ext_textures) {
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-            if (img->gl_tex[slot]) {
-                glDeleteTextures(1, &img->gl_tex[slot]);
+            if (img->gl.tex[slot]) {
+                glDeleteTextures(1, &img->gl.tex[slot]);
             }
         }
     }
-    if (img->gl_depth_render_buffer) {
-        glDeleteRenderbuffers(1, &img->gl_depth_render_buffer);
+    if (img->gl.depth_render_buffer) {
+        glDeleteRenderbuffers(1, &img->gl.depth_render_buffer);
     }
-    if (img->gl_msaa_render_buffer) {
-        glDeleteRenderbuffers(1, &img->gl_msaa_render_buffer);
+    if (img->gl.msaa_render_buffer) {
+        glDeleteRenderbuffers(1, &img->gl.msaa_render_buffer);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -5336,12 +5339,14 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
 
 _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    SOKOL_ASSERT(!shd->gl_prog);
+    SOKOL_ASSERT(!shd->gl.prog);
     _SG_GL_CHECK_ERROR();
+
+    _sg_shader_common_init(&shd->cmn, desc);
 
     /* copy vertex attribute names over, these are required for GLES2, and optional for GLES3 and GL3.x */
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
-        _sg_strcpy(&shd->attrs[i].name, desc->attrs[i].name);
+        _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].name);
     }
 
     GLuint gl_vs = _sg_gl_compile_shader(SG_SHADERSTAGE_VS, desc->vs.source);
@@ -5371,21 +5376,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
         glDeleteProgram(gl_prog);
         return SG_RESOURCESTATE_FAILED;
     }
-    shd->gl_prog = gl_prog;
+    shd->gl.prog = gl_prog;
 
     /* resolve uniforms */
     _SG_GL_CHECK_ERROR();
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
-        _sg_shader_stage_t* stage = &shd->stage[stage_index];
-        SOKOL_ASSERT(stage->num_uniform_blocks == 0);
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+        _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
+        for (int ub_index = 0; ub_index < shd->cmn.stage[stage_index].num_uniform_blocks; ub_index++) {
             const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
-            if (0 == ub_desc->size) {
-                break;
-            }
-            _sg_uniform_block_t* ub = &stage->uniform_blocks[ub_index];
-            ub->size = ub_desc->size;
+            SOKOL_ASSERT(ub_desc->size > 0);
+            _sg_gl_uniform_block_t* ub = &gl_stage->uniform_blocks[ub_index];
             SOKOL_ASSERT(ub->num_uniforms == 0);
             int cur_uniform_offset = 0;
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
@@ -5393,7 +5394,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
                     break;
                 }
-                _sg_uniform_t* u = &ub->uniforms[u_index];
+                _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
                 u->count = (uint8_t) u_desc->array_count;
                 u->offset = (uint16_t) cur_uniform_offset;
@@ -5407,7 +5408,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
                 ub->num_uniforms++;
             }
             SOKOL_ASSERT(ub_desc->size == cur_uniform_offset);
-            stage->num_uniform_blocks++;
         }
     }
 
@@ -5416,26 +5416,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     int gl_tex_slot = 0;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
-        _sg_shader_stage_t* stage = &shd->stage[stage_index];
-        SOKOL_ASSERT(stage->num_images == 0);
-        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+        _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
+        for (int img_index = 0; img_index < shd->cmn.stage[stage_index].num_images; img_index++) {
             const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
-            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
-                break;
-            }
-            _sg_shader_image_t* img = &stage->images[img_index];
-            img->type = img_desc->type;
-            img->gl_loc = img_index;
+            SOKOL_ASSERT(img_desc->type != _SG_IMAGETYPE_DEFAULT);
+            _sg_gl_shader_image_t* gl_img = &gl_stage->images[img_index];
+            gl_img->gl_loc = img_index;
             if (img_desc->name) {
-                img->gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
+                gl_img->gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
             }
-            if (img->gl_loc != -1) {
-                img->gl_tex_slot = gl_tex_slot++;
+            if (gl_img->gl_loc != -1) {
+                gl_img->gl_tex_slot = gl_tex_slot++;
             }
             else {
-                img->gl_tex_slot = -1;
+                gl_img->gl_tex_slot = -1;
             }
-            stage->num_images++;
         }
     }
     _SG_GL_CHECK_ERROR();
@@ -5445,8 +5440,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
 _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     _SG_GL_CHECK_ERROR();
-    if (shd->gl_prog) {
-        glDeleteProgram(shd->gl_prog);
+    if (shd->gl.prog) {
+        glDeleteProgram(shd->gl.prog);
     }
     _SG_GL_CHECK_ERROR();
 }
@@ -5455,17 +5450,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(!pip->shader && pip->cmn.shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
-    SOKOL_ASSERT(shd->gl_prog);
+    SOKOL_ASSERT(shd->gl.prog);
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
-    pip->primitive_type = desc->primitive_type;
-    pip->depth_stencil = desc->depth_stencil;
-    pip->blend = desc->blend;
-    pip->rast = desc->rasterizer;
+    pip->gl.primitive_type = desc->primitive_type;
+    pip->gl.depth_stencil = desc->depth_stencil;
+    pip->gl.blend = desc->blend;
+    pip->gl.rast = desc->rasterizer;
 
     /* resolve vertex attributes */
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-        pip->gl_attrs[attr_index].vb_index = -1;
+        pip->gl.attrs[attr_index].vb_index = -1;
     }
     for (uint32_t attr_index = 0; attr_index < _sg.limits.max_vertex_attrs; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
@@ -5477,12 +5472,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         const sg_vertex_step step_func = l_desc->step_func;
         const int step_rate = l_desc->step_rate;
         GLint attr_loc = attr_index;
-        if (!_sg_strempty(&shd->attrs[attr_index].name)) {
-            attr_loc = glGetAttribLocation(pip->shader->gl_prog, _sg_strptr(&shd->attrs[attr_index].name));
+        if (!_sg_strempty(&shd->gl.attrs[attr_index].name)) {
+            attr_loc = glGetAttribLocation(pip->shader->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
         }
         SOKOL_ASSERT(attr_loc < (GLint)_sg.limits.max_vertex_attrs);
         if (attr_loc != -1) {
-            _sg_gl_attr_t* gl_attr = &pip->gl_attrs[attr_loc];
+            _sg_gl_attr_t* gl_attr = &pip->gl.attrs[attr_loc];
             SOKOL_ASSERT(gl_attr->vb_index == -1);
             gl_attr->vb_index = (int8_t) a_desc->buffer_index;
             if (step_func == SG_VERTEXSTEP_PER_VERTEX) {
@@ -5501,7 +5496,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
         }
         else {
             SOKOL_LOG("Vertex attribute not found in shader: ");
-            SOKOL_LOG(_sg_strptr(&shd->attrs[attr_index].name));
+            SOKOL_LOG(_sg_strptr(&shd->gl.attrs[attr_index].name));
         }
     }
     return SG_RESOURCESTATE_VALID;
@@ -5565,12 +5560,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     glBindFramebuffer(GL_FRAMEBUFFER, pass->gl_fb);
 
     /* attach msaa render buffer or textures */
-    const bool is_msaa = (0 != att_images[0]->gl_msaa_render_buffer);
+    const bool is_msaa = (0 != att_images[0]->gl.msaa_render_buffer);
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             const _sg_image_t* att_img = pass->color_atts[i].image;
             if (att_img) {
-                const GLuint gl_render_buffer = att_img->gl_msaa_render_buffer;
+                const GLuint gl_render_buffer = att_img->gl.msaa_render_buffer;
                 SOKOL_ASSERT(gl_render_buffer);
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0+i, GL_RENDERBUFFER, gl_render_buffer);
             }
@@ -5582,7 +5577,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
             const int mip_level = pass->color_atts[i].mip_level;
             const int slice = pass->color_atts[i].slice;
             if (att_img) {
-                const GLuint gl_tex = att_img->gl_tex[0];
+                const GLuint gl_tex = att_img->gl.tex[0];
                 SOKOL_ASSERT(gl_tex);
                 const GLenum gl_att = GL_COLOR_ATTACHMENT0 + i;
                 switch (att_img->cmn.type) {
@@ -5607,7 +5602,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
 
     /* attach depth-stencil buffer to framebuffer */
     if (pass->ds_att.image) {
-        const GLuint gl_render_buffer = pass->ds_att.image->gl_depth_render_buffer;
+        const GLuint gl_render_buffer = pass->ds_att.image->gl.depth_render_buffer;
         SOKOL_ASSERT(gl_render_buffer);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
         if (_sg_is_depth_stencil_format(pass->ds_att.image->cmn.pixel_format)) {
@@ -5629,7 +5624,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
                 SOKOL_ASSERT(0 == att->gl_msaa_resolve_buffer);
                 glGenFramebuffers(1, &att->gl_msaa_resolve_buffer);
                 glBindFramebuffer(GL_FRAMEBUFFER, att->gl_msaa_resolve_buffer);
-                const GLuint gl_tex = att->image->gl_tex[0];
+                const GLuint gl_tex = att->image->gl.tex[0];
                 SOKOL_ASSERT(gl_tex);
                 switch (att->image->cmn.type) {
                     case SG_IMAGETYPE_2D:
@@ -5882,11 +5877,11 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     if ((_sg.gl.cache.cur_pipeline != pip) || (_sg.gl.cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg.gl.cache.cur_pipeline = pip;
         _sg.gl.cache.cur_pipeline_id.id = pip->slot.id;
-        _sg.gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->primitive_type);
+        _sg.gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->gl.primitive_type);
         _sg.gl.cache.cur_index_type = _sg_gl_index_type(pip->cmn.index_type);
 
         /* update depth-stencil state */
-        const sg_depth_stencil_state* new_ds = &pip->depth_stencil;
+        const sg_depth_stencil_state* new_ds = &pip->gl.depth_stencil;
         sg_depth_stencil_state* cache_ds = &_sg.gl.cache.ds;
         if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
             cache_ds->depth_compare_func = new_ds->depth_compare_func;
@@ -5936,7 +5931,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
         cache_ds->stencil_ref = new_ds->stencil_ref;
 
         /* update blend state */
-        const sg_blend_state* new_b = &pip->blend;
+        const sg_blend_state* new_b = &pip->gl.blend;
         sg_blend_state* cache_b = &_sg.gl.cache.blend;
         if (new_b->enabled != cache_b->enabled) {
             cache_b->enabled = new_b->enabled;
@@ -5982,7 +5977,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
         }
 
         /* update rasterizer state */
-        const sg_rasterizer_state* new_r = &pip->rast;
+        const sg_rasterizer_state* new_r = &pip->gl.rast;
         sg_rasterizer_state* cache_r = &_sg.gl.cache.rast;
         if (new_r->cull_mode != cache_r->cull_mode) {
             cache_r->cull_mode = new_r->cull_mode;
@@ -6037,7 +6032,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
         }
 
         /* bind shader program */
-        glUseProgram(pip->shader->gl_prog);
+        glUseProgram(pip->shader->gl.prog);
     }
 }
 
@@ -6057,31 +6052,32 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     /* bind textures */
     _SG_GL_CHECK_ERROR();
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        const _sg_shader_stage_t* stage = &pip->shader->stage[stage_index];
+        const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[stage_index];
+        const _sg_gl_shader_stage_t* gl_stage = &pip->shader->gl.stage[stage_index];
         _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
         SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
-            const _sg_shader_image_t* shd_img = &stage->images[img_index];
-            if (shd_img->gl_loc != -1) {
+            const _sg_gl_shader_image_t* gl_shd_img = &gl_stage->images[img_index];
+            if (gl_shd_img->gl_loc != -1) {
                 _sg_image_t* img = imgs[img_index];
-                const GLuint gl_tex = img->gl_tex[img->cmn.active_slot];
-                SOKOL_ASSERT(img && img->gl_target);
-                SOKOL_ASSERT((shd_img->gl_tex_slot != -1) && gl_tex);
-                glUniform1i(shd_img->gl_loc, shd_img->gl_tex_slot);
-                _sg_gl_bind_texture(shd_img->gl_tex_slot, img->gl_target, gl_tex);
+                const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
+                SOKOL_ASSERT(img && img->gl.target);
+                SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
+                glUniform1i(gl_shd_img->gl_loc, gl_shd_img->gl_tex_slot);
+                _sg_gl_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
             }
         }
     }
     _SG_GL_CHECK_ERROR();
 
     /* index buffer (can be 0) */
-    const GLuint gl_ib = ib ? ib->gl_buf[ib->cmn.active_slot] : 0;
+    const GLuint gl_ib = ib ? ib->gl.buf[ib->cmn.active_slot] : 0;
     _sg_gl_bind_buffer(GL_ELEMENT_ARRAY_BUFFER, gl_ib);
     _sg.gl.cache.cur_ib_offset = ib_offset;
 
     /* vertex attributes */
     for (uint32_t attr_index = 0; attr_index < _sg.limits.max_vertex_attrs; attr_index++) {
-        _sg_gl_attr_t* attr = &pip->gl_attrs[attr_index];
+        _sg_gl_attr_t* attr = &pip->gl.attrs[attr_index];
         _sg_gl_cache_attr_t* cache_attr = &_sg.gl.cache.attrs[attr_index];
         bool cache_attr_dirty = false;
         int vb_offset = 0;
@@ -6091,7 +6087,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
             SOKOL_ASSERT(attr->vb_index < num_vbs);
             _sg_buffer_t* vb = vbs[attr->vb_index];
             SOKOL_ASSERT(vb);
-            gl_vb = vb->gl_buf[vb->cmn.active_slot];
+            gl_vb = vb->gl.buf[vb->cmn.active_slot];
             vb_offset = vb_offsets[attr->vb_index] + attr->offset;
             if ((gl_vb != cache_attr->gl_vbuf) ||
                 (attr->size != cache_attr->gl_attr.size) ||
@@ -6140,12 +6136,13 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->slot.id == _sg.gl.cache.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->slot.id == _sg.gl.cache.cur_pipeline->cmn.shader_id.id);
-    _sg_shader_stage_t* stage = &_sg.gl.cache.cur_pipeline->shader->stage[stage_index];
+    const _sg_shader_stage_t* stage = &_sg.gl.cache.cur_pipeline->shader->cmn.stage[stage_index];
+    const _sg_gl_shader_stage_t* gl_stage = &_sg.gl.cache.cur_pipeline->shader->gl.stage[stage_index];
     SOKOL_ASSERT(ub_index < stage->num_uniform_blocks);
-    _sg_uniform_block_t* ub = &stage->uniform_blocks[ub_index];
-    SOKOL_ASSERT(ub->size == num_bytes);
-    for (int u_index = 0; u_index < ub->num_uniforms; u_index++) {
-        _sg_uniform_t* u = &ub->uniforms[u_index];
+    const _sg_gl_uniform_block_t* gl_ub = &gl_stage->uniform_blocks[ub_index];
+    SOKOL_ASSERT(stage->uniform_blocks[ub_index].size == num_bytes);
+    for (int u_index = 0; u_index < gl_ub->num_uniforms; u_index++) {
+        const _sg_gl_uniform_t* u = &gl_ub->uniforms[u_index];
         SOKOL_ASSERT(u->type != SG_UNIFORMTYPE_INVALID);
         if (u->gl_loc == -1) {
             continue;
@@ -6221,7 +6218,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     }
     GLenum gl_tgt = _sg_gl_buffer_target(buf->cmn.type);
     SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    GLuint gl_buf = buf->gl_buf[buf->cmn.active_slot];
+    GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_store_buffer_binding(gl_tgt);
@@ -6240,7 +6237,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     }
     GLenum gl_tgt = _sg_gl_buffer_target(buf->cmn.type);
     SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    GLuint gl_buf = buf->gl_buf[buf->cmn.active_slot];
+    GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     SOKOL_ASSERT(gl_buf);
     _SG_GL_CHECK_ERROR();
     _sg_gl_store_buffer_binding(gl_tgt);
@@ -6257,16 +6254,16 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* d
         img->cmn.active_slot = 0;
     }
     SOKOL_ASSERT(img->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    SOKOL_ASSERT(0 != img->gl_tex[img->cmn.active_slot]);
+    SOKOL_ASSERT(0 != img->gl.tex[img->cmn.active_slot]);
     _sg_gl_store_texture_binding(0);
-    _sg_gl_bind_texture(0, img->gl_target, img->gl_tex[img->cmn.active_slot]);
+    _sg_gl_bind_texture(0, img->gl.target, img->gl.tex[img->cmn.active_slot]);
     const GLenum gl_img_format = _sg_gl_teximage_format(img->cmn.pixel_format);
     const GLenum gl_img_type = _sg_gl_teximage_type(img->cmn.pixel_format);
     const int num_faces = img->cmn.type == SG_IMAGETYPE_CUBE ? 6 : 1;
     const int num_mips = img->cmn.num_mipmaps;
     for (int face_index = 0; face_index < num_faces; face_index++) {
         for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-            GLenum gl_img_target = img->gl_target;
+            GLenum gl_img_target = img->gl.target;
             if (SG_IMAGETYPE_CUBE == img->cmn.type) {
                 gl_img_target = _sg_gl_cubeface_target(face_index);
             }
@@ -10300,7 +10297,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         /* has expected vertex shader images */
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-            _sg_shader_stage_t* stage = &pip->shader->stage[SG_SHADERSTAGE_VS];
+            _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
             if (bindings->vs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_VS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->vs_images[i].id);
@@ -10316,7 +10313,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
 
         /* has expected fragment shader images */
         for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-            _sg_shader_stage_t* stage = &pip->shader->stage[SG_SHADERSTAGE_FS];
+            _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
             if (bindings->fs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_FS_IMGS);
                 const _sg_image_t* img = _sg_lookup_image(&_sg.pools, bindings->fs_images[i].id);
@@ -10350,7 +10347,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int
         SOKOL_ASSERT(pip->shader && (pip->shader->slot.id == pip->cmn.shader_id.id));
 
         /* check that there is a uniform block at 'stage' and 'ub_index' */
-        const _sg_shader_stage_t* stage = &pip->shader->stage[stage_index];
+        const _sg_shader_stage_t* stage = &pip->shader->cmn.stage[stage_index];
         SOKOL_VALIDATE(ub_index < stage->num_uniform_blocks, _SG_VALIDATE_AUB_NO_UB_AT_SLOT);
 
         /* check that the provided data size doesn't exceed the uniform block size */
