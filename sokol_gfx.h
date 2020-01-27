@@ -2183,6 +2183,8 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #endif
 
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #define _SOKOL_ANY_GL (1)
+
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
     #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
     #endif
@@ -2594,7 +2596,7 @@ typedef struct {
 typedef _sg_dummy_context_t _sg_context_t;
 
 /*== GL BACKEND DECLARATIONS =================================================*/
-#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#elif defined(_SOKOL_ANY_GL)
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -3212,7 +3214,7 @@ typedef struct {
     sg_features features;
     sg_limits limits;
     sg_pixelformat_info formats[_SG_PIXELFORMAT_NUM];
-    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+    #if defined(_SOKOL_ANY_GL)
     _sg_gl_backend_t gl;
     #elif defined(SOKOL_METAL)
     _sg_mtl_backend_t mtl;
@@ -3587,7 +3589,7 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
 /*== DUMMY BACKEND IMPL ======================================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
 
-_SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+_SOKOL_PRIVATE void _sg_dummy_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     _SOKOL_UNUSED(desc);
     _sg.backend = SG_BACKEND_DUMMY;
@@ -3602,64 +3604,64 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg.formats[SG_PIXELFORMAT_DEPTH_STENCIL].depth = true;
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(void) {
+_SOKOL_PRIVATE void _sg_dummy_discard_backend(void) {
     /* empty */
 }
 
-_SOKOL_PRIVATE void _sg_reset_state_cache(void) {
+_SOKOL_PRIVATE void _sg_dummy_reset_state_cache(void) {
     /* empty*/
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
 }
 
-_SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_dummy_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _sg_buffer_common_init(&buf->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     _SOKOL_UNUSED(buf);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _sg_image_common_init(&img->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     _SOKOL_UNUSED(img);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     _sg_shader_common_init(&shd->cmn, desc);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     _SOKOL_UNUSED(shd);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && desc);
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
@@ -3674,12 +3676,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
 
@@ -3706,24 +3708,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
+_SOKOL_PRIVATE void _sg_dummy_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     _SOKOL_UNUSED(pass);
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
+_SOKOL_PRIVATE _sg_image_t* _sg_dummy_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     /* NOTE: may return null */
     return pass->dmy.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
+_SOKOL_PRIVATE _sg_image_t* _sg_dummy_pass_ds_image(const _sg_pass_t* pass) {
     /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->dmy.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_dummy_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     _SOKOL_UNUSED(pass);
     _SOKOL_UNUSED(action);
@@ -3731,15 +3733,15 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* actio
     _SOKOL_UNUSED(h);
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(void) {
+_SOKOL_PRIVATE void _sg_dummy_end_pass(void) {
     /* empty */
 }
 
-_SOKOL_PRIVATE void _sg_commit(void) {
+_SOKOL_PRIVATE void _sg_dummy_commit(void) {
     /* empty */
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_dummy_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     _SOKOL_UNUSED(x);
     _SOKOL_UNUSED(y);
     _SOKOL_UNUSED(w);
@@ -3747,7 +3749,7 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     _SOKOL_UNUSED(origin_top_left);
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_dummy_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     _SOKOL_UNUSED(x);
     _SOKOL_UNUSED(y);
     _SOKOL_UNUSED(w);
@@ -3755,12 +3757,12 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     _SOKOL_UNUSED(origin_top_left);
 }
 
-_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_dummy_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     _SOKOL_UNUSED(pip);
 }
 
-_SOKOL_PRIVATE void _sg_apply_bindings(
+_SOKOL_PRIVATE void _sg_dummy_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
@@ -3778,7 +3780,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     _SOKOL_UNUSED(fs_imgs); _SOKOL_UNUSED(num_fs_imgs);
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
@@ -3788,13 +3790,13 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     _SOKOL_UNUSED(num_bytes);
 }
 
-_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_instances) {
     _SOKOL_UNUSED(base_element);
     _SOKOL_UNUSED(num_elements);
     _SOKOL_UNUSED(num_instances);
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
+_SOKOL_PRIVATE void _sg_dummy_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(data_size);
@@ -3803,7 +3805,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data, int d
     }
 }
 
-_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int data_size, bool new_frame) {
+_SOKOL_PRIVATE void _sg_dummy_append_buffer(_sg_buffer_t* buf, const void* data, int data_size, bool new_frame) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(data_size);
@@ -3814,7 +3816,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int d
     }
 }
 
-_SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
+_SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     _SOKOL_UNUSED(data);
     if (++img->cmn.active_slot >= img->cmn.num_slots) {
@@ -3823,7 +3825,7 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* d
 }
 
 /*== GL BACKEND ==============================================================*/
-#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#elif defined(_SOKOL_ANY_GL)
 
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
@@ -4950,58 +4952,7 @@ _SOKOL_PRIVATE void _sg_gl_restore_texture_binding(int slot_index) {
     _sg_gl_bind_texture(slot_index, slot->target, slot->texture);
 }
 
-_SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
-    _SG_GL_CHECK_ERROR();
-    memset(&_sg.gl.cache, 0, sizeof(_sg.gl.cache));
-    _sg_gl_clear_buffer_bindings(true);
-    _SG_GL_CHECK_ERROR();
-    _sg_gl_clear_texture_bindings(true);
-    _SG_GL_CHECK_ERROR();
-    for (uint32_t i = 0; i < _sg.limits.max_vertex_attrs; i++) {
-        _sg_gl_init_attr(&_sg.gl.cache.attrs[i].gl_attr);
-        glDisableVertexAttribArray(i);
-        _SG_GL_CHECK_ERROR();
-    }
-    _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
-
-    /* depth-stencil state */
-    _sg_gl_init_depth_stencil_state(&_sg.gl.cache.ds);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_ALWAYS);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_STENCIL_TEST);
-    glStencilFunc(GL_ALWAYS, 0, 0);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-    glStencilMask(0);
-
-    /* blend state */
-    _sg_gl_init_blend_state(&_sg.gl.cache.blend);
-    glDisable(GL_BLEND);
-    glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
-    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
-
-    /* rasterizer state */
-    _sg_gl_init_rasterizer_state(&_sg.gl.cache.rast);
-    glPolygonOffset(0.0f, 0.0f);
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    glDisable(GL_CULL_FACE);
-    glFrontFace(GL_CW);
-    glCullFace(GL_BACK);
-    glEnable(GL_SCISSOR_TEST);
-    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-    glEnable(GL_DITHER);
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    #if defined(SOKOL_GLCORE33)
-        glEnable(GL_MULTISAMPLE);
-        glEnable(GL_PROGRAM_POINT_SIZE);
-    #endif
-}
-
-/*-- main GL backend state and functions -------------------------------------*/
-
-_SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+_SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     /* assumes that _sg.gl is already zero-initialized */
     _sg.gl.valid = true;
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -5029,33 +4980,77 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(void) {
+_SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
     _sg.gl.valid = false;
 }
 
-_SOKOL_PRIVATE void _sg_reset_state_cache(void) {
+_SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     if (_sg.gl.cur_context) {
+        _SG_GL_CHECK_ERROR();
         #if !defined(SOKOL_GLES2)
         if (!_sg.gl.gles2) {
-            _SG_GL_CHECK_ERROR();
             glBindVertexArray(_sg.gl.cur_context->vao);
             _SG_GL_CHECK_ERROR();
         }
         #endif
-        _sg_gl_reset_state_cache();
+        memset(&_sg.gl.cache, 0, sizeof(_sg.gl.cache));
+        _sg_gl_clear_buffer_bindings(true);
+        _SG_GL_CHECK_ERROR();
+        _sg_gl_clear_texture_bindings(true);
+        _SG_GL_CHECK_ERROR();
+        for (uint32_t i = 0; i < _sg.limits.max_vertex_attrs; i++) {
+            _sg_gl_init_attr(&_sg.gl.cache.attrs[i].gl_attr);
+            glDisableVertexAttribArray(i);
+            _SG_GL_CHECK_ERROR();
+        }
+        _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
+
+        /* depth-stencil state */
+        _sg_gl_init_depth_stencil_state(&_sg.gl.cache.ds);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_STENCIL_TEST);
+        glStencilFunc(GL_ALWAYS, 0, 0);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        glStencilMask(0);
+
+        /* blend state */
+        _sg_gl_init_blend_state(&_sg.gl.cache.blend);
+        glDisable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+        /* rasterizer state */
+        _sg_gl_init_rasterizer_state(&_sg.gl.cache.rast);
+        glPolygonOffset(0.0f, 0.0f);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDisable(GL_CULL_FACE);
+        glFrontFace(GL_CW);
+        glCullFace(GL_BACK);
+        glEnable(GL_SCISSOR_TEST);
+        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        glEnable(GL_DITHER);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        #if defined(SOKOL_GLCORE33)
+            glEnable(GL_MULTISAMPLE);
+            glEnable(GL_PROGRAM_POINT_SIZE);
+        #endif
     }
 }
 
-_SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
     _sg.gl.cur_context = ctx;
-    _sg_reset_state_cache();
+    _sg_gl_reset_state_cache();
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-_SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
@@ -5072,7 +5067,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_gl_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
@@ -5084,7 +5079,7 @@ _SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
     #endif
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
     _sg_buffer_common_init(&buf->cmn, desc);
@@ -5114,7 +5109,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
+_SOKOL_PRIVATE void _sg_gl_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     _SG_GL_CHECK_ERROR();
     if (!buf->gl.ext_buffers) {
@@ -5133,7 +5128,7 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
     return _sg.formats[fmt_index].sample;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
     _sg_image_common_init(&img->cmn, desc);
@@ -5314,7 +5309,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_gl_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     _SG_GL_CHECK_ERROR();
     if (!img->gl.ext_textures) {
@@ -5358,7 +5353,7 @@ _SOKOL_PRIVATE GLuint _sg_gl_compile_shader(sg_shader_stage stage, const char* s
     return gl_shd;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->gl.prog);
     _SG_GL_CHECK_ERROR();
@@ -5458,7 +5453,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
+_SOKOL_PRIVATE void _sg_gl_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     _SG_GL_CHECK_ERROR();
     if (shd->gl.prog) {
@@ -5467,7 +5462,7 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(!pip->shader && pip->cmn.shader_id.id == SG_INVALID_ID);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
@@ -5523,7 +5518,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_gl_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     /* empty */
 }
@@ -5535,7 +5530,7 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
     first entries are the color attachment images (or nullptr), last entry
     is the depth-stencil image (or nullptr).
 */
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && att_images && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
     _SG_GL_CHECK_ERROR();
@@ -5669,7 +5664,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
+_SOKOL_PRIVATE void _sg_gl_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     _SG_GL_CHECK_ERROR();
     if (0 != pass->gl.fb) {
@@ -5686,20 +5681,19 @@ _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
+_SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     /* NOTE: may return null */
     return pass->gl.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
+_SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_ds_image(const _sg_pass_t* pass) {
     /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->gl.ds_att.image;
 }
 
-/*-- GL backend rendering functions ------------------------------------------*/
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     /* FIXME: what if a texture used as render target is still bound, should we
        unbind all currently bound textures in begin pass? */
     SOKOL_ASSERT(action);
@@ -5835,7 +5829,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* actio
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(void) {
+_SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     SOKOL_ASSERT(_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
@@ -5881,19 +5875,19 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_gl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.gl.in_pass);
     y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
     glViewport(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_gl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.gl.in_pass);
     y = origin_top_left ? (_sg.gl.cur_pass_height - (y+h)) : y;
     glScissor(x, y, w, h);
 }
 
-_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     _SG_GL_CHECK_ERROR();
@@ -6059,7 +6053,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_apply_bindings(
+_SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
@@ -6152,7 +6146,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
@@ -6196,7 +6190,7 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     }
 }
 
-_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances) {
     const GLenum i_type = _sg.gl.cache.cur_index_type;
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
     if (0 != i_type) {
@@ -6226,14 +6220,14 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     }
 }
 
-_SOKOL_PRIVATE void _sg_commit(void) {
+_SOKOL_PRIVATE void _sg_gl_commit(void) {
     SOKOL_ASSERT(!_sg.gl.in_pass);
     /* "soft" clear bindings (only those that are actually bound) */
     _sg_gl_clear_buffer_bindings(false);
     _sg_gl_clear_texture_bindings(false);
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
+_SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
     SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     /* only one update per buffer per frame allowed */
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
@@ -6251,7 +6245,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size, bool new_frame) {
+_SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size, bool new_frame) {
     SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     if (new_frame) {
         if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
@@ -6270,7 +6264,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
+_SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     /* only one update per image per frame allowed */
     if (++img->cmn.active_slot >= img->cmn.num_slots) {
@@ -6634,7 +6628,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+_SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
     /* assume _sg.d3d11 already is zero-initialized */
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->d3d11_device);
@@ -6650,7 +6644,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_d3d11_init_caps();
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(void) {
+_SOKOL_PRIVATE void _sg_d3d11_discard_backend(void) {
     SOKOL_ASSERT(_sg.d3d11.valid);
     _sg.d3d11.valid = false;
 }
@@ -6674,29 +6668,29 @@ _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
     ID3D11DeviceContext_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
 }
 
-_SOKOL_PRIVATE void _sg_reset_state_cache(void) {
+_SOKOL_PRIVATE void _sg_d3d11_reset_state_cache(void) {
     /* just clear the d3d11 device context state */
     _sg_d3d11_clear_state();
 }
 
-_SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_d3d11_activate_context(_sg_context_t* ctx) {
     _SOKOL_UNUSED(ctx);
     _sg_reset_state_cache();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     /* empty */
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(!buf->d3d11.buf);
     _sg_buffer_common_init(&buf->cmn, desc);
@@ -6727,7 +6721,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->d3d11.buf) {
         ID3D11Buffer_Release(buf->d3d11.buf);
@@ -6763,7 +6757,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(!img->d3d11.tex2d && !img->d3d11.tex3d && !img->d3d11.texds && !img->d3d11.texmsaa);
     SOKOL_ASSERT(!img->d3d11.srv && !img->d3d11.smp);
@@ -6972,7 +6966,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     if (img->d3d11.tex2d) {
         ID3D11Texture2D_Release(img->d3d11.tex2d);
@@ -7056,7 +7050,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
 
 #define _sg_d3d11_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->d3d11.vs && !shd->d3d11.fs && !shd->d3d11.vs_blob);
     HRESULT hr;
@@ -7134,7 +7128,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     return result;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     if (shd->d3d11.vs) {
         ID3D11VertexShader_Release(shd->d3d11.vs);
@@ -7156,7 +7150,7 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     SOKOL_ASSERT(shd->slot.state == SG_RESOURCESTATE_VALID);
@@ -7270,7 +7264,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     if (pip->d3d11.il) {
         ID3D11InputLayout_Release(pip->d3d11.il);
@@ -7286,7 +7280,7 @@ _SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
     SOKOL_ASSERT(_sg.d3d11.dev);
@@ -7374,7 +7368,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
+_SOKOL_PRIVATE void _sg_d3d11_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (pass->d3d11.color_atts[i].rtv) {
@@ -7386,19 +7380,19 @@ _SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
     }
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
+_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     /* NOTE: may return null */
     return pass->d3d11.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
+_SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_ds_image(const _sg_pass_t* pass) {
     /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->d3d11.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
     _sg.d3d11.in_pass = true;
@@ -7468,7 +7462,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, 
     return mip_slice + array_slice * mip_levels;
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(void) {
+_SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     SOKOL_ASSERT(_sg.d3d11.in_pass && _sg.d3d11.ctx);
     _sg.d3d11.in_pass = false;
 
@@ -7504,7 +7498,7 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
     _sg_d3d11_clear_state();
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(_sg.d3d11.in_pass);
     D3D11_VIEWPORT vp;
@@ -7517,7 +7511,7 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     ID3D11DeviceContext_RSSetViewports(_sg.d3d11.ctx, 1, &vp);
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(_sg.d3d11.in_pass);
     D3D11_RECT rect;
@@ -7528,7 +7522,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     ID3D11DeviceContext_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 }
 
-_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     SOKOL_ASSERT(_sg.d3d11.ctx);
@@ -7550,7 +7544,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     ID3D11DeviceContext_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, pip->shader->d3d11.stage[SG_SHADERSTAGE_FS].cbufs);
 }
 
-_SOKOL_PRIVATE void _sg_apply_bindings(
+_SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
@@ -7608,7 +7602,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
     ID3D11DeviceContext_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
 }
 
-_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     _SOKOL_UNUSED(num_bytes);
     SOKOL_ASSERT(_sg.d3d11.ctx && _sg.d3d11.in_pass);
     SOKOL_ASSERT(data && (num_bytes > 0));
@@ -7623,7 +7617,7 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     ID3D11DeviceContext_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data, 0, 0);
 }
 
-_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.d3d11.in_pass);
     if (_sg.d3d11.use_indexed_draw) {
         if (1 == num_instances) {
@@ -7643,11 +7637,11 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     }
 }
 
-_SOKOL_PRIVATE void _sg_commit(void) {
+_SOKOL_PRIVATE void _sg_d3d11_commit(void) {
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
+_SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
     SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
@@ -7659,7 +7653,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     ID3D11DeviceContext_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
 }
 
-_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size, bool new_frame) {
+_SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size, bool new_frame) {
     SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
@@ -7673,7 +7667,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, i
     ID3D11DeviceContext_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
 }
 
-_SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
+_SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(img->d3d11.tex2d || img->d3d11.tex3d);
@@ -8406,7 +8400,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
 }
 
 /*-- main Metal backend state and functions ----------------------------------*/
-_SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
+_SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     /* assume already zero-initialized */
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->mtl_device);
@@ -8437,7 +8431,7 @@ _SOKOL_PRIVATE void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_init_caps();
 }
 
-_SOKOL_PRIVATE void _sg_discard_backend(void) {
+_SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     SOKOL_ASSERT(_sg.mtl.valid);
     /* wait for the last frame to finish */
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -8456,27 +8450,27 @@ _SOKOL_PRIVATE void _sg_discard_backend(void) {
     _sg_mtl_device = nil;
 }
 
-_SOKOL_PRIVATE void _sg_reset_state_cache(void) {
+_SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
     _sg_mtl_clear_state_cache();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     /* empty */
 }
 
-_SOKOL_PRIVATE void _sg_activate_context(_sg_context_t* ctx) {
-    _sg_reset_state_cache();
+_SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
+    _sg_mtl_clear_state_cache();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _sg_buffer_common_init(&buf->cmn, desc);
     const bool injected = (0 != desc->mtl_buffers[0]);
@@ -8501,7 +8495,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_b
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_buffer(_sg_buffer_t* buf) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         /* it's valid to call release resource with '0' */
@@ -8633,7 +8627,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc,
     mtl_desc.sampleCount = img->cmn.sample_count;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _sg_image_common_init(&img->cmn, desc);
     const bool injected = (0 != desc->mtl_textures[0]);
@@ -8710,7 +8704,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_image(_sg_image_t* img, const sg_ima
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_image(_sg_image_t* img) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     /* it's valid to call release resource with a 'null resource' */
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
@@ -8744,7 +8738,7 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, 
     return lib;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
 
     _sg_shader_common_init(&shd->cmn, desc);
@@ -8795,7 +8789,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_s
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     /* it is valid to call _sg_mtl_release_resource with a 'null resource' */
     _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
@@ -8804,7 +8798,7 @@ _SOKOL_PRIVATE void _sg_destroy_shader(_sg_shader_t* shd) {
     _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
 
@@ -8917,14 +8911,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sh
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     /* it's valid to call release resource with a 'null resource' */
     _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.rps);
     _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.dss);
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
 
@@ -8953,24 +8947,24 @@ _SOKOL_PRIVATE sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t**
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_pass(_sg_pass_t* pass) {
+_SOKOL_PRIVATE void _sg_mtl_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     _SOKOL_UNUSED(pass);
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
+_SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     /* NOTE: may return null */
     return pass->mtl.color_atts[index].image;
 }
 
-_SOKOL_PRIVATE _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
+_SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_ds_image(const _sg_pass_t* pass) {
     /* NOTE: may return null */
     SOKOL_ASSERT(pass);
     return pass->mtl.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(_sg_mtl_cmd_queue);
@@ -9106,7 +9100,7 @@ _SOKOL_PRIVATE void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* actio
     }
 }
 
-_SOKOL_PRIVATE void _sg_end_pass(void) {
+_SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     _sg.mtl.in_pass = false;
     _sg.mtl.pass_valid = false;
@@ -9116,7 +9110,7 @@ _SOKOL_PRIVATE void _sg_end_pass(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_commit(void) {
+_SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
     SOKOL_ASSERT(_sg.mtl.drawable_cb);
@@ -9148,7 +9142,7 @@ _SOKOL_PRIVATE void _sg_commit(void) {
     _sg_mtl_cmd_buffer = nil;
 }
 
-_SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
@@ -9164,7 +9158,7 @@ _SOKOL_PRIVATE void _sg_apply_viewport(int x, int y, int w, int h, bool origin_t
     [_sg_mtl_cmd_encoder setViewport:vp];
 }
 
-_SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+_SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
@@ -9190,7 +9184,7 @@ _SOKOL_PRIVATE void _sg_apply_scissor_rect(int x, int y, int w, int h, bool orig
     [_sg_mtl_cmd_encoder setScissorRect:r];
 }
 
-_SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_ASSERT(pip->shader);
     SOKOL_ASSERT(_sg.mtl.in_pass);
@@ -9215,7 +9209,7 @@ _SOKOL_PRIVATE void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_apply_bindings(
+_SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
@@ -9288,7 +9282,7 @@ _SOKOL_PRIVATE void _sg_apply_bindings(
 
 #define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
 
-_SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
@@ -9317,7 +9311,7 @@ _SOKOL_PRIVATE void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index
     _sg.mtl.cur_ub_offset = _sg_mtl_roundup(_sg.mtl.cur_ub_offset + num_bytes, _SG_MTL_UB_ALIGN);
 }
 
-_SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instances) {
+_SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
@@ -9347,7 +9341,7 @@ _SOKOL_PRIVATE void _sg_draw(int base_element, int num_elements, int num_instanc
     }
 }
 
-_SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
+_SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
     if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
         buf->cmn.active_slot = 0;
@@ -9360,7 +9354,7 @@ _SOKOL_PRIVATE void _sg_update_buffer(_sg_buffer_t* buf, const void* data, int d
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int data_size, bool new_frame) {
+_SOKOL_PRIVATE void _sg_mtl_append_buffer(_sg_buffer_t* buf, const void* data, int data_size, bool new_frame) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
     if (new_frame) {
         if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
@@ -9376,7 +9370,7 @@ _SOKOL_PRIVATE void _sg_append_buffer(_sg_buffer_t* buf, const void* data, int d
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
+_SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_content* data) {
     SOKOL_ASSERT(img && data);
     if (++img->cmn.active_slot >= img->cmn.num_slots) {
         img->cmn.active_slot = 0;
@@ -9385,6 +9379,373 @@ _SOKOL_PRIVATE void _sg_update_image(_sg_image_t* img, const sg_image_content* d
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
 #endif
+
+/*== BACKEND API WRAPPERS ====================================================*/
+static inline void _sg_setup_backend(const sg_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_setup_backend(desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_setup_backend(desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_setup_backend(desc);
+    #else
+    _sg_dummy_setup_backend(desc);
+    #endif
+}
+
+static inline void _sg_discard_backend(void) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_discard_backend();
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_discard_backend();
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_discard_backend();
+    #else
+    _sg_dummy_discard_backend();
+    #endif
+}
+
+static inline void _sg_reset_state_cache(void) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_reset_state_cache();
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_reset_state_cache();
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_reset_state_cache();
+    #else
+    _sg_dummy_reset_state_cache();
+    #endif
+}
+
+static inline void _sg_activate_context(_sg_context_t* ctx) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_activate_context(ctx);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_activate_context(ctx);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_activate_context(ctx);
+    #else
+    _sg_dummy_activate_context(ctx);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_context(ctx);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_context(ctx);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_context(ctx);
+    #else
+    return _sg_dummy_create_context(ctx);
+    #endif
+}
+
+static inline void _sg_destroy_context(_sg_context_t* ctx) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_context(ctx);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_context(ctx);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_context(ctx);
+    #else
+    _sg_dummy_destroy_context(ctx);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_buffer(buf, desc);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_buffer(buf, desc);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_buffer(buf, desc);
+    #else
+    return _sg_dummy_create_buffer(buf, desc);
+    #endif
+}
+
+static inline void _sg_destroy_buffer(_sg_buffer_t* buf) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_buffer(buf);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_buffer(buf);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_buffer(buf);
+    #else
+    _sg_dummy_destroy_buffer(buf);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_image(img, desc);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_image(img, desc);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_image(img, desc);
+    #else
+    return _sg_dummy_create_image(img, desc);
+    #endif
+}
+
+static inline void _sg_destroy_image(_sg_image_t* img) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_image(img);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_image(img);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_image(img);
+    #else
+    _sg_dummy_destroy_image(img);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_shader(shd, desc);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_shader(shd, desc);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_shader(shd, desc);
+    #else
+    return _sg_dummy_create_shader(shd, desc);
+    #endif
+}
+
+static inline void _sg_destroy_shader(_sg_shader_t* shd) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_shader(shd);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_shader(shd);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_shader(shd);
+    #else
+    _sg_dummy_destroy_shader(shd);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_pipeline(pip, shd, desc);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_pipeline(pip, shd, desc);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_pipeline(pip, shd, desc);
+    #else
+    return _sg_dummy_create_pipeline(pip, shd, desc);
+    #endif
+}
+
+static inline void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_pipeline(pip);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_pipeline(pip);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_pipeline(pip);
+    #else
+    _sg_dummy_destroy_pipeline(pip);
+    #endif
+}
+
+static inline sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_create_pass(pass, att_images, desc);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_create_pass(pass, att_images, desc);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_create_pass(pass, att_images, desc);
+    #else
+    return _sg_dummy_create_pass(pass, att_images, desc);
+    #endif
+}
+
+static inline void _sg_destroy_pass(_sg_pass_t* pass) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_destroy_pass(pass);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_destroy_pass(pass);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_destroy_pass(pass);
+    #else
+    _sg_dummy_destroy_pass(pass);
+    #endif
+}
+
+static inline _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_pass_color_image(pass, index);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_pass_color_image(pass, index);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_pass_color_image(pass, index);
+    #else
+    return _sg_dummy_pass_color_image(pass, index);
+    #endif
+}
+
+static inline _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
+    #if defined(_SOKOL_ANY_GL)
+    return _sg_gl_pass_ds_image(pass);
+    #elif defined(SOKOL_METAL)
+    return _sg_mtl_pass_ds_image(pass);
+    #elif defined(SOKOL_D3D11)
+    return _sg_d3d11_pass_ds_image(pass);
+    #else
+    return _sg_dummy_pass_ds_image(pass);
+    #endif
+}
+
+static inline void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_begin_pass(pass, action, w, h);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_begin_pass(pass, action, w, h);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_begin_pass(pass, action, w, h);
+    #else
+    _sg_dummy_begin_pass(pass, action, w, h);
+    #endif
+}
+
+static inline void _sg_end_pass(void) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_end_pass();
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_end_pass();
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_end_pass();
+    #else
+    _sg_dummy_end_pass();
+    #endif
+}
+
+static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_apply_viewport(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
+    #else
+    _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
+    #endif
+}
+
+static inline void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #else
+    _sg_dummy_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #endif
+}
+
+static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_apply_pipeline(pip);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_apply_pipeline(pip);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_apply_pipeline(pip);
+    #else
+    _sg_dummy_apply_pipeline(pip);
+    #endif
+}
+
+static inline void _sg_apply_bindings(
+    _sg_pipeline_t* pip,
+    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer_t* ib, int ib_offset,
+    _sg_image_t** vs_imgs, int num_vs_imgs,
+    _sg_image_t** fs_imgs, int num_fs_imgs)
+{
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #else
+    _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #endif
+}
+
+static inline void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #else
+    _sg_dummy_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #endif
+}
+
+static inline void _sg_draw(int base_element, int num_elements, int num_instances) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_draw(base_element, num_elements, num_instances);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_draw(base_element, num_elements, num_instances);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_draw(base_element, num_elements, num_instances);
+    #else
+    _sg_dummy_draw(base_element, num_elements, num_instances);
+    #endif
+}
+
+static inline void _sg_commit(void) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_commit();
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_commit();
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_commit();
+    #else
+    _sg_dummy_commit();
+    #endif
+}
+
+static inline void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_update_buffer(buf, data_ptr, data_size);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_update_buffer(buf, data_ptr, data_size);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_update_buffer(buf, data_ptr, data_size);
+    #else
+    _sg_dummy_update_buffer(buf, data_ptr, data_size);
+    #endif
+}
+
+static inline void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, int data_size, bool new_frame) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_append_buffer(buf, data_ptr, data_size, new_frame);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_append_buffer(buf, data_ptr, data_size, new_frame);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_append_buffer(buf, data_ptr, data_size, new_frame);
+    #else
+    _sg_dummy_append_buffer(buf, data_ptr, data_size, new_frame);
+    #endif
+}
+
+static inline void _sg_update_image(_sg_image_t* img, const sg_image_content* data) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_update_image(img, data);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_update_image(img, data);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_update_image(img, data);
+    #else
+    _sg_dummy_update_image(img, data);
+    #endif
+}
 
 /*== RESOURCE POOLS ==========================================================*/
 
