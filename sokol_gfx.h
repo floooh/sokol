@@ -6674,7 +6674,7 @@ _SOKOL_PRIVATE void _sg_d3d11_reset_state_cache(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_activate_context(_sg_context_t* ctx) {
     _SOKOL_UNUSED(ctx);
-    _sg_reset_state_cache();
+    _sg_d3d11_clear_state();
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_context(_sg_context_t* ctx) {
