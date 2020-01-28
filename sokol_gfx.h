@@ -2789,7 +2789,7 @@ typedef struct {
 #elif defined(SOKOL_METAL)
 
 enum {
-    #if defined(_SG_TARGET_MACOS)
+    #if defined(_SG_TARGET_MACOS) || defined(_SG_TARGET_IOS_SIMULATOR)
     _SG_MTL_UB_ALIGN = 256,
     #else
     _SG_MTL_UB_ALIGN = 16,
