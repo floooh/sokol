@@ -5853,8 +5853,8 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
                     SOKOL_ASSERT(gl_att->gl_msaa_resolve_buffer);
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
                     glReadBuffer(GL_COLOR_ATTACHMENT0 + att_index);
-                    const GLenum gl_att = GL_COLOR_ATTACHMENT0;
-                    glDrawBuffers(1, &gl_att);
+                    const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
+                    glDrawBuffers(1, &gl_draw_bufs);
                     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                 }
                 else {
