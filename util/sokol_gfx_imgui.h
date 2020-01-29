@@ -1,26 +1,33 @@
-#pragma once
+#ifndef SOKOL_GFX_IMGUI_INCLUDED
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
 
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+
         #define SOKOL_GFX_IMGUI_IMPL
-    before you include this file in *one* C++ file to create the
+
+    before you include this file in *one* C or C++ file to create the
     implementation.
 
-    NOTE that the implementation must be compiled as C++ or Objective-C++
-    because it calls into the ImGui C++ API. The sokol_gfx_imgui.h API
-    itself is plain C though.
+    NOTE that the implementation can be compiled either as C++ or as C.
+    When compiled as C++, sokol_gfx_imgui.h will directly call into the
+    Dear ImGui C++ API. When compiled as C, sokol_gfx_imgui.h will call
+    cimgui.h functions instead.
 
     Include the following file(s) before including sokol_gfx_imgui.h:
 
         sokol_gfx.h
 
-    Additionally, include the following files(s) before including
-    the implementation of sokol_gfx_imgui.h:
+    Additionally, include the following headers before including the
+    implementation:
 
+    If the implementation is compiled as C++:
         imgui.h
+
+    If the implementation is compiled as C:
+        cimgui.h
 
     The sokol_gfx.h implementation must be compiled with debug trace hooks
     enabled by defining:
@@ -150,6 +157,7 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
+#define SOKOL_GFX_IMGUI_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -551,10 +559,10 @@ typedef struct {
     sg_imgui_caps_t caps;
     sg_pipeline cur_pipeline;
     sg_trace_hooks hooks;
-    rizz_api_gfx_immediate* api;
+    rizz_api_gfx* api;
 } sg_imgui_t;
 
-SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx, rizz_api_gfx_immediate* api);
+SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx, rizz_api_gfx* api);
 SOKOL_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
 SOKOL_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
@@ -577,11 +585,19 @@ SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif
+#endif /* SOKOL_GFX_IMGUI_INCLUDED */
 
 /*=== IMPLEMENTATION =========================================================*/
-#if defined(SOKOL_GFX_IMGUI_IMPL)
-#if !defined(IMGUI_VERSION)
-#error "Please include imgui.h before the sokol_gfx_imgui.h implementation"
+#ifdef SOKOL_GFX_IMGUI_IMPL
+#define SOKOL_GFX_IMGUI_IMPL_INCLUDED (1)
+#if defined(__cplusplus)
+    #if !defined(IMGUI_VERSION)
+    #error "Please include imgui.h before the sokol_imgui.h implementation"
+    #endif
+#else
+    #if !defined(CIMGUI_INCLUDED)
+    #error "Please include cimgui.h before the sokol_imgui.h implementation"
+    #endif
 #endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
@@ -611,10 +627,92 @@ SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 
 #define _SG_IMGUI_SLOT_MASK (0xFFFF)
 #define _SG_IMGUI_LIST_WIDTH (192)
-#define _SG_IMGUI_COLOR_OTHER the__imgui.ColorConvertFloat4ToU32((ImVec4) {0.75f, 0.75f, 0.75f, 1.0f})
-#define _SG_IMGUI_COLOR_RSRC the__imgui.ColorConvertFloat4ToU32((ImVec4){1.0f, 1.0f, 0.0f, 1.0f})
-#define _SG_IMGUI_COLOR_DRAW the__imgui.ColorConvertFloat4ToU32((ImVec4){0.0f, 1.0f, 0.0f, 1.0f})
-#define _SG_IMGUI_COLOR_ERR the__imgui.ColorConvertFloat4ToU32((ImVec4){1.0f, 0.5f, 0.5f, 1.0f})
+#define _SG_IMGUI_COLOR_OTHER 0xFFCCCCCC
+#define _SG_IMGUI_COLOR_RSRC 0xFF00FFFF
+#define _SG_IMGUI_COLOR_DRAW 0xFF00FF00
+#define _SG_IMGUI_COLOR_ERR 0xFF8888FF
+
+/*--- C => C++ layer ---------------------------------------------------------*/
+#if defined(__cplusplus)
+#define IMVEC2(x,y) ImVec2(x,y)
+#define IMVEC4(x,y,z,w) ImVec4(x,y,z,w)
+_SOKOL_PRIVATE void igText(const char* fmt,...) {
+    va_list args;
+    va_start(args, fmt);
+    ImGui::TextV(fmt, args);
+    va_end(args);
+}
+_SOKOL_PRIVATE void igSeparator() {
+    return ImGui::Separator();
+}
+_SOKOL_PRIVATE void igSameLine(float offset_from_start_x, float spacing) {
+    return ImGui::SameLine(offset_from_start_x,spacing);
+}
+_SOKOL_PRIVATE void igPushIDInt(int int_id) {
+    return ImGui::PushID(int_id);
+}
+_SOKOL_PRIVATE void igPopID() {
+    return ImGui::PopID();
+}
+_SOKOL_PRIVATE bool igSelectable(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
+    return ImGui::Selectable(label,selected,flags,size);
+}
+_SOKOL_PRIVATE bool igSmallButton(const char* label) {
+    return ImGui::SmallButton(label);
+}
+_SOKOL_PRIVATE bool igBeginChild(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
+    return ImGui::BeginChild(str_id,size,border,flags);
+}
+_SOKOL_PRIVATE void igEndChild() {
+    return ImGui::EndChild();
+}
+_SOKOL_PRIVATE void igPushStyleColorU32(ImGuiCol idx, ImU32 col) {
+    return ImGui::PushStyleColor(idx,col);
+}
+_SOKOL_PRIVATE void igPopStyleColor(int count) {
+    return ImGui::PopStyleColor(count);
+}
+_SOKOL_PRIVATE bool igTreeNodeStrStr(const char* str_id,const char* fmt,...) {
+    va_list args;
+    va_start(args, fmt);
+    bool ret = ImGui::TreeNodeV(str_id,fmt,args);
+    va_end(args);
+    return ret;
+}
+_SOKOL_PRIVATE bool igTreeNodeStr(const char* label) {
+    return ImGui::TreeNode(label);
+}
+_SOKOL_PRIVATE void igTreePop() {
+    return ImGui::TreePop();
+}
+_SOKOL_PRIVATE bool igIsItemHovered(ImGuiHoveredFlags flags) {
+    return ImGui::IsItemHovered(flags);
+}
+_SOKOL_PRIVATE void igSetTooltip(const char* fmt,...) {
+    va_list args;
+    va_start(args, fmt);
+    ImGui::SetTooltipV(fmt,args);
+    va_end(args);
+}
+_SOKOL_PRIVATE bool igSliderFloat(const char* label,float* v,float v_min,float v_max,const char* format,float power) {
+    return ImGui::SliderFloat(label,v,v_min,v_max,format,power);
+}
+_SOKOL_PRIVATE void igImage(ImTextureID user_texture_id,const ImVec2 size,const ImVec2 uv0,const ImVec2 uv1,const ImVec4 tint_col,const ImVec4 border_col) {
+    return ImGui::Image(user_texture_id,size,uv0,uv1,tint_col,border_col);
+}
+_SOKOL_PRIVATE void igSetNextWindowSize(const ImVec2 size,ImGuiCond cond) {
+    return ImGui::SetNextWindowSize(size,cond);
+}
+_SOKOL_PRIVATE bool igBegin(const char* name,bool* p_open,ImGuiWindowFlags flags) {
+    return ImGui::Begin(name,p_open,flags);
+}
+_SOKOL_PRIVATE void igEnd() {
+    return ImGui::End();
+}
+#else
+#define IMVEC2(x,y) (ImVec2){x,y}
+#define IMVEC4(x,y,z,w) (ImVec4){x,y,z,w}
+#endif
 
 /*--- UTILS ------------------------------------------------------------------*/
 _SOKOL_PRIVATE int _sg_imgui_slot_index(uint32_t id) {
@@ -844,8 +942,18 @@ _SOKOL_PRIVATE const char* _sg_imgui_wrap_string(sg_wrap w) {
     switch (w) {
         case SG_WRAP_REPEAT:            return "SG_WRAP_REPEAT";
         case SG_WRAP_CLAMP_TO_EDGE:     return "SG_WRAP_CLAMP_TO_EDGE";
+        case SG_WRAP_CLAMP_TO_BORDER:   return "SG_WRAP_CLAMP_TO_BORDER";
         case SG_WRAP_MIRRORED_REPEAT:   return "SG_WRAP_MIRRORED_REPEAT";
         default:                        return "???";
+    }
+}
+
+_SOKOL_PRIVATE const char* _sg_imgui_bordercolor_string(sg_border_color bc) {
+    switch (bc) {
+        case SG_BORDERCOLOR_TRANSPARENT_BLACK:  return "SG_BORDERCOLOR_TRANSPARENT_BLACK";
+        case SG_BORDERCOLOR_OPAQUE_BLACK:       return "SG_BORDERCOLOR_OPAQUE_BLACK";
+        case SG_BORDERCOLOR_OPAQUE_WHITE:       return "SG_BORDERCOLOR_OPAQUE_WHITE";
+        default:                                return "???";
     }
 }
 
@@ -856,6 +964,10 @@ _SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
         case SG_UNIFORMTYPE_FLOAT3: return "SG_UNIFORMTYPE_FLOAT3";
         case SG_UNIFORMTYPE_FLOAT4: return "SG_UNIFORMTYPE_FLOAT4";
         case SG_UNIFORMTYPE_MAT4:   return "SG_UNIFORMTYPE_MAT4";
+        case SG_UNIFORMTYPE_INT:    return "SG_UNIFORMTYPE_INT";
+        case SG_UNIFORMTYPE_INT2:   return "SG_UNIFORMTYPE_INT2";
+        case SG_UNIFORMTYPE_INT3:   return "SG_UNIFORMTYPE_INT3";
+        case SG_UNIFORMTYPE_INT4:   return "SG_UNIFORMTYPE_INT4";
         default:                    return "???";
     }
 }
@@ -880,8 +992,10 @@ _SOKOL_PRIVATE const char* _sg_imgui_vertexformat_string(sg_vertex_format f) {
         case SG_VERTEXFORMAT_UBYTE4N:   return "SG_VERTEXFORMAT_UBYTE4N";
         case SG_VERTEXFORMAT_SHORT2:    return "SG_VERTEXFORMAT_SHORT2";
         case SG_VERTEXFORMAT_SHORT2N:   return "SG_VERTEXFORMAT_SHORT2N";
+        case SG_VERTEXFORMAT_USHORT2N:  return "SG_VERTEXFORMAT_USHORT2N";
         case SG_VERTEXFORMAT_SHORT4:    return "SG_VERTEXFORMAT_SHORT4";
         case SG_VERTEXFORMAT_SHORT4N:   return "SG_VERTEXFORMAT_SHORT4N";
+        case SG_VERTEXFORMAT_USHORT4N:  return "SG_VERTEXFORMAT_USHORT4N";
         case SG_VERTEXFORMAT_UINT10_N2: return "SG_VERTEXFORMAT_UINT10_N2";
         default:                        return "???";
     }
@@ -2548,10 +2662,8 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
             the__imgui.Text("Size:  %d", buf_ui->desc.size);
             if (buf_ui->desc.usage != SG_USAGE_IMMUTABLE) {
                 the__imgui.Separator();
-				#if !defined(SOKOL_D3D11)
                 the__imgui.Text("Num Slots:     %d", info.num_slots);
                 the__imgui.Text("Active Slot:   %d", info.active_slot);
-				#endif
                 the__imgui.Text("Update Frame Index: %d", info.update_frame_index);
                 the__imgui.Text("Append Frame Index: %d", info.append_frame_index);
                 the__imgui.Text("Append Pos:         %d", info.append_pos);
@@ -2566,7 +2678,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
 }
 
 _SOKOL_PRIVATE bool _sg_imgui_image_renderable(sg_imgui_t* ctx, sg_image_type type, sg_pixel_format fmt) {
-    return sg_query_pixelformat(fmt).sample && !sg_query_pixelformat(fmt).depth;
+    return (type == SG_IMAGETYPE_2D) && ctx->api->query_pixelformat(fmt).sample && !ctx->api->query_pixelformat(fmt).depth;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img, float* scale) {
@@ -2612,6 +2724,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             the__imgui.Text("Wrap U:            %s", _sg_imgui_wrap_string(desc->wrap_u));
             the__imgui.Text("Wrap V:            %s", _sg_imgui_wrap_string(desc->wrap_v));
             the__imgui.Text("Wrap W:            %s", _sg_imgui_wrap_string(desc->wrap_w));
+            the__imgui.Text("Border Color:      %s", _sg_imgui_bordercolor_string(desc->border_color));
             the__imgui.Text("Max Anisotropy:    %d", desc->max_anisotropy);
             the__imgui.Text("Min LOD:           %.3f", desc->min_lod);
             the__imgui.Text("Max LOD:           %.3f", desc->max_lod);
@@ -3212,28 +3325,29 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
-    ImGui::Text("Backend: %s\n\n", _sg_imgui_backend_string(sg_query_backend()));
-    sg_features f = sg_query_features();
-    ImGui::Text("Features:");
-    ImGui::Text("    instancing: %s", _sg_imgui_bool_string(f.instancing));
-    ImGui::Text("    origin_top_left: %s", _sg_imgui_bool_string(f.origin_top_left));
-    ImGui::Text("    multiple_render_targets: %s", _sg_imgui_bool_string(f.multiple_render_targets));
-    ImGui::Text("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
-    ImGui::Text("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
-    ImGui::Text("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
-    sg_limits l = sg_query_limits();
-    ImGui::Text("\nLimits:\n");
-    ImGui::Text("    max_image_size_2d: %d", l.max_image_size_2d);
-    ImGui::Text("    max_image_size_cube: %d", l.max_image_size_cube);
-    ImGui::Text("    max_image_size_3d: %d", l.max_image_size_3d);
-    ImGui::Text("    max_image_size_array: %d", l.max_image_size_array);
-    ImGui::Text("    max_image_array_layers: %d", l.max_image_array_layers);
-    ImGui::Text("\nUsable Pixelformats:");
+    the__imgui.Text("Backend: %s\n\n", _sg_imgui_backend_string((sg_backend)ctx->api->backend()));
+    sg_features f = ctx->api->query_features();
+    the__imgui.Text("Features:");
+    the__imgui.Text("    instancing: %s", _sg_imgui_bool_string(f.instancing));
+    the__imgui.Text("    origin_top_left: %s", _sg_imgui_bool_string(f.origin_top_left));
+    the__imgui.Text("    multiple_render_targets: %s", _sg_imgui_bool_string(f.multiple_render_targets));
+    the__imgui.Text("    msaa_render_targets: %s", _sg_imgui_bool_string(f.msaa_render_targets));
+    the__imgui.Text("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
+    the__imgui.Text("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
+    the__imgui.Text("    compute_shaders: %s", _sg_imgui_bool_string(f.compute_shaders));
+    sg_limits l = ctx->api->query_limits();
+    the__imgui.Text("\nLimits:\n");
+    the__imgui.Text("    max_image_size_2d: %d", l.max_image_size_2d);
+    the__imgui.Text("    max_image_size_cube: %d", l.max_image_size_cube);
+    the__imgui.Text("    max_image_size_3d: %d", l.max_image_size_3d);
+    the__imgui.Text("    max_image_size_array: %d", l.max_image_size_array);
+    the__imgui.Text("    max_image_array_layers: %d", l.max_image_array_layers);
+    the__imgui.Text("\nUsable Pixelformats:");
     for (int i = (int)(SG_PIXELFORMAT_NONE+1); i < (int)_SG_PIXELFORMAT_NUM; i++) {
         sg_pixel_format fmt = (sg_pixel_format)i;
-        sg_pixelformat_info info = sg_query_pixelformat(fmt);
+        sg_pixelformat_info info = ctx->api->query_pixelformat(fmt);
         if (info.sample) {
-            ImGui::Text("  %s: %s%s%s%s%s%s",
+            the__imgui.Text("  %s: %s%s%s%s%s%s",
                 _sg_imgui_pixelformat_string(fmt),
                 info.sample ? "SAMPLE ":"",
                 info.filter ? "FILTER ":"",
@@ -3246,7 +3360,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(sg_imgui_t* ctx) {
 }
 
 /*--- PUBLIC FUNCTIONS -------------------------------------------------------*/
-SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx, rizz_api_gfx_immediate* api) {
+SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx, rizz_api_gfx* api) {
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(api);
 
@@ -3486,11 +3600,11 @@ SOKOL_API_IMPL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx) {
     if (!ctx->caps.open) {
         return;
     }
-    ImGui::SetNextWindowSize(ImVec2(440, 400), ImGuiCond_Once);
-    if (ImGui::Begin("Capabilities", &ctx->caps.open)) {
+    the__imgui.SetNextWindowSize(sx_vec2f(440, 400), ImGuiCond_Once);
+    if (the__imgui.Begin("Capabilities", &ctx->caps.open, 0)) {
         sg_imgui_draw_capabilities_content(ctx);
     }
-    ImGui::End();
+    the__imgui.End();
 }
 
 SOKOL_API_IMPL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx) {

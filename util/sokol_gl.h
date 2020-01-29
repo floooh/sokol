@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_GL_INCLUDED
 /*
     sokol_gl.h -- OpenGL 1.x style rendering on top of sokol_gfx.h
 
@@ -298,7 +298,8 @@
             sgl_end()
 
         This will record a new draw command in sokol-gl's internal command
-        list.
+        list, or it will extend the previous draw command if no relevant
+        state has changed since the last sgl_begin/end pair.
 
     --- inside a sokol-gfx rendering pass, call:
 
@@ -386,9 +387,29 @@
                       sg_apply_uniforms()
                     - finally call sg_draw()
 
-    All other functions just modify the internally tracked state, add
+    All other functions only modify the internally tracked state, add
     data to the vertex, uniform and command buffers, or manipulate
     the matrix stack.
+
+    ON DRAW COMMAND MERGING
+    =======================
+    Not every call to sgl_end() will automatically record a new draw command.
+    If possible, the previous draw command will simply be extended,
+    resulting in fewer actual draw calls later in sgl_draw().
+
+    A draw command will be merged with the previous command if "no relevant
+    state has changed" since the last sgl_end(), meaning:
+
+    - no calls to sgl_apply_viewport() and sgl_apply_scissor_rect()
+    - the primitive type hasn't changed
+    - the primitive type isn't a 'strip type' (no line or triangle strip)
+    - the pipeline state object hasn't changed
+    - none of the matrices has changed
+    - none of the texture state has changed
+
+    Merging a draw command simply means that the number of vertices
+    to render in the previous draw command will be incremented by the
+    number of vertices in the new draw command.
 
     LICENSE
     =======
@@ -431,6 +452,10 @@
 #else
 #define SOKOL_API_DECL extern
 #endif
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
@@ -550,12 +575,9 @@ SOKOL_API_DECL void sgl_end(void);
 SOKOL_API_DECL void sgl_draw(void);
 
 #ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif /* SOKOL_GL_INCLUDED */
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_GL_IMPL
@@ -1343,7 +1365,9 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
-    desc.shader = _sgl.shd;
+    if (in_desc->shader.id == SG_INVALID_ID) {
+        desc.shader = _sgl.shd;
+    }
     desc.index_type = SG_INDEXTYPE_NONE;
     desc.blend.color_format = _sgl.desc.color_format;
     desc.blend.depth_format = _sgl.desc.depth_format;
@@ -1460,6 +1484,15 @@ static inline _sgl_uniform_t* _sgl_next_uniform(void) {
     }
     else {
         _sgl.error = SGL_ERROR_UNIFORMS_FULL;
+        return 0;
+    }
+}
+
+static inline _sgl_command_t* _sgl_prev_command(void) {
+    if (_sgl.cur_command > 0) {
+        return &_sgl.commands[_sgl.cur_command - 1];
+    }
+    else {
         return 0;
     }
 }
@@ -1832,6 +1865,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
     _sgl_destroy_pipeline(_sgl.def_pip);
+    // FIXME: need to destroy ALL valid pipeline objects in pool here
     _sgl_discard_pipeline_pool();
     _sgl.init_cookie = 0;
 }
@@ -2000,7 +2034,8 @@ SOKOL_API_IMPL void sgl_end(void) {
     if (_sgl.base_vertex == _sgl.cur_vertex) {
         return;
     }
-    if (_sgl.matrix_dirty) {
+    bool matrix_dirty = _sgl.matrix_dirty;
+    if (matrix_dirty) {
         _sgl.matrix_dirty = false;
         _sgl_uniform_t* uni = _sgl_next_uniform();
         if (uni) {
@@ -2008,15 +2043,38 @@ SOKOL_API_IMPL void sgl_end(void) {
             uni->tm = *_sgl_matrix_texture();
         }
     }
-    _sgl_command_t* cmd = _sgl_next_command();
-    if (cmd) {
-        SOKOL_ASSERT(_sgl.cur_uniform > 0);
-        cmd->cmd = SGL_COMMAND_DRAW;
-        cmd->args.draw.img = _sgl.cur_img;
-        cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
-        cmd->args.draw.base_vertex = _sgl.base_vertex;
-        cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
-        cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
+    /* check if command can be merged with previous command */
+    sg_pipeline pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
+    sg_image img = _sgl.texturing_enabled ? _sgl.cur_img : _sgl.def_img;
+    _sgl_command_t* prev_cmd = _sgl_prev_command();
+    bool merge_cmd = false;
+    if (prev_cmd) {
+        if ((prev_cmd->cmd == SGL_COMMAND_DRAW) &&
+            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
+            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
+            !matrix_dirty &&
+            (prev_cmd->args.draw.img.id == img.id) &&
+            (prev_cmd->args.draw.pip.id == pip.id))
+        {
+            merge_cmd = true;
+        }
+    }
+    if (merge_cmd) {
+        /* draw command can be merged with the previous command */
+        prev_cmd->args.draw.num_vertices += _sgl.cur_vertex - _sgl.base_vertex;
+    }
+    else {
+        /* append a new draw command */
+        _sgl_command_t* cmd = _sgl_next_command();
+        if (cmd) {
+            SOKOL_ASSERT(_sgl.cur_uniform > 0);
+            cmd->cmd = SGL_COMMAND_DRAW;
+            cmd->args.draw.img = img;
+            cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
+            cmd->args.draw.base_vertex = _sgl.base_vertex;
+            cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
+            cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
+        }
     }
 }
 

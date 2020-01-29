@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_APP_INCLUDED
 /*
     sokol_app.h -- cross-platform application wrapper
 
@@ -19,6 +19,8 @@
     SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
+    SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
+    SOKOL_FREE          - your own free function (default: free(p))
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -59,7 +61,7 @@
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (RaspberryPi)
+    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (TODO: RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
@@ -99,8 +101,12 @@
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
+    clipboard           | YES     | YES   | TODO  | ---   | ---     | ---   | YES
 
-    - what about bluetooth keyboard / mouse on mobile platforms?
+    TODO
+    ====
+    - Linux clipboard support
+    - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
     ============
@@ -265,6 +271,21 @@
             - the application window was resized, iconified or restored
             - the application was suspended or restored (on mobile platforms)
             - the user or application code has asked to quit the application
+            - a string was pasted to the system clipboard
+
+        To explicitely 'consume' an event and prevent that the event is
+        forwarded for further handling to the operating system, call
+        sapp_consume_event() from inside the event handler (NOTE that
+        this behaviour is currently only implemented for some HTML5
+        events, support for other platforms and event types will
+        be added as needed, please open a github ticket and/or provide
+        a PR if needed).
+
+        NOTE: Do *not* call any 3D API functions in the event callback
+        function, since the 3D API context may not be active when the
+        event callback is called (it may work on some platforms and
+        3D APIs, but not others, and the exact behaviour may change
+        between sokol-app versions).
 
     --- Implement the cleanup-callback function, this is called once
         after the user quits the application (see the section
@@ -272,6 +293,58 @@
         behaviour, and how to intercept a pending quit (for instance to show a
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
         called on the web and mobile platforms.
+
+    CLIPBOARD SUPPORT
+    =================
+    Applications can send and receive UTF-8 encoded text data from and to the
+    system clipboard. By default, clipboard support is disabled and
+    must be enabled at startup via the following sapp_desc struct
+    members:
+
+        sapp_desc.enable_clipboard  - set to true to enable clipboard support
+        sapp_desc.clipboard_size    - size of the internal clipboard buffer in bytes
+
+    Enabling the clipboard will dynamically allocate a clipboard buffer
+    for UTF-8 encoded text data of the requested size in bytes, the default
+    size if 8 KBytes. Strings that don't fit into the clipboard buffer
+    (including the terminating zero) will be silently clipped, so it's
+    important that you provide a big enough clipboard size for your
+    use case.
+
+    To send data to the clipboard, call sapp_set_clipboard_string() with
+    a pointer to an UTF-8 encoded, null-terminated C-string.
+
+    NOTE that on the HTML5 platform, sapp_set_clipboard_string() must be
+    called from inside a 'short-lived event handler', and there are a few
+    other HTML5-specific caveats to workaround. You'll basically have to
+    tinker until it works in all browsers :/ (maybe the situation will
+    improve when all browsers agree on and implement the new
+    HTML5 navigator.clipboard API).
+
+    To get data from the clipboard, check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED
+    event in your event handler function, and then call sapp_get_clipboard_string()
+    to obtain the updated UTF-8 encoded text.
+
+    NOTE that behaviour of sapp_get_clipboard_string() is slightly different
+    depending on platform:
+
+        - on the HTML5 platform, the internal clipboard buffer will only be updated
+          right before the SAPP_EVENTTYPE_CLIPBOARD_PASTED event is sent,
+          and sapp_get_clipboard_string() will simply return the current content
+          of the clipboard buffer
+        - on 'native' platforms, the call to sapp_get_clipboard_string() will
+          update the internal clipboard buffer with the most recent data
+          from the system clipboard
+
+    Portable code should check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED event,
+    and then call sapp_get_clipboard_string() right in the event handler.
+
+    The SAPP_EVENTTYPE_CLIPBOARD_PASTED event will be generated by sokol-app
+    as follows:
+
+        - on macOS: when the Cmd+V key is pressed down
+        - on HTML5: when the browser sends a 'paste' event to the global 'window' object
+        - on all other platforms: when the Ctrl+V key is pressed down
 
     HIGH-DPI RENDERING
     ==================
@@ -524,8 +597,9 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
+    SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     _SAPP_EVENTTYPE_NUM,
-    _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFF
+    _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
 
 /* key codes are the same names and values as GLFW */
@@ -718,6 +792,8 @@ typedef struct sapp_desc {
     bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
     const char* window_title;           /* the window title as UTF-8 encoded string */
     bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+    bool enable_clipboard;              /* enable clipboard access, default is false */
+    int clipboard_size;                 /* max size of clipboard content in bytes */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -745,6 +821,10 @@ SOKOL_API_DECL float sapp_dpi_scale(void);
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+/* show or hide the mouse cursor */
+SOKOL_API_DECL void sapp_show_mouse(bool visible);
+/* show or hide the mouse cursor */
+SOKOL_API_DECL bool sapp_mouse_shown();
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -755,8 +835,14 @@ SOKOL_API_DECL void sapp_request_quit(void);
 SOKOL_API_DECL void sapp_cancel_quit(void);
 /* intiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
 SOKOL_API_DECL void sapp_quit(void);
+/* call from inside event callback to consume the current event (don't forward to platform) */
+SOKOL_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_API_DECL uint64_t sapp_frame_count(void);
+/* write string into clipboard */
+SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
+/* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
+SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -795,6 +881,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #if defined(SOKOL_IMPL)
@@ -807,6 +894,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #pragma warning(disable:4054)   /* 'type cast': from function pointer */
 #pragma warning(disable:4055)   /* 'type cast': from data pointer */
 #pragma warning(disable:4505)   /* unreferenced local function has been removed */
+#pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
 #endif
 
 #include <string.h> /* memset */
@@ -867,7 +955,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
 #endif
-#if !defined(SOKOL_CALLOC) && !defined(SOKOL_FREE)
+#if !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
     #include <stdlib.h>
 #endif
 #if !defined(SOKOL_CALLOC)
@@ -927,6 +1015,7 @@ typedef struct {
     bool cleanup_called;
     bool quit_requested;
     bool quit_ordered;
+    bool event_consumed;
     const char* html5_canvas_name;
     bool html5_ask_leave_site;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -939,6 +1028,9 @@ typedef struct {
     sapp_event event;
     sapp_desc desc;
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
+    bool clipboard_enabled;
+    int clipboard_size;
+    char* clipboard;
 	void* native_event;
 } _sapp_state;
 static _sapp_state _sapp;
@@ -978,21 +1070,32 @@ _SOKOL_PRIVATE void _sapp_call_frame(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
-    if (_sapp.desc.cleanup_cb) {
-        _sapp.desc.cleanup_cb();
+    if (!_sapp.cleanup_called) {
+        if (_sapp.desc.cleanup_cb) {
+            _sapp.desc.cleanup_cb();
+        }
+        else if (_sapp.desc.cleanup_userdata_cb) {
+            _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
+        }
+        _sapp.cleanup_called = true;
     }
-    else if (_sapp.desc.cleanup_userdata_cb) {
-        _sapp.desc.cleanup_userdata_cb(_sapp.desc.user_data);
-    }
-    _sapp.cleanup_called = true;
 }
 
-_SOKOL_PRIVATE void _sapp_call_event(const sapp_event* e) {
-    if (_sapp.desc.event_cb) {
-        _sapp.desc.event_cb(e);
+_SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
+    if (!_sapp.cleanup_called) {
+        if (_sapp.desc.event_cb) {
+            _sapp.desc.event_cb(e);
+        }
+        else if (_sapp.desc.event_userdata_cb) {
+            _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+        }
     }
-    else if (_sapp.desc.event_userdata_cb) {
-        _sapp.desc.event_userdata_cb(e, _sapp.desc.user_data);
+    if (_sapp.event_consumed) {
+        _sapp.event_consumed = false;
+        return true;
+    }
+    else {
+        return false;
     }
 }
 
@@ -1025,6 +1128,11 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
+    _sapp.clipboard_enabled = _sapp.desc.enable_clipboard;
+    if (_sapp.clipboard_enabled) {
+        _sapp.clipboard_size = _sapp_def(_sapp.desc.clipboard_size, 8192);
+        _sapp.clipboard = (char*) SOKOL_CALLOC(1, _sapp.clipboard_size);
+    }
     if (_sapp.desc.window_title) {
         _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     }
@@ -1032,6 +1140,14 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
         _sapp_strcpy("sokol_app", _sapp.window_title, sizeof(_sapp.window_title));
     }
     _sapp.dpi_scale = 1.0f;
+}
+
+_SOKOL_PRIVATE void _sapp_discard_state(void) {
+    if (_sapp.clipboard_enabled) {
+        SOKOL_ASSERT(_sapp.clipboard);
+        SOKOL_FREE((void*)_sapp.clipboard);
+    }
+    memset(&_sapp, 0, sizeof(_sapp));
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -1246,6 +1362,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     NSApp.delegate = _sapp_macos_app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
+    _sapp_discard_state();
 }
 
 /* MacOS entry function */
@@ -1363,6 +1480,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [_sapp_view_obj updateTrackingAreas];
         if (_sapp.desc.high_dpi) {
             [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
+        }
+        else {
+            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:NO];
         }
 
         _sapp_macos_window_obj.contentView = _sapp_view_obj;
@@ -1500,7 +1620,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 - (void)drawRect:(NSRect)bound {
     _sapp_macos_frame();
-    glFlush();
     [[_sapp_view_obj openGLContext] flushBuffer];
 }
 #endif
@@ -1578,7 +1697,15 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
         const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
-        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp_translate_key(event.keyCode), event.isARepeat, mods);
+        /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
+            as a workaround, to prevent key presses from sticking we'll send
+            a keyup event following right after the keydown if SUPER is also pressed
+        */
+        const sapp_keycode key_code = _sapp_translate_key(event.keyCode);
+        _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_DOWN, key_code, event.isARepeat, mods);
+        if (0 != (mods & SAPP_MODIFIER_SUPER)) {
+            _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, key_code, event.isARepeat, mods);
+        }
         const NSString* chars = event.characters;
         const NSUInteger len = chars.length;
         if (len > 0) {
@@ -1593,6 +1720,11 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
                 _sapp.event.key_repeat = event.isARepeat;
                 _sapp_call_event(&_sapp.event);
             }
+        }
+        /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
+        if (_sapp.clipboard_enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
         }
     }
 }
@@ -1637,6 +1769,31 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 @end
+
+void _sapp_macos_set_clipboard_string(const char* str) {
+    @autoreleasepool {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
+    }
+}
+
+const char* _sapp_macos_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard);
+    @autoreleasepool {
+        _sapp.clipboard[0] = 0;
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
+            return _sapp.clipboard;
+        }
+        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
+        if (!str) {
+            return _sapp.clipboard;
+        }
+        _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
+    }
+    return _sapp.clipboard;
+}
 
 #endif /* MacOS */
 
@@ -1691,6 +1848,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
+    _sapp_discard_state();
 }
 
 /* iOS entry function */
@@ -2056,6 +2214,16 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
+    if (_sapp.clipboard_enabled) {
+        _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+
 /*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
 EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
     return _sapp.html5_ask_leave_site ? 1 : 0;
@@ -2069,6 +2237,35 @@ EM_JS(void, sapp_js_hook_beforeunload, (void), {
         }
     });
 });
+
+EM_JS(void, sapp_js_init_clipboard, (void), {
+    window.addEventListener('paste', function(event) {
+        var pasted_str = event.clipboardData.getData('text');
+        ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
+    });
+});
+
+EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
+    var str = UTF8ToString(c_str);
+    var ta = document.createElement('textarea');
+    ta.setAttribute('autocomplete', 'off');
+    ta.setAttribute('autocorrect', 'off');
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('spellcheck', 'false');
+    ta.style.left = -100 + 'px';
+    ta.style.top = -100 + 'px';
+    ta.style.height = 1;
+    ta.style.width = 1;
+    ta.value = str;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
+    sapp_js_write_clipboard(str);
+}
 
 /* called from the emscripten event handler to update the keyboard visibility
     state, this must happen from an JS input event handler, otherwise
@@ -2283,6 +2480,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
+            bool send_keyup_followup = false;
             _sapp_init_event(type);
             _sapp.event.key_repeat = emsc_event->repeat;
             if (emsc_event->ctrlKey) {
@@ -2299,9 +2497,25 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             }
             if (type == SAPP_EVENTTYPE_CHAR) {
                 _sapp.event.char_code = emsc_event->charCode;
+                /* workaround to make Cmd+V work on Safari */
+                if ((emsc_event->metaKey) && (emsc_event->charCode == 118)) {
+                    retval = false;
+                }
             }
             else {
                 _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
+                /* Special hack for macOS: if the Super key is pressed, macOS doesn't
+                    send keyUp events. As a workaround, to prevent keys from
+                    "sticking", we'll send a keyup event following a keydown
+                    when the SUPER key is pressed
+                */
+                if ((type == SAPP_EVENTTYPE_KEY_DOWN) &&
+                    (_sapp.event.key_code != SAPP_KEYCODE_LEFT_SUPER) &&
+                    (_sapp.event.key_code != SAPP_KEYCODE_RIGHT_SUPER) &&
+                    (_sapp.event.modifiers & SAPP_MODIFIER_SUPER))
+                {
+                    send_keyup_followup = true;
+                }
                 /* only forward a certain key ranges to the browser */
                 switch (_sapp.event.key_code) {
                     case SAPP_KEYCODE_WORLD_1:
@@ -2367,7 +2581,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                         break;
                 }
             }
-            _sapp_call_event(&_sapp.event);
+            if (_sapp_call_event(&_sapp.event)) {
+                /* consume event via sapp_consume_event() */
+                retval = true;
+            }
+            if (send_keyup_followup) {
+                _sapp.event.type = SAPP_EVENTTYPE_KEY_UP;
+                if (_sapp_call_event(&_sapp.event)) {
+                    retval = true;
+                }
+            }
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -2533,9 +2756,16 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
+_SOKOL_PRIVATE void _sapp_emsc_init_clipboard(void) {
+    sapp_js_init_clipboard();
+}
+
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_emsc_init_keytable();
+    if (_sapp.clipboard_enabled) {
+        _sapp_emsc_init_clipboard();
+    }
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp.desc.width;
@@ -2602,6 +2832,8 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
     sapp_js_hook_beforeunload();
+
+    // NOT A BUG: do not call _sapp_discard_state()
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -2730,6 +2962,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
+#pragma comment (lib, "Shell32.lib")
 
 #if defined(SOKOL_D3D11)
 #ifndef D3D11_NO_HELPERS
@@ -3106,6 +3340,9 @@ typedef int  GLint;
 #define GL_MAX_CUBE_MAP_TEXTURE_SIZE 0x851C
 #define GL_MAX_3D_TEXTURE_SIZE 0x8073
 #define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+#define GL_MAX_VERTEX_ATTRIBS 0x8869
+#define GL_CLAMP_TO_BORDER 0x812D
+#define GL_TEXTURE_BORDER_COLOR 0x1004
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
@@ -3267,6 +3504,8 @@ typedef void  (GL_APIENTRY *PFN_glBlendColor)(GLfloat red, GLfloat green, GLfloa
 static PFN_glBlendColor _sapp_glBlendColor;
 typedef void  (GL_APIENTRY *PFN_glTexParameterf)(GLenum target, GLenum pname, GLfloat param);
 static PFN_glTexParameterf _sapp_glTexParameterf;
+typedef void  (GL_APIENTRY *PFN_glTexParameterfv)(GLenum target, GLenum pname, GLfloat* params);
+static PFN_glTexParameterfv _sapp_glTexParameterfv;
 typedef void  (GL_APIENTRY *PFN_glGetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
 static PFN_glGetShaderInfoLog _sapp_glGetShaderInfoLog;
 typedef void  (GL_APIENTRY *PFN_glDepthFunc)(GLenum func);
@@ -3388,6 +3627,7 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
     _SAPP_GLPROC(glClearColor);
     _SAPP_GLPROC(glBlendColor);
     _SAPP_GLPROC(glTexParameterf);
+    _SAPP_GLPROC(glTexParameterfv);
     _SAPP_GLPROC(glGetShaderInfoLog);
     _SAPP_GLPROC(glDepthFunc);
     _SAPP_GLPROC(glStencilOp);
@@ -3482,6 +3722,7 @@ _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
 #define glClearColor _sapp_glClearColor
 #define glBlendColor _sapp_glBlendColor
 #define glTexParameterf _sapp_glTexParameterf
+#define glTexParameterfv _sapp_glTexParameterfv
 #define glGetShaderInfoLog _sapp_glGetShaderInfoLog
 #define glDepthFunc _sapp_glDepthFunc
 #define glStencilOp _sapp_glStencilOp
@@ -3851,6 +4092,24 @@ _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int 
     }
 }
 
+_SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
+    SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
+    memset(dst, 0, dst_num_bytes);
+    return 0 != WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
+    ShowCursor((BOOL)shown);
+}
+
+_SOKOL_PRIVATE bool _sapp_win32_mouse_shown(void) {
+    CURSORINFO cursor_info;
+    memset(&cursor_info, 0, sizeof(CURSORINFO));
+    cursor_info.cbSize = sizeof(CURSORINFO);
+    GetCursorInfo(&cursor_info);
+    return (cursor_info.flags & CURSOR_SHOWING) != 0;
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
     /* same as GLFW */
     _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
@@ -4003,16 +4262,16 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
 
 _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     uint32_t mods = 0;
-    if (GetKeyState(VK_SHIFT) & (1<<31)) {
+    if (GetKeyState(VK_SHIFT) & (1<<15)) {
         mods |= SAPP_MODIFIER_SHIFT;
     }
-    if (GetKeyState(VK_CONTROL) & (1<<31)) {
+    if (GetKeyState(VK_CONTROL) & (1<<15)) {
         mods |= SAPP_MODIFIER_CTRL;
     }
-    if (GetKeyState(VK_MENU) & (1<<31)) {
+    if (GetKeyState(VK_MENU) & (1<<15)) {
         mods |= SAPP_MODIFIER_ALT;
     }
-    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<31)) {
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<15)) {
         mods |= SAPP_MODIFIER_SUPER;
     }
     return mods;
@@ -4046,6 +4305,15 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
         _sapp.event.key_code = _sapp.keycodes[vk];
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if (_sapp.clipboard_enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -4297,6 +4565,69 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
     }
 }
 
+_SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(str);
+    SOKOL_ASSERT(_sapp_win32_hwnd);
+    SOKOL_ASSERT(_sapp.clipboard_enabled && (_sapp.clipboard_size > 0));
+
+    wchar_t* wchar_buf = 0;
+    const int wchar_buf_size = _sapp.clipboard_size * sizeof(wchar_t);
+    HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
+    if (!object) {
+        goto error;
+    }
+    wchar_buf = (wchar_t*) GlobalLock(object);
+    if (!wchar_buf) {
+        goto error;
+    }
+    if (!_sapp_win32_utf8_to_wide(str, wchar_buf, wchar_buf_size)) {
+        goto error;
+    }
+    GlobalUnlock(wchar_buf);
+    wchar_buf = 0;
+    if (!OpenClipboard(_sapp_win32_hwnd)) {
+        goto error;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_UNICODETEXT, object);
+    CloseClipboard();
+    return true;
+
+error:
+    if (wchar_buf) {
+        GlobalUnlock(object);
+    }
+    if (object) {
+        GlobalFree(object);
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard_enabled && _sapp.clipboard);
+    SOKOL_ASSERT(_sapp_win32_hwnd);
+    if (!OpenClipboard(_sapp_win32_hwnd)) {
+        /* silently ignore any errors and just return the current
+           content of the local clipboard buffer
+        */
+        return _sapp.clipboard;
+    }
+    HANDLE object = GetClipboardData(CF_UNICODETEXT);
+    if (!object) {
+        CloseClipboard();
+        return _sapp.clipboard;
+    }
+    const wchar_t* wchar_buf = (const wchar_t*) GlobalLock(object);
+    if (!wchar_buf) {
+        CloseClipboard();
+        return _sapp.clipboard;
+    }
+    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard, _sapp.clipboard_size);
+    GlobalUnlock(object);
+    CloseClipboard();
+    return _sapp.clipboard;
+}
+
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_win32_init_keytable();
@@ -4363,24 +4694,59 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_discard_state();
+}
+
+static char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_line, int* o_argc) {
+    int argc = 0;
+    char** argv = 0;
+    char* args;
+
+    LPWSTR* w_argv = CommandLineToArgvW(w_command_line, &argc);
+    if (w_argv == NULL) {
+        _sapp_fail("Win32: failed to parse command line");
+    } else {
+        size_t size = wcslen(w_command_line) * 4;
+        argv = (char**) SOKOL_CALLOC(1, (argc + 1) * sizeof(char*) + size);
+        args = (char*)&argv[argc + 1];
+        int n;
+        for (int i = 0; i < argc; ++i) {
+            n = WideCharToMultiByte(CP_UTF8, 0, w_argv[i], -1, args, (int)size, NULL, NULL);
+            if (n == 0) {
+                _sapp_fail("Win32: failed to convert all arguments to utf8");
+                break;
+            }
+            argv[i] = args;
+            size -= n;
+            args += n;
+        }
+        LocalFree(w_argv);
+    }
+    *o_argc = argc;
+    return argv;
 }
 
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
 #else
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-    int argc = __argc;
-    char** argv = __argv;
-#endif
-    sapp_desc desc = sokol_main(argc, argv);
+    int argc_utf8 = 0;
+    char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
+    sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
     _sapp_run(&desc);
+    SOKOL_FREE(argv_utf8);
     return 0;
 }
+#endif /* SOKOL_WIN32_FORCE_MAIN */
 #endif /* SOKOL_NO_ENTRY */
 #undef _SAPP_SAFE_RELEASE
 #endif /* WINDOWS */
@@ -5104,6 +5470,8 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     activity->callbacks->onLowMemory = _sapp_android_on_low_memory;
 
     SOKOL_LOG("NativeActivity successfully created");
+
+    /* NOT A BUG: do NOT call sapp_discard_state() */
 }
 
 #endif /* Android */
@@ -6586,6 +6954,15 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.key_repeat = repeat;
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if (_sapp.clipboard_enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -6933,6 +7310,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
     XCloseDisplay(_sapp_x11_display);
+    _sapp_discard_state();
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -7020,6 +7398,22 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
+SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
+    #if defined(_WIN32)
+    _sapp_win32_show_mouse(shown);
+    #else
+    _SOKOL_UNUSED(shown);
+    #endif
+}
+
+SOKOL_API_IMPL bool sapp_mouse_shown(void) {
+    #if defined(_WIN32)
+    return _sapp_win32_mouse_shown();
+    #else
+    return false;
+    #endif
+}
+
 SOKOL_API_IMPL void sapp_request_quit(void) {
     _sapp.quit_requested = true;
 }
@@ -7030,6 +7424,44 @@ SOKOL_API_IMPL void sapp_cancel_quit(void) {
 
 SOKOL_API_IMPL void sapp_quit(void) {
     _sapp.quit_ordered = true;
+}
+
+SOKOL_API_IMPL void sapp_consume_event(void) {
+    _sapp.event_consumed = true;
+}
+
+/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
+SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+    if (!_sapp.clipboard_enabled) {
+        return;
+    }
+    SOKOL_ASSERT(str);
+    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        _sapp_macos_set_clipboard_string(str);
+    #elif defined(__EMSCRIPTEN__)
+        _sapp_emsc_set_clipboard_string(str);
+    #elif defined(_WIN32)
+        _sapp_win32_set_clipboard_string(str);
+    #else
+        /* not implemented */
+    #endif
+    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+}
+
+SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+    if (!_sapp.clipboard_enabled) {
+        return "";
+    }
+    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        return _sapp_macos_get_clipboard_string();
+    #elif defined(__EMSCRIPTEN__)
+        return _sapp.clipboard;
+    #elif defined(_WIN32)
+        return _sapp_win32_get_clipboard_string();
+    #else
+        /* not implemented */
+        return _sapp.clipboard;
+    #endif
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
