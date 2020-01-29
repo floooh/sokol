@@ -1,4 +1,4 @@
-#pragma once
+#ifndef SOKOL_ARGS_INCLUDED
 /*
     sokol_args.h    -- cross-platform key/value arg-parsing for web and native
 
@@ -295,6 +295,7 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+#endif // SOKOL_ARGS_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_IMPL
@@ -416,10 +417,6 @@ _SOKOL_PRIVATE bool _sargs_val_expected(void) {
 
 _SOKOL_PRIVATE void _sargs_expect_sep(void) {
     _sargs.parse_state = _SARGS_EXPECT_SEP;
-}
-
-_SOKOL_PRIVATE bool _sargs_sep_expected(void) {
-    return 0 != (_sargs.parse_state & _SARGS_EXPECT_SEP);
 }
 
 _SOKOL_PRIVATE bool _sargs_any_expected(void) {

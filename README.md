@@ -1,13 +1,16 @@
 # Sokol
 
-**Sokol (Сокол)**: Russian for Falcon, a smaller and more nimble
-bird of prey than the Eagle (Орёл, Oryol)
+[![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
 
-[See what's new](#updates) (**18-Aug-2019**: breaking changes in sokol_gfx.h: pixelformats, limits and capabilities)
+Simple
+[STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
+cross-platform libraries for C and C++, written in C.
+
+[See what's new](#updates) (**02-Dec-2019**: initial clipboard support in sokol_app.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
-Minimalistic header-only cross-platform libs in C:
+Cross-platform libraries:
 
 - **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
 - **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
@@ -15,6 +18,13 @@ Minimalistic header-only cross-platform libs in C:
 - **sokol\_audio.h**: minimal buffer-streaming audio playback
 - **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
 - **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
+
+Utility libraries:
+
+- **sokol\_imgui.h**: sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
+- **sokol\_gl.h**: OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
+- **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
+- **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
@@ -32,12 +42,7 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 - easier integration with other languages
 - easier integration into other projects
-- allows even smaller program binaries than Oryol
-
-Sokol will be a bit less convenient to use than Oryol, but that's ok since
-the Sokol headers are intended to be low-level building blocks.
-
-Eventually Oryol will just be a thin C++ layer over Sokol.
+- adds only minimal size overhead to executables
 
 A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.github.io/2017/07/29/sokol-gfx-tour.html)
 
@@ -460,6 +465,89 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **02-Dec-2019**: Initial clipboard support in sokol_app.h for Windows, macOS
+    and HTML5. This allows to read and write UTF-8 encoded strings from and
+    to the target platform's shared clipboard. 
+    
+    A 'real-world' example usage is in the [Visual6502 Remix project](https://github.com/floooh/v6502r).
+
+    Unfortunately clipboard support on the HTML5 platform comes with a lot of
+    platform-specific caveats which can't be solved in sokol_app.h alone
+    because of the restrictions the web platform puts on clipboard access and
+    different behaviours and support levels of the various HTML5 clipboard
+    APIs. I'm not really happy with the current HTML5 clipboard
+    implementation. It sorta works, but it sure ain't pretty :) 
+    
+    Maybe the situation will improve in a few years when all browsers agree
+    on and support the new [permission-based clipboard
+    API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
+
+    For documention of the clipboard feature, search for CLIPBOARD SUPPORT
+    in sokol_app.h
+
+- **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
+    - the enum ```sg_wrap``` has a new member ```SG_WRAP_CLAMP_TO_BORDER```
+    - there's a new enum ```sg_border_color```
+    - the struct ```sg_image_desc``` has a new member ```sg_border_color border_color```
+    - new feature flag in ```sg_features```: ```image_clamp_to_border```
+
+  Note the following caveats:
+
+    - clamp-to-border is only supported on a subset of platforms, support can
+    be checked at runtime via ```sg_query_features().image_clamp_to_border```
+    (D3D11, desktop-GL and macOS-Metal support clamp-to-border,
+    all other platforms don't)
+    - there are three hardwired border colors: transparent-black,
+    opaque-black and opaque-white (modern 3D APIs have moved away from
+    a freely programmable border color)
+    - if clamp-to-border is not supported, sampling will fall back to
+    clamp-to-edge without a validation warning
+
+  Many thanks to @martincohen for suggesting the feature and providing the initial
+D3D11 implementation!
+
+- **31-Aug-2019**: The header **sokol_gfx_cimgui.h** has been merged into
+[**sokol_gfx_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h).
+Same idea as merging sokol_cimgui.h into sokol_imgui.h, the implementation
+is now "bilingual", and can either be included into a C++ file or into a C file.
+When included into a C++ file, the Dear ImGui C++ API will be called directly,
+otherwise the C API bindings via cimgui.h
+
+- **28-Aug-2019**: The header **sokol_cimgui.h** has been merged into
+[**sokol_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h).
+The sokol_cimgui.h header had been created to implement Dear ImGui UIs from
+pure C applications, instead of having to fall back to C++ just for the UI
+code. However, there was a lot of code duplication between sokol_imgui.h and
+sokol_cimgui.h, so that it made more sense to merge the two headers. The C vs
+C++ code path will be selected automatically: When the implementation of
+sokol_imgui.h is included into a C++ source file, the Dear ImGui C++ API will
+be used. Otherwise, when the implementation is included into a C source file,
+the C API via cimgui.h
+
+- **27-Aug-2019**: [**sokol_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h)
+  now has an OpenSLES backend for Android. Many thanks to Sepehr Taghdisian (@septag)
+  for the PR!
+
+- **26-Aug-2019**: new utility header for text rendering, and fixes in sokol_gl.h:
+    - a new utility header [**sokol_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h)
+      which implements a renderer for [fontstash.h](https://github.com/memononen/fontstash)
+      on top of sokol_gl.h
+    - **sokol_gl.h** updates:
+        - Optimization: If no relevant state between two begin/end pairs has
+        changed, draw commands will be merged into a single sokol-gfx draw
+        call. This is especially useful for text- and sprite-rendering (previously,
+        each begin/end pair would always result in one draw call).
+        - Bugfix: When calling sgl_disable_texture() the previously active
+        texture would still remain active which could lead to rendering
+        artefacts. This has been fixed.
+        - Feature: It's now possible to provide a custom shader in the
+        'desc' argument of *sgl_make_pipeline()*, as long as the shader
+        is "compatible" with sokol_gl.h, see the sokol_fontstash.h
+        header for an example. This feature isn't "advertised" in the
+        sokol_gl.h documentation because it's a bit brittle (for instance
+        if sokol_gl.h updates uniform block structures, custom shaders
+        would break), but it may still come in handy in some situations.
+
 - **20-Aug-2019**: sokol_gfx.h has a couple new query functions to inspect the
   default values of resource-creation desc structures:
 
@@ -471,7 +559,7 @@ Mainly some "missing features" for desktop apps:
     sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
     ```
   These functions take a pointer to a resource creation desc struct that
-  may contains zero-initialized values (to indicate default values) and
+  may contain zero-initialized values (to indicate default values) and
   return a new struct where the zero-init values have been replaced with
   concrete values. This is useful to inspect the actual creation attributes
   of a resource.
