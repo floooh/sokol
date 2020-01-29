@@ -627,7 +627,7 @@ typedef enum sg_backend {
         - render: the pixelformat can be used for render targets
         - blend:  blending is supported when using the pixelformat for
                   render targets
-        - msaa:   multisample-antiliasing is supported when using the
+        - msaa:   multisample-antialiasing is supported when using the
                   pixelformat for render targets
         - depth:  the pixelformat can be used for depth-stencil attachments
 
@@ -740,13 +740,13 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing;
-    bool origin_top_left;
-    bool multiple_render_targets;
-    bool msaa_render_targets;
-    bool imagetype_3d;          /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array;       /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool image_clamp_to_border; /* border color and clamp-to-border UV-wrap mode is supported */
+    bool instancing;                /* hardware instancing supported */
+    bool origin_top_left;           /* framebuffer and texture origin is in top left corner */
+    bool multiple_render_targets;   /* offscreen render passes can have multiple render targets attached */
+    bool msaa_render_targets;       /* offscreen render passes support MSAA antialiasing */
+    bool imagetype_3d;              /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array;           /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_clamp_to_border;     /* border color and clamp-to-border UV-wrap mode is supported */
 } sg_features;
 
 /*
@@ -756,8 +756,8 @@ typedef struct sg_limits {
     uint32_t max_image_size_2d;         /* max width/height of SG_IMAGETYPE_2D images */
     uint32_t max_image_size_cube;       /* max width/height of SG_IMAGETYPE_CUBE images */
     uint32_t max_image_size_3d;         /* max width/height/depth of SG_IMAGETYPE_3D images */
-    uint32_t max_image_size_array;
-    uint32_t max_image_array_layers;
+    uint32_t max_image_size_array;      /* max width/height pf SG_IMAGETYPE_ARRAY images */
+    uint32_t max_image_array_layers;    /* max number of layers in SG_IMAGETYPE_ARRAY images */
     uint32_t max_vertex_attrs;          /* <= SG_MAX_VERTEX_ATTRIBUTES (only on some GLES2 impls) */
 } sg_limits;
 
@@ -797,7 +797,7 @@ typedef enum sg_resource_state {
     and images:
 
     SG_USAGE_IMMUTABLE:     the resource will never be updated with
-                            new data, instead the data content of the
+                            new data, instead the content of the
                             resource must be provided on creation
     SG_USAGE_DYNAMIC:       the resource will be updated infrequently
                             with new data (this could range from "once
@@ -816,7 +816,7 @@ typedef enum sg_resource_state {
     application must update all data required for rendering (this
     means that the update data can be smaller than the resource size,
     if only a part of the overall resource size is used for rendering,
-    you only need to make sure that the data that *is* used is valid.
+    you only need to make sure that the data that *is* used is valid).
 
     The default usage is SG_USAGE_IMMUTABLE.
 */
@@ -867,10 +867,11 @@ typedef enum sg_index_type {
 /*
     sg_image_type
 
-    Indicates the basic image type (2D-texture, cubemap, 3D-texture
-    or 2D-array-texture). 3D- and array-textures are not supported
-    on the GLES2/WebGL backend. The image type is used in the
-    sg_image_desc.type member when creating an image.
+    Indicates the basic type of an image object (2D-texture, cubemap,
+    3D-texture or 2D-array-texture). 3D- and array-textures are not supported
+    on the GLES2/WebGL backend (use sg_query_features().imagetype_3d and
+    sg_query_features().imagetype_array to check for support). The image type
+    is used in the sg_image_desc.type member when creating an image.
 
     The default image type when creating an image is SG_IMAGETYPE_2D.
 */
@@ -1244,6 +1245,10 @@ typedef enum sg_blend_op {
     sg_pipeline_desc.blend.color_write_mask when creating a pipeline object.
 
     The default colormask is SG_COLORMASK_RGBA (write all colors channels)
+
+    NOTE: since the color mask value 0 is reserved for the default value
+    (SG_COLORMASK_RGBA), use SG_COLORMASK_NONE if all color channels
+    should be disabled.
 */
 typedef enum sg_color_mask {
     _SG_COLORMASK_DEFAULT = 0,      /* value 0 reserved for default-init */
@@ -1346,8 +1351,8 @@ typedef struct sg_pass_action {
     are defined by the SG_MAX_SHADERSTAGE_BUFFERS and
     SG_MAX_SHADERSTAGE_IMAGES configuration constants.
 
-    The optional buffer offsets can be used to group different chunks
-    of vertex- and/or index-data into the same buffer objects.
+    The optional buffer offsets can be used to put different unrelated
+    chunks of vertex- and/or index-data into the same buffer objects.
 */
 typedef struct sg_bindings {
     uint32_t _start_canary;
@@ -1374,9 +1379,9 @@ typedef struct sg_bindings {
     .content    0
     .label      0       (optional string label for trace hooks)
 
-    The dbg_label will be ignored by sokol_gfx.h, it is only useful
+    The label will be ignored by sokol_gfx.h, it is only useful
     when hooking into sg_make_buffer() or sg_init_buffer() via
-    the sg_install_trace_hook
+    the sg_install_trace_hooks() function.
 
     ADVANCED TOPIC: Injecting native 3D-API buffers:
 
@@ -1616,9 +1621,9 @@ typedef struct sg_shader_desc {
 
     If the vertex data has no gaps between vertex components, you can omit
     the .layout.buffers[].stride and layout.attrs[].offset items (leave them
-    default-initialized to 0), sokol will then compute the offsets and strides
-    from the vertex component formats (.layout.attrs[].offset). Please note
-    that ALL vertex attribute offsets must be 0 in order for the the
+    default-initialized to 0), sokol-gfx will then compute the offsets and strides
+    from the vertex component formats (.layout.attrs[].format). Please note
+    that ALL vertex attribute offsets must be 0 in order for the
     automatic offset computation to kick in.
 
     The default configuration is as follows:
@@ -1752,7 +1757,7 @@ typedef struct sg_pipeline_desc {
     A pass object contains 1..4 color-attachments and none, or one,
     depth-stencil-attachment. Each attachment consists of
     an image, and two additional indices describing
-    which subimage the pass will render: one mipmap index, and
+    which subimage the pass will render to: one mipmap index, and
     if the image is a cubemap, array-texture or 3D-texture, the
     face-index, array-layer or depth-slice.
 
@@ -1763,8 +1768,7 @@ typedef struct sg_pipeline_desc {
     - the same size
     - the same sample count
 
-    In addition, all color-attachment images must have the same
-    pixel format.
+    In addition, all color-attachment images must have the same pixel format.
 */
 typedef struct sg_attachment_desc {
     sg_image image;
@@ -1787,7 +1791,7 @@ typedef struct sg_pass_desc {
 /*
     sg_trace_hooks
 
-    Installable callback functions to keep track of the sokol_gfx calls,
+    Installable callback functions to keep track of the sokol-gfx calls,
     this is useful for debugging, or keeping track of resource creation
     and destruction.
 
