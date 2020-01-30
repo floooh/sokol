@@ -318,7 +318,7 @@
 
     WASAPI may use a different size for its own streaming buffer then requested,
     so the base latency may be slightly bigger. The current backend implementation
-    convertes the incoming floating point sample values to signed 16-bit
+    converts the incoming floating point sample values to signed 16-bit
     integers.
 
     The required Windows system DLLs are linked with #pragma comment(lib, ...),

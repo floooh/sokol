@@ -282,9 +282,9 @@
         last call to sfetch_dowork() will be dispatched to their IO channels
         and assigned a free lane. If all lanes on that channel are occupied
         by requests 'in flight', incoming requests must wait until
-        a lane becomes avaible
+        a lane becomes available
 
-        - for all new requests which have been enquened on a channel which
+        - for all new requests which have been enqueued on a channel which
         don't already have a buffer assigned the response callback will be
         called with (response->dispatched == true) so that the response
         callback can inspect the dynamically assigned lane and bind a buffer
@@ -379,7 +379,7 @@
     sfetch_desc_t sfetch_desc(void)
     -------------------------------
     sfetch_desc() returns a copy of the sfetch_desc_t struct passed to
-    sfetch_setup(), with zero-inititialized values replaced with
+    sfetch_setup(), with zero-initialized values replaced with
     their default values.
 
     int sfetch_max_userdata_bytes(void)
@@ -634,7 +634,7 @@
 
         sfetch_send(&(sfetch_request_t){
             .path = "my_file.txt",
-            .callback = my_reponse_callback,
+            .callback = my_response_callback,
             .channel = 2
         });
 

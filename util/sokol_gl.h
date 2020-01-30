@@ -281,7 +281,7 @@
             sgl_begin_triangle_strip()
             sgl_begin_quads()
 
-        ...after sgl_begin_*() specifiy vertices:
+        ...after sgl_begin_*() specify vertices:
 
             sgl_v*(...)
             sgl_v*_t*(...)
