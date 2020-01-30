@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**02-Dec-2019**: initial clipboard support in sokol_app.h)
+[See what's new](#updates) (**30-Jan-2020**: some internal code cleanup in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -465,10 +465,15 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **30-Jan-2020**: Some cleanup in sokol_gfx.h in the backend implementation code,
+    internal data structures and documentation comments. The public
+    API hasn't changed, so the change should be completely invisible
+    from the outside.
+
 - **02-Dec-2019**: Initial clipboard support in sokol_app.h for Windows, macOS
     and HTML5. This allows to read and write UTF-8 encoded strings from and
-    to the target platform's shared clipboard. 
-    
+    to the target platform's shared clipboard.
+
     A 'real-world' example usage is in the [Visual6502 Remix project](https://github.com/floooh/v6502r).
 
     Unfortunately clipboard support on the HTML5 platform comes with a lot of
@@ -476,8 +481,8 @@ Mainly some "missing features" for desktop apps:
     because of the restrictions the web platform puts on clipboard access and
     different behaviours and support levels of the various HTML5 clipboard
     APIs. I'm not really happy with the current HTML5 clipboard
-    implementation. It sorta works, but it sure ain't pretty :) 
-    
+    implementation. It sorta works, but it sure ain't pretty :)
+
     Maybe the situation will improve in a few years when all browsers agree
     on and support the new [permission-based clipboard
     API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
