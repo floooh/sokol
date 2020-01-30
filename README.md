@@ -330,7 +330,7 @@ static void frame(void) {
 }
 
 // the response callback is where the interesting stuff happens:
-static void reponse_callback(const sfetch_response_t* response) {
+static void response_callback(const sfetch_response_t* response) {
     if (response->fetched) {
         // data has been loaded into the provided buffer, do something
         // with the data...
@@ -482,7 +482,7 @@ Mainly some "missing features" for desktop apps:
     on and support the new [permission-based clipboard
     API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
 
-    For documention of the clipboard feature, search for CLIPBOARD SUPPORT
+    For documentation of the clipboard feature, search for CLIPBOARD SUPPORT
     in sokol_app.h
 
 - **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
@@ -730,7 +730,7 @@ layout definition in sg_pipeline_desc works:
 
     Vertex component names and semantics (needed by the GLES2 and D3D11 backends) have moved from ```sg_pipeline_desc``` into ```sg_shader_desc```.
 
-    This may seem like a rather pointless small detail to change, expecially
+    This may seem like a rather pointless small detail to change, especially
     for breaking existing code, but the whole thing will make a bit more
     sense when the new shader-cross-compiler will be integrated which I'm
     currently working on (here: https://github.com/floooh/sokol-tools).
@@ -743,7 +743,7 @@ layout definition in sg_pipeline_desc works:
     vertex-component **slots**. Instead of (optionally) mapping this
     association through a name, the pipeline's vertex layout is now always
     strictly defined in terms of numeric 'bind slots' for **all** sokol_gfx.h
-    backends. For 3D APIs where the vertex component slot isn't explicitely
+    backends. For 3D APIs where the vertex component slot isn't explicitly
     defined in the shader language (GLES2/WebGL, D3D11, and optionally
     GLES3/GL), the shader merely offers a lookup table how vertex-layout
     slot-indices map to names/semantics (and the underlying 3D API than maps
@@ -871,7 +871,7 @@ pipeline-state-objects), along with a couple of other minor API tweaks.
     sgl_pop_pipeline();
     ```
 
-    You can also load the 'default pipeline' explicitely on the top of the
+    You can also load the 'default pipeline' explicitly on the top of the
     pipeline stack with ```sgl_default_pipeline()```.
 
     The other API change is:

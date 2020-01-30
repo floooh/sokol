@@ -273,7 +273,7 @@
             - the user or application code has asked to quit the application
             - a string was pasted to the system clipboard
 
-        To explicitely 'consume' an event and prevent that the event is
+        To explicitly 'consume' an event and prevent that the event is
         forwarded for further handling to the operating system, call
         sapp_consume_event() from inside the event handler (NOTE that
         this behaviour is currently only implemented for some HTML5
