@@ -3069,7 +3069,7 @@ typedef struct {
         WGPUTexture tex[SG_NUM_INFLIGHT_FRAMES];
         WGPUTexture depth_tex;
         WGPUTexture msaa_tex;
-        WGPUTexture sampler_state;
+        WGPUSampler sampler;
     } wgpu;
 } _sg_wgpu_image_t;
 typedef _sg_wgpu_image_t _sg_image_t;
