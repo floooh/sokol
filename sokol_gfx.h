@@ -3099,11 +3099,15 @@ typedef struct {
 typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
 
 typedef struct {
+    // FIXME
+} _sg_wgpu_attachment_t;
+
+typedef struct {
     _sg_slot_t slot;
     _sg_pass_common_t cmn;
     struct {
-        _sg_mtl_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-        _sg_mtl_attachment_t ds_att;
+        _sg_wgpu_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_wgpu_attachment_t ds_att;
     } mtl;
 } _sg_wgpu_pass_t;
 typedef _sg_wgpu_pass_t _sg_pass_t;
@@ -3116,8 +3120,9 @@ typedef _sg_wgpu_context_t _sg_context_t;
 
 typedef struct {
     bool valid;
+    bool in_pass;
     WGPUDevice dev;
-} _sgl_wgpu_backend_t;
+} _sg_wgpu_backend_t;
 
 #endif
 /*=== RESOURCE POOL DECLARATIONS =============================================*/
@@ -9476,10 +9481,15 @@ _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
     SOKOL_LOG("_sg_wgpu_reset_state_cache: FIXME\n");
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
     return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_context(_sg_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
@@ -9522,7 +9532,7 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_shader(_sg_shader_t* shd) {
     SOKOL_LOG("_sg_sgpu_destroy_shader: FIXME!\n");
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(pip && shd && desc);
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     pip->shader = shd;
@@ -9534,9 +9544,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline* pip, _sg
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     SOKOL_LOG("_sg_wgpu_destroy_pipeline: FIXME!\n");
+    return SG_RESOURCESTATE_FAILED;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
     _sg_pass_common_init(&pass->cmn, desc);
@@ -9546,6 +9557,20 @@ _SOKOL_PRIVATE void _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_ima
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_LOG("_sg_wgpu_destroy_pass: FIXME!\n");
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_color_image(const _sg_pass_t* pass, int index) {
+    SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
+    /* NOTE: may return null */
+    SOKOL_LOG("_sg_wgpu_pass_color_image: FIXME!\n");
+    return 0;
+}
+
+_SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
+    /* NOTE: may return null */
+    SOKOL_ASSERT(pass);
+    SOKOL_LOG("_sg_wgpu_pass_ds_image: FIXME!\n");
+    return 0;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
@@ -9599,13 +9624,18 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
-    SOKOL_ASSERT(_sg.mtl.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_LOG("_sg_wgpu_draw: FIXME!\n");
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
     SOKOL_ASSERT(buf && data && (data_size > 0));
     SOKOL_LOG("_sg_wgpu_update_buffer: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const void* data, int data_size, bool new_frame) {
+    SOKOL_ASSERT(buf && data && (data_size > 0));
+    SOKOL_LOG("_sg_wgpu_append_buffer: FIXME!\n")
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_content* data) {
