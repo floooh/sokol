@@ -16,6 +16,7 @@
         #define SOKOL_GLES3
         #define SOKOL_D3D11
         #define SOKOL_METAL
+        #define SOKOL_WGPU
         #define SOKOL_DUMMY_BACKEND
 
     I.e. for the GL 3.3 Core Profile it should look like this:
@@ -1996,6 +1997,8 @@ typedef struct sg_desc {
     const void* d3d11_device_context;
     const void* (*d3d11_render_target_view_cb)(void);
     const void* (*d3d11_depth_stencil_view_cb)(void);
+    /* WebGPU-specific */
+    const void* wgpu_device;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -2095,8 +2098,8 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #ifdef SOKOL_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
-#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_DUMMY_BACKEND))
-#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL or SOKOL_DUMMY_BACKEND"
+#if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
+#error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
 #endif
 #include <string.h> /* memset */
 #include <float.h> /* FLT_MAX */
@@ -2334,6 +2337,8 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
             #define _SG_TARGET_IOS_SIMULATOR (1)
         #endif
     #endif
+#elif defined(SOKOL_WGPU)
+    #include <webgpu/webgpu.h>
 #endif
 
 /*=== COMMON BACKEND STUFF ===================================================*/
@@ -3045,8 +3050,76 @@ static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 static id<MTLRenderCommandEncoder> _sg_mtl_cmd_encoder;
 static dispatch_semaphore_t _sg_mtl_sem;
 
-#endif /* SOKOL_METAL */
+/*=== WGPU BACKEND DECLARATIONS ==============================================*/
+#elif defined(SOKOL_WGPU)
 
+typedef struct {
+    _sg_slot_t slot;
+    _sg_buffer_common_t cmn;
+    struct {
+        WGPUBuffer buf[SG_NUM_INFLIGHT_FRAMES];
+    } wgpu;
+} _sg_wgpu_buffer_t;
+typedef _sg_wgpu_buffer_t _sg_buffer_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_image_common_t cmn;
+    struct {
+        WGPUTexture tex[SG_NUM_INFLIGHT_FRAMES];
+        WGPUTexture depth_tex;
+        WGPUTexture msaa_tex;
+        WGPUTexture sampler_state;
+    } wgpu;
+} _sg_wgpu_image_t;
+typedef _sg_wgpu_image_t _sg_image_t;
+
+typedef struct {
+    WGPUShaderModule mod;
+    _sg_str_t entry;
+} _sg_wgpu_shader_stage_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_shader_common_t cmn;
+    struct {
+        _sg_wgpu_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+    } wgpu;
+} _sg_wgpu_shader_t;
+typedef _sg_wgpu_shader_t _sg_shader_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_pipeline_common_t cmn;
+    _sg_shader_t* shader;
+    struct {
+        WGPURenderPipeline pip;
+    } wgpu;
+} _sg_wgpu_pipeline_t;
+typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
+
+typedef struct {
+    _sg_slot_t slot;
+    _sg_pass_common_t cmn;
+    struct {
+        _sg_mtl_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+        _sg_mtl_attachment_t ds_att;
+    } mtl;
+} _sg_wgpu_pass_t;
+typedef _sg_wgpu_pass_t _sg_pass_t;
+typedef _sg_attachment_common_t _sg_attachment_t;
+
+typedef struct {
+    _sg_slot_t slot;
+} _sg_wgpu_context_t;
+typedef _sg_wgpu_context_t _sg_context_t;
+
+typedef struct {
+    bool valid;
+    WGPUDevice dev;
+} _sgl_wgpu_backend_t;
+
+#endif
 /*=== RESOURCE POOL DECLARATIONS =============================================*/
 
 /* this *MUST* remain 0 */
@@ -3224,6 +3297,8 @@ typedef struct {
     _sg_mtl_backend_t mtl;
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_backend_t d3d11;
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_backend_t wgpu;
     #endif
     #if defined(SOKOL_TRACE_HOOKS)
     sg_trace_hooks hooks;
@@ -9381,6 +9456,162 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_conten
     __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_idpool[img->mtl.tex[img->cmn.active_slot]];
     _sg_mtl_copy_image_content(img, mtl_tex, data);
 }
+
+/*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
+#elif defined(SOKOL_WGPU)
+_SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->wgpu_device);
+    _sg.wgpu.valid = true;
+    _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
+    SOKOL_ASSERT(_sg.wgpu.valid);
+    _sg.wgpu.valid = false;
+    _sg.wgpu.dev = 0;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
+    SOKOL_LOG("_sg_wgpu_reset_state_cache: FIXME\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_create_context(_sg_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    _SOKOL_UNUSED(ctx);
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
+    SOKOL_LOG("_sg_wgpu_activate_context: FIXME\n");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
+    SOKOL_ASSERT(buf && desc);
+    _sg_buffer_common_init(&buf->cmn, desc);
+    SOKOL_LOG("_sg_wgpu_create_buffer: FIXME\n");
+    return SG_RESOURCESTATE_FAILED;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_buffer(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    SOKOL_LOG("_sg_wgpu_destroy_buffer: FIXME\n");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
+    SOKOL_ASSERT(img && desc);
+    _sg_image_common_init(&img->cmn, desc);
+    SOKOL_LOG("_sg_wgpu_create_image: FIXME\n");
+    return SG_RESOURCESTATE_FAILED;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
+    SOKOL_ASSERT(img);
+    SOKOL_LOG("_sg_wgpu_destroy_image: FIXME!\n");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
+    SOKOL_ASSERT(shd && desc);
+    _sg_shader_common_init(&shd->cmn, desc);
+    SOKOL_LOG("_sg_wgpu_create_shader: FIXME!\n");
+    return SG_RESOURCESTATE_FAILED;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_shader(_sg_shader_t* shd) {
+    SOKOL_ASSERT(shd);
+    SOKOL_LOG("_sg_sgpu_destroy_shader: FIXME!\n");
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && shd && desc);
+    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    pip->shader = shd;
+    _sg_pipeline_common_init(&pip->cmn, desc);
+    SOKOL_LOG("_sg_wgpu_create_pipeline: FIXME!\n");
+    return SG_RESOURCESTATE_FAILED;
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_LOG("_sg_wgpu_destroy_pipeline: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
+    SOKOL_ASSERT(pass && desc);
+    SOKOL_ASSERT(att_images && att_images[0]);
+    _sg_pass_common_init(&pass->cmn, desc);
+    return SG_RESOURCESTATE_VALID;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
+    SOKOL_ASSERT(pass);
+    SOKOL_LOG("_sg_wgpu_destroy_pass: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+    SOKOL_ASSERT(action);
+    SOKOL_ASSERT(!_sg.wgpu.in_pass);
+    _sg.wgpu.in_pass = true;
+    SOKOL_LOG("_sg_wgpu_begin_pass: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    _sg.wgpu.in_pass = false;
+    SOKOL_LOG("_sg_wgpu_end_pass: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_commit(void) {
+    SOKOL_ASSERT(!_sg.wgpu.in_pass);
+    SOKOL_LOG("_sg_wgpu_commit: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_LOG("_sg_wgpu_apply_viewport: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
+    SOKOL_ASSERT(pip);
+    SOKOL_ASSERT(pip->shader);
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_LOG("_sg_wgpu_apply_pipeline: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
+    _sg_pipeline_t* pip,
+    _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
+    _sg_buffer_t* ib, int ib_offset,
+    _sg_image_t** vs_imgs, int num_vs_imgs,
+    _sg_image_t** fs_imgs, int num_fs_imgs)
+{
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_LOG("_sg_wgpu_apply_bindings: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_LOG("_sg_wgpu_apply_uniforms: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
+    SOKOL_ASSERT(_sg.mtl.in_pass);
+    SOKOL_LOG("_sg_wgpu_draw: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
+    SOKOL_ASSERT(buf && data && (data_size > 0));
+    SOKOL_LOG("_sg_wgpu_update_buffer: FIXME!\n");
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_content* data) {
+    SOKOL_ASSERT(img && data);
+    SOKOL_LOG("_sg_wgpu_update_image: FIXME!\n");
+}
 #endif
 
 /*== BACKEND API WRAPPERS ====================================================*/
@@ -9391,8 +9622,12 @@ static inline void _sg_setup_backend(const sg_desc* desc) {
     _sg_mtl_setup_backend(desc);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_setup_backend(desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_setup_backend(desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_setup_backend(desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9403,8 +9638,12 @@ static inline void _sg_discard_backend(void) {
     _sg_mtl_discard_backend();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_discard_backend();
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_discard_backend();
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_discard_backend();
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9415,8 +9654,12 @@ static inline void _sg_reset_state_cache(void) {
     _sg_mtl_reset_state_cache();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_reset_state_cache();
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_reset_state_cache();
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_reset_state_cache();
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9427,8 +9670,12 @@ static inline void _sg_activate_context(_sg_context_t* ctx) {
     _sg_mtl_activate_context(ctx);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_activate_context(ctx);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_activate_context(ctx);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_activate_context(ctx);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9439,8 +9686,12 @@ static inline sg_resource_state _sg_create_context(_sg_context_t* ctx) {
     return _sg_mtl_create_context(ctx);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_context(ctx);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_context(ctx);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_context(ctx);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9451,8 +9702,12 @@ static inline void _sg_destroy_context(_sg_context_t* ctx) {
     _sg_mtl_destroy_context(ctx);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_context(ctx);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_destroy_context(ctx);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_context(ctx);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9463,8 +9718,12 @@ static inline sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_bu
     return _sg_mtl_create_buffer(buf, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_buffer(buf, desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_buffer(buf, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_buffer(buf, desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9475,8 +9734,12 @@ static inline void _sg_destroy_buffer(_sg_buffer_t* buf) {
     _sg_mtl_destroy_buffer(buf);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_buffer(buf);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_destroy_buffer(buf);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_buffer(buf);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9487,8 +9750,12 @@ static inline sg_resource_state _sg_create_image(_sg_image_t* img, const sg_imag
     return _sg_mtl_create_image(img, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_image(img, desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_image(img, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_image(img, desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9499,8 +9766,12 @@ static inline void _sg_destroy_image(_sg_image_t* img) {
     _sg_mtl_destroy_image(img);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_image(img);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_destroy_image(img);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_image(img);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9511,8 +9782,12 @@ static inline sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_sh
     return _sg_mtl_create_shader(shd, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_shader(shd, desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_shader(shd, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_shader(shd, desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9523,8 +9798,12 @@ static inline void _sg_destroy_shader(_sg_shader_t* shd) {
     _sg_mtl_destroy_shader(shd);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_shader(shd);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_destroy_shader(shd);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_shader(shd);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9535,8 +9814,12 @@ static inline sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_sha
     return _sg_mtl_create_pipeline(pip, shd, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_pipeline(pip, shd, desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_pipeline(pip, shd, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_pipeline(pip, shd, desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9547,8 +9830,12 @@ static inline void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_destroy_pipeline(pip);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_pipeline(pip);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_destroy_pipeline(pip);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_pipeline(pip);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9559,8 +9846,12 @@ static inline sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** 
     return _sg_mtl_create_pass(pass, att_images, desc);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_create_pass(pass, att_images, desc);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_create_pass(pass, att_images, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_create_pass(pass, att_images, desc);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9571,8 +9862,12 @@ static inline void _sg_destroy_pass(_sg_pass_t* pass) {
     _sg_mtl_destroy_pass(pass);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_destroy_pass(pass);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_destroy_pass(pass);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_destroy_pass(pass);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9583,8 +9878,12 @@ static inline _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int inde
     return _sg_mtl_pass_color_image(pass, index);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_pass_color_image(pass, index);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_pass_color_image(pass, index);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_pass_color_image(pass, index);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9595,8 +9894,12 @@ static inline _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
     return _sg_mtl_pass_ds_image(pass);
     #elif defined(SOKOL_D3D11)
     return _sg_d3d11_pass_ds_image(pass);
-    #else
+    #elif defined(SOKOL_WGPU)
+    return _sg_wgpu_pass_ds_image(pass);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     return _sg_dummy_pass_ds_image(pass);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9607,8 +9910,12 @@ static inline void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action
     _sg_mtl_begin_pass(pass, action, w, h);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_begin_pass(pass, action, w, h);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_begin_pass(pass, action, w, h);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_begin_pass(pass, action, w, h);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9619,8 +9926,12 @@ static inline void _sg_end_pass(void) {
     _sg_mtl_end_pass();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_end_pass();
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_end_pass();
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_end_pass();
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9631,8 +9942,12 @@ static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_to
     _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_apply_viewport(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9643,8 +9958,12 @@ static inline void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origi
     _sg_mtl_apply_scissor_rect(x, y, w, h, origin_top_left);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_scissor_rect(x, y, w, h, origin_top_left);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9655,8 +9974,12 @@ static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
     _sg_mtl_apply_pipeline(pip);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_pipeline(pip);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_apply_pipeline(pip);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_pipeline(pip);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9673,8 +9996,12 @@ static inline void _sg_apply_bindings(
     _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9685,8 +10012,12 @@ static inline void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index,
     _sg_mtl_apply_uniforms(stage_index, ub_index, data, num_bytes);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_uniforms(stage_index, ub_index, data, num_bytes);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9697,8 +10028,12 @@ static inline void _sg_draw(int base_element, int num_elements, int num_instance
     _sg_mtl_draw(base_element, num_elements, num_instances);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_draw(base_element, num_elements, num_instances);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_draw(base_element, num_elements, num_instances);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_draw(base_element, num_elements, num_instances);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9709,8 +10044,12 @@ static inline void _sg_commit(void) {
     _sg_mtl_commit();
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_commit();
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_commit();
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_commit();
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9721,8 +10060,12 @@ static inline void _sg_update_buffer(_sg_buffer_t* buf, const void* data_ptr, in
     _sg_mtl_update_buffer(buf, data_ptr, data_size);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_update_buffer(buf, data_ptr, data_size);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_update_buffer(buf, data_ptr, data_size);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_update_buffer(buf, data_ptr, data_size);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9733,8 +10076,12 @@ static inline void _sg_append_buffer(_sg_buffer_t* buf, const void* data_ptr, in
     _sg_mtl_append_buffer(buf, data_ptr, data_size, new_frame);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_append_buffer(buf, data_ptr, data_size, new_frame);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_append_buffer(buf, data_ptr, data_size, new_frame);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_append_buffer(buf, data_ptr, data_size, new_frame);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
@@ -9745,8 +10092,12 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_content* da
     _sg_mtl_update_image(img, data);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_update_image(img, data);
-    #else
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_update_image(img, data);
+    #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_update_image(img, data);
+    #else
+    #error("INVALID BACKEND");
     #endif
 }
 
