@@ -3122,8 +3122,11 @@ typedef _sg_wgpu_context_t _sg_context_t;
 typedef struct {
     bool valid;
     bool in_pass;
-    WGPUDevice device;
-    WGPUSwapChain swap_chain;
+    WGPUDevice dev;
+    WGPUSwapChain swap;
+    WGPUQueue queue;
+    WGPUCommandEncoder cmd_enc;
+    WGPURenderPassEncoder pass_enc;
 } _sg_wgpu_backend_t;
 
 #endif
@@ -9466,26 +9469,42 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_conten
 
 /*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
 #elif defined(SOKOL_WGPU)
+
+_SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
+    switch (a) {
+        case SG_ACTION_CLEAR:
+        case SG_ACTION_DONTCARE:
+            return WGPULoadOp_Clear;
+        case SG_ACTION_LOAD:
+            return WGPULoadOp_Load;
+        default:
+            SOKOL_UNREACHABLE;
+            return (WGPULoadOp)0;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
     _sg.wgpu.valid = true;
-    _sg.wgpu.device = (WGPUDevice) desc->wgpu_device;
-    _sg.wgpu.swap_chain = (WGPUSwapChain) desc->wgpu_swap_chain;
-    wgpuDeviceReference(_sg.wgpu.device);
-    wgpuSwapChainReference(_sg.wgpu.swap_chain);
+    _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
+    _sg.wgpu.swap = (WGPUSwapChain) desc->wgpu_swap_chain;
+    _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
+    SOKOL_ASSERT(_sg.wgpu.queue);
+    wgpuDeviceReference(_sg.wgpu.dev);
+    wgpuSwapChainReference(_sg.wgpu.swap);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     _sg.wgpu.valid = false;
-    if (_sg.wgpu.device) {
-        wgpuDeviceRelease(_sg.wgpu.device);
-        _sg.wgpu.device = 0;
+    if (_sg.wgpu.dev) {
+        wgpuDeviceRelease(_sg.wgpu.dev);
+        _sg.wgpu.dev = 0;
     }
-    if (_sg.wgpu.swap_chain) {
-        wgpuSwapChainRelease(_sg.wgpu.swap_chain);
-        _sg.wgpu.swap_chain = 0;
+    if (_sg.wgpu.swap) {
+        wgpuSwapChainRelease(_sg.wgpu.swap);
+        _sg.wgpu.swap = 0;
     }
 }
 
@@ -9588,19 +9607,59 @@ _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swap);
     _sg.wgpu.in_pass = true;
-    SOKOL_LOG("_sg_wgpu_begin_pass: FIXME!\n");
+
+    /* first pass in frame? */
+    if (0 == _sg.wgpu.cmd_enc) {
+        WGPUCommandEncoderDescriptor cmd_enc_desc;
+        memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
+        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    }
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+    WGPURenderPassDescriptor pass_desc;
+    memset(&pass_desc, 0, sizeof(pass_desc));
+    WGPURenderPassColorAttachmentDescriptor color_att_desc;
+    memset(&color_att_desc, 0, sizeof(color_att_desc));
+    if (pass) {
+        // FIXME: offscreen render pass
+    }
+    else {
+        /* default render pass */
+        color_att_desc.loadOp = _sg_wgpu_load_op(action->colors[0].action);
+        color_att_desc.clearColor.r = action->colors[0].val[0];
+        color_att_desc.clearColor.g = action->colors[1].val[1];
+        color_att_desc.clearColor.b = action->colors[2].val[2];
+        color_att_desc.clearColor.a = action->colors[3].val[3];
+        color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swap);
+        pass_desc.colorAttachmentCount = 1;
+        pass_desc.colorAttachments = &color_att_desc;
+        // FIXME: what about depth-stencil attachment???
+        _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &pass_desc);
+        wgpuTextureViewRelease(color_att_desc.attachment);
+    }
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
     _sg.wgpu.in_pass = false;
-    SOKOL_LOG("_sg_wgpu_end_pass: FIXME!\n");
+    wgpuRenderPassEncoderEndPass(_sg.wgpu.pass_enc);
+    wgpuRenderPassEncoderRelease(_sg.wgpu.pass_enc); // ???
+    _sg.wgpu.pass_enc = 0;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
-    SOKOL_LOG("_sg_wgpu_commit: FIXME!\n");
+    SOKOL_ASSERT(_sg.wgpu.queue);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+    WGPUCommandBufferDescriptor cmd_buf_desc;
+    memset(&cmd_buf_desc, 0, sizeof(cmd_buf_desc));
+    WGPUCommandBuffer cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
+    SOKOL_ASSERT(cmd_buf);
+    wgpuQueueSubmit(_sg.wgpu.queue, 1, &cmd_buf);
+    wgpuCommandBufferRelease(cmd_buf);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
