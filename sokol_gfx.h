@@ -1999,6 +1999,7 @@ typedef struct sg_desc {
     const void* (*d3d11_depth_stencil_view_cb)(void);
     /* WebGPU-specific */
     const void* wgpu_device;
+    const void* wgpu_swap_chain;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -3121,7 +3122,8 @@ typedef _sg_wgpu_context_t _sg_context_t;
 typedef struct {
     bool valid;
     bool in_pass;
-    WGPUDevice dev;
+    WGPUDevice device;
+    WGPUSwapChain swap_chain;
 } _sg_wgpu_backend_t;
 
 #endif
@@ -9466,15 +9468,25 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_conten
 #elif defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->wgpu_device);
+    SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
     _sg.wgpu.valid = true;
-    _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
+    _sg.wgpu.device = (WGPUDevice) desc->wgpu_device;
+    _sg.wgpu.swap_chain = (WGPUSwapChain) desc->wgpu_swap_chain;
+    wgpuDeviceReference(_sg.wgpu.device);
+    wgpuSwapChainReference(_sg.wgpu.swap_chain);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     _sg.wgpu.valid = false;
-    _sg.wgpu.dev = 0;
+    if (_sg.wgpu.device) {
+        wgpuDeviceRelease(_sg.wgpu.device);
+        _sg.wgpu.device = 0;
+    }
+    if (_sg.wgpu.swap_chain) {
+        wgpuSwapChainRelease(_sg.wgpu.swap_chain);
+        _sg.wgpu.swap_chain = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_reset_state_cache(void) {
