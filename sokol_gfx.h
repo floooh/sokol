@@ -9610,27 +9610,28 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swap);
     _sg.wgpu.in_pass = true;
 
-    /* first pass in frame? */
+    /* create render command encoder if this is the first pass in the frame */
     if (0 == _sg.wgpu.cmd_enc) {
         WGPUCommandEncoderDescriptor cmd_enc_desc;
         memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
         _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
     }
+
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
-    WGPURenderPassDescriptor pass_desc;
-    memset(&pass_desc, 0, sizeof(pass_desc));
-    WGPURenderPassColorAttachmentDescriptor color_att_desc;
-    memset(&color_att_desc, 0, sizeof(color_att_desc));
     if (pass) {
         // FIXME: offscreen render pass
     }
     else {
         /* default render pass */
+        WGPURenderPassDescriptor pass_desc;
+        memset(&pass_desc, 0, sizeof(pass_desc));
+        WGPURenderPassColorAttachmentDescriptor color_att_desc;
+        memset(&color_att_desc, 0, sizeof(color_att_desc));
         color_att_desc.loadOp = _sg_wgpu_load_op(action->colors[0].action);
         color_att_desc.clearColor.r = action->colors[0].val[0];
-        color_att_desc.clearColor.g = action->colors[1].val[1];
-        color_att_desc.clearColor.b = action->colors[2].val[2];
-        color_att_desc.clearColor.a = action->colors[3].val[3];
+        color_att_desc.clearColor.g = action->colors[0].val[1];
+        color_att_desc.clearColor.b = action->colors[0].val[2];
+        color_att_desc.clearColor.a = action->colors[0].val[3];
         color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swap);
         pass_desc.colorAttachmentCount = 1;
         pass_desc.colorAttachments = &color_att_desc;
@@ -9646,7 +9647,7 @@ _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     _sg.wgpu.in_pass = false;
     wgpuRenderPassEncoderEndPass(_sg.wgpu.pass_enc);
-    wgpuRenderPassEncoderRelease(_sg.wgpu.pass_enc); // ???
+    wgpuRenderPassEncoderRelease(_sg.wgpu.pass_enc);
     _sg.wgpu.pass_enc = 0;
 }
 
@@ -9658,6 +9659,8 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     memset(&cmd_buf_desc, 0, sizeof(cmd_buf_desc));
     WGPUCommandBuffer cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
     SOKOL_ASSERT(cmd_buf);
+    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc);
+    _sg.wgpu.cmd_enc = 0;
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &cmd_buf);
     wgpuCommandBufferRelease(cmd_buf);
 }
