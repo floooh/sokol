@@ -9470,6 +9470,20 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_conten
 /*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
 #elif defined(SOKOL_WGPU)
 
+_SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
+    WGPUBufferUsageFlags res = 0;
+    if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
+        res |= WGPUBufferUsage_Vertex;
+    }
+    else {
+        res |= WGPUBufferUsage_Index;
+    }
+    if (SG_USAGE_IMMUTABLE != u) {
+        res |= WGPUBufferUsage_CopyDst;
+    }
+    return res;
+}
+
 _SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
     switch (a) {
         case SG_ACTION_CLEAR:
@@ -9529,14 +9543,39 @@ _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+    // FIXME: injected buffers
+    // FIXME: debug label
     _sg_buffer_common_init(&buf->cmn, desc);
-    SOKOL_LOG("_sg_wgpu_create_buffer: FIXME\n");
-    return SG_RESOURCESTATE_FAILED;
+    for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
+        WGPUBufferDescriptor wgpu_buf_desc;
+        memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
+        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
+        wgpu_buf_desc.size = buf->cmn.size;
+        if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
+            SOKOL_ASSERT(desc->content);
+            WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
+            buf->wgpu.buf[slot] = res.buffer;
+            SOKOL_ASSERT(res.data && ((int)res.dataLength == buf->cmn.size));
+            memcpy(res.data, desc->content, buf->cmn.size);
+            wgpuBufferUnmap(res.buffer);
+        }
+        else {
+            buf->wgpu.buf[slot] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+        }
+        SOKOL_ASSERT(0 != buf->wgpu.buf[slot]);
+    }
+    return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    SOKOL_LOG("_sg_wgpu_destroy_buffer: FIXME\n");
+    for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
+        WGPUBuffer wgpu_buf = buf->wgpu.buf[slot];
+        if (0 != wgpu_buf) {
+            wgpuBufferDestroy(wgpu_buf);
+            wgpuBufferRelease(wgpu_buf);
+        }
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
