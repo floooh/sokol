@@ -9512,6 +9512,10 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     _sg.wgpu.valid = false;
+    if (_sg.wgpu.queue) {
+        wgpuQueueRelease(_sg.wgpu.queue);
+        _sg.wgpu.queue = 0;
+    }
     if (_sg.wgpu.dev) {
         wgpuDeviceRelease(_sg.wgpu.dev);
         _sg.wgpu.dev = 0;
