@@ -595,6 +595,7 @@ typedef enum sg_backend {
     SG_BACKEND_METAL_IOS,
     SG_BACKEND_METAL_MACOS,
     SG_BACKEND_METAL_SIMULATOR,
+    SG_BACKEND_WGPU,
     SG_BACKEND_DUMMY,
 } sg_backend;
 
@@ -9500,6 +9501,7 @@ _SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
+    _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
     _sg.wgpu.swap = (WGPUSwapChain) desc->wgpu_swap_chain;
@@ -9596,14 +9598,35 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
+    SOKOL_ASSERT(desc->vs.byte_code && desc->fs.byte_code);
     _sg_shader_common_init(&shd->cmn, desc);
-    SOKOL_LOG("_sg_wgpu_create_shader: FIXME!\n");
-    return SG_RESOURCESTATE_FAILED;
+
+    bool success = true;
+    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
+        const sg_shader_stage_desc* stage_desc = (i == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
+        SOKOL_ASSERT((stage_desc->byte_code_size & 3) == 0);
+        _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[i];
+        _sg_strcpy(&wgpu_stage->entry, stage_desc->entry);
+        WGPUShaderModuleDescriptor wgpu_shdmod_desc;
+        memset(&wgpu_shdmod_desc, 0, sizeof(wgpu_shdmod_desc));
+        wgpu_shdmod_desc.codeSize = stage_desc->byte_code_size >> 2;
+        wgpu_shdmod_desc.code = (const uint32_t*) stage_desc->byte_code;
+        wgpu_stage->mod = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
+        if (0 == wgpu_stage->mod) {
+            success = false;
+        }
+    }
+    return success ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
-    SOKOL_LOG("_sg_sgpu_destroy_shader: FIXME!\n");
+    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
+        if (shd->wgpu.stage[i].mod) {
+            /* FIXME: no wgpuShaderModuleDestroy? */
+            wgpuShaderModuleRelease(shd->wgpu.stage[i].mod);
+        }
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
@@ -10847,6 +10870,10 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             /* on Metal or D3D11, must provide shader source code or byte code */
             SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
             SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+        #elif defined(SOKOL_WGPU)
+            /* on WGPU byte code must be provided */
+            SOKOL_VALIDATE((0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_BYTECODE);
         #else
             /* Dummy Backend, don't require source or bytecode */
         #endif
