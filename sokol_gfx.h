@@ -9634,8 +9634,57 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
-    SOKOL_LOG("_sg_wgpu_create_pipeline: FIXME!\n");
-    return SG_RESOURCESTATE_FAILED;
+
+    // FIXME: BindGroupLayouts
+    // FIXME: VertexStateDescriptor
+
+    /*
+        Resourrce binding brain dump:
+
+        - BindGroupLayout and upfront-created bind groups
+          for the global uniform buffers
+        - each Texture + Sampler combinations gets its own
+          BindGroupLayout
+        - pipeline object gets the multiple BindGroupLayouts
+          for the uniform buffers and images required by the
+          shader
+
+    */
+
+    WGPUBindGroupLayoutDescriptor wgpu_bgl_desc;
+    memset(&wgpu_bgl_desc, 0, sizeof(wgpu_bgl_desc));
+    wgpu_bgl_desc.bindingCount = ...;
+    wgpu_bgl_desc.bindings = ...;
+    WGPUBindGroupLayout wgpu_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &wgpu_bgl_desc);
+    SOKOL_ASSERT(wgpu_piplt);
+
+    WGPUPipelineLayoutDescriptor wgpu_piplyt_desc;
+    memset(&wgpu_piplyt_desc, 0, sizeof(wgpu_piplt_desc));
+    wgpu_piplt_desc.bindGroupLayoutCount = 1;
+    wgpu_piplt_desc.bindGroupLayouts = &wgpu_piplt;
+    WGPUPipelineLayout wgpu_piplt = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &wgpu_pyplit_desc);
+    SOKOL_ASSERT(wgpu_piplt);
+
+    WGPURenderPipelineDescriptor wgpu_pip_desc;
+    memset(&wgpu_pip_desc, 0, sizeof(wgpu_pip_desc));
+    wgpu_pip_desc.layout = wgpu_piplyt;
+    wgpu_pip_desc.vertexStage.xxx = ...;
+    wgpu_pip_desc.fragmentStage = ...;
+    wgpu_pip_desc.vertexState = ...;
+    wgpu_pip_desc.primitiveTopology = ...;
+    wgpu_pip_desc.rasterizationState = ...;
+    wgpu_pip_desc.sampleCount = ...;
+    wgpu_pip_desc.depthStencilState = ...;
+    wgpu_pip_desc.colorStateCount = ...;
+    wgpu_pip_desc.colorStates = ...;
+    wgpu_pip_desc.sampleMask = ...;
+    wgpu_pip_desc.alphaToCoverageEnabled = ...;
+    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
+    SOKOL_ASSERT(0 != pip->wgpu.pip);
+
+    wgpuPipelineLayoutRelease(wgu_piplt);
+
+    return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
