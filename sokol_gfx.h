@@ -2370,6 +2370,8 @@ enum {
     _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
+    _SG_WGPU_MAX_BINDINGS = SG_NUM_SHADER_STAGES * (SG_MAX_SHADERSTAGE_UBS + 2*SG_MAX_SHADERSTAGE_IMAGES),
+    _SG_WGPU_MAX_BIND_GROUPS = (1 + (SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_IMAGES))
 };
 
 /* fixed-size string */
@@ -9502,6 +9504,16 @@ _SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
     }
 }
 
+_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_texviewdim(sg_image_type t) {
+    switch (t) {
+        case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
+        case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_Cube;
+        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_3D;
+        case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
+        default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Undefined;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
@@ -9639,7 +9651,63 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
 
-    // FIXME: BindGroupLayouts
+    /*  BindGroupLayout:
+
+        0:      the 4+4 global uniform buffers (4 for VS, 4 for FS)
+        1..x:   vertex shader images
+        x..y:   fragment shader images
+    */
+    WGPUBindGroupLayout bgl[_SG_WGPU_MAX_BIND_GROUPS];
+    int bgl_idx = 0;
+    // FIXME: the uniform buffer bind group can be created once at startup
+    WGPUBindGroupLayoutBinding bglb_ub[SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS];
+    memset(bglb_ub, 0, sizeof(bglb_ub));
+    int bglb_ub_idx = 0;
+    for (int stage_idx = 0; stage_idx < SG_NUM_SHADER_STAGES; stage_idx++) {
+        WGPUShaderStageFlags vis = (stage_idx == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
+        for (int ub_idx = 0; ub_idx < SG_MAX_SHADERSTAGE_UBS; ub_idx++, bglb_ub_idx++) {
+            bglb_ub[bglb_ub_idx].binding = ub_idx;
+            bglb_ub[bglb_ub_idx].visibility = vis;
+            bglb_ub[bglb_ub_idx].type = WGPUBindingType_UniformBuffer;
+            bglb_ub[bglb_ub_idx].hasDynamicOffset = true;
+        }
+    }
+    WGPUBindGroupLayoutDescriptor bglb_desc;
+    memset(&bglb_desc, 0, sizeof(bglb_desc));
+    bglb_desc.bindingCount = bglb_ub_idx;
+    bglb_desc.bindings = bglb_ub;
+    bgl[bgl_idx++] = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bglb_desc);
+    SOKOL_ASSERT(0 != bgl[bgl_idx-1]);
+
+    for (int stage_idx = 0; stage_idx < SG_NUM_SHADER_STAGES; stage_idx++) {
+        WGPUShaderStageFlags vis = (stage_idx == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
+        const int num_imgs = shd->cmn.stage[stage_idx].num_images;
+        if (num_imgs > 0) {
+            for (int img_idx = 0; img_idx < num_imgs; img_idx++) {
+                /* 2 bindings, one bind group per image bind slot (texture + sampler) */
+                WGPUBindGroupLayoutBinding bglb[2];
+                memset(bglb, 0, sizeof(bglb));
+                bglb[0].binding = img_idx;
+                bglb[0].visibility = vis;
+                bglb[0].type = WGPUBindingType_SampledTexture;
+                bglb[0].textureDimension = _sg_wgpu_texviewdim(shd->cmn.stage[stage_idx].images[img_idx].type);
+                bglb[0].textureComponentType = WGPUTextureComponentType_Float; // FIXME
+                bglb[1].binding = img_idx;
+                bglb[1].visibility = vis;
+                bglb[1].type = WGPUBindingType_Sampler;
+                WGPUBindGroupLayoutDescriptor bglb_desc;
+                memset(&bglb_desc, 0, sizeof(bglb_desc));
+                bglb_desc.bindingCount = 2;
+                bglb_desc.bindings = bglb;
+                SOKOL_ASSERT(bgl_idx < _SG_WGPU_MAX_BIND_GROUPS);
+                bgl[bgl_idx++] = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bglb_desc);
+                SOKOL_ASSERT(0 != bgl[bgl_idx-1]);
+            }
+        }
+    }
+    printf("_sg_wgpu_create_pipeline: %d bind group layouts\n", bgl_idx);
+
+
     // FIXME: VertexStateDescriptor
 
     /*
