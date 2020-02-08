@@ -2340,7 +2340,11 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
         #endif
     #endif
 #elif defined(SOKOL_WGPU)
-    #include <webgpu/webgpu.h>
+    #if defined(__EMSCRIPTEN__)
+        #include <webgpu/webgpu.h>
+    #else
+        #include <dawn/webgpu.h>
+    #endif
 #endif
 
 /*=== COMMON BACKEND STUFF ===================================================*/
@@ -9651,6 +9655,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     */
 
+/*
     WGPUBindGroupLayoutDescriptor wgpu_bgl_desc;
     memset(&wgpu_bgl_desc, 0, sizeof(wgpu_bgl_desc));
     wgpu_bgl_desc.bindingCount = ...;
@@ -9683,7 +9688,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(0 != pip->wgpu.pip);
 
     wgpuPipelineLayoutRelease(wgu_piplt);
-
+*/
     return SG_RESOURCESTATE_VALID;
 }
 
