@@ -9514,6 +9514,162 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_texviewdim(sg_image_type t) {
     }
 }
 
+_SOKOL_PRIVATE WGPUIndexFormat _sg_wgpu_indexformat(sg_index_type t) {
+    /* NOTE: there's no WGPUIndexFormat_None */
+    return (t == SG_INDEXTYPE_UINT16) ? WGPUIndexFormat_Uint16 : WGPUIndexFormat_Uint32;
+}
+
+_SOKOL_PRIVATE WGPUInputStepMode _sg_wgpu_stepmode(sg_vertex_step s) {
+    return (s == SG_VERTEXSTEP_PER_VERTEX) ? WGPUInputStepMode_Vertex : WGPUInputStepMode_Instance;
+}
+
+_SOKOL_PRIVATE WGPUVertexFormat _sg_wgpu_vertexformat(sg_vertex_format f) {
+    switch (f) {
+        case SG_VERTEXFORMAT_FLOAT:         return WGPUVertexFormat_Float;
+        case SG_VERTEXFORMAT_FLOAT2:        return WGPUVertexFormat_Float2;
+        case SG_VERTEXFORMAT_FLOAT3:        return WGPUVertexFormat_Float3;
+        case SG_VERTEXFORMAT_FLOAT4:        return WGPUVertexFormat_Float4;
+        case SG_VERTEXFORMAT_BYTE4:         return WGPUVertexFormat_Char4;
+        case SG_VERTEXFORMAT_BYTE4N:        return WGPUVertexFormat_Char4Norm;
+        case SG_VERTEXFORMAT_UBYTE4:        return WGPUVertexFormat_UChar4;
+        case SG_VERTEXFORMAT_UBYTE4N:       return WGPUVertexFormat_UChar4Norm;
+        case SG_VERTEXFORMAT_SHORT2:        return WGPUVertexFormat_Short2;
+        case SG_VERTEXFORMAT_SHORT2N:       return WGPUVertexFormat_Short2Norm;
+        case SG_VERTEXFORMAT_USHORT2N:      return WGPUVertexFormat_UShort2Norm;
+        case SG_VERTEXFORMAT_SHORT4:        return WGPUVertexFormat_Short4;
+        case SG_VERTEXFORMAT_SHORT4N:       return WGPUVertexFormat_Short4Norm;
+        case SG_VERTEXFORMAT_USHORT4N:      return WGPUVertexFormat_UShort4Norm;
+        /* FIXME! UINT10_N2 */
+        case SG_VERTEXFORMAT_UINT10_N2:
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUVertexFormat_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUPrimitiveTopology _sg_wgpu_topology(sg_primitive_type t) {
+    switch (t) {
+        case SG_PRIMITIVETYPE_POINTS:           return WGPUPrimitiveTopology_PointList;
+        case SG_PRIMITIVETYPE_LINES:            return WGPUPrimitiveTopology_LineList;
+        case SG_PRIMITIVETYPE_LINE_STRIP:       return WGPUPrimitiveTopology_LineStrip;
+        case SG_PRIMITIVETYPE_TRIANGLES:        return WGPUPrimitiveTopology_TriangleList;
+        case SG_PRIMITIVETYPE_TRIANGLE_STRIP:   return WGPUPrimitiveTopology_TriangleStrip;
+        default: SOKOL_UNREACHABLE; return WGPUPrimitiveTopology_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUFrontFace _sg_wgpu_frontface(sg_face_winding fw) {
+    return (fw == SG_FACEWINDING_CCW) ? WGPUFrontFace_CCW : WGPUFrontFace_CW;
+}
+
+_SOKOL_PRIVATE WGPUCullMode _sg_wgpu_cullmode(sg_cull_mode cm) {
+    switch (cm) {
+        case SG_CULLMODE_NONE:      return WGPUCullMode_None;
+        case SG_CULLMODE_FRONT:     return WGPUCullMode_Front;
+        case SG_CULLMODE_BACK:      return WGPUCullMode_Back;
+        default: SOKOL_UNREACHABLE; return WGPUCullMode_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
+    switch (p) {
+        case SG_PIXELFORMAT_NONE:           return WGPUTextureFormat_Undefined;
+        case SG_PIXELFORMAT_R8:             return WGPUTextureFormat_R8Unorm;
+        case SG_PIXELFORMAT_R8SN:           return WGPUTextureFormat_R8Snorm;
+        case SG_PIXELFORMAT_R8UI:           return WGPUTextureFormat_R8Uint;
+        case SG_PIXELFORMAT_R8SI:           return WGPUTextureFormat_R8Sint;
+        case SG_PIXELFORMAT_R16UI:          return WGPUTextureFormat_R16Uint;
+        case SG_PIXELFORMAT_R16SI:          return WGPUTextureFormat_R16Sint;
+        case SG_PIXELFORMAT_R16F:           return WGPUTextureFormat_R16Float;
+        case SG_PIXELFORMAT_RG8:            return WGPUTextureFormat_RG8Unorm;
+        case SG_PIXELFORMAT_RG8SN:          return WGPUTextureFormat_RG8Snorm;
+        case SG_PIXELFORMAT_RG8UI:          return WGPUTextureFormat_RG8Uint;
+        case SG_PIXELFORMAT_RG8SI:          return WGPUTextureFormat_RG8Sint;
+        case SG_PIXELFORMAT_R32UI:          return WGPUTextureFormat_R32Uint;
+        case SG_PIXELFORMAT_R32SI:          return WGPUTextureFormat_R32Sint;
+        case SG_PIXELFORMAT_R32F:           return WGPUTextureFormat_R32Float;
+        case SG_PIXELFORMAT_RG16UI:         return WGPUTextureFormat_RG16Uint;
+        case SG_PIXELFORMAT_RG16SI:         return WGPUTextureFormat_RG16Sint;
+        case SG_PIXELFORMAT_RG16F:          return WGPUTextureFormat_RG16Float;
+        case SG_PIXELFORMAT_RGBA8:          return WGPUTextureFormat_RGBA8Unorm;
+        case SG_PIXELFORMAT_RGBA8SN:        return WGPUTextureFormat_RGBA8Snorm;
+        case SG_PIXELFORMAT_RGBA8UI:        return WGPUTextureFormat_RGBA8Uint;
+        case SG_PIXELFORMAT_RGBA8SI:        return WGPUTextureFormat_RGBA8Sint;
+        case SG_PIXELFORMAT_BGRA8:          return WGPUTextureFormat_BGRA8Unorm;
+        case SG_PIXELFORMAT_RGB10A2:        return WGPUTextureFormat_RGB10A2Unorm;
+        case SG_PIXELFORMAT_RG11B10F:       return WGPUTextureFormat_RG11B10Float;
+        case SG_PIXELFORMAT_RG32UI:         return WGPUTextureFormat_RG32Uint;
+        case SG_PIXELFORMAT_RG32SI:         return WGPUTextureFormat_RG32Sint;
+        case SG_PIXELFORMAT_RG32F:          return WGPUTextureFormat_RG32Float;
+        case SG_PIXELFORMAT_RGBA16UI:       return WGPUTextureFormat_RGBA16Uint;
+        case SG_PIXELFORMAT_RGBA16SI:       return WGPUTextureFormat_RGBA16Sint;
+        case SG_PIXELFORMAT_RGBA16F:        return WGPUTextureFormat_RGBA16Float;
+        case SG_PIXELFORMAT_RGBA32UI:       return WGPUTextureFormat_RGBA32Uint;
+        case SG_PIXELFORMAT_RGBA32SI:       return WGPUTextureFormat_RGBA32Sint;
+        case SG_PIXELFORMAT_RGBA32F:        return WGPUTextureFormat_RGBA32Float;
+        case SG_PIXELFORMAT_DEPTH:          return WGPUTextureFormat_Depth24Plus;
+        case SG_PIXELFORMAT_DEPTH_STENCIL:  return WGPUTextureFormat_Depth24PlusStencil8;
+        case SG_PIXELFORMAT_BC1_RGBA:       return WGPUTextureFormat_BC1RGBAUnorm;
+        case SG_PIXELFORMAT_BC2_RGBA:       return WGPUTextureFormat_BC2RGBAUnorm;
+        case SG_PIXELFORMAT_BC3_RGBA:       return WGPUTextureFormat_BC3RGBAUnorm;
+        case SG_PIXELFORMAT_BC4_R:          return WGPUTextureFormat_BC4RUnorm;
+        case SG_PIXELFORMAT_BC4_RSN:        return WGPUTextureFormat_BC4RSnorm;
+        case SG_PIXELFORMAT_BC5_RG:         return WGPUTextureFormat_BC5RGUnorm;
+        case SG_PIXELFORMAT_BC5_RGSN:       return WGPUTextureFormat_BC5RGSnorm;
+        case SG_PIXELFORMAT_BC6H_RGBF:      return WGPUTextureFormat_BC6HRGBSfloat;
+        case SG_PIXELFORMAT_BC6H_RGBUF:     return WGPUTextureFormat_BC6HRGBUfloat;
+        case SG_PIXELFORMAT_BC7_RGBA:       return WGPUTextureFormat_BC7RGBAUnorm;
+
+        /* NOT SUPPORTED */
+        case SG_PIXELFORMAT_R16:
+        case SG_PIXELFORMAT_R16SN:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16SN:
+        case SG_PIXELFORMAT_RGBA16:
+        case SG_PIXELFORMAT_RGBA16SN:
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
+        case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_RG11:
+        case SG_PIXELFORMAT_ETC2_RG11SN:
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUTextureFormat_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUCompareFunction _sg_wgpu_comparefunc(sg_compare_func f) {
+    switch (f) {
+        case SG_COMPAREFUNC_NEVER:          return WGPUCompareFunction_Never;
+        case SG_COMPAREFUNC_LESS:           return WGPUCompareFunction_Less;
+        case SG_COMPAREFUNC_EQUAL:          return WGPUCompareFunction_Equal;
+        case SG_COMPAREFUNC_LESS_EQUAL:     return WGPUCompareFunction_LessEqual;
+        case SG_COMPAREFUNC_GREATER:        return WGPUCompareFunction_Greater;
+        case SG_COMPAREFUNC_NOT_EQUAL:      return WGPUCompareFunction_NotEqual;
+        case SG_COMPAREFUNC_GREATER_EQUAL:  return WGPUCompareFunction_GreaterEqual;
+        case SG_COMPAREFUNC_ALWAYS:         return WGPUCompareFunction_Always;
+        default: SOKOL_UNREACHABLE; return WGPUCompareFunction_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUStencilOperation _sg_wgpu_stencilop(sg_stencil_op op) {
+    switch (op) {
+        case SG_STENCILOP_KEEP:         return WGPUStencilOperation_Keep;
+        case SG_STENCILOP_ZERO:         return WGPUStencilOperation_Zero;
+        case SG_STENCILOP_REPLACE:      return WGPUStencilOperation_Replace;
+        case SG_STENCILOP_INCR_CLAMP:   return WGPUStencilOperation_IncrementClamp;
+        case SG_STENCILOP_DECR_CLAMP:   return WGPUStencilOperation_DecrementClamp;
+        case SG_STENCILOP_INVERT:       return WGPUStencilOperation_Invert;
+        case SG_STENCILOP_INCR_WRAP:    return WGPUStencilOperation_IncrementWrap;
+        case SG_STENCILOP_DECR_WRAP:    return WGPUStencilOperation_DecrementWrap;
+        default: SOKOL_UNREACHABLE; return WGPUStencilOperation_Force32;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
@@ -9651,7 +9807,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
 
-    /*  How BindGroups work in WebGPU:
+    /*
+        FIXME: create bind group layout
+
+        How BindGroups work in WebGPU:
 
         - up to 4 bind groups can be bound simultanously
         - up to 16 bindings per bind group
@@ -9670,55 +9829,89 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         I guess this means that we need to create BindGroups on the
         fly during sg_apply_bindings() :/
     */
-    // FIXME: VertexStateDescriptor
+    WGPUVertexBufferLayoutDescriptor vb_desc[SG_MAX_SHADERSTAGE_BUFFERS];
+    memset(&vb_desc, 0, sizeof(vb_desc));
+    WGPUVertexAttributeDescriptor va_desc[SG_MAX_SHADERSTAGE_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
+    memset(&va_desc, 0, sizeof(va_desc));
+    int vb_idx = 0;
+    for (; vb_idx < SG_MAX_SHADERSTAGE_BUFFERS; vb_idx++) {
+        const sg_buffer_layout_desc* src_vb_desc = &desc->layout.buffers[vb_idx];
+        if (0 == src_vb_desc->stride) {
+            break;
+        }
+        vb_desc[vb_idx].arrayStride = src_vb_desc->stride;
+        vb_desc[vb_idx].stepMode = _sg_wgpu_stepmode(src_vb_desc->step_func);
+        // FIXME: no instance step rate?
+        int va_idx = 0;
+        for (int va_loc = 0; va_loc < SG_MAX_VERTEX_ATTRIBUTES; va_loc++) {
+            const sg_vertex_attr_desc* src_va_desc = &desc->layout.attrs[va_loc];
+            if (SG_VERTEXFORMAT_INVALID == src_va_desc->format) {
+                break;
+            }
+            if (vb_idx == src_va_desc->buffer_index) {
+                va_desc[vb_idx][va_idx].format = _sg_wgpu_vertexformat(src_va_desc->format);
+                va_desc[vb_idx][va_idx].offset = src_va_desc->offset;
+                va_desc[vb_idx][va_idx].shaderLocation = va_loc;
+                va_idx++;
+            }
+        }
+        vb_desc[vb_idx].attributeCount = va_idx;
+        vb_desc[vb_idx].attributes = &va_desc[vb_idx][0];
+    }
+    WGPUVertexStateDescriptor vx_state_desc;
+    memset(&vx_state_desc, 0, sizeof(vx_state_desc));
+    vx_state_desc.indexFormat = _sg_wgpu_indexformat(desc->index_type);
+    vx_state_desc.vertexBufferCount = vb_idx;
+    vx_state_desc.vertexBuffers = vb_desc;
 
+    WGPURasterizationStateDescriptor rs_desc;
+    memset(&rs_desc, 0, sizeof(rs_desc));
+    rs_desc.frontFace = _sg_wgpu_frontface(desc->rasterizer.face_winding);
+    rs_desc.cullMode = _sg_wgpu_cullmode(desc->rasterizer.cull_mode);
+    rs_desc.depthBias = (int32_t) desc->rasterizer.depth_bias;
+    rs_desc.depthBiasClamp = desc->rasterizer.depth_bias_clamp;
+    rs_desc.depthBiasSlopeScale = desc->rasterizer.depth_bias_slope_scale;
+
+    WGPUDepthStencilStateDescriptor ds_desc;
+    memset(&ds_desc, 0, sizeof(ds_desc));
+    ds_desc.format = _sg_wgpu_textureformat(desc->blend.depth_format);
+    ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
+    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
+    ds_desc.stencilReadMask = desc->depth_stencil.stencil_read_mask;
+    ds_desc.stencilWriteMask = desc->depth_stencil.stencil_write_mask;
+    ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_front.compare_func);
+    ds_desc.stencilFront.failOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.fail_op);
+    ds_desc.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.depth_fail_op);
+    ds_desc.stencilFront.passOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.pass_op);
+    ds_desc.stencilBack.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_back.compare_func);
+    ds_desc.stencilBack.failOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.fail_op);
+    ds_desc.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.depth_fail_op);
+    ds_desc.stencilBack.passOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.pass_op);
+
+    WGPUProgrammableStageDescriptor fs_desc;
+    memset(&fs_desc, 0, sizeof(fs_desc));
+    fs_desc.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].mod;
+    fs_desc.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
+
+    WGPURenderPipelineDescriptor pip_desc;
+    memset(&pip_desc, 0, sizeof(pip_desc));
+    // FIXME: pipeline layout
+    pip_desc.vertexStage.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].mod;
+    pip_desc.vertexStage.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
+    pip_desc.fragmentStage = &fs_desc;
+    pip_desc.vertexState = &vx_state_desc;
+    pip_desc.primitiveTopology  = _sg_wgpu_topology(desc->primitive_type);
+    pip_desc.rasterizationState = &rs_desc;
+    pip_desc.sampleCount = desc->rasterizer.sample_count;
+    pip_desc.depthStencilState = &ds_desc;
     /*
-        Resourrce binding brain dump:
-
-        - BindGroupLayout and upfront-created bind groups
-          for the global uniform buffers
-        - each Texture + Sampler combinations gets its own
-          BindGroupLayout
-        - pipeline object gets the multiple BindGroupLayouts
-          for the uniform buffers and images required by the
-          shader
-
+    pip_desc.colorStateCount = ...;
+    pip_desc.colorStates = ...;
+    uint32_t sampleMask;
     */
-
-/*
-    WGPUBindGroupLayoutDescriptor wgpu_bgl_desc;
-    memset(&wgpu_bgl_desc, 0, sizeof(wgpu_bgl_desc));
-    wgpu_bgl_desc.bindingCount = ...;
-    wgpu_bgl_desc.bindings = ...;
-    WGPUBindGroupLayout wgpu_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &wgpu_bgl_desc);
-    SOKOL_ASSERT(wgpu_piplt);
-
-    WGPUPipelineLayoutDescriptor wgpu_piplyt_desc;
-    memset(&wgpu_piplyt_desc, 0, sizeof(wgpu_piplt_desc));
-    wgpu_piplt_desc.bindGroupLayoutCount = 1;
-    wgpu_piplt_desc.bindGroupLayouts = &wgpu_piplt;
-    WGPUPipelineLayout wgpu_piplt = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &wgpu_pyplit_desc);
-    SOKOL_ASSERT(wgpu_piplt);
-
-    WGPURenderPipelineDescriptor wgpu_pip_desc;
-    memset(&wgpu_pip_desc, 0, sizeof(wgpu_pip_desc));
-    wgpu_pip_desc.layout = wgpu_piplyt;
-    wgpu_pip_desc.vertexStage.xxx = ...;
-    wgpu_pip_desc.fragmentStage = ...;
-    wgpu_pip_desc.vertexState = ...;
-    wgpu_pip_desc.primitiveTopology = ...;
-    wgpu_pip_desc.rasterizationState = ...;
-    wgpu_pip_desc.sampleCount = ...;
-    wgpu_pip_desc.depthStencilState = ...;
-    wgpu_pip_desc.colorStateCount = ...;
-    wgpu_pip_desc.colorStates = ...;
-    wgpu_pip_desc.sampleMask = ...;
-    wgpu_pip_desc.alphaToCoverageEnabled = ...;
-    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
+    pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
     SOKOL_ASSERT(0 != pip->wgpu.pip);
 
-    wgpuPipelineLayoutRelease(wgu_piplt);
-*/
     return SG_RESOURCESTATE_VALID;
 }
 
