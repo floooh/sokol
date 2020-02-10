@@ -9670,6 +9670,55 @@ _SOKOL_PRIVATE WGPUStencilOperation _sg_wgpu_stencilop(sg_stencil_op op) {
     }
 }
 
+_SOKOL_PRIVATE WGPUBlendOperation _sg_wgpu_blendop(sg_blend_op op) {
+    switch (op) {
+        case SG_BLENDOP_ADD:                return WGPUBlendOperation_Add;
+        case SG_BLENDOP_SUBTRACT:           return WGPUBlendOperation_Subtract;
+        case SG_BLENDOP_REVERSE_SUBTRACT:   return WGPUBlendOperation_ReverseSubtract;
+        default: SOKOL_UNREACHABLE; return WGPUBlendOperation_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
+    switch (f) {
+        case SG_BLENDFACTOR_ZERO:                   return WGPUBlendFactor_Zero;
+        case SG_BLENDFACTOR_ONE:                    return WGPUBlendFactor_One;
+        case SG_BLENDFACTOR_SRC_COLOR:              return WGPUBlendFactor_SrcColor;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:    return WGPUBlendFactor_OneMinusSrcColor;
+        case SG_BLENDFACTOR_SRC_ALPHA:              return WGPUBlendFactor_SrcAlpha;
+        case SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA:    return WGPUBlendFactor_OneMinusSrcAlpha;
+        case SG_BLENDFACTOR_DST_COLOR:              return WGPUBlendFactor_DstColor;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:    return WGPUBlendFactor_OneMinusDstColor;
+        case SG_BLENDFACTOR_DST_ALPHA:              return WGPUBlendFactor_DstAlpha;
+        case SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA:    return WGPUBlendFactor_OneMinusDstAlpha;
+        case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return WGPUBlendFactor_SrcAlphaSaturated;
+        case SG_BLENDFACTOR_BLEND_COLOR:            return WGPUBlendFactor_BlendColor;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return WGPUBlendFactor_OneMinusBlendColor;
+        /* FIXME: separate blend alpha value not supported? */
+        case SG_BLENDFACTOR_BLEND_ALPHA:
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:
+        default:
+            SOKOL_UNREACHABLE; return WGPUBlendFactor_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
+    WGPUColorWriteMaskFlags res = 0;
+    if (0 != (m & SG_COLORMASK_R)) {
+        res |= WGPUColorWriteMask_Red;
+    }
+    if (0 != (m & SG_COLORMASK_G)) {
+        res |= WGPUColorWriteMask_Green;
+    }
+    if (0 != (m & SG_COLORMASK_B)) {
+        res |= WGPUColorWriteMask_Blue;
+    }
+    if (0 != (m & SG_COLORMASK_A)) {
+        res |= WGPUColorWriteMask_Alpha;
+    }
+    return res;
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
@@ -9893,6 +9942,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     fs_desc.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].mod;
     fs_desc.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
 
+    WGPUColorStateDescriptor cs_desc[SG_MAX_COLOR_ATTACHMENTS];
+    memset(cs_desc, 0, sizeof(cs_desc));
+    cs_desc[0].format = _sg_wgpu_textureformat(desc->blend.color_format);
+    cs_desc[0].colorBlend.operation = _sg_wgpu_blendop(desc->blend.op_rgb);
+    cs_desc[0].colorBlend.srcFactor = _sg_wgpu_blendfactor(desc->blend.src_factor_rgb);
+    cs_desc[0].colorBlend.dstFactor = _sg_wgpu_blendfactor(desc->blend.dst_factor_rgb);
+    cs_desc[0].alphaBlend.operation = _sg_wgpu_blendop(desc->blend.op_alpha);
+    cs_desc[0].alphaBlend.srcFactor = _sg_wgpu_blendfactor(desc->blend.src_factor_alpha);
+    cs_desc[0].alphaBlend.dstFactor = _sg_wgpu_blendfactor(desc->blend.dst_factor_alpha);
+    cs_desc[0].writeMask = _sg_wgpu_colorwritemask(desc->blend.color_write_mask);
+    SOKOL_ASSERT(desc->blend.color_attachment_count <= SG_MAX_COLOR_ATTACHMENTS);
+    for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        cs_desc[i] = cs_desc[0];
+    }
+
     WGPURenderPipelineDescriptor pip_desc;
     memset(&pip_desc, 0, sizeof(pip_desc));
     // FIXME: pipeline layout
@@ -9904,11 +9968,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.rasterizationState = &rs_desc;
     pip_desc.sampleCount = desc->rasterizer.sample_count;
     pip_desc.depthStencilState = &ds_desc;
-    /*
-    pip_desc.colorStateCount = ...;
-    pip_desc.colorStates = ...;
-    uint32_t sampleMask;
-    */
+    pip_desc.colorStateCount = desc->blend.color_attachment_count;
+    pip_desc.colorStates = cs_desc;
+    // FIXME: sampleMask
     pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
     SOKOL_ASSERT(0 != pip->wgpu.pip);
 
