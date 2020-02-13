@@ -1999,10 +1999,10 @@ typedef struct sg_desc {
     const void* (*d3d11_render_target_view_cb)(void);
     const void* (*d3d11_depth_stencil_view_cb)(void);
     /* WebGPU-specific */
-    const void* wgpu_device;            /* WGPUDevice */
-    const void* wgpu_swapchain;         /* WGPUSwapChain */
-    uint32_t wgpu_swapchain_format;     /* WGPUTextureFormat */
-    const void* (*wgpu_depth_stencil_view_cb)(void);    /* WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
+    const void* wgpu_device;                /* WGPUDevice */
+    uint32_t wgpu_swapchain_format;         /* WGPUTextureFormat */
+    const void* (*wgpu_swapchain_cb)(void); /* returns WGPUSwapChain */
+    const void* (*wgpu_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     uint32_t _end_canary;
 } sg_desc;
 
@@ -3133,8 +3133,9 @@ typedef struct {
     bool valid;
     bool in_pass;
     WGPUDevice dev;
-    WGPUSwapChain swapchain;
     WGPUTextureFormat swapchain_format;
+    WGPUSwapChain (*swapchain_cb)(void);
+    WGPUTextureView (*depth_stencil_view_cb)(void);
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder pass_enc;
@@ -9738,16 +9739,18 @@ _SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
 
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swapchain && (WGPUTextureFormat_Undefined != desc->wgpu_swapchain_format));
+    SOKOL_ASSERT(desc->wgpu_device);
+    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu_swapchain_format);
+    SOKOL_ASSERT(desc->wgpu_swapchain_cb);
+    SOKOL_ASSERT(desc->wgpu_depth_stencil_view_cb);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
-    _sg.wgpu.swapchain = (WGPUSwapChain) desc->wgpu_swapchain;
+    _sg.wgpu.swapchain_cb = (WGPUSwapChain(*)(void)) desc->wgpu_swapchain_cb;
     _sg.wgpu.swapchain_format = _sg_wgpu_swapchain_format((WGPUTextureFormat)desc->wgpu_swapchain_format);
+    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_depth_stencil_view_cb;
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
-    wgpuDeviceReference(_sg.wgpu.dev);
-    wgpuSwapChainReference(_sg.wgpu.swapchain);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
@@ -9756,14 +9759,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     if (_sg.wgpu.queue) {
         wgpuQueueRelease(_sg.wgpu.queue);
         _sg.wgpu.queue = 0;
-    }
-    if (_sg.wgpu.dev) {
-        wgpuDeviceRelease(_sg.wgpu.dev);
-        _sg.wgpu.dev = 0;
-    }
-    if (_sg.wgpu.swapchain) {
-        wgpuSwapChainRelease(_sg.wgpu.swapchain);
-        _sg.wgpu.swapchain = 0;
     }
 }
 
@@ -9945,7 +9940,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     memset(&ds_desc, 0, sizeof(ds_desc));
     ds_desc.format = _sg_wgpu_textureformat(desc->blend.depth_format);
     ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
-    ds_desc.depthCompare = WGPUCompareFunction_Never;// _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
+    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
     ds_desc.stencilReadMask = desc->depth_stencil.stencil_read_mask;
     ds_desc.stencilWriteMask = desc->depth_stencil.stencil_write_mask;
     ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_front.compare_func);
@@ -9987,7 +9982,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.primitiveTopology  = _sg_wgpu_topology(desc->primitive_type);
     pip_desc.rasterizationState = &rs_desc;
     pip_desc.sampleCount = desc->rasterizer.sample_count;
-//FIXME: pip_desc.depthStencilState = &ds_desc;
+    if (SG_PIXELFORMAT_NONE != desc->blend.depth_format) {
+        pip_desc.depthStencilState = &ds_desc;
+    }
     pip_desc.colorStateCount = desc->blend.color_attachment_count;
     pip_desc.colorStates = cs_desc;
     pip_desc.sampleMask = 0xFFFFFFFF;   /* FIXME: ??? */
@@ -10032,7 +10029,7 @@ _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swapchain);
+    SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swapchain_cb);
     _sg.wgpu.in_pass = true;
 
     /* create render command encoder if this is the first pass in the frame */
@@ -10057,10 +10054,18 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         color_att_desc.clearColor.g = action->colors[0].val[1];
         color_att_desc.clearColor.b = action->colors[0].val[2];
         color_att_desc.clearColor.a = action->colors[0].val[3];
-        color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swapchain);
+        color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swapchain_cb());
         pass_desc.colorAttachmentCount = 1;
         pass_desc.colorAttachments = &color_att_desc;
-        // FIXME: what about depth-stencil attachment???
+        WGPURenderPassDepthStencilAttachmentDescriptor ds_att_desc;
+        memset(&ds_att_desc, 0, sizeof(ds_att_desc));
+        ds_att_desc.attachment = _sg.wgpu.depth_stencil_view_cb();
+        SOKOL_ASSERT(0 != ds_att_desc.attachment);
+        ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
+        ds_att_desc.clearDepth = action->depth.val;
+        ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
+        ds_att_desc.clearStencil = action->stencil.val;
+        pass_desc.depthStencilAttachment = &ds_att_desc;
         _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &pass_desc);
         wgpuTextureViewRelease(color_att_desc.attachment);
     }
