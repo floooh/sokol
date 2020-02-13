@@ -1999,8 +1999,10 @@ typedef struct sg_desc {
     const void* (*d3d11_render_target_view_cb)(void);
     const void* (*d3d11_depth_stencil_view_cb)(void);
     /* WebGPU-specific */
-    const void* wgpu_device;
-    const void* wgpu_swap_chain;
+    const void* wgpu_device;            /* WGPUDevice */
+    const void* wgpu_swapchain;         /* WGPUSwapChain */
+    uint32_t wgpu_swapchain_format;     /* WGPUTextureFormat */
+    const void* (*wgpu_depth_stencil_view_cb)(void);    /* WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     uint32_t _end_canary;
 } sg_desc;
 
@@ -3102,6 +3104,7 @@ typedef struct {
     _sg_shader_t* shader;
     struct {
         WGPURenderPipeline pip;
+        uint32_t stencil_ref;
     } wgpu;
 } _sg_wgpu_pipeline_t;
 typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
@@ -3130,10 +3133,12 @@ typedef struct {
     bool valid;
     bool in_pass;
     WGPUDevice dev;
-    WGPUSwapChain swap;
+    WGPUSwapChain swapchain;
+    WGPUTextureFormat swapchain_format;
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder pass_enc;
+    bool draw_indexed;
 } _sg_wgpu_backend_t;
 
 #endif
@@ -3392,6 +3397,8 @@ _SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
 _SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_colorformat(void) {
     #if defined(SOKOL_METAL) || defined(SOKOL_D3D11)
         return SG_PIXELFORMAT_BGRA8;
+    #elif defined(SOKOL_WGPU)
+        return _sg.wgpu.swapchain_format;
     #else
         return SG_PIXELFORMAT_RGBA8;
     #endif
@@ -9642,6 +9649,16 @@ _SOKOL_PRIVATE WGPUTextureFormat _sg_wgpu_textureformat(sg_pixel_format p) {
     }
 }
 
+/* this is only used to convert WGPU's preferred swapchain format back to sokol-gfx */
+_SOKOL_PRIVATE sg_pixel_format _sg_wgpu_swapchain_format(WGPUTextureFormat fmt) {
+    switch (fmt) {
+        case WGPUTextureFormat_RGBA8Unorm:  return SG_PIXELFORMAT_RGBA8;
+        case WGPUTextureFormat_BGRA8Unorm:  return SG_PIXELFORMAT_BGRA8;
+        /* FIXME: are there more? */
+        default: SOKOL_UNREACHABLE; return SG_PIXELFORMAT_NONE;
+    }
+}
+
 _SOKOL_PRIVATE WGPUCompareFunction _sg_wgpu_comparefunc(sg_compare_func f) {
     switch (f) {
         case SG_COMPAREFUNC_NEVER:          return WGPUCompareFunction_Never;
@@ -9721,15 +9738,16 @@ _SOKOL_PRIVATE WGPUColorWriteMaskFlags _sg_wgpu_colorwritemask(uint8_t m) {
 
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swap_chain);
+    SOKOL_ASSERT(desc->wgpu_device && desc->wgpu_swapchain && (WGPUTextureFormat_Undefined != desc->wgpu_swapchain_format));
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
-    _sg.wgpu.swap = (WGPUSwapChain) desc->wgpu_swap_chain;
+    _sg.wgpu.swapchain = (WGPUSwapChain) desc->wgpu_swapchain;
+    _sg.wgpu.swapchain_format = _sg_wgpu_swapchain_format((WGPUTextureFormat)desc->wgpu_swapchain_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
     wgpuDeviceReference(_sg.wgpu.dev);
-    wgpuSwapChainReference(_sg.wgpu.swap);
+    wgpuSwapChainReference(_sg.wgpu.swapchain);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
@@ -9743,9 +9761,9 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
         wgpuDeviceRelease(_sg.wgpu.dev);
         _sg.wgpu.dev = 0;
     }
-    if (_sg.wgpu.swap) {
-        wgpuSwapChainRelease(_sg.wgpu.swap);
-        _sg.wgpu.swap = 0;
+    if (_sg.wgpu.swapchain) {
+        wgpuSwapChainRelease(_sg.wgpu.swapchain);
+        _sg.wgpu.swapchain = 0;
     }
 }
 
@@ -9855,6 +9873,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(desc->shader.id == shd->slot.id);
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
+    pip->wgpu.stencil_ref = (uint32_t) desc->depth_stencil.stencil_ref;
 
     /*
         FIXME: create bind group layout
@@ -9897,6 +9916,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
             if (SG_VERTEXFORMAT_INVALID == src_va_desc->format) {
                 break;
             }
+            pip->cmn.vertex_layout_valid[src_va_desc->buffer_index] = true;
             if (vb_idx == src_va_desc->buffer_index) {
                 va_desc[vb_idx][va_idx].format = _sg_wgpu_vertexformat(src_va_desc->format);
                 va_desc[vb_idx][va_idx].offset = src_va_desc->offset;
@@ -9925,7 +9945,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     memset(&ds_desc, 0, sizeof(ds_desc));
     ds_desc.format = _sg_wgpu_textureformat(desc->blend.depth_format);
     ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
-    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
+    ds_desc.depthCompare = WGPUCompareFunction_Never;// _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
     ds_desc.stencilReadMask = desc->depth_stencil.stencil_read_mask;
     ds_desc.stencilWriteMask = desc->depth_stencil.stencil_write_mask;
     ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_front.compare_func);
@@ -9967,10 +9987,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.primitiveTopology  = _sg_wgpu_topology(desc->primitive_type);
     pip_desc.rasterizationState = &rs_desc;
     pip_desc.sampleCount = desc->rasterizer.sample_count;
-    pip_desc.depthStencilState = &ds_desc;
+//FIXME: pip_desc.depthStencilState = &ds_desc;
     pip_desc.colorStateCount = desc->blend.color_attachment_count;
     pip_desc.colorStates = cs_desc;
-    // FIXME: sampleMask
+    pip_desc.sampleMask = 0xFFFFFFFF;   /* FIXME: ??? */
     pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
     SOKOL_ASSERT(0 != pip->wgpu.pip);
 
@@ -10012,7 +10032,7 @@ _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
-    SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swap);
+    SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swapchain);
     _sg.wgpu.in_pass = true;
 
     /* create render command encoder if this is the first pass in the frame */
@@ -10037,7 +10057,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         color_att_desc.clearColor.g = action->colors[0].val[1];
         color_att_desc.clearColor.b = action->colors[0].val[2];
         color_att_desc.clearColor.a = action->colors[0].val[3];
-        color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swap);
+        color_att_desc.attachment = wgpuSwapChainGetCurrentTextureView(_sg.wgpu.swapchain);
         pass_desc.colorAttachmentCount = 1;
         pass_desc.colorAttachments = &color_att_desc;
         // FIXME: what about depth-stencil attachment???
@@ -10081,9 +10101,13 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_ASSERT(pip->shader);
+    SOKOL_ASSERT(pip->wgpu.pip);
     SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_LOG("_sg_wgpu_apply_pipeline: FIXME!\n");
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+    _sg.wgpu.draw_indexed = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
+    wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.pip);
+    wgpuRenderPassEncoderSetBlendColor(_sg.wgpu.pass_enc, (WGPUColor*)pip->cmn.blend_color);
+    wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->wgpu.stencil_ref);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
@@ -10094,7 +10118,23 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
     _sg_image_t** fs_imgs, int num_fs_imgs)
 {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_LOG("_sg_wgpu_apply_bindings: FIXME!\n");
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+
+    /* index buffer */
+    if (ib) {
+        wgpuRenderPassEncoderSetIndexBuffer(_sg.wgpu.pass_enc, ib->wgpu.buf[ib->cmn.active_slot], ib_offset);
+    }
+
+    /* vertex buffers */
+    for (uint32_t slot = 0; slot < (uint32_t)num_vbs; slot++) {
+        const _sg_buffer_t* vb = vbs[slot];
+        wgpuRenderPassEncoderSetVertexBuffer(_sg.wgpu.pass_enc, slot, vb->wgpu.buf[vb->cmn.active_slot], (uint64_t)vb_offsets[slot]);
+    }
+
+    /* vertex shader images */
+    // FIXME
+    /* fragment shader images */
+    // FIXME
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
@@ -10104,7 +10144,13 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_LOG("_sg_wgpu_draw: FIXME!\n");
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+    if (_sg.wgpu.draw_indexed) {
+        /* FIMXE */SOKOL_ASSERT(false);
+    }
+    else {
+        wgpuRenderPassEncoderDraw(_sg.wgpu.pass_enc, num_elements, num_instances, base_element, 0);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const void* data, int data_size) {
