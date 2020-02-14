@@ -3132,14 +3132,14 @@ typedef _sg_wgpu_context_t _sg_context_t;
 typedef struct {
     bool valid;
     bool in_pass;
+    bool draw_indexed;
+    sg_pixel_format swapchain_format;
     WGPUDevice dev;
-    WGPUTextureFormat swapchain_format;
     WGPUSwapChain (*swapchain_cb)(void);
     WGPUTextureView (*depth_stencil_view_cb)(void);
     WGPUQueue queue;
     WGPUCommandEncoder cmd_enc;
     WGPURenderPassEncoder pass_enc;
-    bool draw_indexed;
 } _sg_wgpu_backend_t;
 
 #endif
@@ -9994,10 +9994,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     return SG_RESOURCESTATE_VALID;
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
+_SOKOL_PRIVATE void _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    SOKOL_LOG("_sg_wgpu_destroy_pipeline: FIXME!\n");
-    return SG_RESOURCESTATE_FAILED;
+    if (pip->wgpu.pip) {
+        wgpuRenderPipelineRelease(pip->wgpu.pip);
+        pip->wgpu.pip = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
@@ -10111,7 +10113,12 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
     _sg.wgpu.draw_indexed = (pip->cmn.index_type != SG_INDEXTYPE_NONE);
     wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.pip);
+    /*** FIXME ***/
+    #if !defined(__EMSCRIPTEN__)
     wgpuRenderPassEncoderSetBlendColor(_sg.wgpu.pass_enc, (WGPUColor*)pip->cmn.blend_color);
+    #else
+    SOKOL_LOG("FIXME: wgpuRenderPassEncoderSetBlendColor missing in emscripten\n");
+    #endif
     wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->wgpu.stencil_ref);
 }
 
