@@ -3078,6 +3078,7 @@ static dispatch_semaphore_t _sg_mtl_sem;
 #elif defined(SOKOL_WGPU)
 
 #define _SG_WGPU_UB_ALIGN (256)
+#define _SG_WGPU_NUM_UB (SG_NUM_INFLIGHT_FRAMES * 2)
 
 typedef struct {
     _sg_slot_t slot;
@@ -3145,6 +3146,21 @@ typedef struct {
 } _sg_wgpu_context_t;
 typedef _sg_wgpu_context_t _sg_context_t;
 
+/* a pool of per-frame uniform buffers, one of them mapped while the other is in flight */
+typedef struct {
+    WGPUBindGroupLayout bindgroup_layout;
+    uint32_t size;
+    uint32_t active;        /* index into pool of currently mapped uniform buffer */
+    uint32_t offset;        /* current offset into current frame's mapped uniform buffer */
+    uint32_t bind_offsets[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    struct {
+        WGPUBuffer src;
+        WGPUBuffer dst;
+        WGPUBindGroup bindgroup;
+        uint8_t* ptr;                   /* base of src buffer if currently mapped */
+    } pool[_SG_WGPU_NUM_UB];
+} _sg_wgpu_ub_pool;
+
 typedef struct {
     bool valid;
     bool in_pass;
@@ -3158,13 +3174,7 @@ typedef struct {
     WGPURenderPassEncoder pass_enc;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
-    uint32_t cur_frame_rotate_index;
-    uint32_t ub_size;
-    uint32_t cur_ub_offset;
-    WGPUBuffer ub[SG_NUM_INFLIGHT_FRAMES];
-    WGPUBindGroupLayout ub_bindgroup_layout;
-    WGPUBindGroup ub_bindgroup[SG_NUM_INFLIGHT_FRAMES];
-    uint32_t ub_offsets[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    _sg_wgpu_ub_pool ub;
 } _sg_wgpu_backend_t;
 
 #endif
@@ -9840,25 +9850,33 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
-    /* setup global uniform buffers and bind groups */
+    /* setup WebGPU features and limits */
+    _sg_wgpu_init_caps();
 
+    /* setup global uniform buffer pool */
     /*
-        FIXME: rewrite uniform buffer as follows:
+        UNIFORM BUFFER FIXME:
 
-        Create a small pool of uniform buffers and map them
-        immediately. On new frame, request a mapped buffer from
-        that pool. At frame end, unmap, commit, and request a
-        new mapping immediately. In the mapped callback, put that
-        buffer back into the "mapped pool".
+        - As per WebGPU spec, it should be possible to create a Uniform|MapWrite
+          buffer, but this isn't currently allowed in Dawn.
+        - The async map-write "frame latency" isn't guaranteed, so the size
+          of the "mapping pool" cannot be known upfront, instead uniform buffers must
+          be created on demand if no mapped buffers are available yet
     */
-    _sg.wgpu.ub_size = desc->wgpu_global_uniform_buffer_size;
+    _sg.wgpu.ub.size = desc->wgpu_global_uniform_buffer_size;
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
-    ub_desc.size = _sg.wgpu.ub_size;
-    ub_desc.usage = WGPUBufferUsage_Uniform|WGPUBufferUsage_CopyDst;
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        _sg.wgpu.ub[i] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
-        SOKOL_ASSERT(_sg.wgpu.ub[i]);
+    for (int i = 0; i < _SG_WGPU_NUM_UB; i++) {
+        ub_desc.size = _sg.wgpu.ub.size;
+        ub_desc.usage = WGPUBufferUsage_Uniform|WGPUBufferUsage_CopyDst;
+        _sg.wgpu.ub.pool[i].dst = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
+        SOKOL_ASSERT(_sg.wgpu.ub.pool[i].dst);
+        ub_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
+        WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &ub_desc);
+        _sg.wgpu.ub.pool[i].src = res.buffer;
+        _sg.wgpu.ub.pool[i].ptr = (uint8_t*) res.data;
+        SOKOL_ASSERT(_sg.wgpu.ub.pool[i].src);
+        SOKOL_ASSERT(res.dataLength == _sg.wgpu.ub.size);
     }
 
     WGPUBindGroupLayoutBinding ub_bglb_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
@@ -9878,50 +9896,52 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     memset(&ub_bgl_desc, 0, sizeof(ub_bgl_desc));
     ub_bgl_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
     ub_bgl_desc.bindings = &ub_bglb_desc[0][0];
-    _sg.wgpu.ub_bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bgl_desc);
-    SOKOL_ASSERT(_sg.wgpu.ub_bindgroup_layout);
+    _sg.wgpu.ub.bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bgl_desc);
+    SOKOL_ASSERT(_sg.wgpu.ub.bindgroup_layout);
 
-    for (int frame_index = 0; frame_index < SG_NUM_INFLIGHT_FRAMES; frame_index++) {
+    for (int frame_index = 0; frame_index < _SG_WGPU_NUM_UB; frame_index++) {
         WGPUBindGroupBinding ub_bgb[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
         memset(ub_bgb, 0, sizeof(ub_bgb));
         for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
             for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
                 int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
                 ub_bgb[stage_index][ub_index].binding = bind_index;
-                ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub[frame_index];
-                ub_bgb[stage_index][ub_index].size = _sg.wgpu.ub_size;
+                ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.pool[frame_index].dst;
+                ub_bgb[stage_index][ub_index].size = _sg.wgpu.ub.size;
             }
         }
         WGPUBindGroupDescriptor bg_desc;
         memset(&bg_desc, 0, sizeof(bg_desc));
-        bg_desc.layout = _sg.wgpu.ub_bindgroup_layout;
+        bg_desc.layout = _sg.wgpu.ub.bindgroup_layout;
         bg_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
         bg_desc.bindings = &ub_bgb[0][0];
-        _sg.wgpu.ub_bindgroup[frame_index] = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
-        SOKOL_ASSERT(_sg.wgpu.ub_bindgroup[frame_index]);
+        _sg.wgpu.ub.pool[frame_index].bindgroup = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
+        SOKOL_ASSERT(_sg.wgpu.ub.pool[frame_index].bindgroup);
     }
-
-    /* setup WebGPU features and limits */
-    _sg_wgpu_init_caps();
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     _sg.wgpu.valid = false;
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        if (_sg.wgpu.ub_bindgroup[i]) {
-            wgpuBindGroupRelease(_sg.wgpu.ub_bindgroup[i]);
-            _sg.wgpu.ub_bindgroup[i] = 0;
+    for (int i = 0; i < _SG_WGPU_NUM_UB; i++) {
+        if (_sg.wgpu.ub.pool[i].bindgroup) {
+            wgpuBindGroupRelease(_sg.wgpu.ub.pool[i].bindgroup);
+            _sg.wgpu.ub.pool[i].bindgroup = 0;
         }
-        if (_sg.wgpu.ub[i]) {
-            wgpuBufferDestroy(_sg.wgpu.ub[i]);
-            wgpuBufferRelease(_sg.wgpu.ub[i]);
-            _sg.wgpu.ub[i] = 0;
+        if (_sg.wgpu.ub.pool[i].src) {
+            wgpuBufferDestroy(_sg.wgpu.ub.pool[i].src);
+            wgpuBufferRelease(_sg.wgpu.ub.pool[i].src);
+            _sg.wgpu.ub.pool[i].src = 0;
+        }
+        if (_sg.wgpu.ub.pool[i].dst) {
+            wgpuBufferDestroy(_sg.wgpu.ub.pool[i].dst);
+            wgpuBufferRelease(_sg.wgpu.ub.pool[i].dst);
+            _sg.wgpu.ub.pool[i].dst = 0;
         }
     }
-    if (_sg.wgpu.ub_bindgroup_layout) {
-        wgpuBindGroupLayoutRelease(_sg.wgpu.ub_bindgroup_layout);
-        _sg.wgpu.ub_bindgroup_layout = 0;
+    if (_sg.wgpu.ub.bindgroup_layout) {
+        wgpuBindGroupLayoutRelease(_sg.wgpu.ub.bindgroup_layout);
+        _sg.wgpu.ub.bindgroup_layout = 0;
     }
     if (_sg.wgpu.queue) {
         wgpuQueueRelease(_sg.wgpu.queue);
@@ -10038,8 +10058,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip->wgpu.stencil_ref = (uint32_t) desc->depth_stencil.stencil_ref;
 
     /*
-        FIXME: create bind group layout
-
         How BindGroups work in WebGPU:
 
         - up to 4 bind groups can be bound simultanously
@@ -10059,6 +10077,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         I guess this means that we need to create BindGroups on the
         fly during sg_apply_bindings() :/
     */
+    WGPUBindGroupLayout bgl[1] = { _sg.wgpu.ub.bindgroup_layout };
+    WGPUPipelineLayoutDescriptor pl_desc;
+    memset(&pl_desc, 0, sizeof(pl_desc));
+    pl_desc.bindGroupLayoutCount = 1;
+    pl_desc.bindGroupLayouts = &bgl[0];
+    WGPUPipelineLayout pip_layout = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &pl_desc);
+
     WGPUVertexBufferLayoutDescriptor vb_desc[SG_MAX_SHADERSTAGE_BUFFERS];
     memset(&vb_desc, 0, sizeof(vb_desc));
     WGPUVertexAttributeDescriptor va_desc[SG_MAX_SHADERSTAGE_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
@@ -10071,7 +10096,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         }
         vb_desc[vb_idx].arrayStride = src_vb_desc->stride;
         vb_desc[vb_idx].stepMode = _sg_wgpu_stepmode(src_vb_desc->step_func);
-        // FIXME: no instance step rate?
+        /* NOTE: WebGPU has no support for vertex step rate (because that's
+           not supported by Core Vulkan
+        */
         int va_idx = 0;
         for (int va_loc = 0; va_loc < SG_MAX_VERTEX_ATTRIBUTES; va_loc++) {
             const sg_vertex_attr_desc* src_va_desc = &desc->layout.attrs[va_loc];
@@ -10141,7 +10168,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPURenderPipelineDescriptor pip_desc;
     memset(&pip_desc, 0, sizeof(pip_desc));
-    // FIXME: pipeline layout
+    pip_desc.layout = pip_layout;
     pip_desc.vertexStage.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].mod;
     pip_desc.vertexStage.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
     pip_desc.fragmentStage = &fs_desc;
@@ -10157,6 +10184,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.sampleMask = 0xFFFFFFFF;   /* FIXME: ??? */
     pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
     SOKOL_ASSERT(0 != pip->wgpu.pip);
+    wgpuPipelineLayoutRelease(pip_layout);
 
     return SG_RESOURCESTATE_VALID;
 }
@@ -10205,7 +10233,11 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
 
     /* 'first pass in frame' stuff */
     if (0 == _sg.wgpu.cmd_enc) {
-        memset(&_sg.wgpu.ub_offsets, 0, sizeof(_sg.wgpu.ub_offsets));
+        /* prepare uniform buffer usage for current frame */
+        SOKOL_ASSERT(_sg.wgpu.ub.pool[_sg.wgpu.ub.active].ptr);
+        _sg.wgpu.ub.offset = 0;
+        memset(&_sg.wgpu.ub.bind_offsets, 0, sizeof(_sg.wgpu.ub.bind_offsets));
+        /* get a new command encoder */
         WGPUCommandEncoderDescriptor cmd_enc_desc;
         memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
         _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
@@ -10242,6 +10274,13 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         wgpuTextureViewRelease(color_att_desc.attachment);
     }
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
+
+    /* initial uniform buffer binding (required even if no uniforms are set in the frame) */
+    wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
+                                      0, /* groupIndex 0 is reserved for uniform buffers */
+                                      _sg.wgpu.ub.pool[_sg.wgpu.ub.active].bindgroup,
+                                      SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
+                                      &_sg.wgpu.ub.bind_offsets[0][0]);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
@@ -10253,10 +10292,41 @@ _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
     _sg.wgpu.pass_enc = 0;
 }
 
+/* buffer-mapped callback for per-frame uniform buffer
+
+    NOTE: this is safe to be called even after sg_shutdown()
+*/
+_SOKOL_PRIVATE void _sg_wgpu_ub_mapped(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+    if (!_sg.wgpu.valid) {
+        return;
+    }
+    /* FIXME: better handling for this */
+    if (WGPUBufferMapAsyncStatus_Success != status) {
+        SOKOL_LOG("Mapping uniform buffer failed!\n");
+        SOKOL_ASSERT(false);
+    }
+    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.size));
+    uint32_t index = (uint32_t) user_data;
+    SOKOL_ASSERT(index < _SG_WGPU_NUM_UB);
+    SOKOL_ASSERT(0 == _sg.wgpu.ub.pool[index].ptr);
+    _sg.wgpu.ub.pool[index].ptr = (uint8_t*) data;
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.queue);
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+
+    /* handle frame's uniform data */
+    _sg.wgpu.ub.pool[_sg.wgpu.ub.active].ptr = 0;
+    WGPUBuffer ub_src = _sg.wgpu.ub.pool[_sg.wgpu.ub.active].src;
+    WGPUBuffer ub_dst = _sg.wgpu.ub.pool[_sg.wgpu.ub.active].dst;
+    wgpuBufferUnmap(ub_src);
+    if (_sg.wgpu.ub.offset > 0) {
+        wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, ub_src, 0, ub_dst, 0, _sg.wgpu.ub.offset);
+    }
+
+    /* finish and submit this frame's work */
     WGPUCommandBufferDescriptor cmd_buf_desc;
     memset(&cmd_buf_desc, 0, sizeof(cmd_buf_desc));
     WGPUCommandBuffer cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
@@ -10266,9 +10336,10 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &cmd_buf);
     wgpuCommandBufferRelease(cmd_buf);
 
-    /* rotate uniform buffer slot */
-    if (++_sg.wgpu.cur_frame_rotate_index >= SG_NUM_INFLIGHT_FRAMES) {
-        _sg.wgpu.cur_frame_rotate_index = 0;
+    /* prepare uniform buffer for next frame */
+    wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ub_mapped, _sg.wgpu.ub.active);
+    if (++_sg.wgpu.ub.active >= _SG_WGPU_NUM_UB) {
+        _sg.wgpu.ub.active = 0;
     }
 }
 
@@ -10329,25 +10400,24 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(data && (num_bytes > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
-    SOKOL_ASSERT((_sg.wgpu.cur_ub_offset + num_bytes) <= _sg.wgpu.ub_size);
-    SOKOL_ASSERT((_sg.wgpu.cur_ub_offset & (_SG_WGPU_UB_ALIGN-1)) == 0);
+    SOKOL_ASSERT((_sg.wgpu.ub.offset + num_bytes) <= _sg.wgpu.ub.size);
+    SOKOL_ASSERT((_sg.wgpu.ub.offset & (_SG_WGPU_UB_ALIGN-1)) == 0);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline && _sg.wgpu.cur_pipeline->shader);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->slot.id == _sg.wgpu.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->shader->slot.id == _sg.wgpu.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
     SOKOL_ASSERT(num_bytes <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(0 != _sg.wgpu.ub.pool[_sg.wgpu.ub.active].ptr);
 
-    wgpuBufferSetSubData(_sg.wgpu.ub[_sg.wgpu.cur_frame_rotate_index],
-                         _sg.wgpu.cur_ub_offset,
-                         num_bytes,
-                         data);
-    _sg.wgpu.ub_offsets[stage_index][ub_index] = _sg.wgpu.cur_ub_offset;
+    uint8_t* dst_ptr = _sg.wgpu.ub.pool[_sg.wgpu.ub.active].ptr + _sg.wgpu.ub.offset;
+    memcpy(dst_ptr, data, num_bytes);
+    _sg.wgpu.ub.bind_offsets[stage_index][ub_index] = _sg.wgpu.ub.offset;
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
                                       0, /* groupIndex 0 is reserved for uniform buffers */
-                                      _sg.wgpu.ub_bindgroup[_sg.wgpu.cur_frame_rotate_index],
+                                      _sg.wgpu.ub.pool[_sg.wgpu.ub.active].bindgroup,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
-                                      &_sg.wgpu.ub_offsets[0][0]);
-    _sg.wgpu.cur_ub_offset = _sg_wgpu_roundup(_sg.wgpu.cur_ub_offset + num_bytes, _SG_WGPU_UB_ALIGN);
+                                      &_sg.wgpu.ub.bind_offsets[0][0]);
+    _sg.wgpu.ub.offset = _sg_wgpu_roundup(_sg.wgpu.ub.offset + num_bytes, _SG_WGPU_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
