@@ -3136,7 +3136,7 @@ typedef struct {
     struct {
         _sg_wgpu_attachment_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
         _sg_wgpu_attachment_t ds_att;
-    } mtl;
+    } wgpu;
 } _sg_wgpu_pass_t;
 typedef _sg_wgpu_pass_t _sg_pass_t;
 typedef _sg_attachment_common_t _sg_attachment_t;
@@ -3146,19 +3146,19 @@ typedef struct {
 } _sg_wgpu_context_t;
 typedef _sg_wgpu_context_t _sg_context_t;
 
-/* a pool of per-frame uniform buffers, one of them mapped while the other is in flight */
+/* a pool of per-frame uniform buffers */
 typedef struct {
     WGPUBindGroupLayout bindgroup_layout;
     uint32_t ub_size;
     uint32_t offset;    /* current offset into current frame's mapped uniform buffer */
     uint32_t bind_offsets[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    int num_items;
+    int num_items;      /* new buffers are allocated if no mapped buffers are available */
     int cur_item;       /* index into pool of currently mapped uniform buffer */
     struct {
         WGPUBuffer src;
         WGPUBuffer dst;
         WGPUBindGroup bindgroup;
-        uint8_t* ptr;                   /* base of src buffer if currently mapped */
+        uint8_t* ptr;   /* if != 0, then src-buffer is currently mapped */
     } pool[_SG_WGPU_MAX_UB_POOL_SIZE];
 } _sg_wgpu_ub_pool;
 
