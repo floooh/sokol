@@ -1001,8 +1001,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     sg_push_debug_group("sokol-imgui");
 
     const float dpi_scale = _simgui.desc.dpi_scale;
-    const int fb_width = (const int) (io->DisplaySize.x * dpi_scale);
-    const int fb_height = (const int) (io->DisplaySize.y * dpi_scale);
+    const int fb_width = (int) (io->DisplaySize.x * dpi_scale);
+    const int fb_height = (int) (io->DisplaySize.y * dpi_scale);
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 
