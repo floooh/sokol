@@ -6443,7 +6443,8 @@ static const struct _sapp_x11_codepair {
   { 0xffbd /*XKB_KEY_KP_Equal*/,     '=' }
 };
 
-_SOKOL_PRIVATE int _sapp_x11_error_handler(Display*, XErrorEvent* event) {
+_SOKOL_PRIVATE int _sapp_x11_error_handler(Display* display, XErrorEvent* event) {
+    _SOKOL_UNUSED(display);
     _sapp_x11_error_code = event->error_code;
     return 0;
 }
