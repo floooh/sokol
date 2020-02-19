@@ -6444,6 +6444,7 @@ static const struct _sapp_x11_codepair {
 };
 
 _SOKOL_PRIVATE int _sapp_x11_error_handler(Display* display, XErrorEvent* event) {
+    _SOKOL_UNUSED(display);
     _sapp_x11_error_code = event->error_code;
     return 0;
 }
