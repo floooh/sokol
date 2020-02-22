@@ -3176,7 +3176,7 @@ typedef struct {
     WGPURenderPassEncoder pass_enc;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
-    _sg_wgpu_ubpool ub;
+    _sg_wgpu_ubpool_t ub;
 } _sg_wgpu_backend_t;
 
 #endif
