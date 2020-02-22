@@ -2366,6 +2366,13 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 
 /*=== COMMON BACKEND STUFF ===================================================*/
 
+/* resource pool slots */
+typedef struct {
+    uint32_t id;
+    uint32_t ctx_id;
+    sg_resource_state state;
+} _sg_slot_t;
+
 /* constants */
 enum {
     _SG_STRING_SIZE = 16,
@@ -2381,111 +2388,7 @@ enum {
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_WGPU_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_INVALID_SLOT_INDEX = 0  /* this MUST be 0 */
 };
-
-/* generic pool slots */
-typedef struct {
-    uint32_t id;
-    uint32_t ctx_id;
-    sg_resource_state state;
-} _sg_slot_t;
-
-/* generic pools */
-typedef struct {
-    int size;
-    int queue_top;
-    uint32_t* gen_ctrs;
-    int* free_queue;
-} _sg_pool_t;
-
-_SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, int num) {
-    SOKOL_ASSERT(pool && (num >= 1));
-    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
-    pool->size = num + 1;
-    pool->queue_top = 0;
-    /* generation counters indexable by pool slot index, slot 0 is reserved */
-    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
-    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
-    SOKOL_ASSERT(pool->gen_ctrs);
-    memset(pool->gen_ctrs, 0, gen_ctrs_size);
-    /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
-    SOKOL_ASSERT(pool->free_queue);
-    /* never allocate the zero-th pool item since the invalid id is 0 */
-    for (int i = pool->size-1; i >= 1; i--) {
-        pool->free_queue[pool->queue_top++] = i;
-    }
-}
-
-_SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool_t* pool) {
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->free_queue);
-    if (pool->queue_top > 0) {
-        int slot_index = pool->free_queue[--pool->queue_top];
-        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
-        return slot_index;
-    }
-    else {
-        /* pool exhausted */
-        return _SG_INVALID_SLOT_INDEX;
-    }
-}
-
-_SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool_t* pool, int slot_index) {
-    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->free_queue);
-    SOKOL_ASSERT(pool->queue_top < pool->size);
-    #ifdef SOKOL_DEBUG
-    /* debug check against double-free */
-    for (int i = 0; i < pool->queue_top; i++) {
-        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
-    }
-    #endif
-    pool->free_queue[pool->queue_top++] = slot_index;
-    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
-}
-
-_SOKOL_PRIVATE void _sg_discard_pool(_sg_pool_t* pool) {
-    SOKOL_ASSERT(pool);
-    SOKOL_ASSERT(pool->free_queue);
-    SOKOL_FREE(pool->free_queue);
-    pool->free_queue = 0;
-    SOKOL_ASSERT(pool->gen_ctrs);
-    SOKOL_FREE(pool->gen_ctrs);
-    pool->gen_ctrs = 0;
-    pool->size = 0;
-    pool->queue_top = 0;
-}
-
-/* allocate the slot at slot_index:
-    - bump the slot's generation counter
-    - create a resource id from the generation counter and slot index
-    - set the slot's id to this id
-    - set the slot's state to ALLOC
-    - return the resource id
-*/
-_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int slot_index) {
-    /* FIXME: add handling for an overflowing generation counter,
-       for now, just overflow (another option is to disable
-       the slot)
-    */
-    SOKOL_ASSERT(pool && pool->gen_ctrs);
-    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
-    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
-    uint32_t ctr = ++pool->gen_ctrs[slot_index];
-    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK);
-    slot->state = SG_RESOURCESTATE_ALLOC;
-    return slot->id;
-}
-
-/* extract slot index from id */
-_SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
-    int slot_index = (int) (id & _SG_SLOT_MASK);
-    SOKOL_ASSERT(_SG_INVALID_SLOT_INDEX != slot_index);
-    return slot_index;
-}
 
 /* fixed-size string */
 typedef struct {
@@ -3175,36 +3078,13 @@ static dispatch_semaphore_t _sg_mtl_sem;
 #elif defined(SOKOL_WGPU)
 
 #define _SG_WGPU_UB_ALIGN (256)
-#define _SG_WGPU_MAX_STAGING (8)
+#define _SG_WGPU_MAX_UB_POOL_SIZE (8)
 
-/*
-    A staging system to manage async data uploads to the GPU.
-*/
-typedef struct {
-    _sg_slot_t slot;
-    uint32_t byte_size;
-    uint32_t num;
-    uint32_t cur;
-    struct {
-        WGPUBuffer buf;
-        uint8_t* ptr;   /* 0 if not currently mapped */
-    } items[_SG_WGPU_MAX_STAGING];
-} _sg_wgpu_staging_queue_t;
-
-typedef struct {
-    _sg_pool_t pool;
-    _sg_wgpu_staging_queue_t* queues;
-} _sg_wgpu_staging_pool_t;
-
-typedef uint32_t _sg_wgpu_staging_t;
-
-/* WGPU backend resource structs */
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
     struct {
-        WGPUBuffer buf;
-        _sg_wgpu_staging_t stg;
+        WGPUBuffer buf[SG_NUM_INFLIGHT_FRAMES];
     } wgpu;
 } _sg_wgpu_buffer_t;
 typedef _sg_wgpu_buffer_t _sg_buffer_t;
@@ -3213,11 +3093,10 @@ typedef struct {
     _sg_slot_t slot;
     _sg_image_common_t cmn;
     struct {
-        WGPUTexture tex;
+        WGPUTexture tex[SG_NUM_INFLIGHT_FRAMES];
         WGPUTexture depth_tex;
         WGPUTexture msaa_tex;
-        WGPUSampler smp;
-        _sg_wgpu_staging_t stg;
+        WGPUSampler sampler;
     } wgpu;
 } _sg_wgpu_image_t;
 typedef _sg_wgpu_image_t _sg_image_t;
@@ -3267,15 +3146,20 @@ typedef struct {
 } _sg_wgpu_context_t;
 typedef _sg_wgpu_context_t _sg_context_t;
 
-/* uniform buffer system */
+/* a pool of per-frame uniform buffers */
 typedef struct {
     WGPUBindGroupLayout bindgroup_layout;
     uint32_t ub_size;
     uint32_t offset;    /* current offset into current frame's mapped uniform buffer */
     uint32_t bind_offsets[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    WGPUBuffer buf;
-    WGPUBindGroup bindgroup;
-    _sg_wgpu_staging_t stg;
+    int num_items;      /* new buffers are allocated if no mapped buffers are available */
+    int cur_item;       /* index into pool of currently mapped uniform buffer */
+    struct {
+        WGPUBuffer src;
+        WGPUBuffer dst;
+        WGPUBindGroup bindgroup;
+        uint8_t* ptr;   /* if != 0, then src-buffer is currently mapped */
+    } pool[_SG_WGPU_MAX_UB_POOL_SIZE];
 } _sg_wgpu_ub_pool;
 
 typedef struct {
@@ -3292,11 +3176,20 @@ typedef struct {
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_wgpu_ub_pool ub;
-    _sg_wgpu_staging_pool_t staging;
 } _sg_wgpu_backend_t;
 
 #endif
 /*=== RESOURCE POOL DECLARATIONS =============================================*/
+
+/* this *MUST* remain 0 */
+#define _SG_INVALID_SLOT_INDEX (0)
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sg_pool_t;
 
 typedef struct {
     _sg_pool_t buffer_pool;
@@ -9628,138 +9521,6 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_conten
 /*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
 #elif defined(SOKOL_WGPU)
 
-/*=== WGPU STAGING BUFFER SYSTEM ===*/
-_SOKOL_PRIVATE void _sg_wgpu_staging_init(int num) {
-    SOKOL_ASSERT(num != 0);
-    _sg_init_pool(&_sg.wgpu.staging.pool, num);
-    size_t queues_size = sizeof(_sg_wgpu_staging_queue_t) * num;
-    _sg.wgpu.staging.queues = (_sg_wgpu_staging_queue_t*) SOKOL_MALLOC(queues_size);
-    SOKOL_ASSERT(_sg.wgpu.staging.queues);
-    memset(&_sg.wgpu.staging.queues, 0, sizeof(_sg.wgpu.staging.queues));
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_discard(void) {
-    SOKOL_ASSERT(_sg.wgpu.staging.queues);
-    SOKOL_FREE(_sg.wgpu.staging.queues);
-    _sg_discard_pool(&_sg.wgpu.staging.pool);
-}
-
-_SOKOL_PRIVATE _sg_wgpu_staging_t _sg_wgpu_staging_alloc(uint32_t byte_size) {
-    SOKOL_ASSERT(byte_size > 0);
-    _sg_wgpu_staging_pool_t* stg = &_sg.wgpu.staging;
-    int slot_index = _sg_pool_alloc_index(&stg->pool);
-    if (_SG_INVALID_SLOT_INDEX != slot_index) {
-        _sg_wgpu_staging_queue_t* queue = &stg->queues[slot_index];
-        memset(queue, 0, sizeof(_sg_wgpu_staging_queue_t));
-        queue->byte_size = byte_size;
-        _sg_wgpu_staging_t stg_id = _sg_slot_alloc(&stg->pool, &queue->slot, slot_index);
-        return stg_id;
-    }
-    else {
-        return SG_INVALID_ID;
-    }
-}
-
-_SOKOL_PRIVATE _sg_wgpu_staging_queue_t* _sg_wgpu_staging_lookup_queue(_sg_wgpu_staging_t stg_id, uint32_t id_mask) {
-    SOKOL_ASSERT(stg_id != SG_INVALID_ID);
-    _sg_wgpu_staging_pool_t* stg = &_sg.wgpu.staging;
-    int slot_index = _sg_slot_index(stg_id);
-    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < stg->pool.size));
-    _sg_wgpu_staging_queue_t* queue = &stg->queues[slot_index];
-    if ((queue->slot.id & id_mask) == (stg_id & id_mask)) {
-        return queue;
-    }
-    else {
-        return 0;
-    }
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_free(_sg_wgpu_staging_t stg_id) {
-    _sg_wgpu_staging_queue_t* queue = _sg_wgpu_staging_lookup_queue(stg_id, 0xFFFFFFFF);
-    SOKOL_ASSERT(queue);
-    for (uint32_t i = 0; i < queue->num; i++) {
-        SOKOL_ASSERT(queue->items[i].buf);
-        wgpuBufferRelease(queue->items[i].buf);
-        queue->items[i].buf = 0;
-        queue->items[i].ptr = 0;
-    }
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_next(_sg_wgpu_staging_t stg_id) {
-    _sg_wgpu_staging_queue_t* queue = _sg_wgpu_staging_lookup_queue(stg_id, 0xFFFFFFFF);
-    SOKOL_ASSERT(queue);
-
-    /* check if a mapped staging buffer is available, otherwise create a new pool item */
-    for (uint32_t i = 0; i < queue->num; i++) {
-        if (queue->items[i].ptr) {
-            queue->cur = i;
-            return;
-        }
-    }
-
-    /* no mapped staging buffer available, create a new one */
-    SOKOL_ASSERT(queue->num < _SG_WGPU_MAX_STAGING);
-    queue->cur = queue->num++;
-    WGPUBufferDescriptor ub_desc;
-    memset(&ub_desc, 0, sizeof(ub_desc));
-    ub_desc.size = queue->byte_size;
-    ub_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
-    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &ub_desc);
-    queue->items[queue->cur].buf = res.buffer;
-    queue->items[queue->cur].ptr = (uint8_t*) res.data;
-    SOKOL_ASSERT(queue->items[queue->cur].buf);
-    SOKOL_ASSERT(res.dataLength == (uint64_t)queue->byte_size);
-}
-
-/* async-mapped callback for the staging buffer system, this will be called
-   several frames after wgpuBufferMapWriteAsync() is called
-*/
-_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_cb(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
-    if (!_sg.wgpu.valid) {
-        return;
-    }
-    /* FIXME: better handling for this */
-    if (WGPUBufferMapAsyncStatus_Success != status) {
-        SOKOL_LOG("Mapping uniform buffer failed!\n");
-        SOKOL_ASSERT(false);
-    }
-    /* decode the user data, lower 28 bits are clipped queue id (slot_index in lower 16 bits)
-       and the upper 4 bits are the item-index in the staging queue object
-    */
-    const uint32_t stg_id_mask = 0x0FFFFFFF;
-    uint32_t cb_data = (uint32_t)(uintptr_t)user_data;
-    uint32_t stg_id = cb_data & stg_id_mask;
-    uint32_t item_index = (cb_data >> 28) & 0xF;
-    SOKOL_ASSERT(item_index < _SG_WGPU_MAX_STAGING);
-    _sg_wgpu_staging_queue_t* queue = _sg_wgpu_staging_lookup_queue(stg_id, stg_id_mask);
-    /* the queue slot might have been destroyed and reused since the mapping was requested! */
-    if (queue) {
-        SOKOL_ASSERT(data_len == queue->byte_size);
-        SOKOL_ASSERT(0 == queue->items[item_index].ptr);
-        queue->items[item_index].ptr = data;
-    }
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_copy_to_buffer(_sg_wgpu_staging_t stg_id, WGPUBuffer dst, uint32_t num_bytes) {
-    _sg_wgpu_staging_queue_t* queue = _sg_wgpu_staging_lookup_queue(stg_id, 0xFFFFFFFF);
-    SOKOL_ASSERT(queue);
-    SOKOL_ASSERT(queue->cur < _SG_WGPU_MAX_STAGING);
-    SOKOL_ASSERT(num_bytes <= queue->byte_size);
-    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
-    queue->items[queue->cur].ptr = 0;
-    WGPUBuffer src = queue->items[queue->cur].buf;
-    wgpuBufferUnmap(src);
-    if (num_bytes > 0) {
-        wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, src, 0, dst, 0, num_bytes);
-    }
-    /* mask out the top-most 4 bits of the id's generation counter and use
-       that as to communicate the queue item index to the callback
-    */
-    uint32_t cb_data = (stg_id & 0x0FFFFFFF) | ((queue->cur & 0xF)<<28);
-    wgpuBufferMapWriteAsync(src, _sg_wgpu_staging_mapped_cb, (void*)(intptr_t)cb_data);
-}
-
-/*== WGPU enum translation ===*/
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
     WGPUBufferUsageFlags res = 0;
     if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
@@ -10077,15 +9838,19 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 /*
     WGPU uniform buffer pool implementation:
 
-    Uniform data is currently handled via staging buffer uploads because in
-    Dawn, uniform buffers are not CPU-writable.
+    At start of frame, a mapped buffer is grabbed from the pool,
+    or a new buffer is created if there is no mapped buffer available.
 
-    In the final WebGPU implementation this will probably be possible.
+    At end of frame, the current buffer is unmapped before queue submit,
+    and async-mapped immediately again.
+
+    UNIFORM BUFFER FIXME:
+
+    - As per WebGPU spec, it should be possible to create a Uniform|MapWrite
+      buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
     _sg.wgpu.ub.ub_size = desc->wgpu_global_uniform_buffer_size;
-    _sg.wgpu.ub.stg = _sg_wgpu_staging_alloc(_sg.wgpu.ub.ub_size);
-    SOKOL_ASSERT(SG_INVALID_ID != _sg.wgpu.ub.stg);
 
     WGPUBindGroupLayoutBinding ub_bglb_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
     memset(ub_bglb_desc, 0, sizeof(ub_bglb_desc));
@@ -10106,47 +9871,29 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
     ub_bgl_desc.bindings = &ub_bglb_desc[0][0];
     _sg.wgpu.ub.bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bgl_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.bindgroup_layout);
-
-    WGPUBufferDescriptor ub_desc;
-    memset(&ub_desc, 0, sizeof(ub_desc));
-    ub_desc.size = _sg.wgpu.ub.ub_size;
-    ub_desc.usage = WGPUBufferUsage_Uniform|WGPUBufferUsage_CopyDst;
-    _sg.wgpu.ub.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
-    SOKOL_ASSERT(_sg.wgpu.ub.buf);
-
-    WGPUBindGroupBinding ub_bgb[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    memset(ub_bgb, 0, sizeof(ub_bgb));
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
-        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
-            ub_bgb[stage_index][ub_index].binding = bind_index;
-            ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
-            ub_bgb[stage_index][ub_index].size = _sg.wgpu.ub.ub_size;
-        }
-    }
-    WGPUBindGroupDescriptor bg_desc;
-    memset(&bg_desc, 0, sizeof(bg_desc));
-    bg_desc.layout = _sg.wgpu.ub.bindgroup_layout;
-    bg_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
-    bg_desc.bindings = &ub_bgb[0][0];
-    _sg.wgpu.ub.bindgroup = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
-    SOKOL_ASSERT(_sg.wgpu.ub.bindgroup);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
-    if (_sg.wgpu.ub.buf) {
-        wgpuBufferRelease(_sg.wgpu.ub.buf);
-        _sg.wgpu.ub.buf = 0;
-    }
-    if (_sg.wgpu.ub.bindgroup) {
-        wgpuBindGroupRelease(_sg.wgpu.ub.bindgroup);
-        _sg.wgpu.ub.bindgroup = 0;
+    for (int i = 0; i < _sg.wgpu.ub.num_items; i++) {
+        if (_sg.wgpu.ub.pool[i].bindgroup) {
+            wgpuBindGroupRelease(_sg.wgpu.ub.pool[i].bindgroup);
+            _sg.wgpu.ub.pool[i].bindgroup = 0;
+        }
+        if (_sg.wgpu.ub.pool[i].src) {
+            wgpuBufferDestroy(_sg.wgpu.ub.pool[i].src);
+            wgpuBufferRelease(_sg.wgpu.ub.pool[i].src);
+            _sg.wgpu.ub.pool[i].src = 0;
+        }
+        if (_sg.wgpu.ub.pool[i].dst) {
+            wgpuBufferDestroy(_sg.wgpu.ub.pool[i].dst);
+            wgpuBufferRelease(_sg.wgpu.ub.pool[i].dst);
+            _sg.wgpu.ub.pool[i].dst = 0;
+        }
     }
     if (_sg.wgpu.ub.bindgroup_layout) {
         wgpuBindGroupLayoutRelease(_sg.wgpu.ub.bindgroup_layout);
         _sg.wgpu.ub.bindgroup_layout = 0;
     }
-    _sg_wgpu_staging_free(_sg.wgpu.ub.stg);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_new_frame(void) {
@@ -10155,14 +9902,82 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_new_frame(void) {
     _sg.wgpu.ub.offset = 0;
     memset(&_sg.wgpu.ub.bind_offsets, 0, sizeof(_sg.wgpu.ub.bind_offsets));
 
-    /* request next mapped staging buffer */
-    _sg_wgpu_staging_next(_sg.wgpu.ub.stg);
+    /* check if a mapped buffer is available, otherwise create a new pool item */
+    for (int i = 0; i < _sg.wgpu.ub.num_items; i++) {
+        if (_sg.wgpu.ub.pool[i].ptr) {
+            _sg.wgpu.ub.cur_item = i;
+            return;
+        }
+    }
+
+    /* no mapped uniform buffer available, create one */
+    SOKOL_ASSERT(_sg.wgpu.ub.num_items < _SG_WGPU_MAX_UB_POOL_SIZE);
+    _sg.wgpu.ub.cur_item = _sg.wgpu.ub.num_items++;
+    const int cur_item = _sg.wgpu.ub.cur_item;
+
+    WGPUBufferDescriptor ub_desc;
+    memset(&ub_desc, 0, sizeof(ub_desc));
+    ub_desc.size = _sg.wgpu.ub.ub_size;
+    ub_desc.usage = WGPUBufferUsage_Uniform|WGPUBufferUsage_CopyDst;
+    _sg.wgpu.ub.pool[cur_item].dst = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
+    SOKOL_ASSERT(_sg.wgpu.ub.pool[cur_item].dst);
+    ub_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
+    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &ub_desc);
+    _sg.wgpu.ub.pool[cur_item].src = res.buffer;
+    _sg.wgpu.ub.pool[cur_item].ptr = (uint8_t*) res.data;
+    SOKOL_ASSERT(_sg.wgpu.ub.pool[cur_item].src);
+    SOKOL_ASSERT(res.dataLength == _sg.wgpu.ub.ub_size);
+
+    WGPUBindGroupBinding ub_bgb[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    memset(ub_bgb, 0, sizeof(ub_bgb));
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
+            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
+            ub_bgb[stage_index][ub_index].binding = bind_index;
+            ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.pool[cur_item].dst;
+            ub_bgb[stage_index][ub_index].size = _sg.wgpu.ub.ub_size;
+        }
+    }
+    WGPUBindGroupDescriptor bg_desc;
+    memset(&bg_desc, 0, sizeof(bg_desc));
+    bg_desc.layout = _sg.wgpu.ub.bindgroup_layout;
+    bg_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
+    bg_desc.bindings = &ub_bgb[0][0];
+    _sg.wgpu.ub.pool[cur_item].bindgroup = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
+    SOKOL_ASSERT(_sg.wgpu.ub.pool[cur_item].bindgroup);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_commit(void) {
-    WGPUBuffer dst = _sg.wgpu.ub.buf;
-    int num_bytes = _sg.wgpu.ub.offset;
-    _sg_wgpu_staging_copy_to_buffer(_sg.wgpu.ub.stg, dst, num_bytes);
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_before_submit(void) {
+    const int cur_item = _sg.wgpu.ub.cur_item;
+    _sg.wgpu.ub.pool[cur_item].ptr = 0;
+    wgpuBufferUnmap(_sg.wgpu.ub.pool[cur_item].src);
+    WGPUBuffer ub_src = _sg.wgpu.ub.pool[cur_item].src;
+    WGPUBuffer ub_dst = _sg.wgpu.ub.pool[cur_item].dst;
+    if (_sg.wgpu.ub.offset > 0) {
+        wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, ub_src, 0, ub_dst, 0, _sg.wgpu.ub.offset);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_cb(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+    if (!_sg.wgpu.valid) {
+        return;
+    }
+    /* FIXME: better handling for this */
+    if (WGPUBufferMapAsyncStatus_Success != status) {
+        SOKOL_LOG("Mapping uniform buffer failed!\n");
+        SOKOL_ASSERT(false);
+    }
+    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.ub_size));
+    int index = (int) user_data;
+    SOKOL_ASSERT(index < _sg.wgpu.ub.num_items);
+    SOKOL_ASSERT(0 == _sg.wgpu.ub.pool[index].ptr);
+    _sg.wgpu.ub.pool[index].ptr = (uint8_t*) data;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_after_submit(void) {
+    const int cur_item = _sg.wgpu.ub.cur_item;
+    WGPUBuffer ub_src = _sg.wgpu.ub.pool[cur_item].src;
+    wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ubpool_mapped_cb, (void*)(intptr_t)cur_item);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
@@ -10184,10 +9999,6 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     /* setup WebGPU features and limits */
     _sg_wgpu_init_caps();
 
-    /* setup the staging buffer system */
-    const int num_staging_queues = desc->buffer_pool_size + desc->image_pool_size + 1;
-    _sg_wgpu_staging_init(num_staging_queues);
-
     /* setup the uniform buffer pool */
     _sg_wgpu_ubpool_init(desc);
 }
@@ -10196,7 +10007,6 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
-    _sg_wgpu_staging_discard();
     if (_sg.wgpu.queue) {
         wgpuQueueRelease(_sg.wgpu.queue);
         _sg.wgpu.queue = 0;
@@ -10550,7 +10360,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 
     /* finish and submit this frame's work */
-    _sg_wgpu_ubpool_commit();
+    _sg_wgpu_ubpool_before_submit();
     WGPUCommandBufferDescriptor cmd_buf_desc;
     memset(&cmd_buf_desc, 0, sizeof(cmd_buf_desc));
     WGPUCommandBuffer cmd_buf = wgpuCommandEncoderFinish(_sg.wgpu.cmd_enc, &cmd_buf_desc);
@@ -10559,6 +10369,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     _sg.wgpu.cmd_enc = 0;
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &cmd_buf);
     wgpuCommandBufferRelease(cmd_buf);
+    _sg_wgpu_ubpool_after_submit();
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -11154,6 +10965,66 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_content* da
 
 /*== RESOURCE POOLS ==========================================================*/
 
+_SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
+    memset(pool->gen_ctrs, 0, gen_ctrs_size);
+    /* it's not a bug to only reserve 'num' here */
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    SOKOL_ASSERT(pool->free_queue);
+    /* never allocate the zero-th pool item since the invalid id is 0 */
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_discard_pool(_sg_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_FREE(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    SOKOL_FREE(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+_SOKOL_PRIVATE int _sg_pool_alloc_index(_sg_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    }
+    else {
+        /* pool exhausted */
+        return _SG_INVALID_SLOT_INDEX;
+    }
+}
+
+_SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    /* debug check against double-free */
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
 _SOKOL_PRIVATE void _sg_reset_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     memset(buf, 0, sizeof(_sg_buffer_t));
@@ -11245,6 +11116,34 @@ _SOKOL_PRIVATE void _sg_discard_pools(_sg_pools_t* p) {
     _sg_discard_pool(&p->shader_pool);
     _sg_discard_pool(&p->image_pool);
     _sg_discard_pool(&p->buffer_pool);
+}
+
+/* allocate the slot at slot_index:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the resource id
+*/
+_SOKOL_PRIVATE uint32_t _sg_slot_alloc(_sg_pool_t* pool, _sg_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SG_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SG_SLOT_SHIFT)|(slot_index & _SG_SLOT_MASK);
+    slot->state = SG_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+/* extract slot index from id */
+_SOKOL_PRIVATE int _sg_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SG_SLOT_MASK);
+    SOKOL_ASSERT(_SG_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
 }
 
 /* returns pointer to resource by id without matching id check */
