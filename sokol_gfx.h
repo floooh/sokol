@@ -3161,7 +3161,7 @@ typedef struct {
         WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; /* CPU-side staging buffers */
         uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   /* if != 0, then staging buffer is currently mapped */
     } stage;
-} _sg_wgpu_ub_pool;
+} _sg_wgpu_ubpool;
 
 typedef struct {
     bool valid;
@@ -3176,7 +3176,7 @@ typedef struct {
     WGPURenderPassEncoder pass_enc;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
-    _sg_wgpu_ub_pool ub;
+    _sg_wgpu_ubpool ub;
 } _sg_wgpu_backend_t;
 
 #endif
