@@ -3161,7 +3161,7 @@ typedef struct {
         WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; /* CPU-side staging buffers */
         uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   /* if != 0, then staging buffer is currently mapped */
     } stage;
-} _sg_wgpu_ubpool;
+} _sg_wgpu_ubpool_t;
 
 typedef struct {
     bool valid;
