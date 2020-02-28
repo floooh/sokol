@@ -168,8 +168,8 @@ separate sokol.c/.m implementation file which is necessary
 to split the Objective-C code from the C code of the sample):
 
 ```cpp
-#include "sokol_gfx.h"
 #include "sokol_app.h"
+#include "sokol_gfx.h"
 
 sg_pass_action pass_action;
 
