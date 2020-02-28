@@ -176,11 +176,11 @@ jobs:
         - name: wasm-ninja-debug
           run: |
             cd workspace/sokol-samples
-            python fips build wasm-ninja-debug
+            python fips make cube-emsc wasm-ninja-debug
         - name: wasm-ninja-release
           run: |
             cd workspace/sokol-samples
-            python fips build wasm-ninja-release
+            python fips make cube-emsc wasm-ninja-release
     android:
         runs-on: ubuntu-latest
         steps:
