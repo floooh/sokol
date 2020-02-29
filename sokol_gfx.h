@@ -9938,7 +9938,29 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_new_frame(void) {
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+    if (!_sg.wgpu.valid) {
+        return;
+    }
+    /* FIXME: better handling for this */
+    if (WGPUBufferMapAsyncStatus_Success != status) {
+        SOKOL_LOG("Mapping uniform buffer failed!\n");
+        SOKOL_ASSERT(false);
+    }
+    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
+    int index = (int) user_data;
+    SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
+    SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
+    _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
+
+    /* immediately request a new mapping for the last frame's current staging buffer */
+    if (!first_frame) {
+        WGPUBuffer ub_src = _sg.wgpu.ub.stage.buf[_sg.wgpu.ub.stage.cur];
+        wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ubpool_mapped_callback, (void*)(intptr_t)_sg.wgpu.ub.stage.cur);
+    }
 
     /* rewind per-frame offsets */
     _sg.wgpu.ub.offset = 0;
@@ -9982,29 +10004,6 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
-    if (!_sg.wgpu.valid) {
-        return;
-    }
-    /* FIXME: better handling for this */
-    if (WGPUBufferMapAsyncStatus_Success != status) {
-        SOKOL_LOG("Mapping uniform buffer failed!\n");
-        SOKOL_ASSERT(false);
-    }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
-    int index = (int) user_data;
-    SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
-    SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
-    _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_map_async(void) {
-    /* called after queue-submit to request a mapping for this frame's staging buffer */
-    const int cur = _sg.wgpu.ub.stage.cur;
-    WGPUBuffer ub_src = _sg.wgpu.ub.stage.buf[cur];
-    wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ubpool_mapped_callback, (void*)(intptr_t)cur);
-}
-
 /*
     The WGPU staging buffer implementation:
 
@@ -10040,7 +10039,30 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_discard(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_staging_new_frame(void) {
+_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+    if (!_sg.wgpu.valid) {
+        return;
+    }
+    /* FIXME: better handling for this */
+    if (WGPUBufferMapAsyncStatus_Success != status) {
+        SOKOL_ASSERT("Mapping staging buffer failed!\n");
+        SOKOL_ASSERT(false);
+    }
+    SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
+    int index = (int) user_data;
+    SOKOL_ASSERT(index < _sg.wgpu.staging.num);
+    SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
+    _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
+
+    /* immediately request a new mapping for the last frame's current staging buffer */
+    if (!first_frame) {
+        WGPUBuffer cur_buf = _sg.wgpu.staging.buf[_sg.wgpu.staging.cur];
+        wgpuBufferMapWriteAsync(cur_buf, _sg_wgpu_staging_mapped_callback, (void*)(intptr_t)_sg.wgpu.staging.cur);
+    }
+
     /* rewind staging-buffer offset */
     _sg.wgpu.staging.offset = 0;
 
@@ -10100,28 +10122,6 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
     wgpuBufferUnmap(_sg.wgpu.staging.buf[cur]);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
-    if (!_sg.wgpu.valid) {
-        return;
-    }
-    /* FIXME: better handling for this */
-    if (WGPUBufferMapAsyncStatus_Success != status) {
-        SOKOL_ASSERT("Mapping staging buffer failed!\n");
-        SOKOL_ASSERT(false);
-    }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
-    int index = (int) user_data;
-    SOKOL_ASSERT(index < _sg.wgpu.staging.num);
-    SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
-    _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_staging_map_async(void) {
-    /* called at end of frame after queue-submit to immediately request a new mapping */
-    const int cur = _sg.wgpu.staging.cur;
-    wgpuBufferMapWriteAsync(_sg.wgpu.staging.buf[cur], _sg_wgpu_staging_mapped_callback, (void*)(intptr_t)cur);
-}
-
 /*--- WGPU backend API functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -10145,14 +10145,25 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
 
     /* setup the uniform and staging buffer pools */
     _sg_wgpu_ubpool_init(desc);
+    _sg_wgpu_ubpool_next_frame(true);
     _sg_wgpu_staging_init(desc);
+    _sg_wgpu_staging_next_frame(true);
+
+    /* create initial per-frame command encoder */
+    WGPUCommandEncoderDescriptor cmd_enc_desc;
+    memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
+    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
     _sg_wgpu_staging_discard();
+    wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc);
+    _sg.wgpu.cmd_enc = 0;
     if (_sg.wgpu.queue) {
         wgpuQueueRelease(_sg.wgpu.queue);
         _sg.wgpu.queue = 0;
@@ -10430,21 +10441,11 @@ _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swapchain_cb);
     _sg.wgpu.in_pass = true;
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
-
-    /* 'first pass in frame' stuff */
-    if (0 == _sg.wgpu.cmd_enc) {
-        /* grab new staging buffers for uniform- and vertex/image-updates */
-        _sg_wgpu_ubpool_new_frame();
-        _sg_wgpu_staging_new_frame();
-        /* get a new command encoder */
-        WGPUCommandEncoderDescriptor cmd_enc_desc;
-        memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
-        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-    }
 
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     if (pass) {
@@ -10511,8 +10512,15 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     _sg.wgpu.cmd_enc = 0;
     wgpuQueueSubmit(_sg.wgpu.queue, 1, &cmd_buf);
     wgpuCommandBufferRelease(cmd_buf);
-    _sg_wgpu_ubpool_map_async();
-    _sg_wgpu_staging_map_async();
+
+    /* create a new command encoder for the next frame */
+    WGPUCommandEncoderDescriptor cmd_enc_desc;
+    memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
+    _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+
+    /* grab new staging buffers for uniform- and vertex/image-updates */
+    _sg_wgpu_ubpool_next_frame(false);
+    _sg_wgpu_staging_next_frame(false);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
