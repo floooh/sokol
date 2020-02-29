@@ -3101,6 +3101,7 @@ typedef struct {
     struct {
         WGPUTexture tex;
         WGPUTexture depth_tex;
+        WGPUTextureView tex_view;
         WGPUTexture msaa_tex;
         WGPUSampler sampler;
     } wgpu;
@@ -9566,13 +9567,69 @@ _SOKOL_PRIVATE WGPULoadOp _sg_wgpu_load_op(sg_action a) {
     }
 }
 
-_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_texviewdim(sg_image_type t) {
+_SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
     switch (t) {
         case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
         case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_Cube;
         case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_3D;
         case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
         default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Undefined;
+    }
+}
+
+_SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_tex_dim(sg_image_type t) {
+    if (SG_IMAGETYPE_3D == t) {
+        return WGPUTextureDimension_3D;
+    }
+    else {
+        return WGPUTextureDimension_2D;
+    }
+}
+
+_SOKOL_PRIVATE WGPUAddressMode _sg_wgpu_sampler_addrmode(sg_wrap m) {
+    switch (m) {
+        case SG_WRAP_REPEAT:
+            return WGPUAddressMode_Repeat;
+        case SG_WRAP_CLAMP_TO_EDGE:
+        case SG_WRAP_CLAMP_TO_BORDER:
+            return WGPUAddressMode_ClampToEdge;
+        case SG_WRAP_MIRRORED_REPEAT:
+            return WGPUAddressMode_MirrorRepeat;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUAddressMode_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_minmagfilter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+            return WGPUFilterMode_Nearest;
+        case SG_FILTER_LINEAR:
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+            return WGPUFilterMode_Linear;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUFilterMode_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUFilterMode _sg_wgpu_sampler_mipfilter(sg_filter f) {
+    switch (f) {
+        case SG_FILTER_NEAREST:
+        case SG_FILTER_LINEAR:
+        case SG_FILTER_NEAREST_MIPMAP_NEAREST:
+        case SG_FILTER_LINEAR_MIPMAP_NEAREST:
+            return WGPUFilterMode_Nearest;
+        case SG_FILTER_NEAREST_MIPMAP_LINEAR:
+        case SG_FILTER_LINEAR_MIPMAP_LINEAR:
+            return WGPUFilterMode_Linear;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUFilterMode_Force32;
     }
 }
 
@@ -10220,16 +10277,136 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_buffer(_sg_buffer_t* buf) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex_desc, const sg_image_desc* desc) {
+    wgpu_tex_desc->usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_CopyDst;
+    wgpu_tex_desc->dimension = _sg_wgpu_tex_dim(desc->type);
+    wgpu_tex_desc->size.width = desc->width;
+    wgpu_tex_desc->size.height = desc->height;
+    if (desc->type == SG_IMAGETYPE_3D) {
+        wgpu_tex_desc->size.depth = desc->depth;
+        wgpu_tex_desc->arrayLayerCount = 1;
+    }
+    else if (desc->type == SG_IMAGETYPE_CUBE) {
+        wgpu_tex_desc->size.depth = 1;
+        wgpu_tex_desc->arrayLayerCount = 6;
+    }
+    else {
+        wgpu_tex_desc->size.depth = 1;
+        wgpu_tex_desc->arrayLayerCount = desc->layers;
+    }
+    wgpu_tex_desc->format = _sg_wgpu_textureformat(desc->pixel_format);
+    wgpu_tex_desc->mipLevelCount = desc->num_mipmaps;
+    wgpu_tex_desc->sampleCount = 1;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_init_texdesc_rt(WGPUTextureDescriptor* wgpu_tex_desc) {
+    wgpu_tex_desc->usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
+}
+
+_SOKOL_PRIVATE int _sg_wgpu_image_content_size(const _sg_image_t* img, const sg_image_content* content) {
+    int num_bytes = 0;
+    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    for (int face_index = 0; face_index < num_faces; face_index++) {
+        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
+            num_bytes += _sg_wgpu_roundup(content->subimage[face_index][mip_index].size, _SG_WGPU_STAGING_ALIGN);
+        }
+    }
+    return num_bytes;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer stage_buf, void* stage_ptr, _sg_image_t* img, const sg_image_content* content) {
+    // FIXME
+    SOKOL_ASSERT(false);
+}
+
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    SOKOL_ASSERT(_sg.wgpu.dev);
+    SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+
+    // FIMXE: injected WGPU texture
+
     _sg_image_common_init(&img->cmn, desc);
-    SOKOL_LOG("_sg_wgpu_create_image: FIXME\n");
-    return SG_RESOURCESTATE_FAILED;
+
+    const bool is_msaa = desc->sample_count > 1;
+    WGPUTextureDescriptor wgpu_tex_desc;
+    memset(&wgpu_tex_desc, 0, sizeof(wgpu_tex_desc));
+    _sg_wgpu_init_texdesc_common(&wgpu_tex_desc, desc);
+    if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
+        // FIXME
+        SOKOL_ASSERT(false);
+    }
+    else {
+        if (desc->render_target && is_msaa) {
+            _sg_wgpu_init_texdesc_rt(&wgpu_tex_desc);
+        }
+        img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
+        SOKOL_ASSERT(img->wgpu.tex);
+
+        // copy content into texture via a throw-away staging buffer
+        if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
+            WGPUBufferDescriptor wgpu_buf_desc;
+            memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
+            wgpu_buf_desc.size = _sg_wgpu_image_content_size(img, &desc->content);
+            wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
+            WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
+            SOKOL_ASSERT(map.buffer && map.data);
+            _sg_wgpu_copy_image_content(map.buffer, map.data, img, &desc->content);
+            wgpuBufferRelease(map.buffer);
+        }
+
+        WGPUTextureViewDescriptor wgpu_view_desc;
+        memset(&wgpu_view_desc, 0, sizeof(wgpu_view_desc));
+        wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
+        img->wgpu.tex_view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_view_desc);
+
+        if (desc->render_target && is_msaa) {
+            // FIXME
+            SOKOL_ASSERT(false);
+        }
+    }
+
+    /* create sampler (FIXME: implement a shared sampler cache) */
+    WGPUSamplerDescriptor smp_desc;
+    memset(&smp_desc, 0, sizeof(smp_desc));
+    smp_desc.addressModeU = _sg_wgpu_sampler_addrmode(desc->wrap_u);
+    smp_desc.addressModeV = _sg_wgpu_sampler_addrmode(desc->wrap_v);
+    smp_desc.addressModeW = _sg_wgpu_sampler_addrmode(desc->wrap_w);
+    smp_desc.magFilter = _sg_wgpu_sampler_minmagfilter(desc->mag_filter);
+    smp_desc.minFilter = _sg_wgpu_sampler_minmagfilter(desc->min_filter);
+    smp_desc.mipmapFilter = _sg_wgpu_sampler_mipfilter(desc->min_filter);
+    smp_desc.lodMinClamp = desc->min_lod;
+    smp_desc.lodMaxClamp = desc->max_lod;
+    img->wgpu.sampler = wgpuDeviceCreateSampler(_sg.wgpu.dev, &smp_desc);
+    SOKOL_ASSERT(img->wgpu.sampler);
+
+    return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
-    SOKOL_LOG("_sg_wgpu_destroy_image: FIXME!\n");
+    if (img->wgpu.tex) {
+        wgpuTextureRelease(img->wgpu.tex);
+        img->wgpu.tex = 0;
+    }
+    if (img->wgpu.depth_tex) {
+        wgpuTextureRelease(img->wgpu.depth_tex);
+        img->wgpu.depth_tex = 0;
+    }
+    if (img->wgpu.tex_view) {
+        wgpuTextureViewRelease(img->wgpu.tex_view);
+        img->wgpu.tex_view = 0;
+    }
+    if (img->wgpu.msaa_tex) {
+        wgpuTextureRelease(img->wgpu.msaa_tex);
+        img->wgpu.msaa_tex = 0;
+    }
+    if (img->wgpu.sampler) {
+        wgpuSamplerRelease(img->wgpu.sampler);
+        img->wgpu.sampler = 0;
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
