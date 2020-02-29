@@ -2836,7 +2836,12 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
     emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
+
+    if (_sapp.desc.frame_cb || _sapp.desc.frame_userdata_cb) {
+      emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
+    } else {
+      _sapp_call_init();
+    }
 
     sapp_js_hook_beforeunload();
 
