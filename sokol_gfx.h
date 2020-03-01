@@ -3569,11 +3569,13 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
     }
 }
 
+#define _sg_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
+
 /* return row pitch for an image
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
 */
-_SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
-    int pitch;
+_SOKOL_PRIVATE uint32_t _sg_row_pitch(sg_pixel_format fmt, uint32_t width, uint32_t row_align) {
+    uint32_t pitch;
     switch (fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:
         case SG_PIXELFORMAT_BC4_R:
@@ -3620,14 +3622,13 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width) {
             pitch = width * _sg_pixelformat_bytesize(fmt);
             break;
     }
+    pitch = _sg_roundup(pitch, row_align);
     return pitch;
 }
 
-/* return pitch of a 2D subimage / texture slice
-    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
-*/
-_SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height) {
-    int num_rows = 0;
+/* compute the number of rows in a surface depending on pixel format */
+_SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
+    int num_rows;
     switch (fmt) {
         case SG_PIXELFORMAT_BC1_RGBA:
         case SG_PIXELFORMAT_BC4_R:
@@ -3657,7 +3658,15 @@ _SOKOL_PRIVATE int _sg_surface_pitch(sg_pixel_format fmt, int width, int height)
     if (num_rows < 1) {
         num_rows = 1;
     }
-    return num_rows * _sg_row_pitch(fmt, width);
+    return num_rows;
+}
+
+/* return pitch of a 2D subimage / texture slice
+    see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+*/
+_SOKOL_PRIVATE uint32_t _sg_surface_pitch(sg_pixel_format fmt, uint32_t width, uint32_t height, uint32_t row_align) {
+    int num_rows = _sg_num_rows(fmt, height);
+    return num_rows * _sg_row_pitch(fmt, width, row_align);
 }
 
 /* capability table pixel format helper functions */
@@ -6902,7 +6911,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
                 const int slice_offset = slice_size * slice_index;
                 const uint8_t* ptr = (const uint8_t*) subimg_content->ptr;
                 subres_data->pSysMem = ptr + slice_offset;
-                subres_data->SysMemPitch = _sg_row_pitch(img->cmn.pixel_format, mip_width);
+                subres_data->SysMemPitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 if (img->cmn.type == SG_IMAGETYPE_3D) {
                     /* FIXME? const int mip_depth = ((img->depth>>mip_index)>0) ? img->depth>>mip_index : 1; */
                     subres_data->SysMemSlicePitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height);
@@ -7848,7 +7857,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_cont
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
                 const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
                 const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
-                const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width);
+                const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 const sg_subimage_content* subimg_content = &(data->subimage[face_index][mip_index]);
                 const int slice_size = subimg_content->size / num_slices;
                 const int slice_offset = slice_size * slice_index;
@@ -8675,7 +8684,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image_t* img, __unsafe_
             int bytes_per_row = 0;
             int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height);
             if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
-                bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width);
+                bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
             }
             MTLRegion region;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
@@ -9438,8 +9447,6 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     }
 }
 
-#define _sg_mtl_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
-
 _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
@@ -9466,7 +9473,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_i
     else {
         [_sg_mtl_cmd_encoder setFragmentBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
-    _sg.mtl.cur_ub_offset = _sg_mtl_roundup(_sg.mtl.cur_ub_offset + num_bytes, _SG_MTL_UB_ALIGN);
+    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + num_bytes, _SG_MTL_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
@@ -10078,8 +10085,6 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
     or images). Instead of one big copy-operation at the end of the frame,
     multiple copy-operations will be written throughout the frame.
 */
-#define _sg_wgpu_roundup(val, round_to) (((val)+((round_to)-1))&~((round_to)-1))
-
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
     SOKOL_ASSERT(desc && (desc->wgpu_global_staging_buffer_size > 0));
     _sg.wgpu.staging.num_bytes = desc->wgpu_global_staging_buffer_size;
@@ -10167,7 +10172,7 @@ _SOKOL_PRIVATE int _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, const uin
     memcpy(dst_ptr, data, num_bytes);
     WGPUBuffer src_buf = _sg.wgpu.staging.buf[cur];
     wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, src_buf, offset, dst_buf, 0, num_bytes);
-    _sg.wgpu.staging.offset = _sg_wgpu_roundup(offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.staging.offset = _sg_roundup(offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
     return offset;
 }
 
@@ -10303,22 +10308,76 @@ _SOKOL_PRIVATE void _sg_wgpu_init_texdesc_rt(WGPUTextureDescriptor* wgpu_tex_des
     wgpu_tex_desc->usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
 }
 
-_SOKOL_PRIVATE int _sg_wgpu_image_content_size(const _sg_image_t* img, const sg_image_content* content) {
-    int num_bytes = 0;
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-            SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
-            SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
-            num_bytes += _sg_wgpu_roundup(content->subimage[face_index][mip_index].size, _SG_WGPU_STAGING_ALIGN);
-        }
+_SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* img, const sg_image_content* content) {
+    uint32_t num_bytes = 0;
+    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
+    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+        const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
+        const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+        /* row-pitch must be 256-aligend */
+        const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
+        num_bytes += (bytes_per_slice * num_slices) * num_faces;
     }
     return num_bytes;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer stage_buf, void* stage_ptr, _sg_image_t* img, const sg_image_content* content) {
-    // FIXME
-    SOKOL_ASSERT(false);
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t* staging_ptr, _sg_image_t* img, const sg_image_content* content) {
+    SOKOL_ASSERT(staging_buf && staging_ptr);
+    SOKOL_ASSERT(img);
+    SOKOL_ASSERT(content);
+    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
+    WGPUBufferCopyView src_view;
+    memset(&src_view, 0, sizeof(src_view));
+    src_view.buffer = staging_buf;
+    WGPUTextureCopyView dst_view;
+    memset(&dst_view, 0, sizeof(dst_view));
+    dst_view.texture = img->wgpu.tex;
+    WGPUExtent3D extent;
+    memset(&extent, 0, sizeof(extent));
+
+    uint32_t staging_offset = 0;
+    for (uint32_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint32_t mip_index = 0; mip_index < (uint32_t)img->cmn.num_mipmaps; mip_index++) {
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
+            SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
+            const uint8_t* src_ptr = (const uint8_t*)content->subimage[face_index][mip_index].ptr;
+            SOKOL_ASSERT(src_ptr);
+
+            const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
+            const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+            const uint32_t mip_depth = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.depth >> mip_index, 1) : 1;
+            const uint32_t src_bytes_per_row   = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            const uint32_t dst_bytes_per_row   = _sg_row_pitch(img->cmn.pixel_format, mip_width, _SG_WGPU_STAGING_ALIGN);
+            const uint32_t src_bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
+            const uint32_t dst_bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
+
+            /* copy content into mapped staging buffer */
+            /* FIXME: need to copy row-pitch-aligned rows here */
+            SOKOL_ASSERT(false);
+            /*
+            uint8_t* dst_ptr = staging_ptr + staging_offset;
+            uint32_t num_bytes = content->subimage[face_index][mip_index].size;
+            memcpy(dst_ptr, src_ptr, num_bytes);
+            */
+
+            /* record the staging copy operation into command encoder */
+            src_view.imageHeight = mip_height;
+            src_view.rowPitch = dst_bytes_per_row;
+            dst_view.mipLevel = mip_index;
+            extent.width = mip_width;
+            extent.height = mip_height;
+            extent.depth = mip_depth;
+            for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
+                const uint32_t layer_index = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? slice_index : face_index;
+                src_view.offset = staging_offset;
+                dst_view.arrayLayer = layer_index;
+                wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.cmd_enc, &src_view, &dst_view, &extent);
+                staging_offset += dst_bytes_per_slice;
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -10349,11 +10408,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
             WGPUBufferDescriptor wgpu_buf_desc;
             memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
-            wgpu_buf_desc.size = _sg_wgpu_image_content_size(img, &desc->content);
+            wgpu_buf_desc.size = _sg_wgpu_image_content_buffer_size(img, &desc->content);
             wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
             WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
             SOKOL_ASSERT(map.buffer && map.data);
-            _sg_wgpu_copy_image_content(map.buffer, map.data, img, &desc->content);
+            _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, img, &desc->content);
             wgpuBufferRelease(map.buffer);
         }
 
@@ -10771,7 +10830,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
                                       _sg.wgpu.ub.bindgroup,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
                                       &_sg.wgpu.ub.bind_offsets[0][0]);
-    _sg.wgpu.ub.offset = _sg_wgpu_roundup(_sg.wgpu.ub.offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.ub.offset = _sg_roundup(_sg.wgpu.ub.offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
@@ -12311,7 +12370,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
                 SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
                 const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
                 const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height);
+                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                 const int expected_size = bytes_per_slice * img->cmn.depth;
                 SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= expected_size, _SG_VALIDATE_UPDIMG_SIZE);
             }
