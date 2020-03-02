@@ -3086,6 +3086,7 @@ static dispatch_semaphore_t _sg_mtl_sem;
 #define _SG_WGPU_STAGING_ALIGN (256)
 #define _SG_WGPU_STAGING_PIPELINE_SIZE (8)
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
+#define _SG_WGPU_MAX_SHADERSTAGE_IMAGES (8)
 
 typedef struct {
     _sg_slot_t slot;
@@ -10544,17 +10545,59 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
             1 bind group for all 8 uniform buffers
             1 bind group for vertex shader textures + samplers
-            1 bind group for fragment shaer textures + samples
+            1 bind group for fragment shader textures + samples
+
+        Alternatively:
+
+            1 bind group for 8 uniform buffer slots
+            1 bind group for 8 vs images + 8 vs samplers
+            1 bind group for 12 fs images
+            1 bind group for 12 fs samplers
 
         I guess this means that we need to create BindGroups on the
         fly during sg_apply_bindings() :/
     */
-    WGPUBindGroupLayout bgl[1] = { _sg.wgpu.ub.bindgroup_layout };
+    WGPUBindGroupLayout img_bgl[SG_NUM_SHADER_STAGES];
+    memset(img_bgl, 0, sizeof(img_bgl));
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        WGPUShaderStage vis = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
+        int num_imgs = shd->cmn.stage[stage_index].num_images;
+        if (num_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
+            num_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
+        }
+        WGPUBindGroupLayoutBinding bglb_desc[_SG_WGPU_MAX_SHADERSTAGE_IMAGES * 2];
+        memset(bglb_desc, 0, sizeof(bglb_desc));
+        for (int img_index = 0; img_index < num_imgs; img_index++) {
+            /* texture- and sampler-bindings */
+            WGPUBindGroupLayoutBinding* tex_desc = &bglb_desc[img_index*2 + 0];
+            WGPUBindGroupLayoutBinding* smp_desc = &bglb_desc[img_index*2 + 1];
+
+            tex_desc->binding = img_index;
+            tex_desc->visibility = vis;
+            tex_desc->type = WGPUBindingType_SampledTexture;
+            tex_desc->textureDimension = _sg_wgpu_tex_dim(shd->cmn.stage[stage_index].images[img_index].type);
+            tex_desc->textureComponentType = WGPUTextureComponentType_Float; // FIXME!
+
+            smp_desc->binding = img_index + _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
+            smp_desc->visibility = vis;
+            smp_desc->type = WGPUBindingType_Sampler;
+        }
+        WGPUBindGroupLayoutDescriptor img_bgl_desc;
+        memset(&img_bgl_desc, 0, sizeof(img_bgl_desc));
+        img_bgl_desc.bindingCount = num_imgs * 2;
+        img_bgl_desc.bindings = &bglb_desc[0];
+        img_bgl[stage_index] = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &img_bgl_desc);
+        SOKOL_ASSERT(img_bgl[stage_index]);
+    }
+
+    WGPUBindGroupLayout pip_bgl[3] = { _sg.wgpu.ub.bindgroup_layout, img_bgl[0], img_bgl[1] };
     WGPUPipelineLayoutDescriptor pl_desc;
     memset(&pl_desc, 0, sizeof(pl_desc));
-    pl_desc.bindGroupLayoutCount = 1;
-    pl_desc.bindGroupLayouts = &bgl[0];
+    pl_desc.bindGroupLayoutCount = 3;
+    pl_desc.bindGroupLayouts = &pip_bgl[0];
     WGPUPipelineLayout pip_layout = wgpuDeviceCreatePipelineLayout(_sg.wgpu.dev, &pl_desc);
+    wgpuBindGroupLayoutRelease(img_bgl[0]);
+    wgpuBindGroupLayoutRelease(img_bgl[1]);
 
     WGPUVertexBufferLayoutDescriptor vb_desc[SG_MAX_SHADERSTAGE_BUFFERS];
     memset(&vb_desc, 0, sizeof(vb_desc));
