@@ -3085,6 +3085,7 @@ static dispatch_semaphore_t _sg_mtl_sem;
 
 #define _SG_WGPU_STAGING_ALIGN (256)
 #define _SG_WGPU_STAGING_PIPELINE_SIZE (8)
+#define _SG_WGPU_ROWPITCH_ALIGN (256)
 
 typedef struct {
     _sg_slot_t slot;
@@ -10316,18 +10317,19 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* im
         const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
         const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
         /* row-pitch must be 256-aligend */
-        const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
-        num_bytes += (bytes_per_slice * num_slices) * num_faces;
+        const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
+        num_bytes += bytes_per_slice * num_slices * num_faces;
     }
     return num_bytes;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t* staging_ptr, _sg_image_t* img, const sg_image_content* content) {
-    SOKOL_ASSERT(staging_buf && staging_ptr);
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t* staging_base_ptr, _sg_image_t* img, const sg_image_content* content) {
+    SOKOL_ASSERT(staging_buf && staging_base_ptr);
     SOKOL_ASSERT(img);
     SOKOL_ASSERT(content);
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
     const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
+    const sg_pixel_format fmt = img->cmn.pixel_format;
     WGPUBufferCopyView src_view;
     memset(&src_view, 0, sizeof(src_view));
     src_view.buffer = staging_buf;
@@ -10342,25 +10344,42 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t*
         for (uint32_t mip_index = 0; mip_index < (uint32_t)img->cmn.num_mipmaps; mip_index++) {
             SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
-            const uint8_t* src_ptr = (const uint8_t*)content->subimage[face_index][mip_index].ptr;
-            SOKOL_ASSERT(src_ptr);
+            const uint8_t* src_base_ptr = (const uint8_t*)content->subimage[face_index][mip_index].ptr;
+            SOKOL_ASSERT(src_base_ptr);
+            uint8_t* dst_base_ptr = staging_base_ptr + staging_offset;
 
-            const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
+            const uint32_t mip_width  = _sg_max(img->cmn.width >> mip_index, 1);
             const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            const uint32_t mip_depth = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.depth >> mip_index, 1) : 1;
-            const uint32_t src_bytes_per_row   = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-            const uint32_t dst_bytes_per_row   = _sg_row_pitch(img->cmn.pixel_format, mip_width, _SG_WGPU_STAGING_ALIGN);
-            const uint32_t src_bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
-            const uint32_t dst_bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_STAGING_ALIGN);
+            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.depth >> mip_index, 1) : 1;
+            const uint32_t num_rows   = _sg_num_rows(fmt, mip_height);
+            const uint32_t src_bytes_per_row   = _sg_row_pitch(fmt, mip_width, 1);
+            const uint32_t dst_bytes_per_row   = _sg_row_pitch(fmt, mip_width, _SG_WGPU_ROWPITCH_ALIGN);
+            const uint32_t src_bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+            const uint32_t dst_bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
+            SOKOL_ASSERT((uint32_t)content->subimage[face_index][mip_index].size == (src_bytes_per_slice * num_slices));
+            SOKOL_ASSERT(src_bytes_per_row <= dst_bytes_per_row);
+            SOKOL_ASSERT(src_bytes_per_slice == (src_bytes_per_row * num_rows));
+            SOKOL_ASSERT(dst_bytes_per_slice == (dst_bytes_per_row * num_rows));
 
             /* copy content into mapped staging buffer */
-            /* FIXME: need to copy row-pitch-aligned rows here */
-            SOKOL_ASSERT(false);
-            /*
-            uint8_t* dst_ptr = staging_ptr + staging_offset;
-            uint32_t num_bytes = content->subimage[face_index][mip_index].size;
-            memcpy(dst_ptr, src_ptr, num_bytes);
-            */
+            if (src_bytes_per_row == dst_bytes_per_row) {
+                /* can do a single memcpy */
+                uint32_t num_bytes = content->subimage[face_index][mip_index].size;
+                memcpy(dst_base_ptr, src_base_ptr, num_bytes);
+            }
+            else {
+                /* src/dst pitch doesn't match, need to copy row by row */
+                uint8_t* dst_ptr = dst_base_ptr;
+                const uint8_t* src_ptr = src_base_ptr;
+                for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
+                    SOKOL_ASSERT(dst_ptr == dst_base_ptr + slice_index * dst_bytes_per_slice);
+                    for (uint32_t row_index = 0; row_index < num_rows; row_index++) {
+                        memcpy(dst_ptr, src_ptr, src_bytes_per_row);
+                        src_ptr += src_bytes_per_row;
+                        dst_ptr += dst_bytes_per_row;
+                    }
+                }
+            }
 
             /* record the staging copy operation into command encoder */
             src_view.imageHeight = mip_height;
@@ -10369,6 +10388,7 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t*
             extent.width = mip_width;
             extent.height = mip_height;
             extent.depth = mip_depth;
+            SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
             for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
                 const uint32_t layer_index = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? slice_index : face_index;
                 src_view.offset = staging_offset;
@@ -10413,6 +10433,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
             SOKOL_ASSERT(map.buffer && map.data);
             _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, img, &desc->content);
+            wgpuBufferUnmap(map.buffer);
             wgpuBufferRelease(map.buffer);
         }
 
