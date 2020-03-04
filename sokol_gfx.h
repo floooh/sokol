@@ -8686,7 +8686,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_content(const _sg_image_t* img, __unsafe_
             const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
             /* special case PVRTC formats: bytePerRow must be 0 */
             int bytes_per_row = 0;
-            int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height);
+            int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
             if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
                 bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
             }
