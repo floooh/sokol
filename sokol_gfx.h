@@ -3111,7 +3111,8 @@ typedef struct {
 typedef _sg_wgpu_image_t _sg_image_t;
 
 typedef struct {
-    WGPUShaderModule mod;
+    WGPUShaderModule module;
+    WGPUBindGroupLayout bind_group_layout;
     _sg_str_t entry;
 } _sg_wgpu_shader_stage_t;
 
@@ -3130,7 +3131,6 @@ typedef struct {
     _sg_shader_t* shader;
     struct {
         WGPURenderPipeline pip;
-        WGPUBindGroupLayout bind_group_layout[SG_NUM_SHADER_STAGES];
         uint32_t stencil_ref;
     } wgpu;
 } _sg_wgpu_pipeline_t;
@@ -10505,76 +10505,59 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
     }
 }
 
+/*
+    How BindGroups work in WebGPU:
+
+    - up to 4 bind groups can be bound simultanously
+    - up to 16 bindings per bind group
+    - 'binding' slots are local per bind group
+    - in the shader:
+        layout(set=0, binding=1) corresponds to bind group 0, binding 1
+
+    Now how to map this to sokol-gfx's bind model:
+
+    Reduce SG_MAX_SHADERSTAGE_IMAGES to 8, then:
+
+        1 bind group for all 8 uniform buffers
+        1 bind group for vertex shader textures + samplers
+        1 bind group for fragment shader textures + samples
+
+    Alternatively:
+
+        1 bind group for 8 uniform buffer slots
+        1 bind group for 8 vs images + 8 vs samplers
+        1 bind group for 12 fs images
+        1 bind group for 12 fs samplers
+
+    I guess this means that we need to create BindGroups on the
+    fly during sg_apply_bindings() :/
+*/
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(desc->vs.byte_code && desc->fs.byte_code);
     _sg_shader_common_init(&shd->cmn, desc);
 
     bool success = true;
-    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
-        const sg_shader_stage_desc* stage_desc = (i == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
         SOKOL_ASSERT((stage_desc->byte_code_size & 3) == 0);
-        _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[i];
+
+        _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
+        _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[stage_index];
+
         _sg_strcpy(&wgpu_stage->entry, stage_desc->entry);
         WGPUShaderModuleDescriptor wgpu_shdmod_desc;
         memset(&wgpu_shdmod_desc, 0, sizeof(wgpu_shdmod_desc));
         wgpu_shdmod_desc.codeSize = stage_desc->byte_code_size >> 2;
         wgpu_shdmod_desc.code = (const uint32_t*) stage_desc->byte_code;
-        wgpu_stage->mod = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
-        if (0 == wgpu_stage->mod) {
+        wgpu_stage->module = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
+        if (0 == wgpu_stage->module) {
             success = false;
         }
-    }
-    return success ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
-}
 
-_SOKOL_PRIVATE void _sg_wgpu_destroy_shader(_sg_shader_t* shd) {
-    SOKOL_ASSERT(shd);
-    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
-        if (shd->wgpu.stage[i].mod) {
-            /* FIXME: no wgpuShaderModuleDestroy? */
-            wgpuShaderModuleRelease(shd->wgpu.stage[i].mod);
-        }
-    }
-}
-
-_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(pip && shd && desc);
-    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
-    pip->shader = shd;
-    _sg_pipeline_common_init(&pip->cmn, desc);
-    pip->wgpu.stencil_ref = (uint32_t) desc->depth_stencil.stencil_ref;
-
-    /*
-        How BindGroups work in WebGPU:
-
-        - up to 4 bind groups can be bound simultanously
-        - up to 16 bindings per bind group
-        - 'binding' slots are local per bind group
-        - in the shader:
-            layout(set=0, binding=1) corresponds to bind group 0, binding 1
-
-        Now how to map this to sokol-gfx's bind model:
-
-        Reduce SG_MAX_SHADERSTAGE_IMAGES to 8, then:
-
-            1 bind group for all 8 uniform buffers
-            1 bind group for vertex shader textures + samplers
-            1 bind group for fragment shader textures + samples
-
-        Alternatively:
-
-            1 bind group for 8 uniform buffer slots
-            1 bind group for 8 vs images + 8 vs samplers
-            1 bind group for 12 fs images
-            1 bind group for 12 fs samplers
-
-        I guess this means that we need to create BindGroups on the
-        fly during sg_apply_bindings() :/
-    */
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        /* create image/sampler bind group for the shader stage */
         WGPUShaderStage vis = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
-        int num_imgs = shd->cmn.stage[stage_index].num_images;
+        int num_imgs = cmn_stage->num_images;
         if (num_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
             num_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
         }
@@ -10588,7 +10571,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
             tex_desc->binding = img_index;
             tex_desc->visibility = vis;
             tex_desc->type = WGPUBindingType_SampledTexture;
-            tex_desc->textureDimension = _sg_wgpu_tex_viewdim(shd->cmn.stage[stage_index].images[img_index].type);
+            tex_desc->textureDimension = _sg_wgpu_tex_viewdim(cmn_stage->images[img_index].type);
             tex_desc->textureComponentType = WGPUTextureComponentType_Float; // FIXME!
 
             smp_desc->binding = img_index + _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
@@ -10599,14 +10582,40 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         memset(&img_bgl_desc, 0, sizeof(img_bgl_desc));
         img_bgl_desc.bindingCount = num_imgs * 2;
         img_bgl_desc.bindings = &bglb_desc[0];
-        pip->wgpu.bind_group_layout[stage_index] = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &img_bgl_desc);
-        SOKOL_ASSERT(pip->wgpu.bind_group_layout[stage_index]);
+        wgpu_stage->bind_group_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &img_bgl_desc);
+        SOKOL_ASSERT(wgpu_stage->bind_group_layout);
     }
+    return success ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_shader(_sg_shader_t* shd) {
+    SOKOL_ASSERT(shd);
+    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+        _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[stage_index];
+        if (wgpu_stage->module) {
+            wgpuShaderModuleRelease(wgpu_stage->module);
+            wgpu_stage->module = 0;
+        }
+        if (wgpu_stage->bind_group_layout) {
+            wgpuBindGroupLayoutRelease(wgpu_stage->bind_group_layout);
+            wgpu_stage->bind_group_layout = 0;
+        }
+    }
+}
+
+_SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(pip && shd && desc);
+    SOKOL_ASSERT(desc->shader.id == shd->slot.id);
+    SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout);
+    SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout);
+    pip->shader = shd;
+    _sg_pipeline_common_init(&pip->cmn, desc);
+    pip->wgpu.stencil_ref = (uint32_t) desc->depth_stencil.stencil_ref;
 
     WGPUBindGroupLayout pip_bgl[3] = {
         _sg.wgpu.ub.bindgroup_layout,
-        pip->wgpu.bind_group_layout[SG_SHADERSTAGE_VS],
-        pip->wgpu.bind_group_layout[SG_SHADERSTAGE_FS]
+        shd->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout,
+        shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout
     };
     WGPUPipelineLayoutDescriptor pl_desc;
     memset(&pl_desc, 0, sizeof(pl_desc));
@@ -10678,7 +10687,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPUProgrammableStageDescriptor fs_desc;
     memset(&fs_desc, 0, sizeof(fs_desc));
-    fs_desc.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].mod;
+    fs_desc.module = shd->wgpu.stage[SG_SHADERSTAGE_FS].module;
     fs_desc.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
 
     WGPUColorStateDescriptor cs_desc[SG_MAX_COLOR_ATTACHMENTS];
@@ -10699,7 +10708,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     WGPURenderPipelineDescriptor pip_desc;
     memset(&pip_desc, 0, sizeof(pip_desc));
     pip_desc.layout = pip_layout;
-    pip_desc.vertexStage.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].mod;
+    pip_desc.vertexStage.module = shd->wgpu.stage[SG_SHADERSTAGE_VS].module;
     pip_desc.vertexStage.entryPoint = shd->wgpu.stage[SG_SHADERSTAGE_VS].entry.buf;
     pip_desc.fragmentStage = &fs_desc;
     pip_desc.vertexState = &vx_state_desc;
@@ -10724,12 +10733,6 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
     if (pip->wgpu.pip) {
         wgpuRenderPipelineRelease(pip->wgpu.pip);
         pip->wgpu.pip = 0;
-    }
-    for (int i = 0; i < SG_NUM_SHADER_STAGES; i++) {
-        if (pip->wgpu.bind_group_layout[i]) {
-            wgpuBindGroupLayoutRelease(pip->wgpu.bind_group_layout[i]);
-            pip->wgpu.bind_group_layout[i] = 0;
-        }
     }
 }
 
@@ -10898,6 +10901,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
 {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
+    SOKOL_ASSERT(pip->shader && (pip->cmn.shader_id.id == pip->shader->slot.id));
 
     /* index buffer */
     if (ib) {
@@ -10914,7 +10918,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
         if (num_vs_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
             num_vs_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
         }
-        WGPUBindGroupLayout vs_bgl = pip->wgpu.bind_group_layout[SG_SHADERSTAGE_VS];
+        WGPUBindGroupLayout vs_bgl = pip->shader->wgpu.stage[SG_SHADERSTAGE_VS].bind_group_layout;
         SOKOL_ASSERT(vs_bgl);
         WGPUBindGroup vs_img_bg = _sg_wgpu_create_images_bindgroup(vs_bgl, vs_imgs, num_vs_imgs);
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 1, vs_img_bg, 0, 0);
@@ -10927,7 +10931,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
         if (num_fs_imgs > _SG_WGPU_MAX_SHADERSTAGE_IMAGES) {
             num_fs_imgs = _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
         }
-        WGPUBindGroupLayout fs_bgl = pip->wgpu.bind_group_layout[SG_SHADERSTAGE_FS];
+        WGPUBindGroupLayout fs_bgl = pip->shader->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout;
         SOKOL_ASSERT(fs_bgl);
         WGPUBindGroup fs_img_bg = _sg_wgpu_create_images_bindgroup(fs_bgl, fs_imgs, num_fs_imgs);
         wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc, 2, fs_img_bg, 0, 0);
