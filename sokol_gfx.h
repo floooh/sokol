@@ -2587,6 +2587,105 @@ _SOKOL_PRIVATE void _sg_pass_common_init(_sg_pass_common_t* cmn, const sg_pass_d
     }
 }
 
+/*=== GENERIC SAMPLER CACHE ==================================================*/
+
+/*
+    this is used by the Metal and WGPU backends to reduce the
+    number of sampler state objects created through the backend API
+*/
+typedef struct {
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    sg_wrap wrap_w;
+    sg_border_color border_color;
+    uint32_t max_anisotropy;
+    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
+    int max_lod;
+    uintptr_t sampler_handle;
+} _sg_sampler_cache_item_t;
+
+typedef struct {
+    int capacity;
+    int num_items;
+    _sg_sampler_cache_item_t* items;
+} _sg_sampler_cache_t;
+
+_SOKOL_PRIVATE void _sg_smpcache_init(_sg_sampler_cache_t* cache, int capacity) {
+    SOKOL_ASSERT(cache && (capacity > 0));
+    memset(cache, 0, sizeof(_sg_sampler_cache_t));
+    cache->capacity = capacity;
+    const int size = cache->capacity * sizeof(_sg_sampler_cache_item_t);
+    cache->items = (_sg_sampler_cache_item_t*) SOKOL_MALLOC(size);
+    memset(cache->items, 0, size);
+}
+
+_SOKOL_PRIVATE void _sg_smpcache_discard(_sg_sampler_cache_t* cache) {
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_FREE(cache->items);
+    cache->items = 0;
+    cache->num_items = 0;
+    cache->capacity = 0;
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_minlod_int(float min_lod) {
+    return (int) (min_lod * 1000.0f);
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_maxlod_int(float max_lod) {
+    return (int) (_sg_clamp(max_lod, 0.0f, 1000.0f) * 1000.0f);
+}
+
+_SOKOL_PRIVATE int _sg_smpcache_find_item(const _sg_sampler_cache_t* cache, const sg_image_desc* img_desc) {
+    /* return matching sampler cache item index or -1 */
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(img_desc);
+    const int min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
+    const int max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
+    for (int i = 0; i < cache->num_items; i++) {
+        const _sg_sampler_cache_item_t* item = &cache->items[i];
+        if ((img_desc->min_filter == item->min_filter) &&
+            (img_desc->mag_filter == item->mag_filter) &&
+            (img_desc->wrap_u == item->wrap_u) &&
+            (img_desc->wrap_v == item->wrap_v) &&
+            (img_desc->wrap_w == item->wrap_w) &&
+            (img_desc->max_anisotropy == item->max_anisotropy) &&
+            (img_desc->border_color == item->border_color) &&
+            (min_lod == item->min_lod) &&
+            (max_lod == item->max_lod))
+        {
+            return i;
+        }
+    }
+    /* fallthrough: no matching cache item found */
+    return -1;
+}
+
+_SOKOL_PRIVATE void _sg_smpcache_add_item(_sg_sampler_cache_t* cache, const sg_image_desc* img_desc, uintptr_t sampler_handle) {
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(img_desc);
+    SOKOL_ASSERT(cache->num_items < cache->capacity);
+    const int item_index = cache->num_items++;
+    _sg_sampler_cache_item_t* item = &cache->items[item_index];
+    item->min_filter = img_desc->min_filter;
+    item->mag_filter = img_desc->mag_filter;
+    item->wrap_u = img_desc->wrap_u;
+    item->wrap_v = img_desc->wrap_v;
+    item->wrap_w = img_desc->wrap_w;
+    item->border_color = img_desc->border_color;
+    item->max_anisotropy = img_desc->max_anisotropy;
+    item->min_lod = _sg_smpcache_minlod_int(img_desc->min_lod);
+    item->max_lod = _sg_smpcache_maxlod_int(img_desc->max_lod);
+    item->sampler_handle = sampler_handle;
+}
+
+_SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int item_index) {
+    SOKOL_ASSERT(cache && cache->items);
+    SOKOL_ASSERT(item_index < cache->num_items);
+    return cache->items[item_index].sampler_handle;
+}
+
 /*=== DUMMY BACKEND DECLARATIONS =============================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
 typedef struct {
@@ -2945,26 +3044,6 @@ typedef struct {
     _sg_mtl_release_item_t* release_queue;
 } _sg_mtl_idpool_t;
 
-/* Metal sampler cache */
-typedef struct {
-    sg_filter min_filter;
-    sg_filter mag_filter;
-    sg_wrap wrap_u;
-    sg_wrap wrap_v;
-    sg_wrap wrap_w;
-    sg_border_color border_color;
-    uint32_t max_anisotropy;
-    int min_lod;    /* orig min/max_lod is float, this is int(min/max_lod*1000.0) */
-    int max_lod;
-    uint32_t mtl_sampler_state;
-} _sg_mtl_sampler_cache_item_t;
-
-typedef struct {
-    int capacity;
-    int num_items;
-    _sg_mtl_sampler_cache_item_t* items;
-} _sg_mtl_sampler_cache_t;
-
 typedef struct {
     _sg_slot_t slot;
     _sg_buffer_common_t cmn;
@@ -3067,7 +3146,7 @@ typedef struct {
     int cur_width;
     int cur_height;
     _sg_mtl_state_cache_t state_cache;
-    _sg_mtl_sampler_cache_t sampler_cache;
+    _sg_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
 } _sg_mtl_backend_t;
 
@@ -8333,20 +8412,9 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
     }
 }
 
-/*-- a very simple sampler cache -----------------------------------------------
-
-    since there's only a small number of different samplers, sampler objects
-    will never be deleted (except on shutdown), and searching an identical
-    sampler is a simple linear search
-*/
-/* initialize the sampler cache */
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
     SOKOL_ASSERT(desc->mtl_sampler_cache_size > 0);
-    _sg.mtl.sampler_cache.capacity = desc->mtl_sampler_cache_size;
-    _sg.mtl.sampler_cache.num_items = 0;
-    const int size = _sg.mtl.sampler_cache.capacity * sizeof(_sg_mtl_sampler_cache_item_t);
-    _sg.mtl.sampler_cache.items = (_sg_mtl_sampler_cache_item_t*)SOKOL_MALLOC(size);
-    memset(_sg.mtl.sampler_cache.items, 0, size);
+    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->mtl_sampler_cache_size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
@@ -8354,11 +8422,9 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
     SOKOL_ASSERT(_sg.mtl.sampler_cache.items);
     SOKOL_ASSERT(_sg.mtl.sampler_cache.num_items <= _sg.mtl.sampler_cache.capacity);
     for (int i = 0; i < _sg.mtl.sampler_cache.num_items; i++) {
-        _sg_mtl_release_resource(frame_index, _sg.mtl.sampler_cache.items[i].mtl_sampler_state);
+        _sg_mtl_release_resource(frame_index, (uint32_t)_sg.mtl.sampler_cache.items[i].sampler_handle);
     }
-    SOKOL_FREE(_sg.mtl.sampler_cache.items); _sg.mtl.sampler_cache.items = 0;
-    _sg.mtl.sampler_cache.num_items = 0;
-    _sg.mtl.sampler_cache.capacity = 0;
+    _sg_smpcache_discard(&_sg.mtl.sampler_cache);
 }
 
 /*
@@ -8367,65 +8433,34 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
 */
 _SOKOL_PRIVATE uint32_t _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const sg_image_desc* img_desc) {
     SOKOL_ASSERT(img_desc);
-    SOKOL_ASSERT(_sg.mtl.sampler_cache.items);
-    /* sampler state cache is full */
-    const sg_filter min_filter = img_desc->min_filter;
-    const sg_filter mag_filter = img_desc->mag_filter;
-    const sg_wrap wrap_u = img_desc->wrap_u;
-    const sg_wrap wrap_v = img_desc->wrap_v;
-    const sg_wrap wrap_w = img_desc->wrap_w;
-    const sg_border_color border_color = img_desc->border_color;
-    const uint32_t max_anisotropy = img_desc->max_anisotropy;
-    /* convert floats to valid int for proper comparison */
-    const int min_lod = (int)(img_desc->min_lod * 1000.0f);
-    const int max_lod = (int)(_sg_clamp(img_desc->max_lod, 0.0f, 1000.0f) * 1000.0f);
-    /* first try to find identical sampler, number of samplers will be small, so linear search is ok */
-    for (int i = 0; i < _sg.mtl.sampler_cache.num_items; i++) {
-        _sg_mtl_sampler_cache_item_t* item = &_sg.mtl.sampler_cache.items[i];
-        if ((min_filter == item->min_filter) &&
-            (mag_filter == item->mag_filter) &&
-            (wrap_u == item->wrap_u) &&
-            (wrap_v == item->wrap_v) &&
-            (wrap_w == item->wrap_w) &&
-            (max_anisotropy == item->max_anisotropy) &&
-            (border_color == item->border_color) &&
-            (min_lod == item->min_lod) &&
-            (max_lod == item->max_lod))
-        {
-            return item->mtl_sampler_state;
+    int index = _sg_smpcache_find_item(&_sg.mtl.sampler_cache, img_desc);
+    if (index >= 0) {
+        /* reuse existing sampler */
+        return (uint32_t) _sg_smpcache_sampler(&_sg.mtl.sampler_cache, index);
+    }
+    else {
+        /* create a new Metal sampler state object and add to sampler cache */
+        MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
+        mtl_desc.sAddressMode = _sg_mtl_address_mode(img_desc->wrap_u);
+        mtl_desc.tAddressMode = _sg_mtl_address_mode(img_desc->wrap_v);
+        if (SG_IMAGETYPE_3D == img_desc->type) {
+            mtl_desc.rAddressMode = _sg_mtl_address_mode(img_desc->wrap_w);
         }
+        #if defined(_SG_TARGET_MACOS)
+            mtl_desc.borderColor = _sg_mtl_border_color(img_desc->border_color);
+        #endif
+        mtl_desc.minFilter = _sg_mtl_minmag_filter(img_desc->min_filter);
+        mtl_desc.magFilter = _sg_mtl_minmag_filter(img_desc->mag_filter);
+        mtl_desc.mipFilter = _sg_mtl_mip_filter(img_desc->min_filter);
+        mtl_desc.lodMinClamp = img_desc->min_lod;
+        mtl_desc.lodMaxClamp = img_desc->max_lod;
+        mtl_desc.maxAnisotropy = img_desc->max_anisotropy;
+        mtl_desc.normalizedCoordinates = YES;
+        id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
+        uint32_t sampler_handle = _sg_mtl_add_resource(mtl_sampler);
+        _sg_smpcache_add_item(&_sg.mtl.sampler_cache, img_desc, sampler_handle);
+        return sampler_handle;
     }
-    /* fallthrough: need to create a new MTLSamplerState object */
-    SOKOL_ASSERT(_sg.mtl.sampler_cache.num_items < _sg.mtl.sampler_cache.capacity);
-    _sg_mtl_sampler_cache_item_t* new_item = &_sg.mtl.sampler_cache.items[_sg.mtl.sampler_cache.num_items++];
-    new_item->min_filter = min_filter;
-    new_item->mag_filter = mag_filter;
-    new_item->wrap_u = wrap_u;
-    new_item->wrap_v = wrap_v;
-    new_item->wrap_w = wrap_w;
-    new_item->min_lod = min_lod;
-    new_item->max_lod = max_lod;
-    new_item->max_anisotropy = max_anisotropy;
-    new_item->border_color = border_color;
-    MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
-    mtl_desc.sAddressMode = _sg_mtl_address_mode(wrap_u);
-    mtl_desc.tAddressMode = _sg_mtl_address_mode(wrap_v);
-    if (SG_IMAGETYPE_3D == img_desc->type) {
-        mtl_desc.rAddressMode = _sg_mtl_address_mode(wrap_w);
-    }
-    #if defined(_SG_TARGET_MACOS)
-        mtl_desc.borderColor = _sg_mtl_border_color(border_color);
-    #endif
-    mtl_desc.minFilter = _sg_mtl_minmag_filter(min_filter);
-    mtl_desc.magFilter = _sg_mtl_minmag_filter(mag_filter);
-    mtl_desc.mipFilter = _sg_mtl_mip_filter(min_filter);
-    mtl_desc.lodMinClamp = img_desc->min_lod;
-    mtl_desc.lodMaxClamp = img_desc->max_lod;
-    mtl_desc.maxAnisotropy = max_anisotropy;
-    mtl_desc.normalizedCoordinates = YES;
-    id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
-    new_item->mtl_sampler_state = _sg_mtl_add_resource(mtl_sampler);
-    return new_item->mtl_sampler_state;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_clear_state_cache(void) {
