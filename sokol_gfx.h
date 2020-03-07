@@ -2023,6 +2023,7 @@ typedef struct sg_desc {
     const void* (*wgpu_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     int wgpu_global_uniform_buffer_size;
     int wgpu_global_staging_buffer_size;
+    int wgpu_sampler_cache_size;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -2390,8 +2391,8 @@ enum {
     _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
     _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
+    _SG_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
     _SG_WGPU_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
     _SG_WGPU_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
 };
@@ -2682,7 +2683,7 @@ _SOKOL_PRIVATE void _sg_smpcache_add_item(_sg_sampler_cache_t* cache, const sg_i
 
 _SOKOL_PRIVATE uintptr_t _sg_smpcache_sampler(_sg_sampler_cache_t* cache, int item_index) {
     SOKOL_ASSERT(cache && cache->items);
-    SOKOL_ASSERT(item_index < cache->num_items);
+    SOKOL_ASSERT((item_index >= 0) && (item_index < cache->num_items));
     return cache->items[item_index].sampler_handle;
 }
 
@@ -3276,6 +3277,7 @@ typedef struct {
     WGPUBindGroup empty_bind_group;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
+    _sg_sampler_cache_t sampler_cache;
     _sg_wgpu_ubpool_t ub;
     _sg_wgpu_stagingpool_t staging;
 } _sg_wgpu_backend_t;
@@ -8422,7 +8424,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_sampler_cache(uint32_t frame_index) {
     SOKOL_ASSERT(_sg.mtl.sampler_cache.items);
     SOKOL_ASSERT(_sg.mtl.sampler_cache.num_items <= _sg.mtl.sampler_cache.capacity);
     for (int i = 0; i < _sg.mtl.sampler_cache.num_items; i++) {
-        _sg_mtl_release_resource(frame_index, (uint32_t)_sg.mtl.sampler_cache.items[i].sampler_handle);
+        _sg_mtl_release_resource(frame_index, (uint32_t)_sg_smpcache_sampler(&_sg.mtl.sampler_cache, i));
     }
     _sg_smpcache_discard(&_sg.mtl.sampler_cache);
 }
@@ -10223,6 +10225,47 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
     wgpuBufferUnmap(_sg.wgpu.staging.buf[cur]);
 }
 
+/*--- WGPU sampler cache functions ---*/
+_SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
+    SOKOL_ASSERT(desc->wgpu_sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->wgpu_sampler_cache_size);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_destroy_sampler_cache(void) {
+    SOKOL_ASSERT(_sg.wgpu.sampler_cache.items);
+    SOKOL_ASSERT(_sg.wgpu.sampler_cache.num_items <= _sg.wgpu.sampler_cache.capacity);
+    for (int i = 0; i < _sg.wgpu.sampler_cache.num_items; i++) {
+        wgpuSamplerRelease((WGPUSampler)_sg_smpcache_sampler(&_sg.wgpu.sampler_cache, i));
+    }
+    _sg_smpcache_discard(&_sg.wgpu.sampler_cache);
+}
+
+_SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc) {
+    SOKOL_ASSERT(img_desc);
+    int index = _sg_smpcache_find_item(&_sg.wgpu.sampler_cache, img_desc);
+    if (index >= 0) {
+        /* reuse existing sampler */
+        return (WGPUSampler) _sg_smpcache_sampler(&_sg.wgpu.sampler_cache, index);
+    }
+    else {
+        /* create a new WGPU sampler and add to sampler cache */
+        WGPUSamplerDescriptor smp_desc;
+        memset(&smp_desc, 0, sizeof(smp_desc));
+        smp_desc.addressModeU = _sg_wgpu_sampler_addrmode(img_desc->wrap_u);
+        smp_desc.addressModeV = _sg_wgpu_sampler_addrmode(img_desc->wrap_v);
+        smp_desc.addressModeW = _sg_wgpu_sampler_addrmode(img_desc->wrap_w);
+        smp_desc.magFilter = _sg_wgpu_sampler_minmagfilter(img_desc->mag_filter);
+        smp_desc.minFilter = _sg_wgpu_sampler_minmagfilter(img_desc->min_filter);
+        smp_desc.mipmapFilter = _sg_wgpu_sampler_mipfilter(img_desc->min_filter);
+        smp_desc.lodMinClamp = img_desc->min_lod;
+        smp_desc.lodMaxClamp = img_desc->max_lod;
+        WGPUSampler smp = wgpuDeviceCreateSampler(_sg.wgpu.dev, &smp_desc);
+        SOKOL_ASSERT(smp);
+        _sg_smpcache_add_item(&_sg.wgpu.sampler_cache, img_desc, (uintptr_t)smp);
+        return smp;
+    }
+}
+
 /*--- WGPU backend API functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -10244,7 +10287,8 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     /* setup WebGPU features and limits */
     _sg_wgpu_init_caps();
 
-    /* setup the uniform and staging buffer pools */
+    /* setup the sampler cache, uniform and staging buffer pools */
+    _sg_wgpu_init_sampler_cache(&_sg.desc);
     _sg_wgpu_ubpool_init(desc);
     _sg_wgpu_ubpool_next_frame(true);
     _sg_wgpu_staging_init(desc);
@@ -10275,6 +10319,7 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
     _sg_wgpu_staging_discard();
+    _sg_wgpu_destroy_sampler_cache();
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group);
     wgpuCommandEncoderRelease(_sg.wgpu.cmd_enc);
     _sg.wgpu.cmd_enc = 0;
@@ -10499,18 +10544,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         }
     }
 
-    /* create sampler (FIXME: implement a shared sampler cache) */
-    WGPUSamplerDescriptor smp_desc;
-    memset(&smp_desc, 0, sizeof(smp_desc));
-    smp_desc.addressModeU = _sg_wgpu_sampler_addrmode(desc->wrap_u);
-    smp_desc.addressModeV = _sg_wgpu_sampler_addrmode(desc->wrap_v);
-    smp_desc.addressModeW = _sg_wgpu_sampler_addrmode(desc->wrap_w);
-    smp_desc.magFilter = _sg_wgpu_sampler_minmagfilter(desc->mag_filter);
-    smp_desc.minFilter = _sg_wgpu_sampler_minmagfilter(desc->min_filter);
-    smp_desc.mipmapFilter = _sg_wgpu_sampler_mipfilter(desc->min_filter);
-    smp_desc.lodMinClamp = desc->min_lod;
-    smp_desc.lodMaxClamp = desc->max_lod;
-    img->wgpu.sampler = wgpuDeviceCreateSampler(_sg.wgpu.dev, &smp_desc);
+    /* create sampler via shared-sampler-cache */
+    img->wgpu.sampler = _sg_wgpu_create_sampler(desc);
     SOKOL_ASSERT(img->wgpu.sampler);
 
     return SG_RESOURCESTATE_VALID;
@@ -10534,10 +10569,8 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
         wgpuTextureRelease(img->wgpu.msaa_tex);
         img->wgpu.msaa_tex = 0;
     }
-    if (img->wgpu.sampler) {
-        wgpuSamplerRelease(img->wgpu.sampler);
-        img->wgpu.sampler = 0;
-    }
+    /* NOTE: do *not* destroy the sampler from the shared-sampler-cache */
+    img->wgpu.sampler = 0;
 }
 
 /*
@@ -12866,9 +12899,10 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
     _sg.desc.mtl_global_uniform_buffer_size = _sg_def(_sg.desc.mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    _sg.desc.mtl_sampler_cache_size = _sg_def(_sg.desc.mtl_sampler_cache_size, _SG_MTL_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.mtl_sampler_cache_size = _sg_def(_sg.desc.mtl_sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
     _sg.desc.wgpu_global_uniform_buffer_size = _sg_def(_sg.desc.wgpu_global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
     _sg.desc.wgpu_global_staging_buffer_size = _sg_def(_sg.desc.wgpu_global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
+    _sg.desc.wgpu_sampler_cache_size = _sg_def(_sg.desc.wgpu_sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
