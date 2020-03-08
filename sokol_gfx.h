@@ -3182,7 +3182,6 @@ typedef struct {
     _sg_image_common_t cmn;
     struct {
         WGPUTexture tex;
-        WGPUTexture depth_tex;
         WGPUTextureView tex_view;
         WGPUTexture msaa_tex;
         WGPUSampler sampler;
@@ -3217,7 +3216,7 @@ typedef struct {
 typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
 
 typedef struct {
-    // FIXME
+    _sg_image_t* image;
 } _sg_wgpu_attachment_t;
 
 typedef struct {
@@ -10009,7 +10008,8 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
             int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
             ub_bgb[stage_index][ub_index].binding = bind_index;
             ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
-            ub_bgb[stage_index][ub_index].size = _sg.wgpu.ub.num_bytes;
+            /* NOTE: for dynamic-offset bindings, size must be zero */
+            ub_bgb[stage_index][ub_index].size = 0;
         }
     }
     WGPUBindGroupDescriptor bg_desc;
@@ -10401,10 +10401,6 @@ _SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex
     wgpu_tex_desc->sampleCount = 1;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_init_texdesc_rt(WGPUTextureDescriptor* wgpu_tex_desc) {
-    wgpu_tex_desc->usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
-}
-
 _SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* img, const sg_image_content* content) {
     uint32_t num_bytes = 0;
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
@@ -10510,12 +10506,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     memset(&wgpu_tex_desc, 0, sizeof(wgpu_tex_desc));
     _sg_wgpu_init_texdesc_common(&wgpu_tex_desc, desc);
     if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
-        // FIXME
-        SOKOL_ASSERT(false);
+        SOKOL_ASSERT(img->cmn.render_target);
+        SOKOL_ASSERT(img->cmn.type == SG_IMAGETYPE_2D);
+        SOKOL_ASSERT(img->cmn.num_mipmaps == 1);
+        // FIXME: SOKOL_ASSERT(!injected);
+        wgpu_tex_desc.usage = WGPUTextureUsage_OutputAttachment;
+        wgpu_tex_desc.sampleCount = desc->sample_count;
+        img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
+        SOKOL_ASSERT(img->wgpu.tex);
     }
     else {
-        if (desc->render_target && is_msaa) {
-            _sg_wgpu_init_texdesc_rt(&wgpu_tex_desc);
+        if (desc->render_target && !is_msaa) {
+            wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
         }
         img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
         SOKOL_ASSERT(img->wgpu.tex);
@@ -10533,20 +10535,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             wgpuBufferRelease(map.buffer);
         }
 
-        WGPUTextureViewDescriptor wgpu_view_desc;
-        memset(&wgpu_view_desc, 0, sizeof(wgpu_view_desc));
-        wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
-        img->wgpu.tex_view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_view_desc);
-
         if (desc->render_target && is_msaa) {
             // FIXME
             SOKOL_ASSERT(false);
         }
+
+        /* create sampler via shared-sampler-cache */
+        img->wgpu.sampler = _sg_wgpu_create_sampler(desc);
+        SOKOL_ASSERT(img->wgpu.sampler);
     }
 
-    /* create sampler via shared-sampler-cache */
-    img->wgpu.sampler = _sg_wgpu_create_sampler(desc);
-    SOKOL_ASSERT(img->wgpu.sampler);
+    WGPUTextureViewDescriptor wgpu_view_desc;
+    memset(&wgpu_view_desc, 0, sizeof(wgpu_view_desc));
+    wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
+    img->wgpu.tex_view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_view_desc);
 
     return SG_RESOURCESTATE_VALID;
 }
@@ -10556,10 +10558,6 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
     if (img->wgpu.tex) {
         wgpuTextureRelease(img->wgpu.tex);
         img->wgpu.tex = 0;
-    }
-    if (img->wgpu.depth_tex) {
-        wgpuTextureRelease(img->wgpu.depth_tex);
-        img->wgpu.depth_tex = 0;
     }
     if (img->wgpu.tex_view) {
         wgpuTextureViewRelease(img->wgpu.tex_view);
@@ -10808,26 +10806,45 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
     SOKOL_ASSERT(pass && desc);
     SOKOL_ASSERT(att_images && att_images[0]);
     _sg_pass_common_init(&pass->cmn, desc);
+
+    /* copy image pointers */
+    const sg_attachment_desc* att_desc;
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+        att_desc = &desc->color_attachments[i];
+        if (att_desc->image.id != SG_INVALID_ID) {
+            SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
+            SOKOL_ASSERT(0 == pass->wgpu.color_atts[i].image);
+            SOKOL_ASSERT(att_images[i] && (att_images[i]->slot.id == att_desc->image.id));
+            SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(att_images[i]->cmn.pixel_format));
+            pass->wgpu.color_atts[i].image = att_images[i];
+        }
+    }
+    SOKOL_ASSERT(0 == pass->wgpu.ds_att.image);
+    att_desc = &desc->depth_stencil_attachment;
+    if (att_desc->image.id != SG_INVALID_ID) {
+        const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
+        SOKOL_ASSERT(att_images[ds_img_index] && (att_images[ds_img_index]->slot.id == att_desc->image.id));
+        SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->cmn.pixel_format));
+        pass->wgpu.ds_att.image = att_images[ds_img_index];
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
-    SOKOL_LOG("_sg_wgpu_destroy_pass: FIXME!\n");
+    _SOKOL_UNUSED(pass);
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_color_image(const _sg_pass_t* pass, int index) {
     SOKOL_ASSERT(pass && (index >= 0) && (index < SG_MAX_COLOR_ATTACHMENTS));
     /* NOTE: may return null */
-    SOKOL_LOG("_sg_wgpu_pass_color_image: FIXME!\n");
-    return 0;
+    return pass->wgpu.color_atts[index].image;
 }
 
 _SOKOL_PRIVATE _sg_image_t* _sg_wgpu_pass_ds_image(const _sg_pass_t* pass) {
     /* NOTE: may return null */
     SOKOL_ASSERT(pass);
-    SOKOL_LOG("_sg_wgpu_pass_ds_image: FIXME!\n");
-    return 0;
+    return pass->wgpu.ds_att.image;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
@@ -10841,7 +10858,45 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
 
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     if (pass) {
-        // FIXME: offscreen render pass
+        WGPURenderPassDescriptor wgpu_pass_desc;
+        memset(&wgpu_pass_desc, 0, sizeof(wgpu_pass_desc));
+        WGPURenderPassColorAttachmentDescriptor wgpu_color_att_desc[SG_MAX_COLOR_ATTACHMENTS];
+        memset(&wgpu_color_att_desc, 0, sizeof(wgpu_color_att_desc));
+        SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+            const _sg_attachment_t* cmn_att = &pass->cmn.color_atts[i];
+            const _sg_wgpu_attachment_t* wgpu_att = &pass->wgpu.color_atts[i];
+            const _sg_image_t* att_img = wgpu_att->image;
+            SOKOL_ASSERT(att_img->slot.state == SG_RESOURCESTATE_VALID);
+            SOKOL_ASSERT(att_img->slot.id == cmn_att->image_id.id);
+            wgpu_color_att_desc[i].loadOp = _sg_wgpu_load_op(action->colors[i].action);
+            wgpu_color_att_desc[i].storeOp = WGPUStoreOp_Store;
+            wgpu_color_att_desc[i].clearColor.r = action->colors[i].val[0];
+            wgpu_color_att_desc[i].clearColor.g = action->colors[i].val[1];
+            wgpu_color_att_desc[i].clearColor.b = action->colors[i].val[2];
+            wgpu_color_att_desc[i].clearColor.a = action->colors[i].val[3];
+            const bool is_msaa = (att_img->cmn.sample_count > 1);
+            // FIXME!
+            SOKOL_ASSERT(!is_msaa);
+            wgpu_color_att_desc[i].attachment = att_img->wgpu.tex_view;
+        }
+        wgpu_pass_desc.colorAttachmentCount = pass->cmn.num_color_atts;
+        wgpu_pass_desc.colorAttachments = &wgpu_color_att_desc[0];
+        const _sg_image_t* ds_att_img = pass->wgpu.ds_att.image;
+        if (ds_att_img) {
+            WGPURenderPassDepthStencilAttachmentDescriptor wgpu_ds_att_desc;
+            memset(&wgpu_ds_att_desc, 0, sizeof(wgpu_ds_att_desc));
+            SOKOL_ASSERT(ds_att_img->slot.state == SG_RESOURCESTATE_VALID);
+            SOKOL_ASSERT(ds_att_img->slot.id == pass->cmn.ds_att.image_id.id);
+            SOKOL_ASSERT(0 != ds_att_img->wgpu.tex);
+            wgpu_ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
+            wgpu_ds_att_desc.clearDepth = action->depth.val;
+            wgpu_ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
+            wgpu_ds_att_desc.clearStencil = action->stencil.val;
+            wgpu_ds_att_desc.attachment = ds_att_img->wgpu.tex_view;
+            wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att_desc;
+            _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.cmd_enc, &wgpu_pass_desc);
+        }
     }
     else {
         /* default render pass */
@@ -13359,6 +13414,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         sg_pass_action pa;
         _sg_resolve_default_pass_action(pass_action, &pa);
         const _sg_image_t* img = _sg_pass_color_image(pass, 0);
+        SOKOL_ASSERT(img);
         const int w = img->cmn.width;
         const int h = img->cmn.height;
         _sg_begin_pass(pass, &pa, w, h);
