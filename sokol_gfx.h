@@ -3267,6 +3267,8 @@ typedef struct {
     bool valid;
     bool in_pass;
     bool draw_indexed;
+    int cur_width;
+    int cur_height;
     sg_pixel_format swapchain_format;
     WGPUDevice dev;
     WGPUSwapChain (*swapchain_cb)(void);
@@ -10908,6 +10910,8 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     SOKOL_ASSERT(_sg.wgpu.cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev && _sg.wgpu.swapchain_cb);
     _sg.wgpu.in_pass = true;
+    _sg.wgpu.cur_width = w;
+    _sg.wgpu.cur_height = h;
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
@@ -11019,7 +11023,12 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
-    SOKOL_LOG("_sg_wgpu_apply_viewport: FIXME!\n");
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+    float xf = (float) x;
+    float yf = (float) (origin_top_left ? y : (_sg.wgpu.cur_height - (y + h)));
+    float wf = (float) w;
+    float hf = (float) h;
+    wgpuRenderPassEncoderSetViewport(_sg.wgpu.pass_enc, xf, yf, wf, hf, 0.0f, 1.0f);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
