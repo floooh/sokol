@@ -10537,7 +10537,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         /* NOTE: in the MSAA-rendertarget case, both the MSAA texture *and*
            the resolve texture need OutputAttachment usage
         */
-        wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
+        if (img->cmn.render_target) {
+            wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
+        }
         img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
         SOKOL_ASSERT(img->wgpu.tex);
 
