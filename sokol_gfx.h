@@ -9892,8 +9892,8 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
         case SG_BLENDFACTOR_BLEND_COLOR:            return WGPUBlendFactor_BlendColor;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return WGPUBlendFactor_OneMinusBlendColor;
         /* FIXME: separate blend alpha value not supported? */
-        case SG_BLENDFACTOR_BLEND_ALPHA:
-        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:
+        case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_BlendColor;
+        case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusBlendColor;
         default:
             SOKOL_UNREACHABLE; return WGPUBlendFactor_Force32;
     }
@@ -10385,6 +10385,7 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
     }
     else {
         /* create a new WGPU sampler and add to sampler cache */
+        /* FIXME: anisotropic filtering not supported? */
         WGPUSamplerDescriptor smp_desc;
         memset(&smp_desc, 0, sizeof(smp_desc));
         smp_desc.addressModeU = _sg_wgpu_sampler_addrmode(img_desc->wrap_u);
