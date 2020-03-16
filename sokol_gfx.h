@@ -873,7 +873,8 @@ typedef enum sg_index_type {
     3D-texture or 2D-array-texture). 3D- and array-textures are not supported
     on the GLES2/WebGL backend (use sg_query_features().imagetype_3d and
     sg_query_features().imagetype_array to check for support). The image type
-    is used in the sg_image_desc.type member when creating an image.
+    is used in the sg_image_desc.type member when creating an image, and
+    in sg_shader_image_desc when describing a shader's texture sampler binding.
 
     The default image type when creating an image is SG_IMAGETYPE_2D.
 */
@@ -886,6 +887,23 @@ typedef enum sg_image_type {
     _SG_IMAGETYPE_NUM,
     _SG_IMAGETYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_image_type;
+
+/*
+    sg_sampler_type
+
+    Indicates the basic data type of a shader's texture sampler which
+    can be float , unsigned integer or signed integer. The sampler
+    type is used in the sg_shader_image_desc to describe the
+    sampler type of a shader's texture sampler binding.
+
+    The default sampler type is SG_SHADERTYPE_FLOAT.
+*/
+typedef enum sg_sampler_type {
+    _SG_SAMPLERTYPE_DEFAULT,  /* value 0 reserved for default-init */
+    SG_SAMPLERTYPE_FLOAT,
+    SG_SAMPLERTYPE_SINT,
+    SG_SAMPLERTYPE_UINT,
+} sg_sampler_type;
 
 /*
     sg_cube_face
@@ -1585,7 +1603,8 @@ typedef struct sg_shader_uniform_block_desc {
 
 typedef struct sg_shader_image_desc {
     const char* name;
-    sg_image_type type;
+    sg_image_type type;         /* FIXME: should this be renamed to 'image_type'? */
+    sg_sampler_type sampler_type;
 } sg_shader_image_desc;
 
 typedef struct sg_shader_stage_desc {
@@ -2489,6 +2508,7 @@ typedef struct {
 
 typedef struct {
     sg_image_type type;
+    sg_sampler_type sampler_type;
 } _sg_shader_image_t;
 
 typedef struct {
@@ -2522,6 +2542,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
                 break;
             }
             stage->images[img_index].type = img_desc->type;
+            stage->images[img_index].sampler_type = img_desc->sampler_type;
             stage->num_images++;
         }
     }
@@ -9629,7 +9650,16 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
         case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_Cube;
         case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_3D;
         case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
-        default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Undefined;
+        default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Force32;
+    }
+}
+
+_SOKOL_PRIVATE WGPUTextureComponentType _sg_wgpu_tex_comptype(sg_sampler_type t) {
+    switch (t) {
+        case SG_SAMPLERTYPE_FLOAT:  return WGPUTextureComponentType_Float;
+        case SG_SAMPLERTYPE_SINT:   return WGPUTextureComponentType_Sint;
+        case SG_SAMPLERTYPE_UINT:   return WGPUTextureComponentType_Uint;
+        default: SOKOL_UNREACHABLE; return WGPUTextureComponentType_Force32;
     }
 }
 
@@ -10700,7 +10730,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             tex_desc->visibility = vis;
             tex_desc->type = WGPUBindingType_SampledTexture;
             tex_desc->textureDimension = _sg_wgpu_tex_viewdim(cmn_stage->images[img_index].type);
-            tex_desc->textureComponentType = WGPUTextureComponentType_Float; // FIXME!
+            tex_desc->textureComponentType = _sg_wgpu_tex_comptype(cmn_stage->images[img_index].sampler_type);
 
             smp_desc->binding = img_index + _SG_WGPU_MAX_SHADERSTAGE_IMAGES;
             smp_desc->visibility = vis;
@@ -12794,6 +12824,13 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
                 }
                 u_desc->array_count = _sg_def(u_desc->array_count, 1);
             }
+        }
+        for (int img_index = 0; img_index < SG_MAX_SHADERSTAGE_IMAGES; img_index++) {
+            sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
+            if (img_desc->type == _SG_IMAGETYPE_DEFAULT) {
+                break;
+            }
+            img_desc->sampler_type = _sg_def(img_desc->sampler_type, SG_SAMPLERTYPE_FLOAT);
         }
     }
     return def;
