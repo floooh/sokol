@@ -28,6 +28,7 @@
     SOKOL_GLES3
     SOKOL_D3D11
     SOKOL_METAL
+    SOKOL_WGPU
 
     Optionally provide the following configuration defines before including the
     implementation:
@@ -707,8 +708,11 @@ static const uint8_t _simgui_fs_bin[] = {
       0,   0,   0,   0,   0,   0,
       0,   0,   0,   0
 };
+#elif defined(SOKOL_WGPU)
+static const uint8_t _simgui_vs_bin[] = { 0 };
+static const uint8_t _simgui_fs_bin[] = { 0 };
 #else
-#error "sokol_imgui.h: No sokol_gfx.h backend selected (SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11 or SOKOL_METAL)"
+#error "sokol_imgui.h: No sokol_gfx.h backend selected (SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL or SOKOL_WGPU)"
 #endif
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
@@ -865,7 +869,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     shd_desc.attrs[2].sem_name  = "COLOR";
     shd_desc.fs.images[0].name = "tex";
     shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
-    #if defined(SOKOL_D3D11)
+    #if defined(SOKOL_D3D11) || defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _simgui_vs_bin;
         shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bin);
         shd_desc.fs.byte_code = _simgui_fs_bin;

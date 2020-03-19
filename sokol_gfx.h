@@ -10104,7 +10104,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus sta
         SOKOL_ASSERT(false);
     }
     SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
-    int index = (int) user_data;
+    int index = (int)(intptr_t) user_data;
     SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
     SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
     _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
@@ -10299,7 +10299,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus st
         SOKOL_ASSERT(false);
     }
     SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
-    int index = (int) user_data;
+    int index = (int)(intptr_t) user_data;
     SOKOL_ASSERT(index < _sg.wgpu.staging.num);
     SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
     _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
@@ -10341,7 +10341,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
     SOKOL_ASSERT(res.dataLength == _sg.wgpu.staging.num_bytes);
 }
 
-_SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, const uint8_t* data, uint32_t num_bytes) {
+_SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, const void* data, uint32_t num_bytes) {
     /* copy a chunk of data into the staging buffer, and record a blit-operation into
        the command encoder, bump the offset for the next data chunk, return false
        if there was not enough room in the staging buffer
