@@ -293,12 +293,12 @@ typedef struct {
     sg_image img;
     sg_shader shd;
     sg_pipeline pip;
+    bool is_osx;    // return true if running on OSX (or HTML5 OSX), needed for copy/paste
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     bool btn_down[SAPP_MAX_MOUSEBUTTONS];
     bool btn_up[SAPP_MAX_MOUSEBUTTONS];
     uint8_t keys_down[SIMGUI_MAX_KEY_VALUE];     // bits 0..3 or modifiers, != 0 is key-down
     uint8_t keys_up[SIMGUI_MAX_KEY_VALUE];       // same is keys_down
-    bool is_osx;                // return true if running on OSX (or HTML5 OSX), needed for copy/paste
     #endif
 } _simgui_state_t;
 static _simgui_state_t _simgui;
@@ -725,6 +725,7 @@ static const char* _simgui_get_clipboard(void* user_data) {
     (void)user_data;
     return sapp_get_clipboard_string();
 }
+#endif
 
 #if defined(__EMSCRIPTEN__)
 EM_JS(int, simgui_js_is_osx, (void), {
@@ -746,7 +747,6 @@ static bool _simgui_is_osx(void) {
     return false;
     #endif
 }
-#endif
 
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -929,12 +929,14 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.vbuf);
 }
 
+#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 _SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint32_t mods) {
     io->KeyAlt = (mods & SAPP_MODIFIER_ALT) != 0;
     io->KeyCtrl = (mods & SAPP_MODIFIER_CTRL) != 0;
     io->KeyShift = (mods & SAPP_MODIFIER_SHIFT) != 0;
     io->KeySuper = (mods & SAPP_MODIFIER_SUPER) != 0;
 }
+#endif
 
 SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
     #if defined(__cplusplus)
@@ -1003,8 +1005,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     sg_push_debug_group("sokol-imgui");
 
     const float dpi_scale = _simgui.desc.dpi_scale;
-    const int fb_width = (const int) (io->DisplaySize.x * dpi_scale);
-    const int fb_height = (const int) (io->DisplaySize.y * dpi_scale);
+    const int fb_width = (int) (io->DisplaySize.x * dpi_scale);
+    const int fb_height = (int) (io->DisplaySize.y * dpi_scale);
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 

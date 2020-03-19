@@ -1663,6 +1663,16 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
+- (void)otherMouseDown:(NSEvent*)event {
+    if (2 == event.buttonNumber) {
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+    }
+}
+- (void)otherMouseUp:(NSEvent*)event {
+    if (2 == event.buttonNumber) {
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+    }
+}
 - (void)mouseMoved:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
@@ -6434,6 +6444,7 @@ static const struct _sapp_x11_codepair {
 };
 
 _SOKOL_PRIVATE int _sapp_x11_error_handler(Display* display, XErrorEvent* event) {
+    _SOKOL_UNUSED(display);
     _sapp_x11_error_code = event->error_code;
     return 0;
 }
