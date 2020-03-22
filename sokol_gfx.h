@@ -229,6 +229,14 @@
 
             bool sg_query_buffer_overflow(sg_buffer buf)
 
+        NOTE: Due to restrictions in underlying 3D-APIs, appended chunks of
+        data will be 4-byte aligned in the destination buffer. This means
+        that there will be gaps in index buffers containing 16-bit indices
+        when the number of indices in a call to sg_append_buffer() is
+        odd. This isn't a problem when each call to sg_append_buffer()
+        is associated with one draw call, but will be problematic when
+        a single indexed draw call spans several appended chunks of indices.
+
     --- to check at runtime for optional features, limits and pixelformat support,
         call:
 
