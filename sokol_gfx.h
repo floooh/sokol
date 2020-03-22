@@ -1447,6 +1447,8 @@ typedef struct sg_buffer_desc {
     const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
     const void* d3d11_buffer;
+    /* WebGPU specific */
+    const void* wgpu_buffer;
     uint32_t _end_canary;
 } sg_buffer_desc;
 
@@ -1561,6 +1563,8 @@ typedef struct sg_image_desc {
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
     const void* d3d11_texture;
+    /* WebGPU specific */
+    const void* wgpu_texture;
     uint32_t _end_canary;
 } sg_image_desc;
 
@@ -10548,23 +10552,28 @@ _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
-    // FIXME: injected buffers
-    // FIXME: debug label
+    const bool injected = (0 != desc->wgpu_buffer);
     _sg_buffer_common_init(&buf->cmn, desc);
-    WGPUBufferDescriptor wgpu_buf_desc;
-    memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
-    wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
-    wgpu_buf_desc.size = buf->cmn.size;
-    if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
-        SOKOL_ASSERT(desc->content);
-        WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
-        buf->wgpu.buf = res.buffer;
-        SOKOL_ASSERT(res.data && ((int)res.dataLength == buf->cmn.size));
-        memcpy(res.data, desc->content, buf->cmn.size);
-        wgpuBufferUnmap(res.buffer);
+    if (injected) {
+        buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
+        wgpuBufferReference(buf->wgpu.buf);
     }
     else {
-        buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+        WGPUBufferDescriptor wgpu_buf_desc;
+        memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
+        wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
+        wgpu_buf_desc.size = buf->cmn.size;
+        if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
+            SOKOL_ASSERT(desc->content);
+            WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
+            buf->wgpu.buf = res.buffer;
+            SOKOL_ASSERT(res.data && ((int)res.dataLength == buf->cmn.size));
+            memcpy(res.data, desc->content, buf->cmn.size);
+            wgpuBufferUnmap(res.buffer);
+        }
+        else {
+            buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -10604,10 +10613,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
 
-    // FIMXE: injected WGPU texture
-
     _sg_image_common_init(&img->cmn, desc);
 
+    const bool injected = (0 != desc->wgpu_texture);
     const bool is_msaa = desc->sample_count > 1;
     WGPUTextureDescriptor wgpu_tex_desc;
     memset(&wgpu_tex_desc, 0, sizeof(wgpu_tex_desc));
@@ -10616,7 +10624,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         SOKOL_ASSERT(img->cmn.render_target);
         SOKOL_ASSERT(img->cmn.type == SG_IMAGETYPE_2D);
         SOKOL_ASSERT(img->cmn.num_mipmaps == 1);
-        // FIXME: SOKOL_ASSERT(!injected);
+        SOKOL_ASSERT(!injected);
         /* NOTE: a depth-stencil texture will never be MSAA-resolved, so there
            won't be a separate MSAA- and resolve-texture
         */
@@ -10626,28 +10634,34 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         SOKOL_ASSERT(img->wgpu.tex);
     }
     else {
-        /* NOTE: in the MSAA-rendertarget case, both the MSAA texture *and*
-           the resolve texture need OutputAttachment usage
-        */
-        if (img->cmn.render_target) {
-            wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
+        if (injected) {
+            img->wgpu.tex = (WGPUTexture) desc->wgpu_texture;
+            wgpuTextureReference(img->wgpu.tex);
         }
-        img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
-        SOKOL_ASSERT(img->wgpu.tex);
+        else {
+            /* NOTE: in the MSAA-rendertarget case, both the MSAA texture *and*
+               the resolve texture need OutputAttachment usage
+            */
+            if (img->cmn.render_target) {
+                wgpu_tex_desc.usage = WGPUTextureUsage_Sampled|WGPUTextureUsage_OutputAttachment;
+            }
+            img->wgpu.tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
+            SOKOL_ASSERT(img->wgpu.tex);
 
-        /* copy content into texture via a throw-away staging buffer */
-        if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
-            WGPUBufferDescriptor wgpu_buf_desc;
-            memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
-            wgpu_buf_desc.size = _sg_wgpu_image_content_buffer_size(img, &desc->content);
-            wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
-            WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
-            SOKOL_ASSERT(map.buffer && map.data);
-            uint32_t num_bytes = _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, img, &desc->content);
-            _SOKOL_UNUSED(num_bytes);
-            SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size);
-            wgpuBufferUnmap(map.buffer);
-            wgpuBufferRelease(map.buffer);
+            /* copy content into texture via a throw-away staging buffer */
+            if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
+                WGPUBufferDescriptor wgpu_buf_desc;
+                memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
+                wgpu_buf_desc.size = _sg_wgpu_image_content_buffer_size(img, &desc->content);
+                wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
+                WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
+                SOKOL_ASSERT(map.buffer && map.data);
+                uint32_t num_bytes = _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, img, &desc->content);
+                _SOKOL_UNUSED(num_bytes);
+                SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size);
+                wgpuBufferUnmap(map.buffer);
+                wgpuBufferRelease(map.buffer);
+            }
         }
 
         /* create texture view object */
@@ -12288,8 +12302,11 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_BUFFERDESC_CANARY);
         SOKOL_VALIDATE(desc->size > 0, _SG_VALIDATE_BUFFERDESC_SIZE);
-        bool ext = (0 != desc->gl_buffers[0]) || (0 != desc->mtl_buffers[0]) || (0 != desc->d3d11_buffer);
-        if (!ext && (desc->usage == SG_USAGE_IMMUTABLE)) {
+        bool injected = (0 != desc->gl_buffers[0]) ||
+                        (0 != desc->mtl_buffers[0]) ||
+                        (0 != desc->d3d11_buffer) ||
+                        (0 != desc->wgpu_buffer);
+        if (!injected && (desc->usage == SG_USAGE_IMMUTABLE)) {
             SOKOL_VALIDATE(0 != desc->content, _SG_VALIDATE_BUFFERDESC_CONTENT);
         }
         else {
@@ -12312,7 +12329,10 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         SOKOL_VALIDATE(desc->height > 0, _SG_VALIDATE_IMAGEDESC_HEIGHT);
         const sg_pixel_format fmt = desc->pixel_format;
         const sg_usage usage = desc->usage;
-        const bool ext = (0 != desc->gl_textures[0]) || (0 != desc->mtl_textures[0]) || (0 != desc->d3d11_texture);
+        const bool injected = (0 != desc->gl_textures[0]) ||
+                              (0 != desc->mtl_textures[0]) ||
+                              (0 != desc->d3d11_texture) ||
+                              (0 != desc->wgpu_texture);
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
@@ -12334,7 +12354,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
             /* FIXME: should use the same "expected size" computation as in _sg_validate_update_image() here */
-            if (!ext && (usage == SG_USAGE_IMMUTABLE)) {
+            if (!injected && (usage == SG_USAGE_IMMUTABLE)) {
                 const int num_faces = desc->type == SG_IMAGETYPE_CUBE ? 6:1;
                 const int num_mips = desc->num_mipmaps;
                 for (int face_index = 0; face_index < num_faces; face_index++) {
