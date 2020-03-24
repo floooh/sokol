@@ -904,7 +904,7 @@ typedef enum sg_image_type {
     type is used in the sg_shader_image_desc to describe the
     sampler type of a shader's texture sampler binding.
 
-    The default sampler type is SG_SHADERTYPE_FLOAT.
+    The default sampler type is SG_SAMPLERTYPE_FLOAT.
 */
 typedef enum sg_sampler_type {
     _SG_SAMPLERTYPE_DEFAULT,  /* value 0 reserved for default-init */
@@ -1588,6 +1588,7 @@ typedef struct sg_image_desc {
                 - if the member is an array, the number of array items
         - reflection info for the texture images used by the shader stage:
             - the image type (SG_IMAGETYPE_xxx)
+            - the sampler type (SG_SAMPLERTYPE_xxx, default is SG_SAMPLERTYPE_FLOAT)
             - the name of the texture sampler (required for GLES2, optional everywhere else)
 
     For all GL backends, shader source-code must be provided. For D3D11 and Metal,

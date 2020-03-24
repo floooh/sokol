@@ -9,23 +9,36 @@
     before you include this file in *one* C or C++ file to create the
     implementation.
 
+    In the same place define one of the following to select the 3D-API
+    which should be initialized by sokol_app.h:
+
+        #define SOKOL_GLCORE33
+        #define SOKOL_GLES2
+        #define SOKOL_GLES3
+        #define SOKOL_D3D11
+        #define SOKOL_METAL
+        #define SOKOL_WGPU
+
+    If sokol_app.h is used together with sokol_gfx.h, the selected 3D-APIs
+    backend match.
+
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
-    SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
-    SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
-    SOKOL_FREE          - your own free function (default: free(p))
+        SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+        SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
+        SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
+        SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
+        SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
+        SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
+        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_IMPL      - public function implementation prefix (default: -)
+        SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
+        SOKOL_FREE          - your own free function (default: free(p))
 
     Optionally define the following to force debug checks and validations
     even in release mode:
 
-    SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+        SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 
     If sokol_app.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -917,7 +930,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
     #endif
 #elif defined(__EMSCRIPTEN__)
     /* emscripten (asm.js or wasm) */
-    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2) && !defined(SOKOL_WGPU)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
     #endif
 #elif defined(_WIN32)
@@ -2173,12 +2186,14 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #if defined(__EMSCRIPTEN__)
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
-#else
+#elif defined(SOKOL_GLES2)
 #ifndef GL_EXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES
 #endif
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#elif defined(SOKOL_WGPU)
+#include <webgpu/webgpu.h>
 #endif
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
@@ -2369,7 +2384,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
     return EM_TRUE;
 }
 
-_SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved, void* user_data) {
+#if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
     sapp_event_type type;
     switch (emsc_type) {
         case EMSCRIPTEN_EVENT_WEBGLCONTEXTLOST:     type = SAPP_EVENTTYPE_SUSPENDED; break;
@@ -2382,6 +2398,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved
     }
     return true;
 }
+#endif
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
@@ -2791,34 +2808,42 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
 
-    EmscriptenWebGLContextAttributes attrs;
-    emscripten_webgl_init_context_attributes(&attrs);
-    attrs.alpha = _sapp.desc.alpha;
-    attrs.depth = true;
-    attrs.stencil = true;
-    attrs.antialias = _sapp.sample_count > 1;
-    attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
-    attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
-    attrs.enableExtensionsByDefault = true;
-    #if defined(SOKOL_GLES3)
-        if (_sapp.desc.gl_force_gles2) {
+    /* WebGL specific initialization */
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        EmscriptenWebGLContextAttributes attrs;
+        emscripten_webgl_init_context_attributes(&attrs);
+        attrs.alpha = _sapp.desc.alpha;
+        attrs.depth = true;
+        attrs.stencil = true;
+        attrs.antialias = _sapp.sample_count > 1;
+        attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
+        attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
+        attrs.enableExtensionsByDefault = true;
+        #if defined(SOKOL_GLES3)
+            if (_sapp.desc.gl_force_gles2) {
+                attrs.majorVersion = 1;
+                _sapp.gles2_fallback = true;
+            }
+            else {
+                attrs.majorVersion = 2;
+            }
+        #endif
+        EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
+        if (!ctx) {
             attrs.majorVersion = 1;
+            ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
             _sapp.gles2_fallback = true;
         }
-        else {
-            attrs.majorVersion = 2;
-        }
-    #endif
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
-    if (!ctx) {
-        attrs.majorVersion = 1;
-        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
-        _sapp.gles2_fallback = true;
-    }
-    emscripten_webgl_make_context_current(ctx);
+        emscripten_webgl_make_context_current(ctx);
 
-    /* some WebGL extension are not enabled automatically by emscripten */
-    emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
+        /* some WebGL extension are not enabled automatically by emscripten */
+        emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
+
+        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
+        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
+    #elif defined(SOKOL_WGPU)
+        SOKOL_ASSERT(false && "FIXME: WebGPU initialization");
+    #endif
 
     _sapp.valid = true;
     emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
@@ -2834,13 +2859,13 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
-    emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
     sapp_js_hook_beforeunload();
 
-    // NOT A BUG: do not call _sapp_discard_state()
+    /* start the frame loop */
+    emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
+
+    /* NOT A BUG: do not call _sapp_discard_state() */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
