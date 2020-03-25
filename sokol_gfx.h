@@ -446,10 +446,9 @@
         - SG_VERTEXFORMAT_SHORT4N
         - SG_VERTEXFORMAT_USHORT4N
 
-      D3D11 will not convert *non-normalized* vertex formats
-      to floating point vertex shader inputs, those can
-      only use the ivecn formats when D3D11 is used
-      as backend (GL and should Metal can use both formats)
+      D3D11 will not convert *non-normalized* vertex formats to floating point
+      vertex shader inputs, those can only be uses with the *ivecn* vertex shader
+      input types when D3D11 is used as backend (GL and Metal can use both formats)
 
         - SG_VERTEXFORMAT_BYTE4,
         - SG_VERTEXFORMAT_UBYTE4
