@@ -2198,9 +2198,11 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
-static bool _sapp_emsc_input_created;
-static bool _sapp_emsc_wants_show_keyboard;
-static bool _sapp_emsc_wants_hide_keyboard;
+static struct {
+    bool textfield_created;
+    bool wants_show_keyboard;
+    bool wants_hide_keyboard;
+} _sapp_emsc;
 
 /* this function is called from a JS event handler when the user hides
     the onscreen keyboard pressing the 'dismiss keyboard key'
@@ -2294,22 +2296,22 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     the request will be ignored by the browser
 */
 _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
-    if (_sapp_emsc_wants_show_keyboard) {
+    if (_sapp_emsc.wants_show_keyboard) {
         /* create input text field on demand */
-        if (!_sapp_emsc_input_created) {
-            _sapp_emsc_input_created = true;
+        if (!_sapp_emsc.textfield_created) {
+            _sapp_emsc.textfield_created = true;
             sapp_js_create_textfield();
         }
         /* focus the text input field, this will bring up the keyboard */
         _sapp.onscreen_keyboard_shown = true;
-        _sapp_emsc_wants_show_keyboard = false;
+        _sapp_emsc.wants_show_keyboard = false;
         sapp_js_focus_textfield();
     }
-    if (_sapp_emsc_wants_hide_keyboard) {
+    if (_sapp_emsc.wants_hide_keyboard) {
         /* unfocus the text input field */
-        if (_sapp_emsc_input_created) {
+        if (_sapp_emsc.textfield_created) {
             _sapp.onscreen_keyboard_shown = false;
-            _sapp_emsc_wants_hide_keyboard = false;
+            _sapp_emsc.wants_hide_keyboard = false;
             sapp_js_unfocus_textfield();
         }
     }
@@ -2321,10 +2323,10 @@ _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
 */
 _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     if (show) {
-        _sapp_emsc_wants_show_keyboard = true;
+        _sapp_emsc.wants_show_keyboard = true;
     }
     else {
-        _sapp_emsc_wants_hide_keyboard = true;
+        _sapp_emsc.wants_hide_keyboard = true;
     }
 }
 
