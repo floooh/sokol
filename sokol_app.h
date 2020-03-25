@@ -250,16 +250,25 @@
             HWND has been cast to a void pointer in order to be tunneled
             through code which doesn't include Windows.h.
 
-        const void* sapp_d3d11_get_device(void);
-        const void* sapp_d3d11_get_device_context(void);
-        const void* sapp_d3d11_get_render_target_view(void);
-        const void* sapp_d3d11_get_depth_stencil_view(void);
+        const void* sapp_d3d11_get_device(void)
+        const void* sapp_d3d11_get_device_context(void)
+        const void* sapp_d3d11_get_render_target_view(void)
+        const void* sapp_d3d11_get_depth_stencil_view(void)
             Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
             return pointers to D3D11 API objects required for rendering,
             only if the D3D11 backend has been selected. Otherwise they
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
+
+        const void* sapp_wgpu_get_device(void)
+        const void* sapp_wgpu_get_swapchain_render_view(void)
+        const void* sapp_wgpu_get_swapchain_resolve_view(void)
+        const void* sapp_wgpu_get_swapchain_depth_stencil_view(void)
+        uint32_t sapp_wgpu_get_swapchain_format(void)
+            These are the WebGPU-specific functions to get the WebGPU
+            objects and values required for rendering. If sokol_app.h
+            is not compiled with SOKOL_WGPU, these functions return null.
 
         const void* sapp_android_get_native_activity(void);
             On Android, get the native activity ANativeActivity pointer, otherwise
@@ -886,6 +895,17 @@ SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* Win32: get the HWND window handle */
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
+
+/* WebGPU: get WGPUDevice handle */
+SOKOL_API_DECL const void* sapp_wgpu_get_device(void);
+/* WebGPU: get swapchain's WGPUTextureView handle for rendering */
+SOKOL_API_DECL const void* sapp_wgpu_get_swapchain_render_view(void);
+/* WebGPU: get swapchain's MSAA-resolve WGPUTextureView (may return null) */
+SOKOL_API_DECL const void* sapp_wgpu_get_swapchain_resolve_view(void);
+/* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
+SOKOL_API_DECL const void* sapp_wgpu_get_swapchain_depth_stencil_view(void);
+/* WebGPU: get the swapchain's pixel format as WGPUTextureFormat */
+SOKOL_API_DECL uint32_t sapp_wgpu_get_swapchain_format(void);
 
 /* Android: get native activity handle */
 SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
@@ -2202,6 +2222,18 @@ static struct {
     bool textfield_created;
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
+    #if defined(SOKOL_WGPU)
+    struct {
+        WGPUDevice device;
+        WGPUSwapChain swapchain;
+        WGPUTextureFormat swapchain_format;
+        WGPUTexture msaa_tex;
+        WGPUTexture depth_stencil_tex;
+        WGPUTextureView swapchain_view;
+        WGPUTextureView msaa_view;
+        WGPUTextureView depth_stencil_view;
+    } wgpu;
+    #endif
 } _sapp_emsc;
 
 /* this function is called from a JS event handler when the user hides
@@ -7600,6 +7632,61 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_WIN32)
         return _sapp_win32_hwnd;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        return (const void*) _sapp_emsc.wgpu.device;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_swapchain_render_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        if (_sapp.sample_count > 1) {
+            return (const void*) _sapp_emsc.wgpu.msaa_view;
+        }
+        else {
+            return (const void*) _sapp_emsc.wgpu.swapchain_view;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_swapchain_resolve_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        if (_sapp.sample_count > 1) {
+            return (const void*) _sapp_emsc.wgpu.swapchain_view;
+        }
+        else {
+            return 0;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        return (const void*) _sapp_emsc.wgpu.depth_stencil_view;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL uint32_t sapp_wgpu_get_swapchain_format(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        return (uint32_t) _sapp_emsc.wgpu.swapchain_format;
     #else
         return 0;
     #endif
