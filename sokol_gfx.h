@@ -2014,13 +2014,13 @@ typedef struct sg_pass_info {
         a WGPUDevice handle
     .wgpu_swapchain_format
         WGPUTextureFormat of the swap chain surface
-    .wgpu_swapchain_render_view_cb
+    .wgpu_render_view_cb
         callback to get the current WGPUTextureView of the swapchain's
         rendering attachment (may be an MSAA surface)
-    .wgpu_swapchain_resolve_view_cb
+    .wgpu_resolve_view_cb
         callback to get the current WGPUTextureView of the swapchain's
         MSAA-resolve-target surface, must return 0 if not MSAA rendering
-    .wgpu_swapchain_depth_stencil_view_cb
+    .wgpu_depth_stencil_view_cb
         callback to get current default-pass depth-stencil-surface WGPUTextureView
         the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
     .wgpu_global_uniform_buffer_size
@@ -2055,9 +2055,9 @@ typedef struct sg_desc {
     /* WebGPU-specific */
     const void* wgpu_device;                /* WGPUDevice */
     uint32_t wgpu_swapchain_format;         /* WGPUTextureFormat */
-    const void* (*wgpu_swapchain_render_view_cb)(void); /* returns WGPUTextureView */
-    const void* (*wgpu_swapchain_resolve_view_cb)(void); /* returns WGPUTextureView */
-    const void* (*wgpu_swapchain_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
+    const void* (*wgpu_render_view_cb)(void); /* returns WGPUTextureView */
+    const void* (*wgpu_resolve_view_cb)(void); /* returns WGPUTextureView */
+    const void* (*wgpu_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     int wgpu_global_uniform_buffer_size;
     int wgpu_global_staging_buffer_size;
     int wgpu_sampler_cache_size;
@@ -3310,9 +3310,9 @@ typedef struct {
     int cur_height;
     WGPUDevice dev;
     sg_pixel_format swapchain_format;
-    WGPUTextureView (*swapchain_render_view_cb)(void);
-    WGPUTextureView (*swapchain_resolve_view_cb)(void);
-    WGPUTextureView (*swapchain_depth_stencil_view_cb)(void);
+    WGPUTextureView (*render_view_cb)(void);
+    WGPUTextureView (*resolve_view_cb)(void);
+    WGPUTextureView (*depth_stencil_view_cb)(void);
     WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
     WGPUCommandEncoder staging_cmd_enc;
@@ -10467,17 +10467,17 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device);
     SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu_swapchain_format);
-    SOKOL_ASSERT(desc->wgpu_swapchain_render_view_cb);
-    SOKOL_ASSERT(desc->wgpu_swapchain_resolve_view_cb);
-    SOKOL_ASSERT(desc->wgpu_swapchain_depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->wgpu_render_view_cb);
+    SOKOL_ASSERT(desc->wgpu_resolve_view_cb);
+    SOKOL_ASSERT(desc->wgpu_depth_stencil_view_cb);
     SOKOL_ASSERT(desc->wgpu_global_uniform_buffer_size > 0);
     SOKOL_ASSERT(desc->wgpu_global_staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
-    _sg.wgpu.swapchain_render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_swapchain_render_view_cb;
-    _sg.wgpu.swapchain_resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_swapchain_resolve_view_cb;
-    _sg.wgpu.swapchain_depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_swapchain_depth_stencil_view_cb;
+    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_render_view_cb;
+    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_resolve_view_cb;
+    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_depth_stencil_view_cb;
     _sg.wgpu.swapchain_format = _sg_wgpu_swapchain_format((WGPUTextureFormat)desc->wgpu_swapchain_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
@@ -11020,9 +11020,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.swapchain_render_view_cb);
-    SOKOL_ASSERT(_sg.wgpu.swapchain_resolve_view_cb);
-    SOKOL_ASSERT(_sg.wgpu.swapchain_depth_stencil_view_cb);
+    SOKOL_ASSERT(_sg.wgpu.render_view_cb);
+    SOKOL_ASSERT(_sg.wgpu.resolve_view_cb);
+    SOKOL_ASSERT(_sg.wgpu.depth_stencil_view_cb);
     _sg.wgpu.in_pass = true;
     _sg.wgpu.cur_width = w;
     _sg.wgpu.cur_height = h;
@@ -11065,9 +11065,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     }
     else {
         /* default render pass */
-        WGPUTextureView wgpu_render_view = _sg.wgpu.swapchain_render_view_cb();
-        WGPUTextureView wgpu_resolve_view = _sg.wgpu.swapchain_resolve_view_cb();
-        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.swapchain_depth_stencil_view_cb();
+        WGPUTextureView wgpu_render_view = _sg.wgpu.render_view_cb();
+        WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb();
+        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.depth_stencil_view_cb();
 
         WGPURenderPassDescriptor pass_desc;
         memset(&pass_desc, 0, sizeof(pass_desc));
