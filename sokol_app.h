@@ -262,10 +262,10 @@
             frame to the next!
 
         const void* sapp_wgpu_get_device(void)
-        const void* sapp_wgpu_get_swapchain_render_view(void)
-        const void* sapp_wgpu_get_swapchain_resolve_view(void)
-        const void* sapp_wgpu_get_swapchain_depth_stencil_view(void)
-        uint32_t sapp_wgpu_get_swapchain_format(void)
+        const void* sapp_wgpu_get_render_view(void)
+        const void* sapp_wgpu_get_resolve_view(void)
+        const void* sapp_wgpu_get_depth_stencil_view(void)
+        uint32_t sapp_wgpu_get_render_format(void)
             These are the WebGPU-specific functions to get the WebGPU
             objects and values required for rendering. If sokol_app.h
             is not compiled with SOKOL_WGPU, these functions return null.
@@ -905,7 +905,7 @@ SOKOL_API_DECL const void* sapp_wgpu_get_resolve_view(void);
 /* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
 SOKOL_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 /* WebGPU: get the swapchain's pixel format as WGPUTextureFormat */
-SOKOL_API_DECL uint32_t sapp_wgpu_get_swapchain_format(void);
+SOKOL_API_DECL uint32_t sapp_wgpu_get_render_format(void);
 
 /* Android: get native activity handle */
 SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
@@ -2227,7 +2227,7 @@ static struct {
         int state;
         WGPUDevice device;
         WGPUSwapChain swapchain;
-        WGPUTextureFormat swapchain_format;
+        WGPUTextureFormat render_format;
         WGPUTexture msaa_tex;
         WGPUTexture depth_stencil_tex;
         WGPUTextureView swapchain_view;
@@ -2882,7 +2882,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id,
     SOKOL_ASSERT(0 == _sapp_emsc.wgpu.device);
     _sapp_emsc.wgpu.device = (WGPUDevice) device_id;
     _sapp_emsc.wgpu.swapchain = (WGPUSwapChain) swapchain_id;
-    _sapp_emsc.wgpu.swapchain_format = (WGPUTextureFormat) swapchain_fmt;
+    _sapp_emsc.wgpu.render_format = (WGPUTextureFormat) swapchain_fmt;
     _sapp_emsc.wgpu.state = _SAPP_EMSC_WGPU_STATE_READY;
 }
 
@@ -2938,7 +2938,7 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void) {
         msaa_desc.size.height = (uint32_t) _sapp.framebuffer_height;
         msaa_desc.size.depth = 1;
         msaa_desc.arrayLayerCount = 1;
-        msaa_desc.format = _sapp_emsc.wgpu.swapchain_format;
+        msaa_desc.format = _sapp_emsc.wgpu.render_format;
         msaa_desc.mipLevelCount = 1;
         msaa_desc.sampleCount = _sapp.sample_count;
         _sapp_emsc.wgpu.msaa_tex = wgpuDeviceCreateTexture(_sapp_emsc.wgpu.device, &msaa_desc);
@@ -2986,11 +2986,9 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
         switch (_sapp_emsc.wgpu.state) {
             case _SAPP_EMSC_WGPU_STATE_INITIAL:
                 /* async JS init hasn't finished yet */
-                printf("FIXME: wgpu waiting\n");
                 break;
             case _SAPP_EMSC_WGPU_STATE_READY:
                 /* perform post-async init stuff */
-                printf("FIXME: wgpu post-init");
                 _sapp_emsc_wgpu_surfaces_create();
                 _sapp_emsc.wgpu.state = _SAPP_EMSC_WGPU_STATE_RUNNING;
                 break;
@@ -7817,10 +7815,10 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
     #endif
 }
 
-SOKOL_API_IMPL uint32_t sapp_wgpu_get_swapchain_format(void) {
+SOKOL_API_IMPL uint32_t sapp_wgpu_get_render_format(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_WGPU)
-        return (uint32_t) _sapp_emsc.wgpu.swapchain_format;
+        return (uint32_t) _sapp_emsc.wgpu.render_format;
     #else
         return 0;
     #endif
