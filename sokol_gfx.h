@@ -2012,7 +2012,7 @@ typedef struct sg_pass_info {
     WebGPU specific:
     .wgpu_device
         a WGPUDevice handle
-    .wgpu_swapchain_format
+    .wgpu_render_format
         WGPUTextureFormat of the swap chain surface
     .wgpu_render_view_cb
         callback to get the current WGPUTextureView of the swapchain's
@@ -2053,10 +2053,10 @@ typedef struct sg_desc {
     const void* (*d3d11_render_target_view_cb)(void);
     const void* (*d3d11_depth_stencil_view_cb)(void);
     /* WebGPU-specific */
-    const void* wgpu_device;                /* WGPUDevice */
-    uint32_t wgpu_swapchain_format;         /* WGPUTextureFormat */
-    const void* (*wgpu_render_view_cb)(void); /* returns WGPUTextureView */
-    const void* (*wgpu_resolve_view_cb)(void); /* returns WGPUTextureView */
+    const void* wgpu_device;                    /* WGPUDevice */
+    uint32_t wgpu_render_format;                /* WGPUTextureFormat */
+    const void* (*wgpu_render_view_cb)(void);   /* returns WGPUTextureView */
+    const void* (*wgpu_resolve_view_cb)(void);  /* returns WGPUTextureView */
     const void* (*wgpu_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     int wgpu_global_uniform_buffer_size;
     int wgpu_global_staging_buffer_size;
@@ -9881,8 +9881,8 @@ _SOKOL_PRIVATE WGPUTextureAspect _sg_wgpu_texture_aspect(sg_pixel_format fmt) {
 }
 */
 
-/* this is only used to convert WGPU's preferred swapchain format back to sokol-gfx */
-_SOKOL_PRIVATE sg_pixel_format _sg_wgpu_swapchain_format(WGPUTextureFormat fmt) {
+/* this is only used to convert WGPU's preferred swapchain render format back to sokol-gfx */
+_SOKOL_PRIVATE sg_pixel_format _sg_wgpu_render_format(WGPUTextureFormat fmt) {
     switch (fmt) {
         case WGPUTextureFormat_RGBA8Unorm:  return SG_PIXELFORMAT_RGBA8;
         case WGPUTextureFormat_BGRA8Unorm:  return SG_PIXELFORMAT_BGRA8;
@@ -10466,7 +10466,7 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->wgpu_device);
-    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu_swapchain_format);
+    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu_render_format);
     SOKOL_ASSERT(desc->wgpu_render_view_cb);
     SOKOL_ASSERT(desc->wgpu_resolve_view_cb);
     SOKOL_ASSERT(desc->wgpu_depth_stencil_view_cb);
@@ -10478,7 +10478,7 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_render_view_cb;
     _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_resolve_view_cb;
     _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_depth_stencil_view_cb;
-    _sg.wgpu.swapchain_format = _sg_wgpu_swapchain_format((WGPUTextureFormat)desc->wgpu_swapchain_format);
+    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->wgpu_render_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
