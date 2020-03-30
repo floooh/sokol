@@ -11157,6 +11157,27 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_viewport(int x, int y, int w, int h, bool ori
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+    SOKOL_ASSERT(_sg.wgpu.in_pass);
+    SOKOL_ASSERT(_sg.wgpu.pass_enc);
+
+    /* clip against framebuffer rect */
+    x = _sg_min(_sg_max(0, x), _sg.wgpu.cur_width-1);
+    y = _sg_min(_sg_max(0, y), _sg.wgpu.cur_height-1);
+    if ((x + w) > _sg.wgpu.cur_width) {
+        w = _sg.wgpu.cur_width - x;
+    }
+    if ((y + h) > _sg.wgpu.cur_height) {
+        h = _sg.wgpu.cur_height - y;
+    }
+    w = _sg_max(w, 1);
+    h = _sg_max(h, 1);
+
+    uint32_t sx = (uint32_t) x;
+    uint32_t sy = origin_top_left ? y : (_sg.wgpu.cur_height - (y + h));
+    uint32_t sw = w;
+    uint32_t sh = h;
+    wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.pass_enc, sx, sy, sw, sh);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
