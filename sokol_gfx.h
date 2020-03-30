@@ -10230,6 +10230,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint
             SOKOL_ASSERT(src_bytes_per_row <= dst_bytes_per_row);
             SOKOL_ASSERT(src_bytes_per_slice == (src_bytes_per_row * num_rows));
             SOKOL_ASSERT(dst_bytes_per_slice == (dst_bytes_per_row * num_rows));
+            _SOKOL_UNUSED(src_bytes_per_slice);
 
             /* copy content into mapped staging buffer */
             if (src_bytes_per_row == dst_bytes_per_row) {
@@ -11299,6 +11300,7 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_conte
     SOKOL_ASSERT(img && data);
     bool success = _sg_wgpu_staging_copy_to_texture(img, data);
     SOKOL_ASSERT(success);
+    _SOKOL_UNUSED(success);
 }
 #endif
 
