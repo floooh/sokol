@@ -1973,64 +1973,94 @@ typedef struct sg_pass_info {
         must hold a strong reference to the Objective-C object for the
         duration of the sokol_gfx call!
 
-    .mtl_device
+    .mtl.device
         a pointer to the MTLDevice object
-    .mtl_renderpass_descriptor_cb
+    .mtl.renderpass_descriptor_cb
         a C callback function to obtain the MTLRenderPassDescriptor for the
         current frame when rendering to the default framebuffer, will be called
         in sg_begin_default_pass()
-    .mtl_drawable_cb
+    .mtl.drawable_cb
         a C callback function to obtain a MTLDrawable for the current
         frame when rendering to the default framebuffer, will be called in
         sg_end_pass() of the default pass
-    .mtl_global_uniform_buffer_size
+    .mtl.global_uniform_buffer_size
         the size of the global uniform buffer in bytes, this must be big
         enough to hold all uniform block updates for a single frame,
         the default value is 4 MByte (4 * 1024 * 1024)
-    .mtl_sampler_cache_size
+    .mtl.sampler_cache_size
         the number of slots in the sampler cache, the Metal backend
         will share texture samplers with the same state in this
         cache, the default value is 64
 
     D3D11 specific:
-    .d3d11_device
+    .d3d11.device
         a pointer to the ID3D11Device object, this must have been created
         before sg_setup() is called
-    .d3d11_device_context
+    .d3d11.device_context
         a pointer to the ID3D11DeviceContext object
-    .d3d11_render_target_view_cb
+    .d3d11.render_target_view_cb
         a C callback function to obtain a pointer to the current
         ID3D11RenderTargetView object of the default framebuffer,
         this function will be called in sg_begin_pass() when rendering
         to the default framebuffer
-    .d3d11_depth_stencil_view_cb
+    .d3d11.depth_stencil_view_cb
         a C callback function to obtain a pointer to the current
         ID3D11DepthStencilView object of the default framebuffer,
         this function will be called in sg_begin_pass() when rendering
         to the default framebuffer
 
     WebGPU specific:
-    .wgpu_device
+    .wgpu.device
         a WGPUDevice handle
-    .wgpu_render_format
+    .wgpu.render_format
         WGPUTextureFormat of the swap chain surface
-    .wgpu_render_view_cb
+    .wgpu.render_view_cb
         callback to get the current WGPUTextureView of the swapchain's
         rendering attachment (may be an MSAA surface)
-    .wgpu_resolve_view_cb
+    .wgpu.resolve_view_cb
         callback to get the current WGPUTextureView of the swapchain's
         MSAA-resolve-target surface, must return 0 if not MSAA rendering
-    .wgpu_depth_stencil_view_cb
+    .wgpu.depth_stencil_view_cb
         callback to get current default-pass depth-stencil-surface WGPUTextureView
         the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
-    .wgpu_global_uniform_buffer_size
+    .wgpu.global_uniform_buffer_size
         the size in bytes of the per-frame uniform buffers in the WebGPU backend,
         the default size is 4 MBytes
-    .wgpu_global_staging_buffer_size
+    .wgpu.global_staging_buffer_size
         the size in bytes of the overall per-frame data that's uploaded into
         into dynamic buffer and image resources
         (e.g. sg_update_buffer() + sg_append_buffer() sg_update_image())
 */
+typedef struct sg_gl_desc {
+    bool force_gles2;
+} sg_gl_desc;
+
+typedef struct sg_mtl_desc {
+    const void* device;
+    const void* (*renderpass_descriptor_cb)(void);
+    const void* (*drawable_cb)(void);
+    int global_uniform_buffer_size;
+    int sampler_cache_size;
+} sg_mtl_desc;
+
+typedef struct sg_d3d11_desc {
+    const void* device;
+    const void* device_context;
+    const void* (*render_target_view_cb)(void);
+    const void* (*depth_stencil_view_cb)(void);
+} sg_d3d11_desc;
+
+typedef struct sg_wgpu_desc {
+    const void* device;                    /* WGPUDevice */
+    uint32_t render_format;                /* WGPUTextureFormat */
+    const void* (*render_view_cb)(void);   /* returns WGPUTextureView */
+    const void* (*resolve_view_cb)(void);  /* returns WGPUTextureView */
+    const void* (*depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
+    int global_uniform_buffer_size;
+    int global_staging_buffer_size;
+    int sampler_cache_size;
+} sg_wgpu_desc;
+
 typedef struct sg_desc {
     uint32_t _start_canary;
     int buffer_pool_size;
@@ -2039,28 +2069,10 @@ typedef struct sg_desc {
     int pipeline_pool_size;
     int pass_pool_size;
     int context_pool_size;
-    /* GL specific */
-    bool gl_force_gles2;
-    /* Metal-specific */
-    const void* mtl_device;
-    const void* (*mtl_renderpass_descriptor_cb)(void);
-    const void* (*mtl_drawable_cb)(void);
-    int mtl_global_uniform_buffer_size;
-    int mtl_sampler_cache_size;
-    /* D3D11-specific */
-    const void* d3d11_device;
-    const void* d3d11_device_context;
-    const void* (*d3d11_render_target_view_cb)(void);
-    const void* (*d3d11_depth_stencil_view_cb)(void);
-    /* WebGPU-specific */
-    const void* wgpu_device;                    /* WGPUDevice */
-    uint32_t wgpu_render_format;                /* WGPUTextureFormat */
-    const void* (*wgpu_render_view_cb)(void);   /* returns WGPUTextureView */
-    const void* (*wgpu_resolve_view_cb)(void);  /* returns WGPUTextureView */
-    const void* (*wgpu_depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
-    int wgpu_global_uniform_buffer_size;
-    int wgpu_global_staging_buffer_size;
-    int wgpu_sampler_cache_size;
+    sg_gl_desc gl;
+    sg_mtl_desc mtl;
+    sg_d3d11_desc d3d11;
+    sg_wgpu_desc wgpu;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -5254,7 +5266,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     /* assumes that _sg.gl is already zero-initialized */
     _sg.gl.valid = true;
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-    _sg.gl.gles2 = desc->gl_force_gles2;
+    _sg.gl.gles2 = desc->gl.force_gles2;
     #else
     _SOKOL_UNUSED(desc);
     _sg.gl.gles2 = false;
@@ -8464,8 +8476,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->mtl_sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->mtl_sampler_cache_size);
+    SOKOL_ASSERT(desc->mtl.sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->mtl.sampler_cache_size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
@@ -8660,20 +8672,20 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
 _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     /* assume already zero-initialized */
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->mtl_device);
-    SOKOL_ASSERT(desc->mtl_renderpass_descriptor_cb);
-    SOKOL_ASSERT(desc->mtl_drawable_cb);
-    SOKOL_ASSERT(desc->mtl_global_uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->mtl.device);
+    SOKOL_ASSERT(desc->mtl.renderpass_descriptor_cb);
+    SOKOL_ASSERT(desc->mtl.drawable_cb);
+    SOKOL_ASSERT(desc->mtl.global_uniform_buffer_size > 0);
     _sg_mtl_init_pool(desc);
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
     _sg.mtl.valid = true;
-    _sg.mtl.renderpass_descriptor_cb = desc->mtl_renderpass_descriptor_cb;
-    _sg.mtl.drawable_cb = desc->mtl_drawable_cb;
+    _sg.mtl.renderpass_descriptor_cb = desc->mtl.renderpass_descriptor_cb;
+    _sg.mtl.drawable_cb = desc->mtl.drawable_cb;
     _sg.mtl.frame_index = 1;
-    _sg.mtl.ub_size = desc->mtl_global_uniform_buffer_size;
+    _sg.mtl.ub_size = desc->mtl.global_uniform_buffer_size;
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
-    _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl_device;
+    _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl.device;
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
     #if defined(_SG_TARGET_MACOS)
@@ -10037,7 +10049,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
       buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
-    _sg.wgpu.ub.num_bytes = desc->wgpu_global_uniform_buffer_size;
+    _sg.wgpu.ub.num_bytes = desc->wgpu.global_uniform_buffer_size;
 
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
@@ -10290,8 +10302,8 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint
     multiple copy-operations will be written throughout the frame.
 */
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->wgpu_global_staging_buffer_size > 0));
-    _sg.wgpu.staging.num_bytes = desc->wgpu_global_staging_buffer_size;
+    SOKOL_ASSERT(desc && (desc->wgpu.global_staging_buffer_size > 0));
+    _sg.wgpu.staging.num_bytes = desc->wgpu.global_staging_buffer_size;
     /* there's actually nothing more to do here */
 }
 
@@ -10415,8 +10427,8 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
 
 /*--- WGPU sampler cache functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->wgpu_sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->wgpu_sampler_cache_size);
+    SOKOL_ASSERT(desc->wgpu.sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->wgpu.sampler_cache_size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_sampler_cache(void) {
@@ -10458,20 +10470,20 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
 /*--- WGPU backend API functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->wgpu_device);
-    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu_render_format);
-    SOKOL_ASSERT(desc->wgpu_render_view_cb);
-    SOKOL_ASSERT(desc->wgpu_resolve_view_cb);
-    SOKOL_ASSERT(desc->wgpu_depth_stencil_view_cb);
-    SOKOL_ASSERT(desc->wgpu_global_uniform_buffer_size > 0);
-    SOKOL_ASSERT(desc->wgpu_global_staging_buffer_size > 0);
+    SOKOL_ASSERT(desc->wgpu.device);
+    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu.render_format);
+    SOKOL_ASSERT(desc->wgpu.render_view_cb);
+    SOKOL_ASSERT(desc->wgpu.resolve_view_cb);
+    SOKOL_ASSERT(desc->wgpu.depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->wgpu.global_uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->wgpu.global_staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
-    _sg.wgpu.dev = (WGPUDevice) desc->wgpu_device;
-    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_render_view_cb;
-    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_resolve_view_cb;
-    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu_depth_stencil_view_cb;
-    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->wgpu_render_format);
+    _sg.wgpu.dev = (WGPUDevice) desc->wgpu.device;
+    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.render_view_cb;
+    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.resolve_view_cb;
+    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.depth_stencil_view_cb;
+    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->wgpu.render_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
@@ -13173,11 +13185,11 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.desc.pipeline_pool_size = _sg_def(_sg.desc.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
     _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
-    _sg.desc.mtl_global_uniform_buffer_size = _sg_def(_sg.desc.mtl_global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    _sg.desc.mtl_sampler_cache_size = _sg_def(_sg.desc.mtl_sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg.desc.wgpu_global_uniform_buffer_size = _sg_def(_sg.desc.wgpu_global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
-    _sg.desc.wgpu_global_staging_buffer_size = _sg_def(_sg.desc.wgpu_global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
-    _sg.desc.wgpu_sampler_cache_size = _sg_def(_sg.desc.wgpu_sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.mtl.global_uniform_buffer_size = _sg_def(_sg.desc.mtl.global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    _sg.desc.mtl.sampler_cache_size = _sg_def(_sg.desc.mtl.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.wgpu.global_uniform_buffer_size = _sg_def(_sg.desc.wgpu.global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
+    _sg.desc.wgpu.global_staging_buffer_size = _sg_def(_sg.desc.wgpu.global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
+    _sg.desc.wgpu.sampler_cache_size = _sg_def(_sg.desc.wgpu.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
