@@ -10053,7 +10053,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
       buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
-    _sg.wgpu.ub.num_bytes = desc->wgpu.global_uniform_buffer_size;
+    _sg.wgpu.ub.num_bytes = desc->context.wgpu.global_uniform_buffer_size;
 
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
@@ -10307,7 +10307,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint
 */
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
     SOKOL_ASSERT(desc && (desc->wgpu.global_staging_buffer_size > 0));
-    _sg.wgpu.staging.num_bytes = desc->wgpu.global_staging_buffer_size;
+    _sg.wgpu.staging.num_bytes = desc->context.wgpu.global_staging_buffer_size;
     /* there's actually nothing more to do here */
 }
 
@@ -10432,7 +10432,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
 /*--- WGPU sampler cache functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
     SOKOL_ASSERT(desc->wgpu.sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->wgpu.sampler_cache_size);
+    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->context.wgpu.sampler_cache_size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_sampler_cache(void) {
@@ -10483,11 +10483,11 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->wgpu.global_staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
-    _sg.wgpu.dev = (WGPUDevice) desc->wgpu.device;
-    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.render_view_cb;
-    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.resolve_view_cb;
-    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->wgpu.depth_stencil_view_cb;
-    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->wgpu.render_format);
+    _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
+    _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.render_view_cb;
+    _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.resolve_view_cb;
+    _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
+    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->context.wgpu.render_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
