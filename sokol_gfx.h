@@ -6946,16 +6946,16 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
 _SOKOL_PRIVATE void _sg_d3d11_setup_backend(const sg_desc* desc) {
     /* assume _sg.d3d11 already is zero-initialized */
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->d3d11.device);
-    SOKOL_ASSERT(desc->d3d11.device_context);
-    SOKOL_ASSERT(desc->d3d11.render_target_view_cb);
-    SOKOL_ASSERT(desc->d3d11.depth_stencil_view_cb);
-    SOKOL_ASSERT(desc->d3d11.render_target_view_cb != desc->d3d11.depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->context.d3d11.device);
+    SOKOL_ASSERT(desc->context.d3d11.device_context);
+    SOKOL_ASSERT(desc->context.d3d11.render_target_view_cb);
+    SOKOL_ASSERT(desc->context.d3d11.depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->context.d3d11.render_target_view_cb != desc->context.d3d11.depth_stencil_view_cb);
     _sg.d3d11.valid = true;
-    _sg.d3d11.dev = (ID3D11Device*) desc->d3d11.device;
-    _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->d3d11.device_context;
-    _sg.d3d11.rtv_cb = desc->d3d11.render_target_view_cb;
-    _sg.d3d11.dsv_cb = desc->d3d11.depth_stencil_view_cb;
+    _sg.d3d11.dev = (ID3D11Device*) desc->context.d3d11.device;
+    _sg.d3d11.ctx = (ID3D11DeviceContext*) desc->context.d3d11.device_context;
+    _sg.d3d11.rtv_cb = desc->context.d3d11.render_target_view_cb;
+    _sg.d3d11.dsv_cb = desc->context.d3d11.depth_stencil_view_cb;
     _sg_d3d11_init_caps();
 }
 
