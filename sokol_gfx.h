@@ -2041,7 +2041,7 @@ typedef struct sg_mtl_desc {
     const void* (*drawable_cb)(void);
     int global_uniform_buffer_size;
     int sampler_cache_size;
-} sg_mtl_desc;
+} sg_metal_desc;
 
 typedef struct sg_d3d11_desc {
     const void* device;
@@ -2061,6 +2061,13 @@ typedef struct sg_wgpu_desc {
     int sampler_cache_size;
 } sg_wgpu_desc;
 
+typedef struct sg_context_desc {
+    sg_gl_desc gl;
+    sg_metal_desc metal;
+    sg_d3d11_desc d3d11;
+    sg_wgpu_desc wgpu;
+} sg_context_desc;
+
 typedef struct sg_desc {
     uint32_t _start_canary;
     int buffer_pool_size;
@@ -2069,10 +2076,7 @@ typedef struct sg_desc {
     int pipeline_pool_size;
     int pass_pool_size;
     int context_pool_size;
-    sg_gl_desc gl;
-    sg_mtl_desc mtl;
-    sg_d3d11_desc d3d11;
-    sg_wgpu_desc wgpu;
+    sg_context_desc context;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -5266,7 +5270,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     /* assumes that _sg.gl is already zero-initialized */
     _sg.gl.valid = true;
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-    _sg.gl.gles2 = desc->gl.force_gles2;
+    _sg.gl.gles2 = desc->context.gl.force_gles2;
     #else
     _SOKOL_UNUSED(desc);
     _sg.gl.gles2 = false;
@@ -8476,8 +8480,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->mtl.sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->mtl.sampler_cache_size);
+    SOKOL_ASSERT(desc->context.metal.sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->context.metal.sampler_cache_size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
@@ -8672,20 +8676,20 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
 _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     /* assume already zero-initialized */
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->mtl.device);
-    SOKOL_ASSERT(desc->mtl.renderpass_descriptor_cb);
-    SOKOL_ASSERT(desc->mtl.drawable_cb);
-    SOKOL_ASSERT(desc->mtl.global_uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->context.metal.device);
+    SOKOL_ASSERT(desc->context.metal.renderpass_descriptor_cb);
+    SOKOL_ASSERT(desc->context.metal.drawable_cb);
+    SOKOL_ASSERT(desc->context.metal.global_uniform_buffer_size > 0);
     _sg_mtl_init_pool(desc);
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
     _sg.mtl.valid = true;
-    _sg.mtl.renderpass_descriptor_cb = desc->mtl.renderpass_descriptor_cb;
-    _sg.mtl.drawable_cb = desc->mtl.drawable_cb;
+    _sg.mtl.renderpass_descriptor_cb = desc->context.metal.renderpass_descriptor_cb;
+    _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
     _sg.mtl.frame_index = 1;
-    _sg.mtl.ub_size = desc->mtl.global_uniform_buffer_size;
+    _sg.mtl.ub_size = desc->context.metal.global_uniform_buffer_size;
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
-    _sg_mtl_device = (__bridge id<MTLDevice>) desc->mtl.device;
+    _sg_mtl_device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
     #if defined(_SG_TARGET_MACOS)
@@ -13185,11 +13189,11 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.desc.pipeline_pool_size = _sg_def(_sg.desc.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
     _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
-    _sg.desc.mtl.global_uniform_buffer_size = _sg_def(_sg.desc.mtl.global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    _sg.desc.mtl.sampler_cache_size = _sg_def(_sg.desc.mtl.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg.desc.wgpu.global_uniform_buffer_size = _sg_def(_sg.desc.wgpu.global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
-    _sg.desc.wgpu.global_staging_buffer_size = _sg_def(_sg.desc.wgpu.global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
-    _sg.desc.wgpu.sampler_cache_size = _sg_def(_sg.desc.wgpu.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.context.metal.global_uniform_buffer_size = _sg_def(_sg.desc.context.metal.global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
+    _sg.desc.context.metal.sampler_cache_size = _sg_def(_sg.desc.context.metal.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.context.wgpu.global_uniform_buffer_size = _sg_def(_sg.desc.context.wgpu.global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
+    _sg.desc.context.wgpu.global_staging_buffer_size = _sg_def(_sg.desc.context.wgpu.global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
+    _sg.desc.context.wgpu.sampler_cache_size = _sg_def(_sg.desc.context.wgpu.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
