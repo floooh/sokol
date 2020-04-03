@@ -10306,7 +10306,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint
     multiple copy-operations will be written throughout the frame.
 */
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->wgpu.global_staging_buffer_size > 0));
+    SOKOL_ASSERT(desc && (desc->context.wgpu.global_staging_buffer_size > 0));
     _sg.wgpu.staging.num_bytes = desc->context.wgpu.global_staging_buffer_size;
     /* there's actually nothing more to do here */
 }
@@ -10431,7 +10431,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
 
 /*--- WGPU sampler cache functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->wgpu.sampler_cache_size > 0);
+    SOKOL_ASSERT(desc->context.wgpu.sampler_cache_size > 0);
     _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->context.wgpu.sampler_cache_size);
 }
 
@@ -10474,13 +10474,13 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
 /*--- WGPU backend API functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->wgpu.device);
-    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->wgpu.render_format);
-    SOKOL_ASSERT(desc->wgpu.render_view_cb);
-    SOKOL_ASSERT(desc->wgpu.resolve_view_cb);
-    SOKOL_ASSERT(desc->wgpu.depth_stencil_view_cb);
-    SOKOL_ASSERT(desc->wgpu.global_uniform_buffer_size > 0);
-    SOKOL_ASSERT(desc->wgpu.global_staging_buffer_size > 0);
+    SOKOL_ASSERT(desc->context.wgpu.device);
+    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->context.wgpu.render_format);
+    SOKOL_ASSERT(desc->context.wgpu.render_view_cb);
+    SOKOL_ASSERT(desc->context.wgpu.resolve_view_cb);
+    SOKOL_ASSERT(desc->context.wgpu.depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->context.wgpu.global_uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->context.wgpu.global_staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
