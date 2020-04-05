@@ -2250,10 +2250,8 @@ SOKOL_API_IMPL void sgl_begin_quads(void) {
 SOKOL_API_IMPL void sgl_end(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(_sgl.in_begin);
+    SOKOL_ASSERT(_sgl.cur_vertex >= _sgl.base_vertex);
     _sgl.in_begin = false;
-    if (_sgl.base_vertex == _sgl.cur_vertex) {
-        return;
-    }
     bool matrix_dirty = _sgl.matrix_dirty;
     if (matrix_dirty) {
         _sgl.matrix_dirty = false;
@@ -2580,7 +2578,9 @@ SOKOL_API_IMPL void sgl_draw(void) {
                             cur_uniform_index = args->uniform_index;
                         }
                         /* FIXME: what if number of vertices doesn't match the primitive type? */
-                        sg_draw(args->base_vertex, args->num_vertices, 1);
+                        if (args->num_vertices > 0) {
+                            sg_draw(args->base_vertex, args->num_vertices, 1);
+                        }
                     }
                     break;
             }
