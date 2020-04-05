@@ -465,6 +465,11 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **05-Apr-2020**: A bugfix in sokol_gl.h, the (fairly recent) optimization for
+    merging draw calls contained a bug that could be triggered in an "empty"
+    sgl_begin/sgl_end pair (with no vertices recorded inbetween). This could
+    lead to the following draw call being rendered with the wrong uniform data.
+
 - **30-Jan-2020**: Some cleanup in sokol_gfx.h in the backend implementation code,
     internal data structures and documentation comments. The public
     API hasn't changed, so the change should be completely invisible
