@@ -2889,9 +2889,12 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id,
 /* embedded JS function to handle all the asynchronous WebGPU setup */
 EM_JS(void, _sapp_emsc_wgpu_init, (), {
     WebGPU.initManagers();
+    // FIXME: the extension activation must be more clever here
     navigator.gpu.requestAdapter().then(function(adapter) {
-        adapter.requestDevice().then(function(device) {
+        console.log("wgpu adapter extensions: " + adapter.extensions);
+        adapter.requestDevice({ extensions: ["textureCompressionBC"]}).then(function(device) {
             var gpuContext = document.getElementById("canvas").getContext("gpupresent");
+            console.log("wgpu device extensions: " + adapter.extensions);
             gpuContext.getSwapChainPreferredFormat(device).then(function(fmt) {
                 var swapChainDescriptor = { device: device, format: fmt };
                 var swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
