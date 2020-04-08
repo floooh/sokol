@@ -3272,7 +3272,8 @@ typedef _sg_wgpu_pipeline_t _sg_pipeline_t;
 
 typedef struct {
     _sg_image_t* image;
-    WGPUTextureView tex_view;
+    WGPUTextureView render_tex_view;
+    WGPUTextureView resolve_tex_view;
 } _sg_wgpu_attachment_t;
 
 typedef struct {
@@ -10222,31 +10223,31 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* im
 /* helper function to copy image data into a texture via a staging buffer, returns number of
    bytes copied
 */
-_SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint8_t* staging_base_ptr, _sg_image_t* img, const sg_image_content* content) {
+_SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer stg_buf, uint8_t* stg_base_ptr, uint32_t stg_base_offset, _sg_image_t* img, const sg_image_content* content) {
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-    SOKOL_ASSERT(staging_buf && staging_base_ptr);
+    SOKOL_ASSERT(stg_buf && stg_base_ptr);
     SOKOL_ASSERT(img);
     SOKOL_ASSERT(content);
+    uint32_t stg_offset = stg_base_offset;
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
     const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
     const sg_pixel_format fmt = img->cmn.pixel_format;
     WGPUBufferCopyView src_view;
     memset(&src_view, 0, sizeof(src_view));
-    src_view.buffer = staging_buf;
+    src_view.buffer = stg_buf;
     WGPUTextureCopyView dst_view;
     memset(&dst_view, 0, sizeof(dst_view));
     dst_view.texture = img->wgpu.tex;
     WGPUExtent3D extent;
     memset(&extent, 0, sizeof(extent));
 
-    uint32_t staging_offset = 0;
     for (uint32_t face_index = 0; face_index < num_faces; face_index++) {
         for (uint32_t mip_index = 0; mip_index < (uint32_t)img->cmn.num_mipmaps; mip_index++) {
             SOKOL_ASSERT(content->subimage[face_index][mip_index].ptr);
             SOKOL_ASSERT(content->subimage[face_index][mip_index].size > 0);
             const uint8_t* src_base_ptr = (const uint8_t*)content->subimage[face_index][mip_index].ptr;
             SOKOL_ASSERT(src_base_ptr);
-            uint8_t* dst_base_ptr = staging_base_ptr + staging_offset;
+            uint8_t* dst_base_ptr = stg_base_ptr + stg_offset;
 
             const uint32_t mip_width  = _sg_max(img->cmn.width >> mip_index, 1);
             const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
@@ -10292,14 +10293,16 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer staging_buf, uint
             SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
             for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
                 const uint32_t layer_index = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? slice_index : face_index;
-                src_view.offset = staging_offset;
+                src_view.offset = stg_offset;
                 dst_view.arrayLayer = layer_index;
                 wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.staging_cmd_enc, &src_view, &dst_view, &extent);
-                staging_offset += dst_bytes_per_slice;
+                stg_offset += dst_bytes_per_slice;
+                SOKOL_ASSERT(stg_offset <= _sg.wgpu.staging.num_bytes);
             }
         }
     }
-    return staging_offset;
+    SOKOL_ASSERT(stg_offset >= stg_base_offset);
+    return (stg_offset - stg_base_offset);
 }
 
 /*
@@ -10425,13 +10428,13 @@ _SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_texture(_sg_image_t* img, const sg_
     }
     const int cur = _sg.wgpu.staging.cur;
     SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    uint32_t offset = _sg.wgpu.staging.offset;
-    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur] + offset;
+    uint32_t stg_offset = _sg.wgpu.staging.offset;
+    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur];
     WGPUBuffer stg_buf = _sg.wgpu.staging.buf[cur];
-    uint32_t bytes_copied = _sg_wgpu_copy_image_content(stg_buf, stg_ptr, img, content);
+    uint32_t bytes_copied = _sg_wgpu_copy_image_content(stg_buf, stg_ptr, stg_offset, img, content);
     _SOKOL_UNUSED(bytes_copied);
     SOKOL_ASSERT(bytes_copied == num_bytes);
-    _sg.wgpu.staging.offset = _sg_roundup(offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.staging.offset = _sg_roundup(stg_offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
     return true;
 }
 
@@ -10680,7 +10683,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
                 wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
                 WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
                 SOKOL_ASSERT(map.buffer && map.data);
-                uint32_t num_bytes = _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, img, &desc->content);
+                uint32_t num_bytes = _sg_wgpu_copy_image_content(map.buffer, (uint8_t*)map.data, 0, img, &desc->content);
                 _SOKOL_UNUSED(num_bytes);
                 SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size);
                 wgpuBufferUnmap(map.buffer);
@@ -10699,6 +10702,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
            offscreen-render pass
         */
         if (desc->render_target && is_msaa) {
+            wgpu_tex_desc.dimension = WGPUTextureDimension_2D;
+            wgpu_tex_desc.size.depth = 1;
+            wgpu_tex_desc.arrayLayerCount = 1;
+            wgpu_tex_desc.mipLevelCount = 1;
             wgpu_tex_desc.usage = WGPUTextureUsage_OutputAttachment;
             wgpu_tex_desc.sampleCount = desc->sample_count;
             img->wgpu.msaa_tex = wgpuDeviceCreateTexture(_sg.wgpu.dev, &wgpu_tex_desc);
@@ -10978,17 +10985,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format));
             pass->wgpu.color_atts[i].image = img;
             /* create a render-texture-view to render into the right sub-surface */
+            const bool is_msaa = img->cmn.sample_count > 1;
             WGPUTextureViewDescriptor view_desc;
             memset(&view_desc, 0, sizeof(view_desc));
-            view_desc.baseMipLevel = att_desc->mip_level;
+            view_desc.baseMipLevel = is_msaa ? 0 : att_desc->mip_level;
             view_desc.mipLevelCount = 1;
-            view_desc.baseArrayLayer = att_desc->slice;
+            view_desc.baseArrayLayer = is_msaa ? 0 : att_desc->slice;
             view_desc.arrayLayerCount = 1;
-            const bool is_msaa = img->cmn.sample_count > 1;
             WGPUTexture wgpu_tex = is_msaa ? img->wgpu.msaa_tex : img->wgpu.tex;
             SOKOL_ASSERT(wgpu_tex);
-            pass->wgpu.color_atts[i].tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
-            SOKOL_ASSERT(pass->wgpu.color_atts[i].tex_view);
+            pass->wgpu.color_atts[i].render_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
+            SOKOL_ASSERT(pass->wgpu.color_atts[i].render_tex_view);
+            /* ... and if needed a separate resolve texture view */
+            if (is_msaa) {
+                view_desc.baseMipLevel = att_desc->mip_level;
+                view_desc.baseArrayLayer = att_desc->slice;
+                WGPUTexture wgpu_tex = img->wgpu.tex;
+                pass->wgpu.color_atts[i].resolve_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
+                SOKOL_ASSERT(pass->wgpu.color_atts[i].resolve_tex_view);
+            }
         }
     }
     SOKOL_ASSERT(0 == pass->wgpu.ds_att.image);
@@ -11006,8 +11021,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
         memset(&view_desc, 0, sizeof(view_desc));
         WGPUTexture wgpu_tex = ds_img->wgpu.tex;
         SOKOL_ASSERT(wgpu_tex);
-        pass->wgpu.ds_att.tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
-        SOKOL_ASSERT(pass->wgpu.ds_att.tex_view);
+        pass->wgpu.ds_att.render_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
+        SOKOL_ASSERT(pass->wgpu.ds_att.render_tex_view);
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -11015,14 +11030,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        if (pass->wgpu.color_atts[i].tex_view) {
-            wgpuTextureViewRelease(pass->wgpu.color_atts[i].tex_view);
-            pass->wgpu.color_atts[i].tex_view = 0;
+        if (pass->wgpu.color_atts[i].render_tex_view) {
+            wgpuTextureViewRelease(pass->wgpu.color_atts[i].render_tex_view);
+            pass->wgpu.color_atts[i].render_tex_view = 0;
+        }
+        if (pass->wgpu.color_atts[i].resolve_tex_view) {
+            wgpuTextureViewRelease(pass->wgpu.color_atts[i].resolve_tex_view);
+            pass->wgpu.color_atts[i].resolve_tex_view = 0;
         }
     }
-    if (pass->wgpu.ds_att.tex_view) {
-        wgpuTextureViewRelease(pass->wgpu.ds_att.tex_view);
-        pass->wgpu.ds_att.tex_view = 0;
+    if (pass->wgpu.ds_att.render_tex_view) {
+        wgpuTextureViewRelease(pass->wgpu.ds_att.render_tex_view);
+        pass->wgpu.ds_att.render_tex_view = 0;
     }
 }
 
@@ -11067,9 +11086,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
             wgpu_color_att_desc[i].clearColor.g = action->colors[i].val[1];
             wgpu_color_att_desc[i].clearColor.b = action->colors[i].val[2];
             wgpu_color_att_desc[i].clearColor.a = action->colors[i].val[3];
-            wgpu_color_att_desc[i].attachment = wgpu_att->tex_view;
+            wgpu_color_att_desc[i].attachment = wgpu_att->render_tex_view;
             if (wgpu_att->image->cmn.sample_count > 1) {
-                wgpu_color_att_desc[i].resolveTarget = wgpu_att->image->wgpu.tex_view;
+                wgpu_color_att_desc[i].resolveTarget = wgpu_att->resolve_tex_view;
             }
         }
         wgpu_pass_desc.colorAttachmentCount = pass->cmn.num_color_atts;
@@ -11081,7 +11100,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
             wgpu_ds_att_desc.clearDepth = action->depth.val;
             wgpu_ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
             wgpu_ds_att_desc.clearStencil = action->stencil.val;
-            wgpu_ds_att_desc.attachment = pass->wgpu.ds_att.tex_view;
+            wgpu_ds_att_desc.attachment = pass->wgpu.ds_att.render_tex_view;
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att_desc;
             _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &wgpu_pass_desc);
         }
