@@ -10104,8 +10104,8 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
             int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
             ub_bgb[stage_index][ub_index].binding = bind_index;
             ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
-            /* NOTE: for dynamic-offset bindings, size must be zero */
-            ub_bgb[stage_index][ub_index].size = 0;
+            // FIXME FIXME FIXME FIXME: HACK FOR VALIDATION BUG IN DAWN
+            ub_bgb[stage_index][ub_index].size = (1<<16);
         }
     }
     WGPUBindGroupDescriptor bg_desc;
