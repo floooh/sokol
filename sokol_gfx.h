@@ -1950,6 +1950,8 @@ typedef struct sg_pass_info {
     The sg_desc struct contains configuration values for sokol_gfx,
     it is used as parameter to the sg_setup() call.
 
+    FIXME: explain the various configuration options
+
     The default configuration is:
 
     .buffer_pool_size:      128
@@ -1958,12 +1960,18 @@ typedef struct sg_pass_info {
     .pipeline_pool_size:    64
     .pass_pool_size:        16
     .context_pool_size:     16
+    .sampler_cache_size     64
+    .uniform_buffer_size    4 MB (4*1024*1024)
+    .staging_buffer_size    8 MB (8*1024*1024)
+
+    .context.color_format   SG_PIXELFORMAT_RGBA8 or SG_PIXELFORMAT_BGRA8 (depending on backend)
+    .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
 
     GL specific:
-    .gl_force_gles2
-        if this is true the GL backend will act in "GLES2 fallback mode" even
-        when compiled with SOKOL_GLES3, this is useful to fall back
-        to traditional WebGL if a browser doesn't support a WebGL2 context
+        .context.gl.orce_gles2
+            if this is true the GL backend will act in "GLES2 fallback mode" even
+            when compiled with SOKOL_GLES3, this is useful to fall back
+            to traditional WebGL if a browser doesn't support a WebGL2 context
 
     Metal specific:
         (NOTE: All Objective-C object references are transferred through
@@ -1973,63 +1981,48 @@ typedef struct sg_pass_info {
         must hold a strong reference to the Objective-C object for the
         duration of the sokol_gfx call!
 
-    .mtl.device
-        a pointer to the MTLDevice object
-    .mtl.renderpass_descriptor_cb
-        a C callback function to obtain the MTLRenderPassDescriptor for the
-        current frame when rendering to the default framebuffer, will be called
-        in sg_begin_default_pass()
-    .mtl.drawable_cb
-        a C callback function to obtain a MTLDrawable for the current
-        frame when rendering to the default framebuffer, will be called in
-        sg_end_pass() of the default pass
-    .mtl.global_uniform_buffer_size
-        the size of the global uniform buffer in bytes, this must be big
-        enough to hold all uniform block updates for a single frame,
-        the default value is 4 MByte (4 * 1024 * 1024)
-    .mtl.sampler_cache_size
-        the number of slots in the sampler cache, the Metal backend
-        will share texture samplers with the same state in this
-        cache, the default value is 64
+        .context.metal.device
+            a pointer to the MTLDevice object
+        .context.metal.renderpass_descriptor_cb
+            a C callback function to obtain the MTLRenderPassDescriptor for the
+            current frame when rendering to the default framebuffer, will be called
+            in sg_begin_default_pass()
+        .context.metal.drawable_cb
+            a C callback function to obtain a MTLDrawable for the current
+            frame when rendering to the default framebuffer, will be called in
+            sg_end_pass() of the default pass
 
     D3D11 specific:
-    .d3d11.device
-        a pointer to the ID3D11Device object, this must have been created
-        before sg_setup() is called
-    .d3d11.device_context
-        a pointer to the ID3D11DeviceContext object
-    .d3d11.render_target_view_cb
-        a C callback function to obtain a pointer to the current
-        ID3D11RenderTargetView object of the default framebuffer,
-        this function will be called in sg_begin_pass() when rendering
-        to the default framebuffer
-    .d3d11.depth_stencil_view_cb
-        a C callback function to obtain a pointer to the current
-        ID3D11DepthStencilView object of the default framebuffer,
-        this function will be called in sg_begin_pass() when rendering
-        to the default framebuffer
+        .context.d3d11.device
+            a pointer to the ID3D11Device object, this must have been created
+            before sg_setup() is called
+        .context..d3d11.device_context
+            a pointer to the ID3D11DeviceContext object
+        .context..d3d11.render_target_view_cb
+            a C callback function to obtain a pointer to the current
+            ID3D11RenderTargetView object of the default framebuffer,
+            this function will be called in sg_begin_pass() when rendering
+            to the default framebuffer
+        .context.d3d11.depth_stencil_view_cb
+            a C callback function to obtain a pointer to the current
+            ID3D11DepthStencilView object of the default framebuffer,
+            this function will be called in sg_begin_pass() when rendering
+            to the default framebuffer
 
     WebGPU specific:
-    .wgpu.device
-        a WGPUDevice handle
-    .wgpu.render_format
-        WGPUTextureFormat of the swap chain surface
-    .wgpu.render_view_cb
-        callback to get the current WGPUTextureView of the swapchain's
-        rendering attachment (may be an MSAA surface)
-    .wgpu.resolve_view_cb
-        callback to get the current WGPUTextureView of the swapchain's
-        MSAA-resolve-target surface, must return 0 if not MSAA rendering
-    .wgpu.depth_stencil_view_cb
-        callback to get current default-pass depth-stencil-surface WGPUTextureView
-        the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
-    .wgpu.global_uniform_buffer_size
-        the size in bytes of the per-frame uniform buffers in the WebGPU backend,
-        the default size is 4 MBytes
-    .wgpu.global_staging_buffer_size
-        the size in bytes of the overall per-frame data that's uploaded into
-        into dynamic buffer and image resources
-        (e.g. sg_update_buffer() + sg_append_buffer() sg_update_image())
+        .context.wgpu.device
+            a WGPUDevice handle
+        .context.wgpu.render_format
+            WGPUTextureFormat of the swap chain surface
+        .context.wgpu.render_view_cb
+            callback to get the current WGPUTextureView of the swapchain's
+            rendering attachment (may be an MSAA surface)
+        .context.wgpu.resolve_view_cb
+            callback to get the current WGPUTextureView of the swapchain's
+            MSAA-resolve-target surface, must return 0 if not MSAA rendering
+        .context.wgpu.depth_stencil_view_cb
+            callback to get current default-pass depth-stencil-surface WGPUTextureView
+            the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
 */
 typedef struct sg_gl_desc {
     bool force_gles2;
@@ -2039,8 +2032,6 @@ typedef struct sg_mtl_desc {
     const void* device;
     const void* (*renderpass_descriptor_cb)(void);
     const void* (*drawable_cb)(void);
-    int global_uniform_buffer_size;
-    int sampler_cache_size;
 } sg_metal_desc;
 
 typedef struct sg_d3d11_desc {
@@ -2052,16 +2043,14 @@ typedef struct sg_d3d11_desc {
 
 typedef struct sg_wgpu_desc {
     const void* device;                    /* WGPUDevice */
-    uint32_t render_format;                /* WGPUTextureFormat */
     const void* (*render_view_cb)(void);   /* returns WGPUTextureView */
     const void* (*resolve_view_cb)(void);  /* returns WGPUTextureView */
     const void* (*depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
-    int global_uniform_buffer_size;
-    int global_staging_buffer_size;
-    int sampler_cache_size;
 } sg_wgpu_desc;
 
 typedef struct sg_context_desc {
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
     sg_gl_desc gl;
     sg_metal_desc metal;
     sg_d3d11_desc d3d11;
@@ -2076,6 +2065,9 @@ typedef struct sg_desc {
     int pipeline_pool_size;
     int pass_pool_size;
     int context_pool_size;
+    int uniform_buffer_size;
+    int staging_buffer_size;
+    int sampler_cache_size;
     sg_context_desc context;
     uint32_t _end_canary;
 } sg_desc;
@@ -2445,9 +2437,8 @@ enum {
     _SG_DEFAULT_PASS_POOL_SIZE = 16,
     _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
     _SG_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
-    _SG_MTL_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_WGPU_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_WGPU_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
+    _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
+    _SG_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
 };
 
 /* fixed-size string */
@@ -3326,7 +3317,6 @@ typedef struct {
     int cur_width;
     int cur_height;
     WGPUDevice dev;
-    sg_pixel_format swapchain_format;
     WGPUTextureView (*render_view_cb)(void);
     WGPUTextureView (*resolve_view_cb)(void);
     WGPUTextureView (*depth_stencil_view_cb)(void);
@@ -3592,21 +3582,6 @@ _SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
             SOKOL_UNREACHABLE;
             return -1;
     }
-}
-
-/* the default color pixelformat for render targets */
-_SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_colorformat(void) {
-    #if defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        return SG_PIXELFORMAT_BGRA8;
-    #elif defined(SOKOL_WGPU)
-        return _sg.wgpu.swapchain_format;
-    #else
-        return SG_PIXELFORMAT_RGBA8;
-    #endif
-}
-
-_SOKOL_PRIVATE sg_pixel_format _sg_default_rendertarget_depthformat(void) {
-    return SG_PIXELFORMAT_DEPTH_STENCIL;
 }
 
 /* return true if pixel format is a compressed format */
@@ -9898,16 +9873,6 @@ _SOKOL_PRIVATE WGPUTextureAspect _sg_wgpu_texture_aspect(sg_pixel_format fmt) {
 }
 */
 
-/* this is only used to convert WGPU's preferred swapchain render format back to sokol-gfx */
-_SOKOL_PRIVATE sg_pixel_format _sg_wgpu_render_format(WGPUTextureFormat fmt) {
-    switch (fmt) {
-        case WGPUTextureFormat_RGBA8Unorm:  return SG_PIXELFORMAT_RGBA8;
-        case WGPUTextureFormat_BGRA8Unorm:  return SG_PIXELFORMAT_BGRA8;
-        /* FIXME: are there more? */
-        default: SOKOL_UNREACHABLE; return SG_PIXELFORMAT_NONE;
-    }
-}
-
 _SOKOL_PRIVATE WGPUCompareFunction _sg_wgpu_comparefunc(sg_compare_func f) {
     switch (f) {
         case SG_COMPAREFUNC_NEVER:          return WGPUCompareFunction_Never;
@@ -10068,7 +10033,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
       buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
-    _sg.wgpu.ub.num_bytes = desc->context.wgpu.global_uniform_buffer_size;
+    _sg.wgpu.ub.num_bytes = desc->uniform_buffer_size;
 
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
@@ -10323,8 +10288,8 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer stg_buf, uint8_t*
     multiple copy-operations will be written throughout the frame.
 */
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
-    SOKOL_ASSERT(desc && (desc->context.wgpu.global_staging_buffer_size > 0));
-    _sg.wgpu.staging.num_bytes = desc->context.wgpu.global_staging_buffer_size;
+    SOKOL_ASSERT(desc && (desc->staging_buffer_size > 0));
+    _sg.wgpu.staging.num_bytes = desc->staging_buffer_size;
     /* there's actually nothing more to do here */
 }
 
@@ -10448,8 +10413,8 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
 
 /*--- WGPU sampler cache functions ---*/
 _SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->context.wgpu.sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->context.wgpu.sampler_cache_size);
+    SOKOL_ASSERT(desc->sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.wgpu.sampler_cache, desc->sampler_cache_size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_sampler_cache(void) {
@@ -10492,19 +10457,17 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
-    SOKOL_ASSERT(WGPUTextureFormat_Undefined != desc->context.wgpu.render_format);
     SOKOL_ASSERT(desc->context.wgpu.render_view_cb);
     SOKOL_ASSERT(desc->context.wgpu.resolve_view_cb);
     SOKOL_ASSERT(desc->context.wgpu.depth_stencil_view_cb);
-    SOKOL_ASSERT(desc->context.wgpu.global_uniform_buffer_size > 0);
-    SOKOL_ASSERT(desc->context.wgpu.global_staging_buffer_size > 0);
+    SOKOL_ASSERT(desc->uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
     _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.render_view_cb;
     _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.resolve_view_cb;
     _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
-    _sg.wgpu.swapchain_format = _sg_wgpu_render_format((WGPUTextureFormat)desc->context.wgpu.render_format);
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
@@ -12715,8 +12678,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         else {
             /* default pass */
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == 1, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->cmn.color_format == _sg_default_rendertarget_colorformat(), _SG_VALIDATE_APIP_COLOR_FORMAT);
-            SOKOL_VALIDATE(pip->cmn.depth_format == _sg_default_rendertarget_depthformat(), _SG_VALIDATE_APIP_DEPTH_FORMAT);
+            SOKOL_VALIDATE(pip->cmn.color_format == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
+            SOKOL_VALIDATE(pip->cmn.depth_format == _sg.desc.context.depth_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
             /* FIXME: hmm, we don't know if the default framebuffer is multisampled here */
         }
         return SOKOL_VALIDATE_END();
@@ -12914,7 +12877,7 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.num_mipmaps = _sg_def(def.num_mipmaps, 1);
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
     if (desc->render_target) {
-        def.pixel_format = _sg_def(def.pixel_format, _sg_default_rendertarget_colorformat());
+        def.pixel_format = _sg_def(def.pixel_format, _sg.desc.context.color_format);
     }
     else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
@@ -12995,8 +12958,8 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         def.blend.color_write_mask = (uint8_t) _sg_def((sg_color_mask)def.blend.color_write_mask, SG_COLORMASK_RGBA);
     }
     def.blend.color_attachment_count = _sg_def(def.blend.color_attachment_count, 1);
-    def.blend.color_format = _sg_def(def.blend.color_format, _sg_default_rendertarget_colorformat());
-    def.blend.depth_format = _sg_def(def.blend.depth_format, _sg_default_rendertarget_depthformat());
+    def.blend.color_format = _sg_def(def.blend.color_format, _sg.desc.context.color_format);
+    def.blend.depth_format = _sg_def(def.blend.depth_format, _sg.desc.context.depth_format);
 
     def.rasterizer.cull_mode = _sg_def(def.rasterizer.cull_mode, SG_CULLMODE_NONE);
     def.rasterizer.face_winding = _sg_def(def.rasterizer.face_winding, SG_FACEWINDING_CW);
@@ -13215,18 +13178,27 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     memset(&_sg, 0, sizeof(_sg));
     _sg.desc = *desc;
 
-    /* replace zero-init items with their default values */
+    /* replace zero-init items with their default values
+        NOTE: on WebGPU, the default color pixel format MUST be provided,
+        cannot be a default compile-time constant.
+    */
+    #if defined(SOKOL_WGPU)
+        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != _sg.desc.context.color_format);
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+        _sg.desc.context.color_format = _sg_def(_sg.desc.context.color_format, SG_PIXELFORMAT_BGRA8);
+    #else
+        _sg.desc.context.color_format = _sg_def(_sg.desc.context.color_format, SG_PIXELFORMAT_RGBA8);
+    #endif
+    _sg.desc.context.depth_format = _sg_def(_sg.desc.context.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
     _sg.desc.buffer_pool_size = _sg_def(_sg.desc.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     _sg.desc.image_pool_size = _sg_def(_sg.desc.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
     _sg.desc.shader_pool_size = _sg_def(_sg.desc.shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE);
     _sg.desc.pipeline_pool_size = _sg_def(_sg.desc.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
     _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
     _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
-    _sg.desc.context.metal.global_uniform_buffer_size = _sg_def(_sg.desc.context.metal.global_uniform_buffer_size, _SG_MTL_DEFAULT_UB_SIZE);
-    _sg.desc.context.metal.sampler_cache_size = _sg_def(_sg.desc.context.metal.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg.desc.context.wgpu.global_uniform_buffer_size = _sg_def(_sg.desc.context.wgpu.global_uniform_buffer_size, _SG_WGPU_DEFAULT_UB_SIZE);
-    _sg.desc.context.wgpu.global_staging_buffer_size = _sg_def(_sg.desc.context.wgpu.global_staging_buffer_size, _SG_WGPU_DEFAULT_STAGING_SIZE);
-    _sg.desc.context.wgpu.sampler_cache_size = _sg_def(_sg.desc.context.wgpu.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    _sg.desc.uniform_buffer_size = _sg_def(_sg.desc.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
+    _sg.desc.staging_buffer_size = _sg_def(_sg.desc.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
+    _sg.desc.sampler_cache_size = _sg_def(_sg.desc.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
