@@ -8456,8 +8456,8 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_init_sampler_cache(const sg_desc* desc) {
-    SOKOL_ASSERT(desc->context.metal.sampler_cache_size > 0);
-    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->context.metal.sampler_cache_size);
+    SOKOL_ASSERT(desc->sampler_cache_size > 0);
+    _sg_smpcache_init(&_sg.mtl.sampler_cache, desc->sampler_cache_size);
 }
 
 /* destroy the sampler cache, and release all sampler objects */
@@ -8655,7 +8655,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc->context.metal.device);
     SOKOL_ASSERT(desc->context.metal.renderpass_descriptor_cb);
     SOKOL_ASSERT(desc->context.metal.drawable_cb);
-    SOKOL_ASSERT(desc->context.metal.global_uniform_buffer_size > 0);
+    SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     _sg_mtl_init_pool(desc);
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
@@ -8663,7 +8663,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.renderpass_descriptor_cb = desc->context.metal.renderpass_descriptor_cb;
     _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
     _sg.mtl.frame_index = 1;
-    _sg.mtl.ub_size = desc->context.metal.global_uniform_buffer_size;
+    _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg_mtl_sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg_mtl_device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg_mtl_cmd_queue = [_sg_mtl_device newCommandQueue];
