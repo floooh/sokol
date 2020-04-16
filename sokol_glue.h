@@ -105,14 +105,14 @@ SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_RGBA8 == SG_PIXELFORMAT_RGBA8);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_BGRA8 == SG_PIXELFORMAT_BGRA8);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH == SG_PIXELFORMAT_DEPTH);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH_STENCIL == SG_PIXELFORMAT_DEPTH_STENCIL);
+    SOKOL_ASSERT(SAPP_PIXELFORMAT_RGBA8 == (sapp_pixel_format) SG_PIXELFORMAT_RGBA8);
+    SOKOL_ASSERT(SAPP_PIXELFORMAT_BGRA8 == (sapp_pixel_format) SG_PIXELFORMAT_BGRA8);
+    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH == (sapp_pixel_format) SG_PIXELFORMAT_DEPTH);
+    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH_STENCIL == (sapp_pixel_format) SG_PIXELFORMAT_DEPTH_STENCIL);
     sg_context_desc desc;
     memset(&desc, 0, sizeof(desc));
-    desc.color_format = sapp_color_format();
-    desc.depth_format = sapp_depth_format();
+    desc.color_format = (sg_pixel_format) sapp_color_format();
+    desc.depth_format = (sg_pixel_format) sapp_depth_format();
     desc.gl.force_gles2 = sapp_gles2();
     desc.metal.device = sapp_metal_get_device();
     desc.metal.renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor;
