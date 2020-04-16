@@ -218,6 +218,17 @@
         int sapp_height(void)
             Likewise, returns the current height of the default framebuffer.
 
+        uint32_t sapp_color_format(void)
+        uint32_t sapp_depth_format(void)
+            The color and depth-stencil pixelformats of the default framebuffer,
+            as uint32_t values which are compatible with sokol-gfx's
+            sg_pixel_format enum:
+
+                SAPP_PIXELFORMAT_RGBA8 == 23 == SG_PIXELFORMAT_RGBA8
+                SAPP_PIXELFORMAT_BGRA8 == 27 == SG_PIXELFORMAT_BGRA8
+                SAPP_PIXELFORMAT_DEPTH == 41 == SG_PIXELFORMAT_DEPTH
+                SAPP_PIXELFORMAT_DEPTH_STENCIL == 42 == SG_PIXELFORMAT_DEPTH_STENCIL
+
         bool sapp_gles2(void)
             Returns true if a GLES2 or WebGL context has been created. This
             is useful when a GLES3/WebGL2 context was requested but is not
@@ -265,7 +276,6 @@
         const void* sapp_wgpu_get_render_view(void)
         const void* sapp_wgpu_get_resolve_view(void)
         const void* sapp_wgpu_get_depth_stencil_view(void)
-        uint32_t sapp_wgpu_get_render_format(void)
             These are the WebGPU-specific functions to get the WebGPU
             objects and values required for rendering. If sokol_app.h
             is not compiled with SOKOL_WGPU, these functions return null.
@@ -597,6 +607,14 @@ enum {
     SAPP_MAX_KEYCODES = 512,
 };
 
+/* NOTE: the pixel format values *must* be compatible with sg_pixel_format */
+typedef enum sapp_pixel_format {
+    SAPP_PIXELFORMAT_RGBA8 = 23,
+    SAPP_PIXELFORMAT_BGRA8 = 27,
+    SAPP_PIXELFORMAT_DEPTH = 41,
+    SAPP_PIXELFORMAT_DEPTH_STENCIL = 42
+} sapp_pixel_format;
+
 typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
     SAPP_EVENTTYPE_KEY_DOWN,
@@ -834,6 +852,10 @@ SOKOL_API_DECL bool sapp_isvalid(void);
 SOKOL_API_DECL int sapp_width(void);
 /* returns the current framebuffer height in pixels */
 SOKOL_API_DECL int sapp_height(void);
+/* get default framebuffer color pixel format */
+SOKOL_API_DECL sapp_pixel_format sapp_color_format(void);
+/* get default framebuffer depth pixel format */
+SOKOL_API_DECL sapp_pixel_format sapp_depth_format(void);
 /* returns true when high_dpi was requested and actually running in a high-dpi scenario */
 SOKOL_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
@@ -904,8 +926,6 @@ SOKOL_API_DECL const void* sapp_wgpu_get_render_view(void);
 SOKOL_API_DECL const void* sapp_wgpu_get_resolve_view(void);
 /* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
 SOKOL_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
-/* WebGPU: get the swapchain's pixel format as WGPUTextureFormat */
-SOKOL_API_DECL uint32_t sapp_wgpu_get_render_format(void);
 
 /* Android: get native activity handle */
 SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
@@ -986,6 +1006,9 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 #if !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
     #include <stdlib.h>
@@ -7575,6 +7598,28 @@ SOKOL_API_IMPL int sapp_width(void) {
     return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
+SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
+    #if defined(SOKOL_WGPU)
+        switch (_sapp_emsc.wgpu.render_format) {
+            case WGPUTextureFormat_RGBA8Unorm:
+                return SAPP_PIXELFORMAT_RGBA8;
+            case WGPUTextureFormat_BGRA8Unorm:
+                return SAPP_PIXELFORMAT_BGRA8;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
+        }
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+        return SAPP_PIXELFORMAT_BGRA8;
+    #else
+        return SAPP_PIXELFORMAT_RGBA8;
+    #endif
+}
+
+SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+    return SAPP_PIXELFORMAT_DEPTH_STENCIL;
+}
+
 SOKOL_API_IMPL int sapp_height(void) {
     return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
@@ -7813,15 +7858,6 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_WGPU)
         return (const void*) _sapp_emsc.wgpu.depth_stencil_view;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL uint32_t sapp_wgpu_get_render_format(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
-        return (uint32_t) _sapp_emsc.wgpu.render_format;
     #else
         return 0;
     #endif
