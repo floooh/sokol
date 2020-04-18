@@ -3213,6 +3213,7 @@ static dispatch_semaphore_t _sg_mtl_sem;
 #define _SG_WGPU_STAGING_PIPELINE_SIZE (8)
 #define _SG_WGPU_ROWPITCH_ALIGN (256)
 #define _SG_WGPU_MAX_SHADERSTAGE_IMAGES (8)
+#define _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE (1<<16)
 
 typedef struct {
     _sg_slot_t slot;
@@ -10033,7 +10034,13 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
       buffer, but this isn't currently allowed in Dawn.
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
-    _sg.wgpu.ub.num_bytes = desc->uniform_buffer_size;
+
+    /* Add the max-uniform-update size (64 KB) to the requested buffer size,
+       this is to prevent validation errors in the WebGPU implementation
+       if the entire buffer size is used per frame. 64 KB is the allowed
+       max uniform update size on NVIDIA
+    */
+    _sg.wgpu.ub.num_bytes = desc->uniform_buffer_size + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
 
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
@@ -11291,6 +11298,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->shader->slot.id == _sg.wgpu.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
     SOKOL_ASSERT(num_bytes <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(num_bytes <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
     SOKOL_ASSERT(0 != _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur]);
 
     uint8_t* dst_ptr = _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur] + _sg.wgpu.ub.offset;
