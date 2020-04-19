@@ -284,6 +284,40 @@
         will be replaced with their concrete values in the returned desc
         struct.
 
+    ON INITIALIZATION:
+    ==================
+    When calling sg_setup(), a pointer to an sg_desc struct must be provided
+    which contains initialization options. These options provide two types
+    of information to sokol-gfx:
+
+        (1) upper bounds and limits needed to allocate various internal
+            data structures:
+                - the max number of resources of each type that can
+                  be alive at the same time, this is used for allocating
+                  internal pools
+                - the max overall size of uniform data that can be
+                  updated per frame, including a worst-case alignment
+                  per uniform update (this worst-case alignment is 256 bytes)
+                - the max size of all dynamic resource updates (sg_update_buffer,
+                  sg_append_buffer and sg_update_image) per frame
+                - the max number of entries in the texture sampler cache
+                  (how many unique texture sampler can exist at the same time)
+            Not all of those limit values are used by all backends, but it is
+            good practice to provide them none-the-less.
+
+        (2) 3D-API "context information" (sometimes also called "bindings"):
+            sokol_gfx.h doesn't create or initialize 3D API objects which are
+            closely related to the presentation layer (this includes the "rendering
+            device", the swapchain, and any objects which depend on the
+            swapchain). These API objects (or callback functions to obtain
+            them, if those objects might change between frames), must
+            be provided in a nested sg_context_desc struct inside the
+            sg_desc struct. If sokol_gfx.h is used together with
+            sokol_app.h, have a look at the sokol_glue.h header which provides
+            a convenience function to get a sg_context_desc struct filled out
+            with context information provided by sokol_app.h
+
+    See the documention block of the sg_desc struct below for more information.
 
     BACKEND-SPECIFIC TOPICS:
     ========================
@@ -1954,21 +1988,24 @@ typedef struct sg_pass_info {
 
     The default configuration is:
 
-    .buffer_pool_size:      128
-    .image_pool_size:       128
-    .shader_pool_size:      32
-    .pipeline_pool_size:    64
-    .pass_pool_size:        16
-    .context_pool_size:     16
+    .buffer_pool_size       128
+    .image_pool_size        128
+    .shader_pool_size       32
+    .pipeline_pool_size     64
+    .pass_pool_size         16
+    .context_pool_size      16
     .sampler_cache_size     64
     .uniform_buffer_size    4 MB (4*1024*1024)
     .staging_buffer_size    8 MB (8*1024*1024)
 
-    .context.color_format   SG_PIXELFORMAT_RGBA8 or SG_PIXELFORMAT_BGRA8 (depending on backend)
+    .context.color_format: default value depends on selected backend:
+        all GL backends:    SG_PIXELFORMAT_RGBA8
+        Metal and D3D11:    SG_PIXELFORMAT_BGRA8
+        WGPU:               *no default* (must be queried from WGPU swapchain)
     .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
 
     GL specific:
-        .context.gl.orce_gles2
+        .context.gl.force_gles2
             if this is true the GL backend will act in "GLES2 fallback mode" even
             when compiled with SOKOL_GLES3, this is useful to fall back
             to traditional WebGL if a browser doesn't support a WebGL2 context
@@ -2023,6 +2060,12 @@ typedef struct sg_pass_info {
         .context.wgpu.depth_stencil_view_cb
             callback to get current default-pass depth-stencil-surface WGPUTextureView
             the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
+
+    When using sokol_gfx.h and sokol_app.h together, consider using the
+    helper function sapp_sgcontext() in the sokol_glue.h header to
+    initialize the sg_desc.context nested struct. sapp_sgcontext() returns
+    a completely initialized sg_context_desc struct with information
+    provided by sokol_app.h.
 */
 typedef struct sg_gl_desc {
     bool force_gles2;

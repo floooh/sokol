@@ -971,7 +971,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #elif defined(__EMSCRIPTEN__)
     /* emscripten (asm.js or wasm) */
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2) && !defined(SOKOL_WGPU)
-    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3, SOKOL_GLES2 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
