@@ -1530,9 +1530,8 @@ typedef struct sg_image_content {
     .depth/.layers:     1
     .num_mipmaps:       1
     .usage:             SG_USAGE_IMMUTABLE
-    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, backend-dependent
-                        for render targets (RGBA8 or BGRA8)
-    .sample_count:      1 (only used in render_targets)
+    .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.context.color_format for render targets
+    .sample_count:      1 for textures, or sg_desc.context.sample_count for render target
     .min_filter:        SG_FILTER_NEAREST
     .mag_filter:        SG_FILTER_NEAREST
     .wrap_u:            SG_WRAP_REPEAT
@@ -1737,7 +1736,7 @@ typedef struct sg_shader_desc {
         .alpha_to_coverage_enabled:     false
         .cull_mode:                     SG_CULLMODE_NONE
         .face_winding:                  SG_FACEWINDING_CW
-        .sample_count:                  1
+        .sample_count:                  sg_desc.context.sample_count
         .depth_bias:                    0.0f
         .depth_bias_slope_scale:        0.0f
         .depth_bias_clamp:              0.0f
@@ -2003,6 +2002,7 @@ typedef struct sg_pass_info {
         Metal and D3D11:    SG_PIXELFORMAT_BGRA8
         WGPU:               *no default* (must be queried from WGPU swapchain)
     .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
+    .context.sample_count   1
 
     GL specific:
         .context.gl.force_gles2
@@ -2094,6 +2094,7 @@ typedef struct sg_wgpu_desc {
 typedef struct sg_context_desc {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
+    int sample_count;
     sg_gl_desc gl;
     sg_metal_desc metal;
     sg_d3d11_desc d3d11;
@@ -12731,7 +12732,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == 1, _SG_VALIDATE_APIP_ATT_COUNT);
             SOKOL_VALIDATE(pip->cmn.color_format == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
             SOKOL_VALIDATE(pip->cmn.depth_format == _sg.desc.context.depth_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
-            /* FIXME: hmm, we don't know if the default framebuffer is multisampled here */
+            SOKOL_VALIDATE(pip->cmn.sample_count == _sg.desc.context.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
         }
         return SOKOL_VALIDATE_END();
     #endif
@@ -12929,11 +12930,12 @@ _SOKOL_PRIVATE sg_image_desc _sg_image_desc_defaults(const sg_image_desc* desc) 
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
     if (desc->render_target) {
         def.pixel_format = _sg_def(def.pixel_format, _sg.desc.context.color_format);
+        def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
     }
     else {
         def.pixel_format = _sg_def(def.pixel_format, SG_PIXELFORMAT_RGBA8);
+        def.sample_count = _sg_def(def.sample_count, 1);
     }
-    def.sample_count = _sg_def(def.sample_count, 1);
     def.min_filter = _sg_def(def.min_filter, SG_FILTER_NEAREST);
     def.mag_filter = _sg_def(def.mag_filter, SG_FILTER_NEAREST);
     def.wrap_u = _sg_def(def.wrap_u, SG_WRAP_REPEAT);
@@ -13014,7 +13016,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
 
     def.rasterizer.cull_mode = _sg_def(def.rasterizer.cull_mode, SG_CULLMODE_NONE);
     def.rasterizer.face_winding = _sg_def(def.rasterizer.face_winding, SG_FACEWINDING_CW);
-    def.rasterizer.sample_count = _sg_def(def.rasterizer.sample_count, 1);
+    def.rasterizer.sample_count = _sg_def(def.rasterizer.sample_count, _sg.desc.context.sample_count);
 
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         sg_vertex_attr_desc* a_desc = &def.layout.attrs[attr_index];
@@ -13241,6 +13243,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
         _sg.desc.context.color_format = _sg_def(_sg.desc.context.color_format, SG_PIXELFORMAT_RGBA8);
     #endif
     _sg.desc.context.depth_format = _sg_def(_sg.desc.context.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    _sg.desc.context.sample_count = _sg_def(_sg.desc.context.sample_count, 1);
     _sg.desc.buffer_pool_size = _sg_def(_sg.desc.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
     _sg.desc.image_pool_size = _sg_def(_sg.desc.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
     _sg.desc.shader_pool_size = _sg_def(_sg.desc.shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE);
