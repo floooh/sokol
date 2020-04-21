@@ -1544,6 +1544,17 @@ typedef struct sg_image_content {
     .content            an sg_image_content struct to define the initial content
     .label              0       (optional string label for trace hooks)
 
+    Q: Why is the default sample_count for render targets identical with the
+    "default sample count" from sg_desc.context.sample_count?
+
+    A: So that it matches the default sample count in pipeline objects. Even
+    though it is a bit strange/confusing that offscreen render targets by default
+    get the same sample count as the default framebuffer, but it's better that
+    an offscreen render target created with default parameters matches
+    a pipeline object created with default parameters.
+
+    NOTE:
+
     SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
     WebGL/GLES2, use sg_query_features().imagetype_array and
     sg_query_features().imagetype_3d at runtime to check
