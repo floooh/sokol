@@ -2078,38 +2078,38 @@ typedef struct sg_pass_info {
     a completely initialized sg_context_desc struct with information
     provided by sokol_app.h.
 */
-typedef struct sg_gl_desc {
+typedef struct sg_gl_context_desc {
     bool force_gles2;
-} sg_gl_desc;
+} sg_gl_context_desc;
 
-typedef struct sg_mtl_desc {
+typedef struct sg_mtl_context_desc {
     const void* device;
     const void* (*renderpass_descriptor_cb)(void);
     const void* (*drawable_cb)(void);
-} sg_metal_desc;
+} sg_metal_context_desc;
 
-typedef struct sg_d3d11_desc {
+typedef struct sg_d3d11_context_desc {
     const void* device;
     const void* device_context;
     const void* (*render_target_view_cb)(void);
     const void* (*depth_stencil_view_cb)(void);
-} sg_d3d11_desc;
+} sg_d3d11_context_desc;
 
-typedef struct sg_wgpu_desc {
+typedef struct sg_wgpu_context_desc {
     const void* device;                    /* WGPUDevice */
     const void* (*render_view_cb)(void);   /* returns WGPUTextureView */
     const void* (*resolve_view_cb)(void);  /* returns WGPUTextureView */
     const void* (*depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
-} sg_wgpu_desc;
+} sg_wgpu_context_desc;
 
 typedef struct sg_context_desc {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    sg_gl_desc gl;
-    sg_metal_desc metal;
-    sg_d3d11_desc d3d11;
-    sg_wgpu_desc wgpu;
+    sg_gl_context_desc gl;
+    sg_metal_context_desc metal;
+    sg_d3d11_context_desc d3d11;
+    sg_wgpu_context_desc wgpu;
 } sg_context_desc;
 
 typedef struct sg_desc {
