@@ -218,16 +218,19 @@
         int sapp_height(void)
             Likewise, returns the current height of the default framebuffer.
 
-        uint32_t sapp_color_format(void)
-        uint32_t sapp_depth_format(void)
+        sapp_pixel_format sapp_color_format(void)
+        sapp_pixel_format sapp_depth_format(void)
             The color and depth-stencil pixelformats of the default framebuffer,
-            as uint32_t values which are compatible with sokol-gfx's
+            as enum values which are compatible with sokol-gfx's
             sg_pixel_format enum:
 
                 SAPP_PIXELFORMAT_RGBA8 == 23 == SG_PIXELFORMAT_RGBA8
                 SAPP_PIXELFORMAT_BGRA8 == 27 == SG_PIXELFORMAT_BGRA8
                 SAPP_PIXELFORMAT_DEPTH == 41 == SG_PIXELFORMAT_DEPTH
                 SAPP_PIXELFORMAT_DEPTH_STENCIL == 42 == SG_PIXELFORMAT_DEPTH_STENCIL
+
+        int sapp_sample_count(void)
+            Return the MSAA sample count of the default framebuffer.
 
         bool sapp_gles2(void)
             Returns true if a GLES2 or WebGL context has been created. This
