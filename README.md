@@ -480,6 +480,9 @@ Mainly some "missing features" for desktop apps:
     - [sokol-samples](https://github.com/floooh/sokol-samples/) has a new set of
       backend-specific WebGPU samples, and the other samples have been updated
       for the new sokol-gfx initialization
+    - ```pre-webgpu``` tags have been added to the [sokol](https://github.com/floooh/sokol/releases/tag/pre-webgpu), [sokol-samples](https://github.com/floooh/sokol-samples/releases/tag/pre-webgpu), [sokol-tools](https://github.com/floooh/sokol-tools/releases/tag/pre-webgpu)
+      and [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin/releases/tag/pre-webgpu) github repositories (in case you need to continue working with
+      the older versions)
     - please see this [blog post](https://floooh.github.io/2020/04/26/sokol-spring-2020-update.html)
       for more details
 
