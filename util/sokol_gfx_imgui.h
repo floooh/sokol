@@ -861,6 +861,15 @@ _SOKOL_PRIVATE const char* _sg_imgui_imagetype_string(sg_image_type t) {
     }
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_samplertype_string(sg_sampler_type t) {
+    switch (t) {
+        case SG_SAMPLERTYPE_FLOAT:  return "SG_SAMPLERTYPE_FLOAT";
+        case SG_SAMPLERTYPE_SINT:   return "SG_SAMPLERTYPE_SINT";
+        case SG_SAMPLERTYPE_UINT:   return "SG_SAMPLERTYPE_UINT";
+        default:                    return "???";
+    }
+}
+
 _SOKOL_PRIVATE const char* _sg_imgui_pixelformat_string(sg_pixel_format fmt) {
     switch (fmt) {
         case SG_PIXELFORMAT_NONE: return "SG_PIXELFORMAT_NONE";
@@ -2783,7 +2792,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(sg_imgui_t* ctx, const sg_shader
             for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
                 const sg_shader_image_desc* sid = &stage->images[i];
                 if (sid->type != _SG_IMAGETYPE_DEFAULT) {
-                    igText("%s %s", _sg_imgui_imagetype_string(sid->type), sid->name ? sid->name : "");
+                    igText("slot: %d\n  name: %s\n  type: %s\n  sampler_type: %s",
+                        i, sid->name ? sid->name : "NONE",
+                        _sg_imgui_imagetype_string(sid->type),
+                        _sg_imgui_samplertype_string(sid->sampler_type));
                 }
                 else {
                     break;

@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**30-Jan-2020**: some internal code cleanup in sokol_gfx.h)
+[See what's new](#updates) (**30-Apr-2020**: experimental WebGPU backend and minor breaking changes)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -170,18 +170,13 @@ to split the Objective-C code from the C code of the sample):
 ```cpp
 #include "sokol_app.h"
 #include "sokol_gfx.h"
+#include "sokol_glue.h"
 
 sg_pass_action pass_action;
 
 void init(void) {
     sg_setup(&(sg_desc){
-        .mtl_device = sapp_metal_get_device(),
-        .mtl_renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor,
-        .mtl_drawable_cb = sapp_metal_get_drawable,
-        .d3d11_device = sapp_d3d11_get_device(),
-        .d3d11_device_context = sapp_d3d11_get_device_context(),
-        .d3d11_render_target_view_cb = sapp_d3d11_get_render_target_view,
-        .d3d11_depth_stencil_view_cb = sapp_d3d11_get_depth_stencil_view
+        .context = sapp_sgcontext()
     });
     pass_action = (sg_pass_action) {
         .colors[0] = { .action=SG_ACTION_CLEAR, .val={1.0f, 0.0f, 0.0f, 1.0f} }
@@ -464,6 +459,32 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **30-Apr-2020**: experimental WebGPU backend and a minor breaking change:
+    - sokol_gfx.h: a new WebGPU backend, expect frequent breakage for a while
+      because the WebGPU backend is still in flux
+    - a new header sokol_glue.h, with interop helper functions when specific combinations
+      of sokol headers are used together
+    - changes in the way sokol_gfx.h is initialized via a new layout of the
+      sg_desc structure
+    - sokol_gfx.h: a new ```sg_sampler_type``` enum which is required for
+      shader creation to tell the WebGPU backend about the sampler data types
+      (float, signed int, or unsigned int) used in the shader
+    - sokol_app.h: a handful new functions to query default framebuffer attributes (color- and
+      depth-buffer pixel formats, and MSAA sample count)
+    - sokol_app.h: WebGPU device and swapchain initialization (currently only
+      in the emscripten code path)
+    - [sokol-shdc](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) has
+      been updated with WebGPU support (currently outputs SPIRV bytecode), and to output the new
+      ```sg_sampler_type``` enum in ```sg_shader_image_desc```
+    - [sokol-samples](https://github.com/floooh/sokol-samples/) has a new set of
+      backend-specific WebGPU samples, and the other samples have been updated
+      for the new sokol-gfx initialization
+    - ```pre-webgpu``` tags have been added to the [sokol](https://github.com/floooh/sokol/releases/tag/pre-webgpu), [sokol-samples](https://github.com/floooh/sokol-samples/releases/tag/pre-webgpu), [sokol-tools](https://github.com/floooh/sokol-tools/releases/tag/pre-webgpu)
+      and [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin/releases/tag/pre-webgpu) github repositories (in case you need to continue working with
+      the older versions)
+    - please see this [blog post](https://floooh.github.io/2020/04/26/sokol-spring-2020-update.html)
+      for more details
 
 - **05-Apr-2020**: A bugfix in sokol_gl.h, the (fairly recent) optimization for
     merging draw calls contained a bug that could be triggered in an "empty"
