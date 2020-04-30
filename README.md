@@ -462,7 +462,7 @@ Mainly some "missing features" for desktop apps:
 
 - **30-Apr-2020**: experimental WebGPU backend and a minor breaking change:
     - sokol_gfx.h: a new WebGPU backend, expect frequent breakage for a while
-      because the WebGPU backend is still in flux
+      because the WebGPU API is still in flux
     - a new header sokol_glue.h, with interop helper functions when specific combinations
       of sokol headers are used together
     - changes in the way sokol_gfx.h is initialized via a new layout of the
