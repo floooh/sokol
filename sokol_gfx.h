@@ -489,10 +489,9 @@
         - SG_VERTEXFORMAT_SHORT4N
         - SG_VERTEXFORMAT_USHORT4N
 
-      D3D11 will not convert *non-normalized* vertex formats
-      to floating point vertex shader inputs, those can
-      only use the ivecn formats when D3D11 is used
-      as backend (GL and should Metal can use both formats)
+      D3D11 will not convert *non-normalized* vertex formats to floating point
+      vertex shader inputs, those can only be uses with the *ivecn* vertex shader
+      input types when D3D11 is used as backend (GL and Metal can use both formats)
 
         - SG_VERTEXFORMAT_BYTE4,
         - SG_VERTEXFORMAT_UBYTE4
@@ -1715,7 +1714,7 @@ typedef struct sg_shader_desc {
             .buffer_index   0 the vertex buffer bind slot
             .offset         0 (offsets can be omitted if the vertex layout has no gaps)
             .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
-    .shader:            0 (must be intilized with a valid sg_shader id!)
+    .shader:            0 (must be initialized with a valid sg_shader id!)
     .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
     .index_type:        SG_INDEXTYPE_NONE
     .depth_stencil:

@@ -881,7 +881,7 @@ SOKOL_API_DECL sapp_desc sapp_query_desc(void);
 SOKOL_API_DECL void sapp_request_quit(void);
 /* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
 SOKOL_API_DECL void sapp_cancel_quit(void);
-/* intiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
+/* initiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
 SOKOL_API_DECL void sapp_quit(void);
 /* call from inside event callback to consume the current event (don't forward to platform) */
 SOKOL_API_DECL void sapp_consume_event(void);
