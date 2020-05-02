@@ -460,14 +460,15 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
-- **02-May-2020**: Added optional "shutdown support" to the HTML5/WASM code path in
-sokol_app.h. Thanks to @caiiiycuk for the PR!
-    - Must be enabled on startup by setting the new ```sapp_desc.html5_enable_shutdown```
-      initialization parameter to ```true```.
-    - Calling ```sapp_quit()``` was formerly a no-op on the web platform, now this
-      causes a similar shutdown behaviour as on other platforms: the sokol-app
-      cleanup callback will be called, after that platform-specific cleanup
-      code, and finally the frame loop will be exited.
+- **02-May-2020**: sokol_app.h: the 'programmatic quit' behaviour on the
+web-platform is now more in line with other platforms: calling
+```sapp_quit()``` will invoke the cleanup callback function, perform
+platform-specific cleanup (like unregistering JS event handlers), and finally
+exit the frame loop. In typical scenarios this isn't very useful (because
+usually the user will simply close the tab, which doesn't allow to run
+cleanup code), but it's useful for situations where the same
+code needs to run repeatedly on a web page. Many thanks to @caiiiycuk
+for providing the PR!
 
 - **30-Apr-2020**: experimental WebGPU backend and a minor breaking change:
     - sokol_gfx.h: a new WebGPU backend, expect frequent breakage for a while
