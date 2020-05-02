@@ -427,13 +427,16 @@
     exit' means that the application-provided cleanup callback will be
     called.
 
-    This 'graceful exit' is only supported on native desktop platforms, on
-    the web and mobile platforms an application may be terminated at any time
-    by the user or browser/OS runtime environment without a chance to run
-    custom shutdown code.
+    On the web platform, programmatic quit isn't very useful in many cases
+    because usually the user simply closes the webpage, so there isn't a proper
+    shutdown-behaviour implemented by default. But when required, this can be
+    enabled with the sapp_desc.html5_enable_shutdown=true initialization
+    parameter.  When this is set, the user cleanup callback will be invoked, JS
+    event handlers unregistered, and the request-animation-frame-loop will be
+    exited.
 
-    On the web platform, you can call the following function to let the
-    browser open a standard popup dialog before the user wants to leave a site:
+    In addition, the standard browser popup which warns before leaving a webpage
+    can be activated or deactivated with the following call:
 
         sapp_html5_ask_leave_site(bool ask);
 
