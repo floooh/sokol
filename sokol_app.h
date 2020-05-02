@@ -422,39 +422,16 @@
 
     APPLICATION QUIT
     ================
-    Without special quit handling, a sokol_app.h application will exist
-    'gracefully' when the user clicks the window close-button. 'Graceful
-    exit' means that the application-provided cleanup callback will be
-    called.
+    Without special quit handling, a sokol_app.h application will quit
+    'gracefully' when the user clicks the window close-button unless a
+    platform's application model prevents this (e.g. on web or mobile).
+    'Graceful exit' means that the application-provided cleanup callback will
+    be called before the application quits.
 
-    On the web platform, programmatic quit isn't very useful in many cases
-    because usually the user simply closes the webpage, so there isn't a proper
-    shutdown-behaviour implemented by default. But when required, this can be
-    enabled with the sapp_desc.html5_enable_shutdown=true initialization
-    parameter.  When this is set, the user cleanup callback will be invoked, JS
-    event handlers unregistered, and the request-animation-frame-loop will be
-    exited.
-
-    In addition, the standard browser popup which warns before leaving a webpage
-    can be activated or deactivated with the following call:
-
-        sapp_html5_ask_leave_site(bool ask);
-
-    The initial state of the associated internal flag can be provided
-    at startup via sapp_desc.html5_ask_leave_site.
-
-    This feature should only be used sparingly in critical situations - for
-    instance when the user would loose data - since popping up modal dialog
-    boxes is considered quite rude in the web world. Note that there's no way
-    to customize the content of this dialog box or run any code as a result
-    of the user's decision. Also note that the user must have interacted with
-    the site before the dialog box will appear. These are all security measures
-    to prevent fishing.
-
-    On native desktop platforms, sokol_app.h provides more control over the
+    On native desktop platforms sokol_app.h provides more control over the
     application-quit-process. It's possible to initiate a 'programmatic quit'
-    from the application code, and a quit initiated by the application user
-    can be intercepted (for instance to show a custom dialog box).
+    from the application code, and a quit initiated by the application user can
+    be intercepted (for instance to show a custom dialog box).
 
     This 'programmatic quit protocol' is implemented trough 3 functions
     and 1 event:
@@ -480,6 +457,37 @@
           sapp_request_quit() function. The event handler callback code can handle
           this event by calling sapp_cancel_quit() to cancel the quit.
           If the event is ignored, the application will quit as usual.
+
+    On the web platform, the quit behaviour differs from native platforms,
+    because of web-specific restrictions:
+
+    A `programmatic quit` initiated by calling sapp_quit() or
+    sapp_request_quit() will work as described above: the cleanup callback is
+    called, platform-specific cleanup is performed (on the web
+    this means that JS event handlers are unregisters), and then
+    the request-animation-loop will be exited. However that's all. The
+    web page itself will continue to exist (e.g. it's not possible to
+    programmatically close the browser tab).
+
+    On the web it's also not possible to run custom code when the user
+    closes a brower tab, so it's not possible to prevent this with a
+    fancy custom dialog box.
+
+    Instead the standard "Leave Site?" dialog box can be activated (or
+    deactivated) with the following function:
+
+        sapp_html5_ask_leave_site(bool ask);
+
+    The initial state of the associated internal flag can be provided
+    at startup via sapp_desc.html5_ask_leave_site.
+
+    This feature should only be used sparingly in critical situations - for
+    instance when the user would loose data - since popping up modal dialog
+    boxes is considered quite rude in the web world. Note that there's no way
+    to customize the content of this dialog box or run any code as a result
+    of the user's decision. Also note that the user must have interacted with
+    the site before the dialog box will appear. These are all security measures
+    to prevent fishing.
 
     The Dear ImGui HighDPI sample contains example code of how to
     implement a 'Really Quit?' dialog box with Dear ImGui (native desktop
@@ -845,7 +853,6 @@ typedef struct sapp_desc {
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
     bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
-    bool html5_enable_shutdown;         /* if true, then sokol-app will run in a mode where shutdown/cleanup is enabled */
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
@@ -1082,7 +1089,6 @@ typedef struct {
     bool event_consumed;
     const char* html5_canvas_name;
     bool html5_ask_leave_site;
-    bool html5_enable_shutdown;
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
     uint64_t frame_count;
@@ -1192,7 +1198,6 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.swap_interval = _sapp_def(_sapp.desc.swap_interval, 1);
     _sapp.html5_canvas_name = _sapp_def(_sapp.desc.html5_canvas_name, "canvas");
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
-    _sapp.html5_enable_shutdown = _sapp.desc.html5_enable_shutdown;
     _sapp.clipboard_enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard_enabled) {
         _sapp.clipboard_size = _sapp_def(_sapp.desc.clipboard_size, 8192);
@@ -3075,20 +3080,18 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
         _sapp_frame();
     #endif
 
-    /* optional quit-handling */
-    if (_sapp.html5_enable_shutdown) {
+    /* quit-handling */
+    if (_sapp.quit_requested) {
+        _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        _sapp_call_event(&_sapp.event);
         if (_sapp.quit_requested) {
-            _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
-            _sapp_call_event(&_sapp.event);
-            if (_sapp.quit_requested) {
-                _sapp.quit_ordered = true;
-            }
+            _sapp.quit_ordered = true;
         }
-        if (_sapp.quit_ordered) {
-            _sapp_emsc_unregister_eventhandlers();
-            _sapp_call_cleanup();
-            return EM_FALSE;
-        }
+    }
+    if (_sapp.quit_ordered) {
+        _sapp_emsc_unregister_eventhandlers();
+        _sapp_call_cleanup();
+        return EM_FALSE;
     }
     return EM_TRUE;
 }
