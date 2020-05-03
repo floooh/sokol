@@ -1847,7 +1847,7 @@ void _sapp_macos_set_clipboard_string(const char* str) {
 }
 
 void _sapp_macos_show_mouse(bool shown) {
-    if (show) {
+    if (shown) {
         [NSCursor unhide];
     }
     else {
