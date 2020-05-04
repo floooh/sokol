@@ -119,14 +119,20 @@ extern "C" {
     compile-time define.
 */
 typedef enum sdtx_font_t {
-    SDTX_FONT_KC853,
+    SDTX_FONT_KC853 = 0,
     SDTX_FONT_KC854,
+    SDTX_FONT_Z1013,
     SDTX_FONT_CPC,
     SDTC_FONT_C64,
+    //--- keep at end:
+    SDTC_FONT_NUM
 } sdtx_font_t;
 
 /* a rendering context handle */
 typedef struct sdtx_context { uint32_t id; } sdtx_context;
+
+/* the default context handle */
+static const sdtx_context sdtx_default_context = { 0 };
 
 /*
     sdtx_context_desc_t
@@ -137,8 +143,8 @@ typedef struct sdtx_context { uint32_t id; } sdtx_context;
     of text.
 */
 typedef struct sdtx_context_desc_t {
-    int max_draw_chars;             // max number of characters rendered in one frame, default: 16384
-    int max_printf_chars;           // size of internal buffer for snprintf()
+    int char_buf_size;              // max number of characters rendered in one frame, default: 16384
+    int printf_buf_size;            // size of internal buffer for snprintf()
     int canvas_width;               // the initial virtual canvas width, default: 640
     int canvas_height;              // the initial virtual canvas height, default: 400
     sdtx_font_t font;               // the default font (default is the first valid embedded font)
@@ -213,8 +219,274 @@ SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR
 #ifdef SOKOL_DEBUGTEXT_IMPL
 #define SOKOL_DEBUGTEXT_IMPL_INCLUDED (1)
 
+#include <string.h> // memset
+
+#ifndef SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
+#endif
+#ifndef SOKOL_DEBUG
+    #ifndef NDEBUG
+        #define SOKOL_DEBUG (1)
+    #endif
+#endif
+#ifndef SOKOL_ASSERT
+    #include <assert.h>
+    #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_MALLOC
+    #include <stdlib.h>
+    #define SOKOL_MALLOC(s) malloc(s)
+    #define SOKOL_FREE(p) free(p)
+#endif
+#ifndef SOKOL_LOG
+    #ifdef SOKOL_DEBUG
+        #include <stdio.h>
+        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
+    #else
+        #define SOKOL_LOG(s)
+    #endif
+#endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
+#endif
+
 #ifndef SOKOL_SNPRINTF
 #define SOKOL_SNPRINTF snprintf
 #endif
+
+typedef struct {
+    uint32_t id;
+    sg_resource_state state;
+} _sdtx_slot_t;
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sdtx_pool_t;
+
+typedef struct {
+    int x, y;
+} _sdtx_int2_t;
+
+typedef struct {
+    uint16_t u0, v0, u1, v1;
+} _sdtx_uvrect_t;
+
+typedef struct {
+    _sdtx_uvrect_t uvs[256];
+} _sdtx_font_t;
+
+typedef struct {
+    uint16_t x, y;
+    uint32_t color;
+} _sdtx_vertex_t;
+
+typedef struct {
+    _sdtx_slot_t slot;
+    sg_buffer vbuf;
+    sg_pipeline pip;
+    uint32_t max_vertex;
+    uint32_t cur_vertex;
+    _sdtx_vertex_t* vertices;
+    uint32_t fmt_buf_size;
+    uint8_t* fmt_buf;
+    sdtx_font_t cur_font;
+    _sdtx_int2_t canvas_size;
+    _sdtx_int2_t origin;
+    _sdtx_int2_t pos;
+    uint32_t color;
+} _sdtx_context_t;
+
+typedef struct {
+    _sdtx_pool_t pool;
+    _sdtx_context_t* contexts;
+} _sdtx_context_pool_t;
+
+typedef struct {
+    uint32_t init_cookie;
+    sdtx_desc_t desc;
+
+    sg_image font_tex;
+    _sdtx_font_t fonts[SDTX_FONT_NUM];
+    uint32_t default_context_id;
+    _sdtx_context_pool context_pool;
+} _sdtx__t;
+static _sdtx_t _sdtx;
+
+
+/*=== CONTEXT POOL ===========================================================*/
+#define _SDTX_INVALID_SLOT_INDEX (0)
+#define _SDTX_SLOT_SHIFT (16)
+#define _SDTX_MAX_POOL_SIZE (1<<_SDTX_SLOT_SHIFT)
+
+static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    SOKOL_ASSERT(pool->gen_ctrs);
+    memset(pool->gen_ctrs, 0, gen_ctrs_size);
+    /* it's not a bug to only reserve 'num' here */
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    SOKOL_ASSERT(pool->free_queue);
+    /* never allocate the zero-th pool item since the invalid id is 0 */
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+static void _sdtx_discard_pool(_sdtx_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_FREE(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    SOKOL_FREE(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+static int _sdtx_pool_alloc_index(_sdtx_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    }
+    else {
+        /* pool exhausted */
+        return _SDTX_INVALID_SLOT_INDEX;
+    }
+}
+
+static void _sdtx_pool_free_index(_sdtx_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SDTX_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    /* debug check against double-free */
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+static void _sdtx_reset_context(_sdtx_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    memset(ctx, 0, sizeof(_sdtx_context_t));
+}
+
+static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    /* note: the pool will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SDTX_MAX_POOL_SIZE));
+    _sdtx_init_pool(&_sdtx.context_pool.pool, desc->context_pool_size);
+    size_t pool_byte_size = sizeof(_sdtx_context_t) * _sdtx.context_pool.pool.size;
+    _sdtx.context_pool.contexts = (_sdtx_context_t*) SOKOL_MALLOC(pool_byte_size);
+    SOKOL_ASSERT(_sgl.context_pool.contexts);
+    memset(_sgl.context_pool.contexts, 0, pool_byte_size);
+}
+
+static void _sdtx_discard_pipeline_pool(void) {
+    SOKOL_FREE(_sdtx.context.pool.contexts);
+    _sdtx.contex_pool.contexts = 0;
+    _sdtx_discard_pool(&_sdtx.context_pool.pool);
+}
+
+/* allocate the slot at slot_index:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the resource id
+*/
+static uint32_t _sdtx_slot_alloc(_sdtx_pool_t* pool, _sdtx_slot_t* slot, int slot_index) {
+    /* FIXME: add handling for an overflowing generation counter,
+       for now, just overflow (another option is to disable
+       the slot)
+    */
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SDTX_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT((slot->state == SG_RESOURCESTATE_INITIAL) && (slot->id == SG_INVALID_ID));
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SDTX_SLOT_SHIFT)|(slot_index & _SDTX_SLOT_MASK);
+    slot->state = SG_RESOURCESTATE_ALLOC;
+    return slot->id;
+}
+
+/* extract slot index from id */
+static int _sdtx_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SDTX_SLOT_MASK);
+    SOKOL_ASSERT(_SDTX_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+/* get context pointer without id-check */
+static _sdtx_context_t* _sdstx_context_at(uint32_t ctx_id) {
+    SOKOL_ASSERT(SG_INVALID_ID != ctx_id);
+    int slot_index = _sdtx_slot_index(ctx_id);
+    SOKOL_ASSERT((slot_index > _SDTX_INVALID_SLOT_INDEX) && (slot_index < _sgl.context_pool.pool.size));
+    return &_sgl.context_pool.contexts[slot_index];
+}
+
+/* get context pointer with id-check, returns 0 if no match */
+static _sdtx_context_t* _sdtx_lookup_context(uint32_t ctx_id) {
+    if (SG_INVALID_ID != ctx_id) {
+        _sdtx_context_t* ctx = _sdtx_context_at(ctx_id);
+        if (ctx->slot.id == ctx_id) {
+            return ctx;
+        }
+    }
+    return 0;
+}
+
+static sdtx_context _sdtx_alloc_context(void) {
+    sdtx_context hnd;
+    int slot_index = _sdtx_pool_alloc_index(&_sdtx.context_pool.pool);
+    if (_SDTX_INVALID_SLOT_INDEX != slot_index) {
+        hnd.id = _sdtx_slot_alloc(&_sdtx.context_pool.pool, &_sdtx.context_pool.contexts[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        hnd.id = SG_INVALID_ID;
+    }
+    return hnd;
+}
+
+static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc* desc) {
+    SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && desc);
+    // FIXME
+    SOKOL_ASSERT(false);
+}
+
+static sdtx_context _sdtx_make_context(const sdtx_context_desc* desc) {
+    SOKOL_ASSERT(desc);
+    sdtx_context ctx_id = _sdtx_alloc_context();
+    if (ctx_id.id != SG_INVALID_ID) {
+        _sdtx_init_context(ctx_id, desc);
+    }
+    else {
+        SOKOL_LOG("sokol_debugtext.h: context pool exhausted!");
+    }
+    return ctx_id;
+}
+
+static void _sdtx_destroy_context(stdx_context ctx_id) {
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx) {
+        // FIXME
+        SOKOL_ASSERT(false);
+    }
+}
 
 #endif /* SOKOL_DEBUGTEXT_IMPL */
