@@ -3267,6 +3267,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#pragma comment (linker, "/subsystem:windows")
 #pragma comment (lib, "gdi32.lib")
 #pragma comment (lib, "user32.lib")
 #pragma comment (lib, "Shell32.lib")
