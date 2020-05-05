@@ -3267,6 +3267,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#pragma comment (lib, "gdi32.lib")
+#pragma comment (lib, "user32.lib")
 #pragma comment (lib, "Shell32.lib")
 
 #if defined(SOKOL_D3D11)
@@ -3285,7 +3287,6 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "WindowsApp.lib")
 #else
-#pragma comment (lib, "user32.lib")
 #pragma comment (lib, "dxgi.lib")
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "dxguid.lib")
