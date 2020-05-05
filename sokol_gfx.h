@@ -5068,6 +5068,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
             else if (strstr(ext, "_texture_compression_pvrtc")) {
                 has_pvrtc = true;
             }
+            else if (strstr(ext, "_compressed_texture_pvrtc")) {
+                has_pvrtc = true;
+            }
             else if (strstr(ext, "_compressed_texture_etc")) {
                 has_etc2 = true;
             }
@@ -5135,7 +5138,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         has_s3tc = strstr(ext, "_texture_compression_s3tc") || strstr(ext, "_compressed_texture_s3tc");
         has_rgtc = strstr(ext, "_texture_compression_rgtc");
         has_bptc = strstr(ext, "_texture_compression_bptc");
-        has_pvrtc = strstr(ext, "_texture_compression_pvrtc");
+        has_pvrtc = strstr(ext, "_texture_compression_pvrtc") || strstr(ext, "_compressed_texture_pvrtc");
         has_etc2 = strstr(ext, "_compressed_texture_etc");
         has_texture_float = strstr(ext, "_texture_float");
         has_texture_float_linear = strstr(ext, "_texture_float_linear");
