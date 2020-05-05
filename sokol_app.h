@@ -3269,7 +3269,9 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <shellapi.h>
 #pragma comment (lib, "Shell32.lib")
 
+#if !defined(SOKOL_WIN32_FORCE_MAIN)
 #pragma comment (linker, "/subsystem:windows")
+#endif
 
 #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
 #pragma comment (lib, "WindowsApp.lib")
