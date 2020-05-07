@@ -123,9 +123,9 @@ typedef enum sdtx_font_t {
     SDTX_FONT_KC854,
     SDTX_FONT_Z1013,
     SDTX_FONT_CPC,
-    SDTC_FONT_C64,
+    SDTX_FONT_C64,
     //--- keep at end:
-    SDTC_FONT_NUM
+    SDTX_FONT_NUM
 } sdtx_font_t;
 
 /* a rendering context handle */
@@ -311,8 +311,8 @@ typedef struct {
     sg_image font_tex;
     _sdtx_font_t fonts[SDTX_FONT_NUM];
     uint32_t default_context_id;
-    _sdtx_context_pool context_pool;
-} _sdtx__t;
+    _sdtx_context_pool_t context_pool;
+} _sdtx_t;
 static _sdtx_t _sdtx;
 
 
@@ -320,6 +320,7 @@ static _sdtx_t _sdtx;
 #define _SDTX_INVALID_SLOT_INDEX (0)
 #define _SDTX_SLOT_SHIFT (16)
 #define _SDTX_MAX_POOL_SIZE (1<<_SDTX_SLOT_SHIFT)
+#define _SDTX_SLOT_MASK (_SDTX_MAX_POOL_SIZE-1)
 
 static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -393,13 +394,13 @@ static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
     _sdtx_init_pool(&_sdtx.context_pool.pool, desc->context_pool_size);
     size_t pool_byte_size = sizeof(_sdtx_context_t) * _sdtx.context_pool.pool.size;
     _sdtx.context_pool.contexts = (_sdtx_context_t*) SOKOL_MALLOC(pool_byte_size);
-    SOKOL_ASSERT(_sgl.context_pool.contexts);
-    memset(_sgl.context_pool.contexts, 0, pool_byte_size);
+    SOKOL_ASSERT(_sdtx.context_pool.contexts);
+    memset(_sdtx.context_pool.contexts, 0, pool_byte_size);
 }
 
 static void _sdtx_discard_pipeline_pool(void) {
-    SOKOL_FREE(_sdtx.context.pool.contexts);
-    _sdtx.contex_pool.contexts = 0;
+    SOKOL_FREE(_sdtx.context_pool.contexts);
+    _sdtx.context_pool.contexts = 0;
     _sdtx_discard_pool(&_sdtx.context_pool.pool);
 }
 
@@ -432,11 +433,11 @@ static int _sdtx_slot_index(uint32_t id) {
 }
 
 /* get context pointer without id-check */
-static _sdtx_context_t* _sdstx_context_at(uint32_t ctx_id) {
+static _sdtx_context_t* _sdtx_context_at(uint32_t ctx_id) {
     SOKOL_ASSERT(SG_INVALID_ID != ctx_id);
     int slot_index = _sdtx_slot_index(ctx_id);
-    SOKOL_ASSERT((slot_index > _SDTX_INVALID_SLOT_INDEX) && (slot_index < _sgl.context_pool.pool.size));
-    return &_sgl.context_pool.contexts[slot_index];
+    SOKOL_ASSERT((slot_index > _SDTX_INVALID_SLOT_INDEX) && (slot_index < _sdtx.context_pool.pool.size));
+    return &_sdtx.context_pool.contexts[slot_index];
 }
 
 /* get context pointer with id-check, returns 0 if no match */
@@ -463,13 +464,13 @@ static sdtx_context _sdtx_alloc_context(void) {
     return hnd;
 }
 
-static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc* desc) {
+static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* desc) {
     SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && desc);
     // FIXME
     SOKOL_ASSERT(false);
 }
 
-static sdtx_context _sdtx_make_context(const sdtx_context_desc* desc) {
+static sdtx_context _sdtx_make_context(const sdtx_context_desc_t* desc) {
     SOKOL_ASSERT(desc);
     sdtx_context ctx_id = _sdtx_alloc_context();
     if (ctx_id.id != SG_INVALID_ID) {
@@ -481,7 +482,7 @@ static sdtx_context _sdtx_make_context(const sdtx_context_desc* desc) {
     return ctx_id;
 }
 
-static void _sdtx_destroy_context(stdx_context ctx_id) {
+static void _sdtx_destroy_context(sdtx_context ctx_id) {
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     if (ctx) {
         // FIXME
