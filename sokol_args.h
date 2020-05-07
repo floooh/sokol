@@ -294,6 +294,10 @@ SOKOL_API_DECL const char* sargs_value_at(int index);
 
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for c++ */
+inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
+
 #endif
 #endif // SOKOL_ARGS_INCLUDED
 
