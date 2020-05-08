@@ -119,7 +119,7 @@ extern "C" {
     compile-time define.
 */
 typedef enum sdtx_font_t {
-    SDTX_FONT_KC853 = 0,
+    SDTX_FONT_KC853 = 0,        // this is also the default font
     SDTX_FONT_KC854,
     SDTX_FONT_Z1013,
     SDTX_FONT_CPC,
@@ -132,7 +132,7 @@ typedef enum sdtx_font_t {
 typedef struct sdtx_context { uint32_t id; } sdtx_context;
 
 /* the default context handle */
-static const sdtx_context sdtx_default_context = { 0 };
+static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0 };
 
 /*
     sdtx_context_desc_t
@@ -144,7 +144,7 @@ static const sdtx_context sdtx_default_context = { 0 };
 */
 typedef struct sdtx_context_desc_t {
     int char_buf_size;              // max number of characters rendered in one frame, default: 16384
-    int printf_buf_size;            // size of internal buffer for snprintf()
+    int printf_buf_size;            // size of internal buffer for snprintf(), default: 16348
     int canvas_width;               // the initial virtual canvas width, default: 640
     int canvas_height;              // the initial virtual canvas height, default: 400
     sdtx_font_t font;               // the default font (default is the first valid embedded font)
@@ -160,7 +160,7 @@ typedef struct sdtx_context_desc_t {
     to the sdtx_setup() function.
 */
 typedef struct sdtx_desc_t {
-    int context_pool_size;          // max number of rendering contexts that can be created, default: 16
+    int context_pool_size;          // max number of rendering contexts that can be created, default: 8
     sdtx_context_desc_t context;    // the default context creation parameters
 } sdtx_desc_t;
 
@@ -254,6 +254,20 @@ SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR
 #define SOKOL_SNPRINTF snprintf
 #endif
 
+#define _sdtx_def(val, def) (((val) == 0) ? (def) : (val))
+#define _SDTX_INIT_COOKIE (0xACBAABCA)
+
+#define _SDTX_DEFAULT_CONTEXT_POOL_SIZE (8)
+#define _SDTX_DEFAULT_CHAR_BUF_SIZE (1<<14)
+#define _SDTX_DEFAULT_PRINTF_BUF_SIZE (1<<14)
+#define _SDTX_DEFAULT_CANVAS_WIDTH (640)
+#define _SDTX_DEFAULT_CANVAS_HEIGHT (480)
+#define _SDTX_DEFAULT_FONT (
+#define _SDTX_INVALID_SLOT_INDEX (0)
+#define _SDTX_SLOT_SHIFT (16)
+#define _SDTX_MAX_POOL_SIZE (1<<_SDTX_SLOT_SHIFT)
+#define _SDTX_SLOT_MASK (_SDTX_MAX_POOL_SIZE-1)
+
 typedef struct {
     uint32_t id;
     sg_resource_state state;
@@ -307,21 +321,15 @@ typedef struct {
 typedef struct {
     uint32_t init_cookie;
     sdtx_desc_t desc;
-
     sg_image font_tex;
     _sdtx_font_t fonts[SDTX_FONT_NUM];
-    uint32_t default_context_id;
+    sdtx_context default_context;
+    sdtx_context current_context;
     _sdtx_context_pool_t context_pool;
 } _sdtx_t;
 static _sdtx_t _sdtx;
 
-
 /*=== CONTEXT POOL ===========================================================*/
-#define _SDTX_INVALID_SLOT_INDEX (0)
-#define _SDTX_SLOT_SHIFT (16)
-#define _SDTX_MAX_POOL_SIZE (1<<_SDTX_SLOT_SHIFT)
-#define _SDTX_SLOT_MASK (_SDTX_MAX_POOL_SIZE-1)
-
 static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -398,7 +406,7 @@ static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
     memset(_sdtx.context_pool.contexts, 0, pool_byte_size);
 }
 
-static void _sdtx_discard_pipeline_pool(void) {
+static void _sdtx_discard_context_pool(void) {
     SOKOL_FREE(_sdtx.context_pool.contexts);
     _sdtx.context_pool.contexts = 0;
     _sdtx_discard_pool(&_sdtx.context_pool.pool);
@@ -464,13 +472,58 @@ static sdtx_context _sdtx_alloc_context(void) {
     return hnd;
 }
 
-static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* desc) {
-    SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && desc);
+static sdtx_context_desc_t _sdtx_context_defaults(const sdtx_context_desc_t* desc) {
+    sdtx_context_desc_t res = *desc;
+    res.char_buf_size = _sdtx_def(res.char_buf_size, _SDTX_DEFAULT_CHAR_BUF_SIZE);
+    res.printf_buf_size = _sdtx_def(res.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
+    res.canvas_width = _sdtx_def(res.canvas_width, _SDTX_DEFAULT_CANVAS_WIDTH);
+    res.canvas_height = _sdtx_def(res.canvas_height, _SDTX_DEFAULT_CANVAS_HEIGHT);
+    /* keep pixel format attrs are passed as is into pipeline creation */
+    return res;
+}
+
+static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* in_desc) {
+    SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && in_desc);
+    sdtx_context_desc_t desc = _sdtx_context_defaults(in_desc);
     // FIXME
     SOKOL_ASSERT(false);
 }
 
-static sdtx_context _sdtx_make_context(const sdtx_context_desc_t* desc) {
+static void _sdtx_setup_fonts(const sdtx_context_desc_t* desc) {
+    // FIXME
+}
+
+static void _sdtx_discard_fonts(void) {
+    // FIXME
+}
+
+SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    memset(&_sdtx, 0, sizeof(_sdtx));
+    _sdtx.init_cookie = _SDTX_INIT_COOKIE;
+    _sdtx.desc = *desc;
+    _sdtx.desc.context_pool_size = _sdtx_def(_sdtx.desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
+    _sdtx_setup_context_pool(&_sdtx.desc);
+    _sdtx_setup_fonts(&_sdtx.desc.context);
+    _sdtx.default_context = sdtx_make_context(&_sdtx.desc.context);
+    sdtx_set_context(_sdtx.default_context);
+}
+
+SOKOL_API_IMPL void sdtx_shutdown(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    sdtx_destroy_context(_sdtx.default_context);
+    _sdtx_discard_fonts();
+    _sdtx_discard_context_pool();
+    _sdtx.init_cookie = 0;
+}
+
+SOKOL_API_IMPL void sdtx_draw(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+
+}
+
+SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     SOKOL_ASSERT(desc);
     sdtx_context ctx_id = _sdtx_alloc_context();
     if (ctx_id.id != SG_INVALID_ID) {
@@ -482,11 +535,22 @@ static sdtx_context _sdtx_make_context(const sdtx_context_desc_t* desc) {
     return ctx_id;
 }
 
-static void _sdtx_destroy_context(sdtx_context ctx_id) {
+SOKOL_API_IMPL void sdtx_destroy_context(sdtx_context ctx_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     if (ctx) {
         // FIXME
         SOKOL_ASSERT(false);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_set_context(sdtx_context ctx_id) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    if (0 == ctx_id.id) {
+        _sdtx.current_context = _sdtx.default_context;
+    }
+    else {
+        _sdtx.current_context = ctx_id;
     }
 }
 
