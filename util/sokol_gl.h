@@ -2077,7 +2077,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
 }
 
 SOKOL_API_IMPL void sgl_shutdown(void) {
-    SOKOL_ASSERT(_sgl.init_cookie == 0xABCDABCD);
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_FREE(_sgl.vertices); _sgl.vertices = 0;
     SOKOL_FREE(_sgl.uniforms); _sgl.uniforms = 0;
     SOKOL_FREE(_sgl.commands); _sgl.commands = 0;
