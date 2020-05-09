@@ -1551,15 +1551,21 @@ static _sgl_pipeline_t* _sgl_lookup_pipeline(uint32_t pip_id) {
     return 0;
 }
 
+/* make pipeline id from uint32_t id */
+static sgl_pipeline _sgl_make_pip_id(uint32_t pip_id) {
+    sgl_pipeline pip = { pip_id };
+    return pip;
+}
+
 static sgl_pipeline _sgl_alloc_pipeline(void) {
     sgl_pipeline res;
     int slot_index = _sgl_pool_alloc_index(&_sgl.pip_pool.pool);
     if (_SGL_INVALID_SLOT_INDEX != slot_index) {
-        res.id =_sgl_slot_alloc(&_sgl.pip_pool.pool, &_sgl.pip_pool.pips[slot_index].slot, slot_index);
+        res = _sgl_make_pip_id(_sgl_slot_alloc(&_sgl.pip_pool.pool, &_sgl.pip_pool.pips[slot_index].slot, slot_index));
     }
     else {
         /* pool is exhausted */
-        res.id = SG_INVALID_ID;
+        res = _sgl_make_pip_id(SG_INVALID_ID);
     }
     return res;
 }
@@ -1666,9 +1672,8 @@ static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t 
         return pip->pip[prim_type];
     }
     else {
-        sg_pipeline dummy_pip;
-        dummy_pip.id = SG_INVALID_ID;
-        return dummy_pip;
+        sg_pipeline dummy_id = { SG_INVALID_ID };
+        return dummy_id;
     }
 }
 
@@ -2059,6 +2064,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     #endif
     shd_desc.label = "sgl-shader";
     _sgl.shd = sg_make_shader(&shd_desc);
+    SOKOL_ASSERT(SG_INVALID_ID != _sgl.shd.id);
 
     /* create default pipeline object */
     sg_pipeline_desc def_pip_desc;
@@ -2084,8 +2090,10 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     sg_destroy_buffer(_sgl.vbuf);
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
-    _sgl_destroy_pipeline(_sgl.def_pip);
-    // FIXME: need to destroy ALL valid pipeline objects in pool here
+    for (int i = 0; i < _sgl.pip_pool.pool.size; i++) {
+        _sgl_pipeline_t* pip = &_sgl.pip_pool.pips[i];
+        _sgl_destroy_pipeline(_sgl_make_pip_id(pip->slot.id));
+    }
     _sgl_discard_pipeline_pool();
     _sgl.init_cookie = 0;
 }
