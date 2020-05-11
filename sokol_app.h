@@ -869,6 +869,8 @@ SOKOL_API_DECL float sapp_dpi_scale(void);
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+/* toggle fullscreen mode */
+SOKOL_API_DECL void sapp_toggle_fullscreen(void);
 /* show or hide the mouse cursor */
 SOKOL_API_DECL void sapp_show_mouse(bool visible);
 /* show or hide the mouse cursor */
@@ -4337,6 +4339,30 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     return 0 != WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen() {
+    HMONITOR monitor = MonitorFromWindow(_sapp_win32_hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO minfo = { .cbSize = sizeof(MONITORINFO) };
+    GetMonitorInfo(monitor, &minfo);
+    RECT r = minfo.rcMonitor;
+    int monitor_w = r.right - r.left;
+    int monitor_h = r.bottom - r.top;
+
+    if (_sapp.desc.fullscreen) {
+        SetWindowLongPtr(_sapp_win32_hwnd, GWL_STYLE, WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX);
+        int window_w = monitor_w < _sapp.desc.width ? monitor_w : _sapp.desc.width;
+        int window_h = monitor_h < _sapp.desc.height ? monitor_h : _sapp.desc.height;
+        int offset_x = (monitor_w - window_w) / 2;
+        int offset_y = (monitor_h - window_h) / 2;
+        SetWindowPos(_sapp_win32_hwnd, HWND_TOP, r.left + offset_x, r.top + offset_y, window_w, window_h, SWP_SHOWWINDOW);
+        _sapp.desc.fullscreen = false;
+    }
+    else {
+        SetWindowLongPtr(_sapp_win32_hwnd, GWL_STYLE, WS_POPUP | WS_SYSMENU | WS_VISIBLE);
+        SetWindowPos(_sapp_win32_hwnd, HWND_TOP, r.left, r.top, monitor_w, monitor_h, SWP_SHOWWINDOW);
+        _sapp.desc.fullscreen = true;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
     ShowCursor((BOOL)shown);
 }
@@ -7659,6 +7685,14 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
+}
+
+SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
+    #if defined(_WIN32)
+    _sapp_win32_toggle_fullscreen();
+    #else
+    _SOKOL_UNUSED(shown);
+    #endif
 }
 
 SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
