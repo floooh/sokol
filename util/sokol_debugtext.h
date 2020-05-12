@@ -212,7 +212,7 @@ SOKOL_API_DECL void sdtx_color4f(float r, float g, float b, float a);           
 SOKOL_API_DECL void sdtx_color1i(uint32_t rgba);
 
 /* text rendering */
-SOKOL_API_DECL void sdtx_putc(int chr);
+SOKOL_API_DECL void sdtx_putc(char c);
 SOKOL_API_DECL void sdtx_puts(const char* str);             // does NOT append newline!
 SOKOL_API_DECL void sdtx_putr(const char* str, int len);    // 'put range', also stops at zero-char
 SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
@@ -1132,10 +1132,6 @@ typedef struct {
 } _sdtx_pool_t;
 
 typedef struct {
-    int x, y;
-} _sdtx_int2_t;
-
-typedef struct {
     float x, y;
 } _sdtx_float2_t;
 
@@ -1157,9 +1153,10 @@ typedef struct {
     sg_buffer vbuf;
     sg_pipeline pip;
     sdtx_font_t cur_font;
-    _sdtx_int2_t canvas_size;
-    _sdtx_int2_t origin;
-    _sdtx_int2_t pos;
+    _sdtx_float2_t canvas_size;
+    _sdtx_float2_t glyph_size;
+    _sdtx_float2_t origin;
+    _sdtx_float2_t pos;
     uint32_t color;
 } _sdtx_context_t;
 
@@ -1175,8 +1172,8 @@ typedef struct {
     sg_shader shader;
     uint32_t fmt_buf_size;
     uint8_t* fmt_buf;
-    sdtx_context default_context;
-    sdtx_context current_context;
+    sdtx_context def_ctx;
+    _sdtx_context_t* cur_ctx;   // may be 0!
     _sdtx_context_pool_t context_pool;
     uint8_t font_pixels[SDTX_NUM_FONTS * 256 * 8 * 8];
 } _sdtx_t;
@@ -1339,6 +1336,8 @@ static sdtx_context_desc_t _sdtx_context_defaults(const sdtx_context_desc_t* des
 static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* in_desc) {
     SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && in_desc);
     sdtx_context_desc_t desc = _sdtx_context_defaults(in_desc);
+    SOKOL_ASSERT(desc.canvas_width > 0);
+    SOKOL_ASSERT(desc.canvas_height > 0);
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
 
@@ -1373,8 +1372,10 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     SOKOL_ASSERT(SG_INVALID_ID != ctx->pip.id);
 
     ctx->cur_font = desc.font;
-    ctx->canvas_size.x = desc.canvas_width;
-    ctx->canvas_size.y = desc.canvas_height;
+    ctx->canvas_size.x = (float) desc.canvas_width;
+    ctx->canvas_size.y = (float) desc.canvas_height;
+    ctx->glyph_size.x = (8.0f / ctx->canvas_size.x);
+    ctx->glyph_size.y = (8.0f / ctx->canvas_size.y);
     ctx->color = _SDTX_DEFAULT_COLOR;
 }
 
@@ -1482,6 +1483,24 @@ static void _sdtx_discard_common(void) {
     }
 }
 
+static inline uint32_t _sdtx_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
+}
+
+static inline float _sdtx_clamp(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    else if (v > hi) return hi;
+    else return v;
+}
+
+static inline uint32_t _sdtx_pack_rgbaf(float r, float g, float b, float a) {
+    uint8_t r_u8 = (uint8_t) (_sdtx_clamp(r, 0.0f, 1.0f) * 255.0f);
+    uint8_t g_u8 = (uint8_t) (_sdtx_clamp(g, 0.0f, 1.0f) * 255.0f);
+    uint8_t b_u8 = (uint8_t) (_sdtx_clamp(b, 0.0f, 1.0f) * 255.0f);
+    uint8_t a_u8 = (uint8_t) (_sdtx_clamp(a, 0.0f, 1.0f) * 255.0f);
+    return _sdtx_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
+}
+
 /*=== PUBLIC API FUNCTIONS ===================================================*/
 SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -1492,8 +1511,8 @@ SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     _sdtx.desc.printf_buf_size = _sdtx_def(_sdtx.desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
     _sdtx_setup_context_pool(&_sdtx.desc);
     _sdtx_setup_common();
-    _sdtx.default_context = sdtx_make_context(&_sdtx.desc.context);
-    sdtx_set_context(_sdtx.default_context);
+    _sdtx.def_ctx = sdtx_make_context(&_sdtx.desc.context);
+    sdtx_set_context(_sdtx.def_ctx);
 }
 
 SOKOL_API_IMPL void sdtx_shutdown(void) {
@@ -1505,11 +1524,6 @@ SOKOL_API_IMPL void sdtx_shutdown(void) {
     _sdtx_discard_common();
     _sdtx_discard_context_pool();
     _sdtx.init_cookie = 0;
-}
-
-SOKOL_API_IMPL void sdtx_draw(void) {
-    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-
 }
 
 SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
@@ -1527,17 +1541,167 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
 
 SOKOL_API_IMPL void sdtx_destroy_context(sdtx_context ctx_id) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
+    if (ctx == _sdtx.cur_ctx) {
+        _sdtx.cur_ctx = 0;
+    }
     _sdtx_destroy_context(ctx_id);
 }
 
 SOKOL_API_IMPL void sdtx_set_context(sdtx_context ctx_id) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     if (0 == ctx_id.id) {
-        _sdtx.current_context = _sdtx.default_context;
+        _sdtx.cur_ctx = _sdtx_lookup_context(_sdtx.def_ctx.id);
     }
     else {
-        _sdtx.current_context = ctx_id;
+        _sdtx.cur_ctx = _sdtx_lookup_context(ctx_id.id);
     }
+}
+
+SOKOL_API_IMPL void sdtx_canvas(int w, int h) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    SOKOL_ASSERT((w > 0) && (h > 0));
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->canvas_size.x = (float) w;
+        ctx->canvas_size.y = (float) h;
+        ctx->glyph_size.x = (8.0f / ctx->canvas_size.x);
+        ctx->glyph_size.y = (8.0f / ctx->canvas_size.y);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_origin(int x, int y) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->origin.x = (float) x;
+        ctx->origin.y = (float) y;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_home(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.x = 0.0f;
+        ctx->pos.y = 0.0f;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_pos(int x, int y) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.x = ((float)x) * ctx->glyph_size.x;
+        ctx->pos.y = ((float)y) * ctx->glyph_size.y;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_x(int x) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.x = ((float)x) * ctx->glyph_size.x;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_y(int y) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.y = ((float)y) * ctx->glyph_size.y;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_dx(int dx) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.x += ((float)dx) * ctx->glyph_size.x;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_dy(int dy) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.y += ((float)dy) * ctx->glyph_size.y;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_crlf(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->pos.x = 0.0f;
+        ctx->pos.y += ctx->glyph_size.y;
+    }
+}
+
+SOKOL_API_IMPL void sdtx_color3b(uint8_t r, uint8_t g, uint8_t b) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->color = _sdtx_pack_rgbab(r, g, b, 255);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_color3f(float r, float g, float b) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->color = _sdtx_pack_rgbaf(r, g, b, 1.0f);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_color4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->color = _sdtx_pack_rgbab(r, g, b, a);
+    }
+}
+
+SOKOL_API_IMPL void std_color4f(float r, float g, float b, float a) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->color = _sdtx_pack_rgbaf(r, g, b, a);
+    }
+}
+
+SOKOL_API_IMPL void sdtx_color1i(uint32_t rgba) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    _sdtx_context_t* ctx = _sdtx.cur_ctx;
+    if (ctx) {
+        ctx->color = rgba;
+    }
+}
+
+SOKOL_API_DECL void sdtx_putc(char chr) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    // FIXME
+}
+
+SOKOL_API_DECL void sdtx_puts(const char* str) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    // FIXME
+}
+
+SOKOL_API_DECL void sdtx_putr(const char* str, int len) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    // FIXME
+}
+
+SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    // FIXME
+    return 0;
+}
+
+SOKOL_API_IMPL void sdtx_draw(void) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    // FIXME
 }
 
 #endif /* SOKOL_DEBUGTEXT_IMPL */
