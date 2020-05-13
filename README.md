@@ -460,6 +460,10 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **13-May-2020**: a new function in sokol_time.h to round a measured frame time
+against to common display refresh rates: ```stm_round_to_common_refresh_rate()```.
+See the header documentation for the motivation behind this function.
+
 - **02-May-2020**: sokol_app.h: the 'programmatic quit' behaviour on the
 web-platform is now more in line with other platforms: calling
 ```sapp_quit()``` will invoke the cleanup callback function, perform
