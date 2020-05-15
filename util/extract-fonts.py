@@ -7,12 +7,8 @@
 
 # extract a byte range from a ROM image file and return an array of bytes
 def extract_bytes(filename, offset, num_bytes):
-    out = []
     with open(filename, 'rb') as f:
-        file_data = f.read()
-        for byte in file_data[offset : offset + num_bytes]:
-            out.append(byte)
-    return out
+        return f.read()[offset: offset + num_bytes ]
 
 # system specific functions, return 256*8 bytes font data arrays
 def extract_kc85_3():
