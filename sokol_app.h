@@ -9,23 +9,36 @@
     before you include this file in *one* C or C++ file to create the
     implementation.
 
+    In the same place define one of the following to select the 3D-API
+    which should be initialized by sokol_app.h:
+
+        #define SOKOL_GLCORE33
+        #define SOKOL_GLES2
+        #define SOKOL_GLES3
+        #define SOKOL_D3D11
+        #define SOKOL_METAL
+        #define SOKOL_WGPU
+
+    If sokol_app.h is used together with sokol_gfx.h, the selected 3D-APIs
+    backend match.
+
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
-    SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
-    SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
-    SOKOL_FREE          - your own free function (default: free(p))
+        SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
+        SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
+        SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
+        SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
+        SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
+        SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
+        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_IMPL      - public function implementation prefix (default: -)
+        SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
+        SOKOL_FREE          - your own free function (default: free(p))
 
     Optionally define the following to force debug checks and validations
     even in release mode:
 
-    SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
+        SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
 
     If sokol_app.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -61,7 +74,7 @@
     - creates a window and 3D-API context/device with a 'default framebuffer'
     - makes the rendered frame visible
     - provides keyboard-, mouse- and low-level touch-events
-    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android, RaspberryPi
+    - platforms: MacOS, iOS, HTML5, Win32, Linux, Android (TODO: RaspberryPi)
     - 3D-APIs: Metal, D3D11, GL3.2, GLES2, GLES3, WebGL, WebGL2
 
     FEATURE/PLATFORM MATRIX
@@ -69,19 +82,19 @@
                         | Windows | macOS | Linux |  iOS  | Android | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+-------+-------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | YES   | YES
+    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | TODO  | YES
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | ---   | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES   | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES   | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES   | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES   | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES   | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES   | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES   | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | ???   | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | ???   | YES
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | TODO  | YES
+    CHAR                | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | ---   | YES
     TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
     TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | ---   | YES
@@ -91,16 +104,16 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | ---   | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | YES   | ---
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES   | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | NO    | YES
-    fullscreen          | YES     | YES   | TODO  | YES   | YES     | YES   | ---
+    key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
+    fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | YES   | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | ???   | YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
+    high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
     clipboard           | YES     | YES   | TODO  | ---   | ---     | ---   | YES
 
     TODO
@@ -205,6 +218,20 @@
         int sapp_height(void)
             Likewise, returns the current height of the default framebuffer.
 
+        sapp_pixel_format sapp_color_format(void)
+        sapp_pixel_format sapp_depth_format(void)
+            The color and depth-stencil pixelformats of the default framebuffer,
+            as enum values which are compatible with sokol-gfx's
+            sg_pixel_format enum:
+
+                SAPP_PIXELFORMAT_RGBA8 == 23 == SG_PIXELFORMAT_RGBA8
+                SAPP_PIXELFORMAT_BGRA8 == 27 == SG_PIXELFORMAT_BGRA8
+                SAPP_PIXELFORMAT_DEPTH == 41 == SG_PIXELFORMAT_DEPTH
+                SAPP_PIXELFORMAT_DEPTH_STENCIL == 42 == SG_PIXELFORMAT_DEPTH_STENCIL
+
+        int sapp_sample_count(void)
+            Return the MSAA sample count of the default framebuffer.
+
         bool sapp_gles2(void)
             Returns true if a GLES2 or WebGL context has been created. This
             is useful when a GLES3/WebGL2 context was requested but is not
@@ -237,16 +264,24 @@
             HWND has been cast to a void pointer in order to be tunneled
             through code which doesn't include Windows.h.
 
-        const void* sapp_d3d11_get_device(void);
-        const void* sapp_d3d11_get_device_context(void);
-        const void* sapp_d3d11_get_render_target_view(void);
-        const void* sapp_d3d11_get_depth_stencil_view(void);
+        const void* sapp_d3d11_get_device(void)
+        const void* sapp_d3d11_get_device_context(void)
+        const void* sapp_d3d11_get_render_target_view(void)
+        const void* sapp_d3d11_get_depth_stencil_view(void)
             Similar to the sapp_metal_* functions, the sapp_d3d11_* functions
             return pointers to D3D11 API objects required for rendering,
             only if the D3D11 backend has been selected. Otherwise they
             return a null pointer. Note that the returned pointers to the
             render-target-view and depth-stencil-view may change from one
             frame to the next!
+
+        const void* sapp_wgpu_get_device(void)
+        const void* sapp_wgpu_get_render_view(void)
+        const void* sapp_wgpu_get_resolve_view(void)
+        const void* sapp_wgpu_get_depth_stencil_view(void)
+            These are the WebGPU-specific functions to get the WebGPU
+            objects and values required for rendering. If sokol_app.h
+            is not compiled with SOKOL_WGPU, these functions return null.
 
         const void* sapp_android_get_native_activity(void);
             On Android, get the native activity ANativeActivity pointer, otherwise
@@ -273,7 +308,7 @@
             - the user or application code has asked to quit the application
             - a string was pasted to the system clipboard
 
-        To explicitely 'consume' an event and prevent that the event is
+        To explicitly 'consume' an event and prevent that the event is
         forwarded for further handling to the operating system, call
         sapp_consume_event() from inside the event handler (NOTE that
         this behaviour is currently only implemented for some HTML5
@@ -387,36 +422,16 @@
 
     APPLICATION QUIT
     ================
-    Without special quit handling, a sokol_app.h application will exist
-    'gracefully' when the user clicks the window close-button. 'Graceful
-    exit' means that the application-provided cleanup callback will be
-    called.
+    Without special quit handling, a sokol_app.h application will quit
+    'gracefully' when the user clicks the window close-button unless a
+    platform's application model prevents this (e.g. on web or mobile).
+    'Graceful exit' means that the application-provided cleanup callback will
+    be called before the application quits.
 
-    This 'graceful exit' is only supported on native desktop platforms, on
-    the web and mobile platforms an application may be terminated at any time
-    by the user or browser/OS runtime environment without a chance to run
-    custom shutdown code.
-
-    On the web platform, you can call the following function to let the
-    browser open a standard popup dialog before the user wants to leave a site:
-
-        sapp_html5_ask_leave_site(bool ask);
-
-    The initial state of the associated internal flag can be provided
-    at startup via sapp_desc.html5_ask_leave_site.
-
-    This feature should only be used sparingly in critical situations - for
-    instance when the user would loose data - since popping up modal dialog
-    boxes is considered quite rude in the web world. Note that there's no way
-    to customize the content of this dialog box or run any code as a result
-    of the user's decision. Also note that the user must have interacted with
-    the site before the dialog box will appear. These are all security measures
-    to prevent fishing.
-
-    On native desktop platforms, sokol_app.h provides more control over the
+    On native desktop platforms sokol_app.h provides more control over the
     application-quit-process. It's possible to initiate a 'programmatic quit'
-    from the application code, and a quit initiated by the application user
-    can be intercepted (for instance to show a custom dialog box).
+    from the application code, and a quit initiated by the application user can
+    be intercepted (for instance to show a custom dialog box).
 
     This 'programmatic quit protocol' is implemented trough 3 functions
     and 1 event:
@@ -442,6 +457,37 @@
           sapp_request_quit() function. The event handler callback code can handle
           this event by calling sapp_cancel_quit() to cancel the quit.
           If the event is ignored, the application will quit as usual.
+
+    On the web platform, the quit behaviour differs from native platforms,
+    because of web-specific restrictions:
+
+    A `programmatic quit` initiated by calling sapp_quit() or
+    sapp_request_quit() will work as described above: the cleanup callback is
+    called, platform-specific cleanup is performed (on the web
+    this means that JS event handlers are unregisters), and then
+    the request-animation-loop will be exited. However that's all. The
+    web page itself will continue to exist (e.g. it's not possible to
+    programmatically close the browser tab).
+
+    On the web it's also not possible to run custom code when the user
+    closes a brower tab, so it's not possible to prevent this with a
+    fancy custom dialog box.
+
+    Instead the standard "Leave Site?" dialog box can be activated (or
+    deactivated) with the following function:
+
+        sapp_html5_ask_leave_site(bool ask);
+
+    The initial state of the associated internal flag can be provided
+    at startup via sapp_desc.html5_ask_leave_site.
+
+    This feature should only be used sparingly in critical situations - for
+    instance when the user would loose data - since popping up modal dialog
+    boxes is considered quite rude in the web world. Note that there's no way
+    to customize the content of this dialog box or run any code as a result
+    of the user's decision. Also note that the user must have interacted with
+    the site before the dialog box will appear. These are all security measures
+    to prevent fishing.
 
     The Dear ImGui HighDPI sample contains example code of how to
     implement a 'Really Quit?' dialog box with Dear ImGui (native desktop
@@ -574,6 +620,14 @@ enum {
     SAPP_MAX_MOUSEBUTTONS = 3,
     SAPP_MAX_KEYCODES = 512,
 };
+
+/* NOTE: the pixel format values *must* be compatible with sg_pixel_format */
+typedef enum sapp_pixel_format {
+    SAPP_PIXELFORMAT_RGBA8 = 23,
+    SAPP_PIXELFORMAT_BGRA8 = 27,
+    SAPP_PIXELFORMAT_DEPTH = 41,
+    SAPP_PIXELFORMAT_DEPTH_STENCIL = 42
+} sapp_pixel_format;
 
 typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
@@ -766,7 +820,6 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;
     int framebuffer_height;
-	void* native_event;
 } sapp_event;
 
 typedef struct sapp_desc {
@@ -813,6 +866,12 @@ SOKOL_API_DECL bool sapp_isvalid(void);
 SOKOL_API_DECL int sapp_width(void);
 /* returns the current framebuffer height in pixels */
 SOKOL_API_DECL int sapp_height(void);
+/* get default framebuffer color pixel format */
+SOKOL_API_DECL sapp_pixel_format sapp_color_format(void);
+/* get default framebuffer depth pixel format */
+SOKOL_API_DECL sapp_pixel_format sapp_depth_format(void);
+/* get default framebuffer sample count */
+SOKOL_API_DECL int sapp_sample_count(void);
 /* returns true when high_dpi was requested and actually running in a high-dpi scenario */
 SOKOL_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
@@ -833,7 +892,7 @@ SOKOL_API_DECL sapp_desc sapp_query_desc(void);
 SOKOL_API_DECL void sapp_request_quit(void);
 /* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
 SOKOL_API_DECL void sapp_cancel_quit(void);
-/* intiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
+/* initiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
 SOKOL_API_DECL void sapp_quit(void);
 /* call from inside event callback to consume the current event (don't forward to platform) */
 SOKOL_API_DECL void sapp_consume_event(void);
@@ -875,6 +934,15 @@ SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* Win32: get the HWND window handle */
 SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
 
+/* WebGPU: get WGPUDevice handle */
+SOKOL_API_DECL const void* sapp_wgpu_get_device(void);
+/* WebGPU: get swapchain's WGPUTextureView handle for rendering */
+SOKOL_API_DECL const void* sapp_wgpu_get_render_view(void);
+/* WebGPU: get swapchain's MSAA-resolve WGPUTextureView (may return null) */
+SOKOL_API_DECL const void* sapp_wgpu_get_resolve_view(void);
+/* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
+SOKOL_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
+
 /* Android: get native activity handle */
 SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 
@@ -884,7 +952,7 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#if defined(SOKOL_IMPL)
+#ifdef SOKOL_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
 #ifdef _MSC_VER
@@ -918,8 +986,8 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
     #endif
 #elif defined(__EMSCRIPTEN__)
     /* emscripten (asm.js or wasm) */
-    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3 or SOKOL_GLES2")
+    #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2) && !defined(SOKOL_WGPU)
+    #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3, SOKOL_GLES2 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
@@ -958,6 +1026,9 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
+#endif
+#ifndef SOKOL_UNREACHABLE
+    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
 #if !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
     #include <stdlib.h>
@@ -1035,7 +1106,6 @@ typedef struct {
     bool clipboard_enabled;
     int clipboard_size;
     char* clipboard;
-	void* native_event;
 } _sapp_state;
 static _sapp_state _sapp;
 
@@ -1163,7 +1233,6 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.window_height = _sapp.window_height;
     _sapp.event.framebuffer_width = _sapp.framebuffer_width;
     _sapp.event.framebuffer_height = _sapp.framebuffer_height;
-	_sapp.event.native_event = _sapp.native_event;
 }
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
@@ -1670,6 +1739,16 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
 }
+- (void)otherMouseDown:(NSEvent*)event {
+    if (2 == event.buttonNumber) {
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+    }
+}
+- (void)otherMouseUp:(NSEvent*)event {
+    if (2 == event.buttonNumber) {
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+    }
+}
 - (void)mouseMoved:(NSEvent*)event {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
@@ -1779,6 +1858,15 @@ void _sapp_macos_set_clipboard_string(const char* str) {
         NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
         [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
         [pasteboard setString:@(str) forType:NSPasteboardTypeString];
+    }
+}
+
+void _sapp_macos_show_mouse(bool shown) {
+    if (shown) {
+        [NSCursor unhide];
+    }
+    else {
+        [NSCursor hide];
     }
 }
 
@@ -2170,19 +2258,36 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 #if defined(__EMSCRIPTEN__)
 #if defined(SOKOL_GLES3)
 #include <GLES3/gl3.h>
-#else
+#elif defined(SOKOL_GLES2)
 #ifndef GL_EXT_PROTOTYPES
 #define GL_GLEXT_PROTOTYPES
 #endif
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#elif defined(SOKOL_WGPU)
+#include <webgpu/webgpu.h>
 #endif
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
-static bool _sapp_emsc_input_created;
-static bool _sapp_emsc_wants_show_keyboard;
-static bool _sapp_emsc_wants_hide_keyboard;
+static struct {
+    bool textfield_created;
+    bool wants_show_keyboard;
+    bool wants_hide_keyboard;
+    #if defined(SOKOL_WGPU)
+    struct {
+        int state;
+        WGPUDevice device;
+        WGPUSwapChain swapchain;
+        WGPUTextureFormat render_format;
+        WGPUTexture msaa_tex;
+        WGPUTexture depth_stencil_tex;
+        WGPUTextureView swapchain_view;
+        WGPUTextureView msaa_view;
+        WGPUTextureView depth_stencil_view;
+    } wgpu;
+    #endif
+} _sapp_emsc;
 
 /* this function is called from a JS event handler when the user hides
     the onscreen keyboard pressing the 'dismiss keyboard key'
@@ -2233,20 +2338,30 @@ EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
     return _sapp.html5_ask_leave_site ? 1 : 0;
 }
 
-EM_JS(void, sapp_js_hook_beforeunload, (void), {
-    window.addEventListener('beforeunload', function(_sapp_event) {
+EM_JS(void, sapp_add_js_hook_beforeunload, (void), {
+    Module.sokol_beforeunload = function(_sapp_event) {
         if (__sapp_html5_get_ask_leave_site() != 0) {
             _sapp_event.preventDefault();
             _sapp_event.returnValue = ' ';
         }
-    });
+    };
+    window.addEventListener('beforeunload', Module.sokol_beforeunload);
 });
 
-EM_JS(void, sapp_js_init_clipboard, (void), {
-    window.addEventListener('paste', function(event) {
+EM_JS(void, sapp_remove_js_hook_beforeunload, (void), {
+    window.removeEventListener('beforeunload', Module.sokol_beforeunload);
+});
+
+EM_JS(void, sapp_add_js_hook_clipboard, (void), {
+    Module.sokol_paste = function(event) {
         var pasted_str = event.clipboardData.getData('text');
         ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
-    });
+    };
+    window.addEventListener('paste', Module.sokol_paste);
+});
+
+EM_JS(void, sapp_remove_js_hook_clipboard, (void), {
+    window.removeEventListener('paste', Module.sokol_paste);
 });
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
@@ -2276,22 +2391,22 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     the request will be ignored by the browser
 */
 _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
-    if (_sapp_emsc_wants_show_keyboard) {
+    if (_sapp_emsc.wants_show_keyboard) {
         /* create input text field on demand */
-        if (!_sapp_emsc_input_created) {
-            _sapp_emsc_input_created = true;
+        if (!_sapp_emsc.textfield_created) {
+            _sapp_emsc.textfield_created = true;
             sapp_js_create_textfield();
         }
         /* focus the text input field, this will bring up the keyboard */
         _sapp.onscreen_keyboard_shown = true;
-        _sapp_emsc_wants_show_keyboard = false;
+        _sapp_emsc.wants_show_keyboard = false;
         sapp_js_focus_textfield();
     }
-    if (_sapp_emsc_wants_hide_keyboard) {
+    if (_sapp_emsc.wants_hide_keyboard) {
         /* unfocus the text input field */
-        if (_sapp_emsc_input_created) {
+        if (_sapp_emsc.textfield_created) {
             _sapp.onscreen_keyboard_shown = false;
-            _sapp_emsc_wants_hide_keyboard = false;
+            _sapp_emsc.wants_hide_keyboard = false;
             sapp_js_unfocus_textfield();
         }
     }
@@ -2303,12 +2418,17 @@ _SOKOL_PRIVATE void _sapp_emsc_update_keyboard_state(void) {
 */
 _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     if (show) {
-        _sapp_emsc_wants_show_keyboard = true;
+        _sapp_emsc.wants_show_keyboard = true;
     }
     else {
-        _sapp_emsc_wants_hide_keyboard = true;
+        _sapp_emsc.wants_hide_keyboard = true;
     }
 }
+
+#if defined(SOKOL_WGPU)
+_SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
+_SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
+#endif
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     double w, h;
@@ -2352,29 +2472,13 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    #if defined(SOKOL_WGPU)
+        /* on WebGPU: recreate size-dependent rendering surfaces */
+        _sapp_emsc_wgpu_surfaces_discard();
+        _sapp_emsc_wgpu_surfaces_create();
+    #endif
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
-        _sapp_call_event(&_sapp.event);
-    }
-    return true;
-}
-
-_SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
-    _SOKOL_UNUSED(time);
-    _SOKOL_UNUSED(userData);
-    _sapp_frame();
-    return EM_TRUE;
-}
-
-_SOKOL_PRIVATE EM_BOOL _sapp_emsc_context_cb(int emsc_type, const void* reserved, void* user_data) {
-    sapp_event_type type;
-    switch (emsc_type) {
-        case EMSCRIPTEN_EVENT_WEBGLCONTEXTLOST:     type = SAPP_EVENTTYPE_SUSPENDED; break;
-        case EMSCRIPTEN_EVENT_WEBGLCONTEXTRESTORED: type = SAPP_EVENTTYPE_RESUMED; break;
-        default:                                    type = SAPP_EVENTTYPE_INVALID; break;
-    }
-    if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
-        _sapp_init_event(type);
         _sapp_call_event(&_sapp.event);
     }
     return true;
@@ -2656,7 +2760,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
     return retval;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
+_SOKOL_PRIVATE void _sapp_emsc_keytable_init(void) {
     _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
     _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
     _sapp.keycodes[13]  = SAPP_KEYCODE_ENTER;
@@ -2760,34 +2864,22 @@ _SOKOL_PRIVATE void _sapp_emsc_init_keytable(void) {
     _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_init_clipboard(void) {
-    sapp_js_init_clipboard();
+#if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
+    sapp_event_type type;
+    switch (emsc_type) {
+        case EMSCRIPTEN_EVENT_WEBGLCONTEXTLOST:     type = SAPP_EVENTTYPE_SUSPENDED; break;
+        case EMSCRIPTEN_EVENT_WEBGLCONTEXTRESTORED: type = SAPP_EVENTTYPE_RESUMED; break;
+        default:                                    type = SAPP_EVENTTYPE_INVALID; break;
+    }
+    if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+    return true;
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
-    _sapp_init_state(desc);
-    _sapp_emsc_init_keytable();
-    if (_sapp.clipboard_enabled) {
-        _sapp_emsc_init_clipboard();
-    }
-    double w, h;
-    if (_sapp.desc.html5_canvas_resize) {
-        w = (double) _sapp.desc.width;
-        h = (double) _sapp.desc.height;
-    }
-    else {
-        emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
-        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
-    }
-    if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
-    }
-    _sapp.window_width = (int) w;
-    _sapp.window_height = (int) h;
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
-
+_SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
     attrs.alpha = _sapp.desc.alpha;
@@ -2816,8 +2908,114 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
 
     /* some WebGL extension are not enabled automatically by emscripten */
     emscripten_webgl_enable_extension(ctx, "WEBKIT_WEBGL_compressed_texture_pvrtc");
+}
+#endif
 
-    _sapp.valid = true;
+#if defined(SOKOL_WGPU)
+#define _SAPP_EMSC_WGPU_STATE_INITIAL (0)
+#define _SAPP_EMSC_WGPU_STATE_READY (1)
+#define _SAPP_EMSC_WGPU_STATE_RUNNING (2)
+
+/* called when the asynchronous WebGPU device + swapchain init code in JS has finished */
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id, int swapchain_fmt) {
+    SOKOL_ASSERT(0 == _sapp_emsc.wgpu.device);
+    _sapp_emsc.wgpu.device = (WGPUDevice) device_id;
+    _sapp_emsc.wgpu.swapchain = (WGPUSwapChain) swapchain_id;
+    _sapp_emsc.wgpu.render_format = (WGPUTextureFormat) swapchain_fmt;
+    _sapp_emsc.wgpu.state = _SAPP_EMSC_WGPU_STATE_READY;
+}
+
+/* embedded JS function to handle all the asynchronous WebGPU setup */
+EM_JS(void, _sapp_emsc_wgpu_init, (), {
+    WebGPU.initManagers();
+    // FIXME: the extension activation must be more clever here
+    navigator.gpu.requestAdapter().then(function(adapter) {
+        console.log("wgpu adapter extensions: " + adapter.extensions);
+        adapter.requestDevice({ extensions: ["textureCompressionBC"]}).then(function(device) {
+            var gpuContext = document.getElementById("canvas").getContext("gpupresent");
+            console.log("wgpu device extensions: " + adapter.extensions);
+            gpuContext.getSwapChainPreferredFormat(device).then(function(fmt) {
+                var swapChainDescriptor = { device: device, format: fmt };
+                var swapChain = gpuContext.configureSwapChain(swapChainDescriptor);
+                var deviceId = WebGPU.mgrDevice.create(device);
+                var swapChainId = WebGPU.mgrSwapChain.create(swapChain);
+                var fmtId = WebGPU.TextureFormat.findIndex(function(elm) { return elm==fmt; });
+                console.log("wgpu device: " + device);
+                console.log("wgpu swap chain: " + swapChain);
+                console.log("wgpu preferred format: " + fmt + " (" + fmtId + ")");
+                __sapp_emsc_wgpu_ready(deviceId, swapChainId, fmtId);
+            });
+        });
+    });
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void) {
+    SOKOL_ASSERT(_sapp_emsc.wgpu.device);
+    SOKOL_ASSERT(_sapp_emsc.wgpu.swapchain);
+    SOKOL_ASSERT(0 == _sapp_emsc.wgpu.depth_stencil_tex);
+    SOKOL_ASSERT(0 == _sapp_emsc.wgpu.depth_stencil_view);
+    SOKOL_ASSERT(0 == _sapp_emsc.wgpu.msaa_tex);
+    SOKOL_ASSERT(0 == _sapp_emsc.wgpu.msaa_view);
+
+    WGPUTextureDescriptor ds_desc;
+    memset(&ds_desc, 0, sizeof(ds_desc));
+    ds_desc.usage = WGPUTextureUsage_OutputAttachment;
+    ds_desc.dimension = WGPUTextureDimension_2D;
+    ds_desc.size.width = (uint32_t) _sapp.framebuffer_width;
+    ds_desc.size.height = (uint32_t) _sapp.framebuffer_height;
+    ds_desc.size.depth = 1;
+    ds_desc.arrayLayerCount = 1;
+    ds_desc.format = WGPUTextureFormat_Depth24PlusStencil8;
+    ds_desc.mipLevelCount = 1;
+    ds_desc.sampleCount = _sapp.sample_count;
+    _sapp_emsc.wgpu.depth_stencil_tex = wgpuDeviceCreateTexture(_sapp_emsc.wgpu.device, &ds_desc);
+    _sapp_emsc.wgpu.depth_stencil_view = wgpuTextureCreateView(_sapp_emsc.wgpu.depth_stencil_tex, 0);
+
+    if (_sapp.sample_count > 1) {
+        WGPUTextureDescriptor msaa_desc;
+        memset(&msaa_desc, 0, sizeof(msaa_desc));
+        msaa_desc.usage = WGPUTextureUsage_OutputAttachment;
+        msaa_desc.dimension = WGPUTextureDimension_2D;
+        msaa_desc.size.width = (uint32_t) _sapp.framebuffer_width;
+        msaa_desc.size.height = (uint32_t) _sapp.framebuffer_height;
+        msaa_desc.size.depth = 1;
+        msaa_desc.arrayLayerCount = 1;
+        msaa_desc.format = _sapp_emsc.wgpu.render_format;
+        msaa_desc.mipLevelCount = 1;
+        msaa_desc.sampleCount = _sapp.sample_count;
+        _sapp_emsc.wgpu.msaa_tex = wgpuDeviceCreateTexture(_sapp_emsc.wgpu.device, &msaa_desc);
+        _sapp_emsc.wgpu.msaa_view = wgpuTextureCreateView(_sapp_emsc.wgpu.msaa_tex, 0);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void) {
+    if (_sapp_emsc.wgpu.msaa_tex) {
+        wgpuTextureRelease(_sapp_emsc.wgpu.msaa_tex);
+        _sapp_emsc.wgpu.msaa_tex = 0;
+    }
+    if (_sapp_emsc.wgpu.msaa_view) {
+        wgpuTextureViewRelease(_sapp_emsc.wgpu.msaa_view);
+        _sapp_emsc.wgpu.msaa_view = 0;
+    }
+    if (_sapp_emsc.wgpu.depth_stencil_tex) {
+        wgpuTextureRelease(_sapp_emsc.wgpu.depth_stencil_tex);
+        _sapp_emsc.wgpu.depth_stencil_tex = 0;
+    }
+    if (_sapp_emsc.wgpu.depth_stencil_view) {
+        wgpuTextureViewRelease(_sapp_emsc.wgpu.depth_stencil_view);
+        _sapp_emsc.wgpu.depth_stencil_view = 0;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_emsc_wgpu_next_frame(void) {
+    if (_sapp_emsc.wgpu.swapchain_view) {
+        wgpuTextureViewRelease(_sapp_emsc.wgpu.swapchain_view);
+    }
+    _sapp_emsc.wgpu.swapchain_view = wgpuSwapChainGetCurrentTextureView(_sapp_emsc.wgpu.swapchain);
+}
+#endif
+
+_SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
     emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
@@ -2831,13 +3029,119 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
-    emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
-    emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_context_cb);
+    sapp_add_js_hook_beforeunload();
+    if (_sapp.clipboard_enabled) {
+        sapp_add_js_hook_clipboard();
+    }
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
+        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
+    emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    sapp_remove_js_hook_beforeunload();
+    if (_sapp.clipboard_enabled) {
+        sapp_remove_js_hook_clipboard();
+    }
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, 0);
+        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, 0);
+    #endif
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(userData);
+
+    #if defined(SOKOL_WGPU)
+        /*
+            on WebGPU, the emscripten frame callback will already be called while
+            the asynchronous WebGPU device and swapchain initialization is still
+            in progress
+        */
+        switch (_sapp_emsc.wgpu.state) {
+            case _SAPP_EMSC_WGPU_STATE_INITIAL:
+                /* async JS init hasn't finished yet */
+                break;
+            case _SAPP_EMSC_WGPU_STATE_READY:
+                /* perform post-async init stuff */
+                _sapp_emsc_wgpu_surfaces_create();
+                _sapp_emsc.wgpu.state = _SAPP_EMSC_WGPU_STATE_RUNNING;
+                break;
+            case _SAPP_EMSC_WGPU_STATE_RUNNING:
+                /* a regular frame */
+                _sapp_emsc_wgpu_next_frame();
+                _sapp_frame();
+                break;
+        }
+    #else
+        /* WebGL code path */
+        _sapp_frame();
+    #endif
+
+    /* quit-handling */
+    if (_sapp.quit_requested) {
+        _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        _sapp_call_event(&_sapp.event);
+        if (_sapp.quit_requested) {
+            _sapp.quit_ordered = true;
+        }
+    }
+    if (_sapp.quit_ordered) {
+        _sapp_emsc_unregister_eventhandlers();
+        _sapp_call_cleanup();
+        return EM_FALSE;
+    }
+    return EM_TRUE;
+}
+
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+    memset(&_sapp_emsc, 0, sizeof(_sapp_emsc));
+    _sapp_init_state(desc);
+    _sapp_emsc_keytable_init();
+    double w, h;
+    if (_sapp.desc.html5_canvas_resize) {
+        w = (double) _sapp.desc.width;
+        h = (double) _sapp.desc.height;
+    }
+    else {
+        emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
+    }
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
+    }
+    _sapp.window_width = (int) w;
+    _sapp.window_height = (int) h;
+    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        _sapp_emsc_webgl_init();
+    #elif defined(SOKOL_WGPU)
+        _sapp_emsc_wgpu_init();
+    #endif
+    _sapp.valid = true;
+    _sapp_emsc_register_eventhandlers();
+
+    /* start the frame loop */
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
-    sapp_js_hook_beforeunload();
-
-    // NOT A BUG: do not call _sapp_discard_state()
+    /* NOT A BUG: do not call _sapp_discard_state() */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -2969,6 +3273,24 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <shellapi.h>
 #pragma comment (lib, "Shell32.lib")
 
+#if !defined(SOKOL_WIN32_FORCE_MAIN)
+#pragma comment (linker, "/subsystem:windows")
+#endif
+
+#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+#pragma comment (lib, "WindowsApp.lib")
+#else
+#pragma comment (lib, "user32.lib")
+#if defined(SOKOL_D3D11)
+#pragma comment (lib, "dxgi.lib")
+#pragma comment (lib, "d3d11.lib")
+#pragma comment (lib, "dxguid.lib")
+#endif
+#if defined(SOKOL_GLCORE33)
+#pragma comment (lib, "gdi32.lib")
+#endif
+#endif
+
 #if defined(SOKOL_D3D11)
 #ifndef D3D11_NO_HELPERS
 #define D3D11_NO_HELPERS
@@ -2982,14 +3304,6 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
-#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-#pragma comment (lib, "WindowsApp.lib")
-#else
-#pragma comment (lib, "user32.lib")
-#pragma comment (lib, "dxgi.lib")
-#pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "dxguid.lib")
-#endif
 #endif
 
 /* see https://github.com/floooh/sokol/issues/138 */
@@ -4655,8 +4969,6 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
         MSG msg;
-        _sapp.native_event = &msg;
-
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
                 done = true;
@@ -6443,6 +6755,7 @@ static const struct _sapp_x11_codepair {
 };
 
 _SOKOL_PRIVATE int _sapp_x11_error_handler(Display* display, XErrorEvent* event) {
+    _SOKOL_UNUSED(display);
     _sapp_x11_error_code = event->error_code;
     return 0;
 }
@@ -7293,7 +7606,6 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
         int count = XPending(_sapp_x11_display);
         while (count--) {
             XEvent event;
-            _sapp.native_event = &event;
             XNextEvent(_sapp_x11_display, &event);
             _sapp_x11_process_event(&event);
         }
@@ -8117,6 +8429,32 @@ SOKOL_API_IMPL int sapp_width(void) {
     return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
+SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
+    #if defined(SOKOL_WGPU)
+        switch (_sapp_emsc.wgpu.render_format) {
+            case WGPUTextureFormat_RGBA8Unorm:
+                return SAPP_PIXELFORMAT_RGBA8;
+            case WGPUTextureFormat_BGRA8Unorm:
+                return SAPP_PIXELFORMAT_BGRA8;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
+        }
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+        return SAPP_PIXELFORMAT_BGRA8;
+    #else
+        return SAPP_PIXELFORMAT_RGBA8;
+    #endif
+}
+
+SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+    return SAPP_PIXELFORMAT_DEPTH_STENCIL;
+}
+
+SOKOL_API_IMPL int sapp_sample_count(void) {
+    return _sapp.sample_count;
+}
+
 SOKOL_API_IMPL int sapp_height(void) {
     return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
@@ -8150,7 +8488,9 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
-    #if defined(_WIN32)
+    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    _sapp_macos_show_mouse(shown);
+    #elif defined(_WIN32)
     _sapp_win32_show_mouse(shown);
     #else
     _SOKOL_UNUSED(shown);
@@ -8309,6 +8649,52 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_WIN32)
         return _sapp_win32_hwnd;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        return (const void*) _sapp_emsc.wgpu.device;
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        if (_sapp.sample_count > 1) {
+            return (const void*) _sapp_emsc.wgpu.msaa_view;
+        }
+        else {
+            return (const void*) _sapp_emsc.wgpu.swapchain_view;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        if (_sapp.sample_count > 1) {
+            return (const void*) _sapp_emsc.wgpu.swapchain_view;
+        }
+        else {
+            return 0;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_WGPU)
+        return (const void*) _sapp_emsc.wgpu.depth_stencil_view;
     #else
         return 0;
     #endif
