@@ -8774,6 +8774,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
+    _SOKOL_UNUSED(ctx);
     _sg_mtl_clear_state_cache();
 }
 
@@ -8907,6 +8908,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
 
 /* initialize MTLTextureDescritor with rendertarget attributes */
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
+    _SOKOL_UNUSED(img);
     SOKOL_ASSERT(img->cmn.render_target);
     /* reset the cpuCacheMode to 'default' */
     mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
@@ -9432,6 +9434,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     id<MTLDrawable> cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
     [_sg_mtl_cmd_buffer presentDrawable:cur_drawable];
     [_sg_mtl_cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+        _SOKOL_UNUSED(cmd_buffer);
         dispatch_semaphore_signal(_sg_mtl_sem);
     }];
     [_sg_mtl_cmd_buffer commit];
@@ -9523,6 +9526,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     _sg_image_t** vs_imgs, int num_vs_imgs,
     _sg_image_t** fs_imgs, int num_fs_imgs)
 {
+    _SOKOL_UNUSED(pip);
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
