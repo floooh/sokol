@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**02-Dec-2019**: initial clipboard support in sokol_app.h)
+[See what's new](#updates) (**30-Apr-2020**: experimental WebGPU backend and minor breaking changes)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -168,20 +168,15 @@ separate sokol.c/.m implementation file which is necessary
 to split the Objective-C code from the C code of the sample):
 
 ```cpp
-#include "sokol_gfx.h"
 #include "sokol_app.h"
+#include "sokol_gfx.h"
+#include "sokol_glue.h"
 
 sg_pass_action pass_action;
 
 void init(void) {
     sg_setup(&(sg_desc){
-        .mtl_device = sapp_metal_get_device(),
-        .mtl_renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor,
-        .mtl_drawable_cb = sapp_metal_get_drawable,
-        .d3d11_device = sapp_d3d11_get_device(),
-        .d3d11_device_context = sapp_d3d11_get_device_context(),
-        .d3d11_render_target_view_cb = sapp_d3d11_get_render_target_view,
-        .d3d11_depth_stencil_view_cb = sapp_d3d11_get_depth_stencil_view
+        .context = sapp_sgcontext()
     });
     pass_action = (sg_pass_action) {
         .colors[0] = { .action=SG_ACTION_CLEAR, .val={1.0f, 0.0f, 0.0f, 1.0f} }
@@ -330,7 +325,7 @@ static void frame(void) {
 }
 
 // the response callback is where the interesting stuff happens:
-static void reponse_callback(const sfetch_response_t* response) {
+static void response_callback(const sfetch_response_t* response) {
     if (response->fetched) {
         // data has been loaded into the provided buffer, do something
         // with the data...
@@ -465,10 +460,60 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **13-May-2020**: a new function in sokol_time.h to round a measured frame time
+against to common display refresh rates: ```stm_round_to_common_refresh_rate()```.
+See the header documentation for the motivation behind this function.
+
+- **02-May-2020**: sokol_app.h: the 'programmatic quit' behaviour on the
+web-platform is now more in line with other platforms: calling
+```sapp_quit()``` will invoke the cleanup callback function, perform
+platform-specific cleanup (like unregistering JS event handlers), and finally
+exit the frame loop. In typical scenarios this isn't very useful (because
+usually the user will simply close the tab, which doesn't allow to run
+cleanup code), but it's useful for situations where the same
+code needs to run repeatedly on a web page. Many thanks to @caiiiycuk
+for providing the PR!
+
+- **30-Apr-2020**: experimental WebGPU backend and a minor breaking change:
+    - sokol_gfx.h: a new WebGPU backend, expect frequent breakage for a while
+      because the WebGPU API is still in flux
+    - a new header sokol_glue.h, with interop helper functions when specific combinations
+      of sokol headers are used together
+    - changes in the way sokol_gfx.h is initialized via a new layout of the
+      sg_desc structure
+    - sokol_gfx.h: a new ```sg_sampler_type``` enum which is required for
+      shader creation to tell the WebGPU backend about the sampler data types
+      (float, signed int, or unsigned int) used in the shader
+    - sokol_app.h: a handful new functions to query default framebuffer attributes (color- and
+      depth-buffer pixel formats, and MSAA sample count)
+    - sokol_app.h: WebGPU device and swapchain initialization (currently only
+      in the emscripten code path)
+    - [sokol-shdc](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md) has
+      been updated with WebGPU support (currently outputs SPIRV bytecode), and to output the new
+      ```sg_sampler_type``` enum in ```sg_shader_image_desc```
+    - [sokol-samples](https://github.com/floooh/sokol-samples/) has a new set of
+      backend-specific WebGPU samples, and the other samples have been updated
+      for the new sokol-gfx initialization
+    - ```pre-webgpu``` tags have been added to the [sokol](https://github.com/floooh/sokol/releases/tag/pre-webgpu), [sokol-samples](https://github.com/floooh/sokol-samples/releases/tag/pre-webgpu), [sokol-tools](https://github.com/floooh/sokol-tools/releases/tag/pre-webgpu)
+      and [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin/releases/tag/pre-webgpu) github repositories (in case you need to continue working with
+      the older versions)
+    - please see this [blog post](https://floooh.github.io/2020/04/26/sokol-spring-2020-update.html)
+      for more details
+
+- **05-Apr-2020**: A bugfix in sokol_gl.h, the (fairly recent) optimization for
+    merging draw calls contained a bug that could be triggered in an "empty"
+    sgl_begin/sgl_end pair (with no vertices recorded inbetween). This could
+    lead to the following draw call being rendered with the wrong uniform data.
+
+- **30-Jan-2020**: Some cleanup in sokol_gfx.h in the backend implementation code,
+    internal data structures and documentation comments. The public
+    API hasn't changed, so the change should be completely invisible
+    from the outside.
+
 - **02-Dec-2019**: Initial clipboard support in sokol_app.h for Windows, macOS
     and HTML5. This allows to read and write UTF-8 encoded strings from and
-    to the target platform's shared clipboard. 
-    
+    to the target platform's shared clipboard.
+
     A 'real-world' example usage is in the [Visual6502 Remix project](https://github.com/floooh/v6502r).
 
     Unfortunately clipboard support on the HTML5 platform comes with a lot of
@@ -476,13 +521,13 @@ Mainly some "missing features" for desktop apps:
     because of the restrictions the web platform puts on clipboard access and
     different behaviours and support levels of the various HTML5 clipboard
     APIs. I'm not really happy with the current HTML5 clipboard
-    implementation. It sorta works, but it sure ain't pretty :) 
-    
+    implementation. It sorta works, but it sure ain't pretty :)
+
     Maybe the situation will improve in a few years when all browsers agree
     on and support the new [permission-based clipboard
     API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API).
 
-    For documention of the clipboard feature, search for CLIPBOARD SUPPORT
+    For documentation of the clipboard feature, search for CLIPBOARD SUPPORT
     in sokol_app.h
 
 - **08-Sep-2019**: sokol_gfx.h now supports clamp-to-border texture sampling:
@@ -730,7 +775,7 @@ layout definition in sg_pipeline_desc works:
 
     Vertex component names and semantics (needed by the GLES2 and D3D11 backends) have moved from ```sg_pipeline_desc``` into ```sg_shader_desc```.
 
-    This may seem like a rather pointless small detail to change, expecially
+    This may seem like a rather pointless small detail to change, especially
     for breaking existing code, but the whole thing will make a bit more
     sense when the new shader-cross-compiler will be integrated which I'm
     currently working on (here: https://github.com/floooh/sokol-tools).
@@ -743,7 +788,7 @@ layout definition in sg_pipeline_desc works:
     vertex-component **slots**. Instead of (optionally) mapping this
     association through a name, the pipeline's vertex layout is now always
     strictly defined in terms of numeric 'bind slots' for **all** sokol_gfx.h
-    backends. For 3D APIs where the vertex component slot isn't explicitely
+    backends. For 3D APIs where the vertex component slot isn't explicitly
     defined in the shader language (GLES2/WebGL, D3D11, and optionally
     GLES3/GL), the shader merely offers a lookup table how vertex-layout
     slot-indices map to names/semantics (and the underlying 3D API than maps
@@ -871,7 +916,7 @@ pipeline-state-objects), along with a couple of other minor API tweaks.
     sgl_pop_pipeline();
     ```
 
-    You can also load the 'default pipeline' explicitely on the top of the
+    You can also load the 'default pipeline' explicitly on the top of the
     pipeline stack with ```sgl_default_pipeline()```.
 
     The other API change is:

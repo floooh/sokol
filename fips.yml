@@ -1,2 +1,0 @@
-exports:
-  header-dirs: [ ".", "util" ]

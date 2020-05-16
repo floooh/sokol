@@ -48,6 +48,15 @@
         the return value will be zero (this usually happens on the
         very first call).
 
+    uint64_t stm_round_to_common_refresh_rate(uint64_t duration)
+        This oddly named function takes a measured frame time and
+        returns the closest "nearby" common display refresh rate frame duration
+        in ticks. If the input duration isn't close to any common display
+        refresh rate, the input duration will be returned unchanged as a fallback.
+        The main purpose of this function is to remove jitter/inaccuracies from
+        measured frame times, and instead use the display refresh rate as
+        frame duration.
+
     Use the following functions to convert a duration in ticks into
     useful time units:
 
@@ -111,6 +120,7 @@ SOKOL_API_DECL uint64_t stm_now(void);
 SOKOL_API_DECL uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
 SOKOL_API_DECL uint64_t stm_since(uint64_t start_ticks);
 SOKOL_API_DECL uint64_t stm_laptime(uint64_t* last_time);
+SOKOL_API_DECL uint64_t stm_round_to_common_refresh_rate(uint64_t frame_ticks);
 SOKOL_API_DECL double stm_sec(uint64_t ticks);
 SOKOL_API_DECL double stm_ms(uint64_t ticks);
 SOKOL_API_DECL double stm_us(uint64_t ticks);
@@ -256,6 +266,34 @@ SOKOL_API_IMPL uint64_t stm_laptime(uint64_t* last_time) {
     }
     *last_time = now;
     return dt;
+}
+
+// first number is frame duration in ns, second number is tolerance in ns,
+// the resulting min/max values must not overlap!
+static const uint64_t _stm_refresh_rates[][2] = {
+    { 16666667, 1000000 },  //  60 Hz: 16.6667 +- 1ms
+    { 13888889,  250000 },  //  72 Hz: 13.8889 +- 0.25ms
+    { 13333333,  250000 },  //  75 Hz: 13.3333 +- 0.25ms
+    { 11764706,  250000 },  //  85 Hz: 11.7647 +- 0.25
+    { 11111111,  250000 },  //  90 Hz: 11.1111 +- 0.25ms
+    {  8333333,  500000 },  // 120 Hz:  8.3333 +- 0.5ms
+    {  6944445,  500000 },  // 144 Hz:  6.9445 +- 0.5ms
+    {  4166667, 1000000 },  // 240 Hz:  4.1666 +- 1ms
+    {        0,       0 },  // keep the last element always at zero
+};
+
+SOKOL_API_IMPL uint64_t stm_round_to_common_refresh_rate(uint64_t ticks) {
+    uint64_t ns;
+    int i = 0;
+    while (0 != (ns = _stm_refresh_rates[i][0])) {
+        uint64_t tol = _stm_refresh_rates[i][1];
+        if ((ticks > (ns - tol)) && (ticks < (ns + tol))) {
+            return ns;
+        }
+        i++;
+    }
+    // fallthough: didn't fit into any buckets
+    return ticks;
 }
 
 SOKOL_API_IMPL double stm_sec(uint64_t ticks) {
