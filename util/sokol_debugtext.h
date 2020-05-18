@@ -1098,7 +1098,7 @@ static const char* _sdtx_fs_src =
     "in vec4 color;\n"
     "out vec4 frag_color;\n"
     "void main() {\n"
-    "  frag_color = texture(tex, uv) * color;\n"
+    "  frag_color = texture(tex, uv).xxxx * color;\n"
     "}\n";
 #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 static const char* _sdtx_vs_src = "FIXME!";
