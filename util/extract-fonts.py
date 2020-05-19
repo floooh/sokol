@@ -2,6 +2,14 @@
     Helper script to extract font data from home computer ROM images,
     print C source to stdout.
 
+    Expects the following ROM image files in the current directory:
+
+    - caos31.853
+    - caos42e.854
+    - z1013_font.bin
+    - cpc6128_os.bin
+    - c64_char.bin
+
     NOTE: run with python3
 '''
 
@@ -47,6 +55,22 @@ def extract_z1013():
     # the Z1013 has a separate linear font ROM with 256 chars
     return extract_bytes('z1013_font.bin', 0x0000, 0x0800)
 
+def extract_cpc():
+    return extract_bytes('cpc6128_os.bin', 0x3800, 0x0800)
+
+def extract_c64():
+    rom_0 = extract_bytes('c64_char.bin', 0x0000, 0x0800)
+    rom_1 = extract_bytes('c64_char.bin', 0x0800, 0x0800)
+    out_data = [0]*(0x100 * 8)
+    out_data[0x00*8 : 0x20*8]  = rom_1[0x60*8 : 0x80*8]
+    out_data[0x20*8 : 0x40*8]  = rom_0[0x20*8 : 0x40*8]  # !@#$...12345...
+    out_data[0x40*8 : 0x60*8]  = rom_0[0x00*8 : 0x20*8]  # @ABCD...
+    out_data[0x60*8 : 0x80*8]  = rom_1[0x00*8 : 0x20*8]  # @abcd...
+    out_data[0x60]             = rom_1[0x40]
+    out_data[0x80*8 : 0xC0*8]  = rom_0[0x40*8 : 0x80*8]
+    out_data[0xC0*8 : 0x100*8] = rom_0[0xC0*8 : 0x100*8]
+    return out_data
+
 # print a C array with the output bytes
 def print_c_array(system_name, array_name, bytes):
     print(f'#if defined(SOKOL_DEBUGTEXT_FONT_{system_name})')
@@ -61,6 +85,8 @@ def print_c_array(system_name, array_name, bytes):
     print('#endif')
 
 # execution starts here
-print_c_array('KC853', '_sdtx_font_kc853', extract_kc85_3())
-print_c_array('KC854', '_sdtx_font_kc854', extract_kc85_4())
-print_c_array('Z1013', '_sdtx_font_z1013', extract_z1013())
+#print_c_array('KC853', '_sdtx_font_kc853', extract_kc85_3())
+#print_c_array('KC854', '_sdtx_font_kc854', extract_kc85_4())
+#print_c_array('Z1013', '_sdtx_font_z1013', extract_z1013())
+#print_c_array('CPC', '_sdtx_font_cpc', extract_cpc())
+print_c_array('C64', '_sdtx_font_c64', extract_c64())
