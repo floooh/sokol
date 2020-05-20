@@ -9,6 +9,7 @@
     - z1013_font.bin
     - cpc6128_os.bin
     - c64_char.bin
+    - oric_atmos_v122.rom
 
     NOTE: run with python3
 '''
@@ -17,6 +18,9 @@
 def extract_bytes(filename, offset, num_bytes):
     with open(filename, 'rb') as f:
         return f.read()[offset: offset + num_bytes ]
+
+def invert(font_data):
+    return [(~i & 0xFF) for i in font_data]
 
 # system specific functions, return 256*8 bytes font data arrays
 def extract_kc85_3():
@@ -32,7 +36,7 @@ def extract_kc85_3():
     out_data[0x00*8 : 0x20*8] = rom_bytes_1[0x00*8 : 0x20*8]
     out_data[0x20*8 : 0x60*8] = rom_bytes_0[0x00*8 : 0x40*8]
     out_data[0x60*8 : 0x80*8] = rom_bytes_1[0x20*8 : 0x40*8]
-    out_data[0x80*8 : 0x100*8] = out_data[0x00*8 : 0x80*8]
+    out_data[0x80*8 : 0x100*8] = invert(out_data[0x00*8 : 0x80*8])
     return out_data
 
 def extract_kc85_4():
@@ -48,7 +52,7 @@ def extract_kc85_4():
     out_data[0x00*8 : 0x20*8] = rom_bytes_1[0x00*8 : 0x20*8]
     out_data[0x20*8 : 0x60*8] = rom_bytes_0[0x00*8 : 0x40*8]
     out_data[0x60*8 : 0x80*8] = rom_bytes_1[0x20*8 : 0x40*8]
-    out_data[0x80*8 : 0x100*8] = out_data[0x00*8 : 0x80*8]
+    out_data[0x80*8 : 0x100*8] = invert(out_data[0x00*8 : 0x80*8])
     return out_data
 
 def extract_z1013():
@@ -71,6 +75,13 @@ def extract_c64():
     out_data[0xC0*8 : 0x100*8] = rom_0[0xC0*8 : 0x100*8]
     return out_data
 
+def extract_oric():
+    font_bytes = extract_bytes('oric_atmos_v122.rom', 0x3C78, 0x0300)
+    out_data = [0]*(0x100 * 8)
+    out_data[0x100 : 0x400] = font_bytes[0 : 0x300]
+    out_data[0x500 : 0x800] = invert(font_bytes[0 : 0x300])
+    return out_data
+
 # print a C array with the output bytes
 def print_c_array(system_name, array_name, bytes):
     print(f'#if defined(SOKOL_DEBUGTEXT_FONT_{system_name})')
@@ -85,8 +96,9 @@ def print_c_array(system_name, array_name, bytes):
     print('#endif')
 
 # execution starts here
-#print_c_array('KC853', '_sdtx_font_kc853', extract_kc85_3())
-#print_c_array('KC854', '_sdtx_font_kc854', extract_kc85_4())
-#print_c_array('Z1013', '_sdtx_font_z1013', extract_z1013())
-#print_c_array('CPC', '_sdtx_font_cpc', extract_cpc())
+print_c_array('KC853', '_sdtx_font_kc853', extract_kc85_3())
+print_c_array('KC854', '_sdtx_font_kc854', extract_kc85_4())
+print_c_array('Z1013', '_sdtx_font_z1013', extract_z1013())
+print_c_array('CPC', '_sdtx_font_cpc', extract_cpc())
 print_c_array('C64', '_sdtx_font_c64', extract_c64())
+print_c_array('ORIC', '_sdtx_font_oric', extract_oric())
