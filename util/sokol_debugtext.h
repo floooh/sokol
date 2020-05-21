@@ -37,7 +37,7 @@
 
     ...optionally provide the following macros to override defaults:
 
-    SOKOL_SNPRINTF      - the function name of an alternative snprintf() function (default: snprintf)
+    SOKOL_VSNPRINTF     - the function name of an alternative vsnprintf() function (default: vsnprintf)
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
@@ -95,6 +95,7 @@
 #define SOKOL_DEBUGTEXT_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h> // va_list
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_debugtext.h"
@@ -219,6 +220,7 @@ SOKOL_API_DECL void sdtx_putc(char c);
 SOKOL_API_DECL void sdtx_puts(const char* str);             // does NOT append newline!
 SOKOL_API_DECL void sdtx_putr(const char* str, int len);    // 'put range', also stops at zero-char
 SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
+SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -231,6 +233,7 @@ SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR
 
 #include <string.h> // memset
 #include <math.h>   // fmodf
+#include <stdarg.h> // for vsnprintf
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -264,8 +267,9 @@ SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
-#ifndef SOKOL_SNPRINTF
-#define SOKOL_SNPRINTF snprintf
+#ifndef SOKOL_VSNPRINTF
+#include <stdio.h>
+#define SOKOL_VSNPRINTF vsnprintf
 #endif
 
 #define _sdtx_def(val, def) (((val) == 0) ? (def) : (val))
@@ -3064,6 +3068,7 @@ typedef struct {
 
 typedef struct {
     _sdtx_slot_t slot;
+    sdtx_context_desc_t desc;
     _sdtx_vertex_t* cur_vertex_ptr;
     const _sdtx_vertex_t* max_vertex_ptr;
     _sdtx_vertex_t* vertices;
@@ -3075,7 +3080,7 @@ typedef struct {
     _sdtx_float2_t glyph_size;
     _sdtx_float2_t origin;
     _sdtx_float2_t pos;
-    float tab_width;        // in virtual canvas pixels
+    float tab_width;
     uint32_t color;
 } _sdtx_context_t;
 
@@ -3090,7 +3095,7 @@ typedef struct {
     sg_image font_img;
     sg_shader shader;
     uint32_t fmt_buf_size;
-    uint8_t* fmt_buf;
+    char* fmt_buf;
     sdtx_context def_ctx;
     sdtx_context cur_ctx_id;
     _sdtx_context_t* cur_ctx;   // may be 0!
@@ -3256,13 +3261,13 @@ static sdtx_context_desc_t _sdtx_context_defaults(const sdtx_context_desc_t* des
 
 static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* in_desc) {
     SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && in_desc);
-    sdtx_context_desc_t desc = _sdtx_context_defaults(in_desc);
-    SOKOL_ASSERT(desc.canvas_width > 0.0f);
-    SOKOL_ASSERT(desc.canvas_height > 0.0f);
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
+    ctx->desc = _sdtx_context_defaults(in_desc);
+    SOKOL_ASSERT(ctx->desc.canvas_width > 0.0f);
+    SOKOL_ASSERT(ctx->desc.canvas_height > 0.0f);
 
-    const uint32_t max_vertices = 6 * desc.char_buf_size;
+    const uint32_t max_vertices = 6 * ctx->desc.char_buf_size;
     const int vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
     ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
@@ -3298,12 +3303,12 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     ctx->pip = sg_make_pipeline(&pip_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->pip.id);
 
-    ctx->def_font = ctx->cur_font = desc.font;
-    ctx->canvas_size.x = desc.canvas_width;
-    ctx->canvas_size.y = desc.canvas_height;
+    ctx->def_font = ctx->cur_font = ctx->desc.font;
+    ctx->canvas_size.x = ctx->desc.canvas_width;
+    ctx->canvas_size.y = ctx->desc.canvas_height;
     ctx->glyph_size.x = 8.0f / ctx->canvas_size.x;
     ctx->glyph_size.y = 8.0f / ctx->canvas_size.y;
-    ctx->tab_width = ctx->glyph_size.x * desc.tab_width;
+    ctx->tab_width = (float) ctx->desc.tab_width;
     ctx->color = _SDTX_DEFAULT_COLOR;
 }
 
@@ -3336,8 +3341,8 @@ static void _sdtx_unpack_font(const uint8_t* font_data, uint8_t* out_pixels) {
 static void _sdtx_setup_common(void) {
 
     /* common printf formatting buffer */
-    _sdtx.fmt_buf_size = _sdtx.desc.printf_buf_size;
-    _sdtx.fmt_buf = (uint8_t*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
+    _sdtx.fmt_buf_size = _sdtx.desc.printf_buf_size + 1;
+    _sdtx.fmt_buf = (char*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
     SOKOL_ASSERT(_sdtx.fmt_buf);
 
     /* common shader for all contexts */
@@ -3488,6 +3493,7 @@ static inline void _sdtx_ctrl_char(_sdtx_context_t* ctx, uint8_t c) {
             break;
         case '\t':
             ctx->pos.x = (ctx->pos.x - fmodf(ctx->pos.x, ctx->tab_width)) + ctx->tab_width;
+            break;
         case ' ':
             ctx->pos.x += 1.0f;
             break;
@@ -3771,11 +3777,26 @@ SOKOL_API_DECL void sdtx_putr(const char* str, int len) {
     }
 }
 
+SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args) {
+    SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
+    SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
+    int res = SOKOL_VSNPRINTF(_sdtx.fmt_buf, _sdtx.fmt_buf_size, fmt, args);
+    sdtx_puts(_sdtx.fmt_buf);
+    return res;
+}
+
 SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-    // FIXME
-    _SOKOL_UNUSED(fmt);
-    return 0;
+    /*
+        Be really sure about that terminating null thing in case we're on an old MSVC.
+    */
+    SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
+    va_list args;
+    va_start(args, fmt);
+    int res = SOKOL_VSNPRINTF(_sdtx.fmt_buf, _sdtx.fmt_buf_size, fmt, args);
+    va_end(args);
+    sdtx_puts(_sdtx.fmt_buf);
+    return res;
 }
 
 SOKOL_API_IMPL void sdtx_draw(void) {
