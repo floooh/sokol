@@ -105,10 +105,6 @@ SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_RGBA8 == (sapp_pixel_format) SG_PIXELFORMAT_RGBA8);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_BGRA8 == (sapp_pixel_format) SG_PIXELFORMAT_BGRA8);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH == (sapp_pixel_format) SG_PIXELFORMAT_DEPTH);
-    SOKOL_ASSERT(SAPP_PIXELFORMAT_DEPTH_STENCIL == (sapp_pixel_format) SG_PIXELFORMAT_DEPTH_STENCIL);
     sg_context_desc desc;
     memset(&desc, 0, sizeof(desc));
     desc.color_format = (sg_pixel_format) sapp_color_format();
