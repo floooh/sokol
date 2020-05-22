@@ -112,7 +112,7 @@ extern "C" {
 typedef struct sdtx_context { uint32_t id; } sdtx_context;
 
 /* the default context handle */
-static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0 };
+static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 
 /*
     sdtx_font_desc_t
@@ -3319,7 +3319,7 @@ static void _sdtx_destroy_context(sdtx_context ctx_id) {
 }
 
 static bool _sdtx_is_default_context(sdtx_context ctx_id) {
-    return ((ctx_id.id == 0) || (ctx_id.id == _sdtx.def_ctx_id.id));
+    return ctx_id.id == SDTX_DEFAULT_CONTEXT.id;
 }
 
 /* unpack linear 8x8 bits-per-pixel font data into 2D byte-per-pixel texture data */
@@ -3548,6 +3548,7 @@ SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     _sdtx_setup_context_pool(&_sdtx.desc);
     _sdtx_setup_common();
     _sdtx.def_ctx_id = sdtx_make_context(&_sdtx.desc.context);
+    SOKOL_ASSERT(SDTX_DEFAULT_CONTEXT.id == _sdtx.def_ctx_id.id);
     sdtx_set_context(_sdtx.def_ctx_id);
 }
 
@@ -3608,7 +3609,7 @@ SOKOL_API_IMPL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc) {
 SOKOL_API_IMPL void sdtx_destroy_context(sdtx_context ctx_id) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     if (_sdtx_is_default_context(ctx_id)) {
-        SOKOL_LOG("sokol_debugtext.h: cannot destroy default context\n");
+        SOKOL_LOG("sokol_debugtext.h: cannot destroy default context");
         return;
     }
     _sdtx_destroy_context(ctx_id);
@@ -3631,12 +3632,7 @@ SOKOL_API_IMPL void sdtx_set_context(sdtx_context ctx_id) {
 
 SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-    if (_sdtx_is_default_context(_sdtx.cur_ctx_id)) {
-        return SDTX_DEFAULT_CONTEXT;
-    }
-    else {
-        return _sdtx.cur_ctx_id;
-    }
+    return _sdtx.cur_ctx_id;
 }
 
 SOKOL_API_IMPL void sdtx_font(int font_index) {
