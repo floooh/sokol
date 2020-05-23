@@ -869,6 +869,8 @@ SOKOL_API_DECL float sapp_dpi_scale(void);
 SOKOL_API_DECL void sapp_show_keyboard(bool visible);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
+/* query fullscreen mode */
+SOKOL_API_DECL bool sapp_is_fullscreen(void);
 /* toggle fullscreen mode */
 SOKOL_API_DECL void sapp_toggle_fullscreen(void);
 /* show or hide the mouse cursor */
@@ -1071,6 +1073,7 @@ typedef struct {
     int sample_count;
     int swap_interval;
     float dpi_scale;
+    bool fullscreen;
     bool gles2_fallback;
     bool first_frame;
     bool init_called;
@@ -1201,6 +1204,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
         _sapp_strcpy("sokol_app", _sapp.window_title, sizeof(_sapp.window_title));
     }
     _sapp.dpi_scale = 1.0f;
+    _sapp.fullscreen = _sapp.desc.fullscreen;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -1463,7 +1467,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
-    if (_sapp.desc.fullscreen) {
+    if (_sapp.fullscreen) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
         _sapp.window_width = screen_rect.size.width;
         _sapp.window_height = screen_rect.size.height;
@@ -1556,7 +1560,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [[NSRunLoop currentRunLoop] addTimer:_sapp_macos_timer_obj forMode:NSDefaultRunLoopMode];
     #endif
     _sapp.valid = true;
-    if (_sapp.desc.fullscreen) {
+    if (_sapp.fullscreen) {
         /* on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp_macos_window_obj toggleFullScreen:self];
     }
@@ -4343,24 +4347,35 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen() {
     HMONITOR monitor = MonitorFromWindow(_sapp_win32_hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO minfo = { .cbSize = sizeof(MONITORINFO) };
     GetMonitorInfo(monitor, &minfo);
-    RECT r = minfo.rcMonitor;
-    int monitor_w = r.right - r.left;
-    int monitor_h = r.bottom - r.top;
+    const RECT mr = minfo.rcMonitor;
+    const int monitor_w = mr.right - mr.left;
+    const int monitor_h = mr.bottom - mr.top;
 
-    if (_sapp.desc.fullscreen) {
-        SetWindowLongPtr(_sapp_win32_hwnd, GWL_STYLE, WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX);
-        int window_w = monitor_w < _sapp.desc.width ? monitor_w : _sapp.desc.width;
-        int window_h = monitor_h < _sapp.desc.height ? monitor_h : _sapp.desc.height;
-        int offset_x = (monitor_w - window_w) / 2;
-        int offset_y = (monitor_h - window_h) / 2;
-        SetWindowPos(_sapp_win32_hwnd, HWND_TOP, r.left + offset_x, r.top + offset_y, window_w, window_h, SWP_SHOWWINDOW);
-        _sapp.desc.fullscreen = false;
+    const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    DWORD win_style;
+    RECT rect = { 0, 0, 0, 0 };
+
+    _sapp.fullscreen = !_sapp.fullscreen;
+    if (!_sapp.fullscreen) {
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
+        rect.right = (int) ((float)_sapp_def(_sapp.desc.width, 640) * _sapp_win32_window_scale);
+        rect.bottom = (int) ((float)_sapp_def(_sapp.desc.height, 480) * _sapp_win32_window_scale);
     }
     else {
-        SetWindowLongPtr(_sapp_win32_hwnd, GWL_STYLE, WS_POPUP | WS_SYSMENU | WS_VISIBLE);
-        SetWindowPos(_sapp_win32_hwnd, HWND_TOP, r.left, r.top, monitor_w, monitor_h, SWP_SHOWWINDOW);
-        _sapp.desc.fullscreen = true;
+        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
+        rect.right = monitor_w;
+        rect.bottom = monitor_h;
     }
+    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
+    int win_width = rect.right - rect.left;
+    int win_height = rect.bottom - rect.top;
+    if (!_sapp.fullscreen) {
+        rect.left = (monitor_w - win_width) / 2;
+        rect.top = (monitor_h - win_height) / 2;
+    }
+
+    SetWindowLongPtr(_sapp_win32_hwnd, GWL_STYLE, win_style);
+    SetWindowPos(_sapp_win32_hwnd, HWND_TOP, mr.left + rect.left, mr.top + rect.top, win_width, win_height, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
@@ -4506,8 +4521,8 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
         const int fb_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
         const int fb_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
         if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = (int)((float)_sapp.window_width * _sapp_win32_content_scale);
-            _sapp.framebuffer_height = (int)((float)_sapp.window_height * _sapp_win32_content_scale);
+            _sapp.framebuffer_width = fb_width;
+            _sapp.framebuffer_height = fb_height;
             /* prevent a framebuffer size of 0 when window is minimized */
             if (_sapp.framebuffer_width == 0) {
                 _sapp.framebuffer_width = 1;
@@ -4624,7 +4639,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 switch (wParam & 0xFFF0) {
                     case SC_SCREENSAVE:
                     case SC_MONITORPOWER:
-                        if (_sapp.desc.fullscreen) {
+                        if (_sapp.fullscreen) {
                             /* disable screen saver and blanking in fullscreen mode */
                             return 0;
                         }
@@ -4733,7 +4748,7 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     DWORD win_style;
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
     RECT rect = { 0, 0, 0, 0 };
-    if (_sapp.desc.fullscreen) {
+    if (_sapp.fullscreen) {
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
         rect.right = GetSystemMetrics(SM_CXSCREEN);
         rect.bottom = GetSystemMetrics(SM_CYSCREEN);
@@ -7685,6 +7700,10 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
+}
+
+SOKOL_API_DECL bool sapp_is_fullscreen(void) {
+    return _sapp.fullscreen;
 }
 
 SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
