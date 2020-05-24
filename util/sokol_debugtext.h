@@ -3851,6 +3851,8 @@ SOKOL_API_IMPL void sdtx_draw(void) {
         }
         ctx->cur_vertex_ptr = ctx->vertices;
         ctx->cur_font = 0;
+        ctx->pos.x = 0.0f;
+        ctx->pos.y = 0.0f;
     }
 }
 
