@@ -3287,9 +3287,9 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip_desc.blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
     pip_desc.blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
-    pip_desc.blend.color_format = _sdtx.desc.context.color_format;
-    pip_desc.blend.depth_format = _sdtx.desc.context.depth_format;
-    pip_desc.rasterizer.sample_count = _sdtx.desc.context.sample_count;
+    pip_desc.blend.color_format = ctx->desc.color_format;
+    pip_desc.blend.depth_format = ctx->desc.depth_format;
+    pip_desc.rasterizer.sample_count = ctx->desc.sample_count;
     pip_desc.label = "sdtx-pipeline";
     ctx->pip = sg_make_pipeline(&pip_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->pip.id);
