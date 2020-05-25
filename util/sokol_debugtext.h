@@ -45,13 +45,200 @@
 
         sokol_gfx.h
 
-    FEATURE OVERVIEW
-    ================
-    [TODO]
+    FEATURES AND CONCEPTS
+    =====================
+    - renders 8-bit ASCII text as fixed-size 8x8 pixel characters
+    - comes with 6 embedded 8-bit home computer fonts (each 2 KBytes)
+    - easily plug in your own fonts
+    - create multiple contexts for rendering text in different layers or render passes
 
     STEP BY STEP
     ============
-    [TODO]
+
+    --- to initialize sokol-debugtext, call sdtx_setup() *after* initializing
+        sokol-gfx:
+
+            sg_setup(&(sg_desc){ ... });
+            sdtx_setup(&(sdtx_desc_t){ ... });
+
+    --- configure sokol-debugtext by populating the sdtx_desc struct:
+
+        .context_pool_size (default: 8)
+            The max number of contexts that can be created.
+
+        .printf_buf_size (default: 4096)
+            The size of the internal text formatting buffer used by
+            sdtx_printf() and sdtx_vprintf().
+
+        .fonts (default: none)
+            An array of sdtx_font_desc_t structs used to configure the
+            fonts that can be used for rendering. To use all builtin
+            fonts, call sdtx_setup() like this (in C99):
+
+            sdtx_setup(&sdtx_desc_t){
+                .fonts = {
+                    [0] = sdtx_font_kc853(),
+                    [1] = sdtx_font_kc854(),
+                    [2] = sdtx_font_z1013(),
+                    [3] = sdtx_font_cpc(),
+                    [4] = sdtx_font_c64(),
+                    [5] = sdtx_font_oric()
+                }
+            });
+
+            For documentation on how to use you own font data, search
+            below for "USING YOUR OWN FONT DATA".
+
+        .context
+            The setup parameters for the default text context. This will
+            be active right after sdtx_setup(), or when calling
+            sdtx_set_context(SDTX_DEFAULT_CONTEXT):
+
+            .char_buf_size (default: 4096)
+                The number of characters that can be rendered in this context,
+                defines the size of an internal fixed-size vertex buffer.
+                Any additional characters will be silently ignored.
+
+            .canvas_width (default: 640)
+            .canvas_height (default: 480)
+                The 'virtual canvas size' in pixels. This defines how big
+                characters will be rendered relative to the default framebuffer
+                dimensions. Each character occupies a grid of 8x8 'virtual canvas
+                pixels' (so a virtual canvas size of 640x480 means that 80x60 characters
+                fit on the screen). For rendering to the default framebuffer you
+                should dynamically update the canvas size in each frame by
+                calling sdtx_canvas(w, h).
+
+            .tab_width (default: 4)
+                The width of a tab character in number of character cells.
+
+            .color_format (default: 0)
+            .depth_format (default: 0)
+            .sample_count (default: 0)
+                The pixel format description for the default context needed
+                for creating the context's sg_pipeline object. When
+                rendering to the default framebuffer you can leave those
+                zero-initialized, in this case the proper values will be
+                filled in by sokol-gfx. You only need to provide non-default
+                values here when rendering to render targets with different
+                pixel format attributes than the default framebuffer.
+
+    --- Before starting to render text, optionally call sdtx_canvas() to
+        dynamically resize the virtual canvas. This is recommended when
+        rendering to a resizeable window. The virtual canvas size can
+        also be used to scale text in relation to the display resolution.
+
+        Examples when using sokol-app:
+
+        - to render characters at 8x8 'physical pixels':
+
+            sdtx_canvas(sapp_width(), sapp_height());
+
+        - to render characters at 16x16 pixels:
+
+            sdtx_canvas(sapp_width()*0.5f, sapp_heigth()*0.5f);
+
+        Do *not* use integer math here, since this will not look nice
+        when the render target size is odd.
+
+    --- Optionally define the origin for the character grid with:
+
+            sdtx_origin(x, y);
+
+        The provided coordinates are in character grid cells, not in
+        virtual canvas pixels. E.g. to set the origin to characters
+        from the left and top border:
+
+            sdtx_origin(2, 2);
+
+        You can define fractions, e.g. to start rendering character half
+        a character grid size from the top-left corner:
+
+            sdtx_origin(0.5f, 0.5f);
+
+    --- Optionally set a different font by calling:
+
+            sdtx_font(font_index)
+
+        sokol-debugtext provides 8 font slots which can be populated
+        with the builtin fonts or with user-provided font data, so
+        'font_index' must be a number from 0 to 7.
+
+    --- Position the cursor with one of the following calls. All arguments
+        are in character grid cells as floats and relative to the
+        origin defined with sdtx_origin():
+
+            sdtx_pos(x, y)      - sets absolute cursor position
+            sdtx_pos_x(x)       - only set absolute x cursor position
+            sdtx_pos_y(y)       - only set absolute y cursor position
+
+            sdtx_move(x, y)     - move cursor relative in x and y direction
+            sdtx_move_x(x)      - move cursor relative only in x direction
+            sdtx_move_y(y)      - move cursor relative only in y direction
+
+            sdtx_crlf()         - set cursor to beginning of next line
+                                  (same as sdtx_pos_x(0) + sdtx_move_y(1))
+            sdtx_home()         - resets the cursor to the origin
+                                  (same as sdtx_pos(0, 0))
+
+    --- Set a new text color with any of the following functions:
+
+            sdtx_color3b(r, g, b)       - RGB 0..255, A=255
+            sdtx_color3f(r, g, b)       - RGB 0.0f..1.0f, A=1.0f
+            sdtx_color4b(r, g, b, a)    - RGBA 0..255
+            sdtx_color4f(r, g, b, a)    - RGBA 0.0f..1.0f
+            sdtx_color1i(uint32_t rgba) - ABGR (0xAABBGGRR)
+
+    --- Output 8-bit ASCII text with the following functions:
+
+            sdtx_putc(c)             - output a single character
+
+            sdtx_puts(str)           - output a null-terminated C string, note that
+                                       this will *not* append a newline (so it behaves
+                                       differently than the CRT's puts() function)
+
+            sdtx_putr(str, len)     - 'put range' output the first 'len' characters of
+                                       a C string or until the zero character is encountered
+
+            sdtx_printf(fmt, ...)   - output with printf-formatting, note that you
+                                      can inject your own printf-compatible function
+                                      by overriding the SOKOL_VSNPRINTF define before
+                                      including the implementation
+
+            sdtx_vprintf(fmt, args) - same as sdtx_printf() but with the arguments
+                                      provided in a va_list
+
+        - Note that the text will not yet be rendered, this will only when
+          sdtx_draw() is called inside a sokol-gfx render pass.
+        - This means also you can output text anywhere in the frame, it doesn't
+          have to be inside a render pass.
+        - Note that character codes <32 are reserved as control characters
+          and won't render anything. Currently only the following control
+          characters are implements:
+
+            \r  - carriage return (same as sdtx_pos_x(0))
+            \n  - carriage return + line feed (same as stdx_crlf())
+            \t  - a tab character
+
+    --- finally, from within a sokol-gfx render pass, call:
+
+            sdtx_draw()
+
+        ...to actually render the text. Calling sdtx_draw() will also rewind
+        the text context:
+
+            - the internal vertex buffer pointer is reset to the beginning
+            - the current font is set to 0
+            - the cursor position is reset to the origin
+
+
+    RENDERING WITH MULTIPLE CONTEXTS
+    ================================
+
+
+    USING YOUR OWN FONT DATA
+    ========================
+
 
 
     LICENSE
@@ -117,7 +304,7 @@ static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 /*
     sdtx_font_desc_t
 
-    Describes the pixel data of a font. A font consists of
+    Describes the pixel data of a font. A font consists of up to
     256 8x8 character tiles, where each character tile is described
     by 8 consecutive bytes, each byte describing 8 pixels.
 
@@ -226,10 +413,10 @@ SOKOL_API_DECL void sdtx_crlf(void);
 
 /* set the current text color */
 SOKOL_API_DECL void sdtx_color3b(uint8_t r, uint8_t g, uint8_t b);              // RGB 0..255, A=255
-SOKOL_API_DECL void sdtx_color3f(float r, float g, float b);                    // RGB 0..1, A=1
+SOKOL_API_DECL void sdtx_color3f(float r, float g, float b);                    // RGB 0.0f..1.0f, A=1.0f
 SOKOL_API_DECL void sdtx_color4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // RGBA 0..255
-SOKOL_API_DECL void sdtx_color4f(float r, float g, float b, float a);           // RGBA 0..1
-SOKOL_API_DECL void sdtx_color1i(uint32_t rgba);
+SOKOL_API_DECL void sdtx_color4f(float r, float g, float b, float a);           // RGBA 0.0f..1.0f
+SOKOL_API_DECL void sdtx_color1i(uint32_t rgba);                                // ABGR 0xAABBGGRR
 
 /* text rendering */
 SOKOL_API_DECL void sdtx_putc(char c);
