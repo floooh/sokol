@@ -240,6 +240,9 @@ SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
 
 #ifdef __cplusplus
 } /* extern "C" */
+/* C++ const-ref wrappers */
+inline void sdtx_setup(const sdtx_desc_t& desc) { return sdtx_setup(&desc); }
+inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return sdtx_make_context(&desc); }
 #endif
 #endif /* SOKOL_DEBUGTEXT_INCLUDED */
 
