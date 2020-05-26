@@ -1,7 +1,5 @@
 #ifndef SOKOL_DEBUGTEXT_INCLUDED
 /*
-    WIP WIP WIP
-
     sokol_debugtext.h   - simple ASCII debug text rendering on top of sokol_gfx.h
 
     Project URL: https://github.com/floooh/sokol
