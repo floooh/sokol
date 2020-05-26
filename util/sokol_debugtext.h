@@ -234,12 +234,128 @@
 
     RENDERING WITH MULTIPLE CONTEXTS
     ================================
+    Use multiple text contexts if you need to render debug text in different
+    sokol-gfx render passes, or want to render text to different layers
+    in the same render pass, each with its own set of parameters.
 
+    To create a new text context call:
+
+        sdtx_context ctx = sdtx_make_context(&(sdtx_context_desc_t){ ... });
+
+    The creation parameters in the sdtx_context_desc_t struct are the same
+    as already described above in the sdtx_setup() function:
+
+        .char_buf_size      -- max number of characters rendered in one frame, default: 4096
+        .canvas_width       -- the initial virtual canvas width, default: 640
+        .canvas_height      -- the initial virtual canvas height, default: 400
+        .tab_width          -- tab width in number of characters, default: 4
+        .color_format       -- color pixel format of target render pass
+        .depth_format       -- depth pixel format of target render pass
+        .sample_count       -- MSAA sample count of target render pass
+
+    To make a new context the active context, call:
+
+        sdtx_set_context(ctx)
+
+    ...and after that call the text output functions as described above, and
+    finally, inside a sokol-gfx render pass, call sdtx_draw() to actually
+    render the text for this context.
+
+    A context keeps track of the following parameters:
+
+        - the active font
+        - the virtual canvas size
+        - the origin position
+        - the current cursor position
+        - the current tab width
+        - and the current color
+
+    You can get the currently active context with:
+
+        sdtx_get_context()
+
+    To make the default context current, call sdtx_set_context() with the
+    special SDTX_DEFAULT_CONTEXT handle:
+
+        sdtx_set_context(SDTX_DEFAULT_CONTEXT)
+
+    To destroy a context, call:
+
+        sdtx_destroy_context(ctx)
+
+    If a context is set as active that no longer exists, all sokol-debugtext
+    that require an active context will silently fail.
 
     USING YOUR OWN FONT DATA
     ========================
 
+    Instead of the built-in fonts you can also plug your own 8x8 font data
+    into sokol-debugtext by providing one or several sdtx_font_desc_t
+    structures in the sdtx_setup call.
 
+    For instance to use a built-in font at slot 0, and a user-font at
+    font slot 1, the sdtx_setup() call might look like this:
+
+        sdtx_setup(&sdtx_desc_t){
+            .fonts = {
+                [0] = sdtx_font_kc853(),
+                [1] = {
+                    .ptr = my_font_data,
+                    .size = sizeof(my_font_data)
+                    .first_char = ...,
+                    .last_char = ...
+                }
+            }
+        });
+
+    Where 'my_font_data' is a byte array where every character is described
+    by 8 bytes arranged like this:
+
+        bits
+        7 6 5 4 3 2 1 0
+        . . . X X . . .     byte 0: 0x18
+        . . X X X X . .     byte 1: 0x3C
+        . X X . . X X .     byte 2: 0x66
+        . X X . . X X .     byte 3: 0x66
+        . X X X X X X .     byte 4: 0x7E
+        . X X . . X X .     byte 5: 0x66
+        . X X . . X X .     byte 6: 0x66
+        . . . . . . . .     byte 7: 0x00
+
+    A complete font consists of 256 characters, resulting in 2048 bytes for
+    the font data array (but note that the character codes 0..31 will never
+    be rendered).
+
+    If you provide such a complete font data array, you can drop the .first_char
+    and .last_char initialization parameters since those default to 0 and 255:
+
+        sdtx_setup(&sdtx_desc_t){
+            .fonts = {
+                [0] = sdtx_font_kc853(),
+                [1] = {
+                    .ptr = my_font_data,
+                    .size = sizeof(my_font_data)
+                }
+            }
+        });
+
+    If the font doesn't define all 256 character tiles, or you don't need an entire
+    256-character font and want to save a couple of bytes, use the .first_char
+    and .last_char initialization parameters to define a sub-range. For instance
+    if the font only contains the between the Space (ASCII code 32) and uppercase
+    character 'Z' (ASCII code 90):
+
+        sdtx_setup(&sdtx_desc_t){
+            .fonts = {
+                [0] = sdtx_font_kc853(),
+                [1] = {
+                    .ptr = my_font_data,
+                    .size = sizeof(my_font_data)
+                    .first_char = 32,       // could also write ' '
+                    .last_char = 90         // could also write 'Z'
+                }
+            }
+        });
 
     LICENSE
     =======
@@ -311,6 +427,7 @@ static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
     For instance the character 'A' could look like this (this is also
     how most home computers used to describe their fonts in ROM):
 
+        bits
         7 6 5 4 3 2 1 0
         . . . X X . . .     byte 0: 0x18
         . . X X X X . .     byte 1: 0x3C
