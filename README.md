@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**30-Apr-2020**: experimental WebGPU backend and minor breaking changes)
+[See what's new](#updates) (**27-May-2020**: new utility header sokol_debugtext.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -25,6 +25,7 @@ Utility libraries:
 - **sokol\_gl.h**: OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
 - **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
 - **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
+- **sokol\_debugtext.h**: a simple text renderer using vintage home computer fonts
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
@@ -459,6 +460,9 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **27-May-2020**: a new utility header [sokol_debugtext.h](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h)
+for rendering simple ASCII text using vintage home computer fonts via sokol_gfx.h
 
 - **13-May-2020**: a new function in sokol_time.h to round a measured frame time
 to common display refresh rates: ```stm_round_to_common_refresh_rate()```.

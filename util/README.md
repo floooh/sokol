@@ -13,5 +13,6 @@ can be compiled as C++ or C.
 on top of sokol_gfx.h
 - **sokol_fontstash.h**: a renderer for [fontstash.h](https://github.com/memononen/fontstash) on
 on top of sokol_gl.h
+- **sokol_debugtext.h**: a simple text renderer using 8-bit home computer fonts
 
 See the embedded header-documentation for build- and usage-details.
