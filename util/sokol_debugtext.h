@@ -46,7 +46,7 @@
     FEATURES AND CONCEPTS
     =====================
     - renders 8-bit ASCII text as fixed-size 8x8 pixel characters
-    - comes with 6 embedded 8-bit home computer fonts (each 2 KBytes)
+    - comes with 6 embedded 8-bit home computer fonts (each taking up 2 KBytes)
     - easily plug in your own fonts
     - create multiple contexts for rendering text in different layers or render passes
 
@@ -56,13 +56,12 @@
     --- to initialize sokol-debugtext, call sdtx_setup() *after* initializing
         sokol-gfx:
 
-            sg_setup(&(sg_desc){ ... });
             sdtx_setup(&(sdtx_desc_t){ ... });
 
-    --- configure sokol-debugtext by populating the sdtx_desc struct:
+    --- configure sokol-debugtext by populating the sdtx_desc_t struct:
 
         .context_pool_size (default: 8)
-            The max number of contexts that can be created.
+            The max number of text contexts that can be created.
 
         .printf_buf_size (default: 4096)
             The size of the internal text formatting buffer used by
@@ -71,7 +70,7 @@
         .fonts (default: none)
             An array of sdtx_font_desc_t structs used to configure the
             fonts that can be used for rendering. To use all builtin
-            fonts, call sdtx_setup() like this (in C99):
+            fonts call sdtx_setup() like this (in C99):
 
             sdtx_setup(&sdtx_desc_t){
                 .fonts = {
@@ -103,7 +102,7 @@
                 characters will be rendered relative to the default framebuffer
                 dimensions. Each character occupies a grid of 8x8 'virtual canvas
                 pixels' (so a virtual canvas size of 640x480 means that 80x60 characters
-                fit on the screen). For rendering to the default framebuffer you
+                fit on the screen). For rendering in a resizeable window, you
                 should dynamically update the canvas size in each frame by
                 calling sdtx_canvas(w, h).
 
@@ -132,25 +131,25 @@
 
             sdtx_canvas(sapp_width(), sapp_height());
 
-        - to render characters at 16x16 pixels:
+        - to render characters at 16x16 physical pixels:
 
-            sdtx_canvas(sapp_width()*0.5f, sapp_heigth()*0.5f);
+            sdtx_canvas(sapp_width()/2.0f, sapp_heigth()/2.0f);
 
         Do *not* use integer math here, since this will not look nice
-        when the render target size is odd.
+        when the render target size isn't divisible by 2.
 
     --- Optionally define the origin for the character grid with:
 
             sdtx_origin(x, y);
 
         The provided coordinates are in character grid cells, not in
-        virtual canvas pixels. E.g. to set the origin to characters
+        virtual canvas pixels. E.g. to set the origin to 2 character tiles
         from the left and top border:
 
             sdtx_origin(2, 2);
 
-        You can define fractions, e.g. to start rendering character half
-        a character grid size from the top-left corner:
+        You can define fractions, e.g. to start rendering half
+        a character tile from the top-left corner:
 
             sdtx_origin(0.5f, 0.5f);
 
@@ -162,7 +161,7 @@
         with the builtin fonts or with user-provided font data, so
         'font_index' must be a number from 0 to 7.
 
-    --- Position the cursor with one of the following calls. All arguments
+    --- Position the text cursor with one of the following calls. All arguments
         are in character grid cells as floats and relative to the
         origin defined with sdtx_origin():
 
@@ -206,8 +205,9 @@
             sdtx_vprintf(fmt, args) - same as sdtx_printf() but with the arguments
                                       provided in a va_list
 
-        - Note that the text will not yet be rendered, this will only when
-          sdtx_draw() is called inside a sokol-gfx render pass.
+        - Note that the text will not yet be rendered, only recorded for rendering 
+          at a later time, the actual rendering happens when sdtx_draw() is called 
+          inside a sokol-gfx render pass.
         - This means also you can output text anywhere in the frame, it doesn't
           have to be inside a render pass.
         - Note that character codes <32 are reserved as control characters
@@ -227,7 +227,7 @@
 
             - the internal vertex buffer pointer is reset to the beginning
             - the current font is set to 0
-            - the cursor position is reset to the origin
+            - the cursor position is reset 
 
 
     RENDERING WITH MULTIPLE CONTEXTS
@@ -287,7 +287,7 @@
     USING YOUR OWN FONT DATA
     ========================
 
-    Instead of the built-in fonts you can also plug your own 8x8 font data
+    Instead of the built-in fonts you can also plug your own font data
     into sokol-debugtext by providing one or several sdtx_font_desc_t
     structures in the sdtx_setup call.
 
@@ -337,11 +337,11 @@
             }
         });
 
-    If the font doesn't define all 256 character tiles, or you don't need an entire
-    256-character font and want to save a couple of bytes, use the .first_char
-    and .last_char initialization parameters to define a sub-range. For instance
-    if the font only contains the between the Space (ASCII code 32) and uppercase
-    character 'Z' (ASCII code 90):
+    If the font doesn't define all 256 character tiles, or you don't need an
+    entire 256-character font and want to save a couple of bytes, use the
+    .first_char and .last_char initialization parameters to define a sub-range.
+    For instance if the font only contains the characters between the Space
+    (ASCII code 32) and uppercase character 'Z' (ASCII code 90):
 
         sdtx_setup(&sdtx_desc_t){
             .fonts = {
@@ -354,6 +354,9 @@
                 }
             }
         });
+
+    Character tiles that haven't been defined in the font will be rendered
+    as a solid 8x8 quad.
 
     LICENSE
     =======
@@ -4119,20 +4122,21 @@ SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
     int res = SOKOL_VSNPRINTF(_sdtx.fmt_buf, _sdtx.fmt_buf_size, fmt, args);
+    // make sure we're 0-terminated in case we're on an old MSVC
+    _sdtx.fmt_buf[_sdtx.fmt_buf_size-1] = 0;
     sdtx_puts(_sdtx.fmt_buf);
     return res;
 }
 
 SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-    /*
-        Be really sure about that terminating null thing in case we're on an old MSVC.
-    */
     SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
     va_list args;
     va_start(args, fmt);
     int res = SOKOL_VSNPRINTF(_sdtx.fmt_buf, _sdtx.fmt_buf_size, fmt, args);
     va_end(args);
+    // make sure we're 0-terminated in case we're on an old MSVC
+    _sdtx.fmt_buf[_sdtx.fmt_buf_size-1] = 0;
     sdtx_puts(_sdtx.fmt_buf);
     return res;
 }
