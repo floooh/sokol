@@ -92,9 +92,9 @@
             sdtx_set_context(SDTX_DEFAULT_CONTEXT):
 
             .char_buf_size (default: 4096)
-                The number of characters that can be rendered in this context,
-                defines the size of an internal fixed-size vertex buffer.
-                Any additional characters will be silently ignored.
+                The number of characters that can be rendered per frame in this
+                context, defines the size of an internal fixed-size vertex
+                buffer.  Any additional characters will be silently ignored.
 
             .canvas_width (default: 640)
             .canvas_height (default: 480)
@@ -205,8 +205,8 @@
             sdtx_vprintf(fmt, args) - same as sdtx_printf() but with the arguments
                                       provided in a va_list
 
-        - Note that the text will not yet be rendered, only recorded for rendering 
-          at a later time, the actual rendering happens when sdtx_draw() is called 
+        - Note that the text will not yet be rendered, only recorded for rendering
+          at a later time, the actual rendering happens when sdtx_draw() is called
           inside a sokol-gfx render pass.
         - This means also you can output text anywhere in the frame, it doesn't
           have to be inside a render pass.
@@ -227,7 +227,7 @@
 
             - the internal vertex buffer pointer is reset to the beginning
             - the current font is set to 0
-            - the cursor position is reset 
+            - the cursor position is reset
 
 
     RENDERING WITH MULTIPLE CONTEXTS
