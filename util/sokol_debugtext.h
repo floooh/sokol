@@ -282,7 +282,7 @@
         sdtx_destroy_context(ctx)
 
     If a context is set as active that no longer exists, all sokol-debugtext
-    that require an active context will silently fail.
+    functions that require an active context will silently fail.
 
     USING YOUR OWN FONT DATA
     ========================
