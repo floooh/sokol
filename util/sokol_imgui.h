@@ -1415,7 +1415,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
             /* simulate a Ctrl-V key down/up */
             _simgui.keys_down[SAPP_KEYCODE_V] = _simgui.keys_up[SAPP_KEYCODE_V] =
-                0x80 | (_simgui.is_osx ? SAPP_MODIFIER_SUPER:SAPP_MODIFIER_CTRL);
+                (uint8_t) (0x80 | (_simgui.is_osx ? SAPP_MODIFIER_SUPER:SAPP_MODIFIER_CTRL));
             break;
         default:
             break;
