@@ -417,6 +417,10 @@ SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
 
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for c++ */
+inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); }
+
 #endif
 #endif // SOKOL_AUDIO_INCLUDED
 

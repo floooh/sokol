@@ -2215,6 +2215,33 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 #endif
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for c++ */
+inline void sg_setup(const sg_desc& desc) { return sg_setup(&desc); }
+
+inline sg_buffer sg_make_buffer(const sg_buffer_desc& desc) { return sg_make_buffer(&desc); }
+inline sg_image sg_make_image(const sg_image_desc& desc) { return sg_make_image(&desc); }
+inline sg_shader sg_make_shader(const sg_shader_desc& desc) { return sg_make_shader(&desc); }
+inline sg_pipeline sg_make_pipeline(const sg_pipeline_desc& desc) { return sg_make_pipeline(&desc); }
+inline sg_pass sg_make_pass(const sg_pass_desc& desc) { return sg_make_pass(&desc); }
+inline void sg_update_image(sg_image img, const sg_image_content& data) { return sg_update_image(img, &data); }
+
+inline void sg_begin_default_pass(const sg_pass_action& pass_action, int width, int height) { return sg_begin_default_pass(&pass_action, width, height); }
+inline void sg_begin_pass(sg_pass pass, const sg_pass_action& pass_action) { return sg_begin_pass(pass, &pass_action); }
+inline void sg_apply_bindings(const sg_bindings& bindings) { return sg_apply_bindings(&bindings); }
+
+inline sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc& desc) { return sg_query_buffer_defaults(&desc); }
+inline sg_image_desc sg_query_image_defaults(const sg_image_desc& desc) { return sg_query_image_defaults(&desc); }
+inline sg_shader_desc sg_query_shader_defaults(const sg_shader_desc& desc) { return sg_query_shader_defaults(&desc); }
+inline sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc& desc) { return sg_query_pipeline_defaults(&desc); }
+inline sg_pass_desc sg_query_pass_defaults(const sg_pass_desc& desc) { return sg_query_pass_defaults(&desc); }
+
+inline void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc& desc) { return sg_init_buffer(buf_id, &desc); }
+inline void sg_init_image(sg_image img_id, const sg_image_desc& desc) { return sg_init_image(img_id, &desc); }
+inline void sg_init_shader(sg_shader shd_id, const sg_shader_desc& desc) { return sg_init_shader(shd_id, &desc); }
+inline void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc& desc) { return sg_init_pipeline(pip_id, &desc); }
+inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_init_pass(pass_id, &desc); }
+
 #endif
 #endif // SOKOL_GFX_INCLUDED
 
