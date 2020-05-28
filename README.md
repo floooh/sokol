@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**27-May-2020**: new utility header sokol_debugtext.h)
+[See what's new](#updates) (**28-May-2020**: reference-based functions wrappers for C++)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -460,6 +460,31 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **28-May-2020**: a small quality-of-life improvement for C++ coders: when the
+sokol headers are included into C++, all public API functions which take a
+pointer to a struct now have a C++ overload which instead takes a const-ref.
+This allows to move the struct initialization right into the function call
+just like in C99. For instance, in C99 one can write:
+    ```c
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = sizeof(vertices),
+        .type = SG_BUFFERTYPE_VERTEXBUFFER
+        .content = vertices
+    });
+    ```
+    In C++ it isn't possible to take the address of an 'adhoc-initialized'
+    struct like this, but with the new reference-wrapper functions (and C++20
+    designated initialization) this should work now:
+    ```cpp
+    sg_buffer buf = sg_make_buffer({
+        .size = sizeof(vertices),
+        .type = SG_BUFFERTYPE_VERTEXBUFFER
+        .content = vertices
+    });
+    ```
+    Many thanks to @garettbass for providing the PR!
+
 
 - **27-May-2020**: a new utility header [sokol_debugtext.h](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h)
 for rendering simple ASCII text using vintage home computer fonts via sokol_gfx.h
