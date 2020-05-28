@@ -469,7 +469,7 @@ just like in C99. For instance, in C99 one can write:
     ```c
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = sizeof(vertices),
-        .type = SG_BUFFERTYPE_VERTEXBUFFER
+        .type = SG_BUFFERTYPE_VERTEXBUFFER,
         .content = vertices
     });
     ```
@@ -479,7 +479,7 @@ just like in C99. For instance, in C99 one can write:
     ```cpp
     sg_buffer buf = sg_make_buffer({
         .size = sizeof(vertices),
-        .type = SG_BUFFERTYPE_VERTEXBUFFER
+        .type = SG_BUFFERTYPE_VERTEXBUFFER,
         .content = vertices
     });
     ```
