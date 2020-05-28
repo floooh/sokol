@@ -939,6 +939,7 @@ SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
 
 /* reference-based equivalents for c++ */
 inline void sfetch_setup(const sfetch_desc_t& desc) { return sfetch_setup(&desc); }
+inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfetch_send(&request); }
 
 #endif
 #endif // SOKOL_FETCH_INCLUDED

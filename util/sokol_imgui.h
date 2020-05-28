@@ -233,6 +233,10 @@ SOKOL_API_DECL void simgui_shutdown(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for C++ */
+inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
+
 #endif
 #endif /* SOKOL_IMGUI_INCLUDED */
 

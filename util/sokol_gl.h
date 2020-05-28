@@ -577,6 +577,10 @@ SOKOL_API_DECL void sgl_draw(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for C++ */
+inline void sgl_setup(const sgl_desc_t& desc) { return sgl_setup(&desc); }
+inline sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc& desc) { return sgl_make_pipeline(&desc); }
 #endif
 #endif /* SOKOL_GL_INCLUDED */
 

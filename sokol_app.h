@@ -941,6 +941,10 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
+
+/* reference-based equivalents for C++ */
+inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
+
 #endif
 #endif // SOKOL_APP_INCLUDED
 
