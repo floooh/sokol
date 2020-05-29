@@ -1973,6 +1973,8 @@ typedef struct sg_image_info {
     uint32_t upd_frame_index;       /* frame index of last sg_update_image() */
     int num_slots;                  /* number of renaming-slots for dynamically updated images */
     int active_slot;                /* currently active write-slot for dynamically updated images */
+    int width;                      /* image width */
+    int height;                     /* image height */
 } sg_image_info;
 
 typedef struct sg_shader_info {
@@ -14067,6 +14069,8 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
         info.num_slots = img->cmn.num_slots;
         info.active_slot = img->cmn.active_slot;
         #endif
+        info.width = img->cmn.width;
+        info.height = img->cmn.height;
     }
     return info;
 }
