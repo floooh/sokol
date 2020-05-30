@@ -463,6 +463,10 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #endif
 #endif
 
+#ifndef _SOKOL_UNUSED
+    #define _SOKOL_UNUSED(x) (void)(x)
+#endif
+
 #if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
     #include <pthread.h>
 #elif defined(_WIN32)
@@ -918,6 +922,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
+    _SOKOL_UNUSED(user_data);
     if (_saudio_has_callback()) {
         const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
         const int num_channels = _saudio.num_channels;

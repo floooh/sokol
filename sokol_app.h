@@ -1472,6 +1472,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
+    _SOKOL_UNUSED(aNotification);
     if (_sapp.desc.fullscreen) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
         _sapp.window_width = screen_rect.size.width;
@@ -1576,6 +1577,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
+    _SOKOL_UNUSED(sender);
     return YES;
 }
 @end
@@ -1627,6 +1629,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
+    _SOKOL_UNUSED(sender);
     /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
     if (!_sapp.quit_ordered) {
         /* if window should be closed and event handling is enabled, give user code
@@ -1649,15 +1652,18 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
     _sapp_macos_app_event(SAPP_EVENTTYPE_ICONIFIED);
 }
 
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
 }
 @end
@@ -1665,11 +1671,14 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 #if defined(SOKOL_METAL)
 @implementation _sapp_macos_mtk_view_dlg
 - (void)drawInMTKView:(MTKView*)view {
+    _SOKOL_UNUSED(view);
     @autoreleasepool {
         _sapp_macos_frame();
     }
 }
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
+    _SOKOL_UNUSED(view);
+    _SOKOL_UNUSED(size);
     /* this is required by the protocol, but we can't do anything useful here */
 }
 @end
@@ -1678,6 +1687,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 @implementation _sapp_macos_view
 #if defined(SOKOL_GLCORE33)
 - (void)timerFired:(id)sender {
+    _SOKOL_UNUSED(sender);
     [self setNeedsDisplay:YES];
 }
 - (void)prepareOpenGL {
@@ -1688,6 +1698,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     [ctx makeCurrentContext];
 }
 - (void)drawRect:(NSRect)bound {
+    _SOKOL_UNUSED(bound);
     _sapp_macos_frame();
     [[_sapp_view_obj openGLContext] flushBuffer];
 }
@@ -1843,6 +1854,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
+    _SOKOL_UNUSED(event);
     if (_sapp.desc.user_cursor) {
         _sapp_macos_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
     }
@@ -2427,6 +2439,8 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
 #endif
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
+    _SOKOL_UNUSED(event_type);
+    _SOKOL_UNUSED(user_data);
     double w, h;
     emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
     /* The above method might report zero when toggling HTML5 fullscreen,
@@ -2481,6 +2495,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(user_data);
     _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
     _sapp.mouse_y = (emsc_event->targetY * _sapp.dpi_scale);
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
@@ -2543,6 +2558,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(user_data);
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
         if (emsc_event->mouse.ctrlKey) {
@@ -2566,6 +2583,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(user_data);
     bool retval = true;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
@@ -2702,6 +2720,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(user_data);
     bool retval = true;
     if (_sapp_events_enabled()) {
         sapp_event_type type;
@@ -2862,6 +2881,8 @@ _SOKOL_PRIVATE void _sapp_emsc_keytable_init(void) {
 
 #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* reserved, void* user_data) {
+    _SOKOL_UNUSED(reserved);
+    _SOKOL_UNUSED(user_data);
     sapp_event_type type;
     switch (emsc_type) {
         case EMSCRIPTEN_EVENT_WEBGLCONTEXTLOST:     type = SAPP_EVENTTYPE_SUSPENDED; break;

@@ -222,6 +222,9 @@ SOKOL_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
+#ifndef _SOKOL_UNUSED
+    #define _SOKOL_UNUSED(x) (void)(x)
+#endif
 
 #if defined(SOKOL_GLCORE33)
 static const char* _sfons_vs_src =
@@ -931,6 +934,8 @@ static int _sfons_render_resize(void* user_ptr, int width, int height) {
 
 static void _sfons_render_update(void* user_ptr, int* rect, const unsigned char* data) {
     SOKOL_ASSERT(user_ptr && rect && data);
+    _SOKOL_UNUSED(rect);
+    _SOKOL_UNUSED(data);
     _sfons_t* sfons = (_sfons_t*) user_ptr;
     sfons->img_dirty = true;
 }
