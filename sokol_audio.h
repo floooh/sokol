@@ -988,6 +988,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 
 /* the streaming callback runs in a separate thread */
 _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
+    _SOKOL_UNUSED(param);
     while (!_saudio.backend.thread_stop) {
         /* snd_pcm_writei() will be blocking until it needs data */
         int write_res = snd_pcm_writei(_saudio.backend.device, _saudio.backend.buffer, _saudio.backend.buffer_frames);
