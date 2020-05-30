@@ -5897,6 +5897,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
 
 _SOKOL_PRIVATE void _sg_gl_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
+    _SOKOL_UNUSED(pip);
     /* empty */
 }
 
@@ -13394,6 +13395,7 @@ SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
 SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(trace_hooks);
+    _SOKOL_UNUSED(trace_hooks);
     #if defined(SOKOL_TRACE_HOOKS)
         sg_trace_hooks old_hooks = _sg.hooks;
         _sg.hooks = *trace_hooks;
@@ -14021,6 +14023,7 @@ SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_content* dat
 SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(name);
+    _SOKOL_UNUSED(name);
     _SG_TRACE_ARGS(push_debug_group, name);
 }
 
