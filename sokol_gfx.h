@@ -5453,6 +5453,8 @@ _SOKOL_PRIVATE void _sg_gl_destroy_context(_sg_context_t* ctx) {
         }
         _SG_GL_CHECK_ERROR();
     }
+    #else
+    _SOKOL_UNUSED(ctx);
     #endif
 }
 
