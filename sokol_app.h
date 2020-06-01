@@ -1061,7 +1061,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #define SOKOL_ABORT() abort()
 #endif
 #ifndef _SOKOL_PRIVATE
-    #if defined(__GNUC__)
+    #if defined(__GNUC__) || defined(__clang__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
     #else
         #define _SOKOL_PRIVATE static

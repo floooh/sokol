@@ -2296,7 +2296,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
 #endif
 
 #ifndef _SOKOL_PRIVATE
-    #if defined(__GNUC__)
+    #if defined(__GNUC__) || defined(__clang__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
     #else
         #define _SOKOL_PRIVATE static
@@ -2468,6 +2468,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #include <windows.h>
     #include <d3d11.h>
     #include <d3dcompiler.h>
+    #ifdef _MSC_VER
     #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
     #pragma comment (lib, "WindowsApp.lib")
     #else
@@ -2475,6 +2476,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #pragma comment (lib, "dxgi.lib")
     #pragma comment (lib, "d3d11.lib")
     #pragma comment (lib, "dxguid.lib")
+    #endif
     #endif
 #elif defined(SOKOL_METAL)
     #if !__has_feature(objc_arc)
@@ -6995,6 +6997,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     for (int fmt = (SG_PIXELFORMAT_NONE+1); fmt < _SG_PIXELFORMAT_NUM; fmt++) {
         DXGI_FORMAT dxgi_fmt = _sg_d3d11_pixel_format((sg_pixel_format)fmt);
         HRESULT hr = ID3D11Device_CheckFormatSupport(_sg.d3d11.dev, dxgi_fmt, &dxgi_fmt_caps);
+        _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
         sg_pixelformat_info* info = &_sg.formats[fmt];
         info->sample = 0 != (dxgi_fmt_caps & D3D11_FORMAT_SUPPORT_TEXTURE2D);
@@ -7143,6 +7146,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     SOKOL_ASSERT(!img->d3d11.tex2d && !img->d3d11.tex3d && !img->d3d11.texds && !img->d3d11.texmsaa);
     SOKOL_ASSERT(!img->d3d11.srv && !img->d3d11.smp);
     HRESULT hr;
+    _SOKOL_UNUSED(hr);
 
     _sg_image_common_init(&img->cmn, desc);
     const bool injected = (0 != desc->d3d11_texture);
@@ -7435,6 +7439,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->d3d11.vs && !shd->d3d11.fs && !shd->d3d11.vs_blob);
     HRESULT hr;
+    _SOKOL_UNUSED(hr);
 
     _sg_shader_common_init(&shd->cmn, desc);
 
@@ -7546,6 +7551,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
 
     /* create input layout object */
     HRESULT hr;
+    _SOKOL_UNUSED(hr);
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     memset(d3d11_comps, 0, sizeof(d3d11_comps));
     int attr_index = 0;
@@ -7670,6 +7676,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
 
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         const sg_attachment_desc* att_desc = &desc->color_attachments[i];
+        _SOKOL_UNUSED(att_desc);
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         _sg_image_t* att_img = att_images[i];
         SOKOL_ASSERT(att_img && (att_img->slot.id == att_desc->image.id));
@@ -7723,6 +7730,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
         const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
         const sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
+        _SOKOL_UNUSED(att_desc);
         _sg_image_t* att_img = att_images[ds_img_index];
         SOKOL_ASSERT(att_img && (att_img->slot.id == att_desc->image.id));
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_img->cmn.pixel_format));
@@ -8066,6 +8074,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_cont
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth:1;
     int subres_index = 0;
     HRESULT hr;
+    _SOKOL_UNUSED(hr);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     for (int face_index = 0; face_index < num_faces; face_index++) {
         for (int slice_index = 0; slice_index < num_slices; slice_index++) {
