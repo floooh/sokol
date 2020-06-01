@@ -463,7 +463,7 @@ Mainly some "missing features" for desktop apps:
 programmatically and to query the current fullscreen state via 2 new
 functions: ```sapp_toggle_fullscreen()``` and ```sapp_is_fullscreen()```.
 Currently this is only implemented for Windows and macOS (not Linux).
-Thanks for @mattiasljungstrom for getting the feature started and providing
+Thanks to @mattiasljungstrom for getting the feature started and providing
 the Win32 implementation!
 
 - **28-May-2020**: a small quality-of-life improvement for C++ coders: when the
