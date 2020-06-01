@@ -450,9 +450,7 @@ Mainly some "missing features" for desktop apps:
 
 - define an application icon
 - change the window title on existing window
-- allow to programmatically activate and deactivate fullscreen
 - pointer lock
-- show/hide mouse cursor
 - allow to change mouse cursor image (at first only switch between system-provided standard images)
 
 ## sokol_audio.h planned features:
