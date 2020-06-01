@@ -1488,6 +1488,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
+    /* NOTE: the _sapp.fullscreen flag is also notified by the
+       windowDidEnterFullscreen / windowDidExitFullscreen
+       event handlers
+    */
+    _sapp.fullscreen = !_sapp.fullscreen;
+    [_sapp_macos_window_obj toggleFullScreen:nil];
+}
+
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
@@ -1683,6 +1692,16 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
+}
+
+- (void)windowDidEnterFullScreen:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp.fullscreen = true;
+}
+
+- (void)windowDidExitFullScreen:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp.fullscreen = false;
 }
 @end
 
@@ -7817,7 +7836,9 @@ SOKOL_API_DECL bool sapp_is_fullscreen(void) {
 }
 
 SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
-    #if defined(_WIN32)
+    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    _sapp_macos_toggle_fullscreen();
+    #elif defined(_WIN32)
     _sapp_win32_toggle_fullscreen();
     #endif
 }
