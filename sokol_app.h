@@ -4439,9 +4439,11 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     return 0 != WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
 }
 
-_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen() {
+_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     HMONITOR monitor = MonitorFromWindow(_sapp_win32_hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO minfo = { .cbSize = sizeof(MONITORINFO) };
+    MONITORINFO minfo;
+    memset(&minfo, 0, sizeof(minfo));
+    minfo.cbSize = sizeof(MONITORINFO);
     GetMonitorInfo(monitor, &minfo);
     const RECT mr = minfo.rcMonitor;
     const int monitor_w = mr.right - mr.left;
@@ -7805,8 +7807,6 @@ SOKOL_API_DECL bool sapp_is_fullscreen(void) {
 SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
     #if defined(_WIN32)
     _sapp_win32_toggle_fullscreen();
-    #else
-    _SOKOL_UNUSED(shown);
     #endif
 }
 
