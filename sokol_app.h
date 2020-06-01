@@ -518,6 +518,11 @@
     might still be used for the non-fullscreen window, in case the user can
     switch back from fullscreen- to windowed-mode).
 
+    To toggle fullscreen mode programmatically, call sapp_toggle_fullscreen().
+
+    To check if the application window is currently in fullscreen mode,
+    call sapp_is_fullscreen().
+
     ONSCREEN KEYBOARD
     =================
     On some platforms which don't provide a physical keyboard, sokol-app
@@ -567,7 +572,6 @@
     - sapp_desc needs a bool whether to initialize depth-stencil surface
     - GL context initialization needs more control (at least what GL version to initialize)
     - application icon
-    - mouse pointer visibility(?)
     - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
       (Win32 sends the event each frame when the mouse moves and is inside the window
       client area, OSX sends it only once when the mouse enters the client area)

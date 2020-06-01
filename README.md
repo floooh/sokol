@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**28-May-2020**: reference-based functions wrappers for C++)
+[See what's new](#updates) (**01-Jun-2020**: sapp_toggle_fullscreen() and sapp_is_fullscreen() functions)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -458,6 +458,13 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **01-Jun-2020**: sokol_app.h now allows to toggle to and from fullscreen
+programmatically and to query the current fullscreen state via 2 new
+functions: ```sapp_toggle_fullscreen()``` and ```sapp_is_fullscreen()```.
+Currently this is only implemented for Windows and macOS (not Linux).
+Thanks for @mattiasljungstrom for getting the feature started and providing
+the Win32 implementation!
 
 - **28-May-2020**: a small quality-of-life improvement for C++ coders: when the
 sokol headers are included into C++, all public API functions which take a
