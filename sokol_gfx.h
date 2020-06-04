@@ -2923,6 +2923,7 @@ typedef struct {
         GLuint prog;
         _sg_gl_shader_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
         _sg_gl_shader_stage_t stage[SG_NUM_SHADER_STAGES];
+        int texture_slots[SG_MAX_SHADERSTAGE_IMAGES];
     } gl;
 } _sg_gl_shader_t;
 typedef _sg_gl_shader_t _sg_shader_t;
@@ -6435,6 +6436,13 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_gl_shader_texture_slot(_sg_shader_t* shd, GLint loc, int slot) {
+    if(shd->gl.texture_slots[loc] != slot) {
+        shd->gl.texture_slots[loc] = slot;
+        glUniform1i(loc, slot);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
@@ -6462,7 +6470,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT(img && img->gl.target);
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
-                glUniform1i(gl_shd_img->gl_loc, gl_shd_img->gl_tex_slot);
+                _sg_gl_shader_texture_slot(pip->shader, gl_shd_img->gl_loc, gl_shd_img->gl_tex_slot);
                 _sg_gl_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
             }
         }
