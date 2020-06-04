@@ -993,6 +993,10 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
     #endif
 #endif
 
+#ifndef _SOKOL_UNUSED
+    #define _SOKOL_UNUSED(x) (void)(x)
+#endif
+
 #if defined(__EMSCRIPTEN__)
     #include <emscripten/emscripten.h>
     #define _SFETCH_PLATFORM_EMSCRIPTEN (1)
@@ -1692,6 +1696,7 @@ _SOKOL_PRIVATE void _sfetch_thread_join(_sfetch_thread_t* thread) {
         EnterCriticalSection(&thread->incoming_critsec);
         _sfetch_thread_request_stop(thread);
         BOOL set_event_res = SetEvent(thread->incoming_event);
+        _SOKOL_UNUSED(set_event_res);
         SOKOL_ASSERT(set_event_res);
         LeaveCriticalSection(&thread->incoming_critsec);
         WaitForSingleObject(thread->thread, INFINITE);
@@ -1726,6 +1731,7 @@ _SOKOL_PRIVATE void _sfetch_thread_enqueue_incoming(_sfetch_thread_t* thread, _s
         }
         LeaveCriticalSection(&thread->incoming_critsec);
         BOOL set_event_res = SetEvent(thread->incoming_event);
+        _SOKOL_UNUSED(set_event_res);
         SOKOL_ASSERT(set_event_res);
     }
 }
