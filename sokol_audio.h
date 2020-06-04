@@ -1129,7 +1129,7 @@ _SOKOL_PRIVATE DWORD WINAPI _saudio_wasapi_thread_fn(LPVOID param) {
         if (FAILED(IAudioClient_GetCurrentPadding(_saudio.backend.audio_client, &padding))) {
             continue;
         }
-        SOKOL_ASSERT(_saudio.backend.thread.dst_buffer_frames >= (int)padding);
+        SOKOL_ASSERT(_saudio.backend.thread.dst_buffer_frames >= padding);
         UINT32 num_frames = _saudio.backend.thread.dst_buffer_frames - padding;
         if (num_frames > 0) {
             _saudio_wasapi_submit_buffer(num_frames);
