@@ -1002,6 +1002,9 @@ inline void sfetch_setup(const sfetch_desc_t& desc) { return sfetch_setup(&desc)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
     #include <windows.h>
     #define _SFETCH_PLATFORM_WINDOWS (1)
     #define _SFETCH_PLATFORM_EMSCRIPTEN (0)

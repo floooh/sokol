@@ -469,6 +469,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
     #include <windows.h>
     #include <synchapi.h>
     #pragma comment (lib, "kernel32.lib")

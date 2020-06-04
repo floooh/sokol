@@ -2463,7 +2463,9 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
-    #include <windows.h>
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
     #include <d3d11.h>
     #include <d3dcompiler.h>
     #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
