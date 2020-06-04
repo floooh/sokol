@@ -3263,6 +3263,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #endif
 #include <windows.h>
 #include <windowsx.h>
@@ -3297,7 +3298,6 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #ifndef COBJMACROS
 #define COBJMACROS
 #endif
-#include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #endif
