@@ -3721,6 +3721,7 @@ typedef int  GLint;
 #define GL_MAX_VERTEX_ATTRIBS 0x8869
 #define GL_CLAMP_TO_BORDER 0x812D
 #define GL_TEXTURE_BORDER_COLOR 0x1004
+#define GL_CURRENT_PROGRAM 0x8B8D
 
 typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
 static PFN_glBindVertexArray _sapp_glBindVertexArray;
