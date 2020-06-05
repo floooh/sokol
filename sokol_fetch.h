@@ -1007,6 +1007,9 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
     #include <windows.h>
     #define _SFETCH_PLATFORM_WINDOWS (1)
     #define _SFETCH_PLATFORM_EMSCRIPTEN (0)
