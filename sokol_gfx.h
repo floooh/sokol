@@ -6131,7 +6131,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     }
-    if (!_sg.gl.cache.ds.depth_write_enabled) {
+    if (!_sg.gl.cache.ds.depth_write_enabled && action->depth.action != SG_ACTION_DONTCARE) {
         need_pip_cache_flush = true;
         _sg.gl.cache.ds.depth_write_enabled = true;
         glDepthMask(GL_TRUE);
@@ -6141,7 +6141,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
         glDepthFunc(GL_ALWAYS);
     }
-    if (_sg.gl.cache.ds.stencil_write_mask != 0xFF) {
+    if (_sg.gl.cache.ds.stencil_write_mask != 0xFF && action->stencil.action != SG_ACTION_DONTCARE) {
         need_pip_cache_flush = true;
         _sg.gl.cache.ds.stencil_write_mask = 0xFF;
         glStencilMask(0xFF);
