@@ -6093,6 +6093,11 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     }
     _sg.gl.cur_pass_width = w;
     _sg.gl.cur_pass_height = h;
+
+    /* number of color attachments */
+    const int num_color_atts = pass ? pass->cmn.num_color_atts : 1;
+
+    /* bind the render pass framebuffer */
     if (pass) {
         /* offscreen pass */
         SOKOL_ASSERT(pass->gl.fb);
@@ -6105,16 +6110,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
                 GL_COLOR_ATTACHMENT2,
                 GL_COLOR_ATTACHMENT3
             };
-            int num_attrs = 0;
-            for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-                if (pass->gl.color_atts[num_attrs].image) {
-                    num_attrs++;
-                }
-                else {
-                    break;
-                }
-            }
-            glDrawBuffers(num_attrs, att);
+            glDrawBuffers(num_color_atts, att);
         }
         #endif
     }
@@ -6125,26 +6121,44 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     }
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
+
+    /* clear color and depth-stencil attachments if needed */
+    bool clear_color = false;
+    for (int i = 0; i < num_color_atts; i++) {
+        if (SG_ACTION_CLEAR == action->colors[i].action) {
+            clear_color = true;
+            break;
+        }
+    }
+    const bool clear_depth = (action->depth.action == SG_ACTION_CLEAR);
+    const bool clear_stencil = (action->stencil.action == SG_ACTION_CLEAR);
+
     bool need_pip_cache_flush = false;
-    if (_sg.gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
-        need_pip_cache_flush = true;
-        _sg.gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    if (clear_color) {
+        if (_sg.gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
+            need_pip_cache_flush = true;
+            _sg.gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        }
     }
-    if (!_sg.gl.cache.ds.depth_write_enabled && action->depth.action != SG_ACTION_DONTCARE) {
-        need_pip_cache_flush = true;
-        _sg.gl.cache.ds.depth_write_enabled = true;
-        glDepthMask(GL_TRUE);
+    if (clear_depth) {
+        if (!_sg.gl.cache.ds.depth_write_enabled) {
+            need_pip_cache_flush = true;
+            _sg.gl.cache.ds.depth_write_enabled = true;
+            glDepthMask(GL_TRUE);
+        }
+        if (_sg.gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
+            need_pip_cache_flush = true;
+            _sg.gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+            glDepthFunc(GL_ALWAYS);
+        }
     }
-    if (_sg.gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
-        need_pip_cache_flush = true;
-        _sg.gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
-        glDepthFunc(GL_ALWAYS);
-    }
-    if (_sg.gl.cache.ds.stencil_write_mask != 0xFF && action->stencil.action != SG_ACTION_DONTCARE) {
-        need_pip_cache_flush = true;
-        _sg.gl.cache.ds.stencil_write_mask = 0xFF;
-        glStencilMask(0xFF);
+    if (clear_stencil) {
+        if (_sg.gl.cache.ds.stencil_write_mask != 0xFF) {
+            need_pip_cache_flush = true;
+            _sg.gl.cache.ds.stencil_write_mask = 0xFF;
+            glStencilMask(0xFF);
+        }
     }
     if (need_pip_cache_flush) {
         /* we messed with the state cache directly, need to clear cached
@@ -6162,12 +6176,12 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     #endif
     if (!use_mrt_clear) {
         GLbitfield clear_mask = 0;
-        if (action->colors[0].action == SG_ACTION_CLEAR) {
+        if (clear_color) {
             clear_mask |= GL_COLOR_BUFFER_BIT;
             const float* c = action->colors[0].val;
             glClearColor(c[0], c[1], c[2], c[3]);
         }
-        if (action->depth.action == SG_ACTION_CLEAR) {
+        if (clear_depth) {
             clear_mask |= GL_DEPTH_BUFFER_BIT;
             #ifdef SOKOL_GLCORE33
             glClearDepth(action->depth.val);
@@ -6175,7 +6189,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
             glClearDepthf(action->depth.val);
             #endif
         }
-        if (action->stencil.action == SG_ACTION_CLEAR) {
+        if (clear_stencil) {
             clear_mask |= GL_STENCIL_BUFFER_BIT;
             glClearStencil(action->stencil.val);
         }
@@ -6186,24 +6200,19 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     #if !defined SOKOL_GLES2
     else {
         SOKOL_ASSERT(pass);
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            if (pass->gl.color_atts[i].image) {
-                if (action->colors[i].action == SG_ACTION_CLEAR) {
-                    glClearBufferfv(GL_COLOR, i, action->colors[i].val);
-                }
-            }
-            else {
-                break;
+        for (int i = 0; i < num_color_atts; i++) {
+            if (action->colors[i].action == SG_ACTION_CLEAR) {
+                glClearBufferfv(GL_COLOR, i, action->colors[i].val);
             }
         }
         if (pass->gl.ds_att.image) {
-            if ((action->depth.action == SG_ACTION_CLEAR) && (action->stencil.action == SG_ACTION_CLEAR)) {
+            if (clear_depth && clear_stencil) {
                 glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.val, action->stencil.val);
             }
-            else if (action->depth.action == SG_ACTION_CLEAR) {
+            else if (clear_depth) {
                 glClearBufferfv(GL_DEPTH, 0, &action->depth.val);
             }
-            else if (action->stencil.action == SG_ACTION_CLEAR) {
+            else if (clear_stencil) {
                 GLuint val = action->stencil.val;
                 glClearBufferuiv(GL_STENCIL, 0, &val);
             }
