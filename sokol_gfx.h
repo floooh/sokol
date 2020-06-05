@@ -5812,6 +5812,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     /* resolve image locations */
     _SG_GL_CHECK_ERROR();
+    GLuint cur_prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&cur_prog);
+    glUseProgram(gl_prog);
     int gl_tex_slot = 0;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
@@ -5826,12 +5829,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             }
             if (gl_img->gl_loc != -1) {
                 gl_img->gl_tex_slot = gl_tex_slot++;
+                glUniform1i(gl_img->gl_loc, gl_img->gl_tex_slot);
             }
             else {
                 gl_img->gl_tex_slot = -1;
             }
         }
     }
+    /* it's legal to call glUseProgram with 0 */
+    glUseProgram(cur_prog);
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
 }
@@ -6473,7 +6479,6 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT(img && img->gl.target);
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
-                glUniform1i(gl_shd_img->gl_loc, gl_shd_img->gl_tex_slot);
                 _sg_gl_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
             }
         }
