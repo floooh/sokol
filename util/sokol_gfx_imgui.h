@@ -2480,7 +2480,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* 
     return res;
 }
 
-_SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label) {
+_SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_type, uint32_t res_id, const char* label) {
     SOKOL_ASSERT(label);
     sg_imgui_str_t str_buf;
     const char* str;
@@ -2491,7 +2491,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_id, const char* label
         _sg_imgui_snprintf(&str_buf, "0x%08X", res_id);
         str = str_buf.buf;
     }
-    igPushIDInt((int)res_id);
+    igPushIDInt((int)((res_type<<24)|res_id));
     bool res = igSmallButton(str);
     igPopID();
     return res;
@@ -2501,7 +2501,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_buffer_link(sg_imgui_t* ctx, sg_buffer buf) {
     bool retval = false;
     if (buf.id != SG_INVALID_ID) {
         const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_imgui_slot_index(buf.id)];
-        retval = _sg_imgui_draw_resid_link(buf.id, buf_ui->label.buf);
+        retval = _sg_imgui_draw_resid_link(1, buf.id, buf_ui->label.buf);
     }
     return retval;
 }
@@ -2510,7 +2510,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_image_link(sg_imgui_t* ctx, sg_image img) {
     bool retval = false;
     if (img.id != SG_INVALID_ID) {
         const sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
-        retval = _sg_imgui_draw_resid_link(img.id, img_ui->label.buf);
+        retval = _sg_imgui_draw_resid_link(2, img.id, img_ui->label.buf);
     }
     return retval;
 }
@@ -2519,7 +2519,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_shader_link(sg_imgui_t* ctx, sg_shader shd) {
     bool retval = false;
     if (shd.id != SG_INVALID_ID) {
         const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_imgui_slot_index(shd.id)];
-        retval = _sg_imgui_draw_resid_link(shd.id, shd_ui->label.buf);
+        retval = _sg_imgui_draw_resid_link(3, shd.id, shd_ui->label.buf);
     }
     return retval;
 }
