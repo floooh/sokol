@@ -2905,7 +2905,6 @@ typedef struct {
 } _sg_gl_uniform_block_t;
 
 typedef struct {
-    GLint gl_loc;
     int gl_tex_slot;
 } _sg_gl_shader_image_t;
 
@@ -5812,6 +5811,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
 
     /* resolve image locations */
     _SG_GL_CHECK_ERROR();
+    GLuint cur_prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&cur_prog);
+    glUseProgram(gl_prog);
     int gl_tex_slot = 0;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
@@ -5820,18 +5822,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
             SOKOL_ASSERT(img_desc->type != _SG_IMAGETYPE_DEFAULT);
             _sg_gl_shader_image_t* gl_img = &gl_stage->images[img_index];
-            gl_img->gl_loc = img_index;
+            GLint gl_loc = img_index;
             if (img_desc->name) {
-                gl_img->gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
+                gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
             }
-            if (gl_img->gl_loc != -1) {
+            if (gl_loc != -1) {
                 gl_img->gl_tex_slot = gl_tex_slot++;
+                glUniform1i(gl_loc, gl_img->gl_tex_slot);
             }
             else {
                 gl_img->gl_tex_slot = -1;
             }
         }
     }
+    /* it's legal to call glUseProgram with 0 */
+    glUseProgram(cur_prog);
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
 }
@@ -6468,12 +6473,11 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_gl_shader_image_t* gl_shd_img = &gl_stage->images[img_index];
-            if (gl_shd_img->gl_loc != -1) {
+            if (gl_shd_img->gl_tex_slot != -1) {
                 _sg_image_t* img = imgs[img_index];
                 const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT(img && img->gl.target);
                 SOKOL_ASSERT((gl_shd_img->gl_tex_slot != -1) && gl_tex);
-                glUniform1i(gl_shd_img->gl_loc, gl_shd_img->gl_tex_slot);
                 _sg_gl_bind_texture(gl_shd_img->gl_tex_slot, img->gl.target, gl_tex);
             }
         }
