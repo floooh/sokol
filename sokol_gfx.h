@@ -2905,7 +2905,6 @@ typedef struct {
 } _sg_gl_uniform_block_t;
 
 typedef struct {
-    GLint gl_loc;
     int gl_tex_slot;
 } _sg_gl_shader_image_t;
 
@@ -5823,13 +5822,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
             SOKOL_ASSERT(img_desc->type != _SG_IMAGETYPE_DEFAULT);
             _sg_gl_shader_image_t* gl_img = &gl_stage->images[img_index];
-            gl_img->gl_loc = img_index;
+            GLint gl_loc = img_index;
             if (img_desc->name) {
-                gl_img->gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
+                gl_loc = glGetUniformLocation(gl_prog, img_desc->name);
             }
-            if (gl_img->gl_loc != -1) {
+            if (gl_loc != -1) {
                 gl_img->gl_tex_slot = gl_tex_slot++;
-                glUniform1i(gl_img->gl_loc, gl_img->gl_tex_slot);
+                glUniform1i(gl_loc, gl_img->gl_tex_slot);
             }
             else {
                 gl_img->gl_tex_slot = -1;
@@ -6474,7 +6473,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
         for (int img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_gl_shader_image_t* gl_shd_img = &gl_stage->images[img_index];
-            if (gl_shd_img->gl_loc != -1) {
+            if (gl_shd_img->gl_tex_slot != -1) {
                 _sg_image_t* img = imgs[img_index];
                 const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
                 SOKOL_ASSERT(img && img->gl.target);
