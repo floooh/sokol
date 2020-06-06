@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**01-Jun-2020**: sapp_toggle_fullscreen() and sapp_is_fullscreen() functions)
+[See what's new](#updates) (**06-Jun-2020**: remove more redundant GL calls in sokol_gfx.h GL backend)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -458,6 +458,13 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **06-Jun-2020**: Some optimizations in the sokol_gfx.h GL backend to avoid
+  redundant GL calls in two areas: in the sg_begin_pass() calls when not
+  clearing the color- and depth-stencil-attachments, and in sg_apply_bindings()
+  when binding textures.  Everything should behave exactly as before, but if
+  you notice any problems in those areas, please file a bug. Many thanks to
+  @edubart for the PRs!
 
 - **01-Jun-2020**: sokol_app.h now allows to toggle to and from fullscreen
 programmatically and to query the current fullscreen state via 2 new
