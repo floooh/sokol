@@ -2998,6 +2998,7 @@ typedef struct {
     GLuint index_buffer;
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
+    GLuint prog;
     _sg_gl_texture_bind_slot textures[SG_MAX_SHADERSTAGE_IMAGES];
     _sg_gl_texture_bind_slot stored_texture;
     int cur_ib_offset;
@@ -5396,6 +5397,10 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         }
         _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
 
+        /* shader program */
+        glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&_sg.gl.cache.prog);
+        _SG_GL_CHECK_ERROR();
+
         /* depth-stencil state */
         _sg_gl_init_depth_stencil_state(&_sg.gl.cache.ds);
         glEnable(GL_DEPTH_TEST);
@@ -6457,7 +6462,10 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         }
 
         /* bind shader program */
-        glUseProgram(pip->shader->gl.prog);
+        if (pip->shader->gl.prog != _sg.gl.cache.prog) {
+            _sg.gl.cache.prog = pip->shader->gl.prog;
+            glUseProgram(pip->shader->gl.prog);
+        }
     }
 }
 
