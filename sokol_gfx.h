@@ -6020,6 +6020,19 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
         return SG_RESOURCESTATE_FAILED;
     }
 
+    /* setup color attachments for the framebuffer */
+    #if !defined(SOKOL_GLES2)
+    if (!_sg.gl.gles2) {
+        GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
+            GL_COLOR_ATTACHMENT0,
+            GL_COLOR_ATTACHMENT1,
+            GL_COLOR_ATTACHMENT2,
+            GL_COLOR_ATTACHMENT3
+        };
+        glDrawBuffers(pass->cmn.num_color_atts, att);
+    }
+    #endif
+
     /* create MSAA resolve framebuffers if necessary */
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
@@ -6053,6 +6066,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                     SOKOL_LOG("Framebuffer completeness check failed (msaa resolve buffer)!\n");
                     return SG_RESOURCESTATE_FAILED;
                 }
+                /* setup color attachments for the framebuffer */
+                #if !defined(SOKOL_GLES2)
+                if (!_sg.gl.gles2) {
+                    const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
+                    glDrawBuffers(1, &gl_draw_bufs);
+                }
+                #endif
             }
         }
     }
@@ -6117,17 +6137,6 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         /* offscreen pass */
         SOKOL_ASSERT(pass->gl.fb);
         glBindFramebuffer(GL_FRAMEBUFFER, pass->gl.fb);
-        #if !defined(SOKOL_GLES2)
-        if (!_sg.gl.gles2) {
-            GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
-                GL_COLOR_ATTACHMENT0,
-                GL_COLOR_ATTACHMENT1,
-                GL_COLOR_ATTACHMENT2,
-                GL_COLOR_ATTACHMENT3
-            };
-            glDrawBuffers(num_color_atts, att);
-        }
-        #endif
     }
     else {
         /* default pass */
@@ -6261,8 +6270,6 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
                     SOKOL_ASSERT(gl_att->gl_msaa_resolve_buffer);
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl_att->gl_msaa_resolve_buffer);
                     glReadBuffer(GL_COLOR_ATTACHMENT0 + att_index);
-                    const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
-                    glDrawBuffers(1, &gl_draw_bufs);
                     glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                 }
                 else {
