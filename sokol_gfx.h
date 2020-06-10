@@ -5273,10 +5273,16 @@ _SOKOL_PRIVATE void _sg_gl_store_buffer_binding(GLenum target) {
 
 _SOKOL_PRIVATE void _sg_gl_restore_buffer_binding(GLenum target) {
     if (target == GL_ARRAY_BUFFER) {
-        _sg_gl_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
+        if(_sg.gl.cache.stored_vertex_buffer != 0) {
+            /* we only care restoring valid ids */
+            _sg_gl_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
+        }
     }
     else {
-        _sg_gl_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
+        if(_sg.gl.cache.stored_index_buffer != 0) {
+            /* we only care restoring valid ids */
+            _sg_gl_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
+        }
     }
 }
 
@@ -5340,7 +5346,10 @@ _SOKOL_PRIVATE void _sg_gl_store_texture_binding(int slot_index) {
 _SOKOL_PRIVATE void _sg_gl_restore_texture_binding(int slot_index) {
     SOKOL_ASSERT(slot_index < SG_MAX_SHADERSTAGE_IMAGES);
     const _sg_gl_texture_bind_slot* slot = &_sg.gl.cache.stored_texture;
-    _sg_gl_bind_texture(slot_index, slot->target, slot->texture);
+    if(slot->texture != 0) {
+        /* we only care restoring valid ids */
+        _sg_gl_bind_texture(slot_index, slot->target, slot->texture);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
