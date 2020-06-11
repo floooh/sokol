@@ -7811,7 +7811,7 @@ SOKOL_API_IMPL int sapp_height(void) {
 }
 
 SOKOL_API_IMPL bool sapp_high_dpi(void) {
-    return _sapp.desc.high_dpi && (_sapp.dpi_scale > 1.5f);
+    return _sapp.desc.high_dpi && (_sapp.dpi_scale >= 1.5f);
 }
 
 SOKOL_API_IMPL float sapp_dpi_scale(void) {
