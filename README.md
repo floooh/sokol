@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**06-Jun-2020**: remove more redundant GL calls in sokol_gfx.h GL backend)
+[See what's new](#updates) (**14-Jun-2020**: new utility header sokol_memtrack.h
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -26,6 +26,7 @@ Utility libraries:
 - **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
 - **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 - **sokol\_debugtext.h**: a simple text renderer using vintage home computer fonts
+- **sokol\_memtrack.h**: easily track memory allocations in sokol headers
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
@@ -458,6 +459,15 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **14-Jun-2020**: I have added a very simple utility header ```sokol_memtrack.h```
+which allows to track memory allocations in sokol headers (number and overall
+size of allocations) by overriding the macros SOKOL_MALLOC, SOKOL_CALLOC and
+SOKOL_FREE. Simply include ```sokol_memtrack.h``` before the other sokol
+header implementation includes to enable memory tracking in those headers
+(but remember that the sokol_memtrack.h implementation must only be included
+once in the whole project, so this only works when all other sokol header
+implementations are included in the same compilation unit).
 
 - **06-Jun-2020**: Some optimizations in the sokol_gfx.h GL backend to avoid
   redundant GL calls in two areas: in the sg_begin_pass() calls when not
