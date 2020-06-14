@@ -3531,7 +3531,8 @@ static _sdtx_context_t* _sdtx_lookup_context(uint32_t ctx_id) {
 
 /* make context handle from raw uint32_t id */
 static sdtx_context _sdtx_make_ctx_id(uint32_t ctx_id) {
-    sdtx_context ctx = { ctx_id };
+    sdtx_context ctx;
+    ctx.id = ctx_id;
     return ctx;
 }
 

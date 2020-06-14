@@ -71,6 +71,7 @@
 */
 #define SOKOL_MEMTRACK_INCLUDED (1)
 #include <stddef.h>
+#include <stdint.h>
 
 #ifndef SOKOL_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
@@ -127,13 +128,12 @@ SOKOL_API_DECL smemtrack_info_t smemtrack_info(void);
 #define _SMEMTRACK_HEADER_SIZE (16)
 
 static struct {
-    int alloc_num;
-    int alloc_size;
+    smemtrack_info_t state;
 } _smemtrack;
 
 _SOKOL_PRIVATE void* _smemtrack_malloc(size_t size) {
-    _smemtrack.alloc_num++;
-    _smemtrack.alloc_size += size;
+    _smemtrack.state.num_allocs++;
+    _smemtrack.state.num_bytes += (int) size;
     uint8_t* ptr = malloc(size + _SMEMTRACK_HEADER_SIZE);
     *(size_t*)ptr = size;
     return ptr + _SMEMTRACK_HEADER_SIZE;
@@ -142,15 +142,15 @@ _SOKOL_PRIVATE void* _smemtrack_malloc(size_t size) {
 _SOKOL_PRIVATE void _smemtrack_free(void* ptr) {
     uint8_t* alloc_ptr = ((uint8_t*)ptr) - _SMEMTRACK_HEADER_SIZE;
     size_t size = *(size_t*)alloc_ptr;
-    _smemtrack.alloc_num--;
-    _smemtrack.alloc_size -= size;
+    _smemtrack.state.num_allocs--;
+    _smemtrack.state.num_bytes -= (int) size;
     free(alloc_ptr);
 }
 
 _SOKOL_PRIVATE void* _smemtrack_calloc(size_t num, size_t size) {
     size_t mem_size = num * size;
-    _smemtrack.alloc_num++;
-    _smemtrack.alloc_size += mem_size;
+    _smemtrack.state.num_allocs++;
+    _smemtrack.state.num_bytes += (int) mem_size;
     uint8_t* ptr = malloc(mem_size + _SMEMTRACK_HEADER_SIZE);
     memset(ptr + _SMEMTRACK_HEADER_SIZE, 0, mem_size);
     *(size_t*)ptr = size;
@@ -158,11 +158,7 @@ _SOKOL_PRIVATE void* _smemtrack_calloc(size_t num, size_t size) {
 }
 
 SOKOL_API_IMPL smemtrack_info_t smemtrack_info(void) {
-    smemtrack_info_t info = {
-        _smemtrack.alloc_num,
-        _smemtrack.alloc_size
-    };
-    return info;
+    return _smemtrack.state;
 }
 
 #endif /* SOKOL_IMPL */
