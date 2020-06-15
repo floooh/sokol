@@ -1557,7 +1557,8 @@ static _sgl_pipeline_t* _sgl_lookup_pipeline(uint32_t pip_id) {
 
 /* make pipeline id from uint32_t id */
 static sgl_pipeline _sgl_make_pip_id(uint32_t pip_id) {
-    sgl_pipeline pip = { pip_id };
+    sgl_pipeline pip;
+    pip.id = pip_id;
     return pip;
 }
 
