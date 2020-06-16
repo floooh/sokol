@@ -3287,12 +3287,12 @@ typedef struct {
 
 /* keep Objective-C 'smart data' in a separate static objects, these can't be in a C struct until Xcode10 or so */
 static NSMutableArray* _sg_mtl_idpool;
+static dispatch_semaphore_t _sg_mtl_sem;
 static id<MTLDevice> _sg_mtl_device;
 static id<MTLCommandQueue> _sg_mtl_cmd_queue;
 static id<MTLCommandBuffer> _sg_mtl_cmd_buffer;
-static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 static id<MTLRenderCommandEncoder> _sg_mtl_cmd_encoder;
-static dispatch_semaphore_t _sg_mtl_sem;
+static id<MTLBuffer> _sg_mtl_uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 
 /*=== WGPU BACKEND DECLARATIONS ==============================================*/
 #elif defined(SOKOL_WGPU)
@@ -8834,17 +8834,23 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_wait(_sg_mtl_sem, DISPATCH_TIME_FOREVER);
     }
+    /* semaphore must be "relinquished" before destruction */
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        dispatch_semaphore_signal(_sg_mtl_sem);
+    }
     _sg_mtl_destroy_sampler_cache(_sg.mtl.frame_index);
     _sg_mtl_garbage_collect(_sg.mtl.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg.mtl.valid = false;
-    _sg_mtl_cmd_encoder = nil;
-    _sg_mtl_cmd_buffer = nil;
+
+    _sg_mtl_sem = nil;
+    _sg_mtl_device = nil;
     _sg_mtl_cmd_queue = nil;
+    _sg_mtl_cmd_buffer = nil;
+    _sg_mtl_cmd_encoder = nil;
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg_mtl_uniform_buffers[i] = nil;
     }
-    _sg_mtl_device = nil;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
