@@ -1312,14 +1312,12 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
             sampleRate: sample_rate,
             latencyHint: 'interactive',
         });
-        console.log('sokol_audio.h: created AudioContext');
     }
     else if (typeof webkitAudioContext !== 'undefined') {
         Module._saudio_context = new webkitAudioContext({
             sampleRate: sample_rate,
             latencyHint: 'interactive',
         });
-        console.log('sokol_audio.h: created webkitAudioContext');
     }
     else {
         Module._saudio_context = null;
@@ -1361,6 +1359,18 @@ EM_JS(int, saudio_js_init, (int sample_rate, int num_channels, int buffer_size),
     }
 });
 
+/* shutdown the WebAudioContext and ScriptProcessorNode */
+EM_JS(void, saudio_js_shutdown, (void), {
+    if (Module._saudio_context !== null) {
+        if (Module._saudio_node) {
+            Module._saudio_node.disconnect();
+        }
+        Module._saudio_context.close();
+        Module._saudio_context = null;
+        Module._saudio_node = null;
+    }
+});
+
 /* get the actual sample rate back from the WebAudio context */
 EM_JS(int, saudio_js_sample_rate, (void), {
     if (Module._saudio_context) {
@@ -1396,9 +1406,11 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
-    /* on HTML5, there's always a 'hard exit' without warning,
-        so nothing useful to do here
-    */
+    saudio_js_shutdown();
+    if (_saudio.backend.buffer) {
+        SOKOL_FREE(_saudio.backend.buffer);
+        _saudio.backend.buffer = 0;
+    }
 }
 
 /*=== ANDROID BACKEND IMPLEMENTATION ======================================*/
