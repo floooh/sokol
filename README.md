@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**14-Jun-2020**: new utility header sokol_memtrack.h
+[See what's new](#updates) (**20-Jun-2020**: better support for older GPUs in sokol_gfx.h D3D11 backend)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,28 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **20-Jun-2020**: Some work to better support older DX10-level GPUs in the
+sokol_gfx.h D3D11 backend:
+    - sg_make_shader() now by default compiles HLSL shader code as shader model 4.0
+      (previously shader model 5.0 was which caused problems with some older
+      Intel GPUs still in use, see this issue: https://github.com/floooh/sokol/issues/179)
+    - A new string item ```const char* d3d11_target``` in ```sg_shader_stage_desc``` now allows
+      to pass in the D3D shader model for compiling shaders. This defaults to 
+      "vs_4_0" for the vertex shader stage and "ps_4_0" for the fragment shader stage.
+      The minimal DX shader model for use with the sokol_gfx.h D3D11 backend is
+      shader model 4.0, because that's the first shader model supporting
+      constant buffers.
+    - The *sokol-shdc* shader compiler tool has a new output option ```hlsl4```
+      to generate HLSL4 source code or shader model 4.0 byte code.
+    - All embedded D3D shader byte code in the sokol utility headers has been
+      changed from shader model 5.0 to 4.0
+
+    If you are using sokol_gfx.h with sokol-shdc, please update both to at the same time
+    to avoid compilation errors caused by the new ```sg_shader_stage_desc.d3d11_target```
+    item. Also, the sg_shader_desc initialization code in sokol-shdc has been updated
+    so that it is less likely to break if new items are added to the sg_shader_desc
+    struct in the future.
 
 - **14-Jun-2020**: I have added a very simple utility header ```sokol_memtrack.h```
 which allows to track memory allocations in sokol headers (number and overall

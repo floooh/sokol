@@ -385,6 +385,25 @@
         The provided semantic information will be used later in sg_create_pipeline()
         to match the vertex layout to vertex shader inputs.
 
+    --- on D3D11, and when passing HLSL source code (instead of byte code) to shader
+        creation, you can optionally define the shader model targets on the vertex
+        stage:
+
+            sg_shader_Desc desc = {
+                .vs = {
+                    ...
+                    .d3d11_target = "vs_5_0"
+                },
+                .fs = {
+                    ...
+                    .d3d11_target = "ps_5_0"
+                }
+            };
+
+        The default targets are "ps_4_0" and "fs_4_0". Note that those target names
+        are only used when compiling shaders from source. They are ignored when
+        creating a shader from bytecode.
+
     --- on Metal, GL 3.3 or GLES3/WebGL2, you don't need to provide an attribute
         name or semantic name, since vertex attributes can be bound by their slot index
         (this is mandatory in Metal, and optional in GL):
@@ -1623,6 +1642,7 @@ typedef struct sg_image_desc {
     - for each vertex- and fragment-shader-stage:
         - the shader source or bytecode
         - an optional entry function name
+        - an optional compile target (only for D3D11 when source is provided, defaults are "vs_4_0" and "ps_4_0")
         - reflection info for each uniform block used by the shader stage:
             - the size of the uniform block in bytes
             - reflection info for each uniform block member (only required for GL backends):
@@ -1638,7 +1658,10 @@ typedef struct sg_image_desc {
     either shader source-code or byte-code can be provided.
 
     For D3D11, if source code is provided, the d3dcompiler_47.dll will be loaded
-    on demand. If this fails, shader creation will fail.
+    on demand. If this fails, shader creation will fail. When compiling HLSL
+    source code, you can provide an optional target string via
+    sg_shader_stage_desc.d3d11_target, the default target is "vs_4_0" for the
+    vertex shader stage and "ps_4_0" for the pixel shader stage.
 */
 typedef struct sg_shader_attr_desc {
     const char* name;           /* GLSL vertex attribute name (only required for GLES2) */
@@ -1668,6 +1691,7 @@ typedef struct sg_shader_stage_desc {
     const uint8_t* byte_code;
     int byte_code_size;
     const char* entry;
+    const char* d3d11_target;
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     sg_shader_image_desc images[SG_MAX_SHADERSTAGE_IMAGES];
 } sg_shader_stage_desc;
@@ -7454,10 +7478,11 @@ _SOKOL_PRIVATE bool _sg_d3d11_load_d3dcompiler_dll(void) {
 #define _sg_d3d11_D3DCompile _sg.d3d11.D3DCompile_func
 #endif
 
-_SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* stage_desc, const char* target) {
+_SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* stage_desc) {
     if (!_sg_d3d11_load_d3dcompiler_dll()) {
         return NULL;
     }
+    SOKOL_ASSERT(stage_desc->d3d11_target);
     ID3DBlob* output = NULL;
     ID3DBlob* errors_or_warnings = NULL;
     HRESULT hr = _sg_d3d11_D3DCompile(
@@ -7467,7 +7492,7 @@ _SOKOL_PRIVATE ID3DBlob* _sg_d3d11_compile_shader(const sg_shader_stage_desc* st
         NULL,                           /* pDefines */
         NULL,                           /* pInclude */
         stage_desc->entry ? stage_desc->entry : "main",     /* pEntryPoint */
-        target,     /* pTarget (vs_5_0 or ps_5_0) */
+        stage_desc->d3d11_target,       /* pTarget (vs_5_0 or ps_5_0) */
         D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3,   /* Flags1 */
         0,          /* Flags2 */
         &output,    /* ppCode */
@@ -7533,8 +7558,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     }
     else {
         /* compile from shader source code */
-        vs_blob = _sg_d3d11_compile_shader(&desc->vs, "vs_5_0");
-        fs_blob = _sg_d3d11_compile_shader(&desc->fs, "ps_5_0");
+        vs_blob = _sg_d3d11_compile_shader(&desc->vs);
+        fs_blob = _sg_d3d11_compile_shader(&desc->fs);
         if (vs_blob && fs_blob) {
             vs_ptr = ID3D10Blob_GetBufferPointer(vs_blob);
             vs_length = ID3D10Blob_GetBufferSize(vs_blob);
@@ -13072,6 +13097,14 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
     #else
         def.vs.entry = _sg_def(def.vs.entry, "main");
         def.fs.entry = _sg_def(def.fs.entry, "main");
+    #endif
+    #if defined(SOKOL_D3D11)
+        if (def.vs.source) {
+            def.vs.d3d11_target = _sg_def(def.vs.d3d11_target, "vs_4_0");
+        }
+        if (def.fs.source) {
+            def.fs.d3d11_target = _sg_def(def.fs.d3d11_target, "ps_4_0");
+        }
     #endif
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &def.vs : &def.fs;
