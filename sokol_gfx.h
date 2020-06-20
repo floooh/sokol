@@ -1,31 +1,40 @@
 #ifndef SOKOL_GFX_INCLUDED
-/*
-    sokol_gfx.h -- simple 3D API wrapper
+/*#
+    # sokol_gfx.h -- simple 3D API wrapper
 
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+
+    ~~~ c
+    #define SOKOL_IMPL
+    ~~~
+
     before you include this file in *one* C or C++ file to create the
     implementation.
 
     In the same place define one of the following to select the rendering
     backend:
-        #define SOKOL_GLCORE33
-        #define SOKOL_GLES2
-        #define SOKOL_GLES3
-        #define SOKOL_D3D11
-        #define SOKOL_METAL
-        #define SOKOL_WGPU
-        #define SOKOL_DUMMY_BACKEND
+
+    ~~~ c
+    #define SOKOL_GLCORE33
+    #define SOKOL_GLES2
+    #define SOKOL_GLES3
+    #define SOKOL_D3D11
+    #define SOKOL_METAL
+    #define SOKOL_WGPU
+    #define SOKOL_DUMMY_BACKEND
+    ~~~
 
     I.e. for the GL 3.3 Core Profile it should look like this:
 
+    ~~~ c
     #include ...
     #include ...
     #define SOKOL_IMPL
     #define SOKOL_GLCORE33
     #include "sokol_gfx.h"
+    ~~~
 
     The dummy backend replaces the platform-specific backend code with empty
     stub functions. This is useful for writing tests that need to run on the
@@ -33,6 +42,7 @@
 
     Optionally provide the following defines with your own implementations:
 
+    ~~~ text
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
@@ -41,11 +51,14 @@
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
+    ~~~
 
     If sokol_gfx.h is compiled as a DLL, define the following before
     including the declaration or implementation:
 
+    ```
     SOKOL_DLL
+    ```
 
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
@@ -53,13 +66,17 @@
     If you want to compile without deprecated structs and functions,
     define:
 
+    ```
     SOKOL_NO_DEPRECATED
+    ```
 
     API usage validation macros:
 
+    ~~~ text
     SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
     SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err))
     SOKOL_VALIDATE_END()        - end a validation block, return true if all checks in block passed (default: bool _sg_validate())
+    ~~~
 
     If you don't want validation errors to be fatal, define SOKOL_VALIDATE_NON_FATAL,
     be aware though that this may spam SOKOL_LOG messages.
@@ -67,18 +84,17 @@
     Optionally define the following to force debug checks and validations
     even in release mode:
 
+    ~~~ text
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
-
+    ~~~
 
     sokol_gfx DOES NOT:
     ===================
     - create a window or the 3D-API context/device, you must do this
       before sokol_gfx is initialized, and pass any required information
       (like 3D device pointers) to the sokol_gfx initialization call
-
     - present the rendered frame, how this is done exactly usually depends
       on how the window and 3D-API context/device was created
-
     - provide a unified shader language, instead 3D-API-specific shader
       source-code or shader-bytecode must be provided
 
@@ -96,73 +112,101 @@
     --- to initialize sokol_gfx, after creating a window and a 3D-API
         context/device, call:
 
-            sg_setup(const sg_desc*)
+        ~~~ c
+        sg_setup(const sg_desc*)
+        ~~~
 
     --- create resource objects (at least buffers, shaders and pipelines,
         and optionally images and passes):
 
-            sg_buffer sg_make_buffer(const sg_buffer_desc*)
-            sg_image sg_make_image(const sg_image_desc*)
-            sg_shader sg_make_shader(const sg_shader_desc*)
-            sg_pipeline sg_make_pipeline(const sg_pipeline_desc*)
-            sg_pass sg_make_pass(const sg_pass_desc*)
+        ~~~ c
+        sg_buffer sg_make_buffer(const sg_buffer_desc*)
+        sg_image sg_make_image(const sg_image_desc*)
+        sg_shader sg_make_shader(const sg_shader_desc*)
+        sg_pipeline sg_make_pipeline(const sg_pipeline_desc*)
+        sg_pass sg_make_pass(const sg_pass_desc*)
+        ~~~
 
     --- start rendering to the default frame buffer with:
 
-            sg_begin_default_pass(const sg_pass_action* actions, int width, int height)
+        ~~~ c
+        sg_begin_default_pass(const sg_pass_action* actions, int width, int height)
+        ~~~
 
     --- or start rendering to an offscreen framebuffer with:
 
-            sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
+        ~~~ c
+        sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
+        ~~~
 
     --- set the pipeline state for the next draw call with:
 
-            sg_apply_pipeline(sg_pipeline pip)
+        ~~~ c
+        sg_apply_pipeline(sg_pipeline pip)
+        ~~~
 
     --- fill an sg_bindings struct with the resource bindings for the next
         draw call (1..N vertex buffers, 0 or 1 index buffer, 0..N image objects
         to use as textures each on the vertex-shader- and fragment-shader-stage
         and then call
 
-            sg_apply_bindings(const sg_bindings* bindings)
+        ~~~ c
+        sg_apply_bindings(const sg_bindings* bindings)
+        ~~~
 
         to update the resource bindings
 
     --- optionally update shader uniform data with:
 
-            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+        ~~~ c
+        sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+        ~~~
 
     --- kick off a draw call with:
 
-            sg_draw(int base_element, int num_elements, int num_instances)
+        ~~~ c
+        sg_draw(int base_element, int num_elements, int num_instances)
+        ~~~
 
     --- finish the current rendering pass with:
 
-            sg_end_pass()
+        ~~~ c
+        sg_end_pass()
+        ~~~
 
     --- when done with the current frame, call
 
-            sg_commit()
+        ~~~ c
+        sg_commit()
+        ~~~
 
     --- at the end of your program, shutdown sokol_gfx with:
 
-            sg_shutdown()
+        ~~~ c
+        sg_shutdown()
+        ~~~
 
     --- if you need to destroy resources before sg_shutdown(), call:
 
-            sg_destroy_buffer(sg_buffer buf)
-            sg_destroy_image(sg_image img)
-            sg_destroy_shader(sg_shader shd)
-            sg_destroy_pipeline(sg_pipeline pip)
-            sg_destroy_pass(sg_pass pass)
+        ~~~ c
+        sg_destroy_buffer(sg_buffer buf)
+        sg_destroy_image(sg_image img)
+        sg_destroy_shader(sg_shader shd)
+        sg_destroy_pipeline(sg_pipeline pip)
+        sg_destroy_pass(sg_pass pass)
+        ~~~
 
     --- to set a new viewport rectangle, call
 
-            sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
+        ~~~ c
+        sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
+        ~~~
 
     --- to set a new scissor rect, call:
 
-            sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left)
+        ~~~ c
+        sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left)
+        ~~~
 
         both sg_apply_viewport() and sg_apply_scissor_rect() must be called
         inside a rendering pass
@@ -172,8 +216,10 @@
 
     --- to update (overwrite) the content of buffer and image resources, call:
 
-            sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
-            sg_update_image(sg_image img, const sg_image_content* content)
+        ~~~ c
+        sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+        sg_update_image(sg_image img, const sg_image_content* content)
+        ~~~
 
         Buffers and images to be updated must have been created with
         SG_USAGE_DYNAMIC or SG_USAGE_STREAM
@@ -189,7 +235,9 @@
 
     --- to append a chunk of data to a buffer resource, call:
 
-            int sg_append_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+        ~~~ c
+        int sg_append_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+        ~~~
 
         The difference to sg_update_buffer() is that sg_append_buffer()
         can be called multiple times per frame to append new data to the
@@ -203,6 +251,7 @@
 
         Code example:
 
+        ~~~ c
         for (...) {
             const void* data = ...;
             const int num_bytes = ...;
@@ -213,6 +262,7 @@
             sg_apply_uniforms(...);
             sg_draw(...);
         }
+        ~~~
 
         A buffer to be used with sg_append_buffer() must have been created
         with SG_USAGE_DYNAMIC or SG_USAGE_STREAM.
@@ -227,7 +277,9 @@
 
         You can also check manually if a buffer is in overflow-state by calling
 
-            bool sg_query_buffer_overflow(sg_buffer buf)
+        ~~~ c
+        bool sg_query_buffer_overflow(sg_buffer buf)
+        ~~~
 
         NOTE: Due to restrictions in underlying 3D-APIs, appended chunks of
         data will be 4-byte aligned in the destination buffer. This means
@@ -240,13 +292,17 @@
     --- to check at runtime for optional features, limits and pixelformat support,
         call:
 
-            sg_features sg_query_features()
-            sg_limits sg_query_limits()
-            sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt)
+        ~~~ c
+        sg_features sg_query_features()
+        sg_limits sg_query_limits()
+        sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt)
+        ~~~
 
     --- if you need to call into the underlying 3D-API directly, you must call:
 
-            sg_reset_state_cache()
+        ~~~ c
+        sg_reset_state_cache()
+        ~~~
 
         ...before calling sokol_gfx functions again
 
@@ -256,11 +312,13 @@
 
     --- you can inspect various internal resource attributes via:
 
-            sg_buffer_info sg_query_buffer_info(sg_buffer buf)
-            sg_image_info sg_query_image_info(sg_image img)
-            sg_shader_info sg_query_shader_info(sg_shader shd)
-            sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip)
-            sg_pass_info sg_query_pass_info(sg_pass pass)
+        ~~~ c
+        sg_buffer_info sg_query_buffer_info(sg_buffer buf)
+        sg_image_info sg_query_image_info(sg_image img)
+        sg_shader_info sg_query_shader_info(sg_shader shd)
+        sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip)
+        sg_pass_info sg_query_pass_info(sg_pass pass)
+        ~~~
 
         ...please note that the returned info-structs are tied quite closely
         to sokol_gfx.h internals, and may change more often than other
@@ -269,15 +327,19 @@
     --- you can ask at runtime what backend sokol_gfx.h has been compiled
         for, or whether the GLES3 backend had to fall back to GLES2 with:
 
-            sg_backend sg_query_backend(void)
+        ~~~ c
+        sg_backend sg_query_backend(void)
+        ~~~
 
     --- you can query the default resource creation parameters through the functions
 
-            sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc)
-            sg_image_desc sg_query_image_defaults(const sg_image_desc* desc)
-            sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
-            sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
-            sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
+        ~~~ c
+        sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc)
+        sg_image_desc sg_query_image_defaults(const sg_image_desc* desc)
+        sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc)
+        sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc)
+        sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc)
+        ~~~
 
         These functions take a pointer to a desc structure which may contain
         zero-initialized items for default values. These zero-init values
@@ -324,48 +386,54 @@
     --- the GL backends need to know about the internal structure of uniform
         blocks, and the texture sampler-name and -type:
 
-            typedef struct {
-                float mvp[16];      // model-view-projection matrix
-                float offset0[2];   // some 2D vectors
-                float offset1[2];
-                float offset2[2];
-            } params_t;
+        ~~~ c
+        typedef struct {
+            float mvp[16];      // model-view-projection matrix
+            float offset0[2];   // some 2D vectors
+            float offset1[2];
+            float offset2[2];
+        } params_t;
 
-            // uniform block structure and texture image definition in sg_shader_desc:
-            sg_shader_desc desc = {
-                // uniform block description (size and internal structure)
-                .vs.uniform_blocks[0] = {
-                    .size = sizeof(params_t),
-                    .uniforms = {
-                        [0] = { .name="mvp", .type=SG_UNIFORMTYPE_MAT4 },
-                        [1] = { .name="offset0", .type=SG_UNIFORMTYPE_VEC2 },
-                        ...
-                    }
-                },
-                // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
-                .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
-                ...
-            };
+        // uniform block structure and texture image definition in sg_shader_desc:
+        sg_shader_desc desc = {
+            // uniform block description (size and internal structure)
+            .vs.uniform_blocks[0] = {
+                .size = sizeof(params_t),
+                .uniforms = {
+                    [0] = { .name="mvp", .type=SG_UNIFORMTYPE_MAT4 },
+                    [1] = { .name="offset0", .type=SG_UNIFORMTYPE_VEC2 },
+                    ...
+                }
+            },
+            // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
+            .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
+            ...
+        };
+        ~~~
 
     --- the Metal and D3D11 backends only need to know the size of uniform blocks,
         not their internal member structure, and they only need to know
         the type of a texture sampler, not its name:
 
-            sg_shader_desc desc = {
-                .vs.uniform_blocks[0].size = sizeof(params_t),
-                .fs.images[0].type = SG_IMAGETYPE_ARRAY,
-                ...
-            };
+        ~~~ c
+        sg_shader_desc desc = {
+            .vs.uniform_blocks[0].size = sizeof(params_t),
+            .fs.images[0].type = SG_IMAGETYPE_ARRAY,
+            ...
+        };
+        ~~~
 
     --- when creating a shader object, GLES2/WebGL need to know the vertex
         attribute names as used in the vertex shader:
 
-            sg_shader_desc desc = {
-                .attrs = {
-                    [0] = { .name="position" },
-                    [1] = { .name="color1" }
-                }
-            };
+        ~~~ c
+        sg_shader_desc desc = {
+            .attrs = {
+                [0] = { .name="position" },
+                [1] = { .name="color1" }
+            }
+        };
+        ~~~
 
         The vertex attribute names provided when creating a shader will be
         used later in sg_create_pipeline() for matching the vertex layout
@@ -375,12 +443,14 @@
         shader description struct instead (see the D3D11 documentation on
         D3D11_INPUT_ELEMENT_DESC for details):
 
-            sg_shader_desc desc = {
-                .attrs = {
-                    [0] = { .sem_name="POSITION", .sem_index=0 }
-                    [1] = { .sem_name="COLOR", .sem_index=1 }
-                }
-            };
+        ~~~ c
+        sg_shader_desc desc = {
+            .attrs = {
+                [0] = { .sem_name="POSITION", .sem_index=0 }
+                [1] = { .sem_name="COLOR", .sem_index=1 }
+            }
+        };
+        ~~~
 
         The provided semantic information will be used later in sg_create_pipeline()
         to match the vertex layout to vertex shader inputs.
@@ -389,14 +459,16 @@
         name or semantic name, since vertex attributes can be bound by their slot index
         (this is mandatory in Metal, and optional in GL):
 
-            sg_pipeline_desc desc = {
-                .layout = {
-                    .attrs = {
-                        [0] = { .format=SG_VERTEXFORMAT_FLOAT3 },
-                        [1] = { .format=SG_VERTEXFORMAT_FLOAT4 }
-                    }
+        ~~~ c
+        sg_pipeline_desc desc = {
+            .layout = {
+                .attrs = {
+                    [0] = { .format=SG_VERTEXFORMAT_FLOAT3 },
+                    [1] = { .format=SG_VERTEXFORMAT_FLOAT4 }
                 }
-            };
+            }
+        };
+        ~~~
 
     WORKING WITH CONTEXTS
     =====================
@@ -522,6 +594,7 @@
     ====
     - talk about asynchronous resource creation
 
+    ~~~ text
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
@@ -544,7 +617,8 @@
 
         3. This notice may not be removed or altered from any source
         distribution.
-*/
+    ~~~
+#*/
 #define SOKOL_GFX_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
