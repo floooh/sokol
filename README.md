@@ -473,6 +473,8 @@ sokol_gfx.h D3D11 backend:
       constant buffers.
     - The *sokol-shdc* shader compiler tool has a new output option ```hlsl4```
       to generate HLSL4 source code or shader model 4.0 byte code.
+    - All embedded D3D shader byte code in the sokol utility headers has been
+      changed from shader model 5.0 to 4.0
 
     If you are using sokol_gfx.h with sokol-shdc, please update both to at the same time
     to avoid compilation errors caused by the new ```sg_shader_stage_desc.d3d11_target```
