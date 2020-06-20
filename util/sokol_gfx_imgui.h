@@ -204,9 +204,11 @@ typedef struct {
     sg_shader res_id;
     sg_imgui_str_t label;
     sg_imgui_str_t vs_entry;
+    sg_imgui_str_t vs_d3d11_target;
     sg_imgui_str_t vs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
     sg_imgui_str_t vs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
     sg_imgui_str_t fs_entry;
+    sg_imgui_str_t fs_d3d11_target;
     sg_imgui_str_t fs_image_name[SG_MAX_SHADERSTAGE_IMAGES];
     sg_imgui_str_t fs_uniform_name[SG_MAX_SHADERSTAGE_UBS][SG_MAX_UB_MEMBERS];
     sg_imgui_str_t attr_name[SG_MAX_VERTEX_ATTRIBUTES];
@@ -1242,6 +1244,14 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     if (shd->desc.fs.entry) {
         shd->fs_entry = _sg_imgui_make_str(shd->desc.fs.entry);
         shd->desc.fs.entry = shd->fs_entry.buf;
+    }
+    if (shd->desc.vs.d3d11_target) {
+        shd->vs_d3d11_target = _sg_imgui_make_str(shd->desc.vs.d3d11_target);
+        shd->desc.fs.d3d11_target = shd->vs_d3d11_target.buf;
+    }
+    if (shd->desc.fs.d3d11_target) {
+        shd->fs_d3d11_target = _sg_imgui_make_str(shd->desc.fs.d3d11_target);
+        shd->desc.fs.d3d11_target = shd->fs_d3d11_target.buf;
     }
     for (int i = 0; i < SG_MAX_SHADERSTAGE_UBS; i++) {
         for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
@@ -2809,6 +2819,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
     }
     if (stage->entry) {
         igText("Entry: %s", stage->entry);
+    }
+    if (stage->d3d11_target) {
+        igText("D3D11 Target: %s", stage->d3d11_target);
     }
     if (stage->source) {
         if (igTreeNodeStr("Source")) {
