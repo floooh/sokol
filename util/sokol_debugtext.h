@@ -3671,28 +3671,24 @@ static void _sdtx_setup_common(void) {
         shd_desc.vs.source = _sdtx_vs_src_gles2;
         shd_desc.fs.source = _sdtx_fs_src_gles2;
     #elif defined(SOKOL_METAL)
+        shd_desc.vs.entry = "main0";
+        shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
                 shd_desc.vs.byte_code = _sdtx_vs_bytecode_metal_macos;
                 shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_metal_macos);
-                shd_desc.vs.entry = "main0";
                 shd_desc.fs.byte_code = _sdtx_fs_bytecode_metal_macos;
                 shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_metal_macos);
-                shd_desc.fs.entry = "main0";
                 break;
             case SG_BACKEND_METAL_IOS:
                 shd_desc.vs.byte_code = _sdtx_vs_bytecode_metal_ios;
                 shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_metal_ios);
-                shd_desc.vs.entry = "main0";
                 shd_desc.fs.byte_code = _sdtx_fs_bytecode_metal_ios;
                 shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_metal_ios);
-                shd_desc.fs.entry = "main0";
                 break;
             default:
                 shd_desc.vs.source = _sdtx_vs_src_metal_sim;
-                shd_desc.vs.entry = "main0";
                 shd_desc.fs.source = _sdtx_fs_src_metal_sim;
-                shd_desc.fs.entry = "main0";
                 break;
         }
     #elif defined(SOKOL_D3D11)
