@@ -2164,7 +2164,7 @@ static const uint8_t _sdtx_font_oric[2048] = {
 /*
     Embedded source code compiled with:
 
-    sokol-shdc -i debugtext.glsl -o debugtext.h -l glsl330:glsl100:hlsl4:metal_macos:metal_ios:metal_sim:wgpu
+    sokol-shdc -i debugtext.glsl -o debugtext.h -l glsl330:glsl100:hlsl4:metal_macos:metal_ios:metal_sim:wgpu -b
 
     (not that for Metal and D3D11 byte code, sokol-shdc must be run
     on macOS and Windows)
@@ -3663,6 +3663,7 @@ static void _sdtx_setup_common(void) {
     shd_desc.attrs[2].sem_index = 2;
     shd_desc.fs.images[0].name = "tex";
     shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     #if defined(SOKOL_GLCORE33)
         shd_desc.vs.source = _sdtx_vs_src_glcore33;
         shd_desc.fs.source = _sdtx_fs_src_glcore33;
