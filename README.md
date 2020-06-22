@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**20-Jun-2020**: better support for older GPUs in sokol_gfx.h D3D11 backend)
+[See what's new](#updates) (**22-Jun-2020**: sokol_app.h: fullscreen support on Linux
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,10 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **22-Jun-2020**: The X11/GLX backend in sokol_app.h now has (soft-)fullscreen
+support, bringing the feature on par with Windows and macOS. Many thanks to
+@medvednikov for the PR!
 
 - **20-Jun-2020**: Some work to better support older DX10-level GPUs in the
 sokol_gfx.h D3D11 backend:

@@ -109,7 +109,7 @@
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
-    fullscreen          | YES     | YES   | TODO  | YES   | YES     | TODO  | ---
+    fullscreen          | YES     | YES   | YES   | YES   | YES     | TODO  | ---
     pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
