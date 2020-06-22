@@ -5988,6 +5988,8 @@ static Atom _sapp_x11_WM_DELETE_WINDOW;
 static Atom _sapp_x11_WM_STATE;
 static Atom _sapp_x11_NET_WM_NAME;
 static Atom _sapp_x11_NET_WM_ICON_NAME;
+static Atom _sapp_x11_NET_WM_STATE;
+static Atom _sapp_x11_NET_WM_STATE_FULLSCREEN;
 // GLX 1.3 functions
 static PFNGLXGETFBCONFIGSPROC              _sapp_glx_GetFBConfigs;
 static PFNGLXGETFBCONFIGATTRIBPROC         _sapp_glx_GetFBConfigAttrib;
@@ -6869,12 +6871,14 @@ _SOKOL_PRIVATE void _sapp_x11_release_error_handler(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
-    _sapp_x11_UTF8_STRING       = XInternAtom(_sapp_x11_display, "UTF8_STRING", False);
-    _sapp_x11_WM_PROTOCOLS      = XInternAtom(_sapp_x11_display, "WM_PROTOCOLS", False);
-    _sapp_x11_WM_DELETE_WINDOW  = XInternAtom(_sapp_x11_display, "WM_DELETE_WINDOW", False);
-    _sapp_x11_WM_STATE          = XInternAtom(_sapp_x11_display, "WM_STATE", False);
-    _sapp_x11_NET_WM_NAME    = XInternAtom(_sapp_x11_display, "_NET_WM_NAME", False);
-    _sapp_x11_NET_WM_ICON_NAME = XInternAtom(_sapp_x11_display, "_NET_WM_ICON_NAME", False);
+    _sapp_x11_UTF8_STRING             = XInternAtom(_sapp_x11_display, "UTF8_STRING", False);
+    _sapp_x11_WM_PROTOCOLS            = XInternAtom(_sapp_x11_display, "WM_PROTOCOLS", False);
+    _sapp_x11_WM_DELETE_WINDOW        = XInternAtom(_sapp_x11_display, "WM_DELETE_WINDOW", False);
+    _sapp_x11_WM_STATE                = XInternAtom(_sapp_x11_display, "WM_STATE", False);
+    _sapp_x11_NET_WM_NAME             = XInternAtom(_sapp_x11_display, "_NET_WM_NAME", False);
+    _sapp_x11_NET_WM_ICON_NAME        = XInternAtom(_sapp_x11_display, "_NET_WM_ICON_NAME", False);
+    _sapp_x11_NET_WM_STATE            = XInternAtom(_sapp_x11_display, "_NET_WM_STATE", False);
+    _sapp_x11_NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp_x11_display, "_NET_WM_STATE_FULLSCREEN", False);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
@@ -7171,6 +7175,62 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
+    XEvent event;
+    memset(&event, 0, sizeof(event));
+
+    event.type = ClientMessage;
+    event.xclient.window = _sapp_x11_window;
+    event.xclient.format = 32;
+    event.xclient.message_type = type;
+    event.xclient.data.l[0] = a;
+    event.xclient.data.l[1] = b;
+    event.xclient.data.l[2] = c;
+    event.xclient.data.l[3] = d;
+    event.xclient.data.l[4] = e;
+
+    XSendEvent(_sapp_x11_display, _sapp_x11_root,
+               False,
+               SubstructureNotifyMask | SubstructureRedirectMask,
+               &event);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
+    XWindowAttributes attribs;
+    XGetWindowAttributes(_sapp_x11_display, _sapp_x11_window, &attribs);
+    _sapp.window_width = attribs.width;
+    _sapp.window_height = attribs.height;
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.window_height;
+}
+
+_SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
+    /* NOTE: this function must be called after XMapWindow (which happens in _sapp_x11_show_window()) */
+    if (_sapp_x11_NET_WM_STATE && _sapp_x11_NET_WM_STATE_FULLSCREEN) {
+        if (enable) {
+            const int _NET_WM_STATE_ADD = 1;
+            _sapp_x11_send_event(_sapp_x11_NET_WM_STATE,
+                                _NET_WM_STATE_ADD,
+                                _sapp_x11_NET_WM_STATE_FULLSCREEN,
+                                0, 1, 0);
+        }
+        else {
+            const int _NET_WM_STATE_REMOVE = 0; 
+            _sapp_x11_send_event(_sapp_x11_NET_WM_STATE,
+                                _NET_WM_STATE_REMOVE,
+                                _sapp_x11_NET_WM_STATE_FULLSCREEN,
+                                0, 1, 0);
+        }
+    }
+    XFlush(_sapp_x11_display);
+}
+
+_SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
+    _sapp.fullscreen = !_sapp.fullscreen;
+    _sapp_x11_set_fullscreen(_sapp.fullscreen);
+    _sapp_x11_query_window_size();
+}
+
 _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     Xutf8SetWMProperties(_sapp_x11_display,
         _sapp_x11_window,
@@ -7187,15 +7247,6 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
         (unsigned char*)_sapp.window_title,
         strlen(_sapp.window_title));
     XFlush(_sapp_x11_display);
-}
-
-_SOKOL_PRIVATE void _sapp_x11_query_window_size(void) {
-    XWindowAttributes attribs;
-    XGetWindowAttributes(_sapp_x11_display, _sapp_x11_window, &attribs);
-    _sapp.window_width = attribs.width;
-    _sapp.window_height = attribs.height;
-    _sapp.framebuffer_width = _sapp.window_width;
-    _sapp.framebuffer_height = _sapp.framebuffer_height;
 }
 
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
@@ -7225,24 +7276,6 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     if (!_sapp_x11_window) {
         _sapp_fail("X11: Failed to create window");
     }
-
-    if (_sapp.desc.fullscreen) {
-	    Atom wm_state = XInternAtom(_sapp_x11_display, "_NET_WM_STATE", False);
-	    Atom fullscreen = XInternAtom(_sapp_x11_display, "_NET_WM_STATE_FULLSCREEN", False);
-	    XEvent xev;
-	    memset(&xev, 0, sizeof(xev));
-	    xev.type = ClientMessage;
-	    xev.xclient.window = _sapp_x11_window;
-	    xev.xclient.message_type = wm_state;
-	    xev.xclient.format = 32;
-	    xev.xclient.data.l[0] = 1;
-	    xev.xclient.data.l[1] = fullscreen;
-	    xev.xclient.data.l[2] = 0;
-	    XMapWindow(_sapp_x11_display, _sapp_x11_window);
-	    XSendEvent (_sapp_x11_display, DefaultRootWindow(_sapp_x11_display), False,
-		    SubstructureRedirectMask | SubstructureNotifyMask, &xev);
-    }
-
     Atom protocols[] = {
         _sapp_x11_WM_DELETE_WINDOW
     };
@@ -7255,7 +7288,6 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     XFree(hints);
 
     _sapp_x11_update_window_title();
-    _sapp_x11_query_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
@@ -7714,6 +7746,10 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     _sapp_glx_create_context();
     _sapp.valid = true;
     _sapp_x11_show_window();
+    if (_sapp.fullscreen) {
+        _sapp_x11_set_fullscreen(true);
+    }
+    _sapp_x11_query_window_size();
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp_x11_display);
     while (!_sapp.quit_ordered) {
@@ -7864,6 +7900,8 @@ SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
     _sapp_macos_toggle_fullscreen();
     #elif defined(_WIN32)
     _sapp_win32_toggle_fullscreen();
+    #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    _sapp_x11_toggle_fullscreen();
     #endif
 }
 
