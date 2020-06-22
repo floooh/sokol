@@ -7226,6 +7226,23 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
         _sapp_fail("X11: Failed to create window");
     }
 
+    if (_sapp.desc.fullscreen) {
+	    Atom wm_state = XInternAtom(_sapp_x11_display, "_NET_WM_STATE", False);
+	    Atom fullscreen = XInternAtom(_sapp_x11_display, "_NET_WM_STATE_FULLSCREEN", False);
+	    XEvent xev;
+	    memset(&xev, 0, sizeof(xev));
+	    xev.type = ClientMessage;
+	    xev.xclient.window = _sapp_x11_window;
+	    xev.xclient.message_type = wm_state;
+	    xev.xclient.format = 32;
+	    xev.xclient.data.l[0] = 1;
+	    xev.xclient.data.l[1] = fullscreen;
+	    xev.xclient.data.l[2] = 0;
+	    XMapWindow(_sapp_x11_display, _sapp_x11_window);
+	    XSendEvent (_sapp_x11_display, DefaultRootWindow(_sapp_x11_display), False,
+		    SubstructureRedirectMask | SubstructureNotifyMask, &xev);
+    }
+
     Atom protocols[] = {
         _sapp_x11_WM_DELETE_WINDOW
     };
