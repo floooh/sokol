@@ -1080,9 +1080,11 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 /*== PLATFORM SPECIFIC INCLUDES AND DEFINES ==================================*/
 #if defined(_SAPP_APPLE)
+    #if defined(SOKOL_METAL)
+        #import <Metal/Metal.h>
+        #import <MetalKit/MetalKit.h>
+    #endif
     #if defined(_SAPP_MACOS)
-            #import <Metal/Metal.h>
-            #import <MetalKit/MetalKit.h>
         #if !defined(SOKOL_METAL)
             #ifndef GL_SILENCE_DEPRECATION
             #define GL_SILENCE_DEPRECATION
@@ -1152,8 +1154,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <d3d11.h>
     #include <dxgi.h>
     #endif
-    /* see https://github.com/floooh/sokol/issues/138 */
-    #ifndef WM_MOUSEHWHEEL
+    #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
     #define WM_MOUSEHWHEEL (0x020E)
     #endif
 #elif defined(_SAPP_ANDROID)
@@ -1182,7 +1183,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
-
     #define GLX_VENDOR 1
     #define GLX_RGBA_BIT 0x00000001
     #define GLX_WINDOW_BIT 0x00000001
