@@ -980,30 +980,36 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if !__has_feature(objc_arc)
         #error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
     #endif
+    #define _SAPP_APPLE (1)
     #include <TargetConditionals.h>
-    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-        /* iOS */
-        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
-        #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
-        #endif
-    #else
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         /* MacOS */
+        #define _SAPP_MACOS (1)
         #if !defined(SOKOL_METAL) && !defined(SOKOL_GLCORE33)
         #error("sokol_app.h: unknown 3D API selected for MacOS, must be SOKOL_METAL or SOKOL_GLCORE33")
+        #endif
+    #else
+        /* iOS or iOS Simulator */
+        #define _SAPP_IOS (1)
+        #if !defined(SOKOL_METAL) && !defined(SOKOL_GLES3)
+        #error("sokol_app.h: unknown 3D API selected for iOS, must be SOKOL_METAL or SOKOL_GLES3")
         #endif
     #endif
 #elif defined(__EMSCRIPTEN__)
     /* emscripten (asm.js or wasm) */
+    #define _SAPP_EMSCRIPTEN (1)
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2) && !defined(SOKOL_WGPU)
     #error("sokol_app.h: unknown 3D API selected for emscripten, must be SOKOL_GLES3, SOKOL_GLES2 or SOKOL_WGPU")
     #endif
 #elif defined(_WIN32)
     /* Windows (D3D11 or GL) */
+    #define _SAPP_WIN32 (1)
     #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11 or SOKOL_GLCORE33")
     #endif
 #elif defined(__ANDROID__)
     /* Android */
+    #define _SAPP_ANDROID (1)
     #if !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
     #error("sokol_app.h: unknown 3D API selected for Android, must be SOKOL_GLES3 or SOKOL_GLES2")
     #endif
@@ -1012,6 +1018,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
+    #define _SAPP_LINUX (1)
     #if !defined(SOKOL_GLCORE33)
     #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33")
     #endif
@@ -1070,6 +1077,152 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #ifndef _SOKOL_UNUSED
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
+
+/*== PLATFORM SPECIFIC INCLUDES AND DEFINES ==================================*/
+#if defined(_SAPP_APPLE)
+    #if defined(_SAPP_MACOS)
+            #import <Metal/Metal.h>
+            #import <MetalKit/MetalKit.h>
+        #if !defined(SOKOL_METAL)
+            #ifndef GL_SILENCE_DEPRECATION
+            #define GL_SILENCE_DEPRECATION
+            #endif
+            #include <Cocoa/Cocoa.h>
+            #include <OpenGL/gl3.h>
+        #endif
+    #elif defined(_SAPP_IOS)
+        #import <UIKit/UIKit.h>
+        #if !defined(SOKOL_METAL)
+            #import <GLKit/GLKit.h>
+            #include <OpenGLES/ES3/gl.h>
+            #include <OpenGLES/ES3/glext.h>
+        #endif
+    #endif
+#elif defined(_SAPP_EMSCRIPTEN)
+    #if defined(SOKOL_GLES3)
+        #include <GLES3/gl3.h>
+    #elif defined(SOKOL_GLES2)
+        #ifndef GL_EXT_PROTOTYPES
+        #define GL_GLEXT_PROTOTYPES
+        #endif
+        #include <GLES2/gl2.h>
+        #include <GLES2/gl2ext.h>
+    #elif defined(SOKOL_WGPU)
+        #include <webgpu/webgpu.h>
+    #endif
+    #include <emscripten/emscripten.h>
+    #include <emscripten/html5.h>
+#elif defined(_SAPP_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
+    #include <windows.h>
+    #include <windowsx.h>
+    #include <shellapi.h>
+    #pragma comment (lib, "Shell32.lib")
+    #if !defined(SOKOL_WIN32_FORCE_MAIN)
+    #pragma comment (linker, "/subsystem:windows")
+    #endif
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+    #pragma comment (lib, "WindowsApp.lib")
+    #else
+    #pragma comment (lib, "user32.lib")
+    #if defined(SOKOL_D3D11)
+    #pragma comment (lib, "dxgi.lib")
+    #pragma comment (lib, "d3d11.lib")
+    #pragma comment (lib, "dxguid.lib")
+    #endif
+    #if defined(SOKOL_GLCORE33)
+    #pragma comment (lib, "gdi32.lib")
+    #endif
+    #endif
+    #if defined(SOKOL_D3D11)
+    #ifndef D3D11_NO_HELPERS
+    #define D3D11_NO_HELPERS
+    #endif
+    #ifndef CINTERFACE
+    #define CINTERFACE
+    #endif
+    #ifndef COBJMACROS
+    #define COBJMACROS
+    #endif
+    #include <d3d11.h>
+    #include <dxgi.h>
+    #endif
+    /* see https://github.com/floooh/sokol/issues/138 */
+    #ifndef WM_MOUSEHWHEEL
+    #define WM_MOUSEHWHEEL (0x020E)
+    #endif
+#elif defined(_SAPP_ANDROID)
+    #include <pthread.h>
+    #include <unistd.h>
+    #include <android/native_activity.h>
+    #include <android/looper.h>
+    #include <EGL/egl.h>
+    #if defined(SOKOL_GLES3)
+        #include <GLES3/gl3.h>
+    #else
+        #ifndef GL_EXT_PROTOTYPES
+            #define GL_GLEXT_PROTOTYPES
+        #endif
+        #include <GLES2/gl2.h>
+        #include <GLES2/gl2ext.h>
+    #endif
+#elif defined(_SAPP_LINUX)
+    #define GL_GLEXT_PROTOTYPES
+    #include <X11/X.h>
+    #include <X11/Xlib.h>
+    #include <X11/XKBlib.h>
+    #include <X11/Xresource.h>
+    #include <X11/extensions/Xrandr.h>
+    #include <X11/Xmd.h> /* CARD32 */
+    #include <GL/gl.h>
+    #include <dlfcn.h> /* dlopen, dlsym, dlclose */
+    #include <limits.h> /* LONG_MAX */
+
+    #define GLX_VENDOR 1
+    #define GLX_RGBA_BIT 0x00000001
+    #define GLX_WINDOW_BIT 0x00000001
+    #define GLX_DRAWABLE_TYPE 0x8010
+    #define GLX_RENDER_TYPE	0x8011
+    #define GLX_RGBA_TYPE 0x8014
+    #define GLX_DOUBLEBUFFER 5
+    #define GLX_STEREO 6
+    #define GLX_AUX_BUFFERS	7
+    #define GLX_RED_SIZE 8
+    #define GLX_GREEN_SIZE 9
+    #define GLX_BLUE_SIZE 10
+    #define GLX_ALPHA_SIZE 11
+    #define GLX_DEPTH_SIZE 12
+    #define GLX_STENCIL_SIZE 13
+    #define GLX_ACCUM_RED_SIZE 14
+    #define GLX_ACCUM_GREEN_SIZE 15
+    #define GLX_ACCUM_BLUE_SIZE	16
+    #define GLX_ACCUM_ALPHA_SIZE 17
+    #define GLX_SAMPLES 0x186a1
+    #define GLX_VISUAL_ID 0x800b
+    #define GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20b2
+    #define GLX_CONTEXT_DEBUG_BIT_ARB 0x00000001
+    #define GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+    #define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+    #define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
+    #define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
+    #define GLX_CONTEXT_MAJOR_VERSION_ARB 0x2091
+    #define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
+    #define GLX_CONTEXT_FLAGS_ARB 0x2094
+    #define GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
+    #define GLX_LOSE_CONTEXT_ON_RESET_ARB 0x8252
+    #define GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+    #define GLX_NO_RESET_NOTIFICATION_ARB 0x8261
+    #define GLX_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
+    #define GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
+    #define GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
+#endif
+
+/*== COMMON DECLARATIONS =====================================================*/
 
 /* helper macros */
 #define _sapp_def(val, def) (((val) == 0) ? (def) : (val))
@@ -1278,21 +1431,10 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 
 /*== MacOS/iOS ===============================================================*/
 
-#if defined(__APPLE__)
+#if defined(_SAPP_APPLE)
 
 /*== MacOS ===================================================================*/
-#if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-
-#if defined(SOKOL_METAL)
-#import <Metal/Metal.h>
-#import <MetalKit/MetalKit.h>
-#elif defined(SOKOL_GLCORE33)
-#ifndef GL_SILENCE_DEPRECATION
-#define GL_SILENCE_DEPRECATION
-#endif
-#include <Cocoa/Cocoa.h>
-#include <OpenGL/gl3.h>
-#endif
+#if defined(_SAPP_MACOS)
 
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
@@ -1939,16 +2081,7 @@ const char* _sapp_macos_get_clipboard_string(void) {
 #endif /* MacOS */
 
 /*== iOS =====================================================================*/
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-#import <UIKit/UIKit.h>
-#if defined(SOKOL_METAL)
-#import <Metal/Metal.h>
-#import <MetalKit/MetalKit.h>
-#else
-#import <GLKit/GLKit.h>
-#include <OpenGLES/ES3/gl.h>
-#include <OpenGLES/ES3/glext.h>
-#endif
+#if defined(_SAPP_IOS)
 
 @interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
 @end
@@ -2301,23 +2434,10 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 @end
 #endif /* TARGET_OS_IPHONE */
 
-#endif /* __APPLE__ */
+#endif /* _SAPP_APPLE */
 
 /*== EMSCRIPTEN ==============================================================*/
-#if defined(__EMSCRIPTEN__)
-#if defined(SOKOL_GLES3)
-#include <GLES3/gl3.h>
-#elif defined(SOKOL_GLES2)
-#ifndef GL_EXT_PROTOTYPES
-#define GL_GLEXT_PROTOTYPES
-#endif
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#elif defined(SOKOL_WGPU)
-#include <webgpu/webgpu.h>
-#endif
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
+#if defined(_SAPP_EMSCRIPTEN)
 
 static struct {
     bool textfield_created;
@@ -3209,7 +3329,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
-#endif /* __EMSCRIPTEN__ */
+#endif /* _SAPP_EMSCRIPTEN */
 
 /*== MISC GL SUPPORT FUNCTIONS ================================================*/
 #if defined(SOKOL_GLCORE33)
@@ -3322,54 +3442,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #endif
 
 /*== WINDOWS ==================================================================*/
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <windowsx.h>
-#include <shellapi.h>
-#pragma comment (lib, "Shell32.lib")
-
-#if !defined(SOKOL_WIN32_FORCE_MAIN)
-#pragma comment (linker, "/subsystem:windows")
-#endif
-
-#if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-#pragma comment (lib, "WindowsApp.lib")
-#else
-#pragma comment (lib, "user32.lib")
-#if defined(SOKOL_D3D11)
-#pragma comment (lib, "dxgi.lib")
-#pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "dxguid.lib")
-#endif
-#if defined(SOKOL_GLCORE33)
-#pragma comment (lib, "gdi32.lib")
-#endif
-#endif
-
-#if defined(SOKOL_D3D11)
-#ifndef D3D11_NO_HELPERS
-#define D3D11_NO_HELPERS
-#endif
-#ifndef CINTERFACE
-#define CINTERFACE
-#endif
-#ifndef COBJMACROS
-#define COBJMACROS
-#endif
-#include <d3d11.h>
-#include <dxgi.h>
-#endif
-
-/* see https://github.com/floooh/sokol/issues/138 */
-#ifndef WM_MOUSEHWHEEL
-#define WM_MOUSEHWHEEL (0x020E)
-#endif
+#if defined(_SAPP_WIN32)
 
 #ifndef DPI_ENUMS_DECLARED
 typedef enum PROCESS_DPI_AWARENESS
@@ -4208,7 +4281,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
         _sapp_d3d11_create_default_render_target();
     }
 }
-#endif
+#endif /* SOKOL_D3D11 */
 
 #if defined(SOKOL_GLCORE33)
 _SOKOL_PRIVATE void _sapp_wgl_init(void) {
@@ -4454,7 +4527,7 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
     /* FIXME: DwmIsCompositionEnabled? (see GLFW) */
     SwapBuffers(_sapp_win32_dc);
 }
-#endif
+#endif /* SOKOL_GLCORE33 */
 
 _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
@@ -5162,27 +5235,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 }
 #endif /* SOKOL_WIN32_FORCE_MAIN */
 #endif /* SOKOL_NO_ENTRY */
-#undef _SAPP_SAFE_RELEASE
-#endif /* WINDOWS */
+#endif /* _SAPP_WIN32 */
 
 /*== Android ================================================================*/
-#if defined(__ANDROID__)
-#include <pthread.h>
-#include <unistd.h>
-#include <android/native_activity.h>
-#include <android/looper.h>
-
-#include <EGL/egl.h>
-#if defined(SOKOL_GLES3)
-    #include <GLES3/gl3.h>
-#else
-    #ifndef GL_EXT_PROTOTYPES
-        #define GL_GLEXT_PROTOTYPES
-    #endif
-    #include <GLES2/gl2.h>
-    #include <GLES2/gl2ext.h>
-#endif
-
+#if defined(_SAPP_ANDROID)
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
@@ -5888,60 +5944,10 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     /* NOT A BUG: do NOT call sapp_discard_state() */
 }
 
-#endif /* Android */
+#endif /* _SAPP_ANDROID */
 
 /*== LINUX ==================================================================*/
-#if (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-#define GL_GLEXT_PROTOTYPES
-#include <X11/X.h>
-#include <X11/Xlib.h>
-#include <X11/XKBlib.h>
-#include <X11/Xresource.h>
-#include <X11/extensions/Xrandr.h>
-#include <X11/Xmd.h> /* CARD32 */
-#include <GL/gl.h>
-#include <dlfcn.h> /* dlopen, dlsym, dlclose */
-#include <limits.h> /* LONG_MAX */
-
-#define GLX_VENDOR 1
-#define GLX_RGBA_BIT 0x00000001
-#define GLX_WINDOW_BIT 0x00000001
-#define GLX_DRAWABLE_TYPE 0x8010
-#define GLX_RENDER_TYPE	0x8011
-#define GLX_RGBA_TYPE 0x8014
-#define GLX_DOUBLEBUFFER 5
-#define GLX_STEREO 6
-#define GLX_AUX_BUFFERS	7
-#define GLX_RED_SIZE 8
-#define GLX_GREEN_SIZE 9
-#define GLX_BLUE_SIZE 10
-#define GLX_ALPHA_SIZE 11
-#define GLX_DEPTH_SIZE 12
-#define GLX_STENCIL_SIZE 13
-#define GLX_ACCUM_RED_SIZE 14
-#define GLX_ACCUM_GREEN_SIZE 15
-#define GLX_ACCUM_BLUE_SIZE	16
-#define GLX_ACCUM_ALPHA_SIZE 17
-#define GLX_SAMPLES 0x186a1
-#define GLX_VISUAL_ID 0x800b
-
-#define GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB 0x20b2
-#define GLX_CONTEXT_DEBUG_BIT_ARB 0x00000001
-#define GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
-#define GLX_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#define GLX_CONTEXT_PROFILE_MASK_ARB 0x9126
-#define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
-#define GLX_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
-#define GLX_CONTEXT_FLAGS_ARB 0x2094
-#define GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB 0x00000004
-#define GLX_LOSE_CONTEXT_ON_RESET_ARB 0x8252
-#define GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
-#define GLX_NO_RESET_NOTIFICATION_ARB 0x8261
-#define GLX_CONTEXT_RELEASE_BEHAVIOR_ARB 0x2097
-#define GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB 0
-#define GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
-
+#if defined(_SAPP_LINUX)
 typedef XID GLXWindow;
 typedef XID GLXDrawable;
 typedef struct __GLXFBConfig* GLXFBConfig;
@@ -7787,7 +7793,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
-#endif /* LINUX */
+#endif /* _SAPP_LINUX */
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
@@ -7834,7 +7840,7 @@ SOKOL_API_IMPL int sapp_width(void) {
 }
 
 SOKOL_API_IMPL int sapp_color_format(void) {
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         switch (_sapp_emsc.wgpu.render_format) {
             case WGPUTextureFormat_RGBA8Unorm:
                 return _SAPP_PIXELFORMAT_RGBA8;
@@ -7876,11 +7882,11 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
-    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    #if defined(_SAPP_IOS)
     _sapp_ios_show_keyboard(shown);
-    #elif defined(__EMSCRIPTEN__)
+    #elif defined(_SAPP_EMSCRIPTEN)
     _sapp_emsc_show_keyboard(shown);
-    #elif defined(__ANDROID__)
+    #elif defined(_SAPP_ANDROID)
     _sapp_android_show_keyboard(shown);
     #else
     _SOKOL_UNUSED(shown);
@@ -7896,19 +7902,19 @@ SOKOL_API_DECL bool sapp_is_fullscreen(void) {
 }
 
 SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
-    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    #if defined(_SAPP_MACOS)
     _sapp_macos_toggle_fullscreen();
-    #elif defined(_WIN32)
+    #elif defined(_SAPP_WIN32)
     _sapp_win32_toggle_fullscreen();
-    #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    #elif defined(_SAPP_LINUX)
     _sapp_x11_toggle_fullscreen();
     #endif
 }
 
 SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
-    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    #if defined(_SAPP_MACOS)
     _sapp_macos_show_mouse(shown);
-    #elif defined(_WIN32)
+    #elif defined(_SAPP_WIN32)
     _sapp_win32_show_mouse(shown);
     #else
     _SOKOL_UNUSED(shown);
@@ -7916,7 +7922,7 @@ SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    #if defined(_WIN32)
+    #if defined(_SAPP_WIN32)
     return _sapp_win32_mouse_shown();
     #else
     return false;
@@ -7945,11 +7951,11 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         return;
     }
     SOKOL_ASSERT(str);
-    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SAPP_MACOS)
         _sapp_macos_set_clipboard_string(str);
-    #elif defined(__EMSCRIPTEN__)
+    #elif defined(_SAPP_EMSCRIPEN)
         _sapp_emsc_set_clipboard_string(str);
-    #elif defined(_WIN32)
+    #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
     #else
         /* not implemented */
@@ -7961,11 +7967,11 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     if (!_sapp.clipboard_enabled) {
         return "";
     }
-    #if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+    #if defined(_SAPP_MACOS)
         return _sapp_macos_get_clipboard_string();
-    #elif defined(__EMSCRIPTEN__)
+    #elif defined(_SAPP_EMSCRIPTEN)
         return _sapp.clipboard;
-    #elif defined(_WIN32)
+    #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
     #else
         /* not implemented */
@@ -8007,7 +8013,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
-    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    #if defined(_SAPP_MACOS)
         const void* obj = (__bridge const void*) _sapp_macos_window_obj;
         SOKOL_ASSERT(obj);
         return obj;
@@ -8017,7 +8023,7 @@ SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
-    #if defined(__APPLE__) && TARGET_OS_IPHONE
+    #if defined(_SAPP_IOS)
         const void* obj = (__bridge const void*) _sapp_ios_window_obj;
         SOKOL_ASSERT(obj);
         return obj;
@@ -8065,7 +8071,7 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_depth_stencil_view(void) {
 
 SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(_WIN32)
+    #if defined(_SAPP_WIN32)
         return _sapp_win32_hwnd;
     #else
         return 0;
@@ -8074,7 +8080,7 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         return (const void*) _sapp_emsc.wgpu.device;
     #else
         return 0;
@@ -8083,7 +8089,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
             return (const void*) _sapp_emsc.wgpu.msaa_view;
         }
@@ -8097,7 +8103,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         if (_sapp.sample_count > 1) {
             return (const void*) _sapp_emsc.wgpu.swapchain_view;
         }
@@ -8111,7 +8117,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
 
 SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(SOKOL_WGPU)
+    #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         return (const void*) _sapp_emsc.wgpu.depth_stencil_view;
     #else
         return 0;
@@ -8120,7 +8126,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
 
 SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
     SOKOL_ASSERT(_sapp.valid);
-    #if defined(__ANDROID__)
+    #if defined(_SAPP_ANDROID)
         return (void*)_sapp_android_state.activity;
     #else
         return 0;
@@ -8130,8 +8136,6 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
-
-#undef _sapp_def
 
 #ifdef _MSC_VER
 #pragma warning(pop)
