@@ -3939,195 +3939,114 @@ typedef int  GLint;
 #define GL_TEXTURE_BORDER_COLOR 0x1004
 #define GL_CURRENT_PROGRAM 0x8B8D
 
-typedef void  (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array);
-static PFN_glBindVertexArray _sapp_glBindVertexArray;
-typedef void  (GL_APIENTRY *PFN_glFramebufferTextureLayer)(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer);
-static PFN_glFramebufferTextureLayer _sapp_glFramebufferTextureLayer;
-typedef void  (GL_APIENTRY *PFN_glGenFramebuffers)(GLsizei n, GLuint * framebuffers);
-static PFN_glGenFramebuffers _sapp_glGenFramebuffers;
-typedef void  (GL_APIENTRY *PFN_glBindFramebuffer)(GLenum target, GLuint framebuffer);
-static PFN_glBindFramebuffer _sapp_glBindFramebuffer;
-typedef void  (GL_APIENTRY *PFN_glBindRenderbuffer)(GLenum target, GLuint renderbuffer);
-static PFN_glBindRenderbuffer _sapp_glBindRenderbuffer;
-typedef const GLubyte * (GL_APIENTRY *PFN_glGetStringi)(GLenum name, GLuint index);
-static PFN_glGetStringi _sapp_glGetStringi;
-typedef void  (GL_APIENTRY *PFN_glClearBufferfi)(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil);
-static PFN_glClearBufferfi _sapp_glClearBufferfi;
-typedef void  (GL_APIENTRY *PFN_glClearBufferfv)(GLenum buffer, GLint drawbuffer, const GLfloat * value);
-static PFN_glClearBufferfv _sapp_glClearBufferfv;
-typedef void  (GL_APIENTRY *PFN_glClearBufferuiv)(GLenum buffer, GLint drawbuffer, const GLuint * value);
-static PFN_glClearBufferuiv _sapp_glClearBufferuiv;
-typedef void  (GL_APIENTRY *PFN_glDeleteRenderbuffers)(GLsizei n, const GLuint * renderbuffers);
-static PFN_glDeleteRenderbuffers _sapp_glDeleteRenderbuffers;
-typedef void  (GL_APIENTRY *PFN_glUniform4fv)(GLint location, GLsizei count, const GLfloat * value);
-static PFN_glUniform4fv _sapp_glUniform4fv;
-typedef void  (GL_APIENTRY *PFN_glUniform2fv)(GLint location, GLsizei count, const GLfloat * value);
-static PFN_glUniform2fv _sapp_glUniform2fv;
-typedef void  (GL_APIENTRY *PFN_glUseProgram)(GLuint program);
-static PFN_glUseProgram _sapp_glUseProgram;
-typedef void  (GL_APIENTRY *PFN_glShaderSource)(GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length);
-static PFN_glShaderSource _sapp_glShaderSource;
-typedef void  (GL_APIENTRY *PFN_glLinkProgram)(GLuint program);
-static PFN_glLinkProgram _sapp_glLinkProgram;
-typedef GLint (GL_APIENTRY *PFN_glGetUniformLocation)(GLuint program, const GLchar * name);
-static PFN_glGetUniformLocation _sapp_glGetUniformLocation;
-typedef void  (GL_APIENTRY *PFN_glGetShaderiv)(GLuint shader, GLenum pname, GLint * params);
-static PFN_glGetShaderiv _sapp_glGetShaderiv;
-typedef void  (GL_APIENTRY *PFN_glGetProgramInfoLog)(GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
-static PFN_glGetProgramInfoLog _sapp_glGetProgramInfoLog;
-typedef GLint (GL_APIENTRY *PFN_glGetAttribLocation)(GLuint program, const GLchar * name);
-static PFN_glGetAttribLocation _sapp_glGetAttribLocation;
-typedef void  (GL_APIENTRY *PFN_glDisableVertexAttribArray)(GLuint index);
-static PFN_glDisableVertexAttribArray _sapp_glDisableVertexAttribArray;
-typedef void  (GL_APIENTRY *PFN_glDeleteShader)(GLuint shader);
-static PFN_glDeleteShader _sapp_glDeleteShader;
-typedef void  (GL_APIENTRY *PFN_glDeleteProgram)(GLuint program);
-static PFN_glDeleteProgram _sapp_glDeleteProgram;
-typedef void  (GL_APIENTRY *PFN_glCompileShader)(GLuint shader);
-static PFN_glCompileShader _sapp_glCompileShader;
-typedef void  (GL_APIENTRY *PFN_glStencilFuncSeparate)(GLenum face, GLenum func, GLint ref, GLuint mask);
-static PFN_glStencilFuncSeparate _sapp_glStencilFuncSeparate;
-typedef void  (GL_APIENTRY *PFN_glStencilOpSeparate)(GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass);
-static PFN_glStencilOpSeparate _sapp_glStencilOpSeparate;
-typedef void  (GL_APIENTRY *PFN_glRenderbufferStorageMultisample)(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
-static PFN_glRenderbufferStorageMultisample _sapp_glRenderbufferStorageMultisample;
-typedef void  (GL_APIENTRY *PFN_glDrawBuffers)(GLsizei n, const GLenum * bufs);
-static PFN_glDrawBuffers _sapp_glDrawBuffers;
-typedef void  (GL_APIENTRY *PFN_glVertexAttribDivisor)(GLuint index, GLuint divisor);
-static PFN_glVertexAttribDivisor _sapp_glVertexAttribDivisor;
-typedef void  (GL_APIENTRY *PFN_glBufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
-static PFN_glBufferSubData _sapp_glBufferSubData;
-typedef void  (GL_APIENTRY *PFN_glGenBuffers)(GLsizei n, GLuint * buffers);
-static PFN_glGenBuffers _sapp_glGenBuffers;
-typedef GLenum (GL_APIENTRY *PFN_glCheckFramebufferStatus)(GLenum target);
-static PFN_glCheckFramebufferStatus _sapp_glCheckFramebufferStatus;
-typedef void  (GL_APIENTRY *PFN_glFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
-static PFN_glFramebufferRenderbuffer _sapp_glFramebufferRenderbuffer;
-typedef void  (GL_APIENTRY *PFN_glCompressedTexImage2D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data);
-static PFN_glCompressedTexImage2D _sapp_glCompressedTexImage2D;
-typedef void  (GL_APIENTRY *PFN_glCompressedTexImage3D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data);
-static PFN_glCompressedTexImage3D _sapp_glCompressedTexImage3D;
-typedef void  (GL_APIENTRY *PFN_glActiveTexture)(GLenum texture);
-static PFN_glActiveTexture _sapp_glActiveTexture;
-typedef void  (GL_APIENTRY *PFN_glTexSubImage3D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels);
-static PFN_glTexSubImage3D _sapp_glTexSubImage3D;
-typedef void  (GL_APIENTRY *PFN_glUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat * value);
-static PFN_glUniformMatrix4fv _sapp_glUniformMatrix4fv;
-typedef void  (GL_APIENTRY *PFN_glRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
-static PFN_glRenderbufferStorage _sapp_glRenderbufferStorage;
-typedef void  (GL_APIENTRY *PFN_glGenTextures)(GLsizei n, GLuint * textures);
-static PFN_glGenTextures _sapp_glGenTextures;
-typedef void  (GL_APIENTRY *PFN_glPolygonOffset)(GLfloat factor, GLfloat units);
-static PFN_glPolygonOffset _sapp_glPolygonOffset;
-typedef void  (GL_APIENTRY *PFN_glDrawElements)(GLenum mode, GLsizei count, GLenum type, const void * indices);
-static PFN_glDrawElements _sapp_glDrawElements;
-typedef void  (GL_APIENTRY *PFN_glDeleteFramebuffers)(GLsizei n, const GLuint * framebuffers);
-static PFN_glDeleteFramebuffers _sapp_glDeleteFramebuffers;
-typedef void  (GL_APIENTRY *PFN_glBlendEquationSeparate)(GLenum modeRGB, GLenum modeAlpha);
-static PFN_glBlendEquationSeparate _sapp_glBlendEquationSeparate;
-typedef void  (GL_APIENTRY *PFN_glDeleteTextures)(GLsizei n, const GLuint * textures);
-static PFN_glDeleteTextures _sapp_glDeleteTextures;
-typedef void  (GL_APIENTRY *PFN_glGetProgramiv)(GLuint program, GLenum pname, GLint * params);
-static PFN_glGetProgramiv _sapp_glGetProgramiv;
-typedef void  (GL_APIENTRY *PFN_glBindTexture)(GLenum target, GLuint texture);
-static PFN_glBindTexture _sapp_glBindTexture;
-typedef void  (GL_APIENTRY *PFN_glTexImage3D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels);
-static PFN_glTexImage3D _sapp_glTexImage3D;
-typedef GLuint (GL_APIENTRY *PFN_glCreateShader)(GLenum type);
-static PFN_glCreateShader _sapp_glCreateShader;
-typedef void  (GL_APIENTRY *PFN_glTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels);
-static PFN_glTexSubImage2D _sapp_glTexSubImage2D;
-typedef void  (GL_APIENTRY *PFN_glClearDepth)(GLdouble depth);
-static PFN_glClearDepth _sapp_glClearDepth;
-typedef void  (GL_APIENTRY *PFN_glFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-static PFN_glFramebufferTexture2D _sapp_glFramebufferTexture2D;
-typedef GLuint (GL_APIENTRY *PFN_glCreateProgram)();
-static PFN_glCreateProgram _sapp_glCreateProgram;
-typedef void  (GL_APIENTRY *PFN_glViewport)(GLint x, GLint y, GLsizei width, GLsizei height);
-static PFN_glViewport _sapp_glViewport;
-typedef void  (GL_APIENTRY *PFN_glDeleteBuffers)(GLsizei n, const GLuint * buffers);
-static PFN_glDeleteBuffers _sapp_glDeleteBuffers;
-typedef void  (GL_APIENTRY *PFN_glDrawArrays)(GLenum mode, GLint first, GLsizei count);
-static PFN_glDrawArrays _sapp_glDrawArrays;
-typedef void  (GL_APIENTRY *PFN_glDrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount);
-static PFN_glDrawElementsInstanced _sapp_glDrawElementsInstanced;
-typedef void  (GL_APIENTRY *PFN_glVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer);
-static PFN_glVertexAttribPointer _sapp_glVertexAttribPointer;
-typedef void  (GL_APIENTRY *PFN_glUniform1i)(GLint location, GLint v0);
-static PFN_glUniform1i _sapp_glUniform1i;
-typedef void  (GL_APIENTRY *PFN_glDisable)(GLenum cap);
-static PFN_glDisable _sapp_glDisable;
-typedef void  (GL_APIENTRY *PFN_glColorMask)(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
-static PFN_glColorMask _sapp_glColorMask;
-typedef void  (GL_APIENTRY *PFN_glBindBuffer)(GLenum target, GLuint buffer);
-static PFN_glBindBuffer _sapp_glBindBuffer;
-typedef void  (GL_APIENTRY *PFN_glDeleteVertexArrays)(GLsizei n, const GLuint * arrays);
-static PFN_glDeleteVertexArrays _sapp_glDeleteVertexArrays;
-typedef void  (GL_APIENTRY *PFN_glDepthMask)(GLboolean flag);
-static PFN_glDepthMask _sapp_glDepthMask;
-typedef void  (GL_APIENTRY *PFN_glDrawArraysInstanced)(GLenum mode, GLint first, GLsizei count, GLsizei instancecount);
-static PFN_glDrawArraysInstanced _sapp_glDrawArraysInstanced;
-typedef void  (GL_APIENTRY *PFN_glClearStencil)(GLint s);
-static PFN_glClearStencil _sapp_glClearStencil;
-typedef void  (GL_APIENTRY *PFN_glScissor)(GLint x, GLint y, GLsizei width, GLsizei height);
-static PFN_glScissor _sapp_glScissor;
-typedef void  (GL_APIENTRY *PFN_glUniform3fv)(GLint location, GLsizei count, const GLfloat * value);
-static PFN_glUniform3fv _sapp_glUniform3fv;
-typedef void  (GL_APIENTRY *PFN_glGenRenderbuffers)(GLsizei n, GLuint * renderbuffers);
-static PFN_glGenRenderbuffers _sapp_glGenRenderbuffers;
-typedef void  (GL_APIENTRY *PFN_glBufferData)(GLenum target, GLsizeiptr size, const void * data, GLenum usage);
-static PFN_glBufferData _sapp_glBufferData;
-typedef void  (GL_APIENTRY *PFN_glBlendFuncSeparate)(GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha);
-static PFN_glBlendFuncSeparate _sapp_glBlendFuncSeparate;
-typedef void  (GL_APIENTRY *PFN_glTexParameteri)(GLenum target, GLenum pname, GLint param);
-static PFN_glTexParameteri _sapp_glTexParameteri;
-typedef void  (GL_APIENTRY *PFN_glGetIntegerv)(GLenum pname, GLint * data);
-static PFN_glGetIntegerv _sapp_glGetIntegerv;
-typedef void  (GL_APIENTRY *PFN_glEnable)(GLenum cap);
-static PFN_glEnable _sapp_glEnable;
-typedef void  (GL_APIENTRY *PFN_glBlitFramebuffer)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
-static PFN_glBlitFramebuffer _sapp_glBlitFramebuffer;
-typedef void  (GL_APIENTRY *PFN_glStencilMask)(GLuint mask);
-static PFN_glStencilMask _sapp_glStencilMask;
-typedef void  (GL_APIENTRY *PFN_glAttachShader)(GLuint program, GLuint shader);
-static PFN_glAttachShader _sapp_glAttachShader;
-typedef GLenum (GL_APIENTRY *PFN_glGetError)();
-static PFN_glGetError _sapp_glGetError;
-typedef void  (GL_APIENTRY *PFN_glClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
-static PFN_glClearColor _sapp_glClearColor;
-typedef void  (GL_APIENTRY *PFN_glBlendColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
-static PFN_glBlendColor _sapp_glBlendColor;
-typedef void  (GL_APIENTRY *PFN_glTexParameterf)(GLenum target, GLenum pname, GLfloat param);
-static PFN_glTexParameterf _sapp_glTexParameterf;
-typedef void  (GL_APIENTRY *PFN_glTexParameterfv)(GLenum target, GLenum pname, GLfloat* params);
-static PFN_glTexParameterfv _sapp_glTexParameterfv;
-typedef void  (GL_APIENTRY *PFN_glGetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog);
-static PFN_glGetShaderInfoLog _sapp_glGetShaderInfoLog;
-typedef void  (GL_APIENTRY *PFN_glDepthFunc)(GLenum func);
-static PFN_glDepthFunc _sapp_glDepthFunc;
-typedef void  (GL_APIENTRY *PFN_glStencilOp)(GLenum fail, GLenum zfail, GLenum zpass);
-static PFN_glStencilOp _sapp_glStencilOp;
-typedef void  (GL_APIENTRY *PFN_glStencilFunc)(GLenum func, GLint ref, GLuint mask);
-static PFN_glStencilFunc _sapp_glStencilFunc;
-typedef void  (GL_APIENTRY *PFN_glEnableVertexAttribArray)(GLuint index);
-static PFN_glEnableVertexAttribArray _sapp_glEnableVertexAttribArray;
-typedef void  (GL_APIENTRY *PFN_glBlendFunc)(GLenum sfactor, GLenum dfactor);
-static PFN_glBlendFunc _sapp_glBlendFunc;
-typedef void  (GL_APIENTRY *PFN_glUniform1fv)(GLint location, GLsizei count, const GLfloat * value);
-static PFN_glUniform1fv _sapp_glUniform1fv;
-typedef void  (GL_APIENTRY *PFN_glReadBuffer)(GLenum src);
-static PFN_glReadBuffer _sapp_glReadBuffer;
-typedef void  (GL_APIENTRY *PFN_glClear)(GLbitfield mask);
-static PFN_glClear _sapp_glClear;
-typedef void  (GL_APIENTRY *PFN_glTexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels);
-static PFN_glTexImage2D _sapp_glTexImage2D;
-typedef void  (GL_APIENTRY *PFN_glGenVertexArrays)(GLsizei n, GLuint * arrays);
-static PFN_glGenVertexArrays _sapp_glGenVertexArrays;
-typedef void  (GL_APIENTRY *PFN_glFrontFace)(GLenum mode);
-static PFN_glFrontFace _sapp_glFrontFace;
-typedef void  (GL_APIENTRY *PFN_glCullFace)(GLenum mode);
-static PFN_glCullFace _sapp_glCullFace;
+// X Macro list of GL function names and signatures
+#define _SAPP_GL_FUNCS \
+    _SAPP_XMACRO(glBindVertexArray,                 void (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array)) \
+    _SAPP_XMACRO(glFramebufferTextureLayer,         void (GL_APIENTRY *PFN_glFramebufferTextureLayer)(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
+    _SAPP_XMACRO(glGenFramebuffers,                 void (GL_APIENTRY *PFN_glGenFramebuffers)(GLsizei n, GLuint * framebuffers)) \
+    _SAPP_XMACRO(glBindFramebuffer,                 void (GL_APIENTRY *PFN_glBindFramebuffer)(GLenum target, GLuint framebuffer)) \
+    _SAPP_XMACRO(glBindRenderbuffer,                void (GL_APIENTRY *PFN_glBindRenderbuffer)(GLenum target, GLuint renderbuffer)) \
+    _SAPP_XMACRO(glGetStringi,                      const GLubyte * (GL_APIENTRY *PFN_glGetStringi)(GLenum name, GLuint index)) \
+    _SAPP_XMACRO(glClearBufferfi,                   void (GL_APIENTRY *PFN_glClearBufferfi)(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
+    _SAPP_XMACRO(glClearBufferfv,                   void (GL_APIENTRY *PFN_glClearBufferfv)(GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
+    _SAPP_XMACRO(glClearBufferuiv,                  void (GL_APIENTRY *PFN_glClearBufferuiv)(GLenum buffer, GLint drawbuffer, const GLuint * value)) \
+    _SAPP_XMACRO(glDeleteRenderbuffers,             void (GL_APIENTRY *PFN_glDeleteRenderbuffers)(GLsizei n, const GLuint * renderbuffers)) \
+    _SAPP_XMACRO(glUniform4fv,                      void (GL_APIENTRY *PFN_glUniform4fv)(GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glUniform2fv,                      void (GL_APIENTRY *PFN_glUniform2fv)(GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glUseProgram,                      void (GL_APIENTRY *PFN_glUseProgram)(GLuint program)) \
+    _SAPP_XMACRO(glShaderSource,                    void (GL_APIENTRY *PFN_glShaderSource)(GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length)) \
+    _SAPP_XMACRO(glLinkProgram,                     void (GL_APIENTRY *PFN_glLinkProgram)(GLuint program)) \
+    _SAPP_XMACRO(glGetUniformLocation,              GLint (GL_APIENTRY *PFN_glGetUniformLocation)(GLuint program, const GLchar * name)) \
+    _SAPP_XMACRO(glGetShaderiv,                     void (GL_APIENTRY *PFN_glGetShaderiv)(GLuint shader, GLenum pname, GLint * params)) \
+    _SAPP_XMACRO(glGetProgramInfoLog,               void (GL_APIENTRY *PFN_glGetProgramInfoLog)(GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SAPP_XMACRO(glGetAttribLocation,               GLint(GL_APIENTRY *PFN_glGetAttribLocation)(GLuint program, const GLchar * name)) \
+    _SAPP_XMACRO(glDisableVertexAttribArray,        void (GL_APIENTRY *PFN_glDisableVertexAttribArray)(GLuint index)) \
+    _SAPP_XMACRO(glDeleteShader,                    void (GL_APIENTRY *PFN_glDeleteShader)(GLuint shader)) \
+    _SAPP_XMACRO(glDeleteProgram,                   void (GL_APIENTRY *PFN_glDeleteProgram)(GLuint program)) \
+    _SAPP_XMACRO(glCompileShader,                   void (GL_APIENTRY *PFN_glCompileShader)(GLuint shader)) \
+    _SAPP_XMACRO(glStencilFuncSeparate,             void (GL_APIENTRY *PFN_glStencilFuncSeparate)(GLenum face, GLenum func, GLint ref, GLuint mask)) \
+    _SAPP_XMACRO(glStencilOpSeparate,               void (GL_APIENTRY *PFN_glStencilOpSeparate)(GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
+    _SAPP_XMACRO(glRenderbufferStorageMultisample,  void (GL_APIENTRY *PFN_glRenderbufferStorageMultisample)(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glDrawBuffers,                     void (GL_APIENTRY *PFN_glDrawBuffers)(GLsizei n, const GLenum * bufs)) \
+    _SAPP_XMACRO(glVertexAttribDivisor,             void (GL_APIENTRY *PFN_glVertexAttribDivisor)(GLuint index, GLuint divisor)) \
+    _SAPP_XMACRO(glBufferSubData,                   void (GL_APIENTRY *PFN_glBufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size, const void * data)) \
+    _SAPP_XMACRO(glGenBuffers,                      void (GL_APIENTRY *PFN_glGenBuffers)(GLsizei n, GLuint * buffers)) \
+    _SAPP_XMACRO(glCheckFramebufferStatus,          GLenum (GL_APIENTRY *PFN_glCheckFramebufferStatus)(GLenum target)) \
+    _SAPP_XMACRO(glFramebufferRenderbuffer,         void (GL_APIENTRY *PFN_glFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
+    _SAPP_XMACRO(glCompressedTexImage2D,            void (GL_APIENTRY *PFN_glCompressedTexImage2D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data)) \
+    _SAPP_XMACRO(glCompressedTexImage3D,            void (GL_APIENTRY *PFN_glCompressedTexImage3D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data)) \
+    _SAPP_XMACRO(glActiveTexture,                   void (GL_APIENTRY *PFN_glActiveTexture)(GLenum texture)) \
+    _SAPP_XMACRO(glTexSubImage3D,                   void (GL_APIENTRY *PFN_glTexSubImage3D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glUniformMatrix4fv,                void (GL_APIENTRY *PFN_glUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)) \
+    _SAPP_XMACRO(glRenderbufferStorage,             void (GL_APIENTRY *PFN_glRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glGenTextures,                     void (GL_APIENTRY *PFN_glGenTextures)(GLsizei n, GLuint * textures)) \
+    _SAPP_XMACRO(glPolygonOffset,                   void (GL_APIENTRY *PFN_glPolygonOffset)(GLfloat factor, GLfloat units)) \
+    _SAPP_XMACRO(glDrawElements,                    void (GL_APIENTRY *PFN_glDrawElements)(GLenum mode, GLsizei count, GLenum type, const void * indices)) \
+    _SAPP_XMACRO(glDeleteFramebuffers,              void (GL_APIENTRY *PFN_glDeleteFramebuffers)(GLsizei n, const GLuint * framebuffers)) \
+    _SAPP_XMACRO(glBlendEquationSeparate,           void (GL_APIENTRY *PFN_glBlendEquationSeparate)(GLenum modeRGB, GLenum modeAlpha)) \
+    _SAPP_XMACRO(glDeleteTextures,                  void (GL_APIENTRY *PFN_glDeleteTextures)(GLsizei n, const GLuint * textures)) \
+    _SAPP_XMACRO(glGetProgramiv,                    void (GL_APIENTRY *PFN_glGetProgramiv)(GLuint program, GLenum pname, GLint * params)) \
+    _SAPP_XMACRO(glBindTexture,                     void (GL_APIENTRY *PFN_glBindTexture)(GLenum target, GLuint texture)) \
+    _SAPP_XMACRO(glTexImage3D,                      void (GL_APIENTRY *PFN_glTexImage3D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glCreateShader,                    GLuint (GL_APIENTRY *PFN_glCreateShader)(GLenum type)) \
+    _SAPP_XMACRO(glTexSubImage2D,                   void (GL_APIENTRY *PFN_glTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glClearDepth,                      void (GL_APIENTRY *PFN_glClearDepth)(GLdouble depth)) \
+    _SAPP_XMACRO(glFramebufferTexture2D,            void (GL_APIENTRY *PFN_glFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
+    _SAPP_XMACRO(glCreateProgram,                   GLuint (GL_APIENTRY *PFN_glCreateProgram)(void)) \
+    _SAPP_XMACRO(glViewport,                        void (GL_APIENTRY *PFN_glViewport)(GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glDeleteBuffers,                   void (GL_APIENTRY *PFN_glDeleteBuffers)(GLsizei n, const GLuint * buffers)) \
+    _SAPP_XMACRO(glDrawArrays,                      void (GL_APIENTRY *PFN_glDrawArrays)(GLenum mode, GLint first, GLsizei count)) \
+    _SAPP_XMACRO(glDrawElementsInstanced,           void (GL_APIENTRY *PFN_glDrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
+    _SAPP_XMACRO(glVertexAttribPointer,             void (GL_APIENTRY *PFN_glVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
+    _SAPP_XMACRO(glUniform1i,                       void (GL_APIENTRY *PFN_glUniform1i)(GLint location, GLint v0)) \
+    _SAPP_XMACRO(glDisable,                         void (GL_APIENTRY *PFN_glDisable)(GLenum cap)) \
+    _SAPP_XMACRO(glColorMask,                       void (GL_APIENTRY *PFN_glColorMask)(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SAPP_XMACRO(glBindBuffer,                      void (GL_APIENTRY *PFN_glBindBuffer)(GLenum target, GLuint buffer)) \
+    _SAPP_XMACRO(glDeleteVertexArrays,              void (GL_APIENTRY *PFN_glDeleteVertexArrays)(GLsizei n, const GLuint * arrays)) \
+    _SAPP_XMACRO(glDepthMask,                       void (GL_APIENTRY *PFN_glDepthMask)(GLboolean flag)) \
+    _SAPP_XMACRO(glDrawArraysInstanced,             void (GL_APIENTRY *PFN_glDrawArraysInstanced)(GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
+    _SAPP_XMACRO(glClearStencil,                    void (GL_APIENTRY *PFN_glClearStencil)(GLint s)) \
+    _SAPP_XMACRO(glScissor,                         void (GL_APIENTRY *PFN_glScissor)(GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glUniform3fv,                      void (GL_APIENTRY *PFN_glUniform3fv)(GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glGenRenderbuffers,                void (GL_APIENTRY *PFN_glGenRenderbuffers)(GLsizei n, GLuint * renderbuffers)) \
+    _SAPP_XMACRO(glBufferData,                      void (GL_APIENTRY *PFN_glBufferData)(GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
+    _SAPP_XMACRO(glBlendFuncSeparate,               void (GL_APIENTRY *PFN_glBlendFuncSeparate)(GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)) \
+    _SAPP_XMACRO(glTexParameteri,                   void (GL_APIENTRY *PFN_glTexParameteri)(GLenum target, GLenum pname, GLint param)) \
+    _SAPP_XMACRO(glGetIntegerv,                     void (GL_APIENTRY *PFN_glGetIntegerv)(GLenum pname, GLint * data)) \
+    _SAPP_XMACRO(glEnable,                          void (GL_APIENTRY *PFN_glEnable)(GLenum cap)) \
+    _SAPP_XMACRO(glBlitFramebuffer,                 void (GL_APIENTRY *PFN_glBlitFramebuffer)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
+    _SAPP_XMACRO(glStencilMask,                     void (GL_APIENTRY *PFN_glStencilMask)(GLuint mask)) \
+    _SAPP_XMACRO(glAttachShader,                    void (GL_APIENTRY *PFN_glAttachShader)(GLuint program, GLuint shader)) \
+    _SAPP_XMACRO(glGetError,                        GLenum (GL_APIENTRY *PFN_glGetError)(void)) \
+    _SAPP_XMACRO(glClearColor,                      void (GL_APIENTRY *PFN_glClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SAPP_XMACRO(glBlendColor,                      void (GL_APIENTRY *PFN_glBlendColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SAPP_XMACRO(glTexParameterf,                   void (GL_APIENTRY *PFN_glTexParameterf)(GLenum target, GLenum pname, GLfloat param)) \
+    _SAPP_XMACRO(glTexParameterfv,                  void (GL_APIENTRY *PFN_glTexParameterfv)(GLenum target, GLenum pname, GLfloat* params)) \
+    _SAPP_XMACRO(glGetShaderInfoLog,                void (GL_APIENTRY *PFN_glGetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SAPP_XMACRO(glDepthFunc,                       void (GL_APIENTRY *PFN_glDepthFunc)(GLenum func)) \
+    _SAPP_XMACRO(glStencilOp ,                      void  (GL_APIENTRY *PFN_glStencilOp)(GLenum fail, GLenum zfail, GLenum zpass)) \
+    _SAPP_XMACRO(glStencilFunc,                     void  (GL_APIENTRY *PFN_glStencilFunc)(GLenum func, GLint ref, GLuint mask)) \
+    _SAPP_XMACRO(glEnableVertexAttribArray,         void  (GL_APIENTRY *PFN_glEnableVertexAttribArray)(GLuint index)) \
+    _SAPP_XMACRO(glBlendFunc,                       void  (GL_APIENTRY *PFN_glBlendFunc)(GLenum sfactor, GLenum dfactor)) \
+    _SAPP_XMACRO(glUniform1fv,                      void  (GL_APIENTRY *PFN_glUniform1fv)(GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glReadBuffer,                      void  (GL_APIENTRY *PFN_glReadBuffer)(GLenum src)) \
+    _SAPP_XMACRO(glClear,                           void  (GL_APIENTRY *PFN_glClear)(GLbitfield mask)) \
+    _SAPP_XMACRO(glTexImage2D,                      void  (GL_APIENTRY *PFN_glTexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glGenVertexArrays,                 void  (GL_APIENTRY *PFN_glGenVertexArrays)(GLsizei n, GLuint * arrays)) \
+    _SAPP_XMACRO(glFrontFace,                       void  (GL_APIENTRY *PFN_glFrontFace)(GLenum mode)) \
+    _SAPP_XMACRO(glCullFace,                        void  (GL_APIENTRY *PFN_glCullFace)(GLenum mode))
 
+// generate GL function pointer typedefs
+#define _SAPP_XMACRO(func, proto) typedef proto;
+_SAPP_GL_FUNCS
+#undef _SAPP_XMACRO
+
+// generate GL function pointers
+#define _SAPP_XMACRO(func, proto) static PFN_ ## func func;
+_SAPP_GL_FUNCS
+#undef _SAPP_XMACRO
+
+// helper function to lookup GL functions in GL DLL
 _SOKOL_PRIVATE void* _sapp_win32_glgetprocaddr(const char* name) {
     void* proc_addr = (void*) _sapp.wgl.GetProcAddress(name);
     if (0 == proc_addr) {
@@ -4137,204 +4056,17 @@ _SOKOL_PRIVATE void* _sapp_win32_glgetprocaddr(const char* name) {
     return proc_addr;
 }
 
-#define _SAPP_GLPROC(name) _sapp_ ## name = (PFN_ ## name) _sapp_win32_glgetprocaddr(#name)
-
+// populate GL function pointers
 _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
     SOKOL_ASSERT(_sapp.wgl.GetProcAddress);
     SOKOL_ASSERT(_sapp.wgl.opengl32);
-    _SAPP_GLPROC(glBindVertexArray);
-    _SAPP_GLPROC(glFramebufferTextureLayer);
-    _SAPP_GLPROC(glGenFramebuffers);
-    _SAPP_GLPROC(glBindFramebuffer);
-    _SAPP_GLPROC(glBindRenderbuffer);
-    _SAPP_GLPROC(glGetStringi);
-    _SAPP_GLPROC(glClearBufferfi);
-    _SAPP_GLPROC(glClearBufferfv);
-    _SAPP_GLPROC(glClearBufferuiv);
-    _SAPP_GLPROC(glDeleteRenderbuffers);
-    _SAPP_GLPROC(glUniform4fv);
-    _SAPP_GLPROC(glUniform2fv);
-    _SAPP_GLPROC(glUseProgram);
-    _SAPP_GLPROC(glShaderSource);
-    _SAPP_GLPROC(glLinkProgram);
-    _SAPP_GLPROC(glGetUniformLocation);
-    _SAPP_GLPROC(glGetShaderiv);
-    _SAPP_GLPROC(glGetProgramInfoLog);
-    _SAPP_GLPROC(glGetAttribLocation);
-    _SAPP_GLPROC(glDisableVertexAttribArray);
-    _SAPP_GLPROC(glDeleteShader);
-    _SAPP_GLPROC(glDeleteProgram);
-    _SAPP_GLPROC(glCompileShader);
-    _SAPP_GLPROC(glStencilFuncSeparate);
-    _SAPP_GLPROC(glStencilOpSeparate);
-    _SAPP_GLPROC(glRenderbufferStorageMultisample);
-    _SAPP_GLPROC(glDrawBuffers);
-    _SAPP_GLPROC(glVertexAttribDivisor);
-    _SAPP_GLPROC(glBufferSubData);
-    _SAPP_GLPROC(glGenBuffers);
-    _SAPP_GLPROC(glCheckFramebufferStatus);
-    _SAPP_GLPROC(glFramebufferRenderbuffer);
-    _SAPP_GLPROC(glCompressedTexImage2D);
-    _SAPP_GLPROC(glCompressedTexImage3D);
-    _SAPP_GLPROC(glActiveTexture);
-    _SAPP_GLPROC(glTexSubImage3D);
-    _SAPP_GLPROC(glUniformMatrix4fv);
-    _SAPP_GLPROC(glRenderbufferStorage);
-    _SAPP_GLPROC(glGenTextures);
-    _SAPP_GLPROC(glPolygonOffset);
-    _SAPP_GLPROC(glDrawElements);
-    _SAPP_GLPROC(glDeleteFramebuffers);
-    _SAPP_GLPROC(glBlendEquationSeparate);
-    _SAPP_GLPROC(glDeleteTextures);
-    _SAPP_GLPROC(glGetProgramiv);
-    _SAPP_GLPROC(glBindTexture);
-    _SAPP_GLPROC(glTexImage3D);
-    _SAPP_GLPROC(glCreateShader);
-    _SAPP_GLPROC(glTexSubImage2D);
-    _SAPP_GLPROC(glClearDepth);
-    _SAPP_GLPROC(glFramebufferTexture2D);
-    _SAPP_GLPROC(glCreateProgram);
-    _SAPP_GLPROC(glViewport);
-    _SAPP_GLPROC(glDeleteBuffers);
-    _SAPP_GLPROC(glDrawArrays);
-    _SAPP_GLPROC(glDrawElementsInstanced);
-    _SAPP_GLPROC(glVertexAttribPointer);
-    _SAPP_GLPROC(glUniform1i);
-    _SAPP_GLPROC(glDisable);
-    _SAPP_GLPROC(glColorMask);
-    _SAPP_GLPROC(glBindBuffer);
-    _SAPP_GLPROC(glDeleteVertexArrays);
-    _SAPP_GLPROC(glDepthMask);
-    _SAPP_GLPROC(glDrawArraysInstanced);
-    _SAPP_GLPROC(glClearStencil);
-    _SAPP_GLPROC(glScissor);
-    _SAPP_GLPROC(glUniform3fv);
-    _SAPP_GLPROC(glGenRenderbuffers);
-    _SAPP_GLPROC(glBufferData);
-    _SAPP_GLPROC(glBlendFuncSeparate);
-    _SAPP_GLPROC(glTexParameteri);
-    _SAPP_GLPROC(glGetIntegerv);
-    _SAPP_GLPROC(glEnable);
-    _SAPP_GLPROC(glBlitFramebuffer);
-    _SAPP_GLPROC(glStencilMask);
-    _SAPP_GLPROC(glAttachShader);
-    _SAPP_GLPROC(glGetError);
-    _SAPP_GLPROC(glClearColor);
-    _SAPP_GLPROC(glBlendColor);
-    _SAPP_GLPROC(glTexParameterf);
-    _SAPP_GLPROC(glTexParameterfv);
-    _SAPP_GLPROC(glGetShaderInfoLog);
-    _SAPP_GLPROC(glDepthFunc);
-    _SAPP_GLPROC(glStencilOp);
-    _SAPP_GLPROC(glStencilFunc);
-    _SAPP_GLPROC(glEnableVertexAttribArray);
-    _SAPP_GLPROC(glBlendFunc);
-    _SAPP_GLPROC(glUniform1fv);
-    _SAPP_GLPROC(glReadBuffer);
-    _SAPP_GLPROC(glClear);
-    _SAPP_GLPROC(glTexImage2D);
-    _SAPP_GLPROC(glGenVertexArrays);
-    _SAPP_GLPROC(glFrontFace);
-    _SAPP_GLPROC(glCullFace);
+    #define _SAPP_XMACRO(func, proto) func = (PFN_ ## func) _sapp_win32_glgetprocaddr(#func);
+    _SAPP_GL_FUNCS
+    #undef _SAPP_XMACRO
 }
-#define glBindVertexArray _sapp_glBindVertexArray
-#define glFramebufferTextureLayer _sapp_glFramebufferTextureLayer
-#define glGenFramebuffers _sapp_glGenFramebuffers
-#define glBindFramebuffer _sapp_glBindFramebuffer
-#define glBindRenderbuffer _sapp_glBindRenderbuffer
-#define glGetStringi _sapp_glGetStringi
-#define glClearBufferfi _sapp_glClearBufferfi
-#define glClearBufferfv _sapp_glClearBufferfv
-#define glClearBufferuiv _sapp_glClearBufferuiv
-#define glDeleteRenderbuffers _sapp_glDeleteRenderbuffers
-#define glUniform4fv _sapp_glUniform4fv
-#define glUniform2fv _sapp_glUniform2fv
-#define glUseProgram _sapp_glUseProgram
-#define glShaderSource _sapp_glShaderSource
-#define glLinkProgram _sapp_glLinkProgram
-#define glGetUniformLocation _sapp_glGetUniformLocation
-#define glGetShaderiv _sapp_glGetShaderiv
-#define glGetProgramInfoLog _sapp_glGetProgramInfoLog
-#define glGetAttribLocation _sapp_glGetAttribLocation
-#define glDisableVertexAttribArray _sapp_glDisableVertexAttribArray
-#define glDeleteShader _sapp_glDeleteShader
-#define glDeleteProgram _sapp_glDeleteProgram
-#define glCompileShader _sapp_glCompileShader
-#define glStencilFuncSeparate _sapp_glStencilFuncSeparate
-#define glStencilOpSeparate _sapp_glStencilOpSeparate
-#define glRenderbufferStorageMultisample _sapp_glRenderbufferStorageMultisample
-#define glDrawBuffers _sapp_glDrawBuffers
-#define glVertexAttribDivisor _sapp_glVertexAttribDivisor
-#define glBufferSubData _sapp_glBufferSubData
-#define glGenBuffers _sapp_glGenBuffers
-#define glCheckFramebufferStatus _sapp_glCheckFramebufferStatus
-#define glFramebufferRenderbuffer _sapp_glFramebufferRenderbuffer
-#define glCompressedTexImage2D _sapp_glCompressedTexImage2D
-#define glCompressedTexImage3D _sapp_glCompressedTexImage3D
-#define glActiveTexture _sapp_glActiveTexture
-#define glTexSubImage3D _sapp_glTexSubImage3D
-#define glUniformMatrix4fv _sapp_glUniformMatrix4fv
-#define glRenderbufferStorage _sapp_glRenderbufferStorage
-#define glGenTextures _sapp_glGenTextures
-#define glPolygonOffset _sapp_glPolygonOffset
-#define glDrawElements _sapp_glDrawElements
-#define glDeleteFramebuffers _sapp_glDeleteFramebuffers
-#define glBlendEquationSeparate _sapp_glBlendEquationSeparate
-#define glDeleteTextures _sapp_glDeleteTextures
-#define glGetProgramiv _sapp_glGetProgramiv
-#define glBindTexture _sapp_glBindTexture
-#define glTexImage3D _sapp_glTexImage3D
-#define glCreateShader _sapp_glCreateShader
-#define glTexSubImage2D _sapp_glTexSubImage2D
-#define glClearDepth _sapp_glClearDepth
-#define glFramebufferTexture2D _sapp_glFramebufferTexture2D
-#define glCreateProgram _sapp_glCreateProgram
-#define glViewport _sapp_glViewport
-#define glDeleteBuffers _sapp_glDeleteBuffers
-#define glDrawArrays _sapp_glDrawArrays
-#define glDrawElementsInstanced _sapp_glDrawElementsInstanced
-#define glVertexAttribPointer _sapp_glVertexAttribPointer
-#define glUniform1i _sapp_glUniform1i
-#define glDisable _sapp_glDisable
-#define glColorMask _sapp_glColorMask
-#define glBindBuffer _sapp_glBindBuffer
-#define glDeleteVertexArrays _sapp_glDeleteVertexArrays
-#define glDepthMask _sapp_glDepthMask
-#define glDrawArraysInstanced _sapp_glDrawArraysInstanced
-#define glClearStencil _sapp_glClearStencil
-#define glScissor _sapp_glScissor
-#define glUniform3fv _sapp_glUniform3fv
-#define glGenRenderbuffers _sapp_glGenRenderbuffers
-#define glBufferData _sapp_glBufferData
-#define glBlendFuncSeparate _sapp_glBlendFuncSeparate
-#define glTexParameteri _sapp_glTexParameteri
-#define glGetIntegerv _sapp_glGetIntegerv
-#define glEnable _sapp_glEnable
-#define glBlitFramebuffer _sapp_glBlitFramebuffer
-#define glStencilMask _sapp_glStencilMask
-#define glAttachShader _sapp_glAttachShader
-#define glGetError _sapp_glGetError
-#define glClearColor _sapp_glClearColor
-#define glBlendColor _sapp_glBlendColor
-#define glTexParameterf _sapp_glTexParameterf
-#define glTexParameterfv _sapp_glTexParameterfv
-#define glGetShaderInfoLog _sapp_glGetShaderInfoLog
-#define glDepthFunc _sapp_glDepthFunc
-#define glStencilOp _sapp_glStencilOp
-#define glStencilFunc _sapp_glStencilFunc
-#define glEnableVertexAttribArray _sapp_glEnableVertexAttribArray
-#define glBlendFunc _sapp_glBlendFunc
-#define glUniform1fv _sapp_glUniform1fv
-#define glReadBuffer _sapp_glReadBuffer
-#define glClear _sapp_glClear
-#define glTexImage2D _sapp_glTexImage2D
-#define glGenVertexArrays _sapp_glGenVertexArrays
-#define glFrontFace _sapp_glFrontFace
-#define glCullFace _sapp_glCullFace
 
-#endif /* SOKOL_WIN32_NO_GL_LOADER */
-
-#endif /* SOKOL_GLCORE33 */
+#endif // SOKOL_WIN32_NO_GL_LOADER
+#endif // SOKOL_GLCORE33
 
 #if defined(SOKOL_D3D11)
 #define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
