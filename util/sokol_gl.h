@@ -2764,6 +2764,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     SOKOL_FREE(_sgl.vertices); _sgl.vertices = 0;
     SOKOL_FREE(_sgl.uniforms); _sgl.uniforms = 0;
     SOKOL_FREE(_sgl.commands); _sgl.commands = 0;
+    sg_push_debug_group("sokol-gl");
     sg_destroy_buffer(_sgl.vbuf);
     sg_destroy_image(_sgl.def_img);
     sg_destroy_shader(_sgl.shd);
@@ -2771,6 +2772,7 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
         _sgl_pipeline_t* pip = &_sgl.pip_pool.pips[i];
         _sgl_destroy_pipeline(_sgl_make_pip_id(pip->slot.id));
     }
+    sg_pop_debug_group();
     _sgl_discard_pipeline_pool();
     _sgl.init_cookie = 0;
 }

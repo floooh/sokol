@@ -1802,11 +1802,13 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
         igDestroyContext(0);
     #endif
     /* NOTE: it's valid to call the destroy funcs with SG_INVALID_ID */
+    sg_push_debug_group("sokol-imgui");
     sg_destroy_pipeline(_simgui.pip);
     sg_destroy_shader(_simgui.shd);
     sg_destroy_image(_simgui.img);
     sg_destroy_buffer(_simgui.ibuf);
     sg_destroy_buffer(_simgui.vbuf);
+    sg_pop_debug_group();
 }
 
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
