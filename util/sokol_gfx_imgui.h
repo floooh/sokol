@@ -2632,6 +2632,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
         igPushStyleColorU32(ImGuiCol_Text, item->color);
+        igPushIDInt(i);
         if (item->cmd == SG_IMGUI_CMD_PUSH_DEBUG_GROUP) {
             if (group_stack & 1) {
                 group_stack <<= 1;
@@ -2651,15 +2652,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
             group_stack >>= 1;
         }
         else if (group_stack & 1) {
-            igPushIDInt(i);
             if (igSelectable(item_string.buf, ctx->capture.sel_item == i, 0, IMVEC2(0,0))) {
                 ctx->capture.sel_item = i;
             }
             if (igIsItemHovered(0)) {
                 igSetTooltip("%s", item_string.buf);
             }
-            igPopID();
         }
+        igPopID();
         igPopStyleColor(1);
     }
     igEndChild();
