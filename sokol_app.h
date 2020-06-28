@@ -1245,21 +1245,23 @@ typedef struct {
 /*== EMSCRIPTEN DECLARATIONS =================================================*/
 #if defined(_SAPP_EMSCRIPTEN)
 typedef struct {
+    int state;
+    WGPUDevice device;
+    WGPUSwapChain swapchain;
+    WGPUTextureFormat render_format;
+    WGPUTexture msaa_tex;
+    WGPUTexture depth_stencil_tex;
+    WGPUTextureView swapchain_view;
+    WGPUTextureView msaa_view;
+    WGPUTextureView depth_stencil_view;
+} _sapp_wgpu_t;
+
+typedef struct {
     bool textfield_created;
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     #if defined(SOKOL_WGPU)
-    struct {
-        int state;
-        WGPUDevice device;
-        WGPUSwapChain swapchain;
-        WGPUTextureFormat render_format;
-        WGPUTexture msaa_tex;
-        WGPUTexture depth_stencil_tex;
-        WGPUTextureView swapchain_view;
-        WGPUTextureView msaa_view;
-        WGPUTextureView depth_stencil_view;
-    } wgpu;
+    _sapp_wgpu_t wgpu;
     #endif
 } _sapp_emsc_t;
 #endif // _SAPP_EMSCROPTEN
@@ -1282,24 +1284,19 @@ typedef enum MONITOR_DPI_TYPE {
 } MONITOR_DPI_TYPE;
 #endif /*DPI_ENUMS_DECLARED*/
 
-typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
-typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
-typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+typedef struct {
+    bool aware;
+    float content_scale;
+    float window_scale;
+    float mouse_scale;
+} _sapp_win32_dpi_t;
 
 typedef struct {
     HWND hwnd;
     HDC dc;
     bool in_create_window;
     bool iconified;
-    struct {
-        bool aware;
-        float content_scale;
-        float window_scale;
-        float mouse_scale;
-        SETPROCESSDPIAWARE_T setprocessdpiaware;
-        SETPROCESSDPIAWARENESS_T setprocessdpiawareness;
-        GETDPIFORMONITOR_T getdpiformonitor;
-    } dpi;
+    _sapp_win32_dpi_t dpi;
 } _sapp_win32_t;
 
 #if defined(SOKOL_D3D11)
@@ -4588,7 +4585,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
         if (_sapp_wgl_attrib(n, WGL_DOUBLE_BUFFER_ARB)) {
             u->doublebuffer = true;
         }
-        if (_sapp.arb.multisample) {
+        if (_sapp.wgl.arb_multisample) {
             u->samples = _sapp_wgl_attrib(n, WGL_SAMPLES_ARB);
         }
         u->handle = n;
@@ -4713,8 +4710,8 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     if (!_sapp.fullscreen) {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.desc.width * _sapp.win32.window_scale);
-        rect.bottom = (int) ((float)_sapp.desc.height * _sapp.win32.window_scale);
+        rect.right = (int) ((float)_sapp.desc.width * _sapp.win32.dpi.window_scale);
+        rect.bottom = (int) ((float)_sapp.desc.height * _sapp.win32.dpi.window_scale);
     }
     else {
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
@@ -4871,10 +4868,10 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.window_scale);
-        const int fb_width = (int)((float)_sapp.window_width * _sapp.win32.content_scale);
-        const int fb_height = (int)((float)_sapp.window_height * _sapp.win32.content_scale);
+        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
+        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
+        const int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
+        const int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
         if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
             _sapp.framebuffer_width = fb_width;
             _sapp.framebuffer_height = fb_height;
@@ -5047,8 +5044,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
-                _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.win32.mouse_scale;
-                _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.mouse_scale;
+                _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
                 if (!_sapp.win32_mouse_tracked) {
                     _sapp.win32_mouse_tracked = true;
                     TRACKMOUSEEVENT tme;
@@ -5110,8 +5107,8 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     }
     else {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.window_width * _sapp.win32.window_scale);
-        rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.window_scale);
+        rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
+        rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
     }
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
@@ -5143,19 +5140,24 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
-    SOKOL_ASSERT(0 == _sapp.win32.setprocessdpiaware);
-    SOKOL_ASSERT(0 == _sapp.win32.setprocessdpiawareness);
-    SOKOL_ASSERT(0 == _sapp.win32.getdpiformonitor);
+    
+    typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
+    typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
+    typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+
+    SETPROCESSDPIAWARE_T fn_setprocessdpiaware = 0;
+    SETPROCESSDPIAWARENESS_T fn_setprocessdpiawareness = 0;
+    GETDPIFORMONITOR_T fn_getdpiformonitor = 0;
     HINSTANCE user32 = LoadLibraryA("user32.dll");
     if (user32) {
-        _sapp.win32.setprocessdpiaware = (SETPROCESSDPIAWARE_T) GetProcAddress(user32, "SetProcessDPIAware");
+        fn_setprocessdpiaware = (SETPROCESSDPIAWARE_T) GetProcAddress(user32, "SetProcessDPIAware");
     }
     HINSTANCE shcore = LoadLibraryA("shcore.dll");
     if (shcore) {
-        _sapp.win32.setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T) GetProcAddress(shcore, "SetProcessDpiAwareness");
-        _sapp.win32.getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
+        fn_setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T) GetProcAddress(shcore, "SetProcessDpiAwareness");
+        fn_getdpiformonitor = (GETDPIFORMONITOR_T) GetProcAddress(shcore, "GetDpiForMonitor");
     }
-    if (_sapp.win32.setprocessdpiawareness) {
+    if (fn_setprocessdpiawareness) {
         /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
         PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
         _sapp.win32.dpi.aware = true;
@@ -5163,35 +5165,35 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
             process_dpi_awareness = PROCESS_DPI_UNAWARE;
             _sapp.win32.dpi.aware = false;
         }
-        _sapp.win32.dpi.setprocessdpiawareness(process_dpi_awareness);
+        fn_setprocessdpiawareness(process_dpi_awareness);
     }
-    else if (_sapp.win32.setprocessdpiaware) {
-        _sapp.win32.setprocessdpiaware();
+    else if (fn_setprocessdpiaware) {
+        fn_setprocessdpiaware();
         _sapp.win32.dpi.aware = true;
     }
     /* get dpi scale factor for main monitor */
-    if (_sapp.win32.getdpiformonitor && _sapp.win32.dpi.aware) {
+    if (fn_getdpiformonitor && _sapp.win32.dpi.aware) {
         POINT pt = { 1, 1 };
         HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         UINT dpix, dpiy;
-        HRESULT hr = _sapp.win32.getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
+        HRESULT hr = fn_getdpiformonitor(hm, MDT_EFFECTIVE_DPI, &dpix, &dpiy);
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr));
         /* clamp window scale to an integer factor */
-        _sapp.win32.window_scale = (float)dpix / 96.0f;
+        _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
     }
     else {
-        _sapp.win32.window_scale = 1.0f;
+        _sapp.win32.dpi.window_scale = 1.0f;
     }
     if (_sapp.desc.high_dpi) {
-        _sapp.win32.content_scale = _sapp.win32.window_scale;
-        _sapp.win32.mouse_scale = 1.0f;
+        _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
+        _sapp.win32.dpi.mouse_scale = 1.0f;
     }
     else {
-        _sapp.win32.content_scale = 1.0f;
-        _sapp.win32.mouse_scale = 1.0f / _sapp.win32.window_scale;
+        _sapp.win32.dpi.content_scale = 1.0f;
+        _sapp.win32.dpi.mouse_scale = 1.0f / _sapp.win32.dpi.window_scale;
     }
-    _sapp.dpi_scale = _sapp.win32.content_scale;
+    _sapp.dpi_scale = _sapp.win32.dpi.content_scale;
     if (user32) {
         FreeLibrary(user32);
     }
