@@ -1830,108 +1830,108 @@ typedef int  GLint;
 
 // X Macro list of GL function names and signatures
 #define _SAPP_GL_FUNCS \
-    _SAPP_XMACRO(glBindVertexArray,                 void (GL_APIENTRY *PFN_glBindVertexArray)(GLuint array)) \
-    _SAPP_XMACRO(glFramebufferTextureLayer,         void (GL_APIENTRY *PFN_glFramebufferTextureLayer)(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
-    _SAPP_XMACRO(glGenFramebuffers,                 void (GL_APIENTRY *PFN_glGenFramebuffers)(GLsizei n, GLuint * framebuffers)) \
-    _SAPP_XMACRO(glBindFramebuffer,                 void (GL_APIENTRY *PFN_glBindFramebuffer)(GLenum target, GLuint framebuffer)) \
-    _SAPP_XMACRO(glBindRenderbuffer,                void (GL_APIENTRY *PFN_glBindRenderbuffer)(GLenum target, GLuint renderbuffer)) \
-    _SAPP_XMACRO(glGetStringi,                      const GLubyte * (GL_APIENTRY *PFN_glGetStringi)(GLenum name, GLuint index)) \
-    _SAPP_XMACRO(glClearBufferfi,                   void (GL_APIENTRY *PFN_glClearBufferfi)(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
-    _SAPP_XMACRO(glClearBufferfv,                   void (GL_APIENTRY *PFN_glClearBufferfv)(GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
-    _SAPP_XMACRO(glClearBufferuiv,                  void (GL_APIENTRY *PFN_glClearBufferuiv)(GLenum buffer, GLint drawbuffer, const GLuint * value)) \
-    _SAPP_XMACRO(glDeleteRenderbuffers,             void (GL_APIENTRY *PFN_glDeleteRenderbuffers)(GLsizei n, const GLuint * renderbuffers)) \
-    _SAPP_XMACRO(glUniform4fv,                      void (GL_APIENTRY *PFN_glUniform4fv)(GLint location, GLsizei count, const GLfloat * value)) \
-    _SAPP_XMACRO(glUniform2fv,                      void (GL_APIENTRY *PFN_glUniform2fv)(GLint location, GLsizei count, const GLfloat * value)) \
-    _SAPP_XMACRO(glUseProgram,                      void (GL_APIENTRY *PFN_glUseProgram)(GLuint program)) \
-    _SAPP_XMACRO(glShaderSource,                    void (GL_APIENTRY *PFN_glShaderSource)(GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length)) \
-    _SAPP_XMACRO(glLinkProgram,                     void (GL_APIENTRY *PFN_glLinkProgram)(GLuint program)) \
-    _SAPP_XMACRO(glGetUniformLocation,              GLint (GL_APIENTRY *PFN_glGetUniformLocation)(GLuint program, const GLchar * name)) \
-    _SAPP_XMACRO(glGetShaderiv,                     void (GL_APIENTRY *PFN_glGetShaderiv)(GLuint shader, GLenum pname, GLint * params)) \
-    _SAPP_XMACRO(glGetProgramInfoLog,               void (GL_APIENTRY *PFN_glGetProgramInfoLog)(GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
-    _SAPP_XMACRO(glGetAttribLocation,               GLint(GL_APIENTRY *PFN_glGetAttribLocation)(GLuint program, const GLchar * name)) \
-    _SAPP_XMACRO(glDisableVertexAttribArray,        void (GL_APIENTRY *PFN_glDisableVertexAttribArray)(GLuint index)) \
-    _SAPP_XMACRO(glDeleteShader,                    void (GL_APIENTRY *PFN_glDeleteShader)(GLuint shader)) \
-    _SAPP_XMACRO(glDeleteProgram,                   void (GL_APIENTRY *PFN_glDeleteProgram)(GLuint program)) \
-    _SAPP_XMACRO(glCompileShader,                   void (GL_APIENTRY *PFN_glCompileShader)(GLuint shader)) \
-    _SAPP_XMACRO(glStencilFuncSeparate,             void (GL_APIENTRY *PFN_glStencilFuncSeparate)(GLenum face, GLenum func, GLint ref, GLuint mask)) \
-    _SAPP_XMACRO(glStencilOpSeparate,               void (GL_APIENTRY *PFN_glStencilOpSeparate)(GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
-    _SAPP_XMACRO(glRenderbufferStorageMultisample,  void (GL_APIENTRY *PFN_glRenderbufferStorageMultisample)(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)) \
-    _SAPP_XMACRO(glDrawBuffers,                     void (GL_APIENTRY *PFN_glDrawBuffers)(GLsizei n, const GLenum * bufs)) \
-    _SAPP_XMACRO(glVertexAttribDivisor,             void (GL_APIENTRY *PFN_glVertexAttribDivisor)(GLuint index, GLuint divisor)) \
-    _SAPP_XMACRO(glBufferSubData,                   void (GL_APIENTRY *PFN_glBufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size, const void * data)) \
-    _SAPP_XMACRO(glGenBuffers,                      void (GL_APIENTRY *PFN_glGenBuffers)(GLsizei n, GLuint * buffers)) \
-    _SAPP_XMACRO(glCheckFramebufferStatus,          GLenum (GL_APIENTRY *PFN_glCheckFramebufferStatus)(GLenum target)) \
-    _SAPP_XMACRO(glFramebufferRenderbuffer,         void (GL_APIENTRY *PFN_glFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
-    _SAPP_XMACRO(glCompressedTexImage2D,            void (GL_APIENTRY *PFN_glCompressedTexImage2D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data)) \
-    _SAPP_XMACRO(glCompressedTexImage3D,            void (GL_APIENTRY *PFN_glCompressedTexImage3D)(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data)) \
-    _SAPP_XMACRO(glActiveTexture,                   void (GL_APIENTRY *PFN_glActiveTexture)(GLenum texture)) \
-    _SAPP_XMACRO(glTexSubImage3D,                   void (GL_APIENTRY *PFN_glTexSubImage3D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels)) \
-    _SAPP_XMACRO(glUniformMatrix4fv,                void (GL_APIENTRY *PFN_glUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)) \
-    _SAPP_XMACRO(glRenderbufferStorage,             void (GL_APIENTRY *PFN_glRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
-    _SAPP_XMACRO(glGenTextures,                     void (GL_APIENTRY *PFN_glGenTextures)(GLsizei n, GLuint * textures)) \
-    _SAPP_XMACRO(glPolygonOffset,                   void (GL_APIENTRY *PFN_glPolygonOffset)(GLfloat factor, GLfloat units)) \
-    _SAPP_XMACRO(glDrawElements,                    void (GL_APIENTRY *PFN_glDrawElements)(GLenum mode, GLsizei count, GLenum type, const void * indices)) \
-    _SAPP_XMACRO(glDeleteFramebuffers,              void (GL_APIENTRY *PFN_glDeleteFramebuffers)(GLsizei n, const GLuint * framebuffers)) \
-    _SAPP_XMACRO(glBlendEquationSeparate,           void (GL_APIENTRY *PFN_glBlendEquationSeparate)(GLenum modeRGB, GLenum modeAlpha)) \
-    _SAPP_XMACRO(glDeleteTextures,                  void (GL_APIENTRY *PFN_glDeleteTextures)(GLsizei n, const GLuint * textures)) \
-    _SAPP_XMACRO(glGetProgramiv,                    void (GL_APIENTRY *PFN_glGetProgramiv)(GLuint program, GLenum pname, GLint * params)) \
-    _SAPP_XMACRO(glBindTexture,                     void (GL_APIENTRY *PFN_glBindTexture)(GLenum target, GLuint texture)) \
-    _SAPP_XMACRO(glTexImage3D,                      void (GL_APIENTRY *PFN_glTexImage3D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
-    _SAPP_XMACRO(glCreateShader,                    GLuint (GL_APIENTRY *PFN_glCreateShader)(GLenum type)) \
-    _SAPP_XMACRO(glTexSubImage2D,                   void (GL_APIENTRY *PFN_glTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
-    _SAPP_XMACRO(glClearDepth,                      void (GL_APIENTRY *PFN_glClearDepth)(GLdouble depth)) \
-    _SAPP_XMACRO(glFramebufferTexture2D,            void (GL_APIENTRY *PFN_glFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
-    _SAPP_XMACRO(glCreateProgram,                   GLuint (GL_APIENTRY *PFN_glCreateProgram)(void)) \
-    _SAPP_XMACRO(glViewport,                        void (GL_APIENTRY *PFN_glViewport)(GLint x, GLint y, GLsizei width, GLsizei height)) \
-    _SAPP_XMACRO(glDeleteBuffers,                   void (GL_APIENTRY *PFN_glDeleteBuffers)(GLsizei n, const GLuint * buffers)) \
-    _SAPP_XMACRO(glDrawArrays,                      void (GL_APIENTRY *PFN_glDrawArrays)(GLenum mode, GLint first, GLsizei count)) \
-    _SAPP_XMACRO(glDrawElementsInstanced,           void (GL_APIENTRY *PFN_glDrawElementsInstanced)(GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
-    _SAPP_XMACRO(glVertexAttribPointer,             void (GL_APIENTRY *PFN_glVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
-    _SAPP_XMACRO(glUniform1i,                       void (GL_APIENTRY *PFN_glUniform1i)(GLint location, GLint v0)) \
-    _SAPP_XMACRO(glDisable,                         void (GL_APIENTRY *PFN_glDisable)(GLenum cap)) \
-    _SAPP_XMACRO(glColorMask,                       void (GL_APIENTRY *PFN_glColorMask)(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
-    _SAPP_XMACRO(glBindBuffer,                      void (GL_APIENTRY *PFN_glBindBuffer)(GLenum target, GLuint buffer)) \
-    _SAPP_XMACRO(glDeleteVertexArrays,              void (GL_APIENTRY *PFN_glDeleteVertexArrays)(GLsizei n, const GLuint * arrays)) \
-    _SAPP_XMACRO(glDepthMask,                       void (GL_APIENTRY *PFN_glDepthMask)(GLboolean flag)) \
-    _SAPP_XMACRO(glDrawArraysInstanced,             void (GL_APIENTRY *PFN_glDrawArraysInstanced)(GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
-    _SAPP_XMACRO(glClearStencil,                    void (GL_APIENTRY *PFN_glClearStencil)(GLint s)) \
-    _SAPP_XMACRO(glScissor,                         void (GL_APIENTRY *PFN_glScissor)(GLint x, GLint y, GLsizei width, GLsizei height)) \
-    _SAPP_XMACRO(glUniform3fv,                      void (GL_APIENTRY *PFN_glUniform3fv)(GLint location, GLsizei count, const GLfloat * value)) \
-    _SAPP_XMACRO(glGenRenderbuffers,                void (GL_APIENTRY *PFN_glGenRenderbuffers)(GLsizei n, GLuint * renderbuffers)) \
-    _SAPP_XMACRO(glBufferData,                      void (GL_APIENTRY *PFN_glBufferData)(GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
-    _SAPP_XMACRO(glBlendFuncSeparate,               void (GL_APIENTRY *PFN_glBlendFuncSeparate)(GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)) \
-    _SAPP_XMACRO(glTexParameteri,                   void (GL_APIENTRY *PFN_glTexParameteri)(GLenum target, GLenum pname, GLint param)) \
-    _SAPP_XMACRO(glGetIntegerv,                     void (GL_APIENTRY *PFN_glGetIntegerv)(GLenum pname, GLint * data)) \
-    _SAPP_XMACRO(glEnable,                          void (GL_APIENTRY *PFN_glEnable)(GLenum cap)) \
-    _SAPP_XMACRO(glBlitFramebuffer,                 void (GL_APIENTRY *PFN_glBlitFramebuffer)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
-    _SAPP_XMACRO(glStencilMask,                     void (GL_APIENTRY *PFN_glStencilMask)(GLuint mask)) \
-    _SAPP_XMACRO(glAttachShader,                    void (GL_APIENTRY *PFN_glAttachShader)(GLuint program, GLuint shader)) \
-    _SAPP_XMACRO(glGetError,                        GLenum (GL_APIENTRY *PFN_glGetError)(void)) \
-    _SAPP_XMACRO(glClearColor,                      void (GL_APIENTRY *PFN_glClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
-    _SAPP_XMACRO(glBlendColor,                      void (GL_APIENTRY *PFN_glBlendColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
-    _SAPP_XMACRO(glTexParameterf,                   void (GL_APIENTRY *PFN_glTexParameterf)(GLenum target, GLenum pname, GLfloat param)) \
-    _SAPP_XMACRO(glTexParameterfv,                  void (GL_APIENTRY *PFN_glTexParameterfv)(GLenum target, GLenum pname, GLfloat* params)) \
-    _SAPP_XMACRO(glGetShaderInfoLog,                void (GL_APIENTRY *PFN_glGetShaderInfoLog)(GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
-    _SAPP_XMACRO(glDepthFunc,                       void (GL_APIENTRY *PFN_glDepthFunc)(GLenum func)) \
-    _SAPP_XMACRO(glStencilOp ,                      void  (GL_APIENTRY *PFN_glStencilOp)(GLenum fail, GLenum zfail, GLenum zpass)) \
-    _SAPP_XMACRO(glStencilFunc,                     void  (GL_APIENTRY *PFN_glStencilFunc)(GLenum func, GLint ref, GLuint mask)) \
-    _SAPP_XMACRO(glEnableVertexAttribArray,         void  (GL_APIENTRY *PFN_glEnableVertexAttribArray)(GLuint index)) \
-    _SAPP_XMACRO(glBlendFunc,                       void  (GL_APIENTRY *PFN_glBlendFunc)(GLenum sfactor, GLenum dfactor)) \
-    _SAPP_XMACRO(glUniform1fv,                      void  (GL_APIENTRY *PFN_glUniform1fv)(GLint location, GLsizei count, const GLfloat * value)) \
-    _SAPP_XMACRO(glReadBuffer,                      void  (GL_APIENTRY *PFN_glReadBuffer)(GLenum src)) \
-    _SAPP_XMACRO(glClear,                           void  (GL_APIENTRY *PFN_glClear)(GLbitfield mask)) \
-    _SAPP_XMACRO(glTexImage2D,                      void  (GL_APIENTRY *PFN_glTexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
-    _SAPP_XMACRO(glGenVertexArrays,                 void  (GL_APIENTRY *PFN_glGenVertexArrays)(GLsizei n, GLuint * arrays)) \
-    _SAPP_XMACRO(glFrontFace,                       void  (GL_APIENTRY *PFN_glFrontFace)(GLenum mode)) \
-    _SAPP_XMACRO(glCullFace,                        void  (GL_APIENTRY *PFN_glCullFace)(GLenum mode))
+    _SAPP_XMACRO(glBindVertexArray,                 void, (GLuint array)) \
+    _SAPP_XMACRO(glFramebufferTextureLayer,         void, (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
+    _SAPP_XMACRO(glGenFramebuffers,                 void, (GLsizei n, GLuint * framebuffers)) \
+    _SAPP_XMACRO(glBindFramebuffer,                 void, (GLenum target, GLuint framebuffer)) \
+    _SAPP_XMACRO(glBindRenderbuffer,                void, (GLenum target, GLuint renderbuffer)) \
+    _SAPP_XMACRO(glGetStringi,                      const GLubyte *, (GLenum name, GLuint index)) \
+    _SAPP_XMACRO(glClearBufferfi,                   void, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
+    _SAPP_XMACRO(glClearBufferfv,                   void, (GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
+    _SAPP_XMACRO(glClearBufferuiv,                  void, (GLenum buffer, GLint drawbuffer, const GLuint * value)) \
+    _SAPP_XMACRO(glDeleteRenderbuffers,             void, (GLsizei n, const GLuint * renderbuffers)) \
+    _SAPP_XMACRO(glUniform4fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glUniform2fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glUseProgram,                      void, (GLuint program)) \
+    _SAPP_XMACRO(glShaderSource,                    void, (GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length)) \
+    _SAPP_XMACRO(glLinkProgram,                     void, (GLuint program)) \
+    _SAPP_XMACRO(glGetUniformLocation,              GLint, (GLuint program, const GLchar * name)) \
+    _SAPP_XMACRO(glGetShaderiv,                     void, (GLuint shader, GLenum pname, GLint * params)) \
+    _SAPP_XMACRO(glGetProgramInfoLog,               void, (GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SAPP_XMACRO(glGetAttribLocation,               GLint, (GLuint program, const GLchar * name)) \
+    _SAPP_XMACRO(glDisableVertexAttribArray,        void, (GLuint index)) \
+    _SAPP_XMACRO(glDeleteShader,                    void, (GLuint shader)) \
+    _SAPP_XMACRO(glDeleteProgram,                   void, (GLuint program)) \
+    _SAPP_XMACRO(glCompileShader,                   void, (GLuint shader)) \
+    _SAPP_XMACRO(glStencilFuncSeparate,             void, (GLenum face, GLenum func, GLint ref, GLuint mask)) \
+    _SAPP_XMACRO(glStencilOpSeparate,               void, (GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
+    _SAPP_XMACRO(glRenderbufferStorageMultisample,  void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glDrawBuffers,                     void, (GLsizei n, const GLenum * bufs)) \
+    _SAPP_XMACRO(glVertexAttribDivisor,             void, (GLuint index, GLuint divisor)) \
+    _SAPP_XMACRO(glBufferSubData,                   void, (GLenum target, GLintptr offset, GLsizeiptr size, const void * data)) \
+    _SAPP_XMACRO(glGenBuffers,                      void, (GLsizei n, GLuint * buffers)) \
+    _SAPP_XMACRO(glCheckFramebufferStatus,          GLenum, (GLenum target)) \
+    _SAPP_XMACRO(glFramebufferRenderbuffer,         void, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
+    _SAPP_XMACRO(glCompressedTexImage2D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data)) \
+    _SAPP_XMACRO(glCompressedTexImage3D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data)) \
+    _SAPP_XMACRO(glActiveTexture,                   void, (GLenum texture)) \
+    _SAPP_XMACRO(glTexSubImage3D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glUniformMatrix4fv,                void, (GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)) \
+    _SAPP_XMACRO(glRenderbufferStorage,             void, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glGenTextures,                     void, (GLsizei n, GLuint * textures)) \
+    _SAPP_XMACRO(glPolygonOffset,                   void, (GLfloat factor, GLfloat units)) \
+    _SAPP_XMACRO(glDrawElements,                    void, (GLenum mode, GLsizei count, GLenum type, const void * indices)) \
+    _SAPP_XMACRO(glDeleteFramebuffers,              void, (GLsizei n, const GLuint * framebuffers)) \
+    _SAPP_XMACRO(glBlendEquationSeparate,           void, (GLenum modeRGB, GLenum modeAlpha)) \
+    _SAPP_XMACRO(glDeleteTextures,                  void, (GLsizei n, const GLuint * textures)) \
+    _SAPP_XMACRO(glGetProgramiv,                    void, (GLuint program, GLenum pname, GLint * params)) \
+    _SAPP_XMACRO(glBindTexture,                     void, (GLenum target, GLuint texture)) \
+    _SAPP_XMACRO(glTexImage3D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glCreateShader,                    GLuint, (GLenum type)) \
+    _SAPP_XMACRO(glTexSubImage2D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glClearDepth,                      void, (GLdouble depth)) \
+    _SAPP_XMACRO(glFramebufferTexture2D,            void, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
+    _SAPP_XMACRO(glCreateProgram,                   GLuint, (void)) \
+    _SAPP_XMACRO(glViewport,                        void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glDeleteBuffers,                   void, (GLsizei n, const GLuint * buffers)) \
+    _SAPP_XMACRO(glDrawArrays,                      void, (GLenum mode, GLint first, GLsizei count)) \
+    _SAPP_XMACRO(glDrawElementsInstanced,           void, (GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
+    _SAPP_XMACRO(glVertexAttribPointer,             void, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
+    _SAPP_XMACRO(glUniform1i,                       void, (GLint location, GLint v0)) \
+    _SAPP_XMACRO(glDisable,                         void, (GLenum cap)) \
+    _SAPP_XMACRO(glColorMask,                       void, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SAPP_XMACRO(glBindBuffer,                      void, (GLenum target, GLuint buffer)) \
+    _SAPP_XMACRO(glDeleteVertexArrays,              void, (GLsizei n, const GLuint * arrays)) \
+    _SAPP_XMACRO(glDepthMask,                       void, (GLboolean flag)) \
+    _SAPP_XMACRO(glDrawArraysInstanced,             void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
+    _SAPP_XMACRO(glClearStencil,                    void, (GLint s)) \
+    _SAPP_XMACRO(glScissor,                         void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SAPP_XMACRO(glUniform3fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glGenRenderbuffers,                void, (GLsizei n, GLuint * renderbuffers)) \
+    _SAPP_XMACRO(glBufferData,                      void, (GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
+    _SAPP_XMACRO(glBlendFuncSeparate,               void, (GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)) \
+    _SAPP_XMACRO(glTexParameteri,                   void, (GLenum target, GLenum pname, GLint param)) \
+    _SAPP_XMACRO(glGetIntegerv,                     void, (GLenum pname, GLint * data)) \
+    _SAPP_XMACRO(glEnable,                          void, (GLenum cap)) \
+    _SAPP_XMACRO(glBlitFramebuffer,                 void, (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
+    _SAPP_XMACRO(glStencilMask,                     void, (GLuint mask)) \
+    _SAPP_XMACRO(glAttachShader,                    void, (GLuint program, GLuint shader)) \
+    _SAPP_XMACRO(glGetError,                        GLenum, (void)) \
+    _SAPP_XMACRO(glClearColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SAPP_XMACRO(glBlendColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SAPP_XMACRO(glTexParameterf,                   void, (GLenum target, GLenum pname, GLfloat param)) \
+    _SAPP_XMACRO(glTexParameterfv,                  void, (GLenum target, GLenum pname, GLfloat* params)) \
+    _SAPP_XMACRO(glGetShaderInfoLog,                void, (GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SAPP_XMACRO(glDepthFunc,                       void, (GLenum func)) \
+    _SAPP_XMACRO(glStencilOp ,                      void, (GLenum fail, GLenum zfail, GLenum zpass)) \
+    _SAPP_XMACRO(glStencilFunc,                     void, (GLenum func, GLint ref, GLuint mask)) \
+    _SAPP_XMACRO(glEnableVertexAttribArray,         void, (GLuint index)) \
+    _SAPP_XMACRO(glBlendFunc,                       void, (GLenum sfactor, GLenum dfactor)) \
+    _SAPP_XMACRO(glUniform1fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SAPP_XMACRO(glReadBuffer,                      void, (GLenum src)) \
+    _SAPP_XMACRO(glClear,                           void, (GLbitfield mask)) \
+    _SAPP_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SAPP_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
+    _SAPP_XMACRO(glFrontFace,                       void, (GLenum mode)) \
+    _SAPP_XMACRO(glCullFace,                        void, (GLenum mode))
 
 // generate GL function pointer typedefs
-#define _SAPP_XMACRO(func, proto) typedef proto;
+#define _SAPP_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
 _SAPP_GL_FUNCS
 #undef _SAPP_XMACRO
 
 // generate GL function pointers
-#define _SAPP_XMACRO(func, proto) static PFN_ ## func func;
+#define _SAPP_XMACRO(name, ret, args) static PFN_ ## name name;
 _SAPP_GL_FUNCS
 #undef _SAPP_XMACRO
 
@@ -1949,7 +1949,7 @@ _SOKOL_PRIVATE void* _sapp_win32_glgetprocaddr(const char* name) {
 _SOKOL_PRIVATE  void _sapp_win32_gl_loadfuncs(void) {
     SOKOL_ASSERT(_sapp.wgl.GetProcAddress);
     SOKOL_ASSERT(_sapp.wgl.opengl32);
-    #define _SAPP_XMACRO(func, proto) func = (PFN_ ## func) _sapp_win32_glgetprocaddr(#func);
+    #define _SAPP_XMACRO(name, ret, args) name = (PFN_ ## name) _sapp_win32_glgetprocaddr(#name);
     _SAPP_GL_FUNCS
     #undef _SAPP_XMACRO
 }
