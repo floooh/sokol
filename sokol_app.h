@@ -2249,7 +2249,7 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
@@ -2265,7 +2265,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc);
+    _sapp_macos_run(&desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -2761,7 +2761,7 @@ static _sapp_ios_glk_view_dlg* _sapp_ios_glk_view_dlg_obj;
 static GLKViewController* _sapp_ios_view_ctrl_obj;
 #endif
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
@@ -2773,7 +2773,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc);
+    _sapp_ios_run(&desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -3907,12 +3907,13 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
     if (_sapp.quit_ordered) {
         _sapp_emsc_unregister_eventhandlers();
         _sapp_call_cleanup();
+        _sapp_discard_state();
         return EM_FALSE;
     }
     return EM_TRUE;
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_emsc_keytable_init();
     double w, h;
@@ -3943,13 +3944,15 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     /* start the frame loop */
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
-    /* NOT A BUG: do not call _sapp_discard_state() */
+    /* NOT A BUG: do not call _sapp_discard_state() here, instead this is
+       called in _sapp_emsc_frame() when the application is ordered to quit
+     */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc);
+    _sapp_emsc_run(&desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -4070,6 +4073,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 
 #if defined(SOKOL_D3D11)
 #define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
@@ -4997,7 +5001,7 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
     return _sapp.clipboard;
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_win32_init_keytable();
     _sapp_win32_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
@@ -5097,7 +5101,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc);
+    _sapp_win32_run(&desc);
     return 0;
 }
 #else
@@ -5109,7 +5113,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     int argc_utf8 = 0;
     char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
     sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
-    _sapp_run(&desc);
+    _sapp_win32_run(&desc);
     SOKOL_FREE(argv_utf8);
     return 0;
 }
@@ -7469,7 +7473,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp.x11.window_state = NormalState;
 
@@ -7530,7 +7534,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
     sapp_desc desc = sokol_main(argc, argv);
-    _sapp_run(&desc);
+    _sapp_linux_run(&desc);
     return 0;
 }
 #endif /* SOKOL_NO_ENTRY */
@@ -7540,7 +7544,20 @@ int main(int argc, char* argv[]) {
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
-    _sapp_run(desc);
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_run(desc);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_run(desc);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_run(desc);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_run(desc);
+    #elif defined(_SAPP_LINUX)
+        _sapp_linux_run(desc);
+    #else
+        // calling sapp_run() directly is not supported on Android) 
+        _sapp_fail("sapp_run() not supported on this platform!");
+    #endif
     return 0;
 }
 
