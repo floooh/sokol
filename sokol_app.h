@@ -1247,6 +1247,8 @@ typedef struct {
 
 /*== EMSCRIPTEN DECLARATIONS =================================================*/
 #if defined(_SAPP_EMSCRIPTEN)
+
+#if defined(SOKOL_WGPU)
 typedef struct {
     int state;
     WGPUDevice device;
@@ -1258,6 +1260,7 @@ typedef struct {
     WGPUTextureView msaa_view;
     WGPUTextureView depth_stencil_view;
 } _sapp_wgpu_t;
+#endif
 
 typedef struct {
     bool textfield_created;
@@ -4876,7 +4879,7 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
-    
+
     typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
     typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
     typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
@@ -7555,7 +7558,7 @@ SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
     #elif defined(_SAPP_LINUX)
         _sapp_linux_run(desc);
     #else
-        // calling sapp_run() directly is not supported on Android) 
+        // calling sapp_run() directly is not supported on Android)
         _sapp_fail("sapp_run() not supported on this platform!");
     #endif
     return 0;
