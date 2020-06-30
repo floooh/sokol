@@ -658,13 +658,13 @@ _SOKOL_PRIVATE void igPushIDInt(int int_id) {
 _SOKOL_PRIVATE void igPopID() {
     return ImGui::PopID();
 }
-_SOKOL_PRIVATE bool igSelectable(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
+_SOKOL_PRIVATE bool igSelectableBool(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
     return ImGui::Selectable(label,selected,flags,size);
 }
 _SOKOL_PRIVATE bool igSmallButton(const char* label) {
     return ImGui::SmallButton(label);
 }
-_SOKOL_PRIVATE bool igBeginChild(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
+_SOKOL_PRIVATE bool igBeginChildStr(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
     return ImGui::BeginChild(str_id,size,border,flags);
 }
 _SOKOL_PRIVATE void igEndChild() {
@@ -2479,12 +2479,12 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* 
     igPushIDInt((int)res_id);
     bool res;
     if (label[0]) {
-        res = igSelectable(label, selected, 0, IMVEC2(0,0));
+        res = igSelectableBool(label, selected, 0, IMVEC2(0,0));
     }
     else {
         sg_imgui_str_t str;
         _sg_imgui_snprintf(&str, "0x%08X", res_id);
-        res = igSelectable(str.buf, selected, 0, IMVEC2(0,0));
+        res = igSelectableBool(str.buf, selected, 0, IMVEC2(0,0));
     }
     igPopID();
     return res;
@@ -2550,7 +2550,7 @@ _SOKOL_PRIVATE void _sg_imgui_show_shader(sg_imgui_t* ctx, sg_shader shd) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
-    igBeginChild("buffer_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("buffer_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->buffers.num_slots; i++) {
         sg_buffer buf = ctx->buffers.slots[i].res_id;
         sg_resource_state state = sg_query_buffer_state(buf);
@@ -2565,7 +2565,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
-    igBeginChild("image_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("image_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->images.num_slots; i++) {
         sg_image img = ctx->images.slots[i].res_id;
         sg_resource_state state = sg_query_image_state(img);
@@ -2580,7 +2580,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
-    igBeginChild("shader_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("shader_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->shaders.num_slots; i++) {
         sg_shader shd = ctx->shaders.slots[i].res_id;
         sg_resource_state state = sg_query_shader_state(shd);
@@ -2595,7 +2595,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
-    igBeginChild("pipeline_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("pipeline_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->pipelines.num_slots; i++) {
         sg_pipeline pip = ctx->pipelines.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
@@ -2610,7 +2610,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
-    igBeginChild("pass_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("pass_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->passes.num_slots; i++) {
         sg_pass pass = ctx->passes.slots[i].res_id;
         sg_resource_state state = sg_query_pass_state(pass);
@@ -2625,7 +2625,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
-    igBeginChild("capture_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChildStr("capture_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     const uint32_t num_items = _sg_imgui_capture_num_read_items(ctx);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (uint32_t i = 0; i < num_items; i++) {
@@ -2652,7 +2652,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
             group_stack >>= 1;
         }
         else if (group_stack & 1) {
-            if (igSelectable(item_string.buf, ctx->capture.sel_item == i, 0, IMVEC2(0,0))) {
+            if (igSelectableBool(item_string.buf, ctx->capture.sel_item == i, 0, IMVEC2(0,0))) {
                 ctx->capture.sel_item = i;
             }
             if (igIsItemHovered(0)) {
@@ -2667,7 +2667,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) {
     if (buf.id != SG_INVALID_ID) {
-        igBeginChild("buffer", IMVEC2(0,0), false, 0);
+        igBeginChildStr("buffer", IMVEC2(0,0), false, 0);
         sg_buffer_info info = sg_query_buffer_info(buf);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_imgui_slot_index(buf.id)];
@@ -2717,7 +2717,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
     if (img.id != SG_INVALID_ID) {
-        igBeginChild("image", IMVEC2(0,0), false, 0);
+        igBeginChildStr("image", IMVEC2(0,0), false, 0);
         sg_image_info info = sg_query_image_info(img);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
@@ -2839,7 +2839,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) {
     if (shd.id != SG_INVALID_ID) {
-        igBeginChild("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
+        igBeginChildStr("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
         sg_shader_info info = sg_query_shader_info(shd);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_imgui_slot_index(shd.id)];
@@ -2952,7 +2952,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_rasterizer_state(const sg_rasterizer_state* r
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline pip) {
     if (pip.id != SG_INVALID_ID) {
-        igBeginChild("pipeline", IMVEC2(0,0), false, 0);
+        igBeginChildStr("pipeline", IMVEC2(0,0), false, 0);
         sg_pipeline_info info = sg_query_pipeline_info(pip);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_imgui_slot_index(pip.id)];
@@ -3001,7 +3001,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_attachment(sg_imgui_t* ctx, const sg_attachme
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
     if (pass.id != SG_INVALID_ID) {
-        igBeginChild("pass", IMVEC2(0,0), false, 0);
+        igBeginChildStr("pass", IMVEC2(0,0), false, 0);
         sg_pass_info info = sg_query_pass_info(pass);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_imgui_slot_index(pass.id)];
@@ -3222,7 +3222,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
         return;
     }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, sel_item_index);
-    igBeginChild("capture_item", IMVEC2(0, 0), false, 0);
+    igBeginChildStr("capture_item", IMVEC2(0, 0), false, 0);
     igPushStyleColorU32(ImGuiCol_Text, item->color);
     igText("%s", _sg_imgui_capture_item_string(ctx, sel_item_index, item).buf);
     igPopStyleColor(1);
