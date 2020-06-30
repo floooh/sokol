@@ -3553,6 +3553,8 @@ static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t
 }
 
 static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* in_desc) {
+    sg_push_debug_group("sokol-debugtext");
+
     SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && in_desc);
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
@@ -3602,6 +3604,8 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     ctx->glyph_size.y = 8.0f / ctx->canvas_size.y;
     ctx->tab_width = (float) ctx->desc.tab_width;
     ctx->color = _SDTX_DEFAULT_COLOR;
+
+    sg_pop_debug_group();
 }
 
 static void _sdtx_destroy_context(sdtx_context ctx_id) {
@@ -3613,8 +3617,10 @@ static void _sdtx_destroy_context(sdtx_context ctx_id) {
             ctx->cur_vertex_ptr = 0;
             ctx->max_vertex_ptr = 0;
         }
+        sg_push_debug_group("sokol_debugtext");
         sg_destroy_buffer(ctx->vbuf);
         sg_destroy_pipeline(ctx->pip);
+        sg_pop_debug_group();
         memset(ctx, 0, sizeof(*ctx));
         _sdtx_pool_free_index(&_sdtx.context_pool.pool, _sdtx_slot_index(ctx_id.id));
     }
@@ -3647,6 +3653,8 @@ static void _sdtx_setup_common(void) {
     _sdtx.fmt_buf_size = _sdtx.desc.printf_buf_size + 1;
     _sdtx.fmt_buf = (char*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
     SOKOL_ASSERT(_sdtx.fmt_buf);
+
+    sg_push_debug_group("sokol-debugtext");
 
     /* common shader for all contexts */
     sg_shader_desc shd_desc;
@@ -3731,15 +3739,19 @@ static void _sdtx_setup_common(void) {
     img_desc.content.subimage[0][0].size = sizeof(_sdtx.font_pixels);
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
+
+    sg_pop_debug_group();
 }
 
 static void _sdtx_discard_common(void) {
+    sg_push_debug_group("sokol-debugtext");
     sg_destroy_image(_sdtx.font_img);
     sg_destroy_shader(_sdtx.shader);
     if (_sdtx.fmt_buf) {
         SOKOL_FREE(_sdtx.fmt_buf);
         _sdtx.fmt_buf = 0;
     }
+    sg_pop_debug_group();
 }
 
 static inline uint32_t _sdtx_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -4140,6 +4152,7 @@ SOKOL_API_IMPL void sdtx_draw(void) {
         const int num_verts = (int) (ctx->cur_vertex_ptr - ctx->vertices);
         if (num_verts > 0) {
             SOKOL_ASSERT((num_verts % 6) == 0);
+            sg_push_debug_group("sokol-debugtext");
             int vbuf_offset = sg_append_buffer(ctx->vbuf, ctx->vertices, num_verts * sizeof(_sdtx_vertex_t));
             sg_apply_pipeline(ctx->pip);
             sg_bindings bindings;
@@ -4149,6 +4162,7 @@ SOKOL_API_IMPL void sdtx_draw(void) {
             bindings.fs_images[0] = _sdtx.font_img;
             sg_apply_bindings(&bindings);
             sg_draw(0, num_verts, 1);
+            sg_pop_debug_group();
         }
         ctx->cur_vertex_ptr = ctx->vertices;
         ctx->cur_font = 0;
