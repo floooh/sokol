@@ -970,8 +970,14 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 /* check if the config defines are alright */
 #if defined(__APPLE__)
+    // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
     #if !__has_feature(objc_arc)
         #error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
+    #endif
+    #if !defined(__cplusplus)
+        #if !__has_feature(objc_arc_fields)
+            #error "sokol_app.h requires a more recent clang supporting the 'objc_arc_fields' feature!"
+        #endif
     #endif
     #define _SAPP_APPLE (1)
     #include <TargetConditionals.h>
@@ -1189,10 +1195,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
-typedef struct {
-    uint32_t flags_changed_store;
-} _sapp_macos_t;
-
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
@@ -1215,6 +1217,18 @@ typedef struct {
     - (void)drawRect:(NSRect)bounds;
     @end
 #endif // SOKOL_GLCORE33
+
+typedef struct {
+    uint32_t flags_changed_store;
+    NSWindow* window_obj;
+    _sapp_macos_app_delegate* app_dlg_obj;
+    _sapp_macos_window_delegate* win_dlg_obj;
+    _sapp_macos_view* view_obj;
+    #if defined(SOKOL_METAL)
+        _sapp_macos_mtk_view_dlg* mtk_view_dlg_obj;
+        id<MTLDevice> mtl_device_obj;
+    #endif
+} _sapp_macos_t;
 
 #endif // _SAPP_MACOS
 
@@ -1545,7 +1559,18 @@ typedef struct {
 #define _SAPP_PIXELFORMAT_DEPTH (41)
 #define _SAPP_PIXELFORMAT_DEPTH_STENCIL (42)
 
-static struct {
+#if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
+    // this is ARC compatible
+    #if defined(__cplusplus)
+        #define _SAPP_CLEAR(type, item) { item = { }; }
+    #else
+        #define _SAPP_CLEAR(type, item) { item = (type) { 0 }; }
+    #endif
+#else
+    #define _SAPP_CLEAR(type, item) { memset(&item, 0, sizeof(item)); }
+#endif
+
+typedef struct {
     bool valid;
     int window_width;
     int window_height;
@@ -1596,7 +1621,8 @@ static struct {
         _sapp_x11_t x11;
         _sapp_glx_t glx;
     #endif
-} _sapp;
+} _sapp_t;
+static _sapp_t _sapp;
 
 /*=== OPTIONAL MINI GL LOADER FOR WIN32/WGL ==================================*/
 #if defined(_SAPP_WIN32) && defined(SOKOL_GLCORE33) && !defined(SOKOL_WIN32_NO_GL_LOADER)
@@ -2054,7 +2080,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
 }
 
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
-    memset(&_sapp, 0, sizeof(_sapp));
+    _SAPP_CLEAR(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
     _sapp.window_width = _sapp.desc.width;
@@ -2082,7 +2108,7 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
         SOKOL_ASSERT(_sapp.clipboard);
         SOKOL_FREE((void*)_sapp.clipboard);
     }
-    memset(&_sapp, 0, sizeof(_sapp));
+    _SAPP_CLEAR(_sapp_t, _sapp);
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -2122,21 +2148,15 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 /*== MacOS/iOS ===============================================================*/
 #if defined(_SAPP_APPLE)
 
+// FIXME: support non-ARC builds one day
+#if __has_feature(objc_arc)
+#define _SAPP_OBJC_RELEASE(obj) { obj = nil; }
+#else
+#define _SAPP_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
+#endif
+
 /*== MacOS ===================================================================*/
 #if defined(_SAPP_MACOS)
-
-// FIXME: put all ObjC objects into an NSMutableArray and reference through indices!
-static NSWindow* _sapp_macos_window_obj;
-static _sapp_macos_window_delegate* _sapp_macos_win_dlg_obj;
-static _sapp_macos_app_delegate* _sapp_macos_app_dlg_obj;
-static _sapp_macos_view* _sapp_view_obj;
-#if defined(SOKOL_METAL)
-static _sapp_macos_mtk_view_dlg* _sapp_macos_mtk_view_dlg_obj;
-static id<MTLDevice> _sapp_mtl_device_obj;
-#elif defined(SOKOL_GLCORE33)
-static NSOpenGLPixelFormat* _sapp_macos_glpixelformat_obj;
-static NSTimer* _sapp_macos_timer_obj;
-#endif
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
@@ -2252,16 +2272,40 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
+_SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
+    if (nil != _sapp.macos.app_dlg_obj) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.app_dlg_obj);
+    }
+    if (nil != _sapp.macos.win_dlg_obj) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg_obj);
+    }
+    if (nil != _sapp.macos.view_obj) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.view_obj);
+    }
+    #if defined(SOKOL_METAL)
+        if (nil != _sapp.macos.mtk_view_dlg_obj) {
+            _SAPP_OBJC_RELEASE(_sapp.macos.mtk_view_dlg_obj);
+        }
+        if (nil != _sapp.macos.mtl_device_obj) {
+            _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device_obj);
+        }
+    #endif
+    if (nil != _sapp.macos.window_obj) {
+        _SAPP_OBJC_RELEASE(_sapp.macos.window_obj);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
-    _sapp_macos_app_dlg_obj = [[_sapp_macos_app_delegate alloc] init];
-    NSApp.delegate = _sapp_macos_app_dlg_obj;
+    _sapp.macos.app_dlg_obj = [[_sapp_macos_app_delegate alloc] init];
+    NSApp.delegate = _sapp.macos.app_dlg_obj;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
-    _sapp_discard_state();
+    // NOTE: [NSApp run] never returns, instead cleanup code
+    // must be put into applicationWillTerminate
 }
 
 /* MacOS entry function */
@@ -2275,15 +2319,15 @@ int main(int argc, char* argv[]) {
 
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = [_sapp_view_obj drawableSize];
+        const CGSize fb_size = [_sapp.macos.view_obj drawableSize];
         _sapp.framebuffer_width = fb_size.width;
         _sapp.framebuffer_height = fb_size.height;
     #elif defined(SOKOL_GLCORE33)
-        const NSRect fb_rect = [_sapp_view_obj convertRectToBacking:[_sapp_view_obj frame]];
+        const NSRect fb_rect = [_sapp.macos.view_obj convertRectToBacking:[_sapp.macos.view_obj frame]];
         _sapp.framebuffer_width = fb_rect.size.width;
         _sapp.framebuffer_height = fb_rect.size.height;
     #endif
-    const NSRect bounds = [_sapp_view_obj bounds];
+    const NSRect bounds = [_sapp.macos.view_obj bounds];
     _sapp.window_width = bounds.size.width;
     _sapp.window_height = bounds.size.height;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
@@ -2291,12 +2335,12 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    const NSPoint mouse_pos = [_sapp_macos_window_obj mouseLocationOutsideOfEventStream];
+    const NSPoint mouse_pos = [_sapp.macos.window_obj mouseLocationOutsideOfEventStream];
     _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
     _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp_macos_window_obj performClose:nil];
+        [_sapp.macos.window_obj performClose:nil];
     }
 }
 
@@ -2306,7 +2350,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
        event handlers
     */
     _sapp.fullscreen = !_sapp.fullscreen;
-    [_sapp_macos_window_obj toggleFullScreen:nil];
+    [_sapp.macos.window_obj toggleFullScreen:nil];
 }
 
 @implementation _sapp_macos_app_delegate
@@ -2332,35 +2376,37 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
     NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
-    _sapp_macos_window_obj = [[NSWindow alloc]
+    _sapp.macos.window_obj = [[NSWindow alloc]
         initWithContentRect:window_rect
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
-    _sapp_macos_window_obj.title = [NSString stringWithUTF8String:_sapp.window_title];
-    _sapp_macos_window_obj.acceptsMouseMovedEvents = YES;
-    _sapp_macos_window_obj.restorable = YES;
-    _sapp_macos_win_dlg_obj = [[_sapp_macos_window_delegate alloc] init];
-    _sapp_macos_window_obj.delegate = _sapp_macos_win_dlg_obj;
+    _sapp.macos.window_obj.releasedWhenClosed = NO; // this is necessary for proper cleanup in applicationWillTerminate
+    _sapp.macos.window_obj.title = [NSString stringWithUTF8String:_sapp.window_title];
+    _sapp.macos.window_obj.acceptsMouseMovedEvents = YES;
+    _sapp.macos.window_obj.restorable = YES;
+
+    _sapp.macos.win_dlg_obj = [[_sapp_macos_window_delegate alloc] init];
+    _sapp.macos.window_obj.delegate = _sapp.macos.win_dlg_obj;
     #if defined(SOKOL_METAL)
-        _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
-        _sapp_macos_mtk_view_dlg_obj = [[_sapp_macos_mtk_view_dlg alloc] init];
-        _sapp_view_obj = [[_sapp_macos_view alloc] init];
-        [_sapp_view_obj updateTrackingAreas];
-        _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-        _sapp_view_obj.delegate = _sapp_macos_mtk_view_dlg_obj;
-        _sapp_view_obj.device = _sapp_mtl_device_obj;
-        _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp_view_obj.sampleCount = _sapp.sample_count;
-        _sapp_macos_window_obj.contentView = _sapp_view_obj;
-        [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
+        _sapp.macos.mtl_device_obj = MTLCreateSystemDefaultDevice();
+        _sapp.macos.mtk_view_dlg_obj = [[_sapp_macos_mtk_view_dlg alloc] init];
+        _sapp.macos.view_obj = [[_sapp_macos_view alloc] init];
+        [_sapp.macos.view_obj updateTrackingAreas];
+        _sapp.macos.view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.macos.view_obj.delegate = _sapp.macos.mtk_view_dlg_obj;
+        _sapp.macos.view_obj.device = _sapp.macos.mtl_device_obj;
+        _sapp.macos.view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        _sapp.macos.view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        _sapp.macos.view_obj.sampleCount = _sapp.sample_count;
+        _sapp.macos.window_obj.contentView = _sapp.macos.view_obj;
+        [_sapp.macos.window_obj makeFirstResponder:_sapp.macos.view_obj];
         if (!_sapp.desc.high_dpi) {
             CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp_view_obj.drawableSize = drawable_size;
+            _sapp.macos.view_obj.drawableSize = drawable_size;
         }
         _sapp_macos_update_dimensions();
-        _sapp_view_obj.layer.magnificationFilter = kCAFilterNearest;
+        _sapp.macos.view_obj.layer.magnificationFilter = kCAFilterNearest;
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
@@ -2380,44 +2426,53 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
         }
         attrs[i++] = 0;
-        _sapp_macos_glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        SOKOL_ASSERT(_sapp_macos_glpixelformat_obj != nil);
+        NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        SOKOL_ASSERT(glpixelformat_obj != nil);
 
-        _sapp_view_obj = [[_sapp_macos_view alloc]
+        _sapp.macos.view_obj = [[_sapp_macos_view alloc]
             initWithFrame:window_rect
-            pixelFormat:_sapp_macos_glpixelformat_obj];
-        [_sapp_view_obj updateTrackingAreas];
+            pixelFormat:glpixelformat_obj];
+        _SAPP_OBJC_RELEASE(glpixelformat_obj);
+        [_sapp.macos.view_obj updateTrackingAreas];
         if (_sapp.desc.high_dpi) {
-            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:YES];
+            [_sapp.macos.view_obj setWantsBestResolutionOpenGLSurface:YES];
         }
         else {
-            [_sapp_view_obj setWantsBestResolutionOpenGLSurface:NO];
+            [_sapp.macos.view_obj setWantsBestResolutionOpenGLSurface:NO];
         }
 
-        _sapp_macos_window_obj.contentView = _sapp_view_obj;
-        [_sapp_macos_window_obj makeFirstResponder:_sapp_view_obj];
+        _sapp.macos.window_obj.contentView = _sapp.macos.view_obj;
+        [_sapp.macos.window_obj makeFirstResponder:_sapp.macos.view_obj];
 
-        _sapp_macos_timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:_sapp_view_obj
+        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
+            target:_sapp.macos.view_obj
             selector:@selector(timerFired:)
             userInfo:nil
             repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:_sapp_macos_timer_obj forMode:NSDefaultRunLoopMode];
+        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
+        timer_obj = nil;
     #endif
     _sapp.valid = true;
     if (_sapp.fullscreen) {
         /* on GL, this already toggles a rendered frame, so set the valid flag before */
-        [_sapp_macos_window_obj toggleFullScreen:self];
+        [_sapp.macos.window_obj toggleFullScreen:self];
     }
     else {
-        [_sapp_macos_window_obj center];
+        [_sapp.macos.window_obj center];
     }
-    [_sapp_macos_window_obj makeKeyAndOrderFront:nil];
+    [_sapp.macos.window_obj makeKeyAndOrderFront:nil];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     _SOKOL_UNUSED(sender);
     return YES;
+}
+
+- (void)applicationWillTerminate:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_call_cleanup();
+    _sapp_macos_discard_state();
+    _sapp_discard_state();
 }
 @end
 
@@ -2482,7 +2537,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         }
     }
     if (_sapp.quit_ordered) {
-        _sapp_call_cleanup();
         return YES;
     }
     else {
@@ -2542,14 +2596,14 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)prepareOpenGL {
     [super prepareOpenGL];
     GLint swapInt = 1;
-    NSOpenGLContext* ctx = [_sapp_view_obj openGLContext];
+    NSOpenGLContext* ctx = [_sapp.macos.view_obj openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
 }
 - (void)drawRect:(NSRect)bound {
     _SOKOL_UNUSED(bound);
     _sapp_macos_frame();
-    [[_sapp_view_obj openGLContext] flushBuffer];
+    [[_sapp.macos.view_obj openGLContext] flushBuffer];
 }
 #endif
 
@@ -7743,7 +7797,7 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj = (__bridge const void*) _sapp_mtl_device_obj;
+        const void* obj = (__bridge const void*) _sapp.macos.mtl_device_obj;
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7754,7 +7808,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj =  (__bridge const void*) [_sapp_view_obj currentRenderPassDescriptor];
+        const void* obj =  (__bridge const void*) [_sapp.macos.view_obj currentRenderPassDescriptor];
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7765,7 +7819,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj = (__bridge const void*) [_sapp_view_obj currentDrawable];
+        const void* obj = (__bridge const void*) [_sapp.macos.view_obj currentDrawable];
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7775,7 +7829,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
 
 SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
     #if defined(_SAPP_MACOS)
-        const void* obj = (__bridge const void*) _sapp_macos_window_obj;
+        const void* obj = (__bridge const void*) _sapp.macos.window_obj;
         SOKOL_ASSERT(obj);
         return obj;
     #else
