@@ -971,12 +971,9 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 /* check if the config defines are alright */
 #if defined(__APPLE__)
     // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
-    #if !__has_feature(objc_arc)
-        #error "sokol_app.h requires ARC (Automatic Reference Counting) on MacOS and iOS"
-    #endif
     #if !defined(__cplusplus)
-        #if !__has_feature(objc_arc_fields)
-            #error "sokol_app.h requires a more recent clang supporting the 'objc_arc_fields' feature!"
+        #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
+            #error "sokol_app.h requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
         #endif
     #endif
     #define _SAPP_APPLE (1)
@@ -2619,7 +2616,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)updateTrackingAreas {
     if (trackingArea != nil) {
         [self removeTrackingArea:trackingArea];
-        trackingArea = nil;
+        _SAPP_OBJC_RELEASE(trackingArea);
     }
     const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
                                           NSTrackingActiveInKeyWindow |
