@@ -2540,7 +2540,9 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();
-    _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
+    if (!_sapp.first_frame) {
+        _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
+    }
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
