@@ -1226,9 +1226,6 @@ typedef struct {
 
 /*== IOS DECLARATIONS ========================================================*/
 #if defined(_SAPP_IOS)
-typedef struct {
-    bool suspended;
-} _sapp_ios_t;
 
 @interface _sapp_app_delegate : NSObject<UIApplicationDelegate>
 @end
@@ -1248,6 +1245,23 @@ typedef struct {
     @interface _sapp_ios_view : GLKView
     @end
 #endif
+
+typedef struct {
+    UIWindow* window;
+    _sapp_ios_view* view;
+    UITextField* textfield;
+    _sapp_textfield_dlg* textfield_dlg;
+    #if defined(SOKOL_METAL)
+        UIViewController<MTKViewDelegate>* view_ctrl;
+        id<MTLDevice> mtl_device;
+        _sapp_ios_mtk_view_dlg* mtk_view_dlg;
+    #else
+        GLKViewController* view_ctrl;
+        EAGLContext* eagl_ctx;
+        _sapp_ios_glk_view_dlg* glk_view_dlg;
+    #endif
+    bool suspended;
+} _sapp_ios_t;
 
 #endif // _SAPP_IOS
 
@@ -2811,20 +2825,22 @@ const char* _sapp_macos_get_clipboard_string(void) {
 /*== iOS =====================================================================*/
 #if defined(_SAPP_IOS)
 
-// FIXME: put all ObjC objects into an NSMutableArray and reference through indices!
-static UIWindow* _sapp_ios_window_obj;
-static _sapp_ios_view* _sapp_view_obj;
-static UITextField* _sapp_ios_textfield_obj;
-static _sapp_textfield_dlg* _sapp_ios_textfield_dlg_obj;
-#if defined(SOKOL_METAL)
-static _sapp_ios_mtk_view_dlg* _sapp_ios_mtk_view_dlg_obj;
-static UIViewController<MTKViewDelegate>* _sapp_ios_view_ctrl_obj;
-static id<MTLDevice> _sapp_mtl_device_obj;
-#else
-static EAGLContext* _sapp_ios_eagl_ctx_obj;
-static _sapp_ios_glk_view_dlg* _sapp_ios_glk_view_dlg_obj;
-static GLKViewController* _sapp_ios_view_ctrl_obj;
-#endif
+_SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
+    // NOTE: it's safe to call [release] on a nil object
+    _SAPP_OBJC_RELEASE(_sapp.ios.textfield_dlg);
+    _SAPP_OBJC_RELEASE(_sapp.ios.textfield);
+    #if defined(SOKOL_METAL)
+        _SAPP_OBJC_RELEASE(_sapp.ios.mtk_view_dlg);
+        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+        _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
+    #else
+        _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
+        _SAPP_OBJC_RELEASE(_sapp.ios.glk_view_dlg);
+        _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
+    #endif
+    _SAPP_OBJC_RELEASE(_sapp.ios.view);
+    _SAPP_OBJC_RELEASE(_sapp.ios.window);
+}
 
 _SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
@@ -2856,12 +2872,12 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     _sapp.window_height = (int) screen_rect.size.height;
     int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = _sapp_view_obj.drawableSize;
+        const CGSize fb_size = _sapp.ios.view.drawableSize;
         cur_fb_width = (int) fb_size.width;
         cur_fb_height = (int) fb_size.height;
     #else
-        cur_fb_width = (int) _sapp_view_obj.drawableWidth;
-        cur_fb_height = (int) _sapp_view_obj.drawableHeight;
+        cur_fb_width = (int) _sapp.ios.view.drawableWidth;
+        cur_fb_height = (int) _sapp.ios.view.drawableHeight;
     #endif
     const bool dim_changed =
         (_sapp.framebuffer_width != cur_fb_width) ||
@@ -2870,7 +2886,7 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     _sapp.framebuffer_height = cur_fb_height;
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
-    if (dim_changed) {
+    if (dim_changed && !_sapp.first_frame) {
         _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 }
@@ -2882,42 +2898,42 @@ _SOKOL_PRIVATE void _sapp_ios_frame(void) {
 
 _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     /* if not happened yet, create an invisible text field */
-    if (nil == _sapp_ios_textfield_obj) {
-        _sapp_ios_textfield_dlg_obj = [[_sapp_textfield_dlg alloc] init];
-        _sapp_ios_textfield_obj = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, 100, 50)];
-        _sapp_ios_textfield_obj.keyboardType = UIKeyboardTypeDefault;
-        _sapp_ios_textfield_obj.returnKeyType = UIReturnKeyDefault;
-        _sapp_ios_textfield_obj.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        _sapp_ios_textfield_obj.autocorrectionType = UITextAutocorrectionTypeNo;
-        _sapp_ios_textfield_obj.spellCheckingType = UITextSpellCheckingTypeNo;
-        _sapp_ios_textfield_obj.hidden = YES;
-        _sapp_ios_textfield_obj.text = @"x";
-        _sapp_ios_textfield_obj.delegate = _sapp_ios_textfield_dlg_obj;
-        [_sapp_ios_view_ctrl_obj.view addSubview:_sapp_ios_textfield_obj];
+    if (nil == _sapp.ios.textfield) {
+        _sapp.ios.textfield_dlg = [[_sapp_textfield_dlg alloc] init];
+        _sapp.ios.textfield = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, 100, 50)];
+        _sapp.ios.textfield.keyboardType = UIKeyboardTypeDefault;
+        _sapp.ios.textfield.returnKeyType = UIReturnKeyDefault;
+        _sapp.ios.textfield.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        _sapp.ios.textfield.autocorrectionType = UITextAutocorrectionTypeNo;
+        _sapp.ios.textfield.spellCheckingType = UITextSpellCheckingTypeNo;
+        _sapp.ios.textfield.hidden = YES;
+        _sapp.ios.textfield.text = @"x";
+        _sapp.ios.textfield.delegate = _sapp.ios.textfield_dlg;
+        [_sapp.ios.view_ctrl.view addSubview:_sapp.ios.textfield];
 
-        [[NSNotificationCenter defaultCenter] addObserver:_sapp_ios_textfield_dlg_obj
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardWasShown:)
             name:UIKeyboardDidShowNotification object:nil];
-        [[NSNotificationCenter defaultCenter] addObserver:_sapp_ios_textfield_dlg_obj
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardWillBeHidden:)
             name:UIKeyboardWillHideNotification object:nil];
-        [[NSNotificationCenter defaultCenter] addObserver:_sapp_ios_textfield_dlg_obj
+        [[NSNotificationCenter defaultCenter] addObserver:_sapp.ios.textfield_dlg
             selector:@selector(keyboardDidChangeFrame:)
             name:UIKeyboardDidChangeFrameNotification object:nil];
     }
     if (shown) {
         /* setting the text field as first responder brings up the onscreen keyboard */
-        [_sapp_ios_textfield_obj becomeFirstResponder];
+        [_sapp.ios.textfield becomeFirstResponder];
     }
     else {
-        [_sapp_ios_textfield_obj resignFirstResponder];
+        [_sapp.ios.textfield resignFirstResponder];
     }
 }
 
 @implementation _sapp_app_delegate
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp_ios_window_obj = [[UIWindow alloc] initWithFrame:screen_rect];
+    _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
     _sapp.window_width = screen_rect.size.width;
     _sapp.window_height = screen_rect.size.height;
     if (_sapp.desc.high_dpi) {
@@ -2930,63 +2946,62 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     #if defined(SOKOL_METAL)
-        _sapp_mtl_device_obj = MTLCreateSystemDefaultDevice();
-        _sapp_ios_mtk_view_dlg_obj = [[_sapp_ios_mtk_view_dlg alloc] init];
-        _sapp_view_obj = [[_sapp_ios_view alloc] init];
-        _sapp_view_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-        _sapp_view_obj.delegate = _sapp_ios_mtk_view_dlg_obj;
-        _sapp_view_obj.device = _sapp_mtl_device_obj;
-        _sapp_view_obj.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp_view_obj.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp_view_obj.sampleCount = _sapp.sample_count;
+        _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
+        _sapp.ios.mtk_view_dlg = [[_sapp_ios_mtk_view_dlg alloc] init];
+        _sapp.ios.view = [[_sapp_ios_view alloc] init];
+        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view.delegate = _sapp.ios.mtk_view_dlg;
+        _sapp.ios.view.device = _sapp.ios.mtl_device;
+        _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        _sapp.ios.view.sampleCount = _sapp.sample_count;
         if (_sapp.desc.high_dpi) {
-            _sapp_view_obj.contentScaleFactor = 2.0;
+            _sapp.ios.view.contentScaleFactor = 2.0;
         }
         else {
-            _sapp_view_obj.contentScaleFactor = 1.0;
+            _sapp.ios.view.contentScaleFactor = 1.0;
         }
-        _sapp_view_obj.userInteractionEnabled = YES;
-        _sapp_view_obj.multipleTouchEnabled = YES;
-        [_sapp_ios_window_obj addSubview:_sapp_view_obj];
-        _sapp_ios_view_ctrl_obj = [[UIViewController<MTKViewDelegate> alloc] init];
-        _sapp_ios_view_ctrl_obj.view = _sapp_view_obj;
-        _sapp_ios_window_obj.rootViewController = _sapp_ios_view_ctrl_obj;
+        _sapp.ios.view.userInteractionEnabled = YES;
+        _sapp.ios.view.multipleTouchEnabled = YES;
+        _sapp.ios.view_ctrl = [[UIViewController<MTKViewDelegate> alloc] init];
+        _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
+        _sapp.ios.view_ctrl.view = _sapp.ios.view;
+        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #else
         if (_sapp.desc.gl_force_gles2) {
-            _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+            _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
             _sapp.gles2_fallback = true;
         }
         else {
-            _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-            if (_sapp_ios_eagl_ctx_obj == nil) {
-                _sapp_ios_eagl_ctx_obj = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+            _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+            if (_sapp.ios.eagl_ctx == nil) {
+                _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
                 _sapp.gles2_fallback = true;
             }
         }
-        _sapp_ios_glk_view_dlg_obj = [[_sapp_ios_glk_view_dlg alloc] init];
-        _sapp_view_obj = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
-        _sapp_view_obj.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
-        _sapp_view_obj.drawableDepthFormat = GLKViewDrawableDepthFormat24;
-        _sapp_view_obj.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
-        _sapp_view_obj.drawableMultisample = GLKViewDrawableMultisampleNone; /* FIXME */
-        _sapp_view_obj.context = _sapp_ios_eagl_ctx_obj;
-        _sapp_view_obj.delegate = _sapp_ios_glk_view_dlg_obj;
-        _sapp_view_obj.enableSetNeedsDisplay = NO;
-        _sapp_view_obj.userInteractionEnabled = YES;
-        _sapp_view_obj.multipleTouchEnabled = YES;
+        _sapp.ios.glk_view_dlg = [[_sapp_ios_glk_view_dlg alloc] init];
+        _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
+        _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
+        _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
+        _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
+        _sapp.ios.view.drawableMultisample = GLKViewDrawableMultisampleNone; /* FIXME */
+        _sapp.ios.view.context = _sapp.ios.eagl_ctx;
+        _sapp.ios.view.delegate = _sapp.ios.glk_view_dlg;
+        _sapp.ios.view.enableSetNeedsDisplay = NO;
+        _sapp.ios.view.userInteractionEnabled = YES;
+        _sapp.ios.view.multipleTouchEnabled = YES;
         if (_sapp.desc.high_dpi) {
-            _sapp_view_obj.contentScaleFactor = 2.0;
+            _sapp.ios.view.contentScaleFactor = 2.0;
         }
         else {
-            _sapp_view_obj.contentScaleFactor = 1.0;
+            _sapp.ios.view.contentScaleFactor = 1.0;
         }
-        [_sapp_ios_window_obj addSubview:_sapp_view_obj];
-        _sapp_ios_view_ctrl_obj = [[GLKViewController alloc] init];
-        _sapp_ios_view_ctrl_obj.view = _sapp_view_obj;
-        _sapp_ios_view_ctrl_obj.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-        _sapp_ios_window_obj.rootViewController = _sapp_ios_view_ctrl_obj;
+        _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
+        _sapp.ios.view_ctrl.view = _sapp.ios.view;
+        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #endif
-    [_sapp_ios_window_obj makeKeyAndVisible];
+    [_sapp.ios.window makeKeyAndVisible];
 
     _sapp.valid = true;
     return YES;
@@ -3005,6 +3020,17 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp_ios_app_event(SAPP_EVENTTYPE_RESUMED);
     }
 }
+
+/* NOTE: this method will rarely ever be called, iOS application
+    which are terminated by the user are usually killed via signal 9
+    by the operating system.
+*/
+- (void)applicationWillTerminate:(UIApplication *)application {
+    _SOKOL_UNUSED(application);
+    _sapp_call_cleanup();
+    _sapp_ios_discard_state();
+    _sapp_discard_state();
+}
 @end
 
 @implementation _sapp_textfield_dlg
@@ -3016,13 +3042,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
         CGRect view_frame = UIScreen.mainScreen.bounds;
         view_frame.size.height -= kbd_h;
-        _sapp_view_obj.frame = view_frame;
+        _sapp.ios.view.frame = view_frame;
     }
 }
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
     if (_sapp.desc.ios_keyboard_resizes_canvas) {
-        _sapp_view_obj.frame = UIScreen.mainScreen.bounds;
+        _sapp.ios.view.frame = UIScreen.mainScreen.bounds;
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
@@ -3032,7 +3058,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
         CGRect view_frame = UIScreen.mainScreen.bounds;
         view_frame.size.height -= kbd_h;
-        _sapp_view_obj.frame = view_frame;
+        _sapp.ios.view.frame = view_frame;
     }
 }
 - (BOOL)textField:(UITextField*)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString*)string {
@@ -3110,7 +3136,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
         UITouch* ios_touch;
         while ((ios_touch = [enumerator nextObject])) {
             if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
-                CGPoint ios_pos = [ios_touch locationInView:_sapp_view_obj];
+                CGPoint ios_pos = [ios_touch locationInView:_sapp.ios.view];
                 sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
                 cur_point->identifier = (uintptr_t) ios_touch;
                 cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
@@ -7805,7 +7831,11 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj = (__bridge const void*) _sapp.macos.mtl_device;
+        #if defined(_SAPP_MACOS)
+            const void* obj = (__bridge const void*) _sapp.macos.mtl_device;
+        #else
+            const void* obj = (__bridge const void*) _sapp.ios.mtl_device;
+        #endif
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7816,7 +7846,11 @@ SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj =  (__bridge const void*) [_sapp.macos.view currentRenderPassDescriptor];
+        #if defined(_SAPP_MACOS)
+            const void* obj = (__bridge const void*) [_sapp.macos.view currentRenderPassDescriptor];
+        #else
+            const void* obj = (__bridge const void*) [_sapp.ios.view currentRenderPassDescriptor];
+        #endif
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7827,7 +7861,11 @@ SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const void* obj = (__bridge const void*) [_sapp.macos.view currentDrawable];
+        #if defined(_SAPP_MACOS)
+            const void* obj = (__bridge const void*) [_sapp.macos.view currentDrawable];
+        #else
+            const void* obj = (__bridge const void*) [_sapp.ios.view currentDrawable];
+        #endif
         SOKOL_ASSERT(obj);
         return obj;
     #else
@@ -7847,7 +7885,7 @@ SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
 
 SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
     #if defined(_SAPP_IOS)
-        const void* obj = (__bridge const void*) _sapp_ios_window_obj;
+        const void* obj = (__bridge const void*) _sapp.ios.window;
         SOKOL_ASSERT(obj);
         return obj;
     #else
