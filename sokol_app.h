@@ -1114,7 +1114,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifdef _MSC_VER
         #pragma warning(push)
         #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-        #pragma warning(disable:4115)   /* named type definition in parentheses */
         #pragma warning(disable:4054)   /* 'type cast': from function pointer */
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
@@ -2154,7 +2153,6 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
 /*== MacOS/iOS ===============================================================*/
 #if defined(_SAPP_APPLE)
 
-// FIXME: support non-ARC builds one day
 #if __has_feature(objc_arc)
 #define _SAPP_OBJC_RELEASE(obj) { obj = nil; }
 #else
@@ -2847,7 +2845,6 @@ _SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
-    _sapp_discard_state();
 }
 
 /* iOS entry function */
