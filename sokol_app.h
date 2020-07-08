@@ -1329,6 +1329,7 @@ static NSOpenGLPixelFormat* _sapp_macos_glpixelformat_obj;
 static NSTimer* _sapp_macos_timer_obj;
 #endif
 static uint32_t _sapp_macos_flags_changed_store;
+static bool _sapp_macos_mouse_is_shown = true;
 
 _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x1D] = SAPP_KEYCODE_0;
@@ -1911,12 +1912,17 @@ void _sapp_macos_set_clipboard_string(const char* str) {
 }
 
 void _sapp_macos_show_mouse(bool shown) {
+    _sapp_macos_mouse_is_shown = shown;
     if (shown) {
         [NSCursor unhide];
     }
     else {
         [NSCursor hide];
     }
+}
+
+bool _sapp_macos_mouse_shown() {
+    return _sapp_macos_mouse_is_shown;
 }
 
 const char* _sapp_macos_get_clipboard_string(void) {
@@ -7215,7 +7221,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
                                 0, 1, 0);
         }
         else {
-            const int _NET_WM_STATE_REMOVE = 0; 
+            const int _NET_WM_STATE_REMOVE = 0;
             _sapp_x11_send_event(_sapp_x11_NET_WM_STATE,
                                 _NET_WM_STATE_REMOVE,
                                 _sapp_x11_NET_WM_STATE_FULLSCREEN,
@@ -7916,7 +7922,9 @@ SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    #if defined(_WIN32)
+    #if defined(__APPLE__) && !TARGET_OS_IPHONE
+    return _sapp_macos_mouse_shown();
+    #elif defined(_WIN32)
     return _sapp_win32_mouse_shown();
     #else
     return false;
