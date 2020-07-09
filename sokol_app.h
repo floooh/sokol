@@ -2630,7 +2630,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (BOOL)isOpaque {
     return YES;
 }
-- (BOOL)canBecomeKey {
+- (BOOL)canBecomeKeyView {
     return YES;
 }
 - (BOOL)acceptsFirstResponder {
