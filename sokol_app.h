@@ -1196,15 +1196,11 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
 #if defined(SOKOL_METAL)
-    @interface _sapp_macos_mtk_view_dlg : NSObject<MTKViewDelegate>
-    @end
     @interface _sapp_macos_view : MTKView
     @end
 #elif defined(SOKOL_GLCORE33)
     @interface _sapp_macos_view : NSOpenGLView
     - (void)timerFired:(id)sender;
-    - (void)prepareOpenGL;
-    - (void)drawRect:(NSRect)bounds;
     @end
 #endif // SOKOL_GLCORE33
 
@@ -1216,7 +1212,6 @@ typedef struct {
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
     #if defined(SOKOL_METAL)
-        _sapp_macos_mtk_view_dlg* mtk_view_dlg;
         id<MTLDevice> mtl_device;
     #endif
 } _sapp_macos_t;
@@ -2283,7 +2278,6 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.win_dlg);
     _SAPP_OBJC_RELEASE(_sapp.macos.view);
     #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.macos.mtk_view_dlg);
         _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
     #endif
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
@@ -2395,11 +2389,9 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.macos.mtk_view_dlg = [[_sapp_macos_mtk_view_dlg alloc] init];
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
         _sapp.macos.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-        _sapp.macos.view.delegate = _sapp.macos.mtk_view_dlg;
         _sapp.macos.view.device = _sapp.macos.mtl_device;
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -2578,22 +2570,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
-#if defined(SOKOL_METAL)
-@implementation _sapp_macos_mtk_view_dlg
-- (void)drawInMTKView:(MTKView*)view {
-    _SOKOL_UNUSED(view);
-    @autoreleasepool {
-        _sapp_macos_frame();
-    }
-}
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    _SOKOL_UNUSED(view);
-    _SOKOL_UNUSED(size);
-    /* this is required by the protocol, but we can't do anything useful here */
-}
-@end
-#endif
-
 @implementation _sapp_macos_view
 #if defined(SOKOL_GLCORE33)
 /* NOTE: this is a hack/fix when the initial window size has been clipped by
@@ -2624,6 +2600,15 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     _SOKOL_UNUSED(bound);
     _sapp_macos_frame();
     [[_sapp.macos.view openGLContext] flushBuffer];
+}
+#endif
+
+#if defined(SOKOL_METAL)
+- (void)drawRect:(NSRect)dirtyRect {
+    _SOKOL_UNUSED(dirtyRect);
+    @autoreleasepool {
+        _sapp_macos_frame();
+    }
 }
 #endif
 
