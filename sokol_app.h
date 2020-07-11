@@ -1229,13 +1229,9 @@ typedef struct {
 - (void)keyboardDidChangeFrame:(NSNotification*)notif;
 @end
 #if defined(SOKOL_METAL)
-    @interface _sapp_ios_mtk_view_dlg : NSObject<MTKViewDelegate>
-    @end
     @interface _sapp_ios_view : MTKView;
     @end
 #else
-    @interface _sapp_ios_glk_view_dlg : NSObject<GLKViewDelegate>
-    @end
     @interface _sapp_ios_view : GLKView
     @end
 #endif
@@ -1246,13 +1242,11 @@ typedef struct {
     UITextField* textfield;
     _sapp_textfield_dlg* textfield_dlg;
     #if defined(SOKOL_METAL)
-        UIViewController<MTKViewDelegate>* view_ctrl;
+        UIViewController* view_ctrl;
         id<MTLDevice> mtl_device;
-        _sapp_ios_mtk_view_dlg* mtk_view_dlg;
     #else
         GLKViewController* view_ctrl;
         EAGLContext* eagl_ctx;
-        _sapp_ios_glk_view_dlg* glk_view_dlg;
     #endif
     bool suspended;
 } _sapp_ios_t;
@@ -2596,21 +2590,17 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
     [ctx makeCurrentContext];
 }
-- (void)drawRect:(NSRect)bound {
-    _SOKOL_UNUSED(bound);
-    _sapp_macos_frame();
-    [[_sapp.macos.view openGLContext] flushBuffer];
-}
 #endif
 
-#if defined(SOKOL_METAL)
-- (void)drawRect:(NSRect)dirtyRect {
-    _SOKOL_UNUSED(dirtyRect);
+- (void)drawRect:(NSRect)rect {
+    _SOKOL_UNUSED(rect);
     @autoreleasepool {
         _sapp_macos_frame();
+        #if !defined(SOKOL_METAL)
+        [[_sapp.macos.view openGLContext] flushBuffer];
+        #endif
     }
 }
-#endif
 
 - (BOOL)isOpaque {
     return YES;
@@ -2813,12 +2803,10 @@ _SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield_dlg);
     _SAPP_OBJC_RELEASE(_sapp.ios.textfield);
     #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.ios.mtk_view_dlg);
         _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
         _SAPP_OBJC_RELEASE(_sapp.ios.mtl_device);
     #else
         _SAPP_OBJC_RELEASE(_sapp.ios.view_ctrl);
-        _SAPP_OBJC_RELEASE(_sapp.ios.glk_view_dlg);
         _SAPP_OBJC_RELEASE(_sapp.ios.eagl_ctx);
     #endif
     _SAPP_OBJC_RELEASE(_sapp.ios.view);
@@ -2929,10 +2917,8 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.ios.mtk_view_dlg = [[_sapp_ios_mtk_view_dlg alloc] init];
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
         _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
-        _sapp.ios.view.delegate = _sapp.ios.mtk_view_dlg;
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -2945,7 +2931,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
-        _sapp.ios.view_ctrl = [[UIViewController<MTKViewDelegate> alloc] init];
+        _sapp.ios.view_ctrl = [[UIViewController alloc] init];
         _sapp.ios.view_ctrl.modalPresentationStyle = UIModalPresentationFullScreen;
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
@@ -2961,14 +2947,12 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                 _sapp.gles2_fallback = true;
             }
         }
-        _sapp.ios.glk_view_dlg = [[_sapp_ios_glk_view_dlg alloc] init];
         _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
         _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
         _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
         _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
         _sapp.ios.view.drawableMultisample = GLKViewDrawableMultisampleNone; /* FIXME */
         _sapp.ios.view.context = _sapp.ios.eagl_ctx;
-        _sapp.ios.view.delegate = _sapp.ios.glk_view_dlg;
         _sapp.ios.view.enableSetNeedsDisplay = NO;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
@@ -3089,28 +3073,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 @end
 
-#if defined(SOKOL_METAL)
-@implementation _sapp_ios_mtk_view_dlg
-- (void)drawInMTKView:(MTKView*)view {
-    @autoreleasepool {
-        _sapp_ios_frame();
-    }
-}
-
-- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size {
-    /* this is required by the protocol, but we can't do anything useful here */
-}
-@end
-#else
-@implementation _sapp_ios_glk_view_dlg
-- (void)glkView:(GLKView*)view drawInRect:(CGRect)rect {
-    @autoreleasepool {
-        _sapp_ios_frame();
-    }
-}
-@end
-#endif
-
 _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -3133,7 +3095,13 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 }
 
 @implementation _sapp_ios_view
-- (BOOL) isOpaque {
+- (void)drawRect:(CGRect)rect {
+    _SOKOL_UNUSED(rect);
+    @autoreleasepool {
+        _sapp_ios_frame();
+    }
+}
+- (BOOL)isOpaque {
     return YES;
 }
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent*)event {
