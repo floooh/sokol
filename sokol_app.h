@@ -250,7 +250,7 @@
             If the Metal backend has been selected, these functions return pointers
             to various Metal API objects required for rendering, otherwise
             they return a null pointer. These void pointers are actually
-            Objective-C ids converted with an ARC __bridge cast so that
+            Objective-C ids converted with a (ARC) __bridge cast so that
             they ids can be tunnel through C code. Also note that the returned
             pointers to the renderpass-descriptor and drawable may change from one
             frame to the next, only the Metal device object is guaranteed to
@@ -259,12 +259,12 @@
         const void* sapp_macos_get_window(void)
             On macOS, get the NSWindow object pointer, otherwise a null pointer.
             Before being used as Objective-C object, the void* must be converted
-            back with an ARC __bridge cast.
+            back with a (ARC) __bridge cast.
 
         const void* sapp_ios_get_window(void)
             On iOS, get the UIWindow object pointer, otherwise a null pointer.
             Before being used as Objective-C object, the void* must be converted
-            back with an ARC __bridge cast.
+            back with a (ARC) __bridge cast.
 
         const void* sapp_win32_get_hwnd(void)
             On Windows, get the window's HWND, otherwise a null pointer. The
@@ -919,15 +919,15 @@ SOKOL_API_DECL bool sapp_gles2(void);
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 
-/* Metal: get ARC-bridged pointer to Metal device object */
+/* Metal: get bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
-/* Metal: get ARC-bridged pointer to this frame's renderpass descriptor */
+/* Metal: get bridged pointer to this frame's renderpass descriptor */
 SOKOL_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
-/* Metal: get ARC-bridged pointer to current drawable */
+/* Metal: get bridged pointer to current drawable */
 SOKOL_API_DECL const void* sapp_metal_get_drawable(void);
-/* macOS: get ARC-bridged pointer to macOS NSWindow */
+/* macOS: get bridged pointer to macOS NSWindow */
 SOKOL_API_DECL const void* sapp_macos_get_window(void);
-/* iOS: get ARC-bridged pointer to iOS UIWindow */
+/* iOS: get bridged pointer to iOS UIWindow */
 SOKOL_API_DECL const void* sapp_ios_get_window(void);
 
 /* D3D11: get pointer to ID3D11Device object */
@@ -2451,7 +2451,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
         [_sapp.macos.window center];
     }
     [_sapp.macos.window makeKeyAndOrderFront:nil];
-    _sapp_macos_update_dimensions();    
+    _sapp_macos_update_dimensions();
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
