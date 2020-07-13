@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Jun-2020**: sokol_app.h: fullscreen support on Linux
+[See what's new](#updates) (**13-Jul-2020**: ObjC ARC is now optional, plus internal cleanup
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -460,6 +460,48 @@ Mainly some "missing features" for desktop apps:
 
 # Updates
 
+- **13-Jul-2020**:
+    - On macOS and iOS, sokol_app.h and sokol_gfx.h can now be compiled with
+      ARC (Automatic Reference Counting) **disabled** (previously ARC had to be
+      enabled). I will generally switch to testing with ARC disabled from now
+      on.
+    - Compiling with ARC enabled is still supported but with a little caveat:
+      if you're compiling sokol_app.h or sokol_gfx.h in ObjC mode (not ObjC++
+      mode) *AND* ARC is enabled, then the Xcode version must be more recent
+      than before (the language feature ```__has_feature(objc_arc_fields)```
+      must be supported, which I think has been added in Xcode 10.2, I couldn't
+      find this mentioned in any Xcode release notes though). Compiling with
+      ARC disabled should also work on older Xcode versions though.
+    - Various internal code cleanup things:
+        - The remaining 'top-level' static ObjC id variables in the sokol_gfx.h
+        Metal backend have been moved into the global static state structure
+        (that's the reason why __has_feature(objc_arc_fields) is required now
+        when compiling with ARC)
+        - sokol_app.h had the same 'structural cleanup' as sokol_gfx.h in
+        January, all internal data has been merged into a single big
+        state structure, backend specific data has been moved closer to
+        each other in the header, and backend-specific structures and functions
+        have been named more consistently for better 'searchability'
+        - The 'mini GL' loader in the sokol_app.h Win32+WGL backend has
+        been rewritten to use X-Macros which killed a lot of redundant and
+        error-prone lines of code
+        - All macOS and iOS code has been revised and cleaned up
+        - On macOS a workaround for a (what looks like) post-Catalina NSOpenGLView
+        issue has been added: if the sokol_app.h window doesn't fit on
+        screen (and was thus 'clamped' by Cocoa) *AND* the content-size was
+        not set to native Retina resolution, the initial content size was
+        reported as if it was in Retina resolution. This caused an empty screen
+        to be rendered in the imgui-sapp demo. The workaround is to hook into
+        the NSOpenGLView reshape event at which point the reported content
+        size is correct.
+        - On macOS and iOS, the various 'view delegate' objects have been removed,
+        and rendering happens instead in the subclasses of MTKView, GLKView
+        and NSOpenGLView.
+        - On macOS and iOS, there's now proper cleanup code in the
+        applicationWillTerminate callback (although note that on iOS this function isn't
+        guaranteed to be called, because an application can also simply be
+        killed by the operating system.
+
 - **22-Jun-2020**: The X11/GLX backend in sokol_app.h now has (soft-)fullscreen
 support, bringing the feature on par with Windows and macOS. Many thanks to
 @medvednikov for the PR!
@@ -470,7 +512,7 @@ sokol_gfx.h D3D11 backend:
       (previously shader model 5.0 which caused problems with some older
       Intel GPUs still in use, see this issue: https://github.com/floooh/sokol/issues/179)
     - A new string item ```const char* d3d11_target``` in ```sg_shader_stage_desc``` now allows
-      to pass in the D3D shader model for compiling shaders. This defaults to 
+      to pass in the D3D shader model for compiling shaders. This defaults to
       "vs_4_0" for the vertex shader stage and "ps_4_0" for the fragment shader stage.
       The minimal DX shader model for use with the sokol_gfx.h D3D11 backend is
       shader model 4.0, because that's the first shader model supporting
