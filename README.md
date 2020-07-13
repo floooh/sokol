@@ -463,8 +463,7 @@ Mainly some "missing features" for desktop apps:
 - **13-Jul-2020**:
     - On macOS and iOS, sokol_app.h and sokol_gfx.h can now be compiled with
       ARC (Automatic Reference Counting) **disabled** (previously ARC had to be
-      enabled). I will generally switch to testing with ARC disabled from now
-      on.
+      enabled).
     - Compiling with ARC enabled is still supported but with a little caveat:
       if you're compiling sokol_app.h or sokol_gfx.h in ObjC mode (not ObjC++
       mode) *AND* ARC is enabled, then the Xcode version must be more recent
