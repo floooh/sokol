@@ -2594,12 +2594,10 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
-    @autoreleasepool {
-        _sapp_macos_frame();
-        #if !defined(SOKOL_METAL)
-        [[_sapp.macos.view openGLContext] flushBuffer];
-        #endif
-    }
+    _sapp_macos_frame();
+    #if !defined(SOKOL_METAL)
+    [[_sapp.macos.view openGLContext] flushBuffer];
+    #endif
 }
 
 - (BOOL)isOpaque {
@@ -3097,9 +3095,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
-    @autoreleasepool {
-        _sapp_ios_frame();
-    }
+    _sapp_ios_frame();
 }
 - (BOOL)isOpaque {
     return YES;
