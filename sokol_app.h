@@ -1595,6 +1595,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
             userInfo:nil
             repeats:YES];
         [[NSRunLoop currentRunLoop] addTimer:_sapp_macos_timer_obj forMode:NSDefaultRunLoopMode];
+        _sapp_macos_update_dimensions();
     #endif
     _sapp.valid = true;
     if (_sapp.fullscreen) {
@@ -7215,7 +7216,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
                                 0, 1, 0);
         }
         else {
-            const int _NET_WM_STATE_REMOVE = 0; 
+            const int _NET_WM_STATE_REMOVE = 0;
             _sapp_x11_send_event(_sapp_x11_NET_WM_STATE,
                                 _NET_WM_STATE_REMOVE,
                                 _sapp_x11_NET_WM_STATE_FULLSCREEN,
