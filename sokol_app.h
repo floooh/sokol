@@ -10,7 +10,9 @@
     implementation.
 
     In the same place define one of the following to select the 3D-API
-    which should be initialized by sokol_app.h:
+    which should be initialized by sokol_app.h (this must also match
+    the backend selected for sokol_gfx.h if both are used in the same
+    project):
 
         #define SOKOL_GLCORE33
         #define SOKOL_GLES2
@@ -18,9 +20,6 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
-
-    If sokol_app.h is used together with sokol_gfx.h, the selected 3D-APIs
-    backend match.
 
     Optionally provide the following defines with your own implementations:
 
@@ -43,15 +42,10 @@
     If sokol_app.h is compiled as a DLL, define the following before
     including the declaration or implementation:
 
-    SOKOL_DLL
+        SOKOL_DLL
 
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
-
-    Portions of the Windows and Linux GL initialization and event code have been
-    taken from GLFW (http://www.glfw.org/)
-
-    iOS onscreen keyboard support 'inspired' by libgdx.
 
     If you use sokol_app.h together with sokol_gfx.h, include both headers
     in the implementation source file, and include sokol_app.h before
@@ -67,6 +61,11 @@
     implementation before the sokol_gfx.h implementation.
 
     For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
+
+    Portions of the Windows and Linux GL initialization and event code have been
+    taken from GLFW (http://www.glfw.org/)
+
+    iOS onscreen keyboard support 'inspired' by libgdx.
 
     FEATURE OVERVIEW
     ================
@@ -123,7 +122,6 @@
     ====
     - Linux:
         - clipboard support
-        - fullscreen support
         - show/hide mouse cursor
     - sapp_consume_event() on non-web platforms?
 
@@ -176,10 +174,10 @@
             The cleanup callback is called once right before the application
             quits.
         .event_cb (void (*)(const sapp_event* event))
-            The event callback is mainly for input handling, but in the
-            future may also be used to communicate other types of events
-            to the application. Keep the event_cb struct member zero-initialized
-            if your application doesn't require event handling.
+            The event callback is mainly for input handling, but is also
+            used to communicate other types of events to the application. Keep the
+            event_cb struct member zero-initialized if your application doesn't require
+            event handling.
         .fail_cb (void (*)(const char* msg))
             The fail callback is called when a fatal error is encountered
             during start which doesn't allow the program to continue.
@@ -188,9 +186,9 @@
 
         As you can see, those 'standard callbacks' don't have a user_data
         argument, so any data that needs to be preserved between callbacks
-        must live in global variables. If you're allergic to global variables
-        or cannot use them for other reasons, an alternative set of callbacks
-        can be defined in sapp_desc, together with a user_data pointer:
+        must live in global variables. If keeping state in global variables
+        is not an option, there's an alternative set of callbacks with
+        an additional user_data pointer argument:
 
         .user_data (void*)
             The user-data argument for the callbacks below
@@ -206,7 +204,7 @@
         The function sapp_userdata() can be used to query the user_data
         pointer provided in the sapp_desc struct.
 
-        You can call sapp_query_desc() to get a copy of the
+        You can also call sapp_query_desc() to get a copy of the
         original sapp_desc structure.
 
         NOTE that there's also an alternative compile mode where sokol_app.h
@@ -219,17 +217,17 @@
         at this point are:
 
         int sapp_width(void)
-            Returns the current width of the default framebuffer, this may change
-            from one frame to the next.
         int sapp_height(void)
-            Likewise, returns the current height of the default framebuffer.
+            Returns the current width and height of the default framebuffer in pixels,
+            this may change from one frame to the next, and it may be different
+            from the initial size provided in the sapp_desc struct.
 
         int sapp_color_format(void)
         int sapp_depth_format(void)
             The color and depth-stencil pixelformats of the default framebuffer,
-            as int values which are compatible with sokol-gfx's
-            sg_pixel_format enum, so they can be plugged directly in places
-            where sg_pixel_format is expected:
+            as integer values which are compatible with sokol-gfx's
+            sg_pixel_format enum (so that they can be plugged directly in places
+            where sg_pixel_format is expected). Possible values are:
 
                 23 == SG_PIXELFORMAT_RGBA8
                 27 == SG_PIXELFORMAT_BGRA8
@@ -323,18 +321,18 @@
         be added as needed, please open a github ticket and/or provide
         a PR if needed).
 
-        NOTE: Do *not* call any 3D API functions in the event callback
-        function, since the 3D API context may not be active when the
-        event callback is called (it may work on some platforms and
-        3D APIs, but not others, and the exact behaviour may change
-        between sokol-app versions).
+        NOTE: Do *not* call any 3D API rendering functions in the event
+        callback function, since the 3D API context may not be active when the
+        event callback is called (it may work on some platforms and 3D APIs,
+        but not others, and the exact behaviour may change between
+        sokol-app versions).
 
     --- Implement the cleanup-callback function, this is called once
         after the user quits the application (see the section
         "APPLICATION QUIT" for detailed information on quitting
-        behaviour, and how to intercept a pending quit (for instance to show a
+        behaviour, and how to intercept a pending quit - for instance to show a
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
-        called on the web and mobile platforms.
+        guaranteed to be called on the web and mobile platforms.
 
     CLIPBOARD SUPPORT
     =================
@@ -365,7 +363,7 @@
 
     To get data from the clipboard, check for the SAPP_EVENTTYPE_CLIPBOARD_PASTED
     event in your event handler function, and then call sapp_get_clipboard_string()
-    to obtain the updated UTF-8 encoded text.
+    to obtain the pasted UTF-8 encoded text.
 
     NOTE that behaviour of sapp_get_clipboard_string() is slightly different
     depending on platform:
@@ -583,8 +581,9 @@
       on Android Honeycomb and later (it can't be done at the moment as the app may be started
       again after onStop and the sokol lifecycle does not yet handle context teardown/bringup)
 
-    FIXME: ERROR HANDLING (this will need an error callback function)
 
+    LICENSE
+    =======
     zlib/libpng license
 
     Copyright (c) 2018 Andre Weissflog
