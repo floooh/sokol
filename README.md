@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**13-Jul-2020**: ObjC ARC is now optional, plus internal cleanup
+[See what's new](#updates) (**14-Jul-2020**: macOS+Win32 show/hide mouse changes)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,20 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **14-Jul-2020**:
+    - sapp_mouse_shown() has been implemented for macOS (thanks to @slmjkdbtl) for
+      providing the initial PR!
+    - On macOS, the lower-level functions CGDisplayShowCursor and CGDisplayHideCursor
+      are now used instead of the NSCursor class. This is in preparation for the
+      'pointer lock' feature which will also use CGDisplay* functions.
+    - Calling ```sapp_show_mouse(bool visible)``` no longer 'stacks' (e.g. there's
+      no 'hidden counter' underneath anymore, instead calling ```sapp_show_mouse(true)```
+      will always show the cursor and ```sapp_show_mouse(false)``` will always
+      hide it. This is a different behaviour than the underlying Win32 and
+      macOS functions ShowCursor() and CGDisplaShow/HideCursor()
+    - The mouse show/hide behaviour can now be tested in the ```events-sapp``` sample
+      (so far this only works on Windows and macOS).
 
 - **13-Jul-2020**:
     - On macOS and iOS, sokol_app.h and sokol_gfx.h can now be compiled with

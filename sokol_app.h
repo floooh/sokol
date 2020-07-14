@@ -1589,6 +1589,7 @@ typedef struct {
     float mouse_y;
     bool win32_mouse_tracked;
     bool onscreen_keyboard_shown;
+    bool mouse_shown;
     sapp_event event;
     sapp_desc desc;
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
@@ -2094,6 +2095,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
+    _sapp.mouse_shown = true;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -2764,12 +2766,13 @@ void _sapp_macos_set_clipboard_string(const char* str) {
     }
 }
 
-void _sapp_macos_show_mouse(bool shown) {
-    if (shown) {
-        [NSCursor unhide];
+void _sapp_macos_show_mouse(bool visible) {
+    /* NOTE: this function is only called when the mouse visibility actually changes */
+    if (visible) {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
     }
     else {
-        [NSCursor hide];
+        CGDisplayHideCursor(kCGDirectMainDisplay);
     }
 }
 
@@ -4502,16 +4505,9 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     SetWindowPos(_sapp.win32.hwnd, HWND_TOP, mr.left + rect.left, mr.top + rect.top, win_width, win_height, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
 }
 
-_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool shown) {
-    ShowCursor((BOOL)shown);
-}
-
-_SOKOL_PRIVATE bool _sapp_win32_mouse_shown(void) {
-    CURSORINFO cursor_info;
-    memset(&cursor_info, 0, sizeof(CURSORINFO));
-    cursor_info.cbSize = sizeof(CURSORINFO);
-    GetCursorInfo(&cursor_info);
-    return (cursor_info.flags & CURSOR_SHOWING) != 0;
+_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
+    /* NOTE: this function is only called when the mouse visibility actually changes */
+    ShowCursor((BOOL)visible);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
@@ -7705,22 +7701,20 @@ SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_show_mouse(bool shown) {
-    #if defined(_SAPP_MACOS)
-    _sapp_macos_show_mouse(shown);
-    #elif defined(_SAPP_WIN32)
-    _sapp_win32_show_mouse(shown);
-    #else
-    _SOKOL_UNUSED(shown);
-    #endif
+/* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
+SOKOL_API_IMPL void sapp_show_mouse(bool visible) {
+    if (_sapp.mouse_shown != visible) {
+        #if defined(_SAPP_MACOS)
+        _sapp_macos_show_mouse(visible);
+        #elif defined(_SAPP_WIN32)
+        _sapp_win32_show_mouse(visible);
+        #endif
+        _sapp.mouse_shown = visible;
+    }
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    #if defined(_SAPP_WIN32)
-    return _sapp_win32_mouse_shown();
-    #else
-    return false;
-    #endif
+    return _sapp.mouse_shown;
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
