@@ -461,8 +461,8 @@ Mainly some "missing features" for desktop apps:
 # Updates
 
 - **14-Jul-2020**:
-    - sapp_mouse_shown() has been implemented for macOS (thanks to @slmjkdbtl) for
-      providing the initial PR!
+    - sapp_mouse_shown() has been implemented for macOS (thanks to @slmjkdbtl for
+      providing the initial PR!)
     - On macOS, the lower-level functions CGDisplayShowCursor and CGDisplayHideCursor
       are now used instead of the NSCursor class. This is in preparation for the
       'pointer lock' feature which will also use CGDisplay* functions.
