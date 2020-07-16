@@ -2236,6 +2236,15 @@ SOKOL_API_DECL sg_context sg_setup_context(void);
 SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 
+/* Backend-specific helper functions, these may come in handy for mixing
+   sokol-gfx rendering with 'native backend' rendering functions.
+
+   This group of functions will be expanded as needed.
+*/
+
+/* Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass) */
+SOKOL_API_DECL const void* sg_mtl_render_command_encoder(void);
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -8899,8 +8908,29 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     _sg.mtl.cmd_encoder = nil;
 }
 
+_SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
+    SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
+    for (int slot = 0; slot < SG_MAX_SHADERSTAGE_UBS; slot++) {
+        [_sg.mtl.cmd_encoder
+            setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            offset:0
+            atIndex:slot];
+        [_sg.mtl.cmd_encoder
+            setFragmentBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            offset:0
+            atIndex:slot];
+    }
+}
+
 _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
     _sg_mtl_clear_state_cache();
+
+    /* need to restore the uniform buffer binding (normally happens in
+       _sg_mtl_begin_pass()
+    */
+    if (nil != _sg.mtl.cmd_encoder) {
+        _sg_mtl_bind_uniform_buffers();
+    }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
@@ -9543,16 +9573,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     }
 
     /* bind the global uniform buffer, this only happens once per pass */
-    for (int slot = 0; slot < SG_MAX_SHADERSTAGE_UBS; slot++) {
-        [_sg.mtl.cmd_encoder
-            setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
-            offset:0
-            atIndex:slot];
-        [_sg.mtl.cmd_encoder
-            setFragmentBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
-            offset:0
-            atIndex:slot];
-    }
+    _sg_mtl_bind_uniform_buffers();
 }
 
 _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
@@ -14282,6 +14303,19 @@ SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_des
 SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
     SOKOL_ASSERT(_sg.valid && desc);
     return _sg_pass_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
+    #if defined(SOKOL_METAL)
+        if (nil != _sg.mtl.cmd_encoder) {
+            return (__bridge const void*) _sg.mtl.cmd_encoder;
+        }
+        else {
+            return 0;
+        }
+    #else
+        return 0;
+    #endif
 }
 
 #ifdef _MSC_VER
