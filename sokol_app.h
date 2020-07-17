@@ -879,7 +879,7 @@ SOKOL_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
 SOKOL_API_DECL float sapp_dpi_scale(void);
 /* show or hide the mobile device onscreen keyboard */
-SOKOL_API_DECL void sapp_show_keyboard(bool visible);
+SOKOL_API_DECL void sapp_show_keyboard(bool show);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
 /* query fullscreen mode */
@@ -887,9 +887,13 @@ SOKOL_API_DECL bool sapp_is_fullscreen(void);
 /* toggle fullscreen mode */
 SOKOL_API_DECL void sapp_toggle_fullscreen(void);
 /* show or hide the mouse cursor */
-SOKOL_API_DECL void sapp_show_mouse(bool visible);
+SOKOL_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor */
 SOKOL_API_DECL bool sapp_mouse_shown();
+/* enable/disable mouse-pointer-lock mode */
+SOKOL_API_DECL void sapp_lock_mouse(bool lock);
+/* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
+SOKOL_API_DECL bool sapp_mouse_locked(void);
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -1590,6 +1594,8 @@ typedef struct {
     bool win32_mouse_tracked;
     bool onscreen_keyboard_shown;
     bool mouse_shown;
+    bool mouse_lock_requested;
+    bool mouse_locked;
     sapp_event event;
     sapp_desc desc;
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
@@ -2791,6 +2797,11 @@ const char* _sapp_macos_get_clipboard_string(void) {
         _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
     }
     return _sapp.clipboard;
+}
+
+void _sapp_macos_lock_mouse(bool lock) {
+    // FIXME
+    _SOKOL_UNUSED(lock);
 }
 
 #endif /* MacOS */
@@ -7671,15 +7682,15 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
     return _sapp.gles2_fallback;
 }
 
-SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
+SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
     #if defined(_SAPP_IOS)
-    _sapp_ios_show_keyboard(shown);
+    _sapp_ios_show_keyboard(show);
     #elif defined(_SAPP_EMSCRIPTEN)
-    _sapp_emsc_show_keyboard(shown);
+    _sapp_emsc_show_keyboard(show);
     #elif defined(_SAPP_ANDROID)
-    _sapp_android_show_keyboard(shown);
+    _sapp_android_show_keyboard(show);
     #else
-    _SOKOL_UNUSED(shown);
+    _SOKOL_UNUSED(show);
     #endif
 }
 
@@ -7702,19 +7713,31 @@ SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
 }
 
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
-SOKOL_API_IMPL void sapp_show_mouse(bool visible) {
-    if (_sapp.mouse_shown != visible) {
+SOKOL_API_IMPL void sapp_show_mouse(bool show) {
+    if (_sapp.mouse_shown != show) {
         #if defined(_SAPP_MACOS)
-        _sapp_macos_show_mouse(visible);
+        _sapp_macos_show_mouse(show);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_show_mouse(visible);
+        _sapp_win32_show_mouse(show);
         #endif
-        _sapp.mouse_shown = visible;
+        _sapp.mouse_shown = show;
     }
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
     return _sapp.mouse_shown;
+}
+
+SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
+    #if defined(_SAPP_MACOS)
+    _sapp_macos_lock_mouse(lock);
+    #else
+    _sapp.mouse_locked = lock;
+    #endif
+}
+
+SOKOL_API_IMPL bool sapp_mouse_locked(void) {
+    return _sapp.mouse_locked;
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
