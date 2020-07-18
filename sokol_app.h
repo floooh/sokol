@@ -814,6 +814,8 @@ typedef struct sapp_event {
     sapp_mousebutton mouse_button;
     float mouse_x;
     float mouse_y;
+    float mouse_dx;
+    float mouse_dy;
     float scroll_x;
     float scroll_y;
     int num_touches;
@@ -1576,6 +1578,7 @@ typedef struct {
 
 typedef struct {
     float x, y;
+    float dx, dy;
     bool shown;
     bool lock_requested;
     bool locked;
@@ -2128,6 +2131,10 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.window_height = _sapp.window_height;
     _sapp.event.framebuffer_width = _sapp.framebuffer_width;
     _sapp.event.framebuffer_height = _sapp.framebuffer_height;
+    _sapp.event.mouse_x = _sapp.mouse.x;
+    _sapp.event.mouse_y = _sapp.mouse.y;
+    _sapp.event.mouse_dx = _sapp.mouse.dx;
+    _sapp.event.mouse_dy = _sapp.mouse.dy;
 }
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
@@ -2313,6 +2320,49 @@ int main(int argc, char* argv[]) {
 }
 #endif /* SOKOL_NO_ENTRY */
 
+_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
+    uint32_t m = 0;
+    if (f & NSEventModifierFlagShift) {
+        m |= SAPP_MODIFIER_SHIFT;
+    }
+    if (f & NSEventModifierFlagControl) {
+        m |= SAPP_MODIFIER_CTRL;
+    }
+    if (f & NSEventModifierFlagOption) {
+        m |= SAPP_MODIFIER_ALT;
+    }
+    if (f & NSEventModifierFlagCommand) {
+        m |= SAPP_MODIFIER_SUPER;
+    }
+    return m;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.mouse_button = btn;
+        _sapp.event.modifiers = mod;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
+        _sapp.event.modifiers = mod;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
         const CGSize fb_size = [_sapp.macos.view drawableSize];
@@ -2341,16 +2391,6 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
-    _sapp.mouse.x = mouse_pos.x * _sapp.dpi_scale;
-    _sapp.mouse.y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
-    _sapp_frame();
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
-}
-
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     /* NOTE: the _sapp.fullscreen flag is also notified by the
        windowDidEnterFullscreen / windowDidExitFullscreen
@@ -2358,6 +2398,64 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     */
     _sapp.fullscreen = !_sapp.fullscreen;
     [_sapp.macos.window toggleFullScreen:nil];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_clipboard_string(const char* str) {
+    @autoreleasepool {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
+    }
+}
+
+_SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.buffer);
+    @autoreleasepool {
+        _sapp.clipboard.buffer[0] = 0;
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
+            return _sapp.clipboard.buffer;
+        }
+        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
+        if (!str) {
+            return _sapp.clipboard.buffer;
+        }
+        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    }
+    return _sapp.clipboard.buffer;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
+    const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+    float new_x = mouse_pos.x * _sapp.dpi_scale;
+    float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+    _sapp.mouse.dx = new_x - _sapp.mouse.x;
+    _sapp.mouse.dy = new_y - _sapp.mouse.y;
+    _sapp.mouse.x = new_x;
+    _sapp.mouse.y = new_y;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
+    /* NOTE: this function is only called when the mouse visibility actually changes */
+    if (visible) {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
+    }
+    else {
+        CGDisplayHideCursor(kCGDirectMainDisplay);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
+    // FIXME
+    _SOKOL_UNUSED(lock);
+}
+
+_SOKOL_PRIVATE void _sapp_macos_frame(void) {
+    _sapp_macos_update_mouse();
+    _sapp_frame();
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
 }
 
 @implementation _sapp_macos_app_delegate
@@ -2480,51 +2578,6 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     _sapp_discard_state();
 }
 @end
-
-_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
-    uint32_t m = 0;
-    if (f & NSEventModifierFlagShift) {
-        m |= SAPP_MODIFIER_SHIFT;
-    }
-    if (f & NSEventModifierFlagControl) {
-        m |= SAPP_MODIFIER_CTRL;
-    }
-    if (f & NSEventModifierFlagOption) {
-        m |= SAPP_MODIFIER_ALT;
-    }
-    if (f & NSEventModifierFlagCommand) {
-        m |= SAPP_MODIFIER_SUPER;
-    }
-    return m;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.mouse_button = btn;
-        _sapp.event.modifiers = mod;
-        _sapp.event.mouse_x = _sapp.mouse.x;
-        _sapp.event.mouse_y = _sapp.mouse.y;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.key_code = key;
-        _sapp.event.key_repeat = repeat;
-        _sapp.event.modifiers = mod;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp_call_event(&_sapp.event);
-    }
-}
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
@@ -2686,8 +2739,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
             _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
-            _sapp.event.mouse_x = _sapp.mouse.x;
-            _sapp.event.mouse_y = _sapp.mouse.y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
@@ -2771,46 +2822,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
-void _sapp_macos_set_clipboard_string(const char* str) {
-    @autoreleasepool {
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
-        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
-    }
-}
-
-void _sapp_macos_show_mouse(bool visible) {
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    if (visible) {
-        CGDisplayShowCursor(kCGDirectMainDisplay);
-    }
-    else {
-        CGDisplayHideCursor(kCGDirectMainDisplay);
-    }
-}
-
-const char* _sapp_macos_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard.buffer);
-    @autoreleasepool {
-        _sapp.clipboard.buffer[0] = 0;
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
-            return _sapp.clipboard.buffer;
-        }
-        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
-        if (!str) {
-            return _sapp.clipboard.buffer;
-        }
-        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
-    }
-    return _sapp.clipboard.buffer;
-}
-
-void _sapp_macos_lock_mouse(bool lock) {
-    // FIXME
-    _SOKOL_UNUSED(lock);
-}
-
 #endif /* MacOS */
 
 /*== iOS =====================================================================*/
@@ -2851,6 +2862,27 @@ _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        NSEnumerator* enumerator = event.allTouches.objectEnumerator;
+        UITouch* ios_touch;
+        while ((ios_touch = [enumerator nextObject])) {
+            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
+                CGPoint ios_pos = [ios_touch locationInView:_sapp.ios.view];
+                sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
+                cur_point->identifier = (uintptr_t) ios_touch;
+                cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
+                cur_point->pos_y = ios_pos.y * _sapp.dpi_scale;
+                cur_point->changed = [touches containsObject:ios_touch];
+            }
+        }
+        if (_sapp.event.num_touches > 0) {
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -3090,27 +3122,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     return NO;
 }
 @end
-
-_SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        NSEnumerator* enumerator = event.allTouches.objectEnumerator;
-        UITouch* ios_touch;
-        while ((ios_touch = [enumerator nextObject])) {
-            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
-                CGPoint ios_pos = [ios_touch locationInView:_sapp.ios.view];
-                sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
-                cur_point->identifier = (uintptr_t) ios_touch;
-                cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
-                cur_point->pos_y = ios_pos.y * _sapp.dpi_scale;
-                cur_point->changed = [touches containsObject:ios_touch];
-            }
-        }
-        if (_sapp.event.num_touches > 0) {
-            _sapp_call_event(&_sapp.event);
-        }
-    }
-}
 
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
@@ -3392,8 +3403,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
-            _sapp.event.mouse_x = _sapp.mouse.x;
-            _sapp.event.mouse_y = _sapp.mouse.y;
             _sapp_call_event(&_sapp.event);
         }
     }
@@ -4701,8 +4710,6 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.mouse_button = btn;
-        _sapp.event.mouse_x = _sapp.mouse.x;
-        _sapp.event.mouse_y = _sapp.mouse.y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -7197,8 +7204,6 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mods;
-        _sapp.event.mouse_x = _sapp.mouse.x;
-        _sapp.event.mouse_y = _sapp.mouse.y;
         _sapp_call_event(&_sapp.event);
     }
 }
