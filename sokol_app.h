@@ -1569,14 +1569,21 @@ typedef struct {
 #endif
 
 typedef struct {
+    bool enabled;
+    int buf_size;
+    char* buffer;
+} _sapp_clipboard_t;
+
+typedef struct {
+    float x, y;
+    bool shown;
+    bool lock_requested;
+    bool locked;
+} _sapp_mouse_t;
+
+typedef struct {
+    sapp_desc desc;
     bool valid;
-    int window_width;
-    int window_height;
-    int framebuffer_width;
-    int framebuffer_height;
-    int sample_count;
-    int swap_interval;
-    float dpi_scale;
     bool fullscreen;
     bool gles2_fallback;
     bool first_frame;
@@ -1586,22 +1593,18 @@ typedef struct {
     bool quit_ordered;
     bool event_consumed;
     bool html5_ask_leave_site;
-    char html5_canvas_name[_SAPP_MAX_TITLE_LENGTH];
-    char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
-    wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
-    uint64_t frame_count;
-    float mouse_x;
-    float mouse_y;
     bool onscreen_keyboard_shown;
-    bool mouse_shown;
-    bool mouse_lock_requested;
-    bool mouse_locked;
+    int window_width;
+    int window_height;
+    int framebuffer_width;
+    int framebuffer_height;
+    int sample_count;
+    int swap_interval;
+    float dpi_scale;
+    uint64_t frame_count;
     sapp_event event;
-    sapp_desc desc;
-    sapp_keycode keycodes[SAPP_MAX_KEYCODES];
-    bool clipboard_enabled;
-    int clipboard_size;
-    char* clipboard;
+    _sapp_mouse_t mouse;
+    _sapp_clipboard_t clipboard;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -1621,6 +1624,10 @@ typedef struct {
         _sapp_x11_t x11;
         _sapp_glx_t glx;
     #endif
+    char html5_canvas_name[_SAPP_MAX_TITLE_LENGTH];
+    char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
+    wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
+    sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -2092,22 +2099,22 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp_strcpy(_sapp.desc.html5_canvas_name, _sapp.html5_canvas_name, sizeof(_sapp.html5_canvas_name));
     _sapp.desc.html5_canvas_name = _sapp.html5_canvas_name;
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
-    _sapp.clipboard_enabled = _sapp.desc.enable_clipboard;
-    if (_sapp.clipboard_enabled) {
-        _sapp.clipboard_size = _sapp.desc.clipboard_size;
-        _sapp.clipboard = (char*) SOKOL_CALLOC(1, _sapp.clipboard_size);
+    _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
+    if (_sapp.clipboard.enabled) {
+        _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
+        _sapp.clipboard.buffer = (char*) SOKOL_CALLOC(1, _sapp.clipboard.buf_size);
     }
     _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
-    _sapp.mouse_shown = true;
+    _sapp.mouse.shown = true;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
-    if (_sapp.clipboard_enabled) {
-        SOKOL_ASSERT(_sapp.clipboard);
-        SOKOL_FREE((void*)_sapp.clipboard);
+    if (_sapp.clipboard.enabled) {
+        SOKOL_ASSERT(_sapp.clipboard.buffer);
+        SOKOL_FREE((void*)_sapp.clipboard.buffer);
     }
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
@@ -2336,8 +2343,8 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
-    _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
-    _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+    _sapp.mouse.x = mouse_pos.x * _sapp.dpi_scale;
+    _sapp.mouse.y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
         [_sapp.macos.window performClose:nil];
@@ -2496,8 +2503,8 @@ _SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mod;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.event.mouse_x = _sapp.mouse.x;
+        _sapp.event.mouse_y = _sapp.mouse.y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -2679,8 +2686,8 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
             _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
-            _sapp.event.mouse_x = _sapp.mouse_x;
-            _sapp.event.mouse_y = _sapp.mouse_y;
+            _sapp.event.mouse_x = _sapp.mouse.x;
+            _sapp.event.mouse_y = _sapp.mouse.y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
@@ -2715,7 +2722,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             }
         }
         /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
-        if (_sapp.clipboard_enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+        if (_sapp.clipboard.enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
@@ -2783,20 +2790,20 @@ void _sapp_macos_show_mouse(bool visible) {
 }
 
 const char* _sapp_macos_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard);
+    SOKOL_ASSERT(_sapp.clipboard.buffer);
     @autoreleasepool {
-        _sapp.clipboard[0] = 0;
+        _sapp.clipboard.buffer[0] = 0;
         NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
         if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
-            return _sapp.clipboard;
+            return _sapp.clipboard.buffer;
         }
         NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
         if (!str) {
-            return _sapp.clipboard;
+            return _sapp.clipboard.buffer;
         }
-        _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
+        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     }
-    return _sapp.clipboard;
+    return _sapp.clipboard.buffer;
 }
 
 void _sapp_macos_lock_mouse(bool lock) {
@@ -3168,8 +3175,8 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
-    if (_sapp.clipboard_enabled) {
-        _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    if (_sapp.clipboard.enabled) {
+        _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
@@ -3210,6 +3217,7 @@ EM_JS(void, sapp_remove_js_hook_clipboard, (void), {
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
     var str = UTF8ToString(c_str);
+console.log("sapp_js_write_clipboard: " + str);
     var ta = document.createElement('textarea');
     ta.setAttribute('autocomplete', 'off');
     ta.setAttribute('autocorrect', 'off');
@@ -3332,8 +3340,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
-    _sapp.mouse_y = (emsc_event->targetY * _sapp.dpi_scale);
+    _sapp.mouse.x = (emsc_event->targetX * _sapp.dpi_scale);
+    _sapp.mouse.y = (emsc_event->targetY * _sapp.dpi_scale);
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
@@ -3384,8 +3392,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
-            _sapp.event.mouse_x = _sapp.mouse_x;
-            _sapp.event.mouse_y = _sapp.mouse_y;
+            _sapp.event.mouse_x = _sapp.mouse.x;
+            _sapp.event.mouse_y = _sapp.mouse.y;
             _sapp_call_event(&_sapp.event);
         }
     }
@@ -3883,7 +3891,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     sapp_add_js_hook_beforeunload();
-    if (_sapp.clipboard_enabled) {
+    if (_sapp.clipboard.enabled) {
         sapp_add_js_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -3907,7 +3915,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
     sapp_remove_js_hook_beforeunload();
-    if (_sapp.clipboard_enabled) {
+    if (_sapp.clipboard.enabled) {
         sapp_remove_js_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -4693,8 +4701,8 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.mouse_button = btn;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.event.mouse_x = _sapp.mouse.x;
+        _sapp.event.mouse_y = _sapp.mouse.y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -4717,7 +4725,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled &&
+        if (_sapp.clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
@@ -4823,8 +4831,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
-                _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                _sapp.mouse.x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                _sapp.mouse.y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
                 if (!_sapp.win32.mouse_tracked) {
                     _sapp.win32.mouse_tracked = true;
                     TRACKMOUSEEVENT tme;
@@ -4984,10 +4992,10 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(str);
     SOKOL_ASSERT(_sapp.win32.hwnd);
-    SOKOL_ASSERT(_sapp.clipboard_enabled && (_sapp.clipboard_size > 0));
+    SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
 
     wchar_t* wchar_buf = 0;
-    const int wchar_buf_size = _sapp.clipboard_size * sizeof(wchar_t);
+    const int wchar_buf_size = _sapp.clipboard.buf_size * sizeof(wchar_t);
     HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
     if (!object) {
         goto error;
@@ -5020,28 +5028,28 @@ error:
 }
 
 _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard_enabled && _sapp.clipboard);
+    SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
     SOKOL_ASSERT(_sapp.win32.hwnd);
     if (!OpenClipboard(_sapp.win32.hwnd)) {
         /* silently ignore any errors and just return the current
            content of the local clipboard buffer
         */
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
     HANDLE object = GetClipboardData(CF_UNICODETEXT);
     if (!object) {
         CloseClipboard();
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
     const wchar_t* wchar_buf = (const wchar_t*) GlobalLock(object);
     if (!wchar_buf) {
         CloseClipboard();
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
-    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard, _sapp.clipboard_size);
+    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     GlobalUnlock(object);
     CloseClipboard();
-    return _sapp.clipboard;
+    return _sapp.clipboard.buffer;
 }
 
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
@@ -7189,8 +7197,8 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mods;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
+        _sapp.event.mouse_x = _sapp.mouse.x;
+        _sapp.event.mouse_y = _sapp.mouse.y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -7213,7 +7221,7 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled &&
+        if (_sapp.clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
@@ -7474,8 +7482,8 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
             break;
         case MotionNotify:
-            _sapp.mouse_x = event->xmotion.x;
-            _sapp.mouse_y = event->xmotion.y;
+            _sapp.mouse.x = event->xmotion.x;
+            _sapp.mouse.y = event->xmotion.y;
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
             break;
         case ConfigureNotify:
@@ -7714,30 +7722,30 @@ SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
 
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
 SOKOL_API_IMPL void sapp_show_mouse(bool show) {
-    if (_sapp.mouse_shown != show) {
+    if (_sapp.mouse.shown != show) {
         #if defined(_SAPP_MACOS)
         _sapp_macos_show_mouse(show);
         #elif defined(_SAPP_WIN32)
         _sapp_win32_show_mouse(show);
         #endif
-        _sapp.mouse_shown = show;
+        _sapp.mouse.shown = show;
     }
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    return _sapp.mouse_shown;
+    return _sapp.mouse.shown;
 }
 
 SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_lock_mouse(lock);
     #else
-    _sapp.mouse_locked = lock;
+    _sapp.mouse.locked = lock;
     #endif
 }
 
 SOKOL_API_IMPL bool sapp_mouse_locked(void) {
-    return _sapp.mouse_locked;
+    return _sapp.mouse.locked;
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
@@ -7758,35 +7766,35 @@ SOKOL_API_IMPL void sapp_consume_event(void) {
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
-    if (!_sapp.clipboard_enabled) {
+    if (!_sapp.clipboard.enabled) {
         return;
     }
     SOKOL_ASSERT(str);
     #if defined(_SAPP_MACOS)
         _sapp_macos_set_clipboard_string(str);
-    #elif defined(_SAPP_EMSCRIPEN)
+    #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
     #else
         /* not implemented */
     #endif
-    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
-    if (!_sapp.clipboard_enabled) {
+    if (!_sapp.clipboard.enabled) {
         return "";
     }
     #if defined(_SAPP_MACOS)
         return _sapp_macos_get_clipboard_string();
     #elif defined(_SAPP_EMSCRIPTEN)
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
     #else
         /* not implemented */
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     #endif
 }
 
