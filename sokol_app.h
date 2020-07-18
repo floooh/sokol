@@ -1313,6 +1313,7 @@ typedef struct {
     HDC dc;
     bool in_create_window;
     bool iconified;
+    bool mouse_tracked;
     _sapp_win32_dpi_t dpi;
 } _sapp_win32_t;
 
@@ -1591,7 +1592,6 @@ typedef struct {
     uint64_t frame_count;
     float mouse_x;
     float mouse_y;
-    bool win32_mouse_tracked;
     bool onscreen_keyboard_shown;
     bool mouse_shown;
     bool mouse_lock_requested;
@@ -4825,8 +4825,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_MOUSEMOVE:
                 _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
                 _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                if (!_sapp.win32_mouse_tracked) {
-                    _sapp.win32_mouse_tracked = true;
+                if (!_sapp.win32.mouse_tracked) {
+                    _sapp.win32.mouse_tracked = true;
                     TRACKMOUSEEVENT tme;
                     memset(&tme, 0, sizeof(tme));
                     tme.cbSize = sizeof(tme);
@@ -4838,7 +4838,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
                 break;
             case WM_MOUSELEAVE:
-                _sapp.win32_mouse_tracked = false;
+                _sapp.win32.mouse_tracked = false;
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
                 break;
             case WM_MOUSEWHEEL:
