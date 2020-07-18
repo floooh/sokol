@@ -1277,7 +1277,7 @@ typedef struct {
     _sapp_wgpu_t wgpu;
     #endif
 } _sapp_emsc_t;
-#endif // _SAPP_EMSCROPTEN
+#endif // _SAPP_EMSCRIPTEN
 
 /*== WIN32 DECLARATIONS ======================================================*/
 #if defined(_SAPP_WIN32)
@@ -7741,7 +7741,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(str);
     #if defined(_SAPP_MACOS)
         _sapp_macos_set_clipboard_string(str);
-    #elif defined(_SAPP_EMSCRIPEN)
+    #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
