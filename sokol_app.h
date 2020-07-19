@@ -1216,6 +1216,7 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
+    float mouse_locked_x, mouse_locked_y; // 'raw' frozen mouse position during mouse lock
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
@@ -1580,7 +1581,6 @@ typedef struct {
     float x, y;
     float dx, dy;
     bool shown;
-    bool lock_requested;
     bool locked;
 } _sapp_mouse_t;
 
@@ -2425,14 +2425,39 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
     return _sapp.clipboard.buffer;
 }
 
+_SOKOL_PRIVATE void _sapp_macos_center_mouse(void) {
+    const NSRect r = [_sapp.macos.window convertRectToScreen:[_sapp.macos.view frame]];
+    const CGPoint mid_point = CGPointMake(NSMidX(r), NSMidY(r));
+    CGWarpMouseCursorPosition(mid_point);
+}
+
+_SOKOL_PRIVATE void _sapp_macos_store_locked_mouse_pos(void) {
+    const NSPoint locked_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+    _sapp.macos.mouse_locked_x = locked_pos.x;
+    _sapp.macos.mouse_locked_y = locked_pos.y;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_restore_locked_mouse_pos(void) {
+    const NSRect r_win = NSMakeRect(_sapp.macos.mouse_locked_x, _sapp.macos.mouse_locked_y, 0, 0);
+    const NSRect r_screen = [_sapp.macos.window convertRectToScreen:r_win];
+    CGFloat x = NSMinX(r_screen);
+    CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMinY(r_screen);
+    CGWarpMouseCursorPosition(CGPointMake(x, y));
+}
+
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
-    const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
-    float new_x = mouse_pos.x * _sapp.dpi_scale;
-    float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
-    _sapp.mouse.dx = new_x - _sapp.mouse.x;
-    _sapp.mouse.dy = new_y - _sapp.mouse.y;
-    _sapp.mouse.x = new_x;
-    _sapp.mouse.y = new_y;
+    if (_sapp.mouse.locked) {
+        _sapp_macos_center_mouse();
+    }
+    else {
+        const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+        float new_x = mouse_pos.x * _sapp.dpi_scale;
+        float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+        _sapp.mouse.dx = new_x - _sapp.mouse.x;
+        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        _sapp.mouse.x = new_x;
+        _sapp.mouse.y = new_y;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
@@ -2446,8 +2471,26 @@ _SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
-    // FIXME
-    _SOKOL_UNUSED(lock);
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    /* in locked mode, the mouse position will remain frozen, the system
+       mouse pointer will be centered in the window to prevent it from bumping
+       into the screen edge, and mouseMoved events will only update mouse_dx/dy
+    */
+    if (_sapp.mouse.locked) {
+        [NSEvent setMouseCoalescingEnabled:NO];
+        CGAssociateMouseAndMouseCursorPosition(NO);
+        _sapp_macos_store_locked_mouse_pos();
+        _sapp_macos_center_mouse();
+    }
+    else {
+        _sapp_macos_restore_locked_mouse_pos();
+        CGAssociateMouseAndMouseCursorPosition(YES);
+        [NSEvent setMouseCoalescingEnabled:YES];
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
@@ -2720,6 +2763,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
