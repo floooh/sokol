@@ -1216,7 +1216,6 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
-    float mouse_locked_x, mouse_locked_y; // 'raw' frozen mouse position during mouse lock
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
@@ -2425,32 +2424,8 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
     return _sapp.clipboard.buffer;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_center_mouse(void) {
-    const NSRect r_screen = [_sapp.macos.window convertRectToScreen:[_sapp.macos.view frame]];
-    const CGFloat x = NSMidX(r_screen);
-    const CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMidY(r_screen);
-    CGWarpMouseCursorPosition(CGPointMake(x, y));
-}
-
-_SOKOL_PRIVATE void _sapp_macos_store_locked_mouse_pos(void) {
-    const NSPoint locked_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
-    _sapp.macos.mouse_locked_x = locked_pos.x;
-    _sapp.macos.mouse_locked_y = locked_pos.y;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_restore_locked_mouse_pos(void) {
-    const NSRect r_win = NSMakeRect(_sapp.macos.mouse_locked_x, _sapp.macos.mouse_locked_y, 0, 0);
-    const NSRect r_screen = [_sapp.macos.window convertRectToScreen:r_win];
-    const CGFloat x = NSMinX(r_screen);
-    const CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMinY(r_screen);
-    CGWarpMouseCursorPosition(CGPointMake(x, y));
-}
-
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
-    if (_sapp.mouse.locked) {
-        _sapp_macos_center_mouse();
-    }
-    else {
+    if (!_sapp.mouse.locked) {
         const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
         float new_x = mouse_pos.x * _sapp.dpi_scale;
         float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
@@ -2484,11 +2459,8 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     if (_sapp.mouse.locked) {
         [NSEvent setMouseCoalescingEnabled:NO];
         CGAssociateMouseAndMouseCursorPosition(NO);
-        _sapp_macos_store_locked_mouse_pos();
-        _sapp_macos_center_mouse();
     }
     else {
-        _sapp_macos_restore_locked_mouse_pos();
         CGAssociateMouseAndMouseCursorPosition(YES);
         [NSEvent setMouseCoalescingEnabled:YES];
     }
