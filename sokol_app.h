@@ -2426,9 +2426,10 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_center_mouse(void) {
-    const NSRect r = [_sapp.macos.window convertRectToScreen:[_sapp.macos.view frame]];
-    const CGPoint mid_point = CGPointMake(NSMidX(r), NSMidY(r));
-    CGWarpMouseCursorPosition(mid_point);
+    const NSRect r_screen = [_sapp.macos.window convertRectToScreen:[_sapp.macos.view frame]];
+    const CGFloat x = NSMidX(r_screen);
+    const CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMidY(r_screen);
+    CGWarpMouseCursorPosition(CGPointMake(x, y));
 }
 
 _SOKOL_PRIVATE void _sapp_macos_store_locked_mouse_pos(void) {
@@ -2440,8 +2441,8 @@ _SOKOL_PRIVATE void _sapp_macos_store_locked_mouse_pos(void) {
 _SOKOL_PRIVATE void _sapp_macos_restore_locked_mouse_pos(void) {
     const NSRect r_win = NSMakeRect(_sapp.macos.mouse_locked_x, _sapp.macos.mouse_locked_y, 0, 0);
     const NSRect r_screen = [_sapp.macos.window convertRectToScreen:r_win];
-    CGFloat x = NSMinX(r_screen);
-    CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMinY(r_screen);
+    const CGFloat x = NSMinX(r_screen);
+    const CGFloat y = CGDisplayBounds(kCGDirectMainDisplay).size.height - NSMinY(r_screen);
     CGWarpMouseCursorPosition(CGPointMake(x, y));
 }
 
@@ -2762,6 +2763,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
     }
 }
+// FIXME: otherMouseDragged?
 - (void)mouseMoved:(NSEvent*)event {
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
@@ -2770,9 +2772,17 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
