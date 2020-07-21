@@ -1862,6 +1862,7 @@ typedef int  GLint;
     _SAPP_XMACRO(glClearBufferfi,                   void, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
     _SAPP_XMACRO(glClearBufferfv,                   void, (GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
     _SAPP_XMACRO(glClearBufferuiv,                  void, (GLenum buffer, GLint drawbuffer, const GLuint * value)) \
+    _SAPP_XMACRO(glClearBufferiv,                   void, (GLenum buffer, GLint drawbuffer, const GLint * value)) \
     _SAPP_XMACRO(glDeleteRenderbuffers,             void, (GLsizei n, const GLuint * renderbuffers)) \
     _SAPP_XMACRO(glUniform4fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
     _SAPP_XMACRO(glUniform2fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
