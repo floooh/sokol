@@ -2452,15 +2452,23 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     }
     _sapp.mouse.dx = _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
-    /* in locked mode, the mouse position will remain frozen, the system
-       mouse pointer will be centered in the window to prevent it from bumping
-       into the screen edge, and mouseMoved events will only update mouse_dx/dy
+    /*
+        NOTE that this code doesn't warp the mouse cursor to the window
+        center as everybody else does it. This lead to a spike in the
+        *second* mouse-moved event after the warp happened. The
+        mouse centering doesn't seem to be required (mouse-moved events
+        are reported correctly even when the cursor is at an edge of the screen).
+
+        NOTE also that the hide/show of the mouse cursor should properly
+        stack with calls to sapp_show_mouse()
     */
     if (_sapp.mouse.locked) {
         [NSEvent setMouseCoalescingEnabled:NO];
         CGAssociateMouseAndMouseCursorPosition(NO);
+        CGDisplayHideCursor(kCGDirectMainDisplay);
     }
     else {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
         CGAssociateMouseAndMouseCursorPosition(YES);
         [NSEvent setMouseCoalescingEnabled:YES];
     }
