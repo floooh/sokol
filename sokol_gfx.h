@@ -6284,8 +6284,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
                 glClearBufferfv(GL_DEPTH, 0, &action->depth.val);
             }
             else if (clear_stencil) {
-                GLuint val = action->stencil.val;
-                glClearBufferuiv(GL_STENCIL, 0, &val);
+                GLint val = (GLint) action->stencil.val;
+                glClearBufferiv(GL_STENCIL, 0, &val);
             }
         }
     }
