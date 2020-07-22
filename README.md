@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Jul-2020**: warning about cmake 3.18 breakage)
+[See what's new](#updates) (**22-Jul-2020 PSA**: warning about cmake 3.18 breakage)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -462,10 +462,13 @@ Mainly some "missing features" for desktop apps:
 
 - **22-Jul-2020**: **PLEASE NOTE** cmake 3.18 breaks some of sokol samples when
   compiling with the Visual Studio toolchain because some C files now actually
-  compiled as C++ for some reason (see:
+  compile as C++ for some reason (see:
   https://twitter.com/FlohOfWoe/status/1285996526117040128).  Until this is
   fixed, or I have come up with a workaround, please use an older cmake version
   to build the sokol samples with the Visual Studio compiler.
+
+  (Update: I have added a workaround to fips: https://github.com/floooh/fips/commit/89997b8ebdca6fc9455a5cfe6145eecaa017df49
+  which fixes the issue at least for fips projects)
 
 - **14-Jul-2020**:
     - sapp_mouse_shown() has been implemented for macOS (thanks to @slmjkdbtl for
