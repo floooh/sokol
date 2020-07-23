@@ -1313,6 +1313,7 @@ typedef struct {
 typedef struct {
     HWND hwnd;
     HDC dc;
+    LONG mouse_locked_x, mouse_locked_y;
     bool in_create_window;
     bool iconified;
     bool mouse_tracked;
@@ -1581,6 +1582,7 @@ typedef struct {
     float dx, dy;
     bool shown;
     bool locked;
+    bool pos_valid;
 } _sapp_mouse_t;
 
 typedef struct {
@@ -2429,10 +2431,14 @@ _SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
         const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
         float new_x = mouse_pos.x * _sapp.dpi_scale;
         float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
-        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        /* don't update dx/dy in the very first update */
+        if (_sapp.mouse.pos_valid) {
+            _sapp.mouse.dx = new_x - _sapp.mouse.x;
+            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        }
         _sapp.mouse.x = new_x;
         _sapp.mouse.y = new_y;
+        _sapp.mouse.pos_valid = true;
     }
 }
 
@@ -4575,6 +4581,27 @@ _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
     ShowCursor((BOOL)visible);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    if (_sapp.mouse.locked) {
+        POINT pos;
+        BOOL res = GetCursorPos(&pos);
+        SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
+        _sapp.win32.mouse_locked_x = pos.x;
+        _sapp.win32.mouse_locked_y = pos.y;
+        // FIXME FIXME FIXME
+    }
+    else {
+        // FIXME FIXME FIXME
+        BOOL res = SetCursorPos(_sapp.win32.mouse_locked_x, _sapp.win32.mouse_locked_y);
+        SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
     /* same as GLFW */
     _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
@@ -4875,23 +4902,35 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
-                _sapp.mouse.x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                _sapp.mouse.y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                if (!_sapp.win32.mouse_tracked) {
-                    _sapp.win32.mouse_tracked = true;
-                    TRACKMOUSEEVENT tme;
-                    memset(&tme, 0, sizeof(tme));
-                    tme.cbSize = sizeof(tme);
-                    tme.dwFlags = TME_LEAVE;
-                    tme.hwndTrack = _sapp.win32.hwnd;
-                    TrackMouseEvent(&tme);
-                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
+                if (!_sapp.mouse.locked) {
+                    const float new_x  = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                    const float new_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                    /* don't update dx/dy in the very first event */
+                    if (_sapp.mouse.pos_valid) {
+                        _sapp.mouse.dx = new_x - _sapp.mouse.x;
+                        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+                    }
+                    _sapp.mouse.x = new_x;
+                    _sapp.mouse.y = new_y;
+                    _sapp.mouse.pos_valid = true;
+                    if (!_sapp.win32.mouse_tracked) {
+                        _sapp.win32.mouse_tracked = true;
+                        TRACKMOUSEEVENT tme;
+                        memset(&tme, 0, sizeof(tme));
+                        tme.cbSize = sizeof(tme);
+                        tme.dwFlags = TME_LEAVE;
+                        tme.hwndTrack = _sapp.win32.hwnd;
+                        TrackMouseEvent(&tme);
+                        _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
+                    }
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
                 }
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
                 break;
             case WM_MOUSELEAVE:
-                _sapp.win32.mouse_tracked = false;
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
+                if (!_sapp.mouse.locked) {
+                    _sapp.win32.mouse_tracked = false;
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
+                }
                 break;
             case WM_MOUSEWHEEL:
                 _sapp_win32_scroll_event(0.0f, (float)((SHORT)HIWORD(wParam)));
@@ -7781,6 +7820,8 @@ SOKOL_API_IMPL bool sapp_mouse_shown(void) {
 SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_lock_mouse(lock);
+    #elif defined(_SAPP_WIN32)
+    _sapp_win32_lock_mouse(lock);
     #else
     _sapp.mouse.locked = lock;
     #endif
