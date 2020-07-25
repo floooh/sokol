@@ -1119,6 +1119,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifdef _MSC_VER
         #pragma warning(push)
         #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+        #pragma warning(disable:4204)   /* nonstandard extension used: non-constant aggregate initializer */ 
         #pragma warning(disable:4054)   /* 'type cast': from function pointer */
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
@@ -4588,15 +4589,15 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
     _sapp.mouse.dx = _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
     if (_sapp.mouse.locked) {
+        /* store the current mouse position, so it can be restored when unlocked */
         POINT pos;
         BOOL res = GetCursorPos(&pos);
         SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
         _sapp.win32.mouse_locked_x = pos.x;
         _sapp.win32.mouse_locked_y = pos.y;
-        // FIXME FIXME FIXME
     }
     else {
-        // FIXME FIXME FIXME
+        /* restore the 'pre-locked' mouse position */
         BOOL res = SetCursorPos(_sapp.win32.mouse_locked_x, _sapp.win32.mouse_locked_y);
         SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
     }
@@ -5253,6 +5254,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 }
 #endif /* SOKOL_WIN32_FORCE_MAIN */
 #endif /* SOKOL_NO_ENTRY */
+
+#ifdef _MSC_VER
+    #pragma warning(pop)
+#endif
+
 #endif /* _SAPP_WIN32 */
 
 /*== Android ================================================================*/
@@ -8050,9 +8056,5 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
-
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 #endif /* SOKOL_IMPL */
