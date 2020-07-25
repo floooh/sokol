@@ -249,7 +249,7 @@
             to various Metal API objects required for rendering, otherwise
             they return a null pointer. These void pointers are actually
             Objective-C ids converted with a (ARC) __bridge cast so that
-            they ids can be tunnel through C code. Also note that the returned
+            the ids can be tunnel through C code. Also note that the returned
             pointers to the renderpass-descriptor and drawable may change from one
             frame to the next, only the Metal device object is guaranteed to
             stay the same.
@@ -346,7 +346,7 @@
 
     Enabling the clipboard will dynamically allocate a clipboard buffer
     for UTF-8 encoded text data of the requested size in bytes, the default
-    size if 8 KBytes. Strings that don't fit into the clipboard buffer
+    size is 8 KBytes. Strings that don't fit into the clipboard buffer
     (including the terminating zero) will be silently clipped, so it's
     important that you provide a big enough clipboard size for your
     use case.
