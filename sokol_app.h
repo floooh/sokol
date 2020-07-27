@@ -66,6 +66,16 @@
     taken from GLFW (http://www.glfw.org/)
 
     iOS onscreen keyboard support 'inspired' by libgdx.
+    
+    Link with the following system libraries:
+
+    - on macOS with Metal: Cocoa, QuartzCore, Metal, MetalKit
+    - on macOS with GL: Cocoa, QuartzCore, OpenGL
+    - on iOS with Metal: UIKit, Metal, MetalKit
+    - on iOS with GL: UIKit, OpenGLES, GLKit
+    - on Linux: X11, Xcursor, GL, dl, m(?)
+    - on Android: GLESv3, EGL, log, android
+    - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
 
     FEATURE OVERVIEW
     ================
@@ -1189,6 +1199,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/XKBlib.h>
     #include <X11/Xresource.h>
     #include <X11/extensions/Xrandr.h>
+    #include <X11/Xcursor/Xcursor.h>
     #include <X11/Xmd.h> /* CARD32 */
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -1499,6 +1510,7 @@ typedef struct {
     Window root;
     Colormap colormap;
     Window window;
+    Cursor hidden_cursor;
     int window_state;
     float dpi;
     unsigned char error_code;
@@ -7197,10 +7209,33 @@ _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
     XFlush(_sapp.x11.display);
 }
 
+_SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
+    SOKOL_ASSERT(0 == _sapp.x11.hidden_cursor);
+    const int w = 16;
+    const int h = 16;
+    XcursorImage* img = XcursorImageCreate(w, h);
+    SOKOL_ASSERT(img && (img->width == 16) && (img->height == 16) && img->pixels);
+    img->xhot = 0;
+    img->yhot = 0;
+    const size_t num_bytes = w * h * sizeof(XcursorPixel);
+    memset(img->pixels, 0, num_bytes);
+    _sapp.x11.hidden_cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
+    XcursorImageDestroy(img);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
     _sapp_x11_query_window_size();
+}
+
+_SOKOL_PRIVATE void _sapp_x11_show_mouse(bool show) {
+    if (show) {
+        XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
+    }
+    else {
+        XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.hidden_cursor);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
@@ -7211,10 +7246,18 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
     _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
     if (_sapp.mouse.locked) {
-        // FIXME
+        XGrabPointer(_sapp.x11.display, // display
+            _sapp.x11.window,           // grab_window
+            True,                       // owner_events
+            ButtonPressMask | ButtonReleaseMask | PointerMotionMask,    // event_mask
+            GrabModeAsync,              // pointer_mode
+            GrabModeAsync,              // keyboard_mode
+            _sapp.x11.window,           // confine_to
+            _sapp.x11.hidden_cursor,    // cursor
+            CurrentTime);               // time
     }
     else {
-        // FIXME
+        XUngrabPointer(_sapp.x11.display, CurrentTime);
     }
 }
 
@@ -7732,6 +7775,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
+    _sapp_x11_create_hidden_cursor();
     _sapp_glx_init();
     Visual* visual = 0;
     int depth = 0;
@@ -7919,6 +7963,8 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         _sapp_macos_show_mouse(show);
         #elif defined(_SAPP_WIN32)
         _sapp_win32_show_mouse(show);
+        #elif defined(_SAPP_LINUX)
+        _sapp_x11_show_mouse(show);
         #endif
         _sapp.mouse.shown = show;
     }
