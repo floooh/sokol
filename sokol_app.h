@@ -654,6 +654,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
+    SAPP_EVENTTYPE_FILE_DRAGGED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -1191,6 +1192,8 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
+@end
+@interface _sapp_macos_window : NSWindow
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
@@ -2371,7 +2374,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
     NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
-    _sapp.macos.window = [[NSWindow alloc]
+    _sapp.macos.window = [[_sapp_macos_window alloc]
         initWithContentRect:window_rect
         styleMask:style
         backing:NSBackingStoreBuffered
@@ -2514,6 +2517,13 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_macos_file_drag_event() {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_FILE_DRAGGED);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
     _SOKOL_UNUSED(sender);
@@ -2563,6 +2573,39 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)windowDidExitFullScreen:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp.fullscreen = false;
+}
+@end
+
+@implementation _sapp_macos_window
+- (instancetype)initWithContentRect:(NSRect)contentRect
+                          styleMask:(NSWindowStyleMask)style
+                            backing:(NSBackingStoreType)backingStoreType
+                              defer:(BOOL)flag {
+    if (self = [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:flag]) {
+        [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+    }
+    return self;
+}
+
+- (NSDragOperation)draggingEntered:(id < NSDraggingInfo >)sender {
+    return NSDragOperationCopy;
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
+    return NSDragOperationCopy;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    NSPasteboard *pboard = [sender draggingPasteboard];
+    if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+        [pasteboard setString:@([NSURL URLFromPasteboard:pboard].path.UTF8String) forType:NSPasteboardTypeString];
+        _sapp_macos_file_drag_event();
+        return YES;
+    }
+
+    return NO;
 }
 @end
 
