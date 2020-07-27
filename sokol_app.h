@@ -7203,6 +7203,21 @@ _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp_x11_query_window_size();
 }
 
+_SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    if (_sapp.mouse.locked) {
+        // FIXME
+    }
+    else {
+        // FIXME
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     Xutf8SetWMProperties(_sapp.x11.display,
         _sapp.x11.window,
@@ -7650,9 +7665,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
             break;
         case MotionNotify:
-            _sapp.mouse.x = event->xmotion.x;
-            _sapp.mouse.y = event->xmotion.y;
-            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+            if (!_sapp.mouse.locked) {
+                const float new_x = (float) event->xmotion.x;
+                const float new_y = (float) event->xmotion.y;
+                if (_sapp.mouse.pos_valid) {
+                    _sapp.mouse.dx = new_x - _sapp.mouse.x;
+                    _sapp.mouse.dy = new_y - _sapp.mouse.y;
+                }
+                _sapp.mouse.x = new_x;
+                _sapp.mouse.y = new_y;
+                _sapp.mouse.pos_valid = true;
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+            }
             break;
         case ConfigureNotify:
             if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
@@ -7909,6 +7933,8 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     _sapp_macos_lock_mouse(lock);
     #elif defined(_SAPP_WIN32)
     _sapp_win32_lock_mouse(lock);
+    #elif defined(_SAPP_LINUX)
+    _sapp_x11_lock_mouse(lock);
     #else
     _sapp.mouse.locked = lock;
     #endif
