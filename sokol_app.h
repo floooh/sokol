@@ -654,7 +654,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
-    SAPP_EVENTTYPE_DROP,
+    SAPP_EVENTTYPE_FILE_DROPPED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -2519,13 +2519,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_file_drag_event() {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
     _SOKOL_UNUSED(sender);
@@ -2589,7 +2582,7 @@ _SOKOL_PRIVATE void _sapp_macos_file_drag_event() {
     return self;
 }
 
-- (NSDragOperation)draggingEntered:(id < NSDraggingInfo >)sender {
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
     return NSDragOperationCopy;
 }
 
@@ -2600,10 +2593,30 @@ _SOKOL_PRIVATE void _sapp_macos_file_drag_event() {
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
-        [pasteboard setString:@([NSURL URLFromPasteboard:pboard].path.UTF8String) forType:NSPasteboardTypeString];
-        _sapp_macos_file_drag_event();
+        int count = pboard.pasteboardItems.count;
+        char** paths = (char**) calloc(count, sizeof(char*));
+
+        int j = 0;
+        for (NSPasteboardItem *item in pboard.pasteboardItems) {
+            NSURL *fileUrl = [NSURL fileURLWithPath:[item stringForType:NSPasteboardTypeFileURL]];
+            NSString *path = fileUrl.standardizedURL.path;
+
+            char* buffer = (char*)calloc(path.length + 1, sizeof(char));
+            strcpy(buffer, fileUrl.standardizedURL.path.UTF8String);
+            paths[j++] = buffer;
+        }
+
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+            _sapp.event.drop_files = (const char**)paths;
+            _sapp.event.drop_files_count = count;
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+
+        for (int i = 0; i < count; i++)
+            free(paths[i]);
+        free(paths);
+
         return YES;
     }
 
@@ -4919,7 +4932,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
 
                 if (_sapp_events_enabled()) {
-                    _sapp_init_event(SAPP_EVENTTYPE_DROP);
+                    _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
                     _sapp.event.drop_files = (const char**)paths;
                     _sapp.event.drop_files_count = count;
                     _sapp.desc.event_cb(&_sapp.event);
