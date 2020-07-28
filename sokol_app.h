@@ -73,7 +73,7 @@
     - on macOS with GL: Cocoa, QuartzCore, OpenGL
     - on iOS with Metal: UIKit, Metal, MetalKit
     - on iOS with GL: UIKit, OpenGLES, GLKit
-    - on Linux: X11, Xcursor, GL, dl, m(?)
+    - on Linux: X11, Xi, Xcursor, GL, dl, m(?)
     - on Android: GLESv3, EGL, log, android
     - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
 
@@ -1194,11 +1194,12 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 #elif defined(_SAPP_LINUX)
     #define GL_GLEXT_PROTOTYPES
-    #include <X11/X.h>
     #include <X11/Xlib.h>
+    #include <X11/Xutil.h>
     #include <X11/XKBlib.h>
+    #include <X11/keysym.h>
     #include <X11/Xresource.h>
-    #include <X11/extensions/Xrandr.h>
+    #include <X11/extensions/XInput2.h>
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/Xmd.h> /* CARD32 */
     #include <GL/gl.h>
@@ -1505,6 +1506,15 @@ typedef int (*PFNGLXSWAPINTERVALMESAPROC)(int);
 typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display*,GLXFBConfig,GLXContext,Bool,const int*);
 
 typedef struct {
+    bool available;
+    int major_opcode;
+    int event_base;
+    int error_base;
+    int major;
+    int minor;
+} _sapp_xi_t;
+
+typedef struct {
     Display* display;
     int screen;
     Window root;
@@ -1522,14 +1532,15 @@ typedef struct {
     Atom NET_WM_ICON_NAME;
     Atom NET_WM_STATE;
     Atom NET_WM_STATE_FULLSCREEN;
+    _sapp_xi_t xi;
 } _sapp_x11_t;
 
 typedef struct {
     void* libgl;
     int major;
     int minor;
-    int eventbase;
-    int errorbase;
+    int event_base;
+    int error_base;
     GLXContext ctx;
     GLXWindow window;
 
@@ -6869,6 +6880,15 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.NET_WM_ICON_NAME        = XInternAtom(_sapp.x11.display, "_NET_WM_ICON_NAME", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
+
+    /* check Xi extension for raw mouse input */
+    if (XQueryExtension(_sapp.x11.display, "XInputExtension", &_sapp.x11.xi.major_opcode, &_sapp.x11.xi.event_base, &_sapp.x11.xi.error_base)) {
+        _sapp.x11.xi.major = 2;
+        _sapp.x11.xi.minor = 0;
+        if (XIQueryVersion(_sapp.x11.display, &_sapp.x11.xi.major, &_sapp.x11.xi.minor) == Success) {
+            _sapp.x11.xi.available = true;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
@@ -6984,7 +7004,7 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
         _sapp_fail("GLX: failed to load required entry points");
     }
 
-    if (!_sapp.glx.QueryExtension(_sapp.x11.display, &_sapp.glx.errorbase, &_sapp.glx.eventbase)) {
+    if (!_sapp.glx.QueryExtension(_sapp.x11.display, &_sapp.glx.error_base, &_sapp.glx.event_base)) {
         _sapp_fail("GLX: GLX extension not found");
     }
     if (!_sapp.glx.QueryVersion(_sapp.x11.display, &_sapp.glx.major, &_sapp.glx.minor)) {
@@ -7246,6 +7266,15 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
     _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
     if (_sapp.mouse.locked) {
+        if (_sapp.x11.xi.available) {
+            XIEventMask em;
+            unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 }; // XIMaskLen is a macro
+            em.deviceid = XIAllMasterDevices;
+            em.mask_len = sizeof(mask);
+            em.mask = mask;
+            XISetMask(mask, XI_RawMotion);
+            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+        }
         XGrabPointer(_sapp.x11.display, // display
             _sapp.x11.window,           // grab_window
             True,                       // owner_events
@@ -7257,8 +7286,18 @@ _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
             CurrentTime);               // time
     }
     else {
+        if (_sapp.x11.xi.available) {
+            XIEventMask em;
+            unsigned char mask[] = { 0 };
+            em.deviceid = XIAllMasterDevices;
+            em.mask_len = sizeof(mask);
+            em.mask = mask;
+            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+        }
+        XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int) _sapp.mouse.x, _sapp.mouse.y);
         XUngrabPointer(_sapp.x11.display, CurrentTime);
     }
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
@@ -7646,6 +7685,35 @@ static bool _sapp_x11_keycodes[256];
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
+        case GenericEvent:
+            if (_sapp.mouse.locked && _sapp.x11.xi.available) {
+                if (event->xcookie.extension == _sapp.x11.xi.major_opcode) {
+                    if (XGetEventData(_sapp.x11.display, &event->xcookie)) {
+                        if (event->xcookie.evtype == XI_RawMotion) {
+                            XIRawEvent* re = (XIRawEvent*) event->xcookie.data;
+                            if (re->valuators.mask_len) {
+                                const double* values = re->raw_values;
+                                if (XIMaskIsSet(re->valuators.mask, 0)) {
+                                    _sapp.mouse.dx = (float) *values;
+                                    values++;
+                                }
+                                if (XIMaskIsSet(re->valuators.mask, 1)) {
+                                    _sapp.mouse.dy = (float) *values;
+                                }
+                                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+                            }
+                        }
+                        XFreeEventData(_sapp.x11.display, &event->xcookie);
+                    }
+                }
+            }
+            break;
+        case FocusOut:
+            /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
+            if (_sapp.mouse.locked) {
+                _sapp_x11_lock_mouse(false);
+            }
+            break;
         case KeyPress:
             {
                 int keycode = event->xkey.keycode;
