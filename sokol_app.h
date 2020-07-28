@@ -654,6 +654,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
+    SAPP_EVENTTYPE_DROP,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -822,6 +823,8 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;
     int framebuffer_height;
+    const char** drop_files;
+    int drop_files_count;
 } sapp_event;
 
 typedef struct sapp_desc {
@@ -4890,6 +4893,45 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_SYSKEYUP:
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
                 break;
+            case WM_DROPFILES:
+            {
+                HDROP drop = (HDROP) wParam;
+                POINT pt;
+                int i;
+
+                const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+                char** paths = (char**) calloc(count, sizeof(char*));
+
+                for (i = 0;  i < count;  i++)
+                {
+                    const UINT length = DragQueryFileW(drop, i, NULL, 0);
+                    WCHAR* buffer = (WCHAR*)calloc(length + 1, sizeof(WCHAR));
+
+                    DragQueryFileW(drop, i, buffer, length + 1);
+
+                    const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, 0, 0);
+                    char* utf8buffer = (char*)calloc(dst_needed + 1, sizeof(char));
+                    _sapp_win32_wide_to_utf8 (buffer, utf8buffer, dst_needed + 1);
+
+                    paths[i] = utf8buffer;
+
+                    free(buffer);
+                }
+
+                if (_sapp_events_enabled()) {
+                    _sapp_init_event(SAPP_EVENTTYPE_DROP);
+                    _sapp.event.drop_files = (const char**)paths;
+                    _sapp.event.drop_files_count = count;
+                    _sapp.desc.event_cb(&_sapp.event);
+                }
+
+                for (i = 0;  i < count;  i++)
+                    free(paths[i]);
+                free(paths);
+
+                DragFinish(drop);
+                break;
+            }
             default:
                 break;
         }
@@ -4943,6 +4985,8 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
     SOKOL_ASSERT(_sapp.win32.dc);
     _sapp_win32_update_dimensions();
+
+    DragAcceptFiles(_sapp.win32.hwnd, 1);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
