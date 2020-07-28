@@ -654,7 +654,6 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
-    SAPP_EVENTTYPE_FILE_DRAGGED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -2519,7 +2518,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE void _sapp_macos_file_drag_event() {
     if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_FILE_DRAGGED);
+        _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
         _sapp_call_event(&_sapp.event);
     }
 }
