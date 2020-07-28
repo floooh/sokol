@@ -823,7 +823,6 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;
     int framebuffer_height;
-    const char** drop_files;
     int drop_files_count;
 } sapp_event;
 
@@ -911,6 +910,8 @@ SOKOL_API_DECL uint64_t sapp_frame_count(void);
 SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
+/* read paths from dropped files during SAPP_EVENTTYPE_FILE_DROPPED. The paths are only valid during the event callback! */
+SOKOL_API_DECL const char** sapp_get_dropped_files(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -1601,6 +1602,7 @@ typedef struct {
     bool clipboard_enabled;
     int clipboard_size;
     char* clipboard;
+    char** dropped_files;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2594,28 +2596,27 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
         int count = pboard.pasteboardItems.count;
-        char** paths = (char**) calloc(count, sizeof(char*));
+        _sapp.dropped_files = (char**)SOKOL_CALLOC(count, sizeof(char*));
 
-        int j = 0;
-        for (NSPasteboardItem *item in pboard.pasteboardItems) {
-            NSURL *fileUrl = [NSURL fileURLWithPath:[item stringForType:NSPasteboardTypeFileURL]];
+        for (int j = 0; j < count; j++) {
+            NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[j] stringForType:NSPasteboardTypeFileURL]];
             NSString *path = fileUrl.standardizedURL.path;
 
-            char* buffer = (char*)calloc(path.length + 1, sizeof(char));
+            char* buffer = (char*)SOKOL_CALLOC(path.length + 1, sizeof(char));
             strcpy(buffer, fileUrl.standardizedURL.path.UTF8String);
-            paths[j++] = buffer;
+            _sapp.dropped_files[j] = buffer;
         }
 
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-            _sapp.event.drop_files = (const char**)paths;
             _sapp.event.drop_files_count = count;
             _sapp.desc.event_cb(&_sapp.event);
         }
 
         for (int i = 0; i < count; i++)
-            free(paths[i]);
-        free(paths);
+            free(_sapp.dropped_files[i]);
+        free(_sapp.dropped_files);
+        _sapp.dropped_files = NULL;
 
         return YES;
     }
@@ -4913,34 +4914,33 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 int i;
 
                 const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
-                char** paths = (char**) calloc(count, sizeof(char*));
+                _sapp.dropped_files = (char**) SOKOL_CALLOC(count, sizeof(char*));
 
                 for (i = 0;  i < count;  i++)
                 {
                     const UINT length = DragQueryFileW(drop, i, NULL, 0);
-                    WCHAR* buffer = (WCHAR*)calloc(length + 1, sizeof(WCHAR));
+                    WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length + 1, sizeof(WCHAR));
 
                     DragQueryFileW(drop, i, buffer, length + 1);
 
                     const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, 0, 0);
-                    char* utf8buffer = (char*)calloc(dst_needed + 1, sizeof(char));
+                    char* utf8buffer = (char*)SOKOL_CALLOC(dst_needed + 1, sizeof(char));
                     _sapp_win32_wide_to_utf8 (buffer, utf8buffer, dst_needed + 1);
 
-                    paths[i] = utf8buffer;
-
+                    _sapp.dropped_files[i] = utf8buffer;
                     free(buffer);
                 }
 
                 if (_sapp_events_enabled()) {
                     _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-                    _sapp.event.drop_files = (const char**)paths;
                     _sapp.event.drop_files_count = count;
                     _sapp.desc.event_cb(&_sapp.event);
                 }
 
                 for (i = 0;  i < count;  i++)
-                    free(paths[i]);
-                free(paths);
+                    free(_sapp.dropped_files[i]);
+                free(_sapp.dropped_files);
+                _sapp.dropped_files = NULL;
 
                 DragFinish(drop);
                 break;
@@ -7865,6 +7865,10 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         /* not implemented */
         return _sapp.clipboard;
     #endif
+}
+
+SOKOL_API_IMPL const char** sapp_get_dropped_files(void) {
+    return (const char**) _sapp.dropped_files;
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
