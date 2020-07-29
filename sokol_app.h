@@ -654,6 +654,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
+    SAPP_EVENTTYPE_FILE_DROPPED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -822,6 +823,7 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;
     int framebuffer_height;
+    int drop_files_count;
 } sapp_event;
 
 typedef struct sapp_desc {
@@ -908,6 +910,8 @@ SOKOL_API_DECL uint64_t sapp_frame_count(void);
 SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
+/* read paths from dropped files during SAPP_EVENTTYPE_FILE_DROPPED. The paths are only valid during the event callback! */
+SOKOL_API_DECL const char** sapp_get_dropped_files(void);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -1191,6 +1195,8 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
+@end
+@interface _sapp_macos_window : NSWindow
 @end
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
@@ -1596,6 +1602,7 @@ typedef struct {
     bool clipboard_enabled;
     int clipboard_size;
     char* clipboard;
+    char** dropped_files;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2371,7 +2378,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
     NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
-    _sapp.macos.window = [[NSWindow alloc]
+    _sapp.macos.window = [[_sapp_macos_window alloc]
         initWithContentRect:window_rect
         styleMask:style
         backing:NSBackingStoreBuffered
@@ -2563,6 +2570,58 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (void)windowDidExitFullScreen:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp.fullscreen = false;
+}
+@end
+
+@implementation _sapp_macos_window
+- (instancetype)initWithContentRect:(NSRect)contentRect
+                          styleMask:(NSWindowStyleMask)style
+                            backing:(NSBackingStoreType)backingStoreType
+                              defer:(BOOL)flag {
+    if (self = [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:flag]) {
+        [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+    }
+    return self;
+}
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+    return NSDragOperationCopy;
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
+    return NSDragOperationCopy;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    NSPasteboard *pboard = [sender draggingPasteboard];
+    if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
+        int count = pboard.pasteboardItems.count;
+        _sapp.dropped_files = (char**)SOKOL_CALLOC(count, sizeof(char*));
+
+        for (int j = 0; j < count; j++) {
+            NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[j] stringForType:NSPasteboardTypeFileURL]];
+            NSString *path = fileUrl.standardizedURL.path;
+
+            char* buffer = (char*)SOKOL_CALLOC(path.length + 1, sizeof(char));
+            strcpy(buffer, fileUrl.standardizedURL.path.UTF8String);
+            _sapp.dropped_files[j] = buffer;
+        }
+
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+            _sapp.event.drop_files_count = count;
+            _sapp.desc.event_cb(&_sapp.event);
+        }
+
+        for (int i = 0; i < count; i++)
+            free(_sapp.dropped_files[i]);
+        free(_sapp.dropped_files);
+        _sapp.dropped_files = NULL;
+
+        return YES;
+    }
+
+    return NO;
 }
 @end
 
@@ -4848,6 +4907,44 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_SYSKEYUP:
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
                 break;
+            case WM_DROPFILES:
+            {
+                HDROP drop = (HDROP) wParam;
+                POINT pt;
+                int i;
+
+                const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+                _sapp.dropped_files = (char**) SOKOL_CALLOC(count, sizeof(char*));
+
+                for (i = 0;  i < count;  i++)
+                {
+                    const UINT length = DragQueryFileW(drop, i, NULL, 0);
+                    WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length + 1, sizeof(WCHAR));
+
+                    DragQueryFileW(drop, i, buffer, length + 1);
+
+                    const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, 0, 0);
+                    char* utf8buffer = (char*)SOKOL_CALLOC(dst_needed + 1, sizeof(char));
+                    _sapp_win32_wide_to_utf8 (buffer, utf8buffer, dst_needed + 1);
+
+                    _sapp.dropped_files[i] = utf8buffer;
+                    free(buffer);
+                }
+
+                if (_sapp_events_enabled()) {
+                    _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+                    _sapp.event.drop_files_count = count;
+                    _sapp.desc.event_cb(&_sapp.event);
+                }
+
+                for (i = 0;  i < count;  i++)
+                    free(_sapp.dropped_files[i]);
+                free(_sapp.dropped_files);
+                _sapp.dropped_files = NULL;
+
+                DragFinish(drop);
+                break;
+            }
             default:
                 break;
         }
@@ -4901,6 +4998,8 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
     SOKOL_ASSERT(_sapp.win32.dc);
     _sapp_win32_update_dimensions();
+
+    DragAcceptFiles(_sapp.win32.hwnd, 1);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
@@ -7766,6 +7865,10 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         /* not implemented */
         return _sapp.clipboard;
     #endif
+}
+
+SOKOL_API_IMPL const char** sapp_get_dropped_files(void) {
+    return (const char**) _sapp.dropped_files;
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
