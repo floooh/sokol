@@ -1292,6 +1292,7 @@ typedef struct {
     bool textfield_created;
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
+    bool mouse_lock_requested;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -3360,6 +3361,35 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    if (lock) {
+        /* nothing to do if mouse lock had already been requested */
+        if (_sapp.emsc.mouse_lock_requested) {
+            return;
+        }
+        /* otherwise request mouse-lock, the actual activation must happen in the event handler */
+        _sapp.emsc.mouse_lock_requested = true;
+    }
+    else {
+        _sapp.emsc.mouse_lock_requested = false;
+        _sapp.mouse.locked = false;
+        // FIXME: actually leave mouse-lock
+    }
+}
+
+/* called from inside event handlers to check if mouse lock had been
+   requested, and if yes, actually enter mouse lock
+*/
+_SOKOL_PRIVATE void _sapp_emsc_update_mouselock_state(void) {
+    if (_sapp.emsc.mouse_lock_requested) {
+        _sapp.emsc.mouse_lock_requested = false;
+        // FIXME: actually enter mouse lock
+    }
+}
+
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
@@ -3486,6 +3516,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
         }
     }
     _sapp_emsc_update_keyboard_state();
+    _sapp_emsc_update_mouselock_state();
     return true;
 }
 
@@ -3511,6 +3542,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
+    _sapp_emsc_update_mouselock_state();
     return true;
 }
 
@@ -3648,6 +3680,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
         }
     }
     _sapp_emsc_update_keyboard_state();
+    _sapp_emsc_update_mouselock_state();
     return retval;
 }
 
@@ -8052,6 +8085,8 @@ SOKOL_API_IMPL bool sapp_mouse_shown(void) {
 SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_lock_mouse(lock);
+    #elif defined(_SAPP_EMSCRIPTEN)
+    _sapp_emsc_lock_mouse(lock);
     #elif defined(_SAPP_WIN32)
     _sapp_win32_lock_mouse(lock);
     #elif defined(_SAPP_LINUX)
