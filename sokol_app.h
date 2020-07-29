@@ -66,7 +66,7 @@
     taken from GLFW (http://www.glfw.org/)
 
     iOS onscreen keyboard support 'inspired' by libgdx.
-    
+
     Link with the following system libraries:
 
     - on macOS with Metal: Cocoa, QuartzCore, Metal, MetalKit
@@ -1129,7 +1129,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifdef _MSC_VER
         #pragma warning(push)
         #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
-        #pragma warning(disable:4204)   /* nonstandard extension used: non-constant aggregate initializer */ 
+        #pragma warning(disable:4204)   /* nonstandard extension used: non-constant aggregate initializer */
         #pragma warning(disable:4054)   /* 'type cast': from function pointer */
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
@@ -3423,8 +3423,15 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    _sapp.mouse.x = (emsc_event->targetX * _sapp.dpi_scale);
-    _sapp.mouse.y = (emsc_event->targetY * _sapp.dpi_scale);
+    float new_x = emsc_event->targetX * _sapp.dpi_scale;
+    float new_y = emsc_event->targetY * _sapp.dpi_scale;
+    if (_sapp.mouse.pos_valid) {
+        _sapp.mouse.dx = new_x - _sapp.mouse.x;
+        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+    }
+    _sapp.mouse.x = new_x;
+    _sapp.mouse.y = new_y;
+    _sapp.mouse.pos_valid = true;
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
