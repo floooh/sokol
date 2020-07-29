@@ -117,10 +117,12 @@
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
     clipboard           | YES     | YES   | TODO  | ---   | ---     | ---   | YES
+    dropped files       | YES     | YES   | TODO  | ---   | ---     | ---   | TODO
 
     TODO
     ====
     - Linux:
+        - dropped files
         - clipboard support
         - show/hide mouse cursor
     - sapp_consume_event() on non-web platforms?
@@ -823,7 +825,6 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;
     int framebuffer_height;
-    int drop_files_count;
 } sapp_event;
 
 typedef struct sapp_desc {
@@ -851,6 +852,8 @@ typedef struct sapp_desc {
     bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
     bool enable_clipboard;              /* enable clipboard access, default is false */
     int clipboard_size;                 /* max size of clipboard content in bytes */
+    int max_dropped_files;              /* max number of dropped files to process */
+    int max_dropped_file_path_length;   /* max length of a dropped file path */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -910,8 +913,10 @@ SOKOL_API_DECL uint64_t sapp_frame_count(void);
 SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
-/* read paths from dropped files during SAPP_EVENTTYPE_FILE_DROPPED. The paths are only valid during the event callback! */
-SOKOL_API_DECL const char** sapp_get_dropped_files(void);
+/* gets the total number of dropped files */
+SOKOL_API_DECL int sapp_get_num_dropped_files(void);
+/* gets the dropped file paths */
+SOKOL_API_DECL const char* sapp_get_dropped_file_path(int index);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -1602,7 +1607,10 @@ typedef struct {
     bool clipboard_enabled;
     int clipboard_size;
     char* clipboard;
-    char** dropped_files;
+    int max_dropped_files;
+    int max_dropped_file_path_length;
+    int num_dropped_files;
+    char* dropped_files;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2077,6 +2085,8 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
     desc.clipboard_size = _sapp_def(desc.clipboard_size, 8192);
+    desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
+    desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 1024);
     desc.window_title = _sapp_def(desc.window_title, "sokol_app");
     return desc;
 }
@@ -2099,6 +2109,11 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
         _sapp.clipboard_size = _sapp.desc.clipboard_size;
         _sapp.clipboard = (char*) SOKOL_CALLOC(1, _sapp.clipboard_size);
     }
+    _sapp.max_dropped_files = _sapp.desc.max_dropped_files;
+    _sapp.max_dropped_file_path_length = _sapp.desc.max_dropped_file_path_length;
+    if (_sapp.max_dropped_files > 0 && _sapp.max_dropped_file_path_length > 0) {
+        _sapp.dropped_files = (char*) SOKOL_CALLOC(1, _sapp.max_dropped_files * _sapp.max_dropped_file_path_length);
+    }
     _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
@@ -2110,6 +2125,10 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.clipboard_enabled) {
         SOKOL_ASSERT(_sapp.clipboard);
         SOKOL_FREE((void*)_sapp.clipboard);
+    }
+    if (_sapp.max_dropped_files > 0 && _sapp.max_dropped_file_path_length > 0) {
+        SOKOL_ASSERT(_sapp.dropped_files);
+        SOKOL_FREE((void*)_sapp.dropped_files);
     }
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
@@ -2595,28 +2614,18 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
-        int count = pboard.pasteboardItems.count;
-        _sapp.dropped_files = (char**)SOKOL_CALLOC(count, sizeof(char*));
+        memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
+        _sapp.num_dropped_files = pboard.pasteboardItems.count > _sapp.max_dropped_files ? _sapp.max_dropped_files : pboard.pasteboardItems.count;
 
-        for (int j = 0; j < count; j++) {
-            NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[j] stringForType:NSPasteboardTypeFileURL]];
-            NSString *path = fileUrl.standardizedURL.path;
-
-            char* buffer = (char*)SOKOL_CALLOC(path.length + 1, sizeof(char));
-            strcpy(buffer, fileUrl.standardizedURL.path.UTF8String);
-            _sapp.dropped_files[j] = buffer;
+        for (int i = 0; i < _sapp.num_dropped_files; i++) {
+            NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[i] stringForType:NSPasteboardTypeFileURL]];
+            _sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], _sapp.max_dropped_file_path_length);
         }
 
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-            _sapp.event.drop_files_count = count;
             _sapp.desc.event_cb(&_sapp.event);
         }
-
-        for (int i = 0; i < count; i++)
-            free(_sapp.dropped_files[i]);
-        free(_sapp.dropped_files);
-        _sapp.dropped_files = NULL;
 
         return YES;
     }
@@ -4908,43 +4917,33 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
                 break;
             case WM_DROPFILES:
-            {
                 HDROP drop = (HDROP) wParam;
                 POINT pt;
                 int i;
 
                 const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
-                _sapp.dropped_files = (char**) SOKOL_CALLOC(count, sizeof(char*));
+                memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
+                _sapp.num_dropped_files = count > _sapp.max_dropped_files ? _sapp.max_dropped_files : count;
 
-                for (i = 0;  i < count;  i++)
-                {
-                    const UINT length = DragQueryFileW(drop, i, NULL, 0);
-                    WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length + 1, sizeof(WCHAR));
+                for (i = 0;  i < _sapp.num_dropped_files;  i++) {
+                    const UINT length = DragQueryFileW(drop, i, NULL, 0) + 1;
+                    WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length, sizeof(WCHAR));
 
-                    DragQueryFileW(drop, i, buffer, length + 1);
+                    DragQueryFileW(drop, i, buffer, length);
 
-                    const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, 0, 0);
-                    char* utf8buffer = (char*)SOKOL_CALLOC(dst_needed + 1, sizeof(char));
-                    _sapp_win32_wide_to_utf8 (buffer, utf8buffer, dst_needed + 1);
-
-                    _sapp.dropped_files[i] = utf8buffer;
+                    const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, NULL, NULL);
+                    int len = dst_needed > _sapp.max_dropped_file_path_length ? _sapp.max_dropped_file_path_length : dst_needed;
+                    _sapp_win32_wide_to_utf8(buffer, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], len);
                     free(buffer);
                 }
 
                 if (_sapp_events_enabled()) {
                     _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-                    _sapp.event.drop_files_count = count;
                     _sapp.desc.event_cb(&_sapp.event);
                 }
 
-                for (i = 0;  i < count;  i++)
-                    free(_sapp.dropped_files[i]);
-                free(_sapp.dropped_files);
-                _sapp.dropped_files = NULL;
-
                 DragFinish(drop);
                 break;
-            }
             default:
                 break;
         }
@@ -7867,8 +7866,12 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     #endif
 }
 
-SOKOL_API_IMPL const char** sapp_get_dropped_files(void) {
-    return (const char**) _sapp.dropped_files;
+SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
+    return _sapp.num_dropped_files;
+}
+
+SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
+    return (const char*) &_sapp.dropped_files[index * _sapp.max_dropped_file_path_length];
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
