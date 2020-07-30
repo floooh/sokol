@@ -3301,7 +3301,6 @@ EM_JS(void, sapp_remove_js_hook_clipboard, (void), {
 
 EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
     var str = UTF8ToString(c_str);
-console.log("sapp_js_write_clipboard: " + str);
     var ta = document.createElement('textarea');
     ta.setAttribute('autocomplete', 'off');
     ta.setAttribute('autocorrect', 'off');
@@ -3361,32 +3360,61 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
-    if (lock == _sapp.mouse.locked) {
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(user_data);
+    _sapp.mouse.locked = emsc_event->isActive;
+    return EM_TRUE;
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockerror_cb(int emsc_type, const void* reserved, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(reserved);
+    _SOKOL_UNUSED(user_data);
+    _sapp.mouse.locked = false;
+    _sapp.emsc.mouse_lock_requested = false;
+    return true;
+}
+
+EM_JS(void, _sapp_emsc_request_pointerlock, (const char* c_str_target), {
+    var target_str = UTF8ToString(c_str_target);
+    var target = document.getElementById(target_str);
+    if (!target) {
+        console.log("sokol_app.h: invalid target:" + target_str);
         return;
     }
+    if (!target.requestPointerLock) {
+        console.log("sokol_app.h: target doesn't doesn't support pointer lock:" + target_str);
+        return;
+    }
+    target.requestPointerLock();
+});
+
+EM_JS(void, _sapp_emsc_exit_pointerlock, (void), {
+    if (document.exitPointerLock) {
+        document.exitPointerLock();
+    }
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
     if (lock) {
-        /* nothing to do if mouse lock had already been requested */
-        if (_sapp.emsc.mouse_lock_requested) {
-            return;
-        }
-        /* otherwise request mouse-lock, the actual activation must happen in the event handler */
+        /* request mouse-lock during event handler invocation (see _sapp_emsc_update_mouse_lock_state) */
         _sapp.emsc.mouse_lock_requested = true;
     }
     else {
+        /* NOTE: the _sapp.mouse_locked state will be set in the pointerlockchange callback */
         _sapp.emsc.mouse_lock_requested = false;
-        _sapp.mouse.locked = false;
-        // FIXME: actually leave mouse-lock
+        _sapp_emsc_exit_pointerlock();
     }
 }
 
-/* called from inside event handlers to check if mouse lock had been
-   requested, and if yes, actually enter mouse lock
+/* called from inside event handlers to check if mouse lock had been requested,
+   and if yes, actually enter mouse lock.
 */
-_SOKOL_PRIVATE void _sapp_emsc_update_mouselock_state(void) {
+_SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     if (_sapp.emsc.mouse_lock_requested) {
         _sapp.emsc.mouse_lock_requested = false;
-        // FIXME: actually enter mouse lock
+        _sapp_emsc_request_pointerlock(_sapp.html5_canvas_name);
     }
 }
 
@@ -3453,15 +3481,21 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    float new_x = emsc_event->targetX * _sapp.dpi_scale;
-    float new_y = emsc_event->targetY * _sapp.dpi_scale;
-    if (_sapp.mouse.pos_valid) {
-        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = (float) emsc_event->movementX;
+        _sapp.mouse.dy = (float) emsc_event->movementY;
     }
-    _sapp.mouse.x = new_x;
-    _sapp.mouse.y = new_y;
-    _sapp.mouse.pos_valid = true;
+    else {
+        float new_x = emsc_event->targetX * _sapp.dpi_scale;
+        float new_y = emsc_event->targetY * _sapp.dpi_scale;
+        if (_sapp.mouse.pos_valid) {
+            _sapp.mouse.dx = new_x - _sapp.mouse.x;
+            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        }
+        _sapp.mouse.x = new_x;
+        _sapp.mouse.y = new_y;
+        _sapp.mouse.pos_valid = true;
+    }
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
@@ -3514,9 +3548,12 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             }
             _sapp_call_event(&_sapp.event);
         }
+        /* mouse lock can only be activated in mouse button events (not in move, enter or leave) */
+        if (is_button_event) {
+            _sapp_emsc_update_mouse_lock_state();
+        }
     }
     _sapp_emsc_update_keyboard_state();
-    _sapp_emsc_update_mouselock_state();
     return true;
 }
 
@@ -3542,7 +3579,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
-    _sapp_emsc_update_mouselock_state();
+    _sapp_emsc_update_mouse_lock_state();
     return true;
 }
 
@@ -3680,7 +3717,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
         }
     }
     _sapp_emsc_update_keyboard_state();
-    _sapp_emsc_update_mouselock_state();
+    _sapp_emsc_update_mouse_lock_state();
     return retval;
 }
 
@@ -4011,6 +4048,8 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
+    emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     sapp_add_js_hook_beforeunload();
     if (_sapp.clipboard.enabled) {
         sapp_add_js_hook_clipboard();
@@ -4035,6 +4074,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
+    emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     sapp_remove_js_hook_beforeunload();
     if (_sapp.clipboard.enabled) {
         sapp_remove_js_hook_clipboard();
