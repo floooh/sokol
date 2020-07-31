@@ -3574,8 +3574,16 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         if (emsc_event->mouse.metaKey) {
             _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
         }
-        _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
-        _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
+        /* see https://github.com/floooh/sokol/issues/339 */
+        float scale;
+        switch (emsc_event->deltaMode) {
+            case DOM_DELTA_PIXEL: scale = -0.04f; break;
+            case DOM_DELTA_LINE:  scale = -1.33f; break;
+            case DOM_DELTA_PAGE:  scale = -10.0f; break; // FIXME: this is a guess
+            default:              scale = -0.1f; break;  // shouldn't happen
+        }
+        _sapp.event.scroll_x = scale * (float)emsc_event->deltaX;
+        _sapp.event.scroll_y = scale * (float)emsc_event->deltaY;
         _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
