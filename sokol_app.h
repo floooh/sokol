@@ -122,7 +122,8 @@
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | TODO  | ---
-    pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | TODO  | TODO
+    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
@@ -132,7 +133,6 @@
     ====
     - Linux:
         - clipboard support
-        - show/hide mouse cursor
     - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
@@ -343,6 +343,96 @@
         behaviour, and how to intercept a pending quit - for instance to show a
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
         guaranteed to be called on the web and mobile platforms.
+
+    MOUSE LOCK (AKA POINTER LOCK, AKA MOUSE CAPTURE)
+    ================================================
+    In normal mouse mode, no mouse movement events are reported when the
+    mouse leaves the windows client area or hits the screen border (whether
+    it's one or the other depends on the platform), and the mouse move events
+    (SAPP_EVENTTYPE_MOUSE_MOVE) contain absolute mouse positions in
+    framebuffer pixels in the sapp_event items mouse_x and mouse_y, and
+    relative movement in framebuffer pixels in the sapp_event items mouse_dx
+    and mouse_dy.
+
+    To get continuous mouse movement (also when the mouse leaves the window
+    client area or hits the screen border), activate mouse-lock mode
+    by calling:
+
+        sapp_lock_mouse(true)
+
+    When mouse lock is activated, the mouse pointer is hidden, the
+    reported absolute mouse position (sapp_event.mouse_x/y) appears
+    frozen, and the relative mouse movement in sapp_event.mouse_dx/dy
+    no longer has a direct relation to framebuffer pixels but instead
+    uses "raw mouse input" (what "raw mouse input" exactly means also
+    differs by platform).
+
+    To deactivate mouse lock and return to normal mouse mode, call
+
+        sapp_lock_mouse(false)
+
+    And finally, to check if mouse lock is currently active, call
+
+        if (sapp_mouse_locked()) { ... }
+
+    On native platforms, the sapp_lock_mouse() and sapp_mouse_locked()
+    functions work as expected (mouse lock is activated or deactivated
+    immediately when sapp_lock_mouse() is called, and sapp_mouse_locked()
+    also immediately returns the new state after sapp_lock_mouse()
+    is called.
+
+    On the web platform, sapp_lock_mouse() and sapp_mouse_locked() behave
+    differently, as dictated by the limitations of the HTML5 Pointer Lock API:
+
+        - sapp_lock_mouse(true) can be called at any time, but it will
+          only take effect in a 'short-lived input event handler of a specific
+          type', meaning when one of the following events happens:
+            - SAPP_EVENTTYPE_MOUSE_DOWN
+            - SAPP_EVENTTYPE_MOUSE_UP
+            - SAPP_EVENTTYPE_MOUSE_SCROLL
+            - SAPP_EVENTYTPE_KEY_UP
+            - SAPP_EVENTTYPE_KEY_DOWN
+        - The mouse lock/unlock action on the web platform is asynchronous,
+          this means that sapp_mouse_locked() won't immediately return
+          the new status after calling sapp_lock_mouse(), instead the
+          reported status will only change when the pointer lock has actually
+          been activated or deactivated in the browser.
+        - On the web, mouse lock can be deactivated by the user at any time
+          by pressing the Esc key. When this happens, sokol_app.h behaves
+          the same as if sapp_lock_mouse(false) is called.
+
+    For things like camera manipulation it's most straightforward to lock
+    and unlock the mouse right from the sokol_app.h event handler, for
+    instance the following code enters and leaves mouse lock when the
+    left mouse button is pressed and released, and then uses the relative
+    movement information to manipulate a camera (taken from the
+    cgltf-sapp.c sample in the sokol-samples repository
+    at https://github.com/floooh/sokol-samples):
+
+        static void input(const sapp_event* ev) {
+            switch (ev->type) {
+                case SAPP_EVENTTYPE_MOUSE_DOWN:
+                    if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+                        sapp_lock_mouse(true);
+                    }
+                    break;
+
+                case SAPP_EVENTTYPE_MOUSE_UP:
+                    if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+                        sapp_lock_mouse(false);
+                    }
+                    break;
+
+                case SAPP_EVENTTYPE_MOUSE_MOVE:
+                    if (sapp_mouse_locked()) {
+                        cam_orbit(&state.camera, ev->mouse_dx * 0.25f, ev->mouse_dy * 0.25f);
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
 
     CLIPBOARD SUPPORT
     =================
