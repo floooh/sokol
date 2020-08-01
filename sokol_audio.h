@@ -642,8 +642,8 @@ typedef struct {
 } _saudio_backend_t;
 
 typedef struct {
-    int32_t atomic_quantums_queued;
-    int32_t num_quantums;
+    int32_t atomic_quanta_queued;
+    int32_t num_quanta;
 } _saudio_worklet_t;
 
 #else
@@ -1457,7 +1457,7 @@ EM_JS(int, saudio_js_init_worklet, (int num_channels, void *worklet_memory, int 
                 var offset = e.data.offset;
                 this.num_slots = e.data.num_slots;
                 this.worklet_t = new Int32Array(buffer, offset, 2);
-                this.num_quantums = this.worklet_t[1];
+                this.num_quanta = this.worklet_t[1];
                 /* pre-create the views to the memory to save on GC pressure */
                 this.slots = Array(this.num_slots);
                 for (var i = 0; i < this.num_slots; i++) {
@@ -1471,9 +1471,9 @@ EM_JS(int, saudio_js_init_worklet, (int num_channels, void *worklet_memory, int 
             var output = outputs[0];
             /* only write data if ready, outputs are cleared to zero by default */
             if (this.ready) {
-                /* check if the render thread has written any quantums */
-                var quantums_queued = Atomics.load(this.worklet_t, 0);
-                if (quantums_queued > 0) {
+                /* check if the render thread has written any quanta */
+                var quanta_queued = Atomics.load(this.worklet_t, 0);
+                if (quanta_queued > 0) {
                     var slot = this.slot;
                     for (var i = 0; i < output.length; i++) {
                         output[i].set(this.slots[slot]);
@@ -1483,7 +1483,7 @@ EM_JS(int, saudio_js_init_worklet, (int num_channels, void *worklet_memory, int 
 
                     /* mark the quantum dequeued and wake up the render thread if there's exactly enough space */
                     var prev_queued = Atomics.sub(this.worklet_t, 0, 1);
-                    if (prev_queued - 1 == this.num_quantums / 2) {
+                    if (prev_queued - 1 == this.num_quanta / 2) {
                         Atomics.notify(this.worklet_t, 0);
                     }
                 }
@@ -1539,24 +1539,24 @@ _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
     /* get the worklet context and quantum slots from the memory pointer */
     _saudio_worklet_t *worklet = (_saudio_worklet_t*)arg;
     float *worklet_slots = (float*)((uint8_t*)arg + sizeof(_saudio_worklet_t));
-    const int num_quantums = worklet->num_quantums;
-    const int half_quantums = num_quantums / 2;
-    const int32_t num_slots = (int32_t)(num_quantums * _saudio.num_channels);
+    const int num_quanta = worklet->num_quanta;
+    const int half_quanta = num_quanta / 2;
+    const int32_t num_slots = (int32_t)(num_quanta * _saudio.num_channels);
     int32_t slot = 0;
 
     while (!_saudio.backend.thread_stop) {
-        int32_t queued = (int32_t)emscripten_atomic_load_u32((uint32_t*)&worklet->atomic_quantums_queued);
+        int32_t queued = (int32_t)emscripten_atomic_load_u32((uint32_t*)&worklet->atomic_quanta_queued);
 
         /* if we have queued more than half of the buffer wait until we get more space */
-        if (queued > half_quantums) {
-            emscripten_futex_wait(&worklet->atomic_quantums_queued, queued, 10.0);
+        if (queued > half_quanta) {
+            emscripten_futex_wait(&worklet->atomic_quanta_queued, queued, 10.0);
             continue;
         }
 
-        _saudio_emsc_pull(half_quantums * 128);
+        _saudio_emsc_pull(half_quanta * 128);
 
-        for (int quantum = 0; quantum < half_quantums; quantum++) {
-            /* de-interleave the channels into quantums for the worklet */
+        for (int quantum = 0; quantum < half_quanta; quantum++) {
+            /* de-interleave the channels into quanta for the worklet */
             const int num_channels = _saudio.num_channels;
             for (int channel = 0; channel < num_channels; channel++) {
                 float *dst = worklet_slots + slot * 128;
@@ -1570,9 +1570,9 @@ _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
             }
 
             /* publish the quantum to the worker, fixing the atomic count if the worker got ahead */
-            int32_t prev_queued = (int32_t)emscripten_atomic_add_u32((uint32_t*)&worklet->atomic_quantums_queued, 1);
+            int32_t prev_queued = (int32_t)emscripten_atomic_add_u32((uint32_t*)&worklet->atomic_quanta_queued, 1);
             if (prev_queued < 0) {
-                emscripten_atomic_store_u32((uint32_t*)&worklet->atomic_quantums_queued, 1);
+                emscripten_atomic_store_u32((uint32_t*)&worklet->atomic_quanta_queued, 1);
             }
         }
     }
@@ -1584,17 +1584,17 @@ _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init_worklet(void) {
-    /* worklet quantums are fixed at 128 so we need the buffer size to be a multiple of that */
-    int worklet_quantums = _saudio.buffer_frames / 128 * 2;
-    if (worklet_quantums < 8) worklet_quantums = 8;
+    /* worklet quanta are fixed at 128 so we need the buffer size to be a multiple of that */
+    int worklet_quanta = _saudio.buffer_frames / 128 * 2;
+    if (worklet_quanta < 8) worklet_quanta = 8;
     /* we need quantum slots for each channel in a quantum */
-    int worklet_slots = worklet_quantums * _saudio.num_channels;
+    int worklet_slots = worklet_quanta * _saudio.num_channels;
     int worklet_slot_bytes = worklet_slots * 128 * sizeof(float);
-    /* use half of the quantums for render thread writing */
-    const int buffer_frames = worklet_quantums / 2 * 128;
+    /* use half of the quanta for render thread writing */
+    const int buffer_frames = worklet_quanta / 2 * 128;
     const int bytes_per_frame = sizeof(float) * _saudio.num_channels;
     const int buf_size = buffer_frames * bytes_per_frame;
-    /* combined allocation of worklet state, worklet quantums, render buffers */
+    /* combined allocation of worklet state, worklet quanta, render buffers */
     void *worklet_memory = SOKOL_MALLOC(sizeof(_saudio_worklet_t) + worklet_slot_bytes + buf_size);
     _saudio_worklet_t *worklet = (_saudio_worklet_t*)worklet_memory;
     uint8_t *buffer = (uint8_t*)worklet_memory + sizeof(_saudio_worklet_t) + worklet_slot_bytes;
@@ -1605,8 +1605,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init_worklet(void) {
         _saudio.buffer_frames = buffer_frames;
         _saudio.backend.buffer = buffer;
 
-        worklet->atomic_quantums_queued = 0;
-        worklet->num_quantums = worklet_quantums;
+        worklet->atomic_quanta_queued = 0;
+        worklet->num_quanta = worklet_quanta;
 
         /* launch the audio render thread */
         if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_emsc_worklet_cb, worklet_memory)) {
