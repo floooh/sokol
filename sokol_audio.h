@@ -1549,7 +1549,7 @@ _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
 
         /* if we have queued more than half of the buffer wait until we get more space */
         if (queued > half_quantums) {
-            emscripten_futex_wait(&worklet->atomic_quantums_queued, queued, 1000.0);
+            emscripten_futex_wait(&worklet->atomic_quantums_queued, queued, 10.0);
             continue;
         }
 
@@ -1576,6 +1576,9 @@ _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
             }
         }
     }
+
+    /* free the worklet memory */
+    SOKOL_FREE(arg);
 
     return NULL;
 }
@@ -1651,7 +1654,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 #if defined(__EMSCRIPTEN_PTHREADS__)
     _saudio.backend.thread_stop = true;
     if (_saudio.backend.worklet_memory) {
-        SOKOL_FREE(_saudio.backend.buffer);
+        /* the background thread is responsible for freeing the worklet memory */
         _saudio.backend.worklet_memory = 0;
         _saudio.backend.buffer = 0;
     }
