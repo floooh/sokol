@@ -67,6 +67,16 @@
 
     iOS onscreen keyboard support 'inspired' by libgdx.
 
+    Link with the following system libraries:
+
+    - on macOS with Metal: Cocoa, QuartzCore, Metal, MetalKit
+    - on macOS with GL: Cocoa, QuartzCore, OpenGL
+    - on iOS with Metal: UIKit, Metal, MetalKit
+    - on iOS with GL: UIKit, OpenGLES, GLKit
+    - on Linux: X11, Xi, Xcursor, GL, dl, m(?)
+    - on Android: GLESv3, EGL, log, android
+    - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
+
     FEATURE OVERVIEW
     ================
     sokol_app.h provides a minimalistic cross-platform API which
@@ -112,7 +122,8 @@
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | TODO  | ---
-    pointer lock        | TODO    | TODO  | TODO  | ---   | ---     | TODO  | TODO
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | TODO  | TODO
+    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | TODO  | YES
@@ -122,7 +133,6 @@
     ====
     - Linux:
         - clipboard support
-        - show/hide mouse cursor
     - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
@@ -249,7 +259,7 @@
             to various Metal API objects required for rendering, otherwise
             they return a null pointer. These void pointers are actually
             Objective-C ids converted with a (ARC) __bridge cast so that
-            they ids can be tunnel through C code. Also note that the returned
+            the ids can be tunnel through C code. Also note that the returned
             pointers to the renderpass-descriptor and drawable may change from one
             frame to the next, only the Metal device object is guaranteed to
             stay the same.
@@ -334,6 +344,96 @@
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
         guaranteed to be called on the web and mobile platforms.
 
+    MOUSE LOCK (AKA POINTER LOCK, AKA MOUSE CAPTURE)
+    ================================================
+    In normal mouse mode, no mouse movement events are reported when the
+    mouse leaves the windows client area or hits the screen border (whether
+    it's one or the other depends on the platform), and the mouse move events
+    (SAPP_EVENTTYPE_MOUSE_MOVE) contain absolute mouse positions in
+    framebuffer pixels in the sapp_event items mouse_x and mouse_y, and
+    relative movement in framebuffer pixels in the sapp_event items mouse_dx
+    and mouse_dy.
+
+    To get continuous mouse movement (also when the mouse leaves the window
+    client area or hits the screen border), activate mouse-lock mode
+    by calling:
+
+        sapp_lock_mouse(true)
+
+    When mouse lock is activated, the mouse pointer is hidden, the
+    reported absolute mouse position (sapp_event.mouse_x/y) appears
+    frozen, and the relative mouse movement in sapp_event.mouse_dx/dy
+    no longer has a direct relation to framebuffer pixels but instead
+    uses "raw mouse input" (what "raw mouse input" exactly means also
+    differs by platform).
+
+    To deactivate mouse lock and return to normal mouse mode, call
+
+        sapp_lock_mouse(false)
+
+    And finally, to check if mouse lock is currently active, call
+
+        if (sapp_mouse_locked()) { ... }
+
+    On native platforms, the sapp_lock_mouse() and sapp_mouse_locked()
+    functions work as expected (mouse lock is activated or deactivated
+    immediately when sapp_lock_mouse() is called, and sapp_mouse_locked()
+    also immediately returns the new state after sapp_lock_mouse()
+    is called.
+
+    On the web platform, sapp_lock_mouse() and sapp_mouse_locked() behave
+    differently, as dictated by the limitations of the HTML5 Pointer Lock API:
+
+        - sapp_lock_mouse(true) can be called at any time, but it will
+          only take effect in a 'short-lived input event handler of a specific
+          type', meaning when one of the following events happens:
+            - SAPP_EVENTTYPE_MOUSE_DOWN
+            - SAPP_EVENTTYPE_MOUSE_UP
+            - SAPP_EVENTTYPE_MOUSE_SCROLL
+            - SAPP_EVENTYTPE_KEY_UP
+            - SAPP_EVENTTYPE_KEY_DOWN
+        - The mouse lock/unlock action on the web platform is asynchronous,
+          this means that sapp_mouse_locked() won't immediately return
+          the new status after calling sapp_lock_mouse(), instead the
+          reported status will only change when the pointer lock has actually
+          been activated or deactivated in the browser.
+        - On the web, mouse lock can be deactivated by the user at any time
+          by pressing the Esc key. When this happens, sokol_app.h behaves
+          the same as if sapp_lock_mouse(false) is called.
+
+    For things like camera manipulation it's most straightforward to lock
+    and unlock the mouse right from the sokol_app.h event handler, for
+    instance the following code enters and leaves mouse lock when the
+    left mouse button is pressed and released, and then uses the relative
+    movement information to manipulate a camera (taken from the
+    cgltf-sapp.c sample in the sokol-samples repository
+    at https://github.com/floooh/sokol-samples):
+
+        static void input(const sapp_event* ev) {
+            switch (ev->type) {
+                case SAPP_EVENTTYPE_MOUSE_DOWN:
+                    if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+                        sapp_lock_mouse(true);
+                    }
+                    break;
+
+                case SAPP_EVENTTYPE_MOUSE_UP:
+                    if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+                        sapp_lock_mouse(false);
+                    }
+                    break;
+
+                case SAPP_EVENTTYPE_MOUSE_MOVE:
+                    if (sapp_mouse_locked()) {
+                        cam_orbit(&state.camera, ev->mouse_dx * 0.25f, ev->mouse_dy * 0.25f);
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
     CLIPBOARD SUPPORT
     =================
     Applications can send and receive UTF-8 encoded text data from and to the
@@ -346,7 +446,7 @@
 
     Enabling the clipboard will dynamically allocate a clipboard buffer
     for UTF-8 encoded text data of the requested size in bytes, the default
-    size if 8 KBytes. Strings that don't fit into the clipboard buffer
+    size is 8 KBytes. Strings that don't fit into the clipboard buffer
     (including the terminating zero) will be silently clipped, so it's
     important that you provide a big enough clipboard size for your
     use case.
@@ -814,6 +914,8 @@ typedef struct sapp_event {
     sapp_mousebutton mouse_button;
     float mouse_x;
     float mouse_y;
+    float mouse_dx;
+    float mouse_dy;
     float scroll_x;
     float scroll_y;
     int num_touches;
@@ -879,7 +981,7 @@ SOKOL_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
 SOKOL_API_DECL float sapp_dpi_scale(void);
 /* show or hide the mobile device onscreen keyboard */
-SOKOL_API_DECL void sapp_show_keyboard(bool visible);
+SOKOL_API_DECL void sapp_show_keyboard(bool show);
 /* return true if the mobile device onscreen keyboard is currently shown */
 SOKOL_API_DECL bool sapp_keyboard_shown(void);
 /* query fullscreen mode */
@@ -887,9 +989,13 @@ SOKOL_API_DECL bool sapp_is_fullscreen(void);
 /* toggle fullscreen mode */
 SOKOL_API_DECL void sapp_toggle_fullscreen(void);
 /* show or hide the mouse cursor */
-SOKOL_API_DECL void sapp_show_mouse(bool visible);
+SOKOL_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor */
 SOKOL_API_DECL bool sapp_mouse_shown();
+/* enable/disable mouse-pointer-lock mode */
+SOKOL_API_DECL void sapp_lock_mouse(bool lock);
+/* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
+SOKOL_API_DECL bool sapp_mouse_locked(void);
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -1113,6 +1219,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifdef _MSC_VER
         #pragma warning(push)
         #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union */
+        #pragma warning(disable:4204)   /* nonstandard extension used: non-constant aggregate initializer */
         #pragma warning(disable:4054)   /* 'type cast': from function pointer */
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
@@ -1177,11 +1284,13 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 #elif defined(_SAPP_LINUX)
     #define GL_GLEXT_PROTOTYPES
-    #include <X11/X.h>
     #include <X11/Xlib.h>
+    #include <X11/Xutil.h>
     #include <X11/XKBlib.h>
+    #include <X11/keysym.h>
     #include <X11/Xresource.h>
-    #include <X11/extensions/Xrandr.h>
+    #include <X11/extensions/XInput2.h>
+    #include <X11/Xcursor/Xcursor.h>
     #include <X11/Xmd.h> /* CARD32 */
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -1273,6 +1382,7 @@ typedef struct {
     bool textfield_created;
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
+    bool mouse_lock_requested;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -1307,9 +1417,15 @@ typedef struct {
 typedef struct {
     HWND hwnd;
     HDC dc;
+    LONG mouse_locked_x, mouse_locked_y;
     bool in_create_window;
     bool iconified;
+    bool mouse_tracked;
     _sapp_win32_dpi_t dpi;
+    bool raw_input_mousepos_valid;
+    LONG raw_input_mousepos_x;
+    LONG raw_input_mousepos_y;
+    uint8_t raw_input_data[256];
 } _sapp_win32_t;
 
 #if defined(SOKOL_D3D11)
@@ -1481,11 +1597,21 @@ typedef int (*PFNGLXSWAPINTERVALMESAPROC)(int);
 typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display*,GLXFBConfig,GLXContext,Bool,const int*);
 
 typedef struct {
+    bool available;
+    int major_opcode;
+    int event_base;
+    int error_base;
+    int major;
+    int minor;
+} _sapp_xi_t;
+
+typedef struct {
     Display* display;
     int screen;
     Window root;
     Colormap colormap;
     Window window;
+    Cursor hidden_cursor;
     int window_state;
     float dpi;
     unsigned char error_code;
@@ -1497,14 +1623,15 @@ typedef struct {
     Atom NET_WM_ICON_NAME;
     Atom NET_WM_STATE;
     Atom NET_WM_STATE_FULLSCREEN;
+    _sapp_xi_t xi;
 } _sapp_x11_t;
 
 typedef struct {
     void* libgl;
     int major;
     int minor;
-    int eventbase;
-    int errorbase;
+    int event_base;
+    int error_base;
     GLXContext ctx;
     GLXWindow window;
 
@@ -1564,14 +1691,22 @@ typedef struct {
 #endif
 
 typedef struct {
+    bool enabled;
+    int buf_size;
+    char* buffer;
+} _sapp_clipboard_t;
+
+typedef struct {
+    float x, y;
+    float dx, dy;
+    bool shown;
+    bool locked;
+    bool pos_valid;
+} _sapp_mouse_t;
+
+typedef struct {
+    sapp_desc desc;
     bool valid;
-    int window_width;
-    int window_height;
-    int framebuffer_width;
-    int framebuffer_height;
-    int sample_count;
-    int swap_interval;
-    float dpi_scale;
     bool fullscreen;
     bool gles2_fallback;
     bool first_frame;
@@ -1581,21 +1716,18 @@ typedef struct {
     bool quit_ordered;
     bool event_consumed;
     bool html5_ask_leave_site;
-    char html5_canvas_name[_SAPP_MAX_TITLE_LENGTH];
-    char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
-    wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
-    uint64_t frame_count;
-    float mouse_x;
-    float mouse_y;
-    bool win32_mouse_tracked;
     bool onscreen_keyboard_shown;
-    bool mouse_shown;
+    int window_width;
+    int window_height;
+    int framebuffer_width;
+    int framebuffer_height;
+    int sample_count;
+    int swap_interval;
+    float dpi_scale;
+    uint64_t frame_count;
     sapp_event event;
-    sapp_desc desc;
-    sapp_keycode keycodes[SAPP_MAX_KEYCODES];
-    bool clipboard_enabled;
-    int clipboard_size;
-    char* clipboard;
+    _sapp_mouse_t mouse;
+    _sapp_clipboard_t clipboard;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -1615,6 +1747,10 @@ typedef struct {
         _sapp_x11_t x11;
         _sapp_glx_t glx;
     #endif
+    char html5_canvas_name[_SAPP_MAX_TITLE_LENGTH];
+    char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
+    wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
+    sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -2087,22 +2223,22 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp_strcpy(_sapp.desc.html5_canvas_name, _sapp.html5_canvas_name, sizeof(_sapp.html5_canvas_name));
     _sapp.desc.html5_canvas_name = _sapp.html5_canvas_name;
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
-    _sapp.clipboard_enabled = _sapp.desc.enable_clipboard;
-    if (_sapp.clipboard_enabled) {
-        _sapp.clipboard_size = _sapp.desc.clipboard_size;
-        _sapp.clipboard = (char*) SOKOL_CALLOC(1, _sapp.clipboard_size);
+    _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
+    if (_sapp.clipboard.enabled) {
+        _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
+        _sapp.clipboard.buffer = (char*) SOKOL_CALLOC(1, _sapp.clipboard.buf_size);
     }
     _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
-    _sapp.mouse_shown = true;
+    _sapp.mouse.shown = true;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
-    if (_sapp.clipboard_enabled) {
-        SOKOL_ASSERT(_sapp.clipboard);
-        SOKOL_FREE((void*)_sapp.clipboard);
+    if (_sapp.clipboard.enabled) {
+        SOKOL_ASSERT(_sapp.clipboard.buffer);
+        SOKOL_FREE((void*)_sapp.clipboard.buffer);
     }
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
@@ -2116,6 +2252,10 @@ _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
     _sapp.event.window_height = _sapp.window_height;
     _sapp.event.framebuffer_width = _sapp.framebuffer_width;
     _sapp.event.framebuffer_height = _sapp.framebuffer_height;
+    _sapp.event.mouse_x = _sapp.mouse.x;
+    _sapp.event.mouse_y = _sapp.mouse.y;
+    _sapp.event.mouse_dx = _sapp.mouse.dx;
+    _sapp.event.mouse_dy = _sapp.mouse.dy;
 }
 
 _SOKOL_PRIVATE bool _sapp_events_enabled(void) {
@@ -2301,6 +2441,49 @@ int main(int argc, char* argv[]) {
 }
 #endif /* SOKOL_NO_ENTRY */
 
+_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
+    uint32_t m = 0;
+    if (f & NSEventModifierFlagShift) {
+        m |= SAPP_MODIFIER_SHIFT;
+    }
+    if (f & NSEventModifierFlagControl) {
+        m |= SAPP_MODIFIER_CTRL;
+    }
+    if (f & NSEventModifierFlagOption) {
+        m |= SAPP_MODIFIER_ALT;
+    }
+    if (f & NSEventModifierFlagCommand) {
+        m |= SAPP_MODIFIER_SUPER;
+    }
+    return m;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.mouse_button = btn;
+        _sapp.event.modifiers = mod;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.key_code = key;
+        _sapp.event.key_repeat = repeat;
+        _sapp.event.modifiers = mod;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
         const CGSize fb_size = [_sapp.macos.view drawableSize];
@@ -2329,16 +2512,6 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
-    _sapp.mouse_x = mouse_pos.x * _sapp.dpi_scale;
-    _sapp.mouse_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
-    _sapp_frame();
-    if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
-    }
-}
-
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     /* NOTE: the _sapp.fullscreen flag is also notified by the
        windowDidEnterFullscreen / windowDidExitFullscreen
@@ -2346,6 +2519,94 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     */
     _sapp.fullscreen = !_sapp.fullscreen;
     [_sapp.macos.window toggleFullScreen:nil];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_clipboard_string(const char* str) {
+    @autoreleasepool {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
+    }
+}
+
+_SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.buffer);
+    @autoreleasepool {
+        _sapp.clipboard.buffer[0] = 0;
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
+            return _sapp.clipboard.buffer;
+        }
+        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
+        if (!str) {
+            return _sapp.clipboard.buffer;
+        }
+        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    }
+    return _sapp.clipboard.buffer;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
+    if (!_sapp.mouse.locked) {
+        const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+        float new_x = mouse_pos.x * _sapp.dpi_scale;
+        float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
+        /* don't update dx/dy in the very first update */
+        if (_sapp.mouse.pos_valid) {
+            _sapp.mouse.dx = new_x - _sapp.mouse.x;
+            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        }
+        _sapp.mouse.x = new_x;
+        _sapp.mouse.y = new_y;
+        _sapp.mouse.pos_valid = true;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_show_mouse(bool visible) {
+    /* NOTE: this function is only called when the mouse visibility actually changes */
+    if (visible) {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
+    }
+    else {
+        CGDisplayHideCursor(kCGDirectMainDisplay);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    /*
+        NOTE that this code doesn't warp the mouse cursor to the window
+        center as everybody else does it. This lead to a spike in the
+        *second* mouse-moved event after the warp happened. The
+        mouse centering doesn't seem to be required (mouse-moved events
+        are reported correctly even when the cursor is at an edge of the screen).
+
+        NOTE also that the hide/show of the mouse cursor should properly
+        stack with calls to sapp_show_mouse()
+    */
+    if (_sapp.mouse.locked) {
+        [NSEvent setMouseCoalescingEnabled:NO];
+        CGAssociateMouseAndMouseCursorPosition(NO);
+        CGDisplayHideCursor(kCGDirectMainDisplay);
+    }
+    else {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
+        CGAssociateMouseAndMouseCursorPosition(YES);
+        [NSEvent setMouseCoalescingEnabled:YES];
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_frame(void) {
+    _sapp_macos_update_mouse();
+    _sapp_frame();
+    if (_sapp.quit_requested || _sapp.quit_ordered) {
+        [_sapp.macos.window performClose:nil];
+    }
 }
 
 @implementation _sapp_macos_app_delegate
@@ -2468,51 +2729,6 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
     _sapp_discard_state();
 }
 @end
-
-_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
-    uint32_t m = 0;
-    if (f & NSEventModifierFlagShift) {
-        m |= SAPP_MODIFIER_SHIFT;
-    }
-    if (f & NSEventModifierFlagControl) {
-        m |= SAPP_MODIFIER_CTRL;
-    }
-    if (f & NSEventModifierFlagOption) {
-        m |= SAPP_MODIFIER_ALT;
-    }
-    if (f & NSEventModifierFlagCommand) {
-        m |= SAPP_MODIFIER_SUPER;
-    }
-    return m;
-}
-
-_SOKOL_PRIVATE void _sapp_macos_mouse_event(sapp_event_type type, sapp_mousebutton btn, uint32_t mod) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.mouse_button = btn;
-        _sapp.event.modifiers = mod;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_macos_key_event(sapp_event_type type, sapp_keycode key, bool repeat, uint32_t mod) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp.event.key_code = key;
-        _sapp.event.key_repeat = repeat;
-        _sapp.event.modifiers = mod;
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        _sapp_call_event(&_sapp.event);
-    }
-}
 
 @implementation _sapp_macos_window_delegate
 - (BOOL)windowShouldClose:(id)sender {
@@ -2654,13 +2870,26 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
     }
 }
+// FIXME: otherMouseDragged?
 - (void)mouseMoved:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = [event deltaX];
+        _sapp.mouse.dy = [event deltaY];
+    }
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
@@ -2674,8 +2903,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
             _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
-            _sapp.event.mouse_x = _sapp.mouse_x;
-            _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
@@ -2710,7 +2937,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
             }
         }
         /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
-        if (_sapp.clipboard_enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+        if (_sapp.clipboard.enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
@@ -2759,41 +2986,6 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 }
 @end
 
-void _sapp_macos_set_clipboard_string(const char* str) {
-    @autoreleasepool {
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
-        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
-    }
-}
-
-void _sapp_macos_show_mouse(bool visible) {
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    if (visible) {
-        CGDisplayShowCursor(kCGDirectMainDisplay);
-    }
-    else {
-        CGDisplayHideCursor(kCGDirectMainDisplay);
-    }
-}
-
-const char* _sapp_macos_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard);
-    @autoreleasepool {
-        _sapp.clipboard[0] = 0;
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
-            return _sapp.clipboard;
-        }
-        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
-        if (!str) {
-            return _sapp.clipboard;
-        }
-        _sapp_strcpy([str UTF8String], _sapp.clipboard, _sapp.clipboard_size);
-    }
-    return _sapp.clipboard;
-}
-
 #endif /* MacOS */
 
 /*== iOS =====================================================================*/
@@ -2834,6 +3026,27 @@ _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
         _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        NSEnumerator* enumerator = event.allTouches.objectEnumerator;
+        UITouch* ios_touch;
+        while ((ios_touch = [enumerator nextObject])) {
+            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
+                CGPoint ios_pos = [ios_touch locationInView:_sapp.ios.view];
+                sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
+                cur_point->identifier = (uintptr_t) ios_touch;
+                cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
+                cur_point->pos_y = ios_pos.y * _sapp.dpi_scale;
+                cur_point->changed = [touches containsObject:ios_touch];
+            }
+        }
+        if (_sapp.event.num_touches > 0) {
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -3074,27 +3287,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 }
 @end
 
-_SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
-        NSEnumerator* enumerator = event.allTouches.objectEnumerator;
-        UITouch* ios_touch;
-        while ((ios_touch = [enumerator nextObject])) {
-            if ((_sapp.event.num_touches + 1) < SAPP_MAX_TOUCHPOINTS) {
-                CGPoint ios_pos = [ios_touch locationInView:_sapp.ios.view];
-                sapp_touchpoint* cur_point = &_sapp.event.touches[_sapp.event.num_touches++];
-                cur_point->identifier = (uintptr_t) ios_touch;
-                cur_point->pos_x = ios_pos.x * _sapp.dpi_scale;
-                cur_point->pos_y = ios_pos.y * _sapp.dpi_scale;
-                cur_point->changed = [touches containsObject:ios_touch];
-            }
-        }
-        if (_sapp.event.num_touches > 0) {
-            _sapp_call_event(&_sapp.event);
-        }
-    }
-}
-
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
@@ -3158,8 +3350,8 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
-    if (_sapp.clipboard_enabled) {
-        _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    if (_sapp.clipboard.enabled) {
+        _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
@@ -3259,6 +3451,64 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(user_data);
+    _sapp.mouse.locked = emsc_event->isActive;
+    return EM_TRUE;
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockerror_cb(int emsc_type, const void* reserved, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(reserved);
+    _SOKOL_UNUSED(user_data);
+    _sapp.mouse.locked = false;
+    _sapp.emsc.mouse_lock_requested = false;
+    return true;
+}
+
+EM_JS(void, _sapp_emsc_request_pointerlock, (const char* c_str_target), {
+    var target_str = UTF8ToString(c_str_target);
+    var target = document.getElementById(target_str);
+    if (!target) {
+        console.log("sokol_app.h: invalid target:" + target_str);
+        return;
+    }
+    if (!target.requestPointerLock) {
+        console.log("sokol_app.h: target doesn't doesn't support pointer lock:" + target_str);
+        return;
+    }
+    target.requestPointerLock();
+});
+
+EM_JS(void, _sapp_emsc_exit_pointerlock, (void), {
+    if (document.exitPointerLock) {
+        document.exitPointerLock();
+    }
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
+    if (lock) {
+        /* request mouse-lock during event handler invocation (see _sapp_emsc_update_mouse_lock_state) */
+        _sapp.emsc.mouse_lock_requested = true;
+    }
+    else {
+        /* NOTE: the _sapp.mouse_locked state will be set in the pointerlockchange callback */
+        _sapp.emsc.mouse_lock_requested = false;
+        _sapp_emsc_exit_pointerlock();
+    }
+}
+
+/* called from inside event handlers to check if mouse lock had been requested,
+   and if yes, actually enter mouse lock.
+*/
+_SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
+    if (_sapp.emsc.mouse_lock_requested) {
+        _sapp.emsc.mouse_lock_requested = false;
+        _sapp_emsc_request_pointerlock(_sapp.html5_canvas_name);
+    }
+}
+
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
@@ -3322,8 +3572,21 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    _sapp.mouse_x = (emsc_event->targetX * _sapp.dpi_scale);
-    _sapp.mouse_y = (emsc_event->targetY * _sapp.dpi_scale);
+    if (_sapp.mouse.locked) {
+        _sapp.mouse.dx = (float) emsc_event->movementX;
+        _sapp.mouse.dy = (float) emsc_event->movementY;
+    }
+    else {
+        float new_x = emsc_event->targetX * _sapp.dpi_scale;
+        float new_y = emsc_event->targetY * _sapp.dpi_scale;
+        if (_sapp.mouse.pos_valid) {
+            _sapp.mouse.dx = new_x - _sapp.mouse.x;
+            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        }
+        _sapp.mouse.x = new_x;
+        _sapp.mouse.y = new_y;
+        _sapp.mouse.pos_valid = true;
+    }
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
         bool is_button_event = false;
@@ -3374,9 +3637,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
             else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
             }
-            _sapp.event.mouse_x = _sapp.mouse_x;
-            _sapp.event.mouse_y = _sapp.mouse_y;
             _sapp_call_event(&_sapp.event);
+        }
+        /* mouse lock can only be activated in mouse button events (not in move, enter or leave) */
+        if (is_button_event) {
+            _sapp_emsc_update_mouse_lock_state();
         }
     }
     _sapp_emsc_update_keyboard_state();
@@ -3400,11 +3665,20 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
         if (emsc_event->mouse.metaKey) {
             _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
         }
-        _sapp.event.scroll_x = -0.1 * (float)emsc_event->deltaX;
-        _sapp.event.scroll_y = -0.1 * (float)emsc_event->deltaY;
+        /* see https://github.com/floooh/sokol/issues/339 */
+        float scale;
+        switch (emsc_event->deltaMode) {
+            case DOM_DELTA_PIXEL: scale = -0.04f; break;
+            case DOM_DELTA_LINE:  scale = -1.33f; break;
+            case DOM_DELTA_PAGE:  scale = -10.0f; break; // FIXME: this is a guess
+            default:              scale = -0.1f; break;  // shouldn't happen
+        }
+        _sapp.event.scroll_x = scale * (float)emsc_event->deltaX;
+        _sapp.event.scroll_y = scale * (float)emsc_event->deltaY;
         _sapp_call_event(&_sapp.event);
     }
     _sapp_emsc_update_keyboard_state();
+    _sapp_emsc_update_mouse_lock_state();
     return true;
 }
 
@@ -3542,6 +3816,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
         }
     }
     _sapp_emsc_update_keyboard_state();
+    _sapp_emsc_update_mouse_lock_state();
     return retval;
 }
 
@@ -3872,8 +4147,10 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
+    emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     sapp_add_js_hook_beforeunload();
-    if (_sapp.clipboard_enabled) {
+    if (_sapp.clipboard.enabled) {
         sapp_add_js_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -3896,8 +4173,10 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
+    emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     sapp_remove_js_hook_beforeunload();
-    if (_sapp.clipboard_enabled) {
+    if (_sapp.clipboard.enabled) {
         sapp_remove_js_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -4511,6 +4790,68 @@ _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
     ShowCursor((BOOL)visible);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    if (_sapp.mouse.locked) {
+        /* store the current mouse position, so it can be restored when unlocked */
+        POINT pos;
+        BOOL res = GetCursorPos(&pos);
+        SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
+        _sapp.win32.mouse_locked_x = pos.x;
+        _sapp.win32.mouse_locked_y = pos.y;
+
+        /* while the mouse is locked, make the mouse cursor invisible and
+           confine the mouse movement to a small rectangle inside our window
+           (so that we dont miss any mouse up events)
+        */
+        RECT client_rect = {
+            _sapp.win32.mouse_locked_x,
+            _sapp.win32.mouse_locked_y,
+            _sapp.win32.mouse_locked_x,
+            _sapp.win32.mouse_locked_y
+        };
+        ClipCursor(&client_rect);
+
+        /* make the mouse cursor invisible, this will stack with sapp_show_mouse() */
+        ShowCursor(FALSE);
+
+        /* enable raw input for mouse, starts sending WM_INPUT messages to WinProc (see GLFW) */
+        const RAWINPUTDEVICE rid = {
+            0x01,   // usUsagePage: HID_USAGE_PAGE_GENERIC
+            0x02,   // usUsage: HID_USAGE_GENERIC_MOUSE
+            0,      // dwFlags
+            _sapp.win32.hwnd    // hwndTarget
+        };
+        if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+            SOKOL_LOG("RegisterRawInputDevices() failed (on mouse lock).\n");
+        }
+        /* in case the raw mouse device only supports absolute position reporting,
+           we need to skip the dx/dy compution for the first WM_INPUT event
+        */
+        _sapp.win32.raw_input_mousepos_valid = false;
+    }
+    else {
+        /* disable raw input for mouse */
+        const RAWINPUTDEVICE rid = { 0x01, 0x02, RIDEV_REMOVE, NULL };
+        if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+            SOKOL_LOG("RegisterRawInputDevices() failed (on mouse unlock).\n");
+        }
+
+        /* let the mouse roam freely again */
+        ClipCursor(NULL);
+        ShowCursor(TRUE);
+
+        /* restore the 'pre-locked' mouse position */
+        BOOL res = SetCursorPos(_sapp.win32.mouse_locked_x, _sapp.win32.mouse_locked_y);
+        SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
     /* same as GLFW */
     _sapp.keycodes[0x00B] = SAPP_KEYCODE_0;
@@ -4683,8 +5024,6 @@ _SOKOL_PRIVATE void _sapp_win32_mouse_event(sapp_event_type type, sapp_mousebutt
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_win32_mods();
         _sapp.event.mouse_button = btn;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -4707,7 +5046,7 @@ _SOKOL_PRIVATE void _sapp_win32_key_event(sapp_event_type type, int vk, bool rep
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled &&
+        if (_sapp.clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
@@ -4813,23 +5152,70 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
-                _sapp.mouse_x = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                _sapp.mouse_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
-                if (!_sapp.win32_mouse_tracked) {
-                    _sapp.win32_mouse_tracked = true;
-                    TRACKMOUSEEVENT tme;
-                    memset(&tme, 0, sizeof(tme));
-                    tme.cbSize = sizeof(tme);
-                    tme.dwFlags = TME_LEAVE;
-                    tme.hwndTrack = _sapp.win32.hwnd;
-                    TrackMouseEvent(&tme);
-                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
+                if (!_sapp.mouse.locked) {
+                    const float new_x  = (float)GET_X_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                    const float new_y = (float)GET_Y_LPARAM(lParam) * _sapp.win32.dpi.mouse_scale;
+                    /* don't update dx/dy in the very first event */
+                    if (_sapp.mouse.pos_valid) {
+                        _sapp.mouse.dx = new_x - _sapp.mouse.x;
+                        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+                    }
+                    _sapp.mouse.x = new_x;
+                    _sapp.mouse.y = new_y;
+                    _sapp.mouse.pos_valid = true;
+                    if (!_sapp.win32.mouse_tracked) {
+                        _sapp.win32.mouse_tracked = true;
+                        TRACKMOUSEEVENT tme;
+                        memset(&tme, 0, sizeof(tme));
+                        tme.cbSize = sizeof(tme);
+                        tme.dwFlags = TME_LEAVE;
+                        tme.hwndTrack = _sapp.win32.hwnd;
+                        TrackMouseEvent(&tme);
+                        _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID);
+                    }
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID);
                 }
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE,  SAPP_MOUSEBUTTON_INVALID);
                 break;
+            case WM_INPUT:
+                /* raw mouse input during mouse-lock */
+                if (_sapp.mouse.locked) {
+                    HRAWINPUT ri = (HRAWINPUT) lParam;
+                    UINT size = sizeof(_sapp.win32.raw_input_data);
+                    if (-1 == GetRawInputData(ri, RID_INPUT, &_sapp.win32.raw_input_data, &size, sizeof(RAWINPUTHEADER))) {
+                        SOKOL_LOG("GetRawInputData() failed\n");
+                        break;
+                    }
+                    const RAWINPUT* raw_mouse_data = (const RAWINPUT*) &_sapp.win32.raw_input_data;
+                    if (raw_mouse_data->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) {
+                        /* mouse only reports absolute position
+                           NOTE: THIS IS UNTESTED, it's unclear from reading the
+                           Win32 RawInput docs under which circumstances absolute
+                           positions are sent.
+                        */
+                        if (_sapp.win32.raw_input_mousepos_valid) {
+                            LONG new_x = raw_mouse_data->data.mouse.lLastX;
+                            LONG new_y = raw_mouse_data->data.mouse.lLastY;
+                            _sapp.mouse.dx = (float) (new_x - _sapp.win32.raw_input_mousepos_x);
+                            _sapp.mouse.dy = (float) (new_y - _sapp.win32.raw_input_mousepos_y);
+                            _sapp.win32.raw_input_mousepos_x = new_x;
+                            _sapp.win32.raw_input_mousepos_y = new_y;
+                            _sapp.win32.raw_input_mousepos_valid = true;
+                        }
+                    }
+                    else {
+                        /* mouse reports movement delta (this seems to be the common case) */
+                        _sapp.mouse.dx = (float) raw_mouse_data->data.mouse.lLastX;
+                        _sapp.mouse.dy = (float) raw_mouse_data->data.mouse.lLastY;
+                    }
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID);
+                }
+                break;
+
             case WM_MOUSELEAVE:
-                _sapp.win32_mouse_tracked = false;
-                _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
+                if (!_sapp.mouse.locked) {
+                    _sapp.win32.mouse_tracked = false;
+                    _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID);
+                }
                 break;
             case WM_MOUSEWHEEL:
                 _sapp_win32_scroll_event(0.0f, (float)((SHORT)HIWORD(wParam)));
@@ -4974,10 +5360,10 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(str);
     SOKOL_ASSERT(_sapp.win32.hwnd);
-    SOKOL_ASSERT(_sapp.clipboard_enabled && (_sapp.clipboard_size > 0));
+    SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
 
     wchar_t* wchar_buf = 0;
-    const int wchar_buf_size = _sapp.clipboard_size * sizeof(wchar_t);
+    const int wchar_buf_size = _sapp.clipboard.buf_size * sizeof(wchar_t);
     HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
     if (!object) {
         goto error;
@@ -5010,28 +5396,28 @@ error:
 }
 
 _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard_enabled && _sapp.clipboard);
+    SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
     SOKOL_ASSERT(_sapp.win32.hwnd);
     if (!OpenClipboard(_sapp.win32.hwnd)) {
         /* silently ignore any errors and just return the current
            content of the local clipboard buffer
         */
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
     HANDLE object = GetClipboardData(CF_UNICODETEXT);
     if (!object) {
         CloseClipboard();
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
     const wchar_t* wchar_buf = (const wchar_t*) GlobalLock(object);
     if (!wchar_buf) {
         CloseClipboard();
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     }
-    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard, _sapp.clipboard_size);
+    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     GlobalUnlock(object);
     CloseClipboard();
-    return _sapp.clipboard;
+    return _sapp.clipboard.buffer;
 }
 
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
@@ -5152,6 +5538,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 }
 #endif /* SOKOL_WIN32_FORCE_MAIN */
 #endif /* SOKOL_NO_ENTRY */
+
+#ifdef _MSC_VER
+    #pragma warning(pop)
+#endif
+
 #endif /* _SAPP_WIN32 */
 
 /*== Android ================================================================*/
@@ -6669,6 +7060,15 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.NET_WM_ICON_NAME        = XInternAtom(_sapp.x11.display, "_NET_WM_ICON_NAME", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
+
+    /* check Xi extension for raw mouse input */
+    if (XQueryExtension(_sapp.x11.display, "XInputExtension", &_sapp.x11.xi.major_opcode, &_sapp.x11.xi.event_base, &_sapp.x11.xi.error_base)) {
+        _sapp.x11.xi.major = 2;
+        _sapp.x11.xi.minor = 0;
+        if (XIQueryVersion(_sapp.x11.display, &_sapp.x11.xi.major, &_sapp.x11.xi.minor) == Success) {
+            _sapp.x11.xi.available = true;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_x11_query_system_dpi(void) {
@@ -6784,7 +7184,7 @@ _SOKOL_PRIVATE void _sapp_glx_init() {
         _sapp_fail("GLX: failed to load required entry points");
     }
 
-    if (!_sapp.glx.QueryExtension(_sapp.x11.display, &_sapp.glx.errorbase, &_sapp.glx.eventbase)) {
+    if (!_sapp.glx.QueryExtension(_sapp.x11.display, &_sapp.glx.error_base, &_sapp.glx.event_base)) {
         _sapp_fail("GLX: GLX extension not found");
     }
     if (!_sapp.glx.QueryVersion(_sapp.x11.display, &_sapp.glx.major, &_sapp.glx.minor)) {
@@ -7009,10 +7409,75 @@ _SOKOL_PRIVATE void _sapp_x11_set_fullscreen(bool enable) {
     XFlush(_sapp.x11.display);
 }
 
+_SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
+    SOKOL_ASSERT(0 == _sapp.x11.hidden_cursor);
+    const int w = 16;
+    const int h = 16;
+    XcursorImage* img = XcursorImageCreate(w, h);
+    SOKOL_ASSERT(img && (img->width == 16) && (img->height == 16) && img->pixels);
+    img->xhot = 0;
+    img->yhot = 0;
+    const size_t num_bytes = w * h * sizeof(XcursorPixel);
+    memset(img->pixels, 0, num_bytes);
+    _sapp.x11.hidden_cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
+    XcursorImageDestroy(img);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
     _sapp_x11_query_window_size();
+}
+
+_SOKOL_PRIVATE void _sapp_x11_show_mouse(bool show) {
+    if (show) {
+        XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
+    }
+    else {
+        XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.hidden_cursor);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
+    if (lock == _sapp.mouse.locked) {
+        return;
+    }
+    _sapp.mouse.dx = 0.0f;
+    _sapp.mouse.dy = 0.0f;
+    _sapp.mouse.locked = lock;
+    if (_sapp.mouse.locked) {
+        if (_sapp.x11.xi.available) {
+            XIEventMask em;
+            unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 }; // XIMaskLen is a macro
+            em.deviceid = XIAllMasterDevices;
+            em.mask_len = sizeof(mask);
+            em.mask = mask;
+            XISetMask(mask, XI_RawMotion);
+            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+        }
+        XGrabPointer(_sapp.x11.display, // display
+            _sapp.x11.window,           // grab_window
+            True,                       // owner_events
+            ButtonPressMask | ButtonReleaseMask | PointerMotionMask,    // event_mask
+            GrabModeAsync,              // pointer_mode
+            GrabModeAsync,              // keyboard_mode
+            _sapp.x11.window,           // confine_to
+            _sapp.x11.hidden_cursor,    // cursor
+            CurrentTime);               // time
+    }
+    else {
+        if (_sapp.x11.xi.available) {
+            XIEventMask em;
+            unsigned char mask[] = { 0 };
+            em.deviceid = XIAllMasterDevices;
+            em.mask_len = sizeof(mask);
+            em.mask = mask;
+            XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
+        }
+        XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int) _sapp.mouse.x, _sapp.mouse.y);
+        XUngrabPointer(_sapp.x11.display, CurrentTime);
+    }
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
@@ -7179,8 +7644,6 @@ _SOKOL_PRIVATE void _sapp_x11_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp_init_event(type);
         _sapp.event.mouse_button = btn;
         _sapp.event.modifiers = mods;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -7203,7 +7666,7 @@ _SOKOL_PRIVATE void _sapp_x11_key_event(sapp_event_type type, sapp_keycode key, 
         _sapp.event.modifiers = mods;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled &&
+        if (_sapp.clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
@@ -7402,6 +7865,35 @@ static bool _sapp_x11_keycodes[256];
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     switch (event->type) {
+        case GenericEvent:
+            if (_sapp.mouse.locked && _sapp.x11.xi.available) {
+                if (event->xcookie.extension == _sapp.x11.xi.major_opcode) {
+                    if (XGetEventData(_sapp.x11.display, &event->xcookie)) {
+                        if (event->xcookie.evtype == XI_RawMotion) {
+                            XIRawEvent* re = (XIRawEvent*) event->xcookie.data;
+                            if (re->valuators.mask_len) {
+                                const double* values = re->raw_values;
+                                if (XIMaskIsSet(re->valuators.mask, 0)) {
+                                    _sapp.mouse.dx = (float) *values;
+                                    values++;
+                                }
+                                if (XIMaskIsSet(re->valuators.mask, 1)) {
+                                    _sapp.mouse.dy = (float) *values;
+                                }
+                                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+                            }
+                        }
+                        XFreeEventData(_sapp.x11.display, &event->xcookie);
+                    }
+                }
+            }
+            break;
+        case FocusOut:
+            /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
+            if (_sapp.mouse.locked) {
+                _sapp_x11_lock_mouse(false);
+            }
+            break;
         case KeyPress:
             {
                 int keycode = event->xkey.keycode;
@@ -7464,9 +7956,18 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
             break;
         case MotionNotify:
-            _sapp.mouse_x = event->xmotion.x;
-            _sapp.mouse_y = event->xmotion.y;
-            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+            if (!_sapp.mouse.locked) {
+                const float new_x = (float) event->xmotion.x;
+                const float new_y = (float) event->xmotion.y;
+                if (_sapp.mouse.pos_valid) {
+                    _sapp.mouse.dx = new_x - _sapp.mouse.x;
+                    _sapp.mouse.dy = new_y - _sapp.mouse.y;
+                }
+                _sapp.mouse.x = new_x;
+                _sapp.mouse.y = new_y;
+                _sapp.mouse.pos_valid = true;
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+            }
             break;
         case ConfigureNotify:
             if ((event->xconfigure.width != _sapp.window_width) || (event->xconfigure.height != _sapp.window_height)) {
@@ -7522,6 +8023,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
+    _sapp_x11_create_hidden_cursor();
     _sapp_glx_init();
     Visual* visual = 0;
     int depth = 0;
@@ -7672,15 +8174,15 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
     return _sapp.gles2_fallback;
 }
 
-SOKOL_API_IMPL void sapp_show_keyboard(bool shown) {
+SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
     #if defined(_SAPP_IOS)
-    _sapp_ios_show_keyboard(shown);
+    _sapp_ios_show_keyboard(show);
     #elif defined(_SAPP_EMSCRIPTEN)
-    _sapp_emsc_show_keyboard(shown);
+    _sapp_emsc_show_keyboard(show);
     #elif defined(_SAPP_ANDROID)
-    _sapp_android_show_keyboard(shown);
+    _sapp_android_show_keyboard(show);
     #else
-    _SOKOL_UNUSED(shown);
+    _SOKOL_UNUSED(show);
     #endif
 }
 
@@ -7703,19 +8205,39 @@ SOKOL_API_DECL void sapp_toggle_fullscreen(void) {
 }
 
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
-SOKOL_API_IMPL void sapp_show_mouse(bool visible) {
-    if (_sapp.mouse_shown != visible) {
+SOKOL_API_IMPL void sapp_show_mouse(bool show) {
+    if (_sapp.mouse.shown != show) {
         #if defined(_SAPP_MACOS)
-        _sapp_macos_show_mouse(visible);
+        _sapp_macos_show_mouse(show);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_show_mouse(visible);
+        _sapp_win32_show_mouse(show);
+        #elif defined(_SAPP_LINUX)
+        _sapp_x11_show_mouse(show);
         #endif
-        _sapp.mouse_shown = visible;
+        _sapp.mouse.shown = show;
     }
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    return _sapp.mouse_shown;
+    return _sapp.mouse.shown;
+}
+
+SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
+    #if defined(_SAPP_MACOS)
+    _sapp_macos_lock_mouse(lock);
+    #elif defined(_SAPP_EMSCRIPTEN)
+    _sapp_emsc_lock_mouse(lock);
+    #elif defined(_SAPP_WIN32)
+    _sapp_win32_lock_mouse(lock);
+    #elif defined(_SAPP_LINUX)
+    _sapp_x11_lock_mouse(lock);
+    #else
+    _sapp.mouse.locked = lock;
+    #endif
+}
+
+SOKOL_API_IMPL bool sapp_mouse_locked(void) {
+    return _sapp.mouse.locked;
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
@@ -7736,7 +8258,7 @@ SOKOL_API_IMPL void sapp_consume_event(void) {
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
-    if (!_sapp.clipboard_enabled) {
+    if (!_sapp.clipboard.enabled) {
         return;
     }
     SOKOL_ASSERT(str);
@@ -7749,22 +8271,22 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #else
         /* not implemented */
     #endif
-    _sapp_strcpy(str, _sapp.clipboard, _sapp.clipboard_size);
+    _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
-    if (!_sapp.clipboard_enabled) {
+    if (!_sapp.clipboard.enabled) {
         return "";
     }
     #if defined(_SAPP_MACOS)
         return _sapp_macos_get_clipboard_string();
     #elif defined(_SAPP_EMSCRIPTEN)
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
     #else
         /* not implemented */
-        return _sapp.clipboard;
+        return _sapp.clipboard.buffer;
     #endif
 }
 
@@ -7937,9 +8459,5 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
-
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 #endif /* SOKOL_IMPL */
