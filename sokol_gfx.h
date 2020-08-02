@@ -7580,17 +7580,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     if (vs_ptr && fs_ptr && (vs_length > 0) && (fs_length > 0)) {
         /* create the D3D vertex- and pixel-shader objects */
         hr = ID3D11Device_CreateVertexShader(_sg.d3d11.dev, vs_ptr, vs_length, NULL, &shd->d3d11.vs);
-        SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11.vs);
+        bool vs_succeeded = SUCCEEDED(hr) && shd->d3d11.vs;
         hr = ID3D11Device_CreatePixelShader(_sg.d3d11.dev, fs_ptr, fs_length, NULL, &shd->d3d11.fs);
-        SOKOL_ASSERT(SUCCEEDED(hr) && shd->d3d11.fs);
+        bool fs_succeeded = SUCCEEDED(hr) && shd->d3d11.fs;
 
         /* need to store the vertex shader byte code, this is needed later in sg_create_pipeline */
-        shd->d3d11.vs_blob_length = (int)vs_length;
-        shd->d3d11.vs_blob = SOKOL_MALLOC((int)vs_length);
-        SOKOL_ASSERT(shd->d3d11.vs_blob);
-        memcpy(shd->d3d11.vs_blob, vs_ptr, vs_length);
-
-        result = SG_RESOURCESTATE_VALID;
+        if (vs_succeeded && fs_succeeded) {
+            shd->d3d11.vs_blob_length = (int)vs_length;
+            shd->d3d11.vs_blob = SOKOL_MALLOC((int)vs_length);
+            SOKOL_ASSERT(shd->d3d11.vs_blob);
+            memcpy(shd->d3d11.vs_blob, vs_ptr, vs_length);
+            result = SG_RESOURCESTATE_VALID;
+        }
     }
     if (vs_blob) {
         ID3D10Blob_Release(vs_blob); vs_blob = 0;
@@ -12751,8 +12752,6 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
         SOKOL_VALIDATE(desc->_start_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->_end_canary == 0, _SG_VALIDATE_PIPELINEDESC_CANARY);
         SOKOL_VALIDATE(desc->shader.id != SG_INVALID_ID, _SG_VALIDATE_PIPELINEDESC_SHADER);
-        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
-        SOKOL_VALIDATE(shd && shd->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
         for (int buf_index = 0; buf_index < SG_MAX_SHADERSTAGE_BUFFERS; buf_index++) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[buf_index];
             if (l_desc->stride == 0) {
@@ -12761,22 +12760,27 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             SOKOL_VALIDATE((l_desc->stride & 3) == 0, _SG_VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4);
         }
         SOKOL_VALIDATE(desc->layout.attrs[0].format != SG_VERTEXFORMAT_INVALID, _SG_VALIDATE_PIPELINEDESC_NO_ATTRS);
-        bool attrs_cont = true;
-        for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
-            const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
-            if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
-                attrs_cont = false;
-                continue;
+        const _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
+        SOKOL_VALIDATE(shd, _SG_VALIDATE_PIPELINEDESC_SHADER);
+        if (shd) {
+            SOKOL_VALIDATE(shd->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PIPELINEDESC_SHADER);
+            bool attrs_cont = true;
+            for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
+                const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
+                if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
+                    attrs_cont = false;
+                    continue;
+                }
+                SOKOL_VALIDATE(attrs_cont, _SG_VALIDATE_PIPELINEDESC_NO_ATTRS);
+                SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS);
+                #if defined(SOKOL_GLES2)
+                /* on GLES2, vertex attribute names must be provided */
+                SOKOL_VALIDATE(!_sg_strempty(&shd->gl.attrs[attr_index].name), _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
+                #elif defined(SOKOL_D3D11)
+                /* on D3D11, semantic names (and semantic indices) must be provided */
+                SOKOL_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
+                #endif
             }
-            SOKOL_VALIDATE(attrs_cont, _SG_VALIDATE_PIPELINEDESC_NO_ATTRS);
-            SOKOL_ASSERT(a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS);
-            #if defined(SOKOL_GLES2)
-            /* on GLES2, vertex attribute names must be provided */
-            SOKOL_VALIDATE(!_sg_strempty(&shd->gl.attrs[attr_index].name), _SG_VALIDATE_PIPELINEDESC_ATTR_NAME);
-            #elif defined(SOKOL_D3D11)
-            /* on D3D11, semantic names (and semantic indices) must be provided */
-            SOKOL_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), _SG_VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
-            #endif
         }
         return SOKOL_VALIDATE_END();
     #endif
