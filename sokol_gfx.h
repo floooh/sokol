@@ -13380,8 +13380,12 @@ _SOKOL_PRIVATE void _sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc
     pip->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_pipeline_desc(desc)) {
         _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
-        SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_VALID);
-        pip->slot.state = _sg_create_pipeline(pip, shd, desc);
+        if (shd && (shd->slot.state == SG_RESOURCESTATE_VALID)) {
+            pip->slot.state = _sg_create_pipeline(pip, shd, desc);
+        }
+        else {
+            pip->slot.state = SG_RESOURCESTATE_FAILED;
+        }
     }
     else {
         pip->slot.state = SG_RESOURCESTATE_FAILED;
