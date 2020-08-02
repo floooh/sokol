@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Jul-2020 PSA**: warning about cmake 3.18 breakage)
+[See what's new](#updates) (**02-Aug-2020**: new mouse-lock feature in sokol_app.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,23 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **02-Aug-2020**:
+    - sokol_app.h now has a mouse-lock feature (aka pointer-lock) via two
+      new functions ```void sapp_lock_mouse(bool lock)``` and ```bool sapp_mouse_locked(void)```.
+      For documentation, please search for 'MOUSE LOCK' in sokol_app.h.
+      The sokol-app samples [events-sapp](https://floooh.github.io/sokol-html5/events-sapp.html)
+      and [cgltf-sapp](https://floooh.github.io/sokol-html5/cgltf-sapp.html) have been
+      updated to demonstrate the feature.
+    - sokol_app.h Linux: mouse pointer visibility (via ```void sapp_show_mouse(bool show)```)
+      has been implemented for Linux/X11
+    - sokol_app.h WASM: mouse wheel scroll deltas are now 'normalized' between
+      the different scroll modes (pixels, lines, pages). See this issue:
+      https://github.com/floooh/sokol/issues/339. Many thanks to @bqqbarbhg for
+      investigating the issue and providing a solution!
+    - sokol_app.h now has [better documentation](https://github.com/floooh/sokol/blob/89a3bb8da0a2df843d6cc60a270ddc69f9aa69d6/sokol_app.h#L70)
+      what system libraries must be linked on the various platforms (and on Linux two additional libraries must be
+      linked now: Xcursor and Xi)
 
 - **22-Jul-2020**: **PLEASE NOTE** cmake 3.18 breaks some of sokol samples when
   compiling with the Visual Studio toolchain because some C files now actually
