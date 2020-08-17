@@ -143,18 +143,16 @@
 
     WINMAIN AND ARGC / ARGV
     =======================
-    On Windows with WinMain() based apps, use the __argc and __argv global
-    variables provided by Windows. These are compatible with main(argc, argv)
-    and have already been converted to UTF-8 by Windows:
+    On Windows with WinMain() based apps, getting UTF8-encoded command line
+    arguments is a bit more complicated:
 
-        int WINAPI WinMain(...) {
-            sargs_setup(&(sargs_desc){
-                .argc = __argc,
-                .argv = __argv
-            });
-        }
+    First call GetCommandLineW(), this returns the entire command line
+    as UTF-16 string. Then call CommandLineToArgvW(), this parses the
+    command line string into the usual argc/argv format (but in UTF-16).
+    Finally convert the UTF-16 strings in argv[] into UTF-8 via
+    WideCharToMultiByte().
 
-    (this is also what sokol_app.h uses btw)
+    See the function _sapp_win32_command_line_to_utf8_argv() for example code.
 
     API DOCUMENTATION
     =================
