@@ -152,7 +152,10 @@
     Finally convert the UTF-16 strings in argv[] into UTF-8 via
     WideCharToMultiByte().
 
-    See the function _sapp_win32_command_line_to_utf8_argv() for example code.
+    See the function _sapp_win32_command_line_to_utf8_argv() in sokol_app.h
+    for example code how to do this (if you're using sokol_app.h, it will
+    already convert the command line arguments to UTF-8 for you of course,
+    so you can plug them directly into sokol_app.h).
 
     API DOCUMENTATION
     =================
