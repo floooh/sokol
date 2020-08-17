@@ -135,6 +135,11 @@
     --- kick off a draw call with:
 
             sg_draw(int base_element, int num_elements, int num_instances)
+   
+               In the case of no instancing: num_instances should be set to 1 and base_element/num_elements are
+               amounts of vertices. In the case of instancing (meaning num_instances > 1), num elements is the
+               number of vertices in one instance, while base_element remains unchanged. base_element is the index
+               of the first vertex to begin drawing from.
 
     --- finish the current rendering pass with:
 
