@@ -647,7 +647,7 @@ enum {
     The active 3D-API backend, use the function sg_query_backend()
     to get the currently active backend.
 
-    For returned value corresponds with the compile-time define to select
+    The returned value corresponds with the compile-time define to select
     a backend, with the only exception of SOKOL_GLES3: this may
     return SG_BACKEND_GLES2 if the backend has to fallback to GLES2 mode
     because GLES3 isn't supported.
@@ -877,13 +877,15 @@ typedef enum sg_resource_state {
     CPU needs to wait for the GPU when attempting to update
     a resource that might be currently accessed by the GPU.
 
-    Resource content is updated with the function sg_update_buffer() for
-    buffer objects, and sg_update_image() for image objects. Only
-    one update is allowed per frame and resource object. The
-    application must update all data required for rendering (this
-    means that the update data can be smaller than the resource size,
-    if only a part of the overall resource size is used for rendering,
-    you only need to make sure that the data that *is* used is valid).
+    Resource content is updated with the functions sg_update_buffer() or
+    sg_append_buffer() for buffer objects, and sg_update_image() for image
+    objects. For the sg_update_*() functions, only one update is allowed per
+    frame and resource object, while sg_append_buffer() can be called
+    multiple times per frame on the same buffer. The application must update
+    all data required for rendering (this means that the update data can be
+    smaller than the resource size, if only a part of the overall resource
+    size is used for rendering, you only need to make sure that the data that
+    *is* used is valid).
 
     The default usage is SG_USAGE_IMMUTABLE.
 */
@@ -1644,10 +1646,11 @@ typedef struct sg_image_desc {
     - reflection information for vertex attributes (vertex shader inputs):
         - vertex attribute name (required for GLES2, optional for GLES3 and GL)
         - a semantic name and index (required for D3D11)
-    - for each vertex- and fragment-shader-stage:
+    - for each shader-stage (vertex and fragment):
         - the shader source or bytecode
         - an optional entry function name
-        - an optional compile target (only for D3D11 when source is provided, defaults are "vs_4_0" and "ps_4_0")
+        - an optional compile target (only for D3D11 when source is provided,
+          defaults are "vs_4_0" and "ps_4_0")
         - reflection info for each uniform block used by the shader stage:
             - the size of the uniform block in bytes
             - reflection info for each uniform block member (only required for GL backends):
@@ -2074,9 +2077,9 @@ typedef struct sg_pass_info {
         .context.d3d11.device
             a pointer to the ID3D11Device object, this must have been created
             before sg_setup() is called
-        .context..d3d11.device_context
+        .context.d3d11.device_context
             a pointer to the ID3D11DeviceContext object
-        .context..d3d11.render_target_view_cb
+        .context.d3d11.render_target_view_cb
             a C callback function to obtain a pointer to the current
             ID3D11RenderTargetView object of the default framebuffer,
             this function will be called in sg_begin_pass() when rendering
