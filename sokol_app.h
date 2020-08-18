@@ -5466,15 +5466,18 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         virtual void Uninitialize();
 
     protected:
-        // Application lifecycle event handlers.
+        // Application lifecycle event handlers
         void OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args);
         void OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args);
         void OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args);
 
-        // Window event handlers.
+        // Window event handlers
         void OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args);
         void OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args);
         void OnWindowClosed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CoreWindowEventArgs const& args);
+
+        // Navigation event handlers
+        void OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args);
 
         // Input event handlers
         void OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args);
@@ -6166,6 +6169,8 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         currentDisplayInformation.OrientationChanged({ this, &App::OnOrientationChanged });
         winrt::Windows::Graphics::Display::DisplayInformation::DisplayContentsInvalidated({ this, &App::OnDisplayContentsInvalidated });
 
+        winrt::Windows::UI::Core::SystemNavigationManager::GetForCurrentView().BackRequested({ this, &App::OnBackRequested });
+
         m_deviceResources->SetWindow(window);
     }
 
@@ -6275,6 +6280,11 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     {
         m_windowClosed = true;
         m_renderer.reset();
+    }
+
+    void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args)
+    {
+        args.Handled(true);
     }
 
     void App::OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args)
