@@ -5218,6 +5218,13 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #if defined(_SAPP_UWP)
 
 // Helper functions
+_SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
+    /* NOTE: this function is only called when the mouse visibility actually changes */
+    winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().PointerCursor(visible ?
+        winrt::Windows::UI::Core::CoreCursor(winrt::Windows::UI::Core::CoreCursorType::Arrow, 0) :
+        winrt::Windows::UI::Core::CoreCursor(nullptr));
+}
+
 _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& senderWindow)
 {
     uint32_t mods = 0;
@@ -6207,7 +6214,9 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         auto targetSize = winrt::Windows::Foundation::Size(_sapp.desc.width, _sapp.desc.height);
         appView.SetPreferredMinSize(targetSize);
         appView.TryResizeView(targetSize);
-        appView.Title(_sapp.window_title_wide);
+        // Disabling this since it can only append the title to the app name (Title - Appname).
+        // There's no way of just setting a string to be the window title.
+        //appView.Title(_sapp.window_title_wide);
 
         // Run() won't start until the CoreWindow is activated.
         winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Activate();
@@ -8934,6 +8943,8 @@ SOKOL_API_IMPL void sapp_show_mouse(bool visible) {
         _sapp_macos_show_mouse(visible);
         #elif defined(_SAPP_WIN32)
         _sapp_win32_show_mouse(visible);
+        #elif defined(_SAPP_UWP)
+        _sapp_uwp_show_mouse(visible);
         #endif
         _sapp.mouse_shown = visible;
     }
