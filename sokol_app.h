@@ -2422,12 +2422,19 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
-    [NSApplication sharedApplication];
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    NSApplication* app = [NSApplication sharedApplication];
+    app.activationPolicy = NSApplicationActivationPolicyRegular;
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
-    NSApp.delegate = _sapp.macos.app_dlg;
-    [NSApp activateIgnoringOtherApps:YES];
-    [NSApp run];
+    app.delegate = _sapp.macos.app_dlg;
+    NSArray* topLevelObjects = nil;
+    if ([[NSBundle mainBundle] loadNibNamed:@"MainMenu"
+                                      owner:app
+                            topLevelObjects:&topLevelObjects] &&
+        [topLevelObjects count] > 0) {
+        app.mainMenu = topLevelObjects[0];			// Use main menu from MainMenu.xib
+    }
+    [app activateIgnoringOtherApps:YES];
+    [app run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
 }
