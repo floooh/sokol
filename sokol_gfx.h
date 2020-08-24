@@ -2162,7 +2162,7 @@ typedef struct sg_wgpu_context_desc {
     const void* (*resolve_view_cb)(void);  /* returns WGPUTextureView */
     const void* (*resolve_view_userdata_cb)(void*);
     const void* (*depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
-    const void* (*depth_stencil_view_userdata_cb)(void);
+    const void* (*depth_stencil_view_userdata_cb)(void*);
     void* user_data;
 } sg_wgpu_context_desc;
 
@@ -3481,8 +3481,12 @@ typedef struct {
     int cur_height;
     WGPUDevice dev;
     WGPUTextureView (*render_view_cb)(void);
+    WGPUTextureView (*render_view_userdata_cb)(void*);
     WGPUTextureView (*resolve_view_cb)(void);
+    WGPUTextureView (*resolve_view_userdata_cb)(void*);
     WGPUTextureView (*depth_stencil_view_cb)(void);
+    WGPUTextureView (*depth_stencil_view_userdata_cb)(void*);
+    void* user_data;
     WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
     WGPUCommandEncoder staging_cmd_enc;
@@ -10820,17 +10824,21 @@ _SOKOL_PRIVATE WGPUSampler _sg_wgpu_create_sampler(const sg_image_desc* img_desc
 _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->context.wgpu.device);
-    SOKOL_ASSERT(desc->context.wgpu.render_view_cb);
-    SOKOL_ASSERT(desc->context.wgpu.resolve_view_cb);
-    SOKOL_ASSERT(desc->context.wgpu.depth_stencil_view_cb);
+    SOKOL_ASSERT(desc->context.wgpu.render_view_cb || desc->context.wgpu.render_view_userdata_cb);
+    SOKOL_ASSERT(desc->context.wgpu.resolve_view_cb || desc->context.wgpu.resolve_view_userdata_cb);
+    SOKOL_ASSERT(desc->context.wgpu.depth_stencil_view_cb || desc->context.wgpu.depth_stencil_view_userdata_cb);
     SOKOL_ASSERT(desc->uniform_buffer_size > 0);
     SOKOL_ASSERT(desc->staging_buffer_size > 0);
     _sg.backend = SG_BACKEND_WGPU;
     _sg.wgpu.valid = true;
     _sg.wgpu.dev = (WGPUDevice) desc->context.wgpu.device;
     _sg.wgpu.render_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.render_view_cb;
+    _sg.wgpu.render_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.render_view_userdata_cb;
     _sg.wgpu.resolve_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.resolve_view_cb;
+    _sg.wgpu.resolve_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.resolve_view_userdata_cb;
     _sg.wgpu.depth_stencil_view_cb = (WGPUTextureView(*)(void)) desc->context.wgpu.depth_stencil_view_cb;
+    _sg.wgpu.depth_stencil_view_userdata_cb = (WGPUTextureView(*)(void*)) desc->context.wgpu.depth_stencil_view_userdata_cb;
+    _sg.wgpu.user_data = desc->context.wgpu.user_data;
     _sg.wgpu.queue = wgpuDeviceCreateQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
@@ -11388,9 +11396,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.render_view_cb);
-    SOKOL_ASSERT(_sg.wgpu.resolve_view_cb);
-    SOKOL_ASSERT(_sg.wgpu.depth_stencil_view_cb);
+    SOKOL_ASSERT(_sg.wgpu.render_view_cb || _sg.wgpu.render_view_userdata_cb);
+    SOKOL_ASSERT(_sg.wgpu.resolve_view_cb || _sg.wgpu.resolve_view_userdata_cb);
+    SOKOL_ASSERT(_sg.wgpu.depth_stencil_view_cb || _sg.wgpu.depth_stencil_view_userdata_cb);
     _sg.wgpu.in_pass = true;
     _sg.wgpu.cur_width = w;
     _sg.wgpu.cur_height = h;
@@ -11433,9 +11441,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     }
     else {
         /* default render pass */
-        WGPUTextureView wgpu_render_view = _sg.wgpu.render_view_cb();
-        WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb();
-        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.depth_stencil_view_cb();
+        WGPUTextureView wgpu_render_view = _sg.wgpu.render_view_cb ? _sg.wgpu.render_view_cb() : _sg.wgpu.render_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb ? _sg.wgpu.resolve_view_cb() : _sg.wgpu.resolve_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.depth_stencil_view_cb ? _sg.wgpu.depth_stencil_view_cb() : _sg.wgpu.depth_stencil_view_userdata_cb(_sg.wgpu.user_data);
 
         WGPURenderPassDescriptor pass_desc;
         memset(&pass_desc, 0, sizeof(pass_desc));
