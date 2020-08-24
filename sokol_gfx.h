@@ -2052,8 +2052,6 @@ typedef struct sg_pass_info {
         WGPU:               *no default* (must be queried from WGPU swapchain)
     .context.depth_format   SG_PIXELFORMAT_DEPTH_STENCIL
     .context.sample_count   1
-    .context.user_data      optional user data pointer passed to the userdata
-                            version of the callback function pointers
 
     GL specific:
         .context.gl.force_gles2
@@ -2081,6 +2079,9 @@ typedef struct sg_pass_info {
             a C callback function to obtain a MTLDrawable for the current
             frame when rendering to the default framebuffer, will be called in
             sg_end_pass() of the default pass
+        .context.metal.user_data
+            optional user data pointer passed to the userdata versions of
+            callback functions
 
     D3D11 specific:
         .context.d3d11.device
@@ -2100,6 +2101,9 @@ typedef struct sg_pass_info {
             ID3D11DepthStencilView object of the default framebuffer,
             this function will be called in sg_begin_pass() when rendering
             to the default framebuffer
+        .context.metal.user_data
+            optional user data pointer passed to the userdata versions of
+            callback functions
 
     WebGPU specific:
         .context.wgpu.device
@@ -2118,6 +2122,9 @@ typedef struct sg_pass_info {
         .context.wgpu.depth_stencil_view_userdata_cb
             callback to get current default-pass depth-stencil-surface WGPUTextureView
             the pixel format of the default WGPUTextureView must be WGPUTextureFormat_Depth24Plus8
+        .context.metal.user_data
+            optional user data pointer passed to the userdata versions of
+            callback functions
 
     When using sokol_gfx.h and sokol_app.h together, consider using the
     helper function sapp_sgcontext() in the sokol_glue.h header to
@@ -2135,6 +2142,7 @@ typedef struct sg_mtl_context_desc {
     const void* (*renderpass_descriptor_userdata_cb)(void*);
     const void* (*drawable_cb)(void);
     const void* (*drawable_userdata_cb)(void*);
+    void* user_data;
 } sg_metal_context_desc;
 
 typedef struct sg_d3d11_context_desc {
@@ -2144,6 +2152,7 @@ typedef struct sg_d3d11_context_desc {
     const void* (*render_target_view_userdata_cb)(void*);
     const void* (*depth_stencil_view_cb)(void);
     const void* (*depth_stencil_view_userdata_cb)(void*);
+    void* user_data;
 } sg_d3d11_context_desc;
 
 typedef struct sg_wgpu_context_desc {
@@ -2154,13 +2163,13 @@ typedef struct sg_wgpu_context_desc {
     const void* (*resolve_view_userdata_cb)(void*);
     const void* (*depth_stencil_view_cb)(void);    /* returns WGPUTextureView, must be WGPUTextureFormat_Depth24Plus8 */
     const void* (*depth_stencil_view_userdata_cb)(void);
+    void* user_data;
 } sg_wgpu_context_desc;
 
 typedef struct sg_context_desc {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    void* user_data;
     sg_gl_context_desc gl;
     sg_metal_context_desc metal;
     sg_d3d11_context_desc d3d11;
@@ -3335,6 +3344,7 @@ typedef struct {
     const void*(*renderpass_descriptor_userdata_cb)(void*);
     const void*(*drawable_cb)(void);
     const void*(*drawable_userdata_cb)(void*);
+    void* user_data;
     uint32_t frame_index;
     uint32_t cur_frame_rotate_index;
     uint32_t ub_size;
@@ -8951,6 +8961,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.renderpass_descriptor_userdata_cb = desc->context.metal.renderpass_descriptor_userdata_cb;
     _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
     _sg.mtl.drawable_userdata_cb = desc->context.metal.drawable_userdata_cb;
+    _sg.mtl.user_data = desc->context.metal.user_data;
     _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
@@ -9571,7 +9582,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_cb();
         }
         else {
-            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.desc.context.user_data);
+            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
         }
 
     }
@@ -9696,7 +9707,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
     }
     else {
-        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.desc.context.user_data);
+        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
     [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
     [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
