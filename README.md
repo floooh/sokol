@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**02-Aug-2020**: new mouse-lock feature in sokol_app.h)
+[See what's new](#updates) (**25-Aug-2020**: optional userdata callbacks in sokol_gfx.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,12 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **24-Aug-2020**:
+    The backend-specific callback functions that are provided to sokol_gfx.h
+    in the ```sg_setup()``` initialization call now have alternative
+    versions which accept a userdata-pointer argument. The userdata-free functions
+    still exist, so no changes are required for existing code.
 
 - **02-Aug-2020**:
     - sokol_app.h now has a mouse-lock feature (aka pointer-lock) via two
