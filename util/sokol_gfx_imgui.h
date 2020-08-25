@@ -1445,80 +1445,105 @@ _SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const void* 
 
 _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int index, const sg_imgui_capture_item_t* item) {
     sg_imgui_str_t str = _sg_imgui_make_str(0);
-    sg_imgui_str_t res_id = _sg_imgui_make_str(0);
     switch (item->cmd) {
         case SG_IMGUI_CMD_RESET_STATE_CACHE:
             _sg_imgui_snprintf(&str, "%d: sg_reset_state_cache()", index);
             break;
 
         case SG_IMGUI_CMD_MAKE_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.make_buffer.result);
-            _sg_imgui_snprintf(&str, "%d: sg_make_buffer(desc=..) => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.make_buffer.result);
+                _sg_imgui_snprintf(&str, "%d: sg_make_buffer(desc=..) => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_MAKE_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.make_image.result);
-            _sg_imgui_snprintf(&str, "%d: sg_make_image(desc=..) => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.make_image.result);
+                _sg_imgui_snprintf(&str, "%d: sg_make_image(desc=..) => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_MAKE_SHADER:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.make_shader.result);
-            _sg_imgui_snprintf(&str, "%d: sg_make_shader(desc=..) => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.make_shader.result);
+                _sg_imgui_snprintf(&str, "%d: sg_make_shader(desc=..) => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_MAKE_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.make_pipeline.result);
-            _sg_imgui_snprintf(&str, "%d: sg_make_pipeline(desc=..) => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.make_pipeline.result);
+                _sg_imgui_snprintf(&str, "%d: sg_make_pipeline(desc=..) => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_MAKE_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.make_pass.result);
-            _sg_imgui_snprintf(&str, "%d: sg_make_pass(desc=..) => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.make_pass.result);
+                _sg_imgui_snprintf(&str, "%d: sg_make_pass(desc=..) => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_DESTROY_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.destroy_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_destroy_buffer(buf=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.destroy_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_destroy_buffer(buf=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_DESTROY_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.destroy_image.image);
-            _sg_imgui_snprintf(&str, "%d: sg_destroy_image(img=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.destroy_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_destroy_image(img=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_DESTROY_SHADER:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.destroy_shader.shader);
-            _sg_imgui_snprintf(&str, "%d: sg_destroy_shader(shd=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.destroy_shader.shader);
+                _sg_imgui_snprintf(&str, "%d: sg_destroy_shader(shd=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_DESTROY_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.destroy_pipeline.pipeline);
-            _sg_imgui_snprintf(&str, "%d: sg_destroy_pipeline(pip=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.destroy_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_destroy_pipeline(pip=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_DESTROY_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.destroy_pass.pass);
-            _sg_imgui_snprintf(&str, "%d: sg_destroy_pass(pass=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.destroy_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_destroy_pass(pass=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_UPDATE_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)",
-                index, res_id.buf,
-                item->args.update_buffer.data_size);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)",
+                    index, res_id.buf,
+                    item->args.update_buffer.data_size);
+            }
             break;
 
         case SG_IMGUI_CMD_UPDATE_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.update_image.image);
-            _sg_imgui_snprintf(&str, "%d: sg_update_image(img=%s, data=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.update_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_update_image(img=%s, data=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_APPEND_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d",
-                index, res_id.buf,
-                item->args.append_buffer.data_size,
-                item->args.append_buffer.result);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d",
+                    index, res_id.buf,
+                    item->args.append_buffer.data_size,
+                    item->args.append_buffer.result);
+            }
             break;
 
         case SG_IMGUI_CMD_BEGIN_DEFAULT_PASS:
@@ -1529,8 +1554,10 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_BEGIN_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.begin_pass.pass);
-            _sg_imgui_snprintf(&str, "%d: sg_begin_pass(pass=%s, pass_action=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.begin_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_begin_pass(pass=%s, pass_action=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_APPLY_VIEWPORT:
@@ -1554,8 +1581,10 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_APPLY_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.apply_pipeline.pipeline);
-            _sg_imgui_snprintf(&str, "%d: sg_apply_pipeline(pip=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.apply_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_apply_pipeline(pip=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_APPLY_BINDINGS:
@@ -1587,78 +1616,108 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_ALLOC_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.alloc_buffer.result);
-            _sg_imgui_snprintf(&str, "%d: sg_alloc_buffer() => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.alloc_buffer.result);
+                _sg_imgui_snprintf(&str, "%d: sg_alloc_buffer() => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_ALLOC_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.alloc_image.result);
-            _sg_imgui_snprintf(&str, "%d: sg_alloc_image() => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.alloc_image.result);
+                _sg_imgui_snprintf(&str, "%d: sg_alloc_image() => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_ALLOC_SHADER:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.alloc_shader.result);
-            _sg_imgui_snprintf(&str, "%d: sg_alloc_shader() => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.alloc_shader.result);
+                _sg_imgui_snprintf(&str, "%d: sg_alloc_shader() => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_ALLOC_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.alloc_pipeline.result);
-            _sg_imgui_snprintf(&str, "%d: sg_alloc_pipeline() => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.alloc_pipeline.result);
+                _sg_imgui_snprintf(&str, "%d: sg_alloc_pipeline() => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_ALLOC_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.alloc_pass.result);
-            _sg_imgui_snprintf(&str, "%d: sg_alloc_pass() => %s", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.alloc_pass.result);
+                _sg_imgui_snprintf(&str, "%d: sg_alloc_pass() => %s", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_INIT_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.init_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_init_buffer(buf=%s, desc=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.init_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_init_buffer(buf=%s, desc=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_INIT_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.init_image.image);
-            _sg_imgui_snprintf(&str, "%d: sg_init_image(img=%s, desc=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.init_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_init_image(img=%s, desc=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_INIT_SHADER:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.init_shader.shader);
-            _sg_imgui_snprintf(&str, "%d: sg_init_shader(shd=%s, desc=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.init_shader.shader);
+                _sg_imgui_snprintf(&str, "%d: sg_init_shader(shd=%s, desc=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_INIT_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.init_pipeline.pipeline);
-            _sg_imgui_snprintf(&str, "%d: sg_init_pipeline(pip=%s, desc=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.init_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_init_pipeline(pip=%s, desc=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_INIT_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.init_pass.pass);
-            _sg_imgui_snprintf(&str, "%d: sg_init_pass(pass=%s, desc=..)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.init_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_init_pass(pass=%s, desc=..)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_FAIL_BUFFER:
-            res_id = _sg_imgui_buffer_id_string(ctx, item->args.fail_buffer.buffer);
-            _sg_imgui_snprintf(&str, "%d: sg_fail_buffer(buf=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.fail_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_fail_buffer(buf=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_FAIL_IMAGE:
-            res_id = _sg_imgui_image_id_string(ctx, item->args.fail_image.image);
-            _sg_imgui_snprintf(&str, "%d: sg_fail_image(img=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.fail_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_fail_image(img=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_FAIL_SHADER:
-            res_id = _sg_imgui_shader_id_string(ctx, item->args.fail_shader.shader);
-            _sg_imgui_snprintf(&str, "%d: sg_fail_shader(shd=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.fail_shader.shader);
+                _sg_imgui_snprintf(&str, "%d: sg_fail_shader(shd=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_FAIL_PIPELINE:
-            res_id = _sg_imgui_pipeline_id_string(ctx, item->args.fail_pipeline.pipeline);
-            _sg_imgui_snprintf(&str, "%d: sg_fail_pipeline(shd=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.fail_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_fail_pipeline(shd=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_FAIL_PASS:
-            res_id = _sg_imgui_pass_id_string(ctx, item->args.fail_pass.pass);
-            _sg_imgui_snprintf(&str, "%d: sg_fail_pass(pass=%s)", index, res_id.buf);
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.fail_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_fail_pass(pass=%s)", index, res_id.buf);
+            }
             break;
 
         case SG_IMGUI_CMD_PUSH_DEBUG_GROUP:
