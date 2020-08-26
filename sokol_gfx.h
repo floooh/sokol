@@ -2528,11 +2528,13 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #ifndef D3D11_NO_HELPERS
     #define D3D11_NO_HELPERS
     #endif
-    #ifndef CINTERFACE
-    #define CINTERFACE
-    #endif
-    #ifndef COBJMACROS
-    #define COBJMACROS
+    #if !defined(__cplusplus)
+        #ifndef CINTERFACE
+        #define CINTERFACE
+        #endif
+        #ifndef COBJMACROS
+        #define COBJMACROS
+        #endif
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
@@ -6888,6 +6890,187 @@ _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_content
 /*== D3D11 BACKEND IMPLEMENTATION ============================================*/
 #elif defined(SOKOL_D3D11)
 
+#if defined(__cplusplus)
+#define _sg_d3d11_AddRef(self) (self)->AddRef()
+#else
+#define _sg_d3d11_AddRef(self) (self)->lpVtbl->AddRef(self)
+#endif
+
+#if defined(__cplusplus)
+#define _sg_d3d11_Release(self) (self)->Release()
+#else
+#define _sg_d3d11_Release(self) (self)->lpVtbl->Release(self)
+#endif
+
+/*-- D3D11 C/C++ wrappers ----------------------------------------------------*/
+static inline HRESULT _sg_d3d11_CheckFormatSupport(ID3D11Device* self, DXGI_FORMAT Format, UINT* pFormatSupport) {
+    #if defined(__cplusplus)
+        return self->CheckFormatSupport(Format, pFormatSupport);
+    #else
+        return self->lpVtbl->CheckFormatSupport(self, Format, pFormatSupport);
+    #endif
+}
+
+static inline void _sg_d3d11_OMSetRenderTargets(ID3D11DeviceContext* self, UINT NumViews, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView *pDepthStencilView) {
+    #if defined(__cplusplus)
+        self->OMSetRenderTargets(NumViews, ppRenderTargetViews, pDepthStencilView);
+    #else
+        self->lpVtbl->OMSetRenderTargets(self, NumViews, ppRenderTargetViews, pDepthStencilView);
+    #endif
+}
+
+static inline void _sg_d3d11_RSSetState(ID3D11DeviceContext* self, ID3D11RasterizerState* pRasterizerState) {
+    #if defined(__cplusplus)
+        self->RSSetState(pRasterizerState);
+    #else
+        self->lpVtbl->RSSetState(self, pRasterizerState);
+    #endif
+}
+
+static inline void _sg_d3d11_OMSetDepthStencilState(ID3D11DeviceContext* self, ID3D11DepthStencilState* pDepthStencilState, UINT StencilRef) {
+    #if defined(__cplusplus)
+        self->OMSetDepthStencilState(pDepthStencilState, StencilRef);
+    #else
+        self->lpVtbl->OMSetDepthStencilState(self, pDepthStencilState, StencilRef);
+    #endif
+}
+
+static inline void _sg_d3d11_OMSetBlendState(ID3D11DeviceContext* self, ID3D11BlendState* pBlendState, const FLOAT BlendFactor[4], UINT SampleMask) {
+    #if defined(__cplusplus)
+        self->OMSetBlendState(pBlendState, BlendFactor, SampleMask);
+    #else
+        self->lpVtbl->OMSetBlendState(self, pBlendState, BlendFactor, SampleMask);
+    #endif
+}
+
+static inline void _sg_d3d11_IASetVertexBuffers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppVertexBuffers, const UINT* pStrides, const UINT* pOffsets) {
+    #if defined(__cplusplus)
+        self->IASetVertexBuffers(StartSlot, NumBuffers, ppVertexBuffers, pStrides, pOffsets);
+    #else
+        self->lpVtbl->IASetVertexBuffers(self, StartSlot, NumBuffers, ppVertexBuffers, pStrides, pOffsets);
+    #endif
+}
+
+static inline void _sg_d3d11_IASetIndexBuffer(ID3D11DeviceContext* self, ID3D11Buffer* pIndexBuffer, DXGI_FORMAT Format, UINT Offset) {
+    #if defined(__cplusplus)
+        self->IASetIndexBuffer(pIndexBuffer, Format, Offset);
+    #else
+        self->lpVtbl->IASetIndexBuffer(self, pIndexBuffer, Format, Offset);
+    #endif
+}
+
+static inline void _sg_d3d11_IASetInputLayout(ID3D11DeviceContext* self, ID3D11InputLayout* pInputLayout) {
+    #if defined(__cplusplus)
+        self->IASetInputLayout(pInputLayout);
+    #else
+        self->lpVtbl->IASetInputLayout(self, pInputLayout);
+    #endif
+}
+
+static inline void _sg_d3d11_VSSetShader(ID3D11DeviceContext* self, ID3D11VertexShader* pVertexShader, ID3D11ClassInstance* const* ppClassInstances, UINT NumClassInstances) {
+    #if defined(__cplusplus)
+        self->VSSetShader(pVertexShader, ppClassInstances, NumClassInstances);
+    #else
+        self->lpVtbl->VSSetShader(self, pVertexShader, ppClassInstances, NumClassInstances);
+    #endif
+}
+
+static inline void _sg_d3d11_PSSetShader(ID3D11DeviceContext* self, ID3D11PixelShader* pPixelShader, ID3D11ClassInstance* const* ppClassInstances, UINT NumClassInstances) {
+    #if defined(__cplusplus)
+        self->PSSetShader(pPixelShader, ppClassInstances, NumClassInstances);
+    #else
+        self->lpVtbl->PSSetShader(self, pPixelShader, ppClassInstances, NumClassInstances);
+    #endif
+}
+
+static inline void _sg_d3d11_VSSetConstantBuffers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers) {
+    #if defined(__cplusplus)
+        self->VSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
+    #else
+        self->lpVtbl->VSSetConstantBuffers(self, StartSlot, NumBuffers, ppConstantBuffers);
+    #endif
+}
+
+static inline void _sg_d3d11_PSSetConstantBuffers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumBuffers, ID3D11Buffer* const* ppConstantBuffers) {
+    #if defined(__cplusplus)
+        self->PSSetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
+    #else
+        self->lpVtbl->PSSetConstantBuffers(self, StartSlot, NumBuffers, ppConstantBuffers);
+    #endif
+}
+
+static inline void _sg_d3d11_VSSetShaderResources(ID3D11DeviceContext* self, UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView* const* ppShaderResourceViews) {
+    #if defined(__cplusplus)
+        self->VSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
+    #else
+        self->lpVtbl->VSSetShaderResources(self, StartSlot, NumViews, ppShaderResourceViews);
+    #endif
+}
+
+static inline void _sg_d3d11_PSSetShaderResources(ID3D11DeviceContext* self, UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView* const* ppShaderResourceViews) {
+    #if defined(__cplusplus)
+        self->PSSetShaderResources(StartSlot, NumViews, ppShaderResourceViews);
+    #else
+        self->lpVtbl->PSSetShaderResources(self, StartSlot, NumViews, ppShaderResourceViews);
+    #endif
+}
+
+static inline void _sg_d3d11_VSSetSamplers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers) {
+    #if defined(__cplusplus)
+        self->VSSetSamplers(StartSlot, NumSamplers, ppSamplers);
+    #else
+        self->lpVtbl->VSSetSamplers(self, StartSlot, NumSamplers, ppSamplers);
+    #endif
+}
+
+static inline void _sg_d3d11_PSSetSamplers(ID3D11DeviceContext* self, UINT StartSlot, UINT NumSamplers, ID3D11SamplerState* const* ppSamplers) {
+    #if defined(__cplusplus)
+        self->PSSetSamplers(StartSlot, NumSamplers, ppSamplers);
+    #else
+        self->lpVtbl->PSSetSamplers(self, StartSlot, NumSamplers, ppSamplers);
+    #endif
+}
+
+static inline HRESULT _sg_d3d11_CreateBuffer(ID3D11Device* self, const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer) {
+    #if defined(__cplusplus)
+        return self->CreateBuffer(pDesc, pInitialData, ppBuffer);
+    #else
+        return self->lpVtbl->CreateBuffer(self, pDesc, pInitialData, ppBuffer);
+    #endif
+}
+
+static inline HRESULT _sg_d3d11_CreateTexture2D(ID3D11Device* self, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D) {
+    #if defined(__cplusplus)
+        return self->CreateTexture2D(pDesc, pInitialData, ppTexture2D);
+    #else
+        return self->lpVtbl->CreateTexture2D(self, pDesc, pInitialData, ppTexture2D);
+    #endif
+}
+
+static inline HRESULT _sg_d3d11_CreateShaderResourceView(ID3D11Device* self, ID3D11Resource* pResource, const D3D11_SHADER_RESOURCE_VIEW_DESC* pDesc, ID3D11ShaderResourceView** ppSRView) {
+    #if defined(__cplusplus)
+        return self->CreateShaderResourceView(pResource, pDesc, ppSRView);
+    #else
+        return self->lpVtbl->CreateShaderResourceView(self, pResource, pDesc, ppSRView);
+    #endif
+}
+
+static inline HRESULT _sg_d3d11_CreateTexture3D(ID3D11Device* self, const D3D11_TEXTURE3D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture3D** ppTexture3D) {
+    #if defined(__cplusplus)
+        return self->CreateTexture3D(pDesc, pInitialData, ppTexture3D);
+    #else
+        return self->lpVtbl->CreateTexture3D(self, pDesc, pInitialData, ppTexture3D);
+    #endif
+}
+
+static inline HRESULT _sg_d3d11_CreateSamplerState(ID3D11Device* self, const D3D11_SAMPLER_DESC* pSamplerDesc, ID3D11SamplerState** ppSamplerState) {
+    #if defined(__cplusplus)
+        return self->CreateSamplerState(pSamplerDesc, ppSamplerState);
+    #else
+        return self->lpVtbl->CreateSamplerState(self, pSamplerDesc, ppSamplerState);
+    #endif
+}
+
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
     switch (usg) {
@@ -7180,7 +7363,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
         UINT dxgi_fmt_caps = 0;
         const DXGI_FORMAT dxgi_fmt = _sg_d3d11_pixel_format((sg_pixel_format)fmt);
         if (dxgi_fmt != DXGI_FORMAT_UNKNOWN) {
-            HRESULT hr = ID3D11Device_CheckFormatSupport(_sg.d3d11.dev, dxgi_fmt, &dxgi_fmt_caps);
+            HRESULT hr = _sg_d3d11_CheckFormatSupport(_sg.d3d11.dev, dxgi_fmt, &dxgi_fmt_caps);
             SOKOL_ASSERT(SUCCEEDED(hr) || (E_FAIL == hr));
             if (!SUCCEEDED(hr)) {
                 dxgi_fmt_caps = 0;
@@ -7224,21 +7407,21 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_backend(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
     /* clear all the device context state, so that resource refs don't keep stuck in the d3d device context */
-    ID3D11DeviceContext_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg.d3d11.zero_rtvs, NULL);
-    ID3D11DeviceContext_RSSetState(_sg.d3d11.ctx, NULL);
-    ID3D11DeviceContext_OMSetDepthStencilState(_sg.d3d11.ctx, NULL, 0);
-    ID3D11DeviceContext_OMSetBlendState(_sg.d3d11.ctx, NULL, NULL, 0xFFFFFFFF);
-    ID3D11DeviceContext_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, _sg.d3d11.zero_vbs, _sg.d3d11.zero_vb_strides, _sg.d3d11.zero_vb_offsets);
-    ID3D11DeviceContext_IASetIndexBuffer(_sg.d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0);
-    ID3D11DeviceContext_IASetInputLayout(_sg.d3d11.ctx, NULL);
-    ID3D11DeviceContext_VSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
-    ID3D11DeviceContext_PSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
-    ID3D11DeviceContext_VSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
-    ID3D11DeviceContext_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
-    ID3D11DeviceContext_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
-    ID3D11DeviceContext_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
-    ID3D11DeviceContext_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
-    ID3D11DeviceContext_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
+    _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg.d3d11.zero_rtvs, NULL);
+    _sg_d3d11_RSSetState(_sg.d3d11.ctx, NULL);
+    _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, NULL, 0);
+    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, NULL, NULL, 0xFFFFFFFF);
+    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, _sg.d3d11.zero_vbs, _sg.d3d11.zero_vb_strides, _sg.d3d11.zero_vb_offsets);
+    _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0);
+    _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, NULL);
+    _sg_d3d11_VSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
+    _sg_d3d11_PSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
+    _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
+    _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
+    _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
+    _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
+    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
+    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_reset_state_cache(void) {
@@ -7270,7 +7453,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
     const bool injected = (0 != desc->d3d11_buffer);
     if (injected) {
         buf->d3d11.buf = (ID3D11Buffer*) desc->d3d11_buffer;
-        ID3D11Buffer_AddRef(buf->d3d11.buf);
+        _sg_d3d11_AddRef(buf->d3d11.buf);
     }
     else {
         D3D11_BUFFER_DESC d3d11_desc;
@@ -7287,7 +7470,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             init_data.pSysMem = desc->content;
             init_data_ptr = &init_data;
         }
-        HRESULT hr = ID3D11Device_CreateBuffer(_sg.d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11.buf);
+        HRESULT hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11.buf);
         _SOKOL_UNUSED(hr);
         SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11.buf);
     }
@@ -7297,7 +7480,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
 _SOKOL_PRIVATE void _sg_d3d11_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->d3d11.buf) {
-        ID3D11Buffer_Release(buf->d3d11.buf);
+        _sg_d3d11_Release(buf->d3d11.buf);
     }
 }
 
@@ -7361,7 +7544,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
         d3d11_desc.SampleDesc.Count = img->cmn.sample_count;
         d3d11_desc.SampleDesc.Quality = msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
-        hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11.texds);
+        hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11.texds);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texds);
     }
     else {
@@ -7412,10 +7595,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.MiscFlags = (img->cmn.type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
             if (injected) {
                 img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
-                ID3D11Texture2D_AddRef(img->d3d11.tex2d);
+                _sg_d3d11_AddRef(img->d3d11.tex2d);
             }
             else {
-                hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
+                hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
                 SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.tex2d);
             }
 
@@ -7440,7 +7623,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 default:
                     SOKOL_UNREACHABLE; break;
             }
-            hr = ID3D11Device_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
+            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
             SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
         }
         else {
@@ -7474,10 +7657,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             }
             if (injected) {
                 img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
-                ID3D11Texture3D_AddRef(img->d3d11.tex3d);
+                _sg_d3d11_AddRef(img->d3d11.tex3d);
             }
             else {
-                hr = ID3D11Device_CreateTexture3D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex3d);
+                hr = _sg_d3d11_CreateTexture3D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex3d);
                 SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.tex3d);
             }
 
@@ -7487,7 +7670,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_srv_desc.Format = d3d11_tex_desc.Format;
             d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
             d3d11_srv_desc.Texture3D.MipLevels = img->cmn.num_mipmaps;
-            hr = ID3D11Device_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
+            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
             SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
         }
 
@@ -7505,7 +7688,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.CPUAccessFlags = 0;
             d3d11_tex_desc.SampleDesc.Count = img->cmn.sample_count;
             d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
-            hr = ID3D11Device_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11.texmsaa);
+            hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11.texmsaa);
             SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texmsaa);
         }
 
@@ -7534,7 +7717,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         d3d11_smp_desc.MinLOD = desc->min_lod;
         d3d11_smp_desc.MaxLOD = desc->max_lod;
-        hr = ID3D11Device_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
+        hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.smp);
     }
     return SG_RESOURCESTATE_VALID;
@@ -7543,22 +7726,22 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 _SOKOL_PRIVATE void _sg_d3d11_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     if (img->d3d11.tex2d) {
-        ID3D11Texture2D_Release(img->d3d11.tex2d);
+        _sg_d3d11_Release(img->d3d11.tex2d);
     }
     if (img->d3d11.tex3d) {
-        ID3D11Texture3D_Release(img->d3d11.tex3d);
+        _sg_d3d11_Release(img->d3d11.tex3d);
     }
     if (img->d3d11.texds) {
-        ID3D11Texture2D_Release(img->d3d11.texds);
+        _sg_d3d11_Release(img->d3d11.texds);
     }
     if (img->d3d11.texmsaa) {
-        ID3D11Texture2D_Release(img->d3d11.texmsaa);
+        _sg_d3d11_Release(img->d3d11.texmsaa);
     }
     if (img->d3d11.srv) {
-        ID3D11ShaderResourceView_Release(img->d3d11.srv);
+        _sg_d3d11_Release(img->d3d11.srv);
     }
     if (img->d3d11.smp) {
-        ID3D11SamplerState_Release(img->d3d11.smp);
+        _sg_d3d11_Release(img->d3d11.smp);
     }
 }
 

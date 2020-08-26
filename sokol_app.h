@@ -1255,11 +1255,13 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #ifndef D3D11_NO_HELPERS
             #define D3D11_NO_HELPERS
         #endif
-        #ifndef CINTERFACE
-            #define CINTERFACE
-        #endif
-        #ifndef COBJMACROS
-            #define COBJMACROS
+        #if !defined(__cplusplus)
+            #ifndef CINTERFACE
+                #define CINTERFACE
+            #endif
+            #ifndef COBJMACROS
+                #define COBJMACROS
+            #endif
         #endif
         #include <d3d11.h>
         #include <dxgi.h>
