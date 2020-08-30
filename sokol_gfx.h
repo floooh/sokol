@@ -2532,9 +2532,6 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
         #ifndef CINTERFACE
         #define CINTERFACE
         #endif
-        #ifndef COBJMACROS
-        #define COBJMACROS
-        #endif
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
