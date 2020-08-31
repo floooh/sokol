@@ -2528,11 +2528,6 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #ifndef D3D11_NO_HELPERS
     #define D3D11_NO_HELPERS
     #endif
-    #if !defined(__cplusplus)
-        #ifndef CINTERFACE
-        #define CINTERFACE
-        #endif
-    #endif
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif

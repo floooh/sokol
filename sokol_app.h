@@ -1255,11 +1255,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #ifndef D3D11_NO_HELPERS
             #define D3D11_NO_HELPERS
         #endif
-        #if !defined(__cplusplus)
-            #ifndef CINTERFACE
-                #define CINTERFACE
-            #endif
-        #endif
         #include <d3d11.h>
         #include <dxgi.h>
     #endif
