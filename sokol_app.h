@@ -1255,12 +1255,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #ifndef D3D11_NO_HELPERS
             #define D3D11_NO_HELPERS
         #endif
-        #ifndef CINTERFACE
-            #define CINTERFACE
-        #endif
-        #ifndef COBJMACROS
-            #define COBJMACROS
-        #endif
         #include <d3d11.h>
         #include <dxgi.h>
     #endif
@@ -4391,7 +4385,62 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(_SAPP_WIN32)
 
 #if defined(SOKOL_D3D11)
-#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { class##_Release(obj); obj=0; }
+
+#if defined(__cplusplus)
+#define _sapp_d3d11_Release(self) (self)->Release()
+#else
+#define _sapp_d3d11_Release(self) (self)->lpVtbl->Release(self)
+#endif
+
+#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
+
+static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
+    #if defined(__cplusplus)
+        return self->GetBuffer(Buffer, riid, ppSurface);
+    #else
+        return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
+    #endif
+}
+
+static inline HRESULT _sapp_d3d11_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource *pResource, const D3D11_RENDER_TARGET_VIEW_DESC* pDesc, ID3D11RenderTargetView** ppRTView) {
+    #if defined(__cplusplus)
+        return self->CreateRenderTargetView(pResource, pDesc, ppRTView);
+    #else
+        return self->lpVtbl->CreateRenderTargetView(self, pResource, pDesc, ppRTView);
+    #endif
+}
+
+static inline HRESULT _sapp_d3d11_CreateTexture2D(ID3D11Device* self, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D) {
+    #if defined(__cplusplus)
+        return self->CreateTexture2D(pDesc, pInitialData, ppTexture2D);
+    #else
+        return self->lpVtbl->CreateTexture2D(self, pDesc, pInitialData, ppTexture2D);
+    #endif
+}
+
+static inline HRESULT _sapp_d3d11_CreateDepthStencilView(ID3D11Device* self, ID3D11Resource* pResource, const D3D11_DEPTH_STENCIL_VIEW_DESC* pDesc, ID3D11DepthStencilView** ppDepthStencilView) {
+    #if defined(__cplusplus)
+        return self->CreateDepthStencilView(pResource, pDesc, ppDepthStencilView);
+    #else
+        return self->lpVtbl->CreateDepthStencilView(self, pResource, pDesc, ppDepthStencilView);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_ResizeBuffers(IDXGISwapChain* self, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
+    #if defined(__cplusplus)
+        return self->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    #else
+        return self->lpVtbl->ResizeBuffers(self, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval, UINT Flags) {
+    #if defined(__cplusplus)
+        return self->Present(SyncInterval, Flags);
+    #else
+        return self->lpVtbl->Present(self, SyncInterval, Flags);
+    #endif
+}
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
@@ -4438,12 +4487,12 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
 _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     HRESULT hr;
     #ifdef __cplusplus
-    hr = IDXGISwapChain_GetBuffer(_sapp.d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
     #else
-    hr = IDXGISwapChain_GetBuffer(_sapp.d3d11.swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
     #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
-    hr = ID3D11Device_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
+    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
     D3D11_TEXTURE2D_DESC ds_desc;
     memset(&ds_desc, 0, sizeof(ds_desc));
@@ -4455,13 +4504,13 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     ds_desc.SampleDesc = _sapp.d3d11.swap_chain_desc.SampleDesc;
     ds_desc.Usage = D3D11_USAGE_DEFAULT;
     ds_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    hr = ID3D11Device_CreateTexture2D(_sapp.d3d11.device, &ds_desc, NULL, &_sapp.d3d11.ds);
+    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &ds_desc, NULL, &_sapp.d3d11.ds);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.ds);
     D3D11_DEPTH_STENCIL_VIEW_DESC dsv_desc;
     memset(&dsv_desc, 0, sizeof(dsv_desc));
     dsv_desc.Format = ds_desc.Format;
     dsv_desc.ViewDimension = _sapp.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
-    hr = ID3D11Device_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, &dsv_desc, &_sapp.d3d11.dsv);
+    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, &dsv_desc, &_sapp.d3d11.dsv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.dsv);
 }
 
@@ -4475,7 +4524,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
-        IDXGISwapChain_ResizeBuffers(_sapp.d3d11.swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
         _sapp_d3d11_create_default_render_target();
     }
 }
@@ -5455,7 +5504,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         _sapp_frame();
         #if defined(SOKOL_D3D11)
-            IDXGISwapChain_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+            _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
             if (IsIconic(_sapp.win32.hwnd)) {
                 Sleep(16 * _sapp.swap_interval);
             }
