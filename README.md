@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**25-Aug-2020**: optional userdata callbacks in sokol_gfx.h)
+[See what's new](#updates) (**31-Aug-2020**: sokol_gfx.h and sokol_app.h automatically select D3D11 C++ or C API)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,16 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **31-Aug-2020**:
+    Internal change: The D3D11/DXGI backend code in sokol_gfx.h and sokol_app.h
+    now use the D3D11 and DXGI C++-APIs when the implementation is compiled as
+    C++, and the C-APIs when the implementation is compiled as C (before, the C
+    API was also used when the implementation is compiled as C++). The new
+    behaviour is useful when another header *must* use the D3D11/DXGI C++ APIs
+    but should be included in the same compilation unit as sokol_gfx.h an
+    sokol_app.h (for example see this PR:
+    https://github.com/floooh/sokol/pull/351).
 
 - **24-Aug-2020**:
     The backend-specific callback functions that are provided to sokol_gfx.h
