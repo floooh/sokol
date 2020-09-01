@@ -3309,15 +3309,32 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 /*== EMSCRIPTEN ==============================================================*/
 #if defined(_SAPP_EMSCRIPTEN)
 
-/* this function is called from a JS event handler when the user hides
-    the onscreen keyboard pressing the 'dismiss keyboard key'
-*/
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* this function is called from a JS event handler when the user hides
+    the onscreen keyboard pressing the 'dismiss keyboard key'
+*/
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
     _sapp.onscreen_keyboard_shown = false;
 }
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
+    if (_sapp.clipboard.enabled) {
+        _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+        if (_sapp_events_enabled()) {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+
+/*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
+EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
+    return _sapp.html5_ask_leave_site ? 1 : 0;
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -3342,21 +3359,6 @@ EM_JS(void, sapp_js_focus_textfield, (void), {
 EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
-
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
-    if (_sapp.clipboard.enabled) {
-        _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
-        if (_sapp_events_enabled()) {
-            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
-            _sapp_call_event(&_sapp.event);
-        }
-    }
-}
-
-/*  https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload */
-EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
-    return _sapp.html5_ask_leave_site ? 1 : 0;
-}
 
 EM_JS(void, sapp_add_js_hook_beforeunload, (void), {
     Module.sokol_beforeunload = function(_sapp_event) {
@@ -4028,6 +4030,9 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
 #define _SAPP_EMSC_WGPU_STATE_READY (1)
 #define _SAPP_EMSC_WGPU_STATE_RUNNING (2)
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
 /* called when the asynchronous WebGPU device + swapchain init code in JS has finished */
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id, int swapchain_fmt) {
     SOKOL_ASSERT(0 == _sapp.emsc.wgpu.device);
@@ -4036,6 +4041,9 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id,
     _sapp.emsc.wgpu.render_format = (WGPUTextureFormat) swapchain_fmt;
     _sapp.emsc.wgpu.state = _SAPP_EMSC_WGPU_STATE_READY;
 }
+#if defined(__cplusplus)
+} // extern "C"
+#endif
 
 /* embedded JS function to handle all the asynchronous WebGPU setup */
 EM_JS(void, _sapp_emsc_wgpu_init, (), {
