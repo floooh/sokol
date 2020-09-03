@@ -1544,6 +1544,7 @@ typedef struct {
 #if defined(_SAPP_UWP)
 
 typedef struct {
+    bool mouse_tracked;
 } _sapp_uwp_t;
 
 #endif // _SAPP_UWP
@@ -5703,8 +5704,6 @@ _SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_uwp_mods(senderWindow);
         _sapp.event.mouse_button = btn;
-        _sapp.event.mouse_x = _sapp.mouse_x;
-        _sapp.event.mouse_y = _sapp.mouse_y;
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -5747,7 +5746,7 @@ _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI
         _sapp.event.key_repeat = type == SAPP_EVENTTYPE_KEY_UP ? false : key_status.WasKeyDown;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard_enabled &&
+        if (_sapp.clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
@@ -6265,8 +6264,8 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         m_d3dContext->RSSetViewports(1, &m_screenViewport);
 
         // Set sokol window and framebuffer sizes
-        _sapp.window_width = m_logicalSize.Width;
-        _sapp.window_height = m_logicalSize.Height;
+        _sapp.window_width = (int) m_logicalSize.Width;
+        _sapp.window_height = (int) m_logicalSize.Height;
         _sapp.framebuffer_width = lround(m_d3dRenderTargetSize.Width);
         _sapp.framebuffer_height = lround(m_d3dRenderTargetSize.Height);
 
@@ -6664,7 +6663,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args)
     {
         auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-        auto targetSize = winrt::Windows::Foundation::Size(_sapp.desc.width, _sapp.desc.height);
+        auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.width, (float)_sapp.desc.height);
         appView.SetPreferredMinSize(targetSize);
         appView.TryResizeView(targetSize);
         // Disabling this since it can only append the title to the app name (Title - Appname).
@@ -6754,13 +6753,13 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
-        _sapp.win32_mouse_tracked = true;
+        _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
     }
 
     void App::OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
-        _sapp.win32_mouse_tracked = false;
+        _sapp.uwp.mouse_tracked = false;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, sender);
     }
 
@@ -6777,11 +6776,11 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
         auto position = args.CurrentPoint().Position();
-        _sapp.mouse_x = position.X;
-        _sapp.mouse_y = position.Y;
-        if (!_sapp.win32_mouse_tracked)
+        _sapp.mouse.x = position.X;
+        _sapp.mouse.y = position.Y;
+        if (!_sapp.uwp.mouse_tracked)
         {
-            _sapp.win32_mouse_tracked = true;
+            _sapp.uwp.mouse_tracked = true;
             _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
         }
 
@@ -6791,7 +6790,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
         auto properties = args.CurrentPoint().Properties();
-        _sapp_uwp_scroll_event(properties.MouseWheelDelta(), properties.IsHorizontalMouseWheel(), sender);
+        _sapp_uwp_scroll_event((float)properties.MouseWheelDelta(), properties.IsHorizontalMouseWheel(), sender);
     }
 
 
@@ -9515,7 +9514,7 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #elif defined(_SAPP_LINUX)
         _sapp_x11_show_mouse(show);
         #elif defined(_SAPP_UWP)
-        _sapp_uwp_show_mouse(visible);
+        _sapp_uwp_show_mouse(show);
         #endif
         _sapp.mouse.shown = show;
     }
