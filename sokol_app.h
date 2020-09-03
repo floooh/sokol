@@ -1110,9 +1110,6 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(SOKOL_D3D11)
         #error("sokol_app.h: unknown 3D API selected for UWP, must be SOKOL_D3D11")
         #endif
-        #if defined(CINTERFACE) || defined(D3D11_NO_HELPERS) || defined(COBJMACROS) || defined(WIN32_LEAN_AND_MEAN) || defined(NOMINMAX)
-        #error("sokol_app.h: incompatible preprocessor directives found. Do not copmile implementation in the same translation unit as sokol_gfx")
-        #endif
         #if !defined(__cplusplus)
         #error("UWP bindings require C++/17")
         #endif
