@@ -463,7 +463,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
-#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
     #include <pthread.h>
 #elif defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
@@ -517,7 +517,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #include <emscripten/emscripten.h>
     #if defined(__EMSCRIPTEN_PTHREADS__)
         #include <emscripten/threading.h>
-        #include <pthread.h>
     #endif
 #endif
 
@@ -539,7 +538,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 
 /*=== MUTEX WRAPPER DECLARATIONS =============================================*/
-#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
 
 typedef struct {
     pthread_mutex_t mutex;
@@ -712,7 +711,7 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
 }
 
 /*=== MUTEX IMPLEMENTATION ===================================================*/
-#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+#if (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
