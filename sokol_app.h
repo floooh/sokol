@@ -6555,6 +6555,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     Renderer::Renderer(const std::shared_ptr<DeviceResources>& deviceResources)
     {
+        _SOKOL_UNUSED(deviceResources);
     }
 
     Renderer::~Renderer()
@@ -6621,6 +6622,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     // Initializes scene resources, or loads a previously saved app state.
     void App::Load(winrt::hstring const& entryPoint)
     {
+        _SOKOL_UNUSED(entryPoint);
         if (m_renderer == nullptr)
         {
             m_renderer = std::unique_ptr<Renderer>(new Renderer(m_deviceResources));
@@ -6659,6 +6661,8 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args)
     {
+        _SOKOL_UNUSED(args);
+        _SOKOL_UNUSED(applicationView);
         auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
         auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.width, (float)_sapp.desc.height);
         appView.SetPreferredMinSize(targetSize);
@@ -6680,6 +6684,8 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args)
     {
+        _SOKOL_UNUSED(sender);
+
         // Save app state asynchronously after requesting a deferral. Holding a deferral
         // indicates that the application is busy performing suspending operations. Be
         // aware that a deferral may not be held indefinitely. After about five seconds,
@@ -6698,6 +6704,9 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args)
     {
+        _SOKOL_UNUSED(args);
+        _SOKOL_UNUSED(sender);
+
         // Restore any data or state that was unloaded on suspend. By default, data
         // and state are persisted when resuming from suspend. Note that this event
         // does not occur if the app was previously terminated.
@@ -6710,24 +6719,29 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args)
     {
+        _SOKOL_UNUSED(args);
         m_deviceResources->SetLogicalSize(winrt::Windows::Foundation::Size(sender.Bounds().Width, sender.Bounds().Height));
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 
     void App::OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args)
     {
+        _SOKOL_UNUSED(sender);
         m_windowVisible = args.Visible();
         _sapp_win32_uwp_app_event(m_windowVisible ? SAPP_EVENTTYPE_RESTORED : SAPP_EVENTTYPE_ICONIFIED);
     }
 
     void App::OnWindowClosed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CoreWindowEventArgs const& args)
     {
+        _SOKOL_UNUSED(sender);
+        _SOKOL_UNUSED(args);
         m_windowClosed = true;
         m_renderer.reset();
     }
 
     void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args)
     {
+        _SOKOL_UNUSED(sender);
         args.Handled(true);
     }
 
@@ -6750,12 +6764,14 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
+        _SOKOL_UNUSED(args);
         _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
     }
 
     void App::OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
+        _SOKOL_UNUSED(args);
         _sapp.uwp.mouse_tracked = false;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, sender);
     }
@@ -6795,6 +6811,8 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
     {
+        _SOKOL_UNUSED(args);
+
         // Note: The value for LogicalDpi retrieved here may not match the effective DPI of the app
         // if it is being scaled for high resolution devices. Once the DPI is set on DeviceResources,
         // you should always retrieve it using the GetDpi method.
@@ -6806,12 +6824,15 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
     {
+        _SOKOL_UNUSED(args);
         m_deviceResources->SetCurrentOrientation(sender.CurrentOrientation());
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 
     void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
     {
+        _SOKOL_UNUSED(args);
+        _SOKOL_UNUSED(sender);
         m_deviceResources->ValidateDevice();
     }
 } /* End empty namespace */
