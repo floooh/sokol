@@ -6846,11 +6846,10 @@ _SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc)
 }
 
 #if !defined(SOKOL_NO_ENTRY)
-int __stdcall wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
-{
+int __stdcall WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
-    _SOKOL_UNUSED(pCmdLine);
+    _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
     sapp_desc desc = sokol_main(0, nullptr);
     _sapp_uwp_run(&desc);
