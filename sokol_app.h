@@ -5725,11 +5725,11 @@ _SOKOL_PRIVATE void _sapp_uwp_mouse_button_event(sapp_event_type event_type, win
     }
     if (properties.IsLeftButtonPressed())
     {
-        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_MIDDLE, sender);
+        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_LEFT, sender);
     }
     if (properties.IsMiddleButtonPressed())
     {
-        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_LEFT, sender);
+        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_MIDDLE, sender);
     }
 }
 
@@ -6837,8 +6837,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 } /* End empty namespace */
 
-_SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc)
-{
+_SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
