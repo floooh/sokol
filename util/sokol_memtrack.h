@@ -134,7 +134,7 @@ static struct {
 _SOKOL_PRIVATE void* _smemtrack_malloc(size_t size) {
     _smemtrack.state.num_allocs++;
     _smemtrack.state.num_bytes += (int) size;
-    uint8_t* ptr = malloc(size + _SMEMTRACK_HEADER_SIZE);
+    uint8_t* ptr = (uint8_t*) malloc(size + _SMEMTRACK_HEADER_SIZE);
     *(size_t*)ptr = size;
     return ptr + _SMEMTRACK_HEADER_SIZE;
 }
@@ -151,7 +151,7 @@ _SOKOL_PRIVATE void* _smemtrack_calloc(size_t num, size_t size) {
     size_t mem_size = num * size;
     _smemtrack.state.num_allocs++;
     _smemtrack.state.num_bytes += (int) mem_size;
-    uint8_t* ptr = malloc(mem_size + _SMEMTRACK_HEADER_SIZE);
+    uint8_t* ptr = (uint8_t*) malloc(mem_size + _SMEMTRACK_HEADER_SIZE);
     memset(ptr + _SMEMTRACK_HEADER_SIZE, 0, mem_size);
     *(size_t*)ptr = size;
     return ptr + _SMEMTRACK_HEADER_SIZE;
