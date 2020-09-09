@@ -1542,6 +1542,7 @@ typedef struct {
 
 typedef struct {
     bool mouse_tracked;
+    uint8_t mouse_buttons;
 } _sapp_uwp_t;
 
 #endif // _SAPP_UWP
@@ -5671,23 +5672,20 @@ _SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
         winrt::Windows::UI::Core::CoreCursor(nullptr));
 }
 
-_SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& senderWindow)
+_SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window)
 {
     uint32_t mods = 0;
-    if ((senderWindow.GetKeyState(winrt::Windows::System::VirtualKey::Shift) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down)
-    {
+    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Shift) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_SHIFT;
     }
-    if ((senderWindow.GetKeyState(winrt::Windows::System::VirtualKey::Control) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down)
-    {
+    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Control) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_CTRL;
     }
-    if ((senderWindow.GetKeyState(winrt::Windows::System::VirtualKey::Menu) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down)
-    {
+    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Menu) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_ALT;
     }
-    if (((senderWindow.GetKeyState(winrt::Windows::System::VirtualKey::LeftWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) ||
-        ((senderWindow.GetKeyState(winrt::Windows::System::VirtualKey::RightWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down))
+    if (((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::LeftWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) ||
+        ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::RightWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down))
     {
         mods |= SAPP_MODIFIER_SUPER;
     }
@@ -5695,50 +5693,76 @@ _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow cons
     return mods;
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton btn, winrt::Windows::UI::Core::CoreWindow const& senderWindow)
-{
+_SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton btn, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_uwp_mods(senderWindow);
+        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.mouse_button = btn;
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_scroll_event(float delta, bool horizontal, winrt::Windows::UI::Core::CoreWindow const& senderWindow)
-{
+_SOKOL_PRIVATE void _sapp_uwp_scroll_event(float delta, bool horizontal, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-        _sapp.event.modifiers = _sapp_uwp_mods(senderWindow);
+        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.scroll_x = horizontal ? (-delta / 30.0f) : 0.0f;
         _sapp.event.scroll_y = horizontal ? 0.0f : (delta / 30.0f);
         _sapp_call_event(&_sapp.event);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_mouse_button_event(sapp_event_type event_type, winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-{
+_SOKOL_PRIVATE void _sapp_uwp_extract_mouse_button_events(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
+
+    // we need to figure out ourselves what mouse buttons have been pressed and released,
+    // because UWP doesn't properly send down/up mouse button events when multiple buttons
+    // are pressed down, so we also need to check the mouse button state in other mouse events
+    // to track what buttons have been pressed down and released
+    //
     auto properties = args.CurrentPoint().Properties();
-    if (properties.IsRightButtonPressed())
-    {
-        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_RIGHT, sender);
+    const uint8_t lmb_bit = (1 << SAPP_MOUSEBUTTON_LEFT);
+    const uint8_t rmb_bit = (1 << SAPP_MOUSEBUTTON_RIGHT);
+    const uint8_t mmb_bit = (1 << SAPP_MOUSEBUTTON_MIDDLE);
+    uint8_t new_btns = 0;
+    if (properties.IsLeftButtonPressed()) {
+        new_btns |= lmb_bit;
     }
-    if (properties.IsLeftButtonPressed())
-    {
-        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_LEFT, sender);
+    if (properties.IsRightButtonPressed()) {
+        new_btns |= rmb_bit;
     }
-    if (properties.IsMiddleButtonPressed())
-    {
-        _sapp_uwp_mouse_event(event_type, SAPP_MOUSEBUTTON_MIDDLE, sender);
+    if (properties.IsMiddleButtonPressed()) {
+        new_btns |= mmb_bit;
+    }
+    const uint8_t old_btns = _sapp.uwp.mouse_buttons;
+    const uint8_t chg_btns = new_btns ^ old_btns;
+
+    _sapp.uwp.mouse_buttons = new_btns;
+
+    sapp_event_type type = SAPP_EVENTTYPE_INVALID;
+    sapp_mousebutton btn = SAPP_MOUSEBUTTON_INVALID;
+    if (chg_btns & lmb_bit) {
+        btn = SAPP_MOUSEBUTTON_LEFT;
+        type = (new_btns & lmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
+    }
+    if (chg_btns & rmb_bit) {
+        btn = SAPP_MOUSEBUTTON_RIGHT;
+        type = (new_btns & rmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
+    }
+    if (chg_btns & mmb_bit) {
+        btn = SAPP_MOUSEBUTTON_MIDDLE;
+        type = (new_btns & mmb_bit) ? SAPP_EVENTTYPE_MOUSE_DOWN : SAPP_EVENTTYPE_MOUSE_UP;
+    }
+    if (type != SAPP_EVENTTYPE_INVALID) {
+        _sapp_uwp_mouse_event(type, btn, sender);
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& senderWindow, winrt::Windows::UI::Core::KeyEventArgs const& keyArgs)
+_SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& sender_window, winrt::Windows::UI::Core::KeyEventArgs const& args)
 {
-    auto key_status = keyArgs.KeyStatus();
+    auto key_status = args.KeyStatus();
     if (_sapp_events_enabled() && (key_status.ScanCode < SAPP_MAX_KEYCODES)) {
         _sapp_init_event(type);
-        _sapp.event.modifiers = _sapp_uwp_mods(senderWindow);
+        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.key_code = _sapp.keycodes[key_status.ScanCode];
         _sapp.event.key_repeat = type == SAPP_EVENTTYPE_KEY_UP ? false : key_status.WasKeyDown;
         _sapp_call_event(&_sapp.event);
@@ -5754,11 +5778,11 @@ _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& senderWindow)
+_SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& sender_window)
 {
     if (_sapp_events_enabled() && (c >= 32)) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-        _sapp.event.modifiers = _sapp_uwp_mods(senderWindow);
+        _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.char_code = c;
         _sapp.event.key_repeat = repeat;
         _sapp_call_event(&_sapp.event);
@@ -6778,12 +6802,13 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     void App::OnPointerPressed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
-        _sapp_uwp_mouse_button_event(SAPP_EVENTTYPE_MOUSE_DOWN, sender, args);
+        _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
+    // NOTE: for some reason this event handler is never called??
     void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
     {
-        _sapp_uwp_mouse_button_event(SAPP_EVENTTYPE_MOUSE_UP, sender, args);
+        _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
     void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
@@ -6796,8 +6821,10 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
             _sapp.uwp.mouse_tracked = true;
             _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
         }
-
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, sender);
+
+        // HACK for detecting multiple mouse buttons
+        _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
     void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
