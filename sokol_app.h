@@ -5666,30 +5666,33 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 // Helper functions
 _SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
+    using namespace winrt::Windows::UI::Core;
+
     /* NOTE: this function is only called when the mouse visibility actually changes */
-    winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().PointerCursor(visible ?
-        winrt::Windows::UI::Core::CoreCursor(winrt::Windows::UI::Core::CoreCursorType::Arrow, 0) :
-        winrt::Windows::UI::Core::CoreCursor(nullptr));
+    CoreWindow::GetForCurrentThread().PointerCursor(visible ?
+        CoreCursor(winrt::Windows::UI::Core::CoreCursorType::Arrow, 0) :
+        CoreCursor(nullptr));
 }
 
-_SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window)
-{
+_SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window) {
+    using namespace winrt::Windows::System;
+    using namespace winrt::Windows::UI::Core;
+
     uint32_t mods = 0;
-    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Shift) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
+    if ((sender_window.GetKeyState(VirtualKey::Shift) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_SHIFT;
     }
-    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Control) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
+    if ((sender_window.GetKeyState(VirtualKey::Control) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_CTRL;
     }
-    if ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::Menu) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) {
+    if ((sender_window.GetKeyState(VirtualKey::Menu) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) {
         mods |= SAPP_MODIFIER_ALT;
     }
-    if (((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::LeftWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) ||
-        ((sender_window.GetKeyState(winrt::Windows::System::VirtualKey::RightWindows) & winrt::Windows::UI::Core::CoreVirtualKeyStates::Down) == winrt::Windows::UI::Core::CoreVirtualKeyStates::Down))
+    if (((sender_window.GetKeyState(VirtualKey::LeftWindows) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down) ||
+        ((sender_window.GetKeyState(VirtualKey::RightWindows) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down))
     {
         mods |= SAPP_MODIFIER_SUPER;
     }
-
     return mods;
 }
 
@@ -5757,8 +5760,7 @@ _SOKOL_PRIVATE void _sapp_uwp_extract_mouse_button_events(winrt::Windows::UI::Co
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& sender_window, winrt::Windows::UI::Core::KeyEventArgs const& args)
-{
+_SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& sender_window, winrt::Windows::UI::Core::KeyEventArgs const& args) {
     auto key_status = args.KeyStatus();
     if (_sapp_events_enabled() && (key_status.ScanCode < SAPP_MAX_KEYCODES)) {
         _sapp_init_event(type);
@@ -5778,8 +5780,7 @@ _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& sender_window)
-{
+_SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled() && (c >= 32)) {
         _sapp_init_event(SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
@@ -5789,31 +5790,24 @@ _SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows
     }
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_toggle_fullscreen(void)
-{
+_SOKOL_PRIVATE void _sapp_uwp_toggle_fullscreen(void) {
     auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
     _sapp.fullscreen = appView.IsFullScreenMode();
-    if (!_sapp.fullscreen)
-    {
+    if (!_sapp.fullscreen) {
         appView.TryEnterFullScreenMode();
     }
-    else
-    {
+    else {
         appView.ExitFullScreenMode();
     }
-
     _sapp.fullscreen = appView.IsFullScreenMode();
 }
 
-namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE) */
-{
+namespace {/* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE) */
     // Controls all the DirectX device resources.
-    class DeviceResources
-    {
+    class DeviceResources {
     public:
         // Provides an interface for an application that owns DeviceResources to be notified of the device being lost or created.
-        interface IDeviceNotify
-        {
+        interface IDeviceNotify {
             virtual void OnDeviceLost() = 0;
             virtual void OnDeviceRestored() = 0;
         };
@@ -5901,28 +5895,9 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         IDeviceNotify* m_deviceNotify;
     };
 
-    // NEVER INSTANTIATE MORE THAN ONE AT A TIME
-    class Renderer
-    {
-    public:
-        Renderer(const std::shared_ptr<DeviceResources>& deviceResources);
-        ~Renderer();
-
-        bool Render();
-
-    private:
-        // Cached pointer to device resources. Shared because of need to interface with C
-        static std::shared_ptr<DeviceResources> m_deviceResources;
-    };
-
-    std::shared_ptr<DeviceResources> Renderer::m_deviceResources;
-
     // Main entry point for our app. Connects the app with the Windows shell and handles application lifecycle events.
-    struct App : winrt::implements<App, winrt::Windows::ApplicationModel::Core::IFrameworkViewSource, winrt::Windows::ApplicationModel::Core::IFrameworkView>
-    {
+    struct App : winrt::implements<App, winrt::Windows::ApplicationModel::Core::IFrameworkViewSource, winrt::Windows::ApplicationModel::Core::IFrameworkView> {
     public:
-        App();
-
         // IFrameworkViewSource Methods
         winrt::Windows::ApplicationModel::Core::IFrameworkView CreateView() { return *this; }
 
@@ -5942,7 +5917,6 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         // Window event handlers
         void OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args);
         void OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args);
-        void OnWindowClosed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CoreWindowEventArgs const& args);
 
         // Navigation event handlers
         void OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args);
@@ -5967,9 +5941,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
     private:
         std::shared_ptr<DeviceResources> m_deviceResources;
-        std::unique_ptr<Renderer> m_renderer;
-        bool m_windowClosed;
-        bool m_windowVisible;
+        bool m_windowVisible = true;
     };
 
     // High resolution displays can require a lot of GPU and battery power to render.
@@ -6033,34 +6005,30 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         CreateDeviceResources();
     }
 
-    DeviceResources::~DeviceResources()
-    {
+    DeviceResources::~DeviceResources() {
         // Cleanup Sokol Context
         _sapp.d3d11.device = nullptr;
         _sapp.d3d11.device_context = nullptr;
     }
 
     // Configures the Direct3D device, and stores handles to it and the device context.
-    void DeviceResources::CreateDeviceResources()
-    {
+    void DeviceResources::CreateDeviceResources() {
         // This flag adds support for surfaces with a different color channel ordering
         // than the API default. It is required for compatibility with Direct2D.
         UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 
-    #if defined(_DEBUG)
-        if (SdkLayersAvailable())
-        {
+        #if defined(_DEBUG)
+        if (SdkLayersAvailable()) {
             // If the project is in a debug build, enable debugging via SDK Layers with this flag.
             creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
         }
-    #endif
+        #endif
 
         // This array defines the set of DirectX hardware feature levels this app will support.
         // Note the ordering should be preserved.
         // Don't forget to declare your application's minimum required feature level in its
         // description.  All applications are assumed to support 9.1 unless otherwise stated.
-        D3D_FEATURE_LEVEL featureLevels[] =
-        {
+        D3D_FEATURE_LEVEL featureLevels[] = {
             D3D_FEATURE_LEVEL_12_1,
             D3D_FEATURE_LEVEL_12_0,
             D3D_FEATURE_LEVEL_11_1,
@@ -6077,20 +6045,19 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         winrt::com_ptr<ID3D11DeviceContext> context;
 
         HRESULT hr = D3D11CreateDevice(
-            nullptr,					// Specify nullptr to use the default adapter.
-            D3D_DRIVER_TYPE_HARDWARE,	// Create a device using the hardware graphics driver.
-            0,							// Should be 0 unless the driver is D3D_DRIVER_TYPE_SOFTWARE.
-            creationFlags,				// Set debug and Direct2D compatibility flags.
-            featureLevels,				// List of feature levels this app can support.
-            ARRAYSIZE(featureLevels),	// Size of the list above.
-            D3D11_SDK_VERSION,			// Always set this to D3D11_SDK_VERSION for Microsoft Store apps.
-            device.put(),				// Returns the Direct3D device created.
-            &m_d3dFeatureLevel,			// Returns feature level of device created.
-            context.put()				// Returns the device immediate context.
+            nullptr,                    // Specify nullptr to use the default adapter.
+            D3D_DRIVER_TYPE_HARDWARE,   // Create a device using the hardware graphics driver.
+            0,                          // Should be 0 unless the driver is D3D_DRIVER_TYPE_SOFTWARE.
+            creationFlags,              // Set debug and Direct2D compatibility flags.
+            featureLevels,              // List of feature levels this app can support.
+            ARRAYSIZE(featureLevels),   // Size of the list above.
+            D3D11_SDK_VERSION,          // Always set this to D3D11_SDK_VERSION for Microsoft Store apps.
+            device.put(),               // Returns the Direct3D device created.
+            &m_d3dFeatureLevel,         // Returns feature level of device created.
+            context.put()               // Returns the device immediate context.
         );
 
-        if (FAILED(hr))
-        {
+        if (FAILED(hr)) {
             // If the initialization fails, fall back to the WARP device.
             // For more information on WARP, see:
             // https://go.microsoft.com/fwlink/?LinkId=286690
@@ -6120,8 +6087,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // These resources need to be recreated every time the window size is changed.
-    void DeviceResources::CreateWindowSizeDependentResources()
-    {
+    void DeviceResources::CreateWindowSizeDependentResources() {
         m_supportHighResolutions = _sapp.desc.high_dpi;
 
         // Cleanup Sokol Context
@@ -6150,8 +6116,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         m_d3dRenderTargetSize.Width = swapDimensions ? m_outputSize.Height : m_outputSize.Width;
         m_d3dRenderTargetSize.Height = swapDimensions ? m_outputSize.Width : m_outputSize.Height;
 
-        if (m_swapChain != nullptr)
-        {
+        if (m_swapChain != nullptr) {
             // If the swap chain already exists, resize it.
             HRESULT hr = m_swapChain->ResizeBuffers(
                 2, // Double-buffered swap chain.
@@ -6161,8 +6126,7 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
                 0
             );
 
-            if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
-            {
+            if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
                 // If the device was removed for any reason, a new device and swap chain will need to be created.
                 HandleDeviceLost();
 
@@ -6170,26 +6134,24 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
                 // and correctly set up the new device.
                 return;
             }
-            else
-            {
+            else {
                 winrt::check_hresult(hr);
             }
         }
-        else
-        {
+        else {
             // Otherwise, create a new one using the same adapter as the existing Direct3D device.
             DXGI_SCALING scaling = m_supportHighResolutions ? DXGI_SCALING_NONE : DXGI_SCALING_STRETCH;
             DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
 
-            swapChainDesc.Width = lround(m_d3dRenderTargetSize.Width);		// Match the size of the window.
+            swapChainDesc.Width = lround(m_d3dRenderTargetSize.Width);      // Match the size of the window.
             swapChainDesc.Height = lround(m_d3dRenderTargetSize.Height);
-            swapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;				// This is the most common swap chain format.
+            swapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;              // This is the most common swap chain format.
             swapChainDesc.Stereo = false;
-            swapChainDesc.SampleDesc.Count = 1;								// Don't use multi-sampling.
+            swapChainDesc.SampleDesc.Count = 1;                             // Don't use multi-sampling.
             swapChainDesc.SampleDesc.Quality = 0;
             swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-            swapChainDesc.BufferCount = 2;									// Use double-buffering to minimize latency.
-            swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;	// All Microsoft Store apps must use this SwapEffect.
+            swapChainDesc.BufferCount = 2;                                  // Use double-buffering to minimize latency.
+            swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;    // All Microsoft Store apps must use this SwapEffect.
             swapChainDesc.Flags = 0;
             swapChainDesc.Scaling = scaling;
             swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
@@ -6224,26 +6186,22 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         // This is due to the difference in coordinate spaces.  Additionally,
         // the 3D matrix is specified explicitly to avoid rounding errors.
 
-        switch (displayRotation)
-        {
-        case DXGI_MODE_ROTATION_IDENTITY:
-            m_orientationTransform3D = m_rotation0;
-            break;
+        switch (displayRotation) {
+            case DXGI_MODE_ROTATION_IDENTITY:
+                m_orientationTransform3D = m_rotation0;
+                break;
 
-        case DXGI_MODE_ROTATION_ROTATE90:
-            m_orientationTransform3D = m_rotation270;
-            break;
+            case DXGI_MODE_ROTATION_ROTATE90:
+                m_orientationTransform3D = m_rotation270;
+                break;
 
-        case DXGI_MODE_ROTATION_ROTATE180:
-            m_orientationTransform3D = m_rotation180;
-            break;
+            case DXGI_MODE_ROTATION_ROTATE180:
+                m_orientationTransform3D = m_rotation180;
+                break;
 
-        case DXGI_MODE_ROTATION_ROTATE270:
-            m_orientationTransform3D = m_rotation90;
-            break;
-
-        default:
-            throw std::invalid_argument("Unexpected display rotation");
+            case DXGI_MODE_ROTATION_ROTATE270:
+                m_orientationTransform3D = m_rotation90;
+                break;
         }
 
         winrt::check_hresult(m_swapChain->SetRotation(displayRotation));
@@ -6301,22 +6259,19 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // Determine the dimensions of the render target and whether it will be scaled down.
-    void DeviceResources::UpdateRenderTargetSize()
-    {
+    void DeviceResources::UpdateRenderTargetSize() {
         m_effectiveDpi = m_dpi;
 
         // To improve battery life on high resolution devices, render to a smaller render target
         // and allow the GPU to scale the output when it is presented.
-        if (!m_supportHighResolutions && m_dpi > m_dpiThreshold)
-        {
+        if (!m_supportHighResolutions && m_dpi > m_dpiThreshold) {
             float width = ConvertDipsToPixels(m_logicalSize.Width, m_dpi);
             float height = ConvertDipsToPixels(m_logicalSize.Height, m_dpi);
 
             // When the device is in portrait orientation, height > width. Compare the
             // larger dimension against the width threshold and the smaller dimension
             // against the height threshold.
-            if (std::max(width, height) > m_widthThreshold && std::min(width, height) > m_heightThreshold)
-            {
+            if ((std::max(width, height) > m_widthThreshold) && (std::min(width, height) > m_heightThreshold)) {
                 // To scale the app we change the effective DPI. Logical size does not change.
                 m_effectiveDpi /= 2.0f;
             }
@@ -6332,57 +6287,45 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // This method is called when the CoreWindow is created (or re-created).
-    void DeviceResources::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window)
-    {
+    void DeviceResources::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window) {
         auto currentDisplayInformation = winrt::Windows::Graphics::Display::DisplayInformation::GetForCurrentView();
-
         m_window = window;
         m_logicalSize = winrt::Windows::Foundation::Size(window.Bounds().Width, window.Bounds().Height);
         m_nativeOrientation = currentDisplayInformation.NativeOrientation();
         m_currentOrientation = currentDisplayInformation.CurrentOrientation();
         m_dpi = currentDisplayInformation.LogicalDpi();
-
         CreateWindowSizeDependentResources();
     }
 
     // This method is called in the event handler for the SizeChanged event.
-    void DeviceResources::SetLogicalSize(winrt::Windows::Foundation::Size logicalSize)
-    {
-        if (m_logicalSize != logicalSize)
-        {
+    void DeviceResources::SetLogicalSize(winrt::Windows::Foundation::Size logicalSize) {
+        if (m_logicalSize != logicalSize) {
             m_logicalSize = logicalSize;
             CreateWindowSizeDependentResources();
         }
     }
 
     // This method is called in the event handler for the DpiChanged event.
-    void DeviceResources::SetDpi(float dpi)
-    {
-        if (dpi != m_dpi)
-        {
+    void DeviceResources::SetDpi(float dpi) {
+        if (dpi != m_dpi) {
             m_dpi = dpi;
-
             // When the display DPI changes, the logical size of the window (measured in Dips) also changes and needs to be updated.
             auto window = m_window.get();
             m_logicalSize = winrt::Windows::Foundation::Size(window.Bounds().Width, window.Bounds().Height);
-
             CreateWindowSizeDependentResources();
         }
     }
 
     // This method is called in the event handler for the OrientationChanged event.
-    void DeviceResources::SetCurrentOrientation(winrt::Windows::Graphics::Display::DisplayOrientations currentOrientation)
-    {
-        if (m_currentOrientation != currentOrientation)
-        {
+    void DeviceResources::SetCurrentOrientation(winrt::Windows::Graphics::Display::DisplayOrientations currentOrientation) {
+        if (m_currentOrientation != currentOrientation) {
             m_currentOrientation = currentOrientation;
             CreateWindowSizeDependentResources();
         }
     }
 
     // This method is called in the event handler for the DisplayContentsInvalidated event.
-    void DeviceResources::ValidateDevice()
-    {
+    void DeviceResources::ValidateDevice() {
         // The D3D Device is no longer valid if the default adapter changed since the device
         // was created or if the device has been removed.
 
@@ -6432,40 +6375,31 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // Recreate all device resources and set them back to the current state.
-    void DeviceResources::HandleDeviceLost()
-    {
+    void DeviceResources::HandleDeviceLost() {
         m_swapChain = nullptr;
-
-        if (m_deviceNotify != nullptr)
-        {
+        if (m_deviceNotify != nullptr) {
             m_deviceNotify->OnDeviceLost();
         }
-
         CreateDeviceResources();
         CreateWindowSizeDependentResources();
-
-        if (m_deviceNotify != nullptr)
-        {
+        if (m_deviceNotify != nullptr) {
             m_deviceNotify->OnDeviceRestored();
         }
     }
 
     // Register our DeviceNotify to be informed on device lost and creation.
-    void DeviceResources::RegisterDeviceNotify(IDeviceNotify* deviceNotify)
-    {
+    void DeviceResources::RegisterDeviceNotify(IDeviceNotify* deviceNotify) {
         m_deviceNotify = deviceNotify;
     }
 
     // Call this method when the app suspends. It provides a hint to the driver that the app
     // is entering an idle state and that temporary buffers can be reclaimed for use by other apps.
-    void DeviceResources::Trim()
-    {
+    void DeviceResources::Trim() {
         m_d3dDevice.as<IDXGIDevice3>()->Trim();
     }
 
     // Present the contents of the swap chain to the screen.
-    void DeviceResources::Present()
-    {
+    void DeviceResources::Present() {
         // The first argument instructs DXGI to block until VSync, putting the application
         // to sleep until the next VSync. This ensures we don't waste any cycles rendering
         // frames that will never be displayed to the screen.
@@ -6482,81 +6416,73 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
 
         // If the device was removed either by a disconnection or a driver upgrade, we
         // must recreate all device resources.
-        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
-        {
+        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
             HandleDeviceLost();
         }
-        else
-        {
+        else {
             winrt::check_hresult(hr);
         }
     }
 
     // This method determines the rotation between the display device's native orientation and the
     // current display orientation.
-    DXGI_MODE_ROTATION DeviceResources::ComputeDisplayRotation()
-    {
+    DXGI_MODE_ROTATION DeviceResources::ComputeDisplayRotation() {
         DXGI_MODE_ROTATION rotation = DXGI_MODE_ROTATION_UNSPECIFIED;
 
         // Note: NativeOrientation can only be Landscape or Portrait even though
         // the DisplayOrientations enum has other values.
-        switch (m_nativeOrientation)
-        {
-        case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-            switch (m_currentOrientation)
-            {
+        switch (m_nativeOrientation) {
             case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-                rotation = DXGI_MODE_ROTATION_IDENTITY;
+                switch (m_currentOrientation) {
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
+                        rotation = DXGI_MODE_ROTATION_IDENTITY;
+                        break;
+
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
+                        rotation = DXGI_MODE_ROTATION_ROTATE270;
+                        break;
+
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
+                        rotation = DXGI_MODE_ROTATION_ROTATE180;
+                        break;
+
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
+                        rotation = DXGI_MODE_ROTATION_ROTATE90;
+                        break;
+                }
                 break;
 
             case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-                rotation = DXGI_MODE_ROTATION_ROTATE270;
-                break;
+                switch (m_currentOrientation) {
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
+                        rotation = DXGI_MODE_ROTATION_ROTATE90;
+                        break;
 
-            case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
-                rotation = DXGI_MODE_ROTATION_ROTATE180;
-                break;
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
+                        rotation = DXGI_MODE_ROTATION_IDENTITY;
+                        break;
 
-            case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
-                rotation = DXGI_MODE_ROTATION_ROTATE90;
-                break;
-            }
-            break;
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
+                        rotation = DXGI_MODE_ROTATION_ROTATE270;
+                        break;
 
-        case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-            switch (m_currentOrientation)
-            {
-            case winrt::Windows::Graphics::Display::DisplayOrientations::Landscape:
-                rotation = DXGI_MODE_ROTATION_ROTATE90;
+                    case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
+                        rotation = DXGI_MODE_ROTATION_ROTATE180;
+                        break;
+                }
                 break;
-
-            case winrt::Windows::Graphics::Display::DisplayOrientations::Portrait:
-                rotation = DXGI_MODE_ROTATION_IDENTITY;
-                break;
-
-            case winrt::Windows::Graphics::Display::DisplayOrientations::LandscapeFlipped:
-                rotation = DXGI_MODE_ROTATION_ROTATE270;
-                break;
-
-            case winrt::Windows::Graphics::Display::DisplayOrientations::PortraitFlipped:
-                rotation = DXGI_MODE_ROTATION_ROTATE180;
-                break;
-            }
-            break;
         }
         return rotation;
     }
 
     // Converts a length in device-independent pixels (DIPs) to a length in physical pixels.
-    inline float DeviceResources::ConvertDipsToPixels(float dips, float dpi)
-    {
+    inline float DeviceResources::ConvertDipsToPixels(float dips, float dpi) {
         static const float dipsPerInch = 96.0f;
         return floorf(dips * dpi / dipsPerInch + 0.5f); // Round to nearest integer.
     }
 
     // Check for SDK Layer support.
-    inline bool DeviceResources::SdkLayersAvailable()
-    {
+    inline bool DeviceResources::SdkLayersAvailable() {
     #if defined(_DEBUG)
         HRESULT hr = D3D11CreateDevice(
             nullptr,
@@ -6570,38 +6496,14 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
             nullptr,                    // No need to know the feature level.
             nullptr                     // No need to keep the D3D device context reference.
         );
-
         return SUCCEEDED(hr);
     #else
         return false;
     #endif
     }
 
-    Renderer::Renderer(const std::shared_ptr<DeviceResources>& deviceResources)
-    {
-        _SOKOL_UNUSED(deviceResources);
-    }
-
-    Renderer::~Renderer()
-    {
-        _sapp_call_cleanup();
-    }
-
-    bool Renderer::Render()
-    {
-        _sapp_frame();
-        return true;
-    }
-
-    App::App() :
-        m_windowClosed(false),
-        m_windowVisible(true)
-    {
-    }
-
     // The first method called when the IFrameworkView is being created.
-    void App::Initialize(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView)
-    {
+    void App::Initialize(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView) {
         // Register event handlers for app lifecycle. This example includes Activated, so that we
         // can make the CoreWindow active and start rendering on the window.
         applicationView.Activated({ this, &App::OnActivated });
@@ -6615,11 +6517,9 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // Called when the CoreWindow object is created (or re-created).
-    void App::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window)
-    {
+    void App::SetWindow(winrt::Windows::UI::Core::CoreWindow const& window) {
         window.SizeChanged({ this, &App::OnWindowSizeChanged });
         window.VisibilityChanged({ this, &App::OnVisibilityChanged });
-        window.Closed({ this, &App::OnWindowClosed });
 
         window.KeyDown({ this, &App::OnKeyDown });
         window.KeyUp({ this, &App::OnKeyUp });
@@ -6644,31 +6544,20 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     }
 
     // Initializes scene resources, or loads a previously saved app state.
-    void App::Load(winrt::hstring const& entryPoint)
-    {
+    void App::Load(winrt::hstring const& entryPoint) {
         _SOKOL_UNUSED(entryPoint);
-        if (m_renderer == nullptr)
-        {
-            m_renderer = std::unique_ptr<Renderer>(new Renderer(m_deviceResources));
-        }
     }
 
     // This method is called after the window becomes active.
-    void App::Run()
-    {
-        while (!m_windowClosed)
-        {
-            if (m_windowVisible)
-            {
+    void App::Run() {
+        // NOTE: UWP will simply terminate an application, it's not possible to detect when an application is being closed
+        while (true) {
+            if (m_windowVisible) {
                 winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessAllIfPresent);
-
-                if (m_renderer->Render())
-                {
-                    m_deviceResources->Present();
-                }
+                _sapp_frame();
+                m_deviceResources->Present();
             }
-            else
-            {
+            else {
                 winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessOneAndAllPending);
             }
         }
@@ -6677,14 +6566,13 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
     // Required for IFrameworkView.
     // Terminate events do not cause Uninitialize to be called. It will be called if your IFrameworkView
     // class is torn down while the app is in the foreground.
-    void App::Uninitialize()
-    {
+    void App::Uninitialize() {
+        // empty
     }
 
     // Application lifecycle event handlers.
 
-    void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args)
-    {
+    void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationView const& applicationView, winrt::Windows::ApplicationModel::Activation::IActivatedEventArgs const& args) {
         _SOKOL_UNUSED(args);
         _SOKOL_UNUSED(applicationView);
         auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
@@ -6698,146 +6586,97 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         // Run() won't start until the CoreWindow is activated.
         winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Activate();
 
-        if (_sapp.desc.fullscreen)
-        {
+        if (_sapp.desc.fullscreen) {
             appView.TryEnterFullScreenMode();
         }
 
         _sapp.fullscreen = appView.IsFullScreenMode();
     }
 
-    void App::OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args)
-    {
+    void App::OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args) {
         _SOKOL_UNUSED(sender);
-
-        // Save app state asynchronously after requesting a deferral. Holding a deferral
-        // indicates that the application is busy performing suspending operations. Be
-        // aware that a deferral may not be held indefinitely. After about five seconds,
-        // the app will be forced to exit.
-        auto deferral = args.SuspendingOperation().GetDeferral();
-        concurrency::create_task([this, deferral]()
-            {
-                m_deviceResources->Trim();
-
-                // Insert your code here.
-                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_SUSPENDED);
-
-                deferral.Complete();
-            });
+        _SOKOL_UNUSED(args);
+        _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_SUSPENDED);
     }
 
-    void App::OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args)
-    {
+    void App::OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args) {
         _SOKOL_UNUSED(args);
         _SOKOL_UNUSED(sender);
-
-        // Restore any data or state that was unloaded on suspend. By default, data
-        // and state are persisted when resuming from suspend. Note that this event
-        // does not occur if the app was previously terminated.
-
-        // Insert your code here.
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESUMED);
     }
 
-    // Window event handlers.
-
-    void App::OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args)
-    {
+    void App::OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args) {
         _SOKOL_UNUSED(args);
         m_deviceResources->SetLogicalSize(winrt::Windows::Foundation::Size(sender.Bounds().Width, sender.Bounds().Height));
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 
-    void App::OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args)
-    {
+    void App::OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
         _SOKOL_UNUSED(sender);
         m_windowVisible = args.Visible();
         _sapp_win32_uwp_app_event(m_windowVisible ? SAPP_EVENTTYPE_RESTORED : SAPP_EVENTTYPE_ICONIFIED);
     }
 
-    void App::OnWindowClosed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CoreWindowEventArgs const& args)
-    {
-        _SOKOL_UNUSED(sender);
-        _SOKOL_UNUSED(args);
-        m_windowClosed = true;
-        m_renderer.reset();
-    }
-
-    void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args)
-    {
+    void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args) {
         _SOKOL_UNUSED(sender);
         args.Handled(true);
     }
 
-    void App::OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args)
-    {
+    void App::OnKeyDown(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args) {
         auto status = args.KeyStatus();
         _sapp_uwp_key_event(SAPP_EVENTTYPE_KEY_DOWN, sender, args);
     }
 
-    void App::OnKeyUp(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args)
-    {
+    void App::OnKeyUp(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::KeyEventArgs const& args) {
         auto status = args.KeyStatus();
         _sapp_uwp_key_event(SAPP_EVENTTYPE_KEY_UP, sender, args);
     }
 
-    void App::OnCharacterReceived(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CharacterReceivedEventArgs const& args)
-    {
+    void App::OnCharacterReceived(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::CharacterReceivedEventArgs const& args) {
         _sapp_uwp_char_event(args.KeyCode(), args.KeyStatus().WasKeyDown, sender);
     }
 
-    void App::OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerEntered(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         _SOKOL_UNUSED(args);
         _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
     }
 
-    void App::OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerExited(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         _SOKOL_UNUSED(args);
         _sapp.uwp.mouse_tracked = false;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, sender);
     }
 
-    void App::OnPointerPressed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerPressed(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
     // NOTE: for some reason this event handler is never called??
-    void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
-    void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         auto position = args.CurrentPoint().Position();
         _sapp.mouse.x = position.X;
         _sapp.mouse.y = position.Y;
-        if (!_sapp.uwp.mouse_tracked)
-        {
+        if (!_sapp.uwp.mouse_tracked) {
             _sapp.uwp.mouse_tracked = true;
             _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
         }
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, sender);
 
-        // HACK for detecting multiple mouse buttons
+        // HACK for detecting multiple mouse button presses
         _sapp_uwp_extract_mouse_button_events(sender, args);
     }
 
-    void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args)
-    {
+    void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
         auto properties = args.CurrentPoint().Properties();
         _sapp_uwp_scroll_event((float)properties.MouseWheelDelta(), properties.IsHorizontalMouseWheel(), sender);
     }
 
-
-    // DisplayInformation event handlers.
-
-    void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
-    {
+    void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
         _SOKOL_UNUSED(args);
 
         // Note: The value for LogicalDpi retrieved here may not match the effective DPI of the app
@@ -6849,15 +6688,13 @@ namespace /* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE)
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 
-    void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
-    {
+    void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
         _SOKOL_UNUSED(args);
         m_deviceResources->SetCurrentOrientation(sender.CurrentOrientation());
         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
     }
 
-    void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args)
-    {
+    void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
         _SOKOL_UNUSED(args);
         _SOKOL_UNUSED(sender);
         m_deviceResources->ValidateDevice();
