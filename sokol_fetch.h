@@ -2286,7 +2286,7 @@ _SOKOL_PRIVATE void _sfetch_channel_dowork(_sfetch_channel_t* chn, _sfetch_pool_
 _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_request_t* req) {
     #if defined(SOKOL_DEBUG)
         if (req->channel >= ctx->desc.num_channels) {
-            SOKOL_LOG("_sfetch_validate_request: request.num_channels too big!");
+            SOKOL_LOG("_sfetch_validate_request: request.channel too big!");
             return false;
         }
         if (!req->path) {
@@ -2302,15 +2302,15 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
             return false;
         }
         if (req->chunk_size > req->buffer_size) {
-            SOKOL_LOG("_sfetch_validate_request: request.stream_size is greater request.buffer_size)");
+            SOKOL_LOG("_sfetch_validate_request: request.chunk_size is greater request.buffer_size)");
             return false;
         }
         if (req->user_data_ptr && (req->user_data_size == 0)) {
-            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is set, but req.user_data_size is null");
+            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is set, but request.user_data_size is null");
             return false;
         }
         if (!req->user_data_ptr && (req->user_data_size > 0)) {
-            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is null, but req.user_data_size is not");
+            SOKOL_LOG("_sfetch_validate_request: request.user_data_ptr is null, but request.user_data_size is not");
             return false;
         }
         if (req->user_data_size > SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) {
