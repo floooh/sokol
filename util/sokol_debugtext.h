@@ -4113,7 +4113,7 @@ SOKOL_API_DECL void sdtx_putr(const char* str, int len) {
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
         for (int i = 0; i < len; i++) {
-            char chr = str[len];
+            char chr = str[i];
             if (0 == chr) {
                 break;
             }
