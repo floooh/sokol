@@ -1541,8 +1541,15 @@ typedef struct {
 #if defined(_SAPP_UWP)
 
 typedef struct {
+    float content_scale;
+    float window_scale;
+    float mouse_scale;
+} _sapp_uwp_dpi_t;
+
+typedef struct {
     bool mouse_tracked;
     uint8_t mouse_buttons;
+    _sapp_uwp_dpi_t dpi;
 } _sapp_uwp_t;
 
 #endif // _SAPP_UWP
@@ -5665,6 +5672,19 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 #if defined(_SAPP_UWP)
 
 // Helper functions
+_SOKOL_PRIVATE void _sapp_uwp_configure_dpi(float monitor_dpi) {
+    _sapp.uwp.dpi.window_scale = monitor_dpi / 96.0f;
+    if (_sapp.desc.high_dpi) {
+        _sapp.uwp.dpi.content_scale = _sapp.uwp.dpi.window_scale;
+        _sapp.uwp.dpi.mouse_scale = 1.0f * _sapp.uwp.dpi.window_scale;
+    }
+    else {
+        _sapp.uwp.dpi.content_scale = 1.0f;
+        _sapp.uwp.dpi.mouse_scale = 1.0f;
+    }
+    _sapp.dpi_scale = _sapp.uwp.dpi.content_scale;
+}
+
 _SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
     using namespace winrt::Windows::UI::Core;
 
@@ -5826,7 +5846,6 @@ public:
     void Present();
     winrt::Windows::Foundation::Size GetOutputSize() const { return m_outputSize; }
     winrt::Windows::Foundation::Size GetLogicalSize() const { return m_logicalSize; }
-    float GetDpi() const { return m_effectiveDpi; }
     ID3D11Device3* GetD3DDevice() const { return m_d3dDevice.get(); }
     ID3D11DeviceContext3* GetD3DDeviceContext() const { return m_d3dContext.get(); }
     IDXGISwapChain3* GetSwapChain() const { return m_swapChain.get(); }
@@ -5837,14 +5856,6 @@ public:
     DirectX::XMFLOAT4X4 GetOrientationTransform3D() const { return m_orientationTransform3D; }
 
 private:
-    // DPI scaling behavior constants
-    bool m_supportHighResolutions = true;
-    // The default thresholds that define a "high resolution" display. If the thresholds
-    // are exceeded and SupportHighResolutions is false, the dimensions will be scaled
-    // by 50%.
-    static inline const float m_dpiThreshold = 192.0;        // 200% of standard desktop display.
-    static inline const float m_widthThreshold = 1920.0f;    // 1080p width.
-    static inline const float m_heightThreshold = 1080.0f;   // 1080p height.
 
     // Swapchain Rotation Matrices (Z-rotation)
     static inline const DirectX::XMFLOAT4X4 DeviceResources::m_rotation0 = {
@@ -5876,7 +5887,6 @@ private:
     void CreateWindowSizeDependentResources();
     void UpdateRenderTargetSize();
     DXGI_MODE_ROTATION ComputeDisplayRotation();
-    float ConvertDipsToPixels(float dips, float dpi);
     bool SdkLayersAvailable();
 
     // Direct3D objects.
@@ -5902,9 +5912,6 @@ private:
     winrt::Windows::Graphics::Display::DisplayOrientations m_nativeOrientation = winrt::Windows::Graphics::Display::DisplayOrientations::None;
     winrt::Windows::Graphics::Display::DisplayOrientations m_currentOrientation = winrt::Windows::Graphics::Display::DisplayOrientations::None;
     float m_dpi = -1.0f;
-
-    // This is the DPI that will be reported back to the app. It takes into account whether the app supports high resolution screens or not.
-    float m_effectiveDpi = -1.0f;
 
     // Transforms used for display orientation.
     DirectX::XMFLOAT4X4 m_orientationTransform3D;
@@ -6047,8 +6054,6 @@ void DeviceResources::CreateDeviceResources() {
 }
 
 void DeviceResources::CreateWindowSizeDependentResources() {
-    m_supportHighResolutions = _sapp.desc.high_dpi;
-
     // Cleanup Sokol Context
     _sapp.d3d11.rt = nullptr;
     _sapp.d3d11.rtv = nullptr;
@@ -6099,7 +6104,7 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     }
     else {
         // Otherwise, create a new one using the same adapter as the existing Direct3D device.
-        DXGI_SCALING scaling = m_supportHighResolutions ? DXGI_SCALING_NONE : DXGI_SCALING_STRETCH;
+        DXGI_SCALING scaling = (_sapp.uwp.dpi.content_scale == _sapp.uwp.dpi.window_scale) ? DXGI_SCALING_NONE : DXGI_SCALING_STRETCH;
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
 
         swapChainDesc.Width = lround(m_d3dRenderTargetSize.Width);      // Match the size of the window.
@@ -6201,26 +6206,9 @@ void DeviceResources::CreateWindowSizeDependentResources() {
 
 // Determine the dimensions of the render target and whether it will be scaled down.
 void DeviceResources::UpdateRenderTargetSize() {
-    m_effectiveDpi = m_dpi;
-
-    // To improve battery life on high resolution devices, render to a smaller render target
-    // and allow the GPU to scale the output when it is presented.
-    if (!m_supportHighResolutions && m_dpi > m_dpiThreshold) {
-        float width = ConvertDipsToPixels(m_logicalSize.Width, m_dpi);
-        float height = ConvertDipsToPixels(m_logicalSize.Height, m_dpi);
-
-        // When the device is in portrait orientation, height > width. Compare the
-        // larger dimension against the width threshold and the smaller dimension
-        // against the height threshold.
-        if ((std::max(width, height) > m_widthThreshold) && (std::min(width, height) > m_heightThreshold)) {
-            // To scale the app we change the effective DPI. Logical size does not change.
-            m_effectiveDpi /= 2.0f;
-        }
-    }
-
     // Calculate the necessary render target size in pixels.
-    m_outputSize.Width = ConvertDipsToPixels(m_logicalSize.Width, m_effectiveDpi);
-    m_outputSize.Height = ConvertDipsToPixels(m_logicalSize.Height, m_effectiveDpi);
+    m_outputSize.Width = m_logicalSize.Width * _sapp.uwp.dpi.content_scale;
+    m_outputSize.Height = m_logicalSize.Height * _sapp.uwp.dpi.content_scale;
 
     // Prevent zero size DirectX content from being created.
     m_outputSize.Width = std::max(m_outputSize.Width, 1.0f);
@@ -6235,6 +6223,7 @@ void DeviceResources::SetWindow(winrt::Windows::UI::Core::CoreWindow const& wind
     m_nativeOrientation = currentDisplayInformation.NativeOrientation();
     m_currentOrientation = currentDisplayInformation.CurrentOrientation();
     m_dpi = currentDisplayInformation.LogicalDpi();
+    _sapp_uwp_configure_dpi(m_dpi);
     CreateWindowSizeDependentResources();
 }
 
@@ -6250,6 +6239,7 @@ void DeviceResources::SetLogicalSize(winrt::Windows::Foundation::Size logicalSiz
 void DeviceResources::SetDpi(float dpi) {
     if (dpi != m_dpi) {
         m_dpi = dpi;
+        _sapp_uwp_configure_dpi(m_dpi);
         // When the display DPI changes, the logical size of the window (measured in Dips) also changes and needs to be updated.
         auto window = m_window.get();
         m_logicalSize = winrt::Windows::Foundation::Size(window.Bounds().Width, window.Bounds().Height);
@@ -6405,12 +6395,6 @@ DXGI_MODE_ROTATION DeviceResources::ComputeDisplayRotation() {
             break;
     }
     return rotation;
-}
-
-// Converts a length in device-independent pixels (DIPs) to a length in physical pixels.
-float DeviceResources::ConvertDipsToPixels(float dips, float dpi) {
-    static const float dipsPerInch = 96.0f;
-    return floorf(dips * dpi / dipsPerInch + 0.5f); // Round to nearest integer.
 }
 
 // Check for SDK Layer support.
@@ -6589,8 +6573,8 @@ void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, 
 
 void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
     auto position = args.CurrentPoint().Position();
-    _sapp.mouse.x = position.X;
-    _sapp.mouse.y = position.Y;
+    _sapp.mouse.x = position.X * _sapp.uwp.dpi.mouse_scale;
+    _sapp.mouse.y = position.Y * _sapp.uwp.dpi.mouse_scale;
     if (!_sapp.uwp.mouse_tracked) {
         _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
@@ -6607,24 +6591,21 @@ void App::OnPointerWheelChanged(winrt::Windows::UI::Core::CoreWindow const& send
 }
 
 void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
+    // NOTE: UNTESTED
     _SOKOL_UNUSED(args);
-
-    // Note: The value for LogicalDpi retrieved here may not match the effective DPI of the app
-    // if it is being scaled for high resolution devices. Once the DPI is set on DeviceResources,
-    // you should always retrieve it using the GetDpi method.
-    // See DeviceResources.cpp for more details.
-
     m_deviceResources->SetDpi(sender.LogicalDpi());
     _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
 }
 
 void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
+    // NOTE: UNTESTED
     _SOKOL_UNUSED(args);
     m_deviceResources->SetCurrentOrientation(sender.CurrentOrientation());
     _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
 }
 
 void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
+    // NOTE: UNTESTED
     _SOKOL_UNUSED(args);
     _SOKOL_UNUSED(sender);
     m_deviceResources->ValidateDevice();
