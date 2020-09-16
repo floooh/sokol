@@ -6135,7 +6135,6 @@ void DeviceResources::CreateWindowSizeDependentResources() {
         winrt::check_hresult(dxgiDevice->SetMaximumFrameLatency(1));
 
         // Setup Sokol Context
-        _sapp.sample_count = swapChainDesc.SampleDesc.Count;
         winrt::check_hresult(swapChain->GetDesc(&_sapp.d3d11.swap_chain_desc));
         _sapp.d3d11.swap_chain = m_swapChain.as<IDXGISwapChain3>().detach();
     }
