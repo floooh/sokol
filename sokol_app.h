@@ -6573,8 +6573,16 @@ void App::OnPointerReleased(winrt::Windows::UI::Core::CoreWindow const& sender, 
 
 void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::PointerEventArgs const& args) {
     auto position = args.CurrentPoint().Position();
-    _sapp.mouse.x = position.X * _sapp.uwp.dpi.mouse_scale;
-    _sapp.mouse.y = position.Y * _sapp.uwp.dpi.mouse_scale;
+    const float new_x = (float)(int)(position.X * _sapp.uwp.dpi.mouse_scale + 0.5f);
+    const float new_y = (float)(int)(position.Y * _sapp.uwp.dpi.mouse_scale + 0.5f);
+    // don't update dx/dy in the very first event
+    if (_sapp.mouse.pos_valid) {
+        _sapp.mouse.dx = new_x - _sapp.mouse.x;
+        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+    }
+    _sapp.mouse.x = new_x;
+    _sapp.mouse.y = new_y;
+    _sapp.mouse.pos_valid = true;
     if (!_sapp.uwp.mouse_tracked) {
         _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
