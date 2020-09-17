@@ -80,6 +80,9 @@
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
+    Building for UWP requires a recent Visual Studio toolchain and Windows SDK
+    (at least VS2019 and Windows SDK 10.0.19041.0).
+
     FEATURE OVERVIEW
     ================
     sokol_app.h provides a minimalistic cross-platform API which
