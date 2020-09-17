@@ -77,8 +77,8 @@
     - on Android: GLESv3, EGL, log, android
     - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
 
-    On Linux, not linking with pthread can result in mysterious errors,
-    see here for details: https://github.com/floooh/sokol/issues/376
+    On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
+    things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
     FEATURE OVERVIEW
     ================
