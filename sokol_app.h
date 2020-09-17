@@ -122,17 +122,20 @@
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | TODO
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
     clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
+    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
 
     TODO
     ====
     - Linux:
         - clipboard support
+    - UWP:
+        - clipboard, mouselock, MSAA support
     - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
