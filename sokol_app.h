@@ -1074,6 +1074,15 @@ SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
 inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #endif
+
+// this WinRT specific hack is required when wWinMain is in a static library
+#if defined(_MSC_VER) && defined(UNICODE)
+#include <winapifamily.h>
+#if defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+#pragma comment(linker, "/include:wWinMain")
+#endif
+#endif
+
 #endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
@@ -6637,7 +6646,11 @@ _SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc) {
 }
 
 #if !defined(SOKOL_NO_ENTRY)
-int __stdcall WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+#if defined(UNICODE)
+int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
+#else
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+#endif
     _SOKOL_UNUSED(hInstance);
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
