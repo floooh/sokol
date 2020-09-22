@@ -1191,8 +1191,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         case the function returns with S_FALSE (thus it doesn't make much
         sense to check the result)
     */
-    CoInitializeEx(0, COINIT_MULTITHREADED);
-    
+    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+    _SOKOL_UNUSED(hr);
+
     _saudio.backend.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio.backend.thread.buffer_end_event) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
@@ -1229,14 +1230,17 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.wBitsPerSample = 16;
     fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
-    REFERENCE_TIME dur = (REFERENCE_TIME) (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
-    if (FAILED(IAudioClient_Initialize(_saudio.backend.audio_client,
-        AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM|AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        dur, 0, &fmt, 0)))
+    /* extra scope block to silence warning about goto skipping variable declaration */
     {
-        SOKOL_LOG("sokol_audio wasapi: audio client initialize failed");
-        goto error;
+        REFERENCE_TIME dur = (REFERENCE_TIME) (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
+        if (FAILED(IAudioClient_Initialize(_saudio.backend.audio_client,
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM|AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+            dur, 0, &fmt, 0)))
+        {
+            SOKOL_LOG("sokol_audio wasapi: audio client initialize failed");
+            goto error;
+        }
     }
     if (FAILED(IAudioClient_GetBufferSize(_saudio.backend.audio_client, &_saudio.backend.thread.dst_buffer_frames))) {
         SOKOL_LOG("sokol_audio wasapi: audio client get buffer size failed");
