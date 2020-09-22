@@ -1605,6 +1605,7 @@ typedef struct {
 } _sapp_xi_t;
 
 typedef struct {
+    uint8_t mouse_buttons;
     Display* display;
     int screen;
     Window root;
@@ -8035,6 +8036,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const uint32_t mods = _sapp_x11_mod(event->xbutton.state);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
                     _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
+                    _sapp.x11.mouse_buttons |= (1 << btn);
                 }
                 else {
                     /* might be a scroll event */
@@ -8052,14 +8054,20 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
                     _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, _sapp_x11_mod(event->xbutton.state));
+                    _sapp.x11.mouse_buttons &= ~(1 << btn);
                 }
             }
             break;
         case EnterNotify:
-            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+            /* don't send enter/leave events while mouse button held down */
+            if (0 == _sapp.x11.mouse_buttons) {
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+            }
             break;
         case LeaveNotify:
-            _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+            if (0 == _sapp.x11.mouse_buttons) {
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+            }
             break;
         case MotionNotify:
             if (!_sapp.mouse.locked) {
