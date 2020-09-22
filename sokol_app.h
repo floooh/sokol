@@ -1418,6 +1418,7 @@ typedef struct {
     bool in_create_window;
     bool iconified;
     bool mouse_tracked;
+    uint8_t mouse_capture_mask;
     _sapp_win32_dpi_t dpi;
     bool raw_input_mousepos_valid;
     LONG raw_input_mousepos_x;
@@ -4850,6 +4851,22 @@ _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
     ShowCursor((BOOL)visible);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_capture_mouse(uint8_t btn_mask) {
+    if (0 == _sapp.win32.mouse_capture_mask) {
+        SetCapture(_sapp.win32.hwnd);
+    }
+    _sapp.win32.mouse_capture_mask |= btn_mask;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_release_mouse(uint8_t btn_mask) {
+    if (0 != _sapp.win32.mouse_capture_mask) {
+        _sapp.win32.mouse_capture_mask &= ~btn_mask;
+        if (0 == _sapp.win32.mouse_capture_mask) {
+            ReleaseCapture();
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
     if (lock == _sapp.mouse.locked) {
         return;
@@ -4857,6 +4874,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
     _sapp.mouse.dx = 0.0f;
     _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
+    _sapp_win32_release_mouse(0xFF);
     if (_sapp.mouse.locked) {
         /* store the current mouse position, so it can be restored when unlocked */
         POINT pos;
@@ -5195,21 +5213,27 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_LBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
+                _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
                 break;
             case WM_RBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT);
+                _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_RIGHT);
                 break;
             case WM_MBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE);
+                _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_LBUTTONUP:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT);
+                _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
                 break;
             case WM_RBUTTONUP:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT);
+                _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_RIGHT);
                 break;
             case WM_MBUTTONUP:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE);
+                _sapp_win32_release_mouse(1<<SAPP_MOUSEBUTTON_MIDDLE);
                 break;
             case WM_MOUSEMOVE:
                 if (!_sapp.mouse.locked) {
