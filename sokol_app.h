@@ -2868,7 +2868,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
     }
 }
-// FIXME: otherMouseDragged?
+- (void)otherMouseDragged:(NSEvent*)event {
+    if (2 == event.buttonNumber) {
+        if (_sapp.mouse.locked) {
+            _sapp.mouse.dx = [event deltaX];
+            _sapp.mouse.dy = [event deltaY];
+        }
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+    }
+}
 - (void)mouseMoved:(NSEvent*)event {
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
