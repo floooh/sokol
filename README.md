@@ -465,8 +465,8 @@ Mainly some "missing features" for desktop apps:
     mouse input is now 'captured' by calling SetCapture(), and when the last
     mouse button is released, ReleaseCapture() is called. This also provides
     mouse events outside the window area as long as a mouse button is pressed,
-    which is useful for windowed UI applicaction. This is not the same as the
-    more 'rigorous' pointer-lock feature though (which is more useful for
+    which is useful for windowed UI applicactions (this is not the same as the
+    more 'rigorous' and explicit pointer-lock feature which is more useful for
     camera-controls)
 
 - **31-Aug-2020**:
