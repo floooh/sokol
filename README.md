@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**31-Aug-2020**: sokol_gfx.h and sokol_app.h automatically select D3D11 C++ or C API)
+[See what's new](#updates) (**22-Sep-2020** sokol_app.h win32: mouse input SetCapture/ReleaseCapture)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -459,6 +459,15 @@ Mainly some "missing features" for desktop apps:
 - implement an alternative WebAudio backend using Audio Worklets and WASM threads
 
 # Updates
+
+- **22-Sep-2020**:
+    A small fix in sokol_app.h's Win32 backend: when a mouse button is pressed,
+    mouse input is now 'captured' by calling SetCapture(), and when the last
+    mouse button is released, ReleaseCapture() is called. This also provides
+    mouse events outside the window area as long as a mouse button is pressed,
+    which is useful for windowed UI applicactions (this is not the same as the
+    more 'rigorous' and explicit pointer-lock feature which is more useful for
+    camera-controls)
 
 - **31-Aug-2020**:
     Internal change: The D3D11/DXGI backend code in sokol_gfx.h and sokol_app.h
