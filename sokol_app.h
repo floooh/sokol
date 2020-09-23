@@ -81,7 +81,10 @@
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
 
     Building for UWP requires a recent Visual Studio toolchain and Windows SDK
-    (at least VS2019 and Windows SDK 10.0.19041.0).
+    (at least VS2019 and Windows SDK 10.0.19041.0). When the UWP backend is
+    selected, the sokol_app.h implementation must be compiled as C++17.
+
+    On macOS and iOS, the implementation must be compiled as Objective-C.
 
     FEATURE OVERVIEW
     ================
