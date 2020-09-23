@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Sep-2020** sokol_app.h win32: mouse input SetCapture/ReleaseCapture)
+[See what's new](#updates) (**22-Sep-2020** sokol_app.h: new UWP backend)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -162,7 +162,7 @@ A minimal cross-platform application-wrapper library:
 - single window or canvas for 3D rendering
 - 3D context initialization
 - event-based keyboard, mouse and touch input
-- supported platforms: Win32, MacOS, Linux (X11), iOS, WASM/asm.js, Android (planned: RaspberryPi)
+- supported platforms: Win32, MacOS, Linux (X11), iOS, WASM, Android, UWP
 - supported 3D-APIs: GL3.3 (GLX/WGL), Metal, D3D11, GLES2/WebGL, GLES3/WebGL2
 
 A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
@@ -430,35 +430,24 @@ int main(int argc, char* argv[]) {
 See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
-# Overview of planned features
-
-A list of things I'd like to do next:
-
-## sokol_gfx.h planned features:
-
-- 2 small additions to the per-pool-slot generation counters in sokol_gfx.h:
-    - an sg_setup() option to disable a pool slot when it's generation
-      counter overflows, this makes the dangling-check for resource ids
-      watertight at the cost that the pool will run out of slots at some point
-    - instead of the 16/16-bit split in the resource ids for unique-tag vs
-      slot-index, only use as many bits as necessary for the slot-index
-      (based on the number of slots in the pool), and the remaining bits
-      for the unique-tag
-
-## sokol_app.h planned features:
-
-Mainly some "missing features" for desktop apps:
-
-- define an application icon
-- change the window title on existing window
-- pointer lock
-- allow to change mouse cursor image (at first only switch between system-provided standard images)
-
-## sokol_audio.h planned features:
-
-- implement an alternative WebAudio backend using Audio Worklets and WASM threads
-
 # Updates
+
+- **23-Sep-2020**:
+    sokol_app.h now has initial UWP support using the C++/WinRT set of APIs.
+    Currently this requires "bleeding edge" tools: A recent VS2019 version,
+    and a very recent Windows SDK version (at least version 10.0.19041.0).
+    Furthermore the sokol_app.h implementation must be compiled as C++17
+    (this is a requirement of the C++/WinRT headers). Note that the Win32
+    backend will remain the primary and recommended backend on Windows. The UWP
+    backend should only be used when the Win32 backend is not an option.
+    The [sokol-samples](https://github.com/floooh/sokol-samples) project
+    has two new build configs ```sapp-uwp-vstudio-debug``` and
+    ```sapp-uwp-vstudio-release``` to build the sokol-app samples for UWP.
+
+    Many thanks to Alberto Fustinoni (@albertofustinoni) for providing
+    the initial PR!
+
+    (also NOTE: UWP-related fixes in other sokol headers will follow)
 
 - **22-Sep-2020**:
     A small fix in sokol_app.h's Win32 backend: when a mouse button is pressed,
