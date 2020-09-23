@@ -200,3 +200,21 @@ jobs:
           run: |
             cd workspace/sokol-samples
             python fips build sapp-android-make-release
+    uwp:
+        runs-on: windows-latest
+        steps:
+        - uses: actions/checkout@v1
+        - name: prepare
+          run: |
+            mkdir workspace
+            cd workspace
+            git clone https://github.com/floooh/sokol-samples
+            cd sokol-samples
+        - name: sapp-uwp-vstudio-debug
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-uwp-vstudio-debug
+        - name: sapp-uwp-vstudio-release
+          run: |
+            cd workspace/sokol-samples
+            python fips build sapp-uwp-vstudio-release
