@@ -1595,6 +1595,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_simgui, 0, sizeof(_simgui));
     _simgui.desc = *desc;
+    _simgui.desc.ini_filename = _simgui_def(_simgui.desc.ini_filename, "imgui.ini");
     _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
     _simgui.desc.dpi_scale = _simgui_def(_simgui.desc.dpi_scale, 1.0f);
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
