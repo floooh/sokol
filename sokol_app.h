@@ -1439,8 +1439,6 @@ typedef struct {
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     bool mouse_lock_requested;
-    bool has_pointer_capture;
-    uint8_t mouse_buttons;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -3567,18 +3565,6 @@ EM_JS(void, sapp_js_pointer_init, (const char* c_str_target), {
     if (!Module.sapp_emsc_target.requestPointerLock) {
         console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
     }
-    if (!Module.sapp_emsc_target.setPointerCapture) {
-        console.log("sokol_app.h: target doesn't support setPointerCapture:" + target_str);
-    }
-});
-
-EM_JS(int, sapp_js_has_pointer_capture, (void), {
-    if (Module.sapp_emsc_target) {
-        if (Module.sapp_emsc_target.setPointerCapture) {
-            return 1;
-        }
-    }
-    return 0;
 });
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
@@ -3694,27 +3680,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     return true;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_mouse_capture_release(sapp_event_type ev_type, sapp_mousebutton btn) {
-    SOKOL_ASSERT(btn != SAPP_MOUSEBUTTON_INVALID);
-    SOKOL_ASSERT((ev_type == SAPP_EVENTTYPE_MOUSE_DOWN) || (ev_type == SAPP_EVENTTYPE_MOUSE_UP));
-    if (ev_type == SAPP_EVENTTYPE_MOUSE_DOWN) {
-        if (0 == _sapp.emsc.mouse_buttons) {
-            if (_sapp.emsc.has_pointer_capture) {
-                // FIXME: setPointerCapture
-            }
-        }
-        _sapp.emsc.mouse_buttons |= (1 << btn);
-    }
-    else {
-        _sapp.emsc.mouse_buttons &= ~(1 << btn);
-        if (0 == _sapp.emsc.mouse_buttons) {
-            if (_sapp.emsc.has_pointer_capture) {
-                // FIXME releasePointerCapture
-            }
-        }
-    }
-}
-
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
     if (_sapp.mouse.locked) {
@@ -3778,7 +3743,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                     case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
                     default: _sapp.event.mouse_button = (sapp_mousebutton)emsc_event->button; break;
                 }
-                _sapp_emsc_mouse_capture_release(_sapp.event.type, _sapp.event.mouse_button);
             }
             else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
@@ -4387,7 +4351,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     sapp_js_pointer_init(_sapp.html5_canvas_name);
-    _sapp.emsc.has_pointer_capture = sapp_js_has_pointer_capture();
     _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
