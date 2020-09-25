@@ -1439,6 +1439,8 @@ typedef struct {
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     bool mouse_lock_requested;
+    bool has_pointer_capture;
+    uint8_t mouse_buttons;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -3468,7 +3470,7 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
     document.getElementById("_sokol_app_input_element").blur();
 });
 
-EM_JS(void, sapp_add_js_hook_beforeunload, (void), {
+EM_JS(void, sapp_js_add_hook_beforeunload, (void), {
     Module.sokol_beforeunload = function(_sapp_event) {
         if (__sapp_html5_get_ask_leave_site() != 0) {
             _sapp_event.preventDefault();
@@ -3478,11 +3480,11 @@ EM_JS(void, sapp_add_js_hook_beforeunload, (void), {
     window.addEventListener('beforeunload', Module.sokol_beforeunload);
 });
 
-EM_JS(void, sapp_remove_js_hook_beforeunload, (void), {
+EM_JS(void, sapp_js_remove_hook_beforeunload, (void), {
     window.removeEventListener('beforeunload', Module.sokol_beforeunload);
 });
 
-EM_JS(void, sapp_add_js_hook_clipboard, (void), {
+EM_JS(void, sapp_js_add_hook_clipboard, (void), {
     Module.sokol_paste = function(event) {
         var pasted_str = event.clipboardData.getData('text');
         ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
@@ -3490,7 +3492,7 @@ EM_JS(void, sapp_add_js_hook_clipboard, (void), {
     window.addEventListener('paste', Module.sokol_paste);
 });
 
-EM_JS(void, sapp_remove_js_hook_clipboard, (void), {
+EM_JS(void, sapp_js_remove_hook_clipboard, (void), {
     window.removeEventListener('paste', Module.sokol_paste);
 });
 
@@ -3555,6 +3557,30 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
+EM_JS(void, sapp_js_pointer_init, (const char* c_str_target), {
+    // lookup and store canvas object by name
+    var target_str = UTF8ToString(c_str_target);
+    Module.sapp_emsc_target = document.getElementById(target_str);
+    if (!Module.sapp_emsc_target) {
+        console.log("sokol_app.h: invalid target:" + target_str);
+    }
+    if (!Module.sapp_emsc_target.requestPointerLock) {
+        console.log("sokol_app.h: target doesn't support requestPointerLock:" + target_str);
+    }
+    if (!Module.sapp_emsc_target.setPointerCapture) {
+        console.log("sokol_app.h: target doesn't support setPointerCapture:" + target_str);
+    }
+});
+
+EM_JS(int, sapp_js_has_pointer_capture, (void), {
+    if (Module.sapp_emsc_target) {
+        if (Module.sapp_emsc_target.setPointerCapture) {
+            return 1;
+        }
+    }
+    return 0;
+});
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
@@ -3571,21 +3597,15 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockerror_cb(int emsc_type, const void*
     return true;
 }
 
-EM_JS(void, _sapp_emsc_request_pointerlock, (const char* c_str_target), {
-    var target_str = UTF8ToString(c_str_target);
-    var target = document.getElementById(target_str);
-    if (!target) {
-        console.log("sokol_app.h: invalid target:" + target_str);
-        return;
+EM_JS(void, sapp_js_request_pointerlock, (void), {
+    if (Module.sapp_emsc_target) {
+        if (Module.sapp_emsc_target.requestPointerLock) {
+            Module.sapp_emsc_target.requestPointerLock();
+        }
     }
-    if (!target.requestPointerLock) {
-        console.log("sokol_app.h: target doesn't doesn't support pointer lock:" + target_str);
-        return;
-    }
-    target.requestPointerLock();
 });
 
-EM_JS(void, _sapp_emsc_exit_pointerlock, (void), {
+EM_JS(void, sapp_js_exit_pointerlock, (void), {
     if (document.exitPointerLock) {
         document.exitPointerLock();
     }
@@ -3599,7 +3619,7 @@ _SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
     else {
         /* NOTE: the _sapp.mouse_locked state will be set in the pointerlockchange callback */
         _sapp.emsc.mouse_lock_requested = false;
-        _sapp_emsc_exit_pointerlock();
+        sapp_js_exit_pointerlock();
     }
 }
 
@@ -3609,7 +3629,7 @@ _SOKOL_PRIVATE void _sapp_emsc_lock_mouse(bool lock) {
 _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     if (_sapp.emsc.mouse_lock_requested) {
         _sapp.emsc.mouse_lock_requested = false;
-        _sapp_emsc_request_pointerlock(_sapp.html5_canvas_name);
+        sapp_js_request_pointerlock();
     }
 }
 
@@ -3672,6 +3692,27 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
         _sapp_call_event(&_sapp.event);
     }
     return true;
+}
+
+_SOKOL_PRIVATE void _sapp_emsc_mouse_capture_release(sapp_event_type ev_type, sapp_mousebutton btn) {
+    SOKOL_ASSERT(btn != SAPP_MOUSEBUTTON_INVALID);
+    SOKOL_ASSERT((ev_type == SAPP_EVENTTYPE_MOUSE_DOWN) || (ev_type == SAPP_EVENTTYPE_MOUSE_UP));
+    if (ev_type == SAPP_EVENTTYPE_MOUSE_DOWN) {
+        if (0 == _sapp.emsc.mouse_buttons) {
+            if (_sapp.emsc.has_pointer_capture) {
+                // FIXME: setPointerCapture
+            }
+        }
+        _sapp.emsc.mouse_buttons |= (1 << btn);
+    }
+    else {
+        _sapp.emsc.mouse_buttons &= ~(1 << btn);
+        if (0 == _sapp.emsc.mouse_buttons) {
+            if (_sapp.emsc.has_pointer_capture) {
+                // FIXME releasePointerCapture
+            }
+        }
+    }
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
@@ -3737,6 +3778,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                     case 2: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_RIGHT; break;
                     default: _sapp.event.mouse_button = (sapp_mousebutton)emsc_event->button; break;
                 }
+                _sapp_emsc_mouse_capture_release(_sapp.event.type, _sapp.event.mouse_button);
             }
             else {
                 _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
@@ -4154,7 +4196,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_wgpu_ready(int device_id, int swapchain_id,
 #endif
 
 /* embedded JS function to handle all the asynchronous WebGPU setup */
-EM_JS(void, _sapp_emsc_wgpu_init, (), {
+EM_JS(void, sapp_js_wgpu_init, (), {
     WebGPU.initManagers();
     // FIXME: the extension activation must be more clever here
     navigator.gpu.requestAdapter().then(function(adapter) {
@@ -4259,9 +4301,9 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
-    sapp_add_js_hook_beforeunload();
+    sapp_js_add_hook_beforeunload();
     if (_sapp.clipboard.enabled) {
-        sapp_add_js_hook_clipboard();
+        sapp_js_add_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
@@ -4285,9 +4327,9 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
-    sapp_remove_js_hook_beforeunload();
+    sapp_js_remove_hook_beforeunload();
     if (_sapp.clipboard.enabled) {
-        sapp_remove_js_hook_clipboard();
+        sapp_js_remove_hook_clipboard();
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, 0);
@@ -4344,6 +4386,8 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    sapp_js_pointer_init(_sapp.html5_canvas_name);
+    _sapp.emsc.has_pointer_capture = sapp_js_has_pointer_capture();
     _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
@@ -4365,7 +4409,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
     #elif defined(SOKOL_WGPU)
-        _sapp_emsc_wgpu_init();
+        sapp_js_wgpu_init();
     #endif
     _sapp.valid = true;
     _sapp_emsc_register_eventhandlers();
