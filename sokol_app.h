@@ -9496,7 +9496,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #elif defined(_SAPP_WIN32)
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
-        // FIXME
+        _sapp_x11_update_window_title();
     #endif
 }
 
