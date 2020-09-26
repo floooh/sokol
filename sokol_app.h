@@ -1026,6 +1026,8 @@ SOKOL_API_DECL uint64_t sapp_frame_count(void);
 SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
+/* set the window title (only on desktop platforms) */
+SOKOL_API_DECL void sapp_set_window_title(const char* str);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
@@ -1044,8 +1046,6 @@ SOKOL_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
 SOKOL_API_DECL const void* sapp_metal_get_drawable(void);
 /* macOS: get bridged pointer to macOS NSWindow */
 SOKOL_API_DECL const void* sapp_macos_get_window(void);
-/* macOS: set window title */
-SOKOL_API_DECL void sapp_macos_set_title(const char* title);
 /* iOS: get bridged pointer to iOS UIWindow */
 SOKOL_API_DECL const void* sapp_ios_get_window(void);
 
@@ -2627,6 +2627,10 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
         _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     }
     return _sapp.clipboard.buffer;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_window_title(const char* str) {
+    [_sapp.macos.window setTitle: [NSString stringWithUTF8String:str]];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
@@ -9479,6 +9483,17 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     #endif
 }
 
+SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
+    SOKOL_ASSERT(title);
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_window_title(title);
+    #elif defined(_SAPP_WIN32)
+        // FIXME
+    #elif defined(_SAPP_LINUX)
+        // FIXME
+    #endif
+}
+
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
@@ -9531,12 +9546,6 @@ SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
         return obj;
     #else
         return 0;
-    #endif
-}
-
-SOKOL_API_IMPL void sapp_macos_set_title(const char* title) {
-    #if defined(__APPLE__) && !TARGET_OS_IPHONE
-        [_sapp.macos.window setTitle: [NSString stringWithUTF8String:title]];
     #endif
 }
 
