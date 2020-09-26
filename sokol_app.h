@@ -5624,6 +5624,11 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
     return _sapp.clipboard.buffer;
 }
 
+_SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
+    _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
+    SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
+}
+
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_win32_uwp_init_keytable();
@@ -9489,7 +9494,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #if defined(_SAPP_MACOS)
         _sapp_macos_update_window_title();
     #elif defined(_SAPP_WIN32)
-        // FIXME
+        _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
         // FIXME
     #endif
