@@ -2629,8 +2629,8 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
     return _sapp.clipboard.buffer;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_set_window_title(const char* str) {
-    [_sapp.macos.window setTitle: [NSString stringWithUTF8String:str]];
+_SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
+    [_sapp.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window_title]];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
@@ -9485,8 +9485,9 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
 
 SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     SOKOL_ASSERT(title);
+    _sapp_strcpy(title, _sapp.window_title, sizeof(_sapp.window_title));
     #if defined(_SAPP_MACOS)
-        _sapp_macos_set_window_title(title);
+        _sapp_macos_update_window_title();
     #elif defined(_SAPP_WIN32)
         // FIXME
     #elif defined(_SAPP_LINUX)
