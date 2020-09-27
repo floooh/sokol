@@ -1531,8 +1531,6 @@ EM_JS(int, saudio_js_cancel_worklet, (), {
     }
 });
 
-#include <stdio.h>
-
 _SOKOL_PRIVATE void *_saudio_emsc_worklet_cb(void *arg) {
 	emscripten_set_thread_name(pthread_self(), "Sokol Audio");
     /* get the worklet context and quantum slots from the memory pointer */
