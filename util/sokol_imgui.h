@@ -117,9 +117,15 @@
                 typically be 2.0. The default value is 1.0
 
             const char* ini_filename
-                Use this path as ImGui::GetIO().IniFilename. By default
-                this is 0, so that Dear ImGui will not do any
-                filesystem calls.
+                Sets this path as ImGui::GetIO().IniFilename where ImGui will store
+                and load UI persistency data. By default this is 0, so that Dear ImGui
+                will not preserve state between sessions (and also won't do
+                any filesystem calls). Also see the ImGui functions:
+                    - LoadIniSettingsFromMemory()
+                    - SaveIniSettingsFromMemory()
+                These functions give you explicit control over loading and saving
+                UI state while using your own filesystem wrapper functions (in this
+                case keep simgui_desc.ini_filename zero)
 
             bool no_default_font
                 Set this to true if you don't want to use ImGui's default
@@ -286,7 +292,7 @@ inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc)
 
 typedef struct {
     ImVec2 disp_size;
-    uint8_t _pad_8[8];    
+    uint8_t _pad_8[8];
 } _simgui_vs_params_t;
 
 #define SIMGUI_MAX_KEY_VALUE (512)      // same as ImGuis IO.KeysDown array
