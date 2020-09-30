@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**26-Sep-2020** sokol_app.h: new function to change window title)
+[See what's new](#updates) (**30-Sep-2020** UWP support for sokol_audio.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -431,6 +431,10 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **30-Sep-2020**:
+    sokol_audio.h now works on UWP, thanks again to Alberto Fustinoni
+    (@albertofustinoni) for the PR!
 
 - **26-Sep-2020**:
     sokol_app.h gained a new function sapp_set_window_title() to change
