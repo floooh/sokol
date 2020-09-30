@@ -1120,7 +1120,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 /* Minimal implementation of an IActivateAudioInterfaceCompletionHandler COM object in plain C.
    Meant to be a static singleton (always one reference when add/remove reference)
    and implements IUnknown and IActivateAudioInterfaceCompletionHandler when queryinterface'd
-   
+
    Do not know why but IActivateAudioInterfaceCompletionHandler's GUID is not the one system queries for,
    so I'm advertising the one actually requested.
 */
@@ -1146,7 +1146,7 @@ _SOKOL_PRIVATE ULONG STDMETHODCALLTYPE _saudio_interface_completion_handler_addr
 
 _SOKOL_PRIVATE HRESULT STDMETHODCALLTYPE _saudio_backend_activate_audio_interface_cb(IActivateAudioInterfaceCompletionHandler* instance, IActivateAudioInterfaceAsyncOperation* activateOperation) {
     _SOKOL_UNUSED(instance);
-    WaitForSingleObject(_saudio.backend.interface_activation_mutex, INFINITE);   
+    WaitForSingleObject(_saudio.backend.interface_activation_mutex, INFINITE);
     _saudio.backend.interface_activation_success = TRUE;
     HRESULT activation_result;
     if (FAILED(activateOperation->lpVtbl->GetActivateResult(activateOperation, &activation_result, (IUnknown**)(&_saudio.backend.audio_client))) || FAILED(activation_result)) {
@@ -1261,10 +1261,12 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     /* UWP Threads are CoInitialized by default with a different threading model, and this call fails
     See https://github.com/Microsoft/cppwinrt/issues/6#issuecomment-253930637 */
 #if (defined(WINAPI_FAMILY_PARTITION) && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-    if (FAILED(CoInitializeEx(0, COINIT_MULTITHREADED))) {
-        SOKOL_LOG("sokol_audio wasapi: CoInitializeEx failed");
-        return false;
-    }
+    /* CoInitializeEx could have been called elsewhere already, in which
+        case the function returns with S_FALSE (thus it doesn't make much
+        sense to check the result)
+    */
+    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+    _SOKOL_UNUSED(hr);
 #endif
     _saudio.backend.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio.backend.thread.buffer_end_event) {
