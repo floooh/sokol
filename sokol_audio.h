@@ -1140,10 +1140,12 @@ _SOKOL_PRIVATE HRESULT STDMETHODCALLTYPE _saudio_interface_completion_handler_qu
 }
 
 _SOKOL_PRIVATE ULONG STDMETHODCALLTYPE _saudio_interface_completion_handler_addref_release(IActivateAudioInterfaceCompletionHandler* instance) {
+    _SOKOL_UNUSED(instance);
     return 1;
 }
 
 _SOKOL_PRIVATE HRESULT STDMETHODCALLTYPE _saudio_backend_activate_audio_interface_cb(IActivateAudioInterfaceCompletionHandler* instance, IActivateAudioInterfaceAsyncOperation* activateOperation) {
+    _SOKOL_UNUSED(instance);
     WaitForSingleObject(_saudio.backend.interface_activation_mutex, INFINITE);   
     _saudio.backend.interface_activation_success = TRUE;
     HRESULT activation_result;
