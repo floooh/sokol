@@ -5868,10 +5868,11 @@ _SOKOL_PRIVATE void _sapp_uwp_extract_mouse_button_events(winrt::Windows::UI::Co
 
 _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI::Core::CoreWindow const& sender_window, winrt::Windows::UI::Core::KeyEventArgs const& args) {
     auto key_status = args.KeyStatus();
-    if (_sapp_events_enabled() && (key_status.ScanCode < SAPP_MAX_KEYCODES)) {
+    uint32_t ext_scan_code = key_status.ScanCode | (key_status.IsExtendedKey ? 0x100 : 0);
+    if (_sapp_events_enabled() && (ext_scan_code < SAPP_MAX_KEYCODES)) {
         _sapp_init_event(type);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
-        _sapp.event.key_code = _sapp.keycodes[key_status.ScanCode];
+        _sapp.event.key_code = _sapp.keycodes[ext_scan_code];
         _sapp.event.key_repeat = type == SAPP_EVENTTYPE_KEY_UP ? false : key_status.WasKeyDown;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
