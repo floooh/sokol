@@ -2502,7 +2502,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #define GL_LUMINANCE 0x1909
     #endif
 
-    #ifdef SOKOL_GLES2
+    #if defined(SOKOL_GLES2) && !defined(SOKOL_GLES3)
     #   ifdef GL_ANGLE_instanced_arrays
     #       define SOKOL_INSTANCING_ENABLED
     #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
