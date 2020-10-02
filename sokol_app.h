@@ -5273,7 +5273,6 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
 }
 
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    /* FIXME: refresh rendering during resize with a WM_TIMER event */
     if (!_sapp.win32.in_create_window) {
         switch (uMsg) {
             case WM_CLOSE:
@@ -5437,6 +5436,31 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_KEYUP:
             case WM_SYSKEYUP:
                 _sapp_win32_key_event(SAPP_EVENTTYPE_KEY_UP, (int)(HIWORD(lParam)&0x1FF), false);
+                break;
+            case WM_ENTERSIZEMOVE:
+                SetTimer(_sapp.win32.hwnd, 1, USER_TIMER_MINIMUM, NULL);
+                break;
+            case WM_EXITSIZEMOVE:
+                KillTimer(_sapp.win32.hwnd, 1);
+                break;
+            case WM_TIMER:
+                _sapp_frame();
+                #if defined(SOKOL_D3D11)
+                    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+                #endif
+                #if defined(SOKOL_GLCORE33)
+                    _sapp_wgl_swap_buffers();
+                #endif
+                /* NOTE: resizing the swap-chain during resize leads to a substantial
+                   memory spike (hundreds of megabytes for a few seconds). 
+
+                if (_sapp_win32_update_dimensions()) {
+                    #if defined(SOKOL_D3D11)
+                    _sapp_d3d11_resize_default_render_target();
+                    #endif
+                    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+                }
+                */
                 break;
             default:
                 break;

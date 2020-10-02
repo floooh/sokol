@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**30-Sep-2020** UWP support for sokol_audio.h)
+[See what's new](#updates) (**02-Oct-2020** sokol_app.h win32: draw during resizing and moving the window)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -431,6 +431,14 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **02-Oct-2020**:
+    The sokol_app.h Win32 backend can now render while moving and resizing
+    the window. NOTE that resizing the swapchain buffers (and receiving
+    SAPP_EVENTTYPE_RESIZED events) is deferred until the resizing finished.
+    Resizing the swapchain buffers each frame created a substantial temporary
+    memory spike of up to several hundred MBytes. I need to figure out a better
+    swapchain resizing strategy.
 
 - **30-Sep-2020**:
     sokol_audio.h now works on UWP, thanks again to Alberto Fustinoni
