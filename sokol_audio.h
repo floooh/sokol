@@ -62,14 +62,19 @@
     callback function running in a separate thread, for such cases Sokol Audio
     provides the push-model as a convenience.
 
-    SOKOL AUDIO AND SOLOUD
-    ======================
+    SOKOL AUDIO, SOLOUD AND MINIAUDIO
+    =================================
     The WASAPI, ALSA, OpenSLES and CoreAudio backend code has been taken from the
     SoLoud library (with some modifications, so any bugs in there are most
     likely my fault). If you need a more fully-featured audio solution, check
     out SoLoud, it's excellent:
 
         https://github.com/jarikomppa/soloud
+
+    Another alternative which feature-wise is somewhere inbetween SoLoud and
+    sokol-audio might be MiniAudio:
+
+        https://github.com/mackron/miniaudio
 
     GLOSSARY
     ========
