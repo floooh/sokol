@@ -1490,6 +1490,7 @@ typedef struct {
     HWND hwnd;
     HDC dc;
     LONG mouse_locked_x, mouse_locked_y;
+    bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
     bool mouse_tracked;
@@ -4727,10 +4728,16 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp.win32.hwnd;
     sc_desc->Windowed = true;
-    sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-    sc_desc->BufferCount = 1;
-    sc_desc->SampleDesc.Count = _sapp.sample_count;
-    sc_desc->SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+    if (_sapp.win32.is_win10_or_greater) {
+        sc_desc->BufferCount = 2;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    }
+    else {
+        sc_desc->BufferCount = 1;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    }
+    sc_desc->SampleDesc.Count = 1;
+    sc_desc->SampleDesc.Quality = 0;
     sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     #if defined(SOKOL_DEBUG)
@@ -5452,7 +5459,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     _sapp_wgl_swap_buffers();
                 #endif
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
-                   memory spike (hundreds of megabytes for a few seconds). 
+                   memory spike (hundreds of megabytes for a few seconds).
 
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
@@ -5653,8 +5660,24 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
+/* don't laugh, but this seems to be the easiest and most robust
+   way to check if we're running on Win10
+
+   From: https://github.com/videolan/vlc/blob/232fb13b0d6110c4d1b683cde24cf9a7f2c5c2ea/modules/video_output/win32/d3d11_swapchain.c#L263
+*/
+_SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
+    HMODULE h = GetModuleHandleA("kernel32.dll");
+    if (NULL != h) {
+        return (NULL != GetProcAddress(h, "GetSystemCpuSetInformation"));
+    }
+    else {
+        return false;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
