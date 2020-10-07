@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**02-Oct-2020** sokol_app.h win32: draw during resizing and moving the window)
+[See what's new](#updates) (**07-Oct-2020** sokol_audio.h: ALSA backend initialization fixes)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -431,6 +431,14 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **07-Oct-2020**:
+    A fix in the ALSA/Linux backend initialization in sokol_audio.h: Previously,
+    initialization would fail if ALSA can't allocate the exact requested
+    buffer size. Instead sokol_audio.h let's now pick ALSA a suitable buffer
+    size. Also better log messages in the ALSA initialization code if something
+    goes wrong. Unfortunately I'm not able to reproduce the buffer allocation
+    problem on my Linux machine. Details are in this issue: https://github.com/floooh/sokol/issues/400
 
 - **02-Oct-2020**:
     The sokol_app.h Win32 backend can now render while moving and resizing
