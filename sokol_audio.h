@@ -1057,8 +1057,10 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     int dir; unsigned int val;
+    snd_pcm_uframes_t buf_frames;
     int rc = snd_pcm_open(&_saudio.backend.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
+        SOKOL_LOG("sokol_audio.h: snd_pcm_open() failed");
         return false;
     }
     snd_pcm_hw_params_t* params = 0;
@@ -1066,8 +1068,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     snd_pcm_hw_params_any(_saudio.backend.device, params);
     snd_pcm_hw_params_set_access(_saudio.backend.device, params, SND_PCM_ACCESS_RW_INTERLEAVED);
     snd_pcm_hw_params_set_channels(_saudio.backend.device, params, _saudio.num_channels);
-    snd_pcm_hw_params_set_buffer_size(_saudio.backend.device, params, _saudio.buffer_frames);
     if (0 > snd_pcm_hw_params_test_format(_saudio.backend.device, params, SND_PCM_FORMAT_FLOAT_LE)) {
+        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_test_format() failed");
         goto error;
     }
     else {
@@ -1076,9 +1078,17 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     val = _saudio.sample_rate;
     dir = 0;
     if (0 > snd_pcm_hw_params_set_rate_near(_saudio.backend.device, params, &val, &dir)) {
+        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_set_rate_near() failed");
         goto error;
     }
+    buf_frames = _saudio.buffer_frames;
+    if (0 > snd_pcm_hw_params_set_buffer_size_near(_saudio.backend.device, params, &buf_frames)) {
+        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_set_buffer_size_near() failed");
+        goto error;
+    }
+    _saudio.buffer_frames = buf_frames;
     if (0 > snd_pcm_hw_params(_saudio.backend.device, params)) {
+        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params() failed");
         goto error;
     }
 
@@ -1097,6 +1107,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     /* create the buffer-streaming start thread */
     if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_alsa_cb, 0)) {
+        SOKOL_LOG("sokol_audio.h: pthread_create() failed");
         goto error;
     }
 
@@ -1822,7 +1833,15 @@ SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     _saudio.num_channels = _saudio_def(_saudio.desc.num_channels, 1);
     _saudio_fifo_init_mutex(&_saudio.fifo);
     if (_saudio_backend_init()) {
-        SOKOL_ASSERT(0 == (_saudio.buffer_frames % _saudio.packet_frames));
+        /* the backend might not support the requested exact buffer size,
+           make sure the actual buffer size is still a multiple of
+           the requested packet size
+        */
+        if (0 != (_saudio.buffer_frames % _saudio.packet_frames)) {
+            SOKOL_LOG("sokol_audio.h: actual backend buffer size isn't multiple of requested packet size");
+            _saudio_backend_shutdown();
+            return;
+        }
         SOKOL_ASSERT(_saudio.bytes_per_frame > 0);
         _saudio_fifo_init(&_saudio.fifo, _saudio.packet_frames * _saudio.bytes_per_frame, _saudio.num_packets);
         _saudio.valid = true;
