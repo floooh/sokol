@@ -440,7 +440,6 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
     goes wrong. Unfortunately I'm not able to reproduce the buffer allocation
     problem on my Linux machine. Details are in this issue: https://github.com/floooh/sokol/issues/400
 
-
 - **02-Oct-2020**:
     The sokol_app.h Win32 backend can now render while moving and resizing
     the window. NOTE that resizing the swapchain buffers (and receiving
