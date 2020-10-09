@@ -6021,16 +6021,6 @@ public:
     void RegisterDeviceNotify(IDeviceNotify* deviceNotify);
     void Trim();
     void Present();
-    winrt::Windows::Foundation::Size GetOutputSize() const { return m_outputSize; }
-    winrt::Windows::Foundation::Size GetLogicalSize() const { return m_logicalSize; }
-    ID3D11Device3* GetD3DDevice() const { return m_d3dDevice.get(); }
-    ID3D11DeviceContext3* GetD3DDeviceContext() const { return m_d3dContext.get(); }
-    IDXGISwapChain3* GetSwapChain() const { return m_swapChain.get(); }
-    D3D_FEATURE_LEVEL GetDeviceFeatureLevel() const { return m_d3dFeatureLevel; }
-    ID3D11RenderTargetView1* GetBackBufferRenderTargetView() const { return m_d3dRenderTargetView.get(); }
-    ID3D11DepthStencilView* GetDepthStencilView() const { return m_d3dDepthStencilView.get(); }
-    D3D11_VIEWPORT GetScreenViewport() const { return m_screenViewport; }
-    DirectX::XMFLOAT4X4 GetOrientationTransform3D() const { return m_orientationTransform3D; }
 
 private:
 
@@ -6074,6 +6064,8 @@ private:
     // Direct3D rendering objects. Required for 3D.
     winrt::com_ptr<ID3D11Texture2D1> m_d3dRenderTarget;
     winrt::com_ptr<ID3D11RenderTargetView1> m_d3dRenderTargetView;
+    winrt::com_ptr<ID3D11Texture2D1> m_d3dMSAARenderTarget;
+    winrt::com_ptr<ID3D11RenderTargetView1> m_d3dMSAARenderTargetView;
     winrt::com_ptr<ID3D11Texture2D1> m_d3dDepthStencil;
     winrt::com_ptr<ID3D11DepthStencilView> m_d3dDepthStencilView;
     D3D11_VIEWPORT m_screenViewport = { };
@@ -6231,17 +6223,22 @@ void DeviceResources::CreateDeviceResources() {
 }
 
 void DeviceResources::CreateWindowSizeDependentResources() {
-    // Cleanup Sokol Context
+    // Cleanup Sokol Context (these are non-owning raw pointers)
     _sapp.d3d11.rt = nullptr;
     _sapp.d3d11.rtv = nullptr;
+    _sapp.d3d11.msaa_rt = nullptr;
+    _sapp.d3d11.msaa_rtv = nullptr;
     _sapp.d3d11.ds = nullptr;
     _sapp.d3d11.dsv = nullptr;
 
     // Clear the previous window size specific context.
     ID3D11RenderTargetView* nullViews[] = { nullptr };
     m_d3dContext->OMSetRenderTargets(ARRAYSIZE(nullViews), nullViews, nullptr);
+    // these are smart pointers, setting to nullptr will delete the objects
     m_d3dRenderTarget = nullptr;
     m_d3dRenderTargetView = nullptr;
+    m_d3dMSAARenderTarget = nullptr;
+    m_d3dMSAARenderTargetView = nullptr;
     m_d3dDepthStencilView = nullptr;
     m_d3dDepthStencil = nullptr;
     m_d3dContext->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
@@ -6344,6 +6341,24 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     winrt::check_hresult(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&m_d3dRenderTarget)));
     winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dRenderTarget.get(), nullptr, m_d3dRenderTargetView.put()));
 
+    // Create MSAA texture and view if needed
+    if (_sapp.sample_count > 1) {
+        CD3D11_TEXTURE2D_DESC1 msaaTexDesc(
+            DXGI_FORMAT_B8G8R8A8_UNORM,
+            lround(m_d3dRenderTargetSize.Width),
+            lround(m_d3dRenderTargetSize.Height),
+            1,  // arraySize
+            1,  // mipLevels
+            D3D11_BIND_RENDER_TARGET,
+            D3D11_USAGE_DEFAULT,
+            0,  // cpuAccessFlags
+            _sapp.sample_count,
+            _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
+        );
+        winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&msaaTexDesc, nullptr, m_d3dMSAARenderTarget.put()));
+        winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dMSAARenderTarget.get(), nullptr, m_d3dMSAARenderTargetView.put()));
+    }
+
     // Create a depth stencil view for use with 3D rendering if needed.
     CD3D11_TEXTURE2D_DESC1 depthStencilDesc(
         DXGI_FORMAT_D24_UNORM_S8_UINT,
@@ -6351,18 +6366,16 @@ void DeviceResources::CreateWindowSizeDependentResources() {
         lround(m_d3dRenderTargetSize.Height),
         1, // This depth stencil view has only one texture.
         1, // Use a single mipmap level.
-        D3D11_BIND_DEPTH_STENCIL
+        D3D11_BIND_DEPTH_STENCIL,
+        D3D11_USAGE_DEFAULT,
+        0,  // cpuAccessFlag
+        _sapp.sample_count,
+        _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
     );
     winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&depthStencilDesc, nullptr, m_d3dDepthStencil.put()));
 
     CD3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc(D3D11_DSV_DIMENSION_TEXTURE2D);
-    winrt::check_hresult(
-        m_d3dDevice->CreateDepthStencilView(
-            m_d3dDepthStencil.get(),
-            &depthStencilViewDesc,
-            m_d3dDepthStencilView.put()
-        )
-    );
+    winrt::check_hresult(m_d3dDevice->CreateDepthStencilView(m_d3dDepthStencil.get(), nullptr, m_d3dDepthStencilView.put()));
 
     // Set sokol window and framebuffer sizes
     _sapp.window_width = (int) m_logicalSize.Width;
@@ -6375,6 +6388,10 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     _sapp.d3d11.rtv = m_d3dRenderTargetView.as<ID3D11RenderTargetView>().get();
     _sapp.d3d11.ds = m_d3dDepthStencil.as<ID3D11Texture2D>().get();
     _sapp.d3d11.dsv = m_d3dDepthStencilView.get();
+    if (_sapp.sample_count > 1) {
+        _sapp.d3d11.msaa_rt = m_d3dMSAARenderTarget.as<ID3D11Texture2D>().get();
+        _sapp.d3d11.msaa_rtv = m_d3dMSAARenderTargetView.as<ID3D11RenderTargetView>().get();
+    }
 
     // Sokol app is now valid
     _sapp.valid = true;
@@ -6498,6 +6515,13 @@ void DeviceResources::Trim() {
 
 // Present the contents of the swap chain to the screen.
 void DeviceResources::Present() {
+
+    // MSAA resolve if needed
+    if (_sapp.sample_count > 1) {
+        m_d3dContext->ResolveSubresource(m_d3dRenderTarget.get(), 0, m_d3dMSAARenderTarget.get(), 0, DXGI_FORMAT_B8G8R8A8_UNORM);
+        m_d3dContext->DiscardView1(m_d3dMSAARenderTargetView.get(), nullptr, 0);
+    }
+
     // The first argument instructs DXGI to block until VSync, putting the application
     // to sleep until the next VSync. This ensures we don't waste any cycles rendering
     // frames that will never be displayed to the screen.
