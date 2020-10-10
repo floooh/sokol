@@ -1289,6 +1289,8 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #endif
         #include <d3d11.h>
         #include <dxgi.h>
+        // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
+        #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -4740,7 +4742,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->Windowed = true;
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
-        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
     }
     else {
         sc_desc->BufferCount = 1;
