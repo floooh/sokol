@@ -1289,6 +1289,8 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #endif
         #include <d3d11.h>
         #include <dxgi.h>
+        // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
+        #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -1454,6 +1456,8 @@ typedef struct {
     ID3D11DeviceContext* device_context;
     ID3D11Texture2D* rt;
     ID3D11RenderTargetView* rtv;
+    ID3D11Texture2D* msaa_rt;
+    ID3D11RenderTargetView* msaa_rtv;
     ID3D11Texture2D* ds;
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
@@ -1490,6 +1494,7 @@ typedef struct {
     HWND hwnd;
     HDC dc;
     LONG mouse_locked_x, mouse_locked_y;
+    bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
     bool mouse_tracked;
@@ -4668,7 +4673,7 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
 #define _sapp_d3d11_Release(self) (self)->lpVtbl->Release(self)
 #endif
 
-#define _SAPP_SAFE_RELEASE(class, obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
+#define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
 
 static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
     #if defined(__cplusplus)
@@ -4702,6 +4707,14 @@ static inline HRESULT _sapp_d3d11_CreateDepthStencilView(ID3D11Device* self, ID3
     #endif
 }
 
+static inline void _sapp_d3d11_ResolveSubresource(ID3D11DeviceContext* self, ID3D11Resource* pDstResource, UINT DstSubresource, ID3D11Resource* pSrcResource, UINT SrcSubresource, DXGI_FORMAT Format) {
+    #if defined(__cplusplus)
+        self->ResolveSubresource(pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
+    #else
+        self->lpVtbl->ResolveSubresource(self, pDstResource, DstSubresource, pSrcResource, SrcSubresource, Format);
+    #endif
+}
+
 static inline HRESULT _sapp_dxgi_ResizeBuffers(IDXGISwapChain* self, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
     #if defined(__cplusplus)
         return self->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
@@ -4727,10 +4740,16 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
     sc_desc->OutputWindow = _sapp.win32.hwnd;
     sc_desc->Windowed = true;
-    sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-    sc_desc->BufferCount = 1;
-    sc_desc->SampleDesc.Count = _sapp.sample_count;
-    sc_desc->SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+    if (_sapp.win32.is_win10_or_greater) {
+        sc_desc->BufferCount = 2;
+        sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    }
+    else {
+        sc_desc->BufferCount = 1;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    }
+    sc_desc->SampleDesc.Count = 1;
+    sc_desc->SampleDesc.Quality = 0;
     sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     #if defined(SOKOL_DEBUG)
@@ -4755,13 +4774,22 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
-    _SAPP_SAFE_RELEASE(IDXGISwapChain, _sapp.d3d11.swap_chain);
-    _SAPP_SAFE_RELEASE(ID3D11DeviceContext, _sapp.d3d11.device_context);
-    _SAPP_SAFE_RELEASE(ID3D11Device, _sapp.d3d11.device);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.swap_chain);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.device_context);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.device);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
+    SOKOL_ASSERT(0 == _sapp.d3d11.rt);
+    SOKOL_ASSERT(0 == _sapp.d3d11.rtv);
+    SOKOL_ASSERT(0 == _sapp.d3d11.msaa_rt);
+    SOKOL_ASSERT(0 == _sapp.d3d11.msaa_rtv);
+    SOKOL_ASSERT(0 == _sapp.d3d11.ds);
+    SOKOL_ASSERT(0 == _sapp.d3d11.dsv);
+
     HRESULT hr;
+
+    /* view for the swapchain-created framebuffer */
     #ifdef __cplusplus
     hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
     #else
@@ -4770,40 +4798,64 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
     hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
-    D3D11_TEXTURE2D_DESC ds_desc;
-    memset(&ds_desc, 0, sizeof(ds_desc));
-    ds_desc.Width = _sapp.framebuffer_width;
-    ds_desc.Height = _sapp.framebuffer_height;
-    ds_desc.MipLevels = 1;
-    ds_desc.ArraySize = 1;
-    ds_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    ds_desc.SampleDesc = _sapp.d3d11.swap_chain_desc.SampleDesc;
-    ds_desc.Usage = D3D11_USAGE_DEFAULT;
-    ds_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &ds_desc, NULL, &_sapp.d3d11.ds);
+
+    /* common desc for MSAA and depth-stencil texture */
+    D3D11_TEXTURE2D_DESC tex_desc;
+    memset(&tex_desc, 0, sizeof(tex_desc));
+    tex_desc.Width = _sapp.framebuffer_width;
+    tex_desc.Height = _sapp.framebuffer_height;
+    tex_desc.MipLevels = 1;
+    tex_desc.ArraySize = 1;
+    tex_desc.Usage = D3D11_USAGE_DEFAULT;
+    tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    tex_desc.SampleDesc.Count = _sapp.sample_count;
+    tex_desc.SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+
+    /* create MSAA texture and view if antialiasing requested */
+    if (_sapp.sample_count > 1) {
+        tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.msaa_rt);
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rt);
+        hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.msaa_rt, NULL, &_sapp.d3d11.msaa_rtv);
+        SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.msaa_rtv);
+    }
+
+    /* texture and view for the depth-stencil-surface */
+    tex_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &_sapp.d3d11.ds);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.ds);
-    D3D11_DEPTH_STENCIL_VIEW_DESC dsv_desc;
-    memset(&dsv_desc, 0, sizeof(dsv_desc));
-    dsv_desc.Format = ds_desc.Format;
-    dsv_desc.ViewDimension = _sapp.sample_count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
-    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, &dsv_desc, &_sapp.d3d11.dsv);
+    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.ds, NULL, &_sapp.d3d11.dsv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.dsv);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
-    _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp.d3d11.rt);
-    _SAPP_SAFE_RELEASE(ID3D11RenderTargetView, _sapp.d3d11.rtv);
-    _SAPP_SAFE_RELEASE(ID3D11Texture2D, _sapp.d3d11.ds);
-    _SAPP_SAFE_RELEASE(ID3D11DepthStencilView, _sapp.d3d11.dsv);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.rt);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.rtv);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.msaa_rt);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.msaa_rtv);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.ds);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.dsv);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
-        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, 1, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
         _sapp_d3d11_create_default_render_target();
     }
 }
+
+_SOKOL_PRIVATE void _sapp_d3d11_present(void) {
+    /* do MSAA resolve if needed */
+    if (_sapp.sample_count > 1) {
+        SOKOL_ASSERT(_sapp.d3d11.rt);
+        SOKOL_ASSERT(_sapp.d3d11.msaa_rt);
+        _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)_sapp.d3d11.rt, 0, (ID3D11Resource*)_sapp.d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
+    }
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+}
+
 #endif /* SOKOL_D3D11 */
 
 #if defined(SOKOL_GLCORE33)
@@ -5446,13 +5498,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_TIMER:
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
-                    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+                    _sapp_d3d11_present();
                 #endif
                 #if defined(SOKOL_GLCORE33)
                     _sapp_wgl_swap_buffers();
                 #endif
                 /* NOTE: resizing the swap-chain during resize leads to a substantial
-                   memory spike (hundreds of megabytes for a few seconds). 
+                   memory spike (hundreds of megabytes for a few seconds).
 
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
@@ -5653,8 +5705,24 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
+/* don't laugh, but this seems to be the easiest and most robust
+   way to check if we're running on Win10
+
+   From: https://github.com/videolan/vlc/blob/232fb13b0d6110c4d1b683cde24cf9a7f2c5c2ea/modules/video_output/win32/d3d11_swapchain.c#L263
+*/
+_SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
+    HMODULE h = GetModuleHandleA("kernel32.dll");
+    if (NULL != h) {
+        return (NULL != GetProcAddress(h, "GetSystemCpuSetInformation"));
+    }
+    else {
+        return false;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
@@ -5688,7 +5756,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         _sapp_frame();
         #if defined(SOKOL_D3D11)
-            _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+            _sapp_d3d11_present();
             if (IsIconic(_sapp.win32.hwnd)) {
                 Sleep(16 * _sapp.swap_interval);
             }
@@ -5955,16 +6023,6 @@ public:
     void RegisterDeviceNotify(IDeviceNotify* deviceNotify);
     void Trim();
     void Present();
-    winrt::Windows::Foundation::Size GetOutputSize() const { return m_outputSize; }
-    winrt::Windows::Foundation::Size GetLogicalSize() const { return m_logicalSize; }
-    ID3D11Device3* GetD3DDevice() const { return m_d3dDevice.get(); }
-    ID3D11DeviceContext3* GetD3DDeviceContext() const { return m_d3dContext.get(); }
-    IDXGISwapChain3* GetSwapChain() const { return m_swapChain.get(); }
-    D3D_FEATURE_LEVEL GetDeviceFeatureLevel() const { return m_d3dFeatureLevel; }
-    ID3D11RenderTargetView1* GetBackBufferRenderTargetView() const { return m_d3dRenderTargetView.get(); }
-    ID3D11DepthStencilView* GetDepthStencilView() const { return m_d3dDepthStencilView.get(); }
-    D3D11_VIEWPORT GetScreenViewport() const { return m_screenViewport; }
-    DirectX::XMFLOAT4X4 GetOrientationTransform3D() const { return m_orientationTransform3D; }
 
 private:
 
@@ -6008,6 +6066,8 @@ private:
     // Direct3D rendering objects. Required for 3D.
     winrt::com_ptr<ID3D11Texture2D1> m_d3dRenderTarget;
     winrt::com_ptr<ID3D11RenderTargetView1> m_d3dRenderTargetView;
+    winrt::com_ptr<ID3D11Texture2D1> m_d3dMSAARenderTarget;
+    winrt::com_ptr<ID3D11RenderTargetView1> m_d3dMSAARenderTargetView;
     winrt::com_ptr<ID3D11Texture2D1> m_d3dDepthStencil;
     winrt::com_ptr<ID3D11DepthStencilView> m_d3dDepthStencilView;
     D3D11_VIEWPORT m_screenViewport = { };
@@ -6165,17 +6225,22 @@ void DeviceResources::CreateDeviceResources() {
 }
 
 void DeviceResources::CreateWindowSizeDependentResources() {
-    // Cleanup Sokol Context
+    // Cleanup Sokol Context (these are non-owning raw pointers)
     _sapp.d3d11.rt = nullptr;
     _sapp.d3d11.rtv = nullptr;
+    _sapp.d3d11.msaa_rt = nullptr;
+    _sapp.d3d11.msaa_rtv = nullptr;
     _sapp.d3d11.ds = nullptr;
     _sapp.d3d11.dsv = nullptr;
 
     // Clear the previous window size specific context.
     ID3D11RenderTargetView* nullViews[] = { nullptr };
     m_d3dContext->OMSetRenderTargets(ARRAYSIZE(nullViews), nullViews, nullptr);
+    // these are smart pointers, setting to nullptr will delete the objects
     m_d3dRenderTarget = nullptr;
     m_d3dRenderTargetView = nullptr;
+    m_d3dMSAARenderTarget = nullptr;
+    m_d3dMSAARenderTargetView = nullptr;
     m_d3dDepthStencilView = nullptr;
     m_d3dDepthStencil = nullptr;
     m_d3dContext->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
@@ -6278,6 +6343,24 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     winrt::check_hresult(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&m_d3dRenderTarget)));
     winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dRenderTarget.get(), nullptr, m_d3dRenderTargetView.put()));
 
+    // Create MSAA texture and view if needed
+    if (_sapp.sample_count > 1) {
+        CD3D11_TEXTURE2D_DESC1 msaaTexDesc(
+            DXGI_FORMAT_B8G8R8A8_UNORM,
+            lround(m_d3dRenderTargetSize.Width),
+            lround(m_d3dRenderTargetSize.Height),
+            1,  // arraySize
+            1,  // mipLevels
+            D3D11_BIND_RENDER_TARGET,
+            D3D11_USAGE_DEFAULT,
+            0,  // cpuAccessFlags
+            _sapp.sample_count,
+            _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
+        );
+        winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&msaaTexDesc, nullptr, m_d3dMSAARenderTarget.put()));
+        winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dMSAARenderTarget.get(), nullptr, m_d3dMSAARenderTargetView.put()));
+    }
+
     // Create a depth stencil view for use with 3D rendering if needed.
     CD3D11_TEXTURE2D_DESC1 depthStencilDesc(
         DXGI_FORMAT_D24_UNORM_S8_UINT,
@@ -6285,18 +6368,16 @@ void DeviceResources::CreateWindowSizeDependentResources() {
         lround(m_d3dRenderTargetSize.Height),
         1, // This depth stencil view has only one texture.
         1, // Use a single mipmap level.
-        D3D11_BIND_DEPTH_STENCIL
+        D3D11_BIND_DEPTH_STENCIL,
+        D3D11_USAGE_DEFAULT,
+        0,  // cpuAccessFlag
+        _sapp.sample_count,
+        _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
     );
     winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&depthStencilDesc, nullptr, m_d3dDepthStencil.put()));
 
     CD3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc(D3D11_DSV_DIMENSION_TEXTURE2D);
-    winrt::check_hresult(
-        m_d3dDevice->CreateDepthStencilView(
-            m_d3dDepthStencil.get(),
-            &depthStencilViewDesc,
-            m_d3dDepthStencilView.put()
-        )
-    );
+    winrt::check_hresult(m_d3dDevice->CreateDepthStencilView(m_d3dDepthStencil.get(), nullptr, m_d3dDepthStencilView.put()));
 
     // Set sokol window and framebuffer sizes
     _sapp.window_width = (int) m_logicalSize.Width;
@@ -6309,6 +6390,10 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     _sapp.d3d11.rtv = m_d3dRenderTargetView.as<ID3D11RenderTargetView>().get();
     _sapp.d3d11.ds = m_d3dDepthStencil.as<ID3D11Texture2D>().get();
     _sapp.d3d11.dsv = m_d3dDepthStencilView.get();
+    if (_sapp.sample_count > 1) {
+        _sapp.d3d11.msaa_rt = m_d3dMSAARenderTarget.as<ID3D11Texture2D>().get();
+        _sapp.d3d11.msaa_rtv = m_d3dMSAARenderTargetView.as<ID3D11RenderTargetView>().get();
+    }
 
     // Sokol app is now valid
     _sapp.valid = true;
@@ -6432,6 +6517,13 @@ void DeviceResources::Trim() {
 
 // Present the contents of the swap chain to the screen.
 void DeviceResources::Present() {
+
+    // MSAA resolve if needed
+    if (_sapp.sample_count > 1) {
+        m_d3dContext->ResolveSubresource(m_d3dRenderTarget.get(), 0, m_d3dMSAARenderTarget.get(), 0, DXGI_FORMAT_B8G8R8A8_UNORM);
+        m_d3dContext->DiscardView1(m_d3dMSAARenderTargetView.get(), nullptr, 0);
+    }
+
     // The first argument instructs DXGI to block until VSync, putting the application
     // to sleep until the next VSync. This ensures we don't waste any cycles rendering
     // frames that will never be displayed to the screen.
@@ -9612,7 +9704,12 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_device_context(void) {
 SOKOL_API_IMPL const void* sapp_d3d11_get_render_target_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_D3D11)
-        return _sapp.d3d11.rtv;
+        if (_sapp.d3d11.msaa_rtv) {
+            return _sapp.d3d11.msaa_rtv;
+        }
+        else {
+            return _sapp.d3d11.rtv;
+        }
     #else
         return 0;
     #endif
