@@ -1056,47 +1056,47 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    int dir; unsigned int val;
-    snd_pcm_uframes_t buf_frames;
+    int dir; unsigned int rate; 
     int rc = snd_pcm_open(&_saudio.backend.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
         SOKOL_LOG("sokol_audio.h: snd_pcm_open() failed");
         return false;
     }
+
+    /* configuration works by restricting the 'configuration space' step 
+       by step, we require all parameters except the sample rate to 
+       match perfectly
+    */
     snd_pcm_hw_params_t* params = 0;
     snd_pcm_hw_params_alloca(&params);
     snd_pcm_hw_params_any(_saudio.backend.device, params);
     snd_pcm_hw_params_set_access(_saudio.backend.device, params, SND_PCM_ACCESS_RW_INTERLEAVED);
-    snd_pcm_hw_params_set_channels(_saudio.backend.device, params, _saudio.num_channels);
-    if (0 > snd_pcm_hw_params_test_format(_saudio.backend.device, params, SND_PCM_FORMAT_FLOAT_LE)) {
-        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_test_format() failed");
+    if (0 > snd_pcm_hw_params_set_format(_saudio.backend.device, params, SND_PCM_FORMAT_FLOAT_LE)) {
+        SOKOL_LOG("sokol_audio.h: float samples not supported");
         goto error;
     }
-    else {
-        snd_pcm_hw_params_set_format(_saudio.backend.device, params, SND_PCM_FORMAT_FLOAT_LE);
+    if (0 > snd_pcm_hw_params_set_buffer_size(_saudio.backend.device, params, _saudio.buffer_frames)) {
+        SOKOL_LOG("sokol_audio.h: requested buffer size not supported");
+        goto error;
     }
-    val = _saudio.sample_rate;
+    if (0 > snd_pcm_hw_params_set_channels(_saudio.backend.device, params, _saudio.num_channels)) {
+        SOKOL_LOG("sokol_audio.h: requested channel count not supported");
+        goto error;
+    }
+    /* let ALSA pick a nearby sampling rate */
+    rate = _saudio.sample_rate;
     dir = 0;
-    if (0 > snd_pcm_hw_params_set_rate_near(_saudio.backend.device, params, &val, &dir)) {
+    if (0 > snd_pcm_hw_params_set_rate_near(_saudio.backend.device, params, &rate, &dir)) {
         SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_set_rate_near() failed");
         goto error;
     }
-    buf_frames = _saudio.buffer_frames;
-    if (0 > snd_pcm_hw_params_set_buffer_size_near(_saudio.backend.device, params, &buf_frames)) {
-        SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params_set_buffer_size_near() failed");
-        goto error;
-    }
-    _saudio.buffer_frames = buf_frames;
     if (0 > snd_pcm_hw_params(_saudio.backend.device, params)) {
         SOKOL_LOG("sokol_audio.h: snd_pcm_hw_params() failed");
         goto error;
     }
 
     /* read back actual sample rate and channels */
-    snd_pcm_hw_params_get_rate(params, &val, &dir);
-    _saudio.sample_rate = val;
-    snd_pcm_hw_params_get_channels(params, &val);
-    SOKOL_ASSERT((int)val == _saudio.num_channels);
+    _saudio.sample_rate = rate;
     _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
 
     /* allocate the streaming buffer */
