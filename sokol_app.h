@@ -1272,8 +1272,9 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma comment (linker, "/subsystem:windows")
     #endif
 
+    #pragma comment (lib, "kernel32.lib")
     #pragma comment (lib, "user32.lib")
-    #pragma comment (lib, "Shell32.lib")
+    #pragma comment (lib, "shell32.lib")    // CommandLineToArgvW
     #if defined(SOKOL_D3D11)
         #pragma comment (lib, "dxgi.lib")
         #pragma comment (lib, "d3d11.lib")

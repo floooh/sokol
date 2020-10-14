@@ -2538,12 +2538,13 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #include <d3dcompiler.h>
     #ifdef _MSC_VER
     #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-    #pragma comment (lib, "WindowsApp.lib")
+        #pragma comment (lib, "WindowsApp.lib")
     #else
-    #pragma comment (lib, "user32.lib")
-    #pragma comment (lib, "dxgi.lib")
-    #pragma comment (lib, "d3d11.lib")
-    #pragma comment (lib, "dxguid.lib")
+        #pragma comment (lib, "kernel32.lib")
+        #pragma comment (lib, "user32.lib")
+        #pragma comment (lib, "dxgi.lib")
+        #pragma comment (lib, "d3d11.lib")
+        #pragma comment (lib, "dxguid.lib")
     #endif
     #endif
 #elif defined(SOKOL_METAL)
