@@ -1134,7 +1134,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #error("sokol_app.h: unknown 3D API selected for UWP, must be SOKOL_D3D11")
         #endif
         #if !defined(__cplusplus)
-        #error("UWP bindings require C++/17")
+        #error("sokol_app.h: UWP bindings require C++/17")
         #endif
     #else
         #define _SAPP_WIN32 (1)
