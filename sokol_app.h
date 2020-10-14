@@ -5712,7 +5712,7 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
    From: https://github.com/videolan/vlc/blob/232fb13b0d6110c4d1b683cde24cf9a7f2c5c2ea/modules/video_output/win32/d3d11_swapchain.c#L263
 */
 _SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
-    HMODULE h = GetModuleHandleA("kernel32.dll");
+    HMODULE h = GetModuleHandleW(L"kernel32.dll");
     if (NULL != h) {
         return (NULL != GetProcAddress(h, "GetSystemCpuSetInformation"));
     }
