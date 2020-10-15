@@ -2338,9 +2338,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     }
     _sapp.max_dropped_files = _sapp.desc.max_dropped_files;
     _sapp.max_dropped_file_path_length = _sapp.desc.max_dropped_file_path_length;
-    if (_sapp.max_dropped_files > 0 && _sapp.max_dropped_file_path_length > 0) {
-        _sapp.dropped_files = (char*) SOKOL_CALLOC(1, _sapp.max_dropped_files * _sapp.max_dropped_file_path_length);
-    }
+    _sapp.dropped_files = (char*) SOKOL_CALLOC(1, _sapp.max_dropped_files * _sapp.max_dropped_file_path_length);
     _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
@@ -2353,10 +2351,8 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
         SOKOL_ASSERT(_sapp.clipboard.buffer);
         SOKOL_FREE((void*)_sapp.clipboard.buffer);
     }
-    if (_sapp.max_dropped_files > 0 && _sapp.max_dropped_file_path_length > 0) {
-        SOKOL_ASSERT(_sapp.dropped_files);
-        SOKOL_FREE((void*)_sapp.dropped_files);
-    }
+    SOKOL_ASSERT(_sapp.dropped_files);
+    SOKOL_FREE((void*)_sapp.dropped_files);
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
 
@@ -5586,31 +5582,26 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 */
                 break;
             case WM_DROPFILES:
-                HDROP drop = (HDROP) wParam;
-                int i;
-
-                const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
-                memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
-                _sapp.num_dropped_files = count > _sapp.max_dropped_files ? _sapp.max_dropped_files : count;
-
-                for (i = 0;  i < _sapp.num_dropped_files;  i++) {
-                    const UINT length = DragQueryFileW(drop, i, NULL, 0) + 1;
-                    WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length, sizeof(WCHAR));
-
-                    DragQueryFileW(drop, i, buffer, length);
-
-                    const int dst_needed = WideCharToMultiByte(CP_UTF8, 0, buffer, -1, 0, 0, NULL, NULL);
-                    int len = dst_needed > _sapp.max_dropped_file_path_length ? _sapp.max_dropped_file_path_length : dst_needed;
-                    _sapp_win32_wide_to_utf8(buffer, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], len);
-                    SOKOL_FREE(buffer);
+                {
+                    HDROP drop = (HDROP) wParam;
+                    int i;
+                    const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+                    memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
+                    _sapp.num_dropped_files = count > _sapp.max_dropped_files ? _sapp.max_dropped_files : count;
+                    for (i = 0;  i < _sapp.num_dropped_files;  i++) {
+                        const UINT length = DragQueryFileW(drop, i, NULL, 0) + 1;
+                        WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length, sizeof(WCHAR));
+                        DragQueryFileW(drop, i, buffer, length);
+                        // FIXME FIXME FIXME: test if properly zero-terminated if file path is longer than max_dropped_file_path_length
+                        _sapp_win32_wide_to_utf8(buffer, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], _sapp.max_dropped_file_path_length);
+                        SOKOL_FREE(buffer);
+                    }
+                    if (_sapp_events_enabled()) {
+                        _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+                        _sapp.desc.event_cb(&_sapp.event);
+                    }
+                    DragFinish(drop);
                 }
-
-                if (_sapp_events_enabled()) {
-                    _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-                    _sapp.desc.event_cb(&_sapp.event);
-                }
-
-                DragFinish(drop);
                 break;
             default:
                 break;
