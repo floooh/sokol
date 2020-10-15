@@ -5174,7 +5174,14 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
     memset(dst, 0, dst_num_bytes);
-    return 0 != WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
+    const int bytes_needed = WideCharToMultiByte(CP_UTF8, 0, src, -1, NULL, 0, NULL, NULL);
+    if (bytes_needed <= dst_num_bytes) {
+        WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
+        return true;
+    }
+    else {
+        return false;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
@@ -5583,6 +5590,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_DROPFILES:
                 {
+                    bool drop_failed = false;
                     HDROP drop = (HDROP) wParam;
                     int i;
                     const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
@@ -5592,13 +5600,21 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                         const UINT length = DragQueryFileW(drop, i, NULL, 0) + 1;
                         WCHAR* buffer = (WCHAR*)SOKOL_CALLOC(length, sizeof(WCHAR));
                         DragQueryFileW(drop, i, buffer, length);
-                        // FIXME FIXME FIXME: test if properly zero-terminated if file path is longer than max_dropped_file_path_length
-                        _sapp_win32_wide_to_utf8(buffer, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], _sapp.max_dropped_file_path_length);
+                        if (!_sapp_win32_wide_to_utf8(buffer, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], _sapp.max_dropped_file_path_length)) {
+                            SOKOL_LOG("sokol_app.h: dropped file path too long\n");
+                            drop_failed = true;
+                        }
                         SOKOL_FREE(buffer);
                     }
-                    if (_sapp_events_enabled()) {
-                        _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
-                        _sapp.desc.event_cb(&_sapp.event);
+                    if (!drop_failed) {
+                        if (_sapp_events_enabled() && !drop_failed) {
+                            _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+                            _sapp.desc.event_cb(&_sapp.event);
+                        }
+                    }
+                    else {
+                        memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
+                        _sapp.num_dropped_files = 0;
                     }
                     DragFinish(drop);
                 }
@@ -5785,7 +5801,9 @@ _SOKOL_PRIVATE const char* _sapp_win32_get_clipboard_string(void) {
         CloseClipboard();
         return _sapp.clipboard.buffer;
     }
-    _sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    if (!_sapp_win32_wide_to_utf8(wchar_buf, _sapp.clipboard.buffer, _sapp.clipboard.buf_size)) {
+        SOKOL_LOG("sokol_app.h: clipboard string didn't fit into clipboard buffer\n");
+    }
     GlobalUnlock(object);
     CloseClipboard();
     return _sapp.clipboard.buffer;
