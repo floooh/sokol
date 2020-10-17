@@ -2396,6 +2396,13 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_clear_drop_buffer(void) {
+    if (_sapp.drop.enabled) {
+        SOKOL_ASSERT(_sapp.drop.buffer);
+        memset(_sapp.drop.buffer, 0, _sapp.drop.buf_size);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_frame(void) {
     if (_sapp.first_frame) {
         _sapp.first_frame = false;
@@ -2932,22 +2939,18 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
-        memset(_sapp.dropped_files, 0, sizeof(_sapp.max_dropped_files * _sapp.max_dropped_file_path_length));
-        _sapp.num_dropped_files = pboard.pasteboardItems.count > _sapp.max_dropped_files ? _sapp.max_dropped_files : pboard.pasteboardItems.count;
-
-        for (int i = 0; i < _sapp.num_dropped_files; i++) {
+        _sapp_clear_drop_buffer();
+        _sapp.drop.num_files = ((int)pboard.pasteboardItems.count > _sapp.drop.max_files) ? _sapp.drop.max_files : pboard.pasteboardItems.count;
+        for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[i] stringForType:NSPasteboardTypeFileURL]];
-            _sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.dropped_files[i * _sapp.max_dropped_file_path_length], _sapp.max_dropped_file_path_length);
+            _sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length);
         }
-
         if (_sapp_events_enabled()) {
-            _sapp_init_event(SAPP_EVENTTYPE_FILE_DROPPED);
+            _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
             _sapp.desc.event_cb(&_sapp.event);
         }
-
         return YES;
     }
-
     return NO;
 }
 @end
@@ -5409,19 +5412,12 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_clear_drop_buffer(void) {
-    if (_sapp.drop.enabled) {
-        SOKOL_ASSERT(_sapp.drop.buffer);
-        memset(_sapp.drop.buffer, 0, _sapp.drop.buf_size);
-    }
-}
-
 _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!_sapp.drop.enabled) {
         return;
     }
     SOKOL_ASSERT(_sapp.drop.buffer);
-    _sapp_win32_clear_drop_buffer();
+    _sapp_clear_drop_buffer();
     bool drop_failed = false;
     const int count = (int) DragQueryFileW(hdrop, 0xffffffff, NULL, 0);
     _sapp.drop.num_files = (count > _sapp.drop.max_files) ? _sapp.drop.max_files : count;
@@ -5443,7 +5439,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
         }
     }
     else {
-        _sapp_win32_clear_drop_buffer();
+        _sapp_clear_drop_buffer();
         _sapp.drop.num_files = 0;
     }
 }
@@ -9760,6 +9756,7 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     if ((index < 0) || (index >= _sapp.drop.max_files)) {
         return "";
     }
+    SOKOL_ASSERT(_sapp.drop.buffer);
     return (const char*) &_sapp.drop.buffer[index * _sapp.drop.max_path_length];
 }
 
