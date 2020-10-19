@@ -1359,6 +1359,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/XKBlib.h>
     #include <X11/keysym.h>
     #include <X11/Xresource.h>
+    #include <X11/Xatom.h>
     #include <X11/extensions/XInput2.h>
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/Xmd.h> /* CARD32 */
@@ -1647,6 +1648,8 @@ typedef struct {
 /*== LINUX DECLARATIONS ======================================================*/
 #if defined(_SAPP_LINUX)
 
+#define _SAPP_X11_XDND_VERSION (5)
+
 #define GLX_VENDOR 1
 #define GLX_RGBA_BIT 0x00000001
 #define GLX_WINDOW_BIT 0x00000001
@@ -1701,6 +1704,22 @@ typedef struct {
 } _sapp_xi_t;
 
 typedef struct {
+    int version;
+    Window source;
+    Atom format;
+    Atom XdndAware;
+    Atom XdndEnter;
+    Atom XdndPosition;
+    Atom XdndStatus;
+    Atom XdndActionCopy;
+    Atom XdndDrop;
+    Atom XdndFinished;
+    Atom XdndSelection;
+    Atom XdndTypeList;
+    Atom text_uri_list;
+} _sapp_xdnd_t;
+
+typedef struct {
     uint8_t mouse_buttons;
     Display* display;
     int screen;
@@ -1720,6 +1739,7 @@ typedef struct {
     Atom NET_WM_STATE;
     Atom NET_WM_STATE_FULLSCREEN;
     _sapp_xi_t xi;
+    _sapp_xdnd_t xdnd;
 } _sapp_x11_t;
 
 typedef struct {
@@ -8489,6 +8509,18 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.NET_WM_ICON_NAME        = XInternAtom(_sapp.x11.display, "_NET_WM_ICON_NAME", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
+    if (_sapp.drop.enabled) {
+        _sapp.x11.xdnd.XdndAware        = XInternAtom(_sapp.x11.display, "XdndAware", False);
+        _sapp.x11.xdnd.XdndEnter        = XInternAtom(_sapp.x11.display, "XdndEnter", False);
+        _sapp.x11.xdnd.XdndPosition     = XInternAtom(_sapp.x11.display, "XdndPosition", False);
+        _sapp.x11.xdnd.XdndStatus       = XInternAtom(_sapp.x11.display, "XdndStatus", False);
+        _sapp.x11.xdnd.XdndActionCopy   = XInternAtom(_sapp.x11.display, "XdndActionCopy", False);
+        _sapp.x11.xdnd.XdndDrop         = XInternAtom(_sapp.x11.display, "XdndDrop", False);
+        _sapp.x11.xdnd.XdndFinished     = XInternAtom(_sapp.x11.display, "XdndFinished", False);
+        _sapp.x11.xdnd.XdndSelection    = XInternAtom(_sapp.x11.display, "XdndSelection", False);
+        _sapp.x11.xdnd.XdndTypeList     = XInternAtom(_sapp.x11.display, "XdndTypeList", False);
+        _sapp.x11.xdnd.text_uri_list    = XInternAtom(_sapp.x11.display, "text/uri-list", False);
+    }
 
     /* check Xi extension for raw mouse input */
     if (XQueryExtension(_sapp.x11.display, "XInputExtension", &_sapp.x11.xi.major_opcode, &_sapp.x11.xi.event_base, &_sapp.x11.xi.error_base)) {
@@ -8965,6 +8997,12 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     XSetWMNormalHints(_sapp.x11.display, _sapp.x11.window, hints);
     XFree(hints);
 
+    /* announce support for drag'n'drop */
+    if (_sapp.drop.enabled) {
+        const Atom version = _SAPP_X11_XDND_VERSION;
+        XChangeProperty(_sapp.x11.display, _sapp.x11.window, _sapp.x11.xdnd.XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*) &version, 1);
+    }
+
     _sapp_x11_update_window_title();
 }
 
@@ -9000,12 +9038,12 @@ _SOKOL_PRIVATE void _sapp_x11_hide_window(void) {
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE unsigned long _sapp_x11_get_window_property(Atom property, Atom type, unsigned char** value) {
+_SOKOL_PRIVATE unsigned long _sapp_x11_get_window_property(Window window, Atom property, Atom type, unsigned char** value) {
     Atom actualType;
     int actualFormat;
     unsigned long itemCount, bytesAfter;
     XGetWindowProperty(_sapp.x11.display,
-                       _sapp.x11.window,
+                       window,
                        property,
                        0,
                        LONG_MAX,
@@ -9026,7 +9064,7 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
         Window icon;
     } *state = NULL;
 
-    if (_sapp_x11_get_window_property(_sapp.x11.WM_STATE, _sapp.x11.WM_STATE, (unsigned char**)&state) >= 2) {
+    if (_sapp_x11_get_window_property(_sapp.x11.window, _sapp.x11.WM_STATE, _sapp.x11.WM_STATE, (unsigned char**)&state) >= 2) {
         result = state->state;
     }
     if (state) {
@@ -9293,6 +9331,7 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
 static bool _sapp_x11_keycodes[256];
 
 _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
+    Bool filtered = XFilterEvent(event, None);
     switch (event->type) {
         case GenericEvent:
             if (_sapp.mouse.locked && _sapp.x11.xi.available) {
@@ -9431,14 +9470,55 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             }
             break;
         case ClientMessage:
+            if (filtered) {
+                return;
+            }
             if (event->xclient.message_type == _sapp.x11.WM_PROTOCOLS) {
                 const Atom protocol = event->xclient.data.l[0];
                 if (protocol == _sapp.x11.WM_DELETE_WINDOW) {
                     _sapp.quit_requested = true;
                 }
             }
+            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndEnter) {
+                const bool is_list = 0 != (event->xclient.data.l[1] & 1);
+                _sapp.x11.xdnd.source  = event->xclient.data.l[0];
+                _sapp.x11.xdnd.version = event->xclient.data.l[1] >> 24;
+                _sapp.x11.xdnd.format  = None;
+                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+                    return;
+                }
+                uint32_t count = 0;
+                Atom* formats = 0;
+                if (is_list) {
+                    count = _sapp_x11_get_window_property(_sapp.x11.xdnd.source, _sapp.x11.xdnd.XdndTypeList, XA_ATOM, (unsigned char**)&formats);
+                }
+                else {
+                    count = 3;
+                    formats = (Atom*) event->xclient.data.l + 2;
+                }
+                for (uint32_t i = 0; i < count; i++) {
+                    if (formats[i] == _sapp.x11.xdnd.text_uri_list) {
+                        _sapp.x11.xdnd.format = _sapp.x11.xdnd.text_uri_list;
+                        break;
+                    }
+                }
+                if (is_list && formats) {
+                    XFree(formats);
+                }
+            }
+            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndDrop) {
+                SOKOL_LOG("FIXME: XdndDrop")
+            }
+            else if (event->xclient.message_type == _sapp.x11.xdnd.XdndPosition) {
+                SOKOL_LOG("FIXME: XdndPosition")
+            }
             break;
         case DestroyNotify:
+            break;
+        case SelectionNotify:
+            if (_sapp.drop.enabled && (event->xselection.property == _sapp.x11.xdnd.XdndSelection)) {
+                SOKOL_LOG("FIXME: SelectionNotify");
+            }
             break;
     }
 }
