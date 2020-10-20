@@ -9350,6 +9350,85 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
+_SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
+    SOKOL_ASSERT(src);
+    SOKOL_ASSERT(_sapp.drop.buffer);
+    
+    _sapp_clear_drop_buffer();
+    _sapp.drop.num_files = 0;
+
+    /*
+        src is (potentially percent-encoded) string made of one or multiple paths
+        separated by \r\n, each path starting with 'file://'
+    */
+    bool err = false;
+    int src_count = 0;
+    char src_chr = 0;
+    char* dst_ptr = _sapp.drop.buffer;
+    const char* dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1); // room for terminating 0
+    while (0 != (src_chr = *src++)) {
+        src_count++;
+        char dst_chr = 0;
+        /* check leading 'file://' */
+        if (src_count <= 7) {
+            if (((src_count == 1) && (src_chr != 'f')) ||
+                ((src_count == 2) && (src_chr != 'i')) ||
+                ((src_count == 3) && (src_chr != 'l')) ||
+                ((src_count == 4) && (src_chr != 'e')) ||
+                ((src_count == 5) && (src_chr != ':')) ||
+                ((src_count == 6) && (src_chr != '/')) ||
+                ((src_count == 7) && (src_chr != '/')))
+            {
+                SOKOL_LOG("sokol_app.h: dropped file URI doesn't start with file://");
+                err = true;
+                break;
+            }
+        }
+        else if (src_chr == '\r') {
+            // skip
+        }
+        else if (src_chr == '\n') {
+            src_chr = 0;
+            src_count = 0;
+            _sapp.drop.num_files++;
+            // too many files is not an error
+            if (_sapp.drop.num_files >= _sapp.drop.max_files) {
+                break;
+            }
+            dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
+            dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
+        }
+        else if ((src_chr == '%') && src[1] && src[2]) {
+            // a percent-encoded character (FIXME: are these always two hex digits?)
+            const char digits[3] = { src[1], src[2], 0 };
+            src += 2;
+            dst_chr = (char) strtol(digits, 0, 16);
+        }
+        else {
+            dst_chr = src_chr;
+        }
+        if (dst_chr) {
+            // dst_end_ptr already has adjustment for terminating zero
+            if (dst_ptr < dst_end_ptr) {
+                *dst_ptr++ = dst_chr;
+            }
+            else {
+                SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
+                err = true;
+                break;
+            }
+        }
+    }
+    if (err) {
+        _sapp_clear_drop_buffer();
+        _sapp.drop.num_files = 0;
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
 // XLib manual says keycodes are in the range [8, 255] inclusive.
 // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
 static bool _sapp_x11_keycodes[256];
@@ -9531,18 +9610,67 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
             }
             else if (event->xclient.message_type == _sapp.x11.xdnd.XdndDrop) {
-                SOKOL_LOG("FIXME: XdndDrop")
+                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+                    return;
+                }
+                Time time = CurrentTime;
+                if (_sapp.x11.xdnd.format) {
+                    if (_sapp.x11.xdnd.version >= 1) {
+                        time = event->xclient.data.l[2];
+                    }
+                    XConvertSelection(_sapp.x11.display, 
+                                      _sapp.x11.xdnd.XdndSelection,
+                                      _sapp.x11.xdnd.format,
+                                      _sapp.x11.xdnd.XdndSelection,
+                                      _sapp.x11.window,
+                                      time);
+                }
+                else if (_sapp.x11.xdnd.version >= 2) {
+                    XEvent reply;
+                    memset(&reply, 0, sizeof(reply));
+                    reply.type = ClientMessage;
+                    reply.xclient.window = _sapp.x11.window;
+                    reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
+                    reply.xclient.format = 32;
+                    reply.xclient.data.l[0] = _sapp.x11.window;
+                    reply.xclient.data.l[1] = 0;    // drag was rejected
+                    reply.xclient.data.l[2] = None;
+                    XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+                    XFlush(_sapp.x11.display);
+                }
             }
             else if (event->xclient.message_type == _sapp.x11.xdnd.XdndPosition) {
                 SOKOL_LOG("FIXME: XdndPosition")
             }
             break;
-        case DestroyNotify:
-            break;
         case SelectionNotify:
-            if (_sapp.drop.enabled && (event->xselection.property == _sapp.x11.xdnd.XdndSelection)) {
-                SOKOL_LOG("FIXME: SelectionNotify");
+            if (event->xselection.property == _sapp.x11.xdnd.XdndSelection) {
+                char* data = 0;
+                uint32_t result = _sapp_x11_get_window_property(event->xselection.requestor, 
+                                                                event->xselection.property,
+                                                                event->xselection.target,
+                                                                (unsigned char**) &data);
+                if (_sapp.drop.enabled && result) {
+                    if (_sapp_x11_parse_dropped_files_list(data)) {
+
+                    }
+                }
+                if (_sapp.x11.xdnd.version >= 2) {
+                    XEvent reply;
+                    memset(&reply, 0, sizeof(reply));
+                    reply.type = ClientMessage;
+                    reply.xclient.window = _sapp.x11.window;
+                    reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
+                    reply.xclient.format = 32;
+                    reply.xclient.data.l[0] = _sapp.x11.window;
+                    reply.xclient.data.l[1] = result;
+                    reply.xclient.data.l[2] = _sapp.x11.xdnd.XdndActionCopy;
+                    XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+                    XFlush(_sapp.x11.display);
+                }
             }
+            break;
+        case DestroyNotify:
             break;
     }
 }
