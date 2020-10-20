@@ -2312,7 +2312,16 @@ _SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
+/* Copy a string into a fixed size buffer with guaranteed zero-
+   termination.
+
+   Return false if the string didn't fit into the buffer and had to be clamped.
+
+   FIXME: Currently UTF-8 strings might become invalid if the string
+   is clamped, because the last zero-byte might be written into
+   the middle of a multi-byte sequence.
+*/
+_SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
     SOKOL_ASSERT(src && dst && (max_len > 0));
     char* const end = &(dst[max_len-1]);
     char c = 0;
@@ -2326,6 +2335,10 @@ _SOKOL_PRIVATE void _sapp_strcpy(const char* src, char* dst, int max_len) {
     /* truncated? */
     if (c != 0) {
         *end = 0;
+        return false;
+    }
+    else {
+        return true;
     }
 }
 
@@ -2961,13 +2974,24 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
         _sapp_clear_drop_buffer();
         _sapp.drop.num_files = ((int)pboard.pasteboardItems.count > _sapp.drop.max_files) ? _sapp.drop.max_files : pboard.pasteboardItems.count;
+        bool drop_failed = false;
         for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[i] stringForType:NSPasteboardTypeFileURL]];
-            _sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length);
+            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length)) {
+                SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
+                drop_failed = true;
+                break;
+            }
         }
-        if (_sapp_events_enabled()) {
-            _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
-            _sapp.desc.event_cb(&_sapp.event);
+        if (!drop_failed) {
+            if (_sapp_events_enabled()) {
+                _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                _sapp.desc.event_cb(&_sapp.event);
+            }
+        }
+        else {
+            _sapp_clear_drop_buffer();
+            _sapp.drop.num_files = 0;
         }
         return YES;
     }
