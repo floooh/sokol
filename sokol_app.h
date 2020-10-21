@@ -9398,9 +9398,9 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
             dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
         }
-        else if ((src_chr == '%') && src[1] && src[2]) {
-            // a percent-encoded character (FIXME: are these always two hex digits?)
-            const char digits[3] = { src[1], src[2], 0 };
+        else if ((src_chr == '%') && src[0] && src[1]) {
+            // a percent-encoded byte (most like UTF-8 multibyte sequence)
+            const char digits[3] = { src[0], src[1], 0 };
             src += 2;
             dst_chr = (char) strtol(digits, 0, 16);
         }
