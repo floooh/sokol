@@ -2986,7 +2986,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         if (!drop_failed) {
             if (_sapp_events_enabled()) {
                 _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
-                _sapp.desc.event_cb(&_sapp.event);
+                _sapp_call_event(&_sapp.event);
             }
         }
         else {
@@ -5479,7 +5479,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!drop_failed) {
         if (_sapp_events_enabled()) {
             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
-            _sapp.desc.event_cb(&_sapp.event);
+            _sapp_call_event(&_sapp.event);
         }
     }
     else {
@@ -9640,7 +9640,29 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
             }
             else if (event->xclient.message_type == _sapp.x11.xdnd.XdndPosition) {
-                SOKOL_LOG("FIXME: XdndPosition")
+                /* drag operation has moved over the window
+                   FIXME: we could track the mouse position here, but
+                   this isn't implemented on other platforms either so far
+                */
+                if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
+                    return;
+                }
+                XEvent reply;
+                memset(&reply, 0, sizeof(reply));
+                reply.type = ClientMessage;
+                reply.xclient.window = _sapp.x11.xdnd.source;
+                reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
+                reply.xclient.format = 32;
+                reply.xclient.data.l[0] = _sapp.x11.window;
+                if (_sapp.x11.xdnd.format) {
+                    /* reply that we are ready to copy the dragged data */
+                    reply.xclient.data.l[1] = 1;    // accept with no rectangle
+                    if (_sapp.x11.xdnd.version >= 2) {
+                        reply.xclient.data.l[4] = _sapp.x11.xdnd.XdndActionCopy;
+                    }
+                }
+                XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
+                XFlush(_sapp.x11.display);
             }
             break;
         case SelectionNotify:
@@ -9652,7 +9674,10 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                                                 (unsigned char**) &data);
                 if (_sapp.drop.enabled && result) {
                     if (_sapp_x11_parse_dropped_files_list(data)) {
-
+                        if (_sapp_events_enabled()) {
+                            _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                            _sapp_call_event(&_sapp.event);
+                        }
                     }
                 }
                 if (_sapp.x11.xdnd.version >= 2) {
