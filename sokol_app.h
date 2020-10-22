@@ -555,7 +555,7 @@
 
     The returned file paths are UTF-8 encoded text.
 
-    You can cann sapp_get_num_dropped_files() and sapp_get_dropped_file_path()
+    You can call sapp_get_num_dropped_files() and sapp_get_dropped_file_path()
     anywhere, also outside the event handler callback, but be aware that the
     file path strings will be overwritten with the next drop operation.
 
