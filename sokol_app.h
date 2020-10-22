@@ -508,7 +508,7 @@
     section:
 
     Like clipboard support, drag'n'drop support must be explicitly enabled
-    at startup in the sapp_desc struct. 
+    at startup in the sapp_desc struct.
 
         sapp_desc sokol_main() {
             return (sapp_desc) {
@@ -528,7 +528,7 @@
                 ...
             };
         }
-        
+
     When drag'n'drop is enabled, the event callback will be invoked with an
     event of type SAPP_EVENTTYPE_FILES_DROPPED whenever the user drops files on
     the application window.
@@ -575,7 +575,6 @@
           needs some sort of error feedback in the future)
         - no mouse positions are reported while the drag is in
           process, this may change in the future
-        - 
 
     HIGH-DPI RENDERING
     ==================
@@ -9430,7 +9429,7 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
 _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
     SOKOL_ASSERT(src);
     SOKOL_ASSERT(_sapp.drop.buffer);
-    
+
     _sapp_clear_drop_buffer();
     _sapp.drop.num_files = 0;
 
@@ -9695,7 +9694,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     if (_sapp.x11.xdnd.version >= 1) {
                         time = event->xclient.data.l[2];
                     }
-                    XConvertSelection(_sapp.x11.display, 
+                    XConvertSelection(_sapp.x11.display,
                                       _sapp.x11.xdnd.XdndSelection,
                                       _sapp.x11.xdnd.format,
                                       _sapp.x11.xdnd.XdndSelection,
@@ -9745,7 +9744,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case SelectionNotify:
             if (event->xselection.property == _sapp.x11.xdnd.XdndSelection) {
                 char* data = 0;
-                uint32_t result = _sapp_x11_get_window_property(event->xselection.requestor, 
+                uint32_t result = _sapp_x11_get_window_property(event->xselection.requestor,
                                                                 event->xselection.property,
                                                                 event->xselection.target,
                                                                 (unsigned char**) &data);
