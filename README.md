@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**10-Oct-2020** sokol_app.h win32/uwp: D3D11/DXGI swapchain code modernization)
+[See what's new](#updates) (**22-Oct-2020** sokol_app.h: initial drag'n'drop support for win32/macos/linux)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -431,6 +431,19 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **22-Oct-2020**: sokol_app.h now has file drag'n'drop support on Win32,
+  macOS and Linux. WASM/HTML5 support will be added soon-ish. This will
+  work a bit differently because of security-related restrictions in the
+  HTML5 drag'n'drop API, but more on that later. For documentation,
+  search for 'DRAG AND DROP SUPPORT' in [sokol_app.h](https://github.com/floooh/sokol/blob/master/sokol_app.h).
+
+  Check out [events-sapp.c](https://github.com/floooh/sokol-samples/blob/master/sapp/events-sapp.cc)
+  for a simple usage example (I will also add a more real-world example to my
+  chips emulators once the WASM/HTML5 implementation is ready).
+
+  Many thanks for @prime32 and @hb3p8 for the initial PRs and valuable feature
+  discussions!
 
 - **10-Oct-2020**: Improvements to the sokol_app.h Win32+D3D11 and UWP+D3D11 swapchain code:
   - In the Win32+D3D11 backend and when running on Win10,
