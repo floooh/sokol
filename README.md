@@ -12,21 +12,21 @@ cross-platform libraries for C and C++, written in C.
 
 Cross-platform libraries:
 
-- **sokol\_gfx.h**: 3D-API wrapper (GL + Metal + D3D11)
-- **sokol\_app.h**: app framework wrapper (entry + window + 3D-context + input)
-- **sokol\_time.h**: time measurement
-- **sokol\_audio.h**: minimal buffer-streaming audio playback
-- **sokol\_fetch.h**: asynchronous data streaming from HTTP and local filesystem
-- **sokol\_args.h**: unified cmdline/URL arg parser for web and native apps
+- [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
+- [**sokol\_app.h**](https://github.com/floooh/sokol/blob/master/sokol_app.h): app framework wrapper (entry + window + 3D-context + input)
+- [**sokol\_time.h**](https://github.com/floooh/sokol/blob/master/sokol_time.h): time measurement
+- [**sokol\_audio.h**](https://github.com/floooh/sokol/blob/master/sokol_audio.h): minimal buffer-streaming audio playback
+- [**sokol\_fetch.h**](https://github.com/floooh/sokol/blob/master/sokol_fetch.h): asynchronous data streaming from HTTP and local filesystem
+- [**sokol\_args.h**](https://github.com/floooh/sokol/blob/master/sokol_args.h): unified cmdline/URL arg parser for web and native apps
 
 Utility libraries:
 
-- **sokol\_imgui.h**: sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
-- **sokol\_gl.h**: OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
-- **sokol\_fontstash.h**: sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
-- **sokol\_gfx\_imgui.h**: debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
-- **sokol\_debugtext.h**: a simple text renderer using vintage home computer fonts
-- **sokol\_memtrack.h**: easily track memory allocations in sokol headers
+- [**sokol\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h): sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
+- [**sokol\_gl.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h): OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
+- [**sokol\_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h): sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
+- [**sokol\_gfx\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h): debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
+- [**sokol\_debugtext.h**](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h): a simple text renderer using vintage home computer fonts
+- [**sokol\_memtrack.h**](https://github.com/floooh/sokol/blob/master/util/sokol_memtrack.h): easily track memory allocations in sokol headers
 
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
