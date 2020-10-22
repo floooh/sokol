@@ -138,15 +138,14 @@
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
     clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
-    dropped files       | YES     | YES   | TODO  | ---   | ---     | TODO | TODO  | TODO
+    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | TODO
 
     TODO
     ====
     - Linux:
-        - dropped files
         - clipboard support
     - UWP:
-        - clipboard, mouselock, MSAA support
+        - clipboard, mouselock
     - sapp_consume_event() on non-web platforms?
 
     STEP BY STEP
@@ -499,6 +498,84 @@
         - on macOS: when the Cmd+V key is pressed down
         - on HTML5: when the browser sends a 'paste' event to the global 'window' object
         - on all other platforms: when the Ctrl+V key is pressed down
+
+    DRAG AND DROP SUPPORT
+    =====================
+    PLEASE NOTE: the drag'n'drop feature works differently on WASM/HTML5
+    and on the native desktop platforms (Win32, Linux and macOS) because
+    of security-related restrictions in the HTML5 drag'n'drop API. The
+    WASM/HTML5 specifics are described at the end of this documentation
+    section:
+
+    Like clipboard support, drag'n'drop support must be explicitly enabled
+    at startup in the sapp_desc struct. 
+
+        sapp_desc sokol_main() {
+            return (sapp_desc) {
+                .enable_dragndrop = true,   // default is false
+                ...
+            };
+        }
+
+    You can also adjust the maximum number of files that are accepted
+    in a drop operation, and the maximum path length in bytes if needed:
+
+        sapp_desc sokol_main() {
+            return (sapp_desc) {
+                .enable_dragndrop = true,               // default is false
+                .max_dropped_files = 8,                 // default is 1
+                .max_dropped_file_path_length = 8192,   // in bytes, default is 2048
+                ...
+            };
+        }
+        
+    When drag'n'drop is enabled, the event callback will be invoked with an
+    event of type SAPP_EVENTTYPE_FILES_DROPPED whenever the user drops files on
+    the application window.
+
+    After the SAPP_EVENTTYPE_FILES_DROPPED is received, you can query the
+    number of dropped files, and their absolute paths by calling separate
+    functions:
+
+        void on_event(const sapp_event* ev) {
+            if (ev->type == SAPP_EVENTTYPE_FILES_DROPPED) {
+
+                // the mouse position where the drop happened
+                float x = ev->mouse_x;
+                float y = ev->mouse_y;
+
+                // get the number of files and their paths like this:
+                const int num_dropped_files = sapp_get_num_dropped_files();
+                for (int i = 0; i < num_dropped_files; i++) {
+                    const char* path = sapp_get_dropped_file_path(i);
+                    ...
+                }
+            }
+        }
+
+    The returned file paths are UTF-8 encoded text.
+
+    You can cann sapp_get_num_dropped_files() and sapp_get_dropped_file_path()
+    anywhere, also outside the event handler callback, but be aware that the
+    file path strings will be overwritten with the next drop operation.
+
+    In any case, sapp_get_dropped_file_path() will never return a null pointer,
+    instead an empty string "" will be returned if the drag'n'drop feature
+    hasn't been enabled, the last drop-operation failed, or the file path index
+    is out of range.
+
+    Drag'n'drop caveats:
+
+        - if more files are dropped in a single drop-action
+          than sapp_desc.max_dropped_files, the additional
+          files will be silently ignored
+        - if any of the file paths is longer than
+          sapp_desc.max_dropped_file_path_length (in number of bytes, after UTF-8
+          encoding) the entire drop operation will be silently ignored (this
+          needs some sort of error feedback in the future)
+        - no mouse positions are reported while the drag is in
+          process, this may change in the future
+        - 
 
     HIGH-DPI RENDERING
     ==================
