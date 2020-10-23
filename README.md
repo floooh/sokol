@@ -442,7 +442,7 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
   for a simple usage example (I will also add a more real-world example to my
   chips emulators once the WASM/HTML5 implementation is ready).
 
-  Many thanks for @prime32 and @hb3p8 for the initial PRs and valuable feature
+  Many thanks for @prime31 and @hb3p8 for the initial PRs and valuable feature
   discussions!
 
 - **10-Oct-2020**: Improvements to the sokol_app.h Win32+D3D11 and UWP+D3D11 swapchain code:
