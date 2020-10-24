@@ -3681,10 +3681,10 @@ EM_JS(void, sapp_js_unfocus_textfield, (void), {
 });
 
 EM_JS(void, sapp_js_add_beforeunload_listener, (void), {
-    Module.sokol_beforeunload = function(_sapp_event) {
+    Module.sokol_beforeunload = function(event) {
         if (__sapp_html5_get_ask_leave_site() != 0) {
-            _sapp_event.preventDefault();
-            _sapp_event.returnValue = ' ';
+            event.preventDefault();
+            event.returnValue = ' ';
         }
     };
     window.addEventListener('beforeunload', Module.sokol_beforeunload);
@@ -3727,6 +3727,48 @@ EM_JS(void, sapp_js_write_clipboard, (const char* c_str), {
 _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
 }
+
+EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
+    console.log('=> sapp_js_add_dragndrop_listeners');
+    var canvas_name = UTF8ToString(canvas_name_cstr);
+    var canvas = document.getElementById(canvas_name);
+    Module.sokol_dragenter = function(event) {
+        console.log("sokol_app.h: dragenter");
+        event.stopPropagation();
+        event.preventDefault();
+    };
+    Module.sokol_dragleave = function(event) {
+        console.log("sokol_app.h: dragleave");
+        event.stopPropagation();
+        event.preventDefault();
+    };
+    Module.sokol_dragover = function(event) {
+        console.log("sokol_app.h: dragover");
+        event.stopPropagation();
+        event.preventDefault();
+    };
+    Module.sokol_drop = function(event) {
+        console.log("sokol_app.h: drop");
+        event.stopPropagation();
+        event.preventDefault();
+    };
+    canvas.addEventListener('dragenter', Module.sokol_dragenter, false);
+    canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
+    canvas.addEventListener('dragover',  Module.sokol_dragover, false);
+    canvas.addEventListener('drop',      Module.sokol_drop, false);
+    console.log('<= sapp_js_remove_dragndrop_listeners');
+});
+
+EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
+    console.log('=> sapp_js_remove_dragndrop_listeners');
+    var canvas_name = UTF8ToString(canvas_name_cstr);
+    var canvas = document.getElementById(canvas_name);
+    canvas.removeEventListener('dragenter', Module.sokol_dragenter);
+    canvas.removeEventListener('dragleave', Module.sokol_dragleave);
+    canvas.removeEventListener('dragover',  Module.sokol_dragover);
+    canvas.removeEventListener('drop',      Module.sokol_drop);
+    console.log('<= sapp_js_remove_dragndrop_listeners');
+});
 
 /* called from the emscripten event handler to update the keyboard visibility
     state, this must happen from an JS input event handler, otherwise
@@ -4481,6 +4523,9 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
     }
+    if (_sapp.drop.enabled) {
+        sapp_js_add_dragndrop_listeners(_sapp.html5_canvas_name);
+    }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
         emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
@@ -4506,6 +4551,9 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     sapp_js_remove_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_remove_clipboard_listener();
+    }
+    if (_sapp.drop.enabled) {
+        sapp_js_remove_dragndrop_listeners(_sapp.html5_canvas_name);
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, 0);
