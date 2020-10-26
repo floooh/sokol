@@ -3728,29 +3728,90 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
 }
 
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_begin_drop(int num) {
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (num < 0) {
+        num = 0;
+    }
+    if (num > _sapp.drop.max_files) {
+        num = _sapp.drop.max_files;
+    }
+    _sapp.drop.num_files = num;
+    _sapp_clear_drop_buffer();
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name, int size) {
+    /* NOTE: name is only the filename part, not a path */
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (0 == name) {
+        return;
+    }
+    if (size < 0) {
+        return;
+    }
+    SOKOL_ASSERT(_sapp.drop.num_files <= _sapp.drop.max_files);
+    if ((i < 0) || (i >= _sapp.drop.num_files)) {
+        return;
+    }
+    if (!_sapp_strcpy(name, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length)) {
+        SOKOL_LOG("sokol_app.h: dropped file path too long!\n");
+        _sapp.drop.num_files = 0;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (0 == _sapp.drop.num_files) {
+        /* there was an error copying the filenames */
+        _sapp_clear_drop_buffer();
+        return;
+
+    }
+    if (_sapp_events_enabled()) {
+        _sapp.mouse.x = (float)x * _sapp.dpi_scale;
+        _sapp.mouse.y = (float)y * _sapp.dpi_scale;
+        _sapp.mouse.dx = 0.0f;
+        _sapp.mouse.dy = 0.0f;
+        _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
 EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
     console.log('=> sapp_js_add_dragndrop_listeners');
+    Module.sokol_drop_files = [];
     var canvas_name = UTF8ToString(canvas_name_cstr);
     var canvas = document.getElementById(canvas_name);
     Module.sokol_dragenter = function(event) {
-        console.log("sokol_app.h: dragenter");
         event.stopPropagation();
         event.preventDefault();
     };
     Module.sokol_dragleave = function(event) {
-        console.log("sokol_app.h: dragleave");
         event.stopPropagation();
         event.preventDefault();
     };
     Module.sokol_dragover = function(event) {
-        console.log("sokol_app.h: dragover");
         event.stopPropagation();
         event.preventDefault();
     };
     Module.sokol_drop = function(event) {
-        console.log("sokol_app.h: drop");
         event.stopPropagation();
         event.preventDefault();
+        var files = event.dataTransfer.files;
+        Module.sokol_dropped_files = files;
+        __sapp_emsc_begin_drop(files.length);
+        var i;
+        for (i = 0; i < files.length; i++) {
+            ccall('_sapp_emsc_drop', 'void', ['number', 'string', 'number'], [i, files[i].name, files[i].size]);
+        }
+        // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
+        __sapp_emsc_end_drop(event.clientX, event.clientY);
     };
     canvas.addEventListener('dragenter', Module.sokol_dragenter, false);
     canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
