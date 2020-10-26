@@ -1123,6 +1123,8 @@ SOKOL_API_DECL bool sapp_gles2(void);
 
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
+/* HTML5: get byte size of a dropped file */
+SOKOL_API_DECL int sapp_html5_get_dropped_file_size(int index);
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
@@ -3742,15 +3744,12 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_begin_drop(int num) {
     _sapp_clear_drop_buffer();
 }
 
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name, int size) {
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
     /* NOTE: name is only the filename part, not a path */
     if (!_sapp.drop.enabled) {
         return;
     }
     if (0 == name) {
-        return;
-    }
-    if (size < 0) {
         return;
     }
     SOKOL_ASSERT(_sapp.drop.num_files <= _sapp.drop.max_files);
@@ -3808,7 +3807,7 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
         __sapp_emsc_begin_drop(files.length);
         var i;
         for (i = 0; i < files.length; i++) {
-            ccall('_sapp_emsc_drop', 'void', ['number', 'string', 'number'], [i, files[i].name, files[i].size]);
+            ccall('_sapp_emsc_drop', 'void', ['number', 'string'], [i, files[i].name]);
         }
         // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
         __sapp_emsc_end_drop(event.clientX, event.clientY);
@@ -3818,6 +3817,15 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
     canvas.addEventListener('dragover',  Module.sokol_dragover, false);
     canvas.addEventListener('drop',      Module.sokol_drop, false);
     console.log('<= sapp_js_remove_dragndrop_listeners');
+});
+
+EM_JS(int, sapp_js_dropped_file_size, (int index), {
+    if ((index < 0) || (index >= Module.sokol_dropped_files.length)) {
+        return 0;
+    }
+    else {
+        return Module.sokol_dropped_files[index].size;
+    }
 });
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
@@ -10200,6 +10208,17 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     }
     SOKOL_ASSERT(_sapp.drop.buffer);
     return (const char*) &_sapp.drop.buffer[index * _sapp.drop.max_path_length];
+}
+
+SOKOL_API_IMPL int sapp_html5_get_dropped_file_size(int index) {
+    #if defined(_SAPP_EMSCRIPTEN)
+    if (!_sapp.drop.enabled) {
+        return 0;
+    }
+    return sapp_js_dropped_file_size(index);
+    #else
+    return 0;
+    #endif
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
