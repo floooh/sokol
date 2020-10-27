@@ -434,11 +434,11 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
 
 # Updates
 
-- **27-Oct-2020**: I committed a bugfix for a lonstanding WebGK canvas id versus
+- **27-Oct-2020**: I committed a bugfix for a longstanding WebGL canvas id versus
   css-selector confusion in the emscripten/WASM backend code in sokol_app.h.
   I think the fix should not require any changes in your code (because if
   you'd be using a canvas name different from the default "canvas" it wouldn't
-  have worked anyway). See this bug for details: https://github.com/floooh/sokol/issues/407
+  have worked before anyway). See this bug for details: https://github.com/floooh/sokol/issues/407
 
 - **22-Oct-2020**: sokol_app.h now has file drag'n'drop support on Win32,
   macOS and Linux. WASM/HTML5 support will be added soon-ish. This will
