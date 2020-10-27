@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Oct-2020** sokol_app.h: initial drag'n'drop support for win32/macos/linux)
+[See what's new](#updates) (**27-Oct-2020** sokol_app.h emscripten: canvas id vs css selector bugfix)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -433,6 +433,12 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **27-Oct-2020**: I committed a bugfix for a lonstanding WebGK canvas id versus
+  css-selector confusion in the emscripten/WASM backend code in sokol_app.h.
+  I think the fix should not require any changes in your code (because if
+  you'd be using a canvas name different from the default "canvas" it wouldn't
+  have worked anyway). See this bug for details: https://github.com/floooh/sokol/issues/407
 
 - **22-Oct-2020**: sokol_app.h now has file drag'n'drop support on Win32,
   macOS and Linux. WASM/HTML5 support will be added soon-ish. This will
