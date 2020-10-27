@@ -1596,7 +1596,10 @@ typedef struct sg_image_content {
 
     .gl_textures[SG_NUM_INFLIGHT_FRAMES]
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
-    .d3d11_texture
+    .d3d11_resource
+
+    For D3D11 the d3d11_resource can be either a texture or a
+	shader resource view (2D texture only).
 
     The same rules apply as for injecting native buffers
     (see sg_buffer_desc documentation for more details).
@@ -1631,7 +1634,7 @@ typedef struct sg_image_desc {
     /* Metal specific */
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
-    const void* d3d11_texture;
+    const void* d3d11_resource;
     /* WebGPU specific */
     const void* wgpu_texture;
     uint32_t _end_canary;
@@ -7698,7 +7701,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     _SOKOL_UNUSED(hr);
 
     _sg_image_common_init(&img->cmn, desc);
-    const bool injected = (0 != desc->d3d11_texture);
+    const bool injected = (0 != desc->d3d11_resource);
     const bool msaa = (img->cmn.sample_count > 1);
 
     /* special case depth-stencil buffer? */
@@ -7770,9 +7773,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.SampleDesc.Count = 1;
             d3d11_tex_desc.SampleDesc.Quality = 0;
             d3d11_tex_desc.MiscFlags = (img->cmn.type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+            bool create_srv = true;
             if (injected) {
-                img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_texture;
-                _sg_d3d11_AddRef(img->d3d11.tex2d);
+                ID3D11Resource* res = (ID3D11Resource*) desc->d3d11_resource;
+                if (SUCCEEDED(res->QueryInterface(IID_ID3D11ShaderResourceView, (void**)&img->d3d11.srv))) {
+                    img->d3d11.srv->GetResource((ID3D11Resource**)&img->d3d11.tex2d);
+					create_srv = false;
+                }
+                else {
+                    img->d3d11.tex2d = (ID3D11Texture2D*) desc->d3d11_resource;
+                    _sg_d3d11_AddRef(img->d3d11.tex2d);
+				}
             }
             else {
                 hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
@@ -7780,28 +7791,30 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             }
 
             /* shader-resource-view */
-            D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
-            memset(&d3d11_srv_desc, 0, sizeof(d3d11_srv_desc));
-            d3d11_srv_desc.Format = d3d11_tex_desc.Format;
-            switch (img->cmn.type) {
-                case SG_IMAGETYPE_2D:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                    d3d11_srv_desc.Texture2D.MipLevels = img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_CUBE:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-                    d3d11_srv_desc.TextureCube.MipLevels = img->cmn.num_mipmaps;
-                    break;
-                case SG_IMAGETYPE_ARRAY:
-                    d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                    d3d11_srv_desc.Texture2DArray.MipLevels = img->cmn.num_mipmaps;
-                    d3d11_srv_desc.Texture2DArray.ArraySize = img->cmn.depth;
-                    break;
-                default:
-                    SOKOL_UNREACHABLE; break;
+            if (create_srv) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+                memset(&d3d11_srv_desc, 0, sizeof(d3d11_srv_desc));
+                d3d11_srv_desc.Format = d3d11_tex_desc.Format;
+                switch (img->cmn.type) {
+                    case SG_IMAGETYPE_2D:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                        d3d11_srv_desc.Texture2D.MipLevels = img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_CUBE:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+                        d3d11_srv_desc.TextureCube.MipLevels = img->cmn.num_mipmaps;
+                        break;
+                    case SG_IMAGETYPE_ARRAY:
+                        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                        d3d11_srv_desc.Texture2DArray.MipLevels = img->cmn.num_mipmaps;
+                        d3d11_srv_desc.Texture2DArray.ArraySize = img->cmn.depth;
+                        break;
+                    default:
+                        SOKOL_UNREACHABLE; break;
+                }
+                hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
+				SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
             }
-            hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
-            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
         }
         else {
             /* 3D texture */
@@ -7833,7 +7846,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 return SG_RESOURCESTATE_FAILED;
             }
             if (injected) {
-                img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_texture;
+                img->d3d11.tex3d = (ID3D11Texture3D*) desc->d3d11_resource;
                 _sg_d3d11_AddRef(img->d3d11.tex3d);
             }
             else {
@@ -13091,7 +13104,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         const sg_usage usage = desc->usage;
         const bool injected = (0 != desc->gl_textures[0]) ||
                               (0 != desc->mtl_textures[0]) ||
-                              (0 != desc->d3d11_texture) ||
+                              (0 != desc->d3d11_resource) ||
                               (0 != desc->wgpu_texture);
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
