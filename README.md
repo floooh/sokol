@@ -10,7 +10,7 @@ cross-platform libraries for C and C++, written in C.
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
-[LearnOpenGL, but for sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
+[LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
 Cross-platform libraries:
 
