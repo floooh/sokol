@@ -1047,6 +1047,7 @@ typedef struct sapp_desc {
     int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
+    int html5_max_dropped_file_size;    /* HTML5 only: refuse to load any dropped files bigger then this (default: 4*1024*1024 == 4 MB) */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
@@ -1054,6 +1055,26 @@ typedef struct sapp_desc {
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
+
+/* HTML5 specific: the content of a dropped file
+
+    NOTE that the data vanishes after the load callback function returns
+    (the data pointer will become dangling). If you need to hold on to
+    the data you need to copy it into your own memory buffer.
+
+    NOTE that 'size' and 'content' are only valid when 'succeeded' is true,
+    otherwise 'size' and 'content' are both 0.
+*/
+typedef struct sapp_html5_dropped_file_content {
+    bool succeeded;             /* true if the loading operation has succeeded */
+    int size;                   /* only if succeeded: loaded data-size in number of bytes */
+    const void* content;        /* only if succeeded: pointer to loaded data */
+    void* user_data;            /* user_data pointer passed to sapp_html5_load_dropped_file() */
+    char filename[256];         /* the (path-less) filename (UTF-8 encoded) */
+} sapp_html5_dropped_file_content;
+
+/* HTML5 specific: the dropped-file loading result callback */
+typedef void (*sapp_html5_load_dropped_file_callback) (const sapp_html5_dropped_file_content* result);
 
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
@@ -1125,6 +1146,8 @@ SOKOL_API_DECL bool sapp_gles2(void);
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 /* HTML5: get byte size of a dropped file */
 SOKOL_API_DECL int sapp_html5_get_dropped_file_size(int index);
+/* HTML5: asynchronously load the content of a dropped file */
+SOKOL_API_DECL void sapp_html5_load_dropped_file(int index, sapp_html5_load_dropped_file_callback cb, void* user_data);
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
@@ -1894,6 +1917,7 @@ typedef struct {
     bool enabled;
     int max_files;
     int max_path_length;
+    int html5_max_file_size;
     int num_files;
     int buf_size;
     char* buffer;
@@ -2390,6 +2414,14 @@ _SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     }
 }
 
+_SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(int index) {
+    SOKOL_ASSERT(_sapp.drop.buffer);
+    SOKOL_ASSERT((index >= 0) && (index <= _sapp.drop.max_files));
+    int offset = index * _sapp.drop.max_path_length;
+    SOKOL_ASSERT(offset < _sapp.drop.buf_size);
+    return &_sapp.drop.buffer[offset];
+}
+
 /* Copy a string into a fixed size buffer with guaranteed zero-
    termination.
 
@@ -2427,6 +2459,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
+    desc.html5_max_dropped_file_size = _sapp_def(desc.html5_max_dropped_file_size, 4 * 1024 * 1024);
     desc.clipboard_size = _sapp_def(desc.clipboard_size, 8192);
     desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
     desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
@@ -2456,6 +2489,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     if (_sapp.drop.enabled) {
         _sapp.drop.max_files = _sapp.desc.max_dropped_files;
         _sapp.drop.max_path_length = _sapp.desc.max_dropped_file_path_length;
+        _sapp.drop.html5_max_file_size = _sapp.desc.html5_max_dropped_file_size;
         _sapp.drop.buf_size = _sapp.drop.max_files * _sapp.drop.max_path_length;
         _sapp.drop.buffer = (char*) SOKOL_CALLOC(1, _sapp.drop.buf_size);
     }
@@ -3055,7 +3089,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         bool drop_failed = false;
         for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[i] stringForType:NSPasteboardTypeFileURL]];
-            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length)) {
+            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
                 SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
                 drop_failed = true;
                 break;
@@ -3756,7 +3790,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
     if ((i < 0) || (i >= _sapp.drop.num_files)) {
         return;
     }
-    if (!_sapp_strcpy(name, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length)) {
+    if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
         SOKOL_LOG("sokol_app.h: dropped file path too long!\n");
         _sapp.drop.num_files = 0;
     }
@@ -3826,6 +3860,21 @@ EM_JS(int, sapp_js_dropped_file_size, (int index), {
     else {
         return Module.sokol_dropped_files[index].size;
     }
+});
+
+EM_JS(void, sapp_js_load_dropped_file, (int index, const char* filename_cstr, void* callback, void* user_data), {
+    if ((index < 0) || (index >= Module.sokol_dropped_files.length)) {
+        return;
+    }
+    var filename = UTF8ToString(filename_cstr);
+    var reader = new FileReader();
+    reader.onload = function(loadEvent) {
+        console.log('sokol_app.h: loaded dropped file ' + filename);
+    };
+    reader.onerror = function() {
+        console.log('sokol_app.h: failed loading dropped file ' + filename);
+    };
+    reader.readAsArrayBuffer(Module.sokol_dropped_files[index]);
 });
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
@@ -5653,7 +5702,6 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!_sapp.drop.enabled) {
         return;
     }
-    SOKOL_ASSERT(_sapp.drop.buffer);
     _sapp_clear_drop_buffer();
     bool drop_failed = false;
     const int count = (int) DragQueryFileW(hdrop, 0xffffffff, NULL, 0);
@@ -5662,7 +5710,7 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
         const UINT num_chars = DragQueryFileW(hdrop, i, NULL, 0) + 1;
         WCHAR* buffer = (WCHAR*) SOKOL_CALLOC(num_chars, sizeof(WCHAR));
         DragQueryFileW(hdrop, i, buffer, num_chars);
-        if (!_sapp_win32_wide_to_utf8(buffer, &_sapp.drop.buffer[i * _sapp.drop.max_path_length], _sapp.drop.max_path_length)) {
+        if (!_sapp_win32_wide_to_utf8(buffer, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
             SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
             drop_failed = true;
         }
@@ -10150,6 +10198,7 @@ SOKOL_API_IMPL void sapp_consume_event(void) {
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(_sapp.clipboard.enabled);
     if (!_sapp.clipboard.enabled) {
         return;
     }
@@ -10167,6 +10216,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.enabled);
     if (!_sapp.clipboard.enabled) {
         return "";
     }
@@ -10195,29 +10245,57 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
 }
 
 SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
-    /* if drag'n'drop isn't enabled, this will always return 0 */
+    SOKOL_ASSERT(_sapp.drop.enabled);
     return _sapp.drop.num_files;
 }
 
 SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
+    SOKOL_ASSERT(_sapp.drop.enabled);
+    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
+    SOKOL_ASSERT(_sapp.drop.buffer);
     if (!_sapp.drop.enabled) {
         return "";
     }
     if ((index < 0) || (index >= _sapp.drop.max_files)) {
         return "";
     }
-    SOKOL_ASSERT(_sapp.drop.buffer);
-    return (const char*) &_sapp.drop.buffer[index * _sapp.drop.max_path_length];
+    return (const char*) _sapp_dropped_file_path_ptr(index);
 }
 
 SOKOL_API_IMPL int sapp_html5_get_dropped_file_size(int index) {
+    SOKOL_ASSERT(_sapp.drop.enabled);
+    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
     if (!_sapp.drop.enabled) {
         return 0;
     }
     return sapp_js_dropped_file_size(index);
     #else
+    (void)index;
     return 0;
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_html5_load_dropped_file(int index, sapp_html5_load_dropped_file_callback cb, void* user_data) {
+    SOKOL_ASSERT(_sapp.drop.enabled);
+    SOKOL_ASSERT(0 != cb);
+    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
+    #if defined(_SAPP_EMSCRIPTEN)
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if ((index < 0) || (index >= _sapp.drop.num_files)) {
+        return;
+    }
+    if (sapp_html5_get_dropped_file_size(index) > _sapp.drop.html5_max_file_size) {
+        SOKOL_LOG("sokol_app.h: refusing to load dropped file because it is too big (sapp_desc.html5_max_dropped_file_size)");
+        return;
+    }
+    sapp_js_load_dropped_file(index, _sapp_dropped_file_path_ptr(index), cb, user_data);
+    #else
+    (void)index;
+    (void)cb;
+    (void)user_data;
     #endif
 }
 
@@ -10284,7 +10362,6 @@ SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
     #else
         return 0;
     #endif
-
 }
 
 SOKOL_API_IMPL const void* sapp_d3d11_get_device(void) {
