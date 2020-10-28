@@ -2281,6 +2281,12 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
    This group of functions will be expanded as needed.
 */
 
+/* D3D11: return ID3D11Device */
+SOKOL_API_DECL const void* sg_d3d11_device(void);
+
+/* Metal: return __bridge-casted MTLDevice */
+SOKOL_API_DECL const void* sg_mtl_device(void);
+
 /* Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass) */
 SOKOL_API_DECL const void* sg_mtl_render_command_encoder(void);
 
@@ -14814,6 +14820,27 @@ SOKOL_API_IMPL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_des
 SOKOL_API_IMPL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc) {
     SOKOL_ASSERT(_sg.valid && desc);
     return _sg_pass_desc_defaults(desc);
+}
+
+SOKOL_API_IMPL const void* sg_d3d11_device(void) {
+#if defined(SOKOL_D3D11)
+    return (const void*) _sg.d3d11.dev;
+#else
+    return 0;
+#endif
+}
+
+SOKOL_API_IMPL const void* sg_mtl_device(void) {
+#if defined(SOKOL_METAL)
+    if (nil != _sg.mtl.device) {
+        return (__bridge const void*) _sg.mtl.device;
+    }
+    else {
+        return 0;
+    }
+#else
+    return 0;
+#endif
 }
 
 SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
