@@ -147,6 +147,10 @@
     - UWP:
         - clipboard, mouselock
     - sapp_consume_event() on non-web platforms?
+    - Should sapp_html5_fetch_dropped_file() disable dropping new files until
+      the async load has finished? If new files are dropped while the load
+      is in progress the 'meta-data' under the file index (file size and name)
+      will be different from when the load had started.
 
     STEP BY STEP
     ============
@@ -1056,25 +1060,26 @@ typedef struct sapp_desc {
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
-/* HTML5 specific: the content of a dropped file
-
-    NOTE that the data vanishes after the load callback function returns
-    (the data pointer will become dangling). If you need to hold on to
-    the data you need to copy it into your own memory buffer.
-
-    NOTE that 'size' and 'content' are only valid when 'succeeded' is true,
-    otherwise 'size' and 'content' are both 0.
+/* HTML5 specific: request and response structs for 
+   asynchronously loading dropped-file content.
 */
-typedef struct sapp_html5_dropped_file_content {
-    bool succeeded;             /* true if the loading operation has succeeded */
-    int size;                   /* only if succeeded: loaded data-size in number of bytes */
-    const void* content;        /* only if succeeded: pointer to loaded data */
-    void* user_data;            /* user_data pointer passed to sapp_html5_load_dropped_file() */
-    char filename[256];         /* the (path-less) filename (UTF-8 encoded) */
-} sapp_html5_dropped_file_content;
+typedef struct sapp_html5_fetch_response {
+    bool succeeded;         /* true if the loading operation has succeeded */
+    int file_index;         /* index of the dropped file (0..sapp_get_num_dropped_filed()-1) */
+    uint32_t fetched_size;  /* size in bytes of loaded data */
+    void* buffer_ptr;       /* pointer to user-provided buffer which contains the loaded data */
+    uint32_t buffer_size;   /* size of user-provided buffer (buffer_size >= fetched_size) */
+    void* user_data;        /* user-provided user data pointer */
+} sapp_html5_fetch_response;
 
-/* HTML5 specific: the dropped-file loading result callback */
-typedef void (*sapp_html5_load_dropped_file_callback) (const sapp_html5_dropped_file_content* result);
+typedef void (*sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
+
+typedef struct sapp_html5_fetch_request {
+    sapp_html5_fetch_callback callback;     /* response callback function pointer (required) */
+    void* buffer_ptr;                       /* pointer to buffer to load data into */
+    uint32_t buffer_size;                   /* size in bytes of buffer */
+    void* user_data;                        /* optional userdata pointer */
+} sapp_html5_fetch_request;
 
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
@@ -1145,9 +1150,9 @@ SOKOL_API_DECL bool sapp_gles2(void);
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 /* HTML5: get byte size of a dropped file */
-SOKOL_API_DECL int sapp_html5_get_dropped_file_size(int index);
+SOKOL_API_DECL uint32_t sapp_html5_get_dropped_file_size(int index);
 /* HTML5: asynchronously load the content of a dropped file */
-SOKOL_API_DECL void sapp_html5_load_dropped_file(int index, sapp_html5_load_dropped_file_callback cb, void* user_data);
+SOKOL_API_DECL void sapp_html5_fetch_dropped_file(int index, const sapp_html5_fetch_request* request);
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
@@ -1917,7 +1922,6 @@ typedef struct {
     bool enabled;
     int max_files;
     int max_path_length;
-    int html5_max_file_size;
     int num_files;
     int buf_size;
     char* buffer;
@@ -2489,7 +2493,6 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     if (_sapp.drop.enabled) {
         _sapp.drop.max_files = _sapp.desc.max_dropped_files;
         _sapp.drop.max_path_length = _sapp.desc.max_dropped_file_path_length;
-        _sapp.drop.html5_max_file_size = _sapp.desc.html5_max_dropped_file_size;
         _sapp.drop.buf_size = _sapp.drop.max_files * _sapp.drop.max_path_length;
         _sapp.drop.buffer = (char*) SOKOL_CALLOC(1, _sapp.drop.buf_size);
     }
@@ -3817,7 +3820,6 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
 }
 
 EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
-    console.log('=> sapp_js_add_dragndrop_listeners');
     Module.sokol_drop_files = [];
     var canvas_name = UTF8ToString(canvas_name_cstr);
     var canvas = document.getElementById(canvas_name);
@@ -3850,10 +3852,9 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
     canvas.addEventListener('dragleave', Module.sokol_dragleave, false);
     canvas.addEventListener('dragover',  Module.sokol_dragover, false);
     canvas.addEventListener('drop',      Module.sokol_drop, false);
-    console.log('<= sapp_js_remove_dragndrop_listeners');
 });
 
-EM_JS(int, sapp_js_dropped_file_size, (int index), {
+EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     if ((index < 0) || (index >= Module.sokol_dropped_files.length)) {
         return 0;
     }
@@ -3862,30 +3863,43 @@ EM_JS(int, sapp_js_dropped_file_size, (int index), {
     }
 });
 
-EM_JS(void, sapp_js_load_dropped_file, (int index, const char* filename_cstr, void* callback, void* user_data), {
-    if ((index < 0) || (index >= Module.sokol_dropped_files.length)) {
-        return;
-    }
-    var filename = UTF8ToString(filename_cstr);
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_fetch_result(int index, int success, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
+    sapp_html5_fetch_response response;
+    memset(&response, 0, sizeof(response));
+    response.succeeded = (0 != success);
+    response.file_index = index;
+    response.fetched_size = fetched_size;
+    response.buffer_ptr = buf_ptr;
+    response.buffer_size = buf_size;
+    response.user_data = user_data;
+    callback(&response);
+}
+
+EM_JS(void, sapp_js_fetch_dropped_file, (int index, void* callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
     var reader = new FileReader();
     reader.onload = function(loadEvent) {
-        console.log('sokol_app.h: loaded dropped file ' + filename);
+        var content = loadEvent.target.result;
+        if (content.byteLength > buf_size) {
+            __sapp_emsc_fetch_result(index, 0, callback, 0, buf_ptr, buf_size, user_data);
+        }
+        else {
+            HEAPU8.set(new Uint8Array(content), buf_ptr);
+            __sapp_emsc_fetch_result(index, 1, callback, content.byteLength, buf_ptr, buf_size, user_data);
+        }
     };
     reader.onerror = function() {
-        console.log('sokol_app.h: failed loading dropped file ' + filename);
+        __sapp_emsc_fetch_result(index, 0, callback, 0, buf_ptr, buf_size, user_data);
     };
     reader.readAsArrayBuffer(Module.sokol_dropped_files[index]);
 });
 
 EM_JS(void, sapp_js_remove_dragndrop_listeners, (const char* canvas_name_cstr), {
-    console.log('=> sapp_js_remove_dragndrop_listeners');
     var canvas_name = UTF8ToString(canvas_name_cstr);
     var canvas = document.getElementById(canvas_name);
     canvas.removeEventListener('dragenter', Module.sokol_dragenter);
     canvas.removeEventListener('dragleave', Module.sokol_dragleave);
     canvas.removeEventListener('dragover',  Module.sokol_dragover);
     canvas.removeEventListener('drop',      Module.sokol_drop);
-    console.log('<= sapp_js_remove_dragndrop_listeners');
 });
 
 /* called from the emscripten event handler to update the keyboard visibility
@@ -10262,7 +10276,7 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     return (const char*) _sapp_dropped_file_path_ptr(index);
 }
 
-SOKOL_API_IMPL int sapp_html5_get_dropped_file_size(int index) {
+SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
     SOKOL_ASSERT(_sapp.drop.enabled);
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
@@ -10276,10 +10290,13 @@ SOKOL_API_IMPL int sapp_html5_get_dropped_file_size(int index) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_html5_load_dropped_file(int index, sapp_html5_load_dropped_file_callback cb, void* user_data) {
+SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(int index, const sapp_html5_fetch_request* request) {
     SOKOL_ASSERT(_sapp.drop.enabled);
-    SOKOL_ASSERT(0 != cb);
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
+    SOKOL_ASSERT(request);
+    SOKOL_ASSERT(request->callback);
+    SOKOL_ASSERT(request->buffer_ptr);
+    SOKOL_ASSERT(request->buffer_size > 0);
     #if defined(_SAPP_EMSCRIPTEN)
     if (!_sapp.drop.enabled) {
         return;
@@ -10287,11 +10304,15 @@ SOKOL_API_IMPL void sapp_html5_load_dropped_file(int index, sapp_html5_load_drop
     if ((index < 0) || (index >= _sapp.drop.num_files)) {
         return;
     }
-    if (sapp_html5_get_dropped_file_size(index) > _sapp.drop.html5_max_file_size) {
-        SOKOL_LOG("sokol_app.h: refusing to load dropped file because it is too big (sapp_desc.html5_max_dropped_file_size)");
+    if (sapp_html5_get_dropped_file_size(index) > request->buffer_size) {
+        SOKOL_LOG("sokol_app.h: buffer to small for dropped file content");
         return;
     }
-    sapp_js_load_dropped_file(index, _sapp_dropped_file_path_ptr(index), cb, user_data);
+    sapp_js_fetch_dropped_file(index,
+        request->callback,
+        request->buffer_ptr,
+        request->buffer_size,
+        request->user_data);
     #else
     (void)index;
     (void)cb;
