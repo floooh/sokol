@@ -138,7 +138,7 @@
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
     clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | TODO
+    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
 
     TODO
     ====
@@ -147,10 +147,6 @@
     - UWP:
         - clipboard, mouselock
     - sapp_consume_event() on non-web platforms?
-    - Should sapp_html5_fetch_dropped_file() disable dropping new files until
-      the async load has finished? If new files are dropped while the load
-      is in progress the 'meta-data' under the file index (file size and name)
-      will be different from when the load had started.
 
     STEP BY STEP
     ============
@@ -1063,8 +1059,15 @@ typedef struct sapp_desc {
 /* HTML5 specific: request and response structs for 
    asynchronously loading dropped-file content.
 */
+typedef enum sapp_html5_fetch_error {
+    SAPP_HTML5_FETCH_ERROR_NO_ERROR,
+    SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL,
+    SAPP_HTML5_FETCH_ERROR_OTHER,
+} sapp_html5_fetch_error;
+
 typedef struct sapp_html5_fetch_response {
     bool succeeded;         /* true if the loading operation has succeeded */
+    sapp_html5_fetch_error error_code;
     int file_index;         /* index of the dropped file (0..sapp_get_num_dropped_filed()-1) */
     uint32_t fetched_size;  /* size in bytes of loaded data */
     void* buffer_ptr;       /* pointer to user-provided buffer which contains the loaded data */
@@ -1075,6 +1078,7 @@ typedef struct sapp_html5_fetch_response {
 typedef void (*sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
 
 typedef struct sapp_html5_fetch_request {
+    int dropped_file_index;                 /* 0..sapp_get_num_dropped_files()-1 */
     sapp_html5_fetch_callback callback;     /* response callback function pointer (required) */
     void* buffer_ptr;                       /* pointer to buffer to load data into */
     uint32_t buffer_size;                   /* size in bytes of buffer */
@@ -1152,7 +1156,7 @@ SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
 /* HTML5: get byte size of a dropped file */
 SOKOL_API_DECL uint32_t sapp_html5_get_dropped_file_size(int index);
 /* HTML5: asynchronously load the content of a dropped file */
-SOKOL_API_DECL void sapp_html5_fetch_dropped_file(int index, const sapp_html5_fetch_request* request);
+SOKOL_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request);
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_API_DECL const void* sapp_metal_get_device(void);
@@ -3863,10 +3867,11 @@ EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     }
 });
 
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_fetch_result(int index, int success, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
     sapp_html5_fetch_response response;
     memset(&response, 0, sizeof(response));
     response.succeeded = (0 != success);
+    response.error_code = (sapp_html5_fetch_error) error_code;
     response.file_index = index;
     response.fetched_size = fetched_size;
     response.buffer_ptr = buf_ptr;
@@ -3875,20 +3880,22 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_fetch_result(int index, int success, sapp_h
     callback(&response);
 }
 
-EM_JS(void, sapp_js_fetch_dropped_file, (int index, void* callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
+EM_JS(void, sapp_js_fetch_dropped_file, (int index, sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
     var reader = new FileReader();
     reader.onload = function(loadEvent) {
         var content = loadEvent.target.result;
         if (content.byteLength > buf_size) {
-            __sapp_emsc_fetch_result(index, 0, callback, 0, buf_ptr, buf_size, user_data);
+            // SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL
+            __sapp_emsc_invoke_fetch_cb(index, 0, 1, callback, 0, buf_ptr, buf_size, user_data);
         }
         else {
             HEAPU8.set(new Uint8Array(content), buf_ptr);
-            __sapp_emsc_fetch_result(index, 1, callback, content.byteLength, buf_ptr, buf_size, user_data);
+            __sapp_emsc_invoke_fetch_cb(index, 1, 0, callback, content.byteLength, buf_ptr, buf_size, user_data);
         }
     };
     reader.onerror = function() {
-        __sapp_emsc_fetch_result(index, 0, callback, 0, buf_ptr, buf_size, user_data);
+        // SAPP_HTML5_FETCH_ERROR_OTHER
+        __sapp_emsc_invoke_fetch_cb(index, 0, 2, callback, 0, buf_ptr, buf_size, user_data);
     };
     reader.readAsArrayBuffer(Module.sokol_dropped_files[index]);
 });
@@ -10280,43 +10287,50 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
     SOKOL_ASSERT(_sapp.drop.enabled);
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
-    if (!_sapp.drop.enabled) {
-        return 0;
-    }
-    return sapp_js_dropped_file_size(index);
+        if (!_sapp.drop.enabled) {
+            return 0;
+        }
+        return sapp_js_dropped_file_size(index);
     #else
-    (void)index;
-    return 0;
+        (void)index;
+        return 0;
     #endif
 }
 
-SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(int index, const sapp_html5_fetch_request* request) {
+SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
     SOKOL_ASSERT(_sapp.drop.enabled);
-    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     SOKOL_ASSERT(request);
     SOKOL_ASSERT(request->callback);
     SOKOL_ASSERT(request->buffer_ptr);
     SOKOL_ASSERT(request->buffer_size > 0);
     #if defined(_SAPP_EMSCRIPTEN)
-    if (!_sapp.drop.enabled) {
-        return;
-    }
-    if ((index < 0) || (index >= _sapp.drop.num_files)) {
-        return;
-    }
-    if (sapp_html5_get_dropped_file_size(index) > request->buffer_size) {
-        SOKOL_LOG("sokol_app.h: buffer to small for dropped file content");
-        return;
-    }
-    sapp_js_fetch_dropped_file(index,
-        request->callback,
-        request->buffer_ptr,
-        request->buffer_size,
-        request->user_data);
+        const int index = request->dropped_file_index;
+        sapp_html5_fetch_error error_code = SAPP_HTML5_FETCH_ERROR_NO_ERROR;
+        if ((index < 0) || (index >= _sapp.drop.num_files)) {
+            error_code = SAPP_HTML5_FETCH_ERROR_OTHER;
+        }
+        if (sapp_html5_get_dropped_file_size(index) > request->buffer_size) {
+            error_code = SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL;
+        }
+        if (SAPP_HTML5_FETCH_ERROR_NO_ERROR != error_code) {
+            _sapp_emsc_invoke_fetch_cb(index,
+                false, // success
+                (int)error_code,
+                request->callback,
+                0, // fetched_size
+                request->buffer_ptr,
+                request->buffer_size,
+                request->user_data);
+        }
+        else {
+            sapp_js_fetch_dropped_file(index,
+                request->callback,
+                request->buffer_ptr,
+                request->buffer_size,
+                request->user_data);
+        }
     #else
-    (void)index;
-    (void)cb;
-    (void)user_data;
+        (void)request;
     #endif
 }
 
