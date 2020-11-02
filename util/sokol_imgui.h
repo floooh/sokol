@@ -1965,9 +1965,9 @@ SOKOL_API_IMPL void simgui_render(void) {
             else {
                 if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
                     tex_id = pcmd->TextureId;
-                    vtx_offset = pcmd->VtxOffset * sizeof(ImDrawVert);
+                    vtx_offset = pcmd->VtxOffset;
                     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
-                    bind.vertex_buffer_offsets[0] = vb_offset + vtx_offset;
+                    bind.vertex_buffer_offsets[0] = vb_offset + pcmd->VtxOffset * sizeof(ImDrawVert);
                     sg_apply_bindings(&bind);
                 }
                 const int scissor_x = (int) (pcmd->ClipRect.x * dpi_scale);
