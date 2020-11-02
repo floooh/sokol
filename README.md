@@ -12,7 +12,9 @@ cross-platform libraries for C and C++, written in C.
 
 [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
-Cross-platform libraries:
+[Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
+
+## Core libraries
 
 - [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
 - [**sokol\_app.h**](https://github.com/floooh/sokol/blob/master/sokol_app.h): app framework wrapper (entry + window + 3D-context + input)
@@ -21,7 +23,7 @@ Cross-platform libraries:
 - [**sokol\_fetch.h**](https://github.com/floooh/sokol/blob/master/sokol_fetch.h): asynchronous data streaming from HTTP and local filesystem
 - [**sokol\_args.h**](https://github.com/floooh/sokol/blob/master/sokol_args.h): unified cmdline/URL arg parser for web and native apps
 
-Utility libraries:
+## Utility libraries
 
 - [**sokol\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h): sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
 - [**sokol\_gl.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h): OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
@@ -30,11 +32,13 @@ Utility libraries:
 - [**sokol\_debugtext.h**](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h): a simple text renderer using vintage home computer fonts
 - [**sokol\_memtrack.h**](https://github.com/floooh/sokol/blob/master/util/sokol_memtrack.h): easily track memory allocations in sokol headers
 
+## Notes
+
 WebAssembly is a 'first-class citizen', one important motivation for the
 Sokol headers is to provide a collection of cross-platform APIs with a
 minimal footprint on the web platform while still being useful.
 
-All headers are standalone and can be used independently from each other.
+The core headers are standalone and can be used independently from each other.
 
 Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
