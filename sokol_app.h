@@ -2045,7 +2045,7 @@ typedef struct {
         _sapp_x11_t x11;
         _sapp_glx_t glx;
     #endif
-    char html5_canvas_name[_SAPP_MAX_TITLE_LENGTH];
+    char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
@@ -2541,8 +2541,9 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.framebuffer_height = _sapp.window_height;
     _sapp.sample_count = _sapp.desc.sample_count;
     _sapp.swap_interval = _sapp.desc.swap_interval;
-    _sapp_strcpy(_sapp.desc.html5_canvas_name, _sapp.html5_canvas_name, sizeof(_sapp.html5_canvas_name));
-    _sapp.desc.html5_canvas_name = _sapp.html5_canvas_name;
+    _sapp.html5_canvas_selector[0] = '#';
+    _sapp_strcpy(_sapp.desc.html5_canvas_name, &_sapp.html5_canvas_selector[1], sizeof(_sapp.html5_canvas_selector) - 1);
+    _sapp.desc.html5_canvas_name = &_sapp.html5_canvas_selector[1];
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
     _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard.enabled) {
@@ -4077,7 +4078,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     _SOKOL_UNUSED(event_type);
     _SOKOL_UNUSED(user_data);
     double w, h;
-    emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+    emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
     /* The above method might report zero when toggling HTML5 fullscreen,
        in that case use the window's inner width reported by the
        emscripten event. This works ok when toggling *into* fullscreen
@@ -4116,7 +4117,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
     _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
     _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
         /* on WebGPU: recreate size-dependent rendering surfaces */
         _sapp_emsc_wgpu_surfaces_discard();
@@ -4575,10 +4576,10 @@ _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
             attrs.majorVersion = 2;
         }
     #endif
-    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
     if (!ctx) {
         attrs.majorVersion = 1;
-        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_name, &attrs);
+        ctx = emscripten_webgl_create_context(_sapp.html5_canvas_selector, &attrs);
         _sapp.gles2_fallback = true;
     }
     emscripten_webgl_make_context_current(ctx);
@@ -4699,19 +4700,19 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_next_frame(void) {
 #endif
 
 _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
-    emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
-    emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
-    emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
-    emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
-    emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_mouse_cb);
-    emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_wheel_cb);
+    emscripten_set_mousedown_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseup_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mousemove_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseenter_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_mouseleave_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_mouse_cb);
+    emscripten_set_wheel_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_wheel_cb);
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
     emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_key_cb);
-    emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
-    emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
-    emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
-    emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchstart_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchmove_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchend_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
+    emscripten_set_touchcancel_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     sapp_js_add_beforeunload_listener();
@@ -4722,25 +4723,25 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
         sapp_js_add_dragndrop_listeners(_sapp.html5_canvas_name);
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
-        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, _sapp_emsc_webgl_context_cb);
+        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_webgl_context_cb);
+        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_webgl_context_cb);
     #endif
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
-    emscripten_set_mousedown_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_mouseup_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_mousemove_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_mouseenter_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_mouseleave_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_wheel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_mousedown_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_mouseup_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_mousemove_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_mouseenter_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_mouseleave_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_wheel_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
-    emscripten_set_touchstart_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_touchmove_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_touchend_callback(_sapp.html5_canvas_name, 0, true, 0);
-    emscripten_set_touchcancel_callback(_sapp.html5_canvas_name, 0, true, 0);
+    emscripten_set_touchstart_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_touchmove_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_touchend_callback(_sapp.html5_canvas_selector, 0, true, 0);
+    emscripten_set_touchcancel_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     sapp_js_remove_beforeunload_listener();
@@ -4751,8 +4752,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
         sapp_js_remove_dragndrop_listeners(_sapp.html5_canvas_name);
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_name, 0, true, 0);
-        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_name, 0, true, 0);
+        emscripten_set_webglcontextlost_callback(_sapp.html5_canvas_selector, 0, true, 0);
+        emscripten_set_webglcontextrestored_callback(_sapp.html5_canvas_selector, 0, true, 0);
     #endif
 }
 
@@ -4805,7 +4806,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_pointer_init(_sapp.html5_canvas_name);
+    sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
     _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
@@ -4813,7 +4814,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
         h = (double) _sapp.desc.height;
     }
     else {
-        emscripten_get_element_css_size(_sapp.html5_canvas_name, &w, &h);
+        emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
@@ -4823,7 +4824,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp.window_height = (int) h;
     _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
     _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_name, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
     #elif defined(SOKOL_WGPU)

@@ -10,6 +10,8 @@ cross-platform libraries for C and C++, written in C.
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
+[LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
+
 Cross-platform libraries:
 
 - [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
@@ -442,6 +444,13 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
   of dropped files on the web and native platforms:
 
   https://floooh.github.io/sokol-html5/droptest-sapp.html
+
+
+- **27-Oct-2020**: I committed a bugfix for a longstanding WebGL canvas id versus
+  css-selector confusion in the emscripten/WASM backend code in sokol_app.h.
+  I think the fix should not require any changes in your code (because if
+  you'd be using a canvas name different from the default "canvas" it wouldn't
+  have worked before anyway). See this bug for details: https://github.com/floooh/sokol/issues/407
 
 - **22-Oct-2020**: sokol_app.h now has file drag'n'drop support on Win32,
   macOS and Linux. WASM/HTML5 support will be added soon-ish. This will
