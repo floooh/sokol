@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Oct-2020** sokol_app.h: initial drag'n'drop support for win32/macos/linux)
+[See what's new](#updates) (**22-Oct-2020** sokol_app.h: drag'n'drop support for HTML5/WASM)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -431,6 +431,17 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **03-Nov-2020**: sokol_app.h: the missing drag'n'drop support for HTML5/WASM
+  has been added. This adds two platform-specific functions
+  ```sapp_html5_get_dropped_file_size()``` and
+  ```sapp_html5_fetch_dropped_file()```. Please read the documentation
+  section in sokol_app.h under 'DRAG AND DROP SUPPORT' for addition
+  details and example code. Also consult the source code of the new
+  ```droptest-sapp``` sample for an example of how to load the content
+  of dropped files on the web and native platforms:
+
+  https://floooh.github.io/sokol-html5/droptest-sapp.html
 
 - **22-Oct-2020**: sokol_app.h now has file drag'n'drop support on Win32,
   macOS and Linux. WASM/HTML5 support will be added soon-ish. This will
