@@ -442,7 +442,7 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
   has been added. This adds two platform-specific functions
   ```sapp_html5_get_dropped_file_size()``` and
   ```sapp_html5_fetch_dropped_file()```. Please read the documentation
-  section in sokol_app.h under 'DRAG AND DROP SUPPORT' for addition
+  section in sokol_app.h under 'DRAG AND DROP SUPPORT' for additional
   details and example code. Also consult the source code of the new
   ```droptest-sapp``` sample for an example of how to load the content
   of dropped files on the web and native platforms:
