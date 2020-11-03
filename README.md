@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**22-Oct-2020** sokol_app.h: drag'n'drop support for HTML5/WASM)
+[See what's new](#updates) (**03-Nov-2020** sokol_app.h: drag'n'drop support for HTML5/WASM)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
