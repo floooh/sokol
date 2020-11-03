@@ -3755,6 +3755,71 @@ EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
     return _sapp.html5_ask_leave_site ? 1 : 0;
 }
 
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_begin_drop(int num) {
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (num < 0) {
+        num = 0;
+    }
+    if (num > _sapp.drop.max_files) {
+        num = _sapp.drop.max_files;
+    }
+    _sapp.drop.num_files = num;
+    _sapp_clear_drop_buffer();
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
+    /* NOTE: name is only the filename part, not a path */
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (0 == name) {
+        return;
+    }
+    SOKOL_ASSERT(_sapp.drop.num_files <= _sapp.drop.max_files);
+    if ((i < 0) || (i >= _sapp.drop.num_files)) {
+        return;
+    }
+    if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
+        SOKOL_LOG("sokol_app.h: dropped file path too long!\n");
+        _sapp.drop.num_files = 0;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
+    if (!_sapp.drop.enabled) {
+        return;
+    }
+    if (0 == _sapp.drop.num_files) {
+        /* there was an error copying the filenames */
+        _sapp_clear_drop_buffer();
+        return;
+
+    }
+    if (_sapp_events_enabled()) {
+        _sapp.mouse.x = (float)x * _sapp.dpi_scale;
+        _sapp.mouse.y = (float)y * _sapp.dpi_scale;
+        _sapp.mouse.dx = 0.0f;
+        _sapp.mouse.dy = 0.0f;
+        _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
+    sapp_html5_fetch_response response;
+    memset(&response, 0, sizeof(response));
+    response.succeeded = (0 != success);
+    response.error_code = (sapp_html5_fetch_error) error_code;
+    response.file_index = index;
+    response.fetched_size = fetched_size;
+    response.buffer_ptr = buf_ptr;
+    response.buffer_size = buf_size;
+    response.user_data = user_data;
+    callback(&response);
+}
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -3828,58 +3893,6 @@ _SOKOL_PRIVATE void _sapp_emsc_set_clipboard_string(const char* str) {
     sapp_js_write_clipboard(str);
 }
 
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_begin_drop(int num) {
-    if (!_sapp.drop.enabled) {
-        return;
-    }
-    if (num < 0) {
-        num = 0;
-    }
-    if (num > _sapp.drop.max_files) {
-        num = _sapp.drop.max_files;
-    }
-    _sapp.drop.num_files = num;
-    _sapp_clear_drop_buffer();
-}
-
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
-    /* NOTE: name is only the filename part, not a path */
-    if (!_sapp.drop.enabled) {
-        return;
-    }
-    if (0 == name) {
-        return;
-    }
-    SOKOL_ASSERT(_sapp.drop.num_files <= _sapp.drop.max_files);
-    if ((i < 0) || (i >= _sapp.drop.num_files)) {
-        return;
-    }
-    if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
-        SOKOL_LOG("sokol_app.h: dropped file path too long!\n");
-        _sapp.drop.num_files = 0;
-    }
-}
-
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
-    if (!_sapp.drop.enabled) {
-        return;
-    }
-    if (0 == _sapp.drop.num_files) {
-        /* there was an error copying the filenames */
-        _sapp_clear_drop_buffer();
-        return;
-
-    }
-    if (_sapp_events_enabled()) {
-        _sapp.mouse.x = (float)x * _sapp.dpi_scale;
-        _sapp.mouse.y = (float)y * _sapp.dpi_scale;
-        _sapp.mouse.dx = 0.0f;
-        _sapp.mouse.dy = 0.0f;
-        _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
 EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
     Module.sokol_drop_files = [];
     var canvas_name = UTF8ToString(canvas_name_cstr);
@@ -3923,19 +3936,6 @@ EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
         return Module.sokol_dropped_files[index].size;
     }
 });
-
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
-    sapp_html5_fetch_response response;
-    memset(&response, 0, sizeof(response));
-    response.succeeded = (0 != success);
-    response.error_code = (sapp_html5_fetch_error) error_code;
-    response.file_index = index;
-    response.fetched_size = fetched_size;
-    response.buffer_ptr = buf_ptr;
-    response.buffer_size = buf_size;
-    response.user_data = user_data;
-    callback(&response);
-}
 
 EM_JS(void, sapp_js_fetch_dropped_file, (int index, sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
     var reader = new FileReader();
