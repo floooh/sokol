@@ -553,7 +553,7 @@
             }
         }
 
-    The returned file paths are UTF-8 encoded text.
+    The returned file paths are UTF-8 encoded strings.
 
     You can call sapp_get_num_dropped_files() and sapp_get_dropped_file_path()
     anywhere, also outside the event handler callback, but be aware that the
@@ -575,6 +575,64 @@
           needs some sort of error feedback in the future)
         - no mouse positions are reported while the drag is in
           process, this may change in the future
+
+    Drag'n'drop on HTML5/WASM:
+
+    The HTML5 drag'n'drop API doesn't return file paths, but instead
+    black-box 'file objects' which must be used to load the content
+    of dropped files. This is the reason why sokol_app.h adds two
+    HTML5-specific functions to the drag'n'drop API:
+
+        uint32_t sapp_html5_get_dropped_file_size(int index)
+            Returns the size in bytes of a dropped file.
+
+        void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request)
+            Asynchronously loads the content of a dropped file into a
+            provided memory buffer (which must be big enough to hold
+            the file content)
+
+    To start loading the first dropped file after an SAPP_EVENTTYPE_FILES_DROPPED
+    event is received:
+
+        sapp_html5_fetch_dropped_file(&(sapp_html5_fetch_request){
+            .dropped_file_index = 0,
+            .callback = fetch_cb
+            .buffer_ptr = buf,
+            .buffer_size = buf_size,
+            .user_data = ...
+        });
+
+    Make sure that the memory pointed to by 'buf' stays valid until the
+    callback function is called!
+
+    As result of the asynchronous loading operation (no matter if succeeded or
+    failed) the 'fetch_cb' function will be called:
+
+        void fetch_cb(const sapp_html5_fetch_response* response) {
+            // IMPORTANT: check if the loading operation actually succeeded:
+            if (response->succeeded) {
+                // the size of the loaded file:
+                const uint32_t num_bytes = response->fetched_size;
+                // and the pointer to the data (same as 'buf' in the fetch-call):
+                const void* ptr = response->buffer_ptr;
+            }
+            else {
+                // on error check the error code:
+                switch (response->error_code) {
+                    case SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL:
+                        ...
+                        break;
+                    case SAPP_HTML5_FETCH_ERROR_OTHER:
+                        ...
+                        break;
+                }
+            }
+        }
+
+    Check the droptest-sapp example for a real-world example which works
+    both on native platforms and the web:
+
+    https://github.com/floooh/sokol-samples/blob/master/sapp/droptest-sapp.c
 
     HIGH-DPI RENDERING
     ==================
@@ -1047,7 +1105,6 @@ typedef struct sapp_desc {
     int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
 
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
-    int html5_max_dropped_file_size;    /* HTML5 only: refuse to load any dropped files bigger then this (default: 4*1024*1024 == 4 MB) */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
@@ -1056,7 +1113,7 @@ typedef struct sapp_desc {
     bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
-/* HTML5 specific: request and response structs for 
+/* HTML5 specific: request and response structs for
    asynchronously loading dropped-file content.
 */
 typedef enum sapp_html5_fetch_error {
@@ -2467,7 +2524,6 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
-    desc.html5_max_dropped_file_size = _sapp_def(desc.html5_max_dropped_file_size, 4 * 1024 * 1024);
     desc.clipboard_size = _sapp_def(desc.clipboard_size, 8192);
     desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
     desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
