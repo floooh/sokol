@@ -354,15 +354,13 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #define _SARGS_MAX_ARGS_DEF (16)
 #define _SARGS_BUF_SIZE_DEF (16*1024)
 
-/* parser state (no parser needed on emscripten) */
-#if !defined(__EMSCRIPTEN__)
+/* parser state */
 #define _SARGS_EXPECT_KEY (1<<0)
 #define _SARGS_EXPECT_SEP (1<<1)
 #define _SARGS_EXPECT_VAL (1<<2)
 #define _SARGS_PARSING_KEY (1<<3)
 #define _SARGS_PARSING_VAL (1<<4)
 #define _SARGS_ERROR (1<<5)
-#endif
 
 /* a key/value pair struct */
 typedef struct {
@@ -379,13 +377,9 @@ typedef struct {
     int buf_pos;        /* current buffer position */
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
     bool valid;
-
-    /* arg parsing isn't needed on emscripten */
-    #if !defined(__EMSCRIPTEN__)
     uint32_t parse_state;
     char quote;         /* current quote char, 0 if not in a quote */
     bool in_escape;     /* currently in an escape sequence */
-    #endif
 } _sargs_state_t;
 static _sargs_state_t _sargs;
 
@@ -402,8 +396,7 @@ _SOKOL_PRIVATE const char* _sargs_str(int index) {
     return &_sargs.buf[index];
 }
 
-/*-- argument parser functions (not required on emscripten) ------------------*/
-#if !defined(__EMSCRIPTEN__)
+/*-- argument parser functions ------------------*/
 _SOKOL_PRIVATE void _sargs_expect_key(void) {
     _sargs.parse_state = _SARGS_EXPECT_KEY;
 }
@@ -609,7 +602,6 @@ _SOKOL_PRIVATE bool _sargs_parse_cargs(int argc, const char** argv) {
     _sargs.parse_state = 0;
     return retval;
 }
-#endif /* __EMSCRIPTEN__ */
 
 /*-- EMSCRIPTEN IMPLEMENTATION -----------------------------------------------*/
 #if defined(__EMSCRIPTEN__)
@@ -670,12 +662,13 @@ SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
     _sargs.valid = true;
+
+    /* parse argc/argv */
+    _sargs_parse_cargs(desc->argc, (const char**) desc->argv);
+
     #if defined(__EMSCRIPTEN__)
-        /* on emscripten, ignore argc/argv, and parse the page URL instead */
+        /* on emscripten, also parse the page URL*/
         sargs_js_parse_url();
-    #else
-        /* on native platform, parse argc/argv */
-        _sargs_parse_cargs(desc->argc, (const char**) desc->argv);
     #endif
 }
 
