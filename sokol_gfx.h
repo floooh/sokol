@@ -1632,7 +1632,7 @@ typedef struct sg_image_desc {
     const char* label;
     /* GL specific */
     uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
-    int gl_texture_target;
+    uint32_t gl_texture_target;
     /* Metal specific */
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
