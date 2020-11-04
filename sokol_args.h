@@ -377,8 +377,6 @@ typedef struct {
     int buf_pos;        /* current buffer position */
     char* buf;          /* character buffer, first char is reserved and zero for 'empty string' */
     bool valid;
-
-
     uint32_t parse_state;
     char quote;         /* current quote char, 0 if not in a quote */
     bool in_escape;     /* currently in an escape sequence */
@@ -665,8 +663,8 @@ SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     _sargs.buf_pos = 1;
     _sargs.valid = true;
 
-	/* parse argc/argv */
-	_sargs_parse_cargs(desc->argc, (const char**) desc->argv);
+    /* parse argc/argv */
+    _sargs_parse_cargs(desc->argc, (const char**) desc->argv);
 
     #if defined(__EMSCRIPTEN__)
         /* on emscripten, also parse the page URL*/
