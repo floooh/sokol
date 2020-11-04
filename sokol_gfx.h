@@ -1598,6 +1598,10 @@ typedef struct sg_image_content {
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
 
+    For GL, you can also specify the texture target or leave it empty
+    to use the default texture target for the image type (GL_TEXTURE_2D
+    for SG_IMAGETYPE_2D etc)
+
     The same rules apply as for injecting native buffers
     (see sg_buffer_desc documentation for more details).
 */
@@ -1628,6 +1632,7 @@ typedef struct sg_image_desc {
     const char* label;
     /* GL specific */
     uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t gl_texture_target;
     /* Metal specific */
     const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
     /* D3D11 specific */
@@ -5731,6 +5736,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             for (int slot = 0; slot < img->cmn.num_slots; slot++) {
                 SOKOL_ASSERT(desc->gl_textures[slot]);
                 img->gl.tex[slot] = desc->gl_textures[slot];
+            }
+            if (desc->gl_texture_target) {
+                img->gl.target = (GLenum)desc->gl_texture_target;
             }
         }
         else {
