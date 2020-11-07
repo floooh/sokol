@@ -100,12 +100,13 @@ typedef struct sshape_buffer_t {
 
 /* result struct of shape builder functions */
 typedef struct sshape_mesh_descs_t {
-    sg_buffer_desc vbuf;
-    sg_buffer_desc ibuf;
-    sg_vertex_attr_desc pos;
-    sg_vertex_attr_desc normal;
-    sg_vertex_attr_desc uv;
-    sg_vertex_attr_desc color;
+    sg_buffer_desc vertices;
+    sg_buffer_desc indices;
+    sg_buffer_layout_desc buffer_layout;
+    sg_vertex_attr_desc pos_attr;
+    sg_vertex_attr_desc normal_attr;
+    sg_vertex_attr_desc uv_attr;
+    sg_vertex_attr_desc color_attr;
 } sshape_mesh_descs_t;
 
 typedef struct sshape_vertex_range_t {
