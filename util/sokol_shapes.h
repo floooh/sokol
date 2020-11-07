@@ -78,11 +78,13 @@
 extern "C" {
 #endif
 
+/* helper structs */
 typedef struct sshape_vec2_t { float x, y; } sshape_vec2_t;
 typedef struct sshape_vec3_t { float x, y, z; } sshape_vec3_t;
 typedef struct sshape_vec4_t { float x, y, z, w; } sshape_vec4_t;
 typedef struct sshape_mat4_t { float m[4][4]; } sshape_mat4_t;
 
+/* vertex structure used in the generated meshes */
 typedef struct sshape_vertex_t {
     sshape_vec3_t pos;
     sshape_vec3_t normal;
@@ -103,7 +105,7 @@ typedef struct sshape_mesh_t {
     struct {
         sg_buffer_desc vbuf;
         sg_buffer_desc ibuf;
-        sg_vertex_attr_desc position;
+        sg_vertex_attr_desc pos;
         sg_vertex_attr_desc normal;
         sg_vertex_attr_desc uv;
         sg_vertex_attr_desc color;
@@ -122,8 +124,8 @@ typedef struct sshape_mesh_t {
 /* result of the ssahape_*_buffer_size() functions */
 typedef struct sshape_buffer_sizes_t {
     uint32_t vertex_buffer_size;    // required vertex buffer size in bytes
-    uint32_t index_buffer_size;     // required index buffer size
     uint32_t num_vertices;          // ...the same in number of vertices
+    uint32_t index_buffer_size;     // required index buffer size
     uint32_t num_indices;           // ...the same in number of indices
 } sshape_buffer_sizes_t;
 
@@ -197,7 +199,7 @@ SOKOL_API_DECL uint32_t sshape_color_3f(float r, float g, float b);
 SOKOL_API_DECL uint32_t sshape_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_API_DECL uint32_t sshape_color_3b(uint8_t r, uint8_t g, uint8_t b);
 
-/* adapter function for filling matrix from generic float[16] array */
+/* adapter function for filling matrix struct from generic float[16] array */
 SOKOL_API_DECL sshape_mat4_t sshape_mat4(const float[16] m);
 SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float[16] m);
 
