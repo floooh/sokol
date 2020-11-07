@@ -99,26 +99,32 @@ typedef struct sshape_buffer_t {
 } sshape_buffer_t;
 
 /* result struct of shape builder functions */
+typedef struct sshape_mesh_descs_t {
+    sg_buffer_desc vbuf;
+    sg_buffer_desc ibuf;
+    sg_vertex_attr_desc pos;
+    sg_vertex_attr_desc normal;
+    sg_vertex_attr_desc uv;
+    sg_vertex_attr_desc color;
+} sshape_mesh_descs_t;
+
+typedef struct sshape_vertex_range_t {
+    sshape_vertex_t* ptr;
+    uint32_t num;
+} sshape_vertex_range_t;
+
+typedef struct sshape_index_range_t {
+    uint16_t ptr;
+    uint32_t num;
+} sshape_index_range_t;
+
 typedef struct sshape_mesh_t {
     bool success;
-    // ready-to-use sokol-gfx desc structs
-    struct {
-        sg_buffer_desc vbuf;
-        sg_buffer_desc ibuf;
-        sg_vertex_attr_desc pos;
-        sg_vertex_attr_desc normal;
-        sg_vertex_attr_desc uv;
-        sg_vertex_attr_desc color;
-    } desc;
-    // ...or as vertex- and index-pointer/num pairs (same as the input buffer pointers)
-    struct {
-        sshape_vertex_t* ptr;
-        uint32_t num;
-    } vertices;
-    struct {
-        uint16_t* ptr;
-        uint32_t num;
-    } indices;
+    // ready-to-use sokol-gfx desc strycts
+    sshape_mesh_descs_t descs;
+    // ..or alternative vertex/index ranges
+    sshape_vertex_range_t vertices;
+    sshape_index_range_t indices;
 } sshape_mesh_t;
 
 /* result of the ssahape_*_buffer_size() functions */
@@ -139,7 +145,7 @@ typedef struct sshape_plane_desc_t {
     sshape_buffer_t indices;        // memory buffer to write indices to
 } sshape_plane_desc_t;
 
-typedef struct sshape_box_t {
+typedef struct sshape_box_desc_t {
     float width, height, depth;     // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
