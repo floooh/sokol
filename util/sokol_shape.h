@@ -1,11 +1,11 @@
-#ifndef SOKOL_SHAPES_INCLUDED
+#ifndef SOKOL_SHAPE_INCLUDED
 /*
-    sokol_shapes.h -- create simple primitive shapes for sokol_gfx.h
+    sokol_shape.h -- create simple primitive shapes for sokol_gfx.h
 
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_SHAPES_IMPL
+        #define SOKOL_SHAPE_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -17,7 +17,7 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
-    If sokol_shapes.h is compiled as a DLL, define the following before
+    If sokol_shape.h is compiled as a DLL, define the following before
     including the declaration or implementation:
 
     SOKOL_DLL
@@ -25,7 +25,7 @@
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
-    Include the following headers before including sokol_shapes.h:
+    Include the following headers before including sokol_shape.h:
 
         sokol_gfx.h
 
@@ -56,12 +56,12 @@
         3. This notice may not be removed or altered from any source
         distribution.
 */
-#define SOKOL_SHAPES_INCLUDED
+#define SOKOL_SHAPE_INCLUDED
 #include <stdint.h>
 #include <stdbool.h>
 
 #if !defined(SOKOL_GFX_INCLUDED)
-#error "Please include sokol_gfx.h before sokol_shapes.h"
+#error "Please include sokol_gfx.h before sokol_shape.h"
 #endif
 
 #ifndef SOKOL_API_DECL
@@ -209,11 +209,11 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float[16] m);
 // FIXME: C++ helper functions
 
 #endif
-#endif // SOKOL_SHAPES_INCLUDED
+#endif // SOKOL_SHAPE_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_SHAPES_IMPL
-#define SOKOL_SHAPES_IMPL_INCLUDED (1)
+#ifdef SOKOL_SHAPE_IMPL
+#define SOKOL_SHAPE_IMPL_INCLUDED (1)
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -296,4 +296,4 @@ SOKOL_API_IMPL sshape_mat4_t sshape_mat4_transpose(const float[16] m) {
 }
 
 
-#endif // SOKOL_SHAPES_IMPL
+#endif // SOKOL_SHAPE_IMPL
