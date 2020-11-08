@@ -81,124 +81,108 @@ extern "C" {
 /* helper structs */
 typedef struct sshape_vec2_t { float x, y; } sshape_vec2_t;
 typedef struct sshape_vec3_t { float x, y, z; } sshape_vec3_t;
-typedef struct sshape_vec4_t { float x, y, z, w; } sshape_vec4_t;
 typedef struct sshape_mat4_t { float v[4][4]; } sshape_mat4_t;
 
-/* vertex structure used in the generated meshes */
 typedef struct sshape_vertex_t {
-    sshape_vec3_t pos;
+    sshape_vec3_t position;
     sshape_vec3_t normal;
-    sshape_vec2_t uv;
+    sshape_vec2_t texcoord;
     uint32_t color;
 } sshape_vertex_t;
 
-/* a pointer / byte-size pair to describe a memory buffer */
-typedef struct sshape_buffer_t {
-    void* ptr;
-    uint32_t size;
-} sshape_buffer_t;
+/* a range of draw-elements (sg_draw(int base_element, int num_element, ...)) */
+typedef struct sshape_element_range_t {
+    int base_element;
+    int num_elements;
+} sshape_element_range_t;
 
-/* result struct of shape builder functions */
-typedef struct sshape_mesh_descs_t {
-    sg_buffer_desc vertices;
-    sg_buffer_desc indices;
-    sg_buffer_layout_desc buffer_layout;
-    sg_vertex_attr_desc pos_attr;
-    sg_vertex_attr_desc normal_attr;
-    sg_vertex_attr_desc uv_attr;
-    sg_vertex_attr_desc color_attr;
-} sshape_mesh_descs_t;
+/* number of elements and byte size of build actions */
+typedef struct sshape_sizes_item_t {
+    uint32_t num;       // number of elements
+    uint32_t size;      // the same as size in bytes
+} sshape_sizes_item_t;
 
-typedef struct sshape_vertex_range_t {
-    sshape_vertex_t* ptr;
-    uint32_t num;
-} sshape_vertex_range_t;
+typedef struct sshape_sizes_t {
+    sshape_sizes_item_t vertices;
+    sshape_sizes_item_t indices;
+} sshape_sizes_t;
 
-typedef struct sshape_index_range_t {
-    uint16_t ptr;
-    uint32_t num;
-} sshape_index_range_t;
+/* in/out struct to keep track of mesh-build state */
+typedef struct sshape_build_item_t {
+    void* buf_ptr;          // pointer to start of output buffer
+    uint32_t buf_size;      // size in bytes of output buffer
+    uint32_t data_offset;   // current data offset from buffer start
+    uint32_t data_size;     // current length of data in bytes
+} sshape_build_item_t;
 
-typedef struct sshape_mesh_t {
-    bool success;
-    // ready-to-use sokol-gfx desc strycts
-    sshape_mesh_descs_t descs;
-    // ..or alternative vertex/index ranges
-    sshape_vertex_range_t vertices;
-    sshape_index_range_t indices;
-} sshape_mesh_t;
-
-/* result of the ssahape_*_buffer_size() functions */
-typedef struct sshape_buffer_sizes_t {
-    uint32_t vertex_buffer_size;    // required vertex buffer size in bytes
-    uint32_t num_vertices;          // ...the same in number of vertices
-    uint32_t index_buffer_size;     // required index buffer size
-    uint32_t num_indices;           // ...the same in number of indices
-} sshape_buffer_sizes_t;
+typedef struct sshape_build_t {
+    sshape_build_item_t vertices;
+    sshape_build_item_t indices;
+} sshape_build_t;
 
 /* shape build-parameter structs */
-typedef struct sshape_plane_desc_t {
+typedef struct sshape_plane_t {
     float width, depth;             // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
-    sshape_buffer_t vertices;       // memory buffer to write vertices to
-    sshape_buffer_t indices;        // memory buffer to write indices to
-} sshape_plane_desc_t;
+} sshape_plane_t;
 
-typedef struct sshape_box_desc_t {
+typedef struct sshape_box_t {
     float width, height, depth;     // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
-    sshape_buffer_t vertices;       // memory buffer to write vertices to
-    sshape_buffer_t indices;        // memory buffer to write indices to
-} sshape_box_desc_t;
+} sshape_box_t;
 
-typedef struct sshape_sphere_desc_t {
+typedef struct sshape_sphere_t {
     float radius;                   // default: 0.5
     uint32_t slices;                // default: FIXME
     uint32_t stacks;                // default: FIXME
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
-    sshape_buffer_t vertices;       // memory buffer to write vertices to
-    sshape_buffer_t indices;        // memory buffer to write indices to
-} sshape_sphere_desc_t;
+} sshape_sphere_t;
 
-typedef struct sshape_cylinder_desc_t {
+typedef struct sshape_cylinder_t {
     float radius;                   // default: 0.5
     float length;                   // default: 1.0
     uint32_t slices;                // default: FIXME
     uint32_t stacks;                // default: FIXME
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
-    sshape_buffer_t vertices;       // memory buffer to write vertices to
-    sshape_buffer_t indices;        // memory buffer to write indices to
-} sshape_cylinder_desc_t;
+} sshape_cylinder_t;
 
-typedef struct sshape_torus_desc_t {
+typedef struct sshape_torus_t {
     float ring_radius;              // default: ???
     float radius;                   // default: ???
     uint32_t sides;                 // default: ???
     uint32_t rings;                 // default: ???
     sshape_mat4_t transform;        // default: identity matrix
-    sshape_buffer_t vertices;       // memory buffer to write vertices to
-    sshape_buffer_t indices;        // memory buffer to write indices to
-} sshape_torus_desc_t;
+} sshape_torus_t;
 
 /* shape builder functions */
-SOKOL_API_DECL sshape_mesh_t sshape_build_plane(const sshape_plane_desc_t* desc);
-SOKOL_API_DECL sshape_mesh_t sshape_build_box(const sshape_box_desc_t* desc);
-SOKOL_API_DECL sshape_mesh_t sshape_build_sphere(const sshape_sphere_desc_t* desc);
-SOKOL_API_DECL sshape_mesh_t sshape_build_cylinder(const sshape_cylinder_desc_t* desc);
-SOKOL_API_DECL sshape_mesh_t sshape_build_torus(const sshape_torus_desc_t* desc);
+SOKOL_API_DECL sshape_build_t sshape_build_plane(const sshape_build_t* state, const sshape_plane_t* params);
+SOKOL_API_DECL sshape_build_t sshape_build_box(const sshape_build_t* state, const sshape_box_t* params);
+SOKOL_API_DECL sshape_build_t sshape_build_sphere(const sshape_build_t* state, const sshape_sphere_t* params);
+SOKOL_API_DECL sshape_build_t sshape_build_cylinder(const sshape_build_t* state, const sshape_cylinder_t* params);
+SOKOL_API_DECL sshape_build_t sshape_build_torus(const sshape_build_t* state, const sshape_torus_t* params);
 
 /* query required vertex- and index-buffer sizes in bytes */
-SOKOL_API_DECL sshape_buffer_sizes_t sshape_plane_buffer_sizes(uint32_t tiles);
-SOKOL_API_DECL sshape_buffer_sizes_t sshape_box_buffer_sizes(uint32_t tiles);
-SOKOL_API_DECL sshape_buffer_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32_t stacks);
-SOKOL_API_DECL sshape_buffer_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint32_t stacks);
-SOKOL_API_DECL sshape_buffer_sizes_t sshape_torus_buffer_sizes(uint32_t sides, uint32_t rings);
+SOKOL_API_DECL sshape_sizes_t sshape_plane_sizes(uint32_t tiles);
+SOKOL_API_DECL sshape_sizes_t sshape_box_sizes(uint32_t tiles);
+SOKOL_API_DECL sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stacks);
+SOKOL_API_DECL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t stacks);
+SOKOL_API_DECL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings);
+
+/* extract sokol-gfx desc structs and primitive ranges from build state */
+SOKOL_API_DECL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_build_t* state);
+SOKOL_API_DECL sg_buffer_desc sshape_index_buffer_desc(const sshape_build_t* state);
+SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_build_t* state);
+SOKOL_API_DECL sg_buffer_layout_desc sshape_buffer_layout_desc(void);
+SOKOL_API_DECL sg_vertex_attr_desc sshape_position_attr_desc(void);
+SOKOL_API_DECL sg_vertex_attr_desc sshape_normal_attr_desc(void);
+SOKOL_API_DECL sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
+SOKOL_API_DECL sg_vertex_attr_desc sshape_color_attr_desc(void);
 
 /* helper functions to build packed color value from floats or bytes */
 SOKOL_API_DECL uint32_t sshape_color_4f(float r, float g, float b, float a);
@@ -344,53 +328,53 @@ SOKOL_API_IMPL sshape_mat4_t sshape_mat4_transpose(const float m[16]) {
     return res;
 }
 
-SOKOL_API_IMPL sshape_buffer_sizes_t sshape_plane_buffer_sizes(uint32_t tiles) {
+SOKOL_API_IMPL sshape_sizes_t sshape_plane_buffer_sizes(uint32_t tiles) {
     SOKOL_ASSERT(tiles >= 1);
-    sshape_buffer_sizes_t res = { 0 };
-    res.num_vertices = _sshape_plane_num_vertices(tiles);
-    res.num_indices = _sshape_plane_num_indices(tiles);
-    res.vertex_buffer_size = res.num_vertices * sizeof(sshape_vertex_t);
-    res.index_buffer_size = res.num_indices * sizeof(uint16_t);
+    sshape_sizes_t res = { 0 };
+    res.vertices.num = _sshape_plane_num_vertices(tiles);
+    res.indices.num = _sshape_plane_num_indices(tiles);
+    res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
+    res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
 
-SOKOL_API_IMPL sshape_buffer_sizes_t sshape_box_buffer_sizes(uint32_t tiles) {
+SOKOL_API_IMPL sshape_sizes_t sshape_box_buffer_sizes(uint32_t tiles) {
     SOKOL_ASSERT(tiles >= 1);
-    sshape_buffer_sizes_t res = { 0 };
-    res.num_vertices = _sshape_box_num_vertices(tiles);
-    res.num_indices = _sshape_box_num_indices(tiles);
-    res.vertex_buffer_size = res.num_vertices * sizeof(sshape_vertex_t);
-    res.index_buffer_size = res.num_indices * sizeof(uint16_t);
+    sshape_sizes_t res = { 0 };
+    res.vertices.num = _sshape_box_num_vertices(tiles);
+    res.indices.num = _sshape_box_num_indices(tiles);
+    res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
+    res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
 
-SOKOL_API_IMPL sshape_buffer_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32_t stacks) {
+SOKOL_API_IMPL sshape_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32_t stacks) {
     SOKOL_ASSERT((slices >= 3) && (stacks >= 2));
-    sshape_buffer_sizes_t res = { 0 };
-    res.num_vertices = _sshape_sphere_num_vertices(slices, stacks);
-    res.num_indices = _sshape_sphere_num_indices(slices, stacks);
-    res.vertex_buffer_size = res.num_vertices * sizeof(sshape_vertex_t);
-    res.index_buffer_size = res.num_indices * sizeof(uint16_t);
+    sshape_sizes_t res = { 0 };
+    res.vertices.num = _sshape_sphere_num_vertices(slices, stacks);
+    res.indices.num = _sshape_sphere_num_indices(slices, stacks);
+    res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
+    res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
 
-SOKOL_API_IMPL sshape_buffer_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint32_t stacks) {
+SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint32_t stacks) {
     SOKOL_ASSERT((slices >= 3) && (stacks >= 1));
-    sshape_buffer_sizes_t res = { 0 };
-    res.num_vertices = _sshape_cylinder_num_vertices(slices, stacks);
-    res.num_indices = _sshape_cylinder_num_indices(slices, stacks);
-    res.vertex_buffer_size = res.num_vertices * sizeof(sshape_vertex_t);
-    res.index_buffer_size = res.num_indices * sizeof(uint16_t);
+    sshape_sizes_t res = { 0 };
+    res.vertices.num = _sshape_cylinder_num_vertices(slices, stacks);
+    res.indices.num = _sshape_cylinder_num_indices(slices, stacks);
+    res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
+    res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
 
-SOKOL_API_IMPL sshape_buffer_sizes_t sshape_torus_buffer_sizes(uint32_t sides, uint32_t rings) {
+SOKOL_API_IMPL sshape_sizes_t sshape_torus_buffer_sizes(uint32_t sides, uint32_t rings) {
     SOKOL_ASSERT((sides >= 3) && (rings >= 3));
-    sshape_buffer_sizes_t res = { 0 };
-    res.num_vertices = _sshape_torus_num_vertices(sides, rings);
-    res.num_indices = _sshape_torus_num_indices(sides, rings);
-    res.vertex_buffer_size = res.num_vertices * sizeof(sshape_vertex_t);
-    res.index_buffer_size = res.num_indices * sizeof(uint16_t);
+    sshape_sizes_t res = { 0 };
+    res.vertices.num = _sshape_torus_num_vertices(sides, rings);
+    res.indices.num = _sshape_torus_num_indices(sides, rings);
+    res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
+    res.indices.size = res.indices.num * sizeof(uint16_t);
     return res;
 }
 
