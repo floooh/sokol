@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**03-Nov-2020** sokol_app.h: drag'n'drop support for HTML5/WASM)
+[See what's new](#updates) (**08-Nov-2020** PSA about RenderDoc 1.10 and sokol_app.h D3D11/DXGI)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -437,6 +437,10 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **08-Nov-2020** PSA: It appears that RenderDoc v1.10 chokes on the new
+  D3D11/DXGI swapchain code from 10-Oct-2020 in sokol_app.h. The current
+  RenderDoc Nightly Build works, so I guess in v1.11 everything will be fine.
 
 - **03-Nov-2020**: sokol_app.h: the missing drag'n'drop support for HTML5/WASM
   has been added. This adds two platform-specific functions
