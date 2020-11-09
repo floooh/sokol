@@ -81,8 +81,9 @@ extern "C" {
 /* helper structs */
 typedef struct sshape_vec2_t { float x, y; } sshape_vec2_t;
 typedef struct sshape_vec3_t { float x, y, z; } sshape_vec3_t;
+typedef struct sshape_vec4_t { float x, y, z, w; } sshape_vec4_t;
 typedef struct sshape_mat4_t { float v[4][4]; } sshape_mat4_t;
-
+typedef uint16_t sshape_index_t;
 typedef struct sshape_vertex_t {
     sshape_vec3_t position;
     sshape_vec3_t normal;
@@ -116,16 +117,18 @@ typedef struct sshape_build_item_t {
 } sshape_build_item_t;
 
 typedef struct sshape_build_t {
+    bool valid;
     sshape_build_item_t vertices;
     sshape_build_item_t indices;
 } sshape_build_t;
 
-/* shape build-parameter structs */
+/* TODO: documentation on build-parameter structs */
 typedef struct sshape_plane_t {
     float width, depth;             // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
+    bool rewind_indices;            // default: false
 } sshape_plane_t;
 
 typedef struct sshape_box_t {
@@ -133,6 +136,7 @@ typedef struct sshape_box_t {
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
+    bool rewind_indices;            // default: false
 } sshape_box_t;
 
 typedef struct sshape_sphere_t {
@@ -141,6 +145,7 @@ typedef struct sshape_sphere_t {
     uint32_t stacks;                // default: FIXME
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
+    bool rewind_indices;            // default: false
 } sshape_sphere_t;
 
 typedef struct sshape_cylinder_t {
@@ -150,6 +155,7 @@ typedef struct sshape_cylinder_t {
     uint32_t stacks;                // default: FIXME
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
+    bool rewind_indices;            // default: false
 } sshape_cylinder_t;
 
 typedef struct sshape_torus_t {
@@ -158,6 +164,7 @@ typedef struct sshape_torus_t {
     uint32_t sides;                 // default: ???
     uint32_t rings;                 // default: ???
     sshape_mat4_t transform;        // default: identity matrix
+    bool rewind_indices;            // default: false
 } sshape_torus_t;
 
 /* shape builder functions */
@@ -237,6 +244,10 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #endif
 
 /*=== PRIVATE FUNCTIONS ======================================================*/
+#define _sshape_def(val, def) (((val) == 0) ? (def) : (val))
+#define _sshape_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
+#define _sshape_white (0xFFFFFFFF)
+
 static inline uint32_t _sshape_pack_rgbab(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (uint32_t)(((uint32_t)a<<24)|((uint32_t)b<<16)|((uint32_t)g<<8)|r);
 }
@@ -253,6 +264,45 @@ static inline uint32_t _sshape_pack_rgbaf(float r, float g, float b, float a) {
     uint8_t b_u8 = (uint8_t) (_sshape_clamp(b, 0.0f, 1.0f) * 255.0f);
     uint8_t a_u8 = (uint8_t) (_sshape_clamp(a, 0.0f, 1.0f) * 255.0f);
     return _sshape_pack_rgbab(r_u8, g_u8, b_u8, a_u8);
+}
+
+static inline sshape_vec4_t _sshape_vec4(float x, float y, float z, float w) {
+    return (sshape_vec4_t) { x, y, z, w };
+}
+
+static inline sshape_vec2_t _sshape_vec2(float x, float y) {
+    return (sshape_vec2_t) { x, y };
+}
+
+static bool _sshape_mat4_isnull(const sshape_mat4_t* m) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (0.0f != m->v[y][x]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static sshape_mat4_t _sshape_mat4_identity(void) {
+    return (sshape_mat4_t) {
+        {
+            { 1.0f, 0.0f, 0.0f, 0.0f },
+            { 0.0f, 1.0f, 0.0f, 0.0f },
+            { 0.0f, 0.0f, 1.0f, 0.0f },
+            { 0.0f, 0.0f, 0.0f, 1.0f }
+        }
+    };
+}
+
+static sshape_vec4_t _sshape_mat4_mul(const sshape_mat4_t* m, sshape_vec4_t v) {
+    return (sshape_vec4_t) {
+        m->v[0][0]*v.x + m->v[1][0]*v.y + m->v[2][0]*v.z + m->v[3][0]*v.w,
+        m->v[0][1]*v.x + m->v[1][1]*v.y + m->v[2][1]*v.z + m->v[3][1]*v.w,
+        m->v[0][2]*v.x + m->v[1][2]*v.y + m->v[2][2]*v.z + m->v[3][2]*v.w,
+        m->v[0][3]*v.x + m->v[1][3]*v.y + m->v[2][3]*v.z + m->v[3][3]*v.w
+    };
 }
 
 static uint32_t _sshape_plane_num_vertices(uint32_t tiles) {
@@ -295,6 +345,74 @@ static uint32_t _sshape_torus_num_indices(uint32_t sides, uint32_t rings) {
     return sides * rings * 2 * 3;
 }
 
+static bool _sshape_validate_build_item(const sshape_build_item_t* item, uint32_t build_size) {
+    if (0 == item->buf_ptr) {
+        return false;
+    }
+    if (0 == item->buf_size) {
+        return false;
+    }
+    if ((item->data_offset + item->data_size + build_size) > item->buf_size) {
+        return false;
+    }
+    return true;
+}
+
+static bool _sshape_validate_build_state(const sshape_build_t* state, uint32_t num_vertices, uint32_t num_indices) {
+    if (!_sshape_validate_build_item(&state->vertices, num_vertices * sizeof(sshape_vertex_t))) {
+        return false;
+    }
+    if (!_sshape_validate_build_item(&state->indices, num_indices * sizeof(sshape_index_t))) {
+        return false;
+    }
+    return true;
+}
+
+static void _sshape_advance_offset(sshape_build_item_t* item) {
+    item->data_offset += item->data_size;
+    item->data_size = 0;
+}
+
+static sshape_index_t _sshape_base_index(const sshape_build_t* state) {
+    return state->indices.data_offset / sizeof(sshape_index_t);
+}
+
+static sshape_plane_t _sshape_plane_defaults(const sshape_plane_t* params) {
+    sshape_plane_t res = *params;
+    res.width = _sshape_def_flt(res.width, 1.0f);
+    res.depth = _sshape_def_flt(res.depth, 1.0f);
+    res.tiles = _sshape_def(res.tiles, 1);
+    res.color = _sshape_def(res.color, _sshape_white);
+    res.transform = _sshape_mat4_isnull(&res.transform) ? _sshape_mat4_identity() : res.transform;
+    return res;
+}
+
+static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_vec4_t norm, sshape_vec2_t uv, uint32_t color) {
+    uint32_t offset = state->vertices.data_offset + state->vertices.data_size;
+    SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= state->vertices.buf_size);
+    state->vertices.data_size += sizeof(sshape_vertex_t);
+    sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)state->vertices.buf_ptr + offset);
+    v_ptr->position.x = pos.x;
+    v_ptr->position.y = pos.y;
+    v_ptr->position.z = pos.z;
+    v_ptr->normal.x = norm.x;
+    v_ptr->normal.y = norm.y;
+    v_ptr->normal.z = norm.z;
+    v_ptr->texcoord.x = uv.x;
+    v_ptr->texcoord.y = uv.y;
+    v_ptr->color = color;
+}
+
+static void _sshape_add_triangle(sshape_build_t* state, sshape_index_t i0, sshape_index_t i1, sshape_index_t i2) {
+    uint32_t offset = state->indices.data_offset + state->indices.data_size;
+    SOKOL_ASSERT((offset + 3*sizeof(sshape_index_t)) <= state->indices.buf_size);
+    state->indices.data_size += 3*sizeof(sshape_index_t);
+    sshape_index_t* i_ptr = (sshape_index_t*) ((uint8_t*)state->indices.buf_ptr + offset);
+    i_ptr[0] = i0;
+    i_ptr[1] = i1;
+    i_ptr[2] = i2;
+}
+
 /*=== PUBLIC API FUNCTIONS ===================================================*/
 SOKOL_API_IMPL uint32_t sshape_color_4f(float r, float g, float b, float a) {
     return _sshape_pack_rgbaf(r, g, b, a);
@@ -334,7 +452,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_plane_buffer_sizes(uint32_t tiles) {
     res.vertices.num = _sshape_plane_num_vertices(tiles);
     res.indices.num = _sshape_plane_num_indices(tiles);
     res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
-    res.indices.size = res.indices.num * sizeof(uint16_t);
+    res.indices.size = res.indices.num * sizeof(sshape_index_t);
     return res;
 }
 
@@ -344,7 +462,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_box_buffer_sizes(uint32_t tiles) {
     res.vertices.num = _sshape_box_num_vertices(tiles);
     res.indices.num = _sshape_box_num_indices(tiles);
     res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
-    res.indices.size = res.indices.num * sizeof(uint16_t);
+    res.indices.size = res.indices.num * sizeof(sshape_index_t);
     return res;
 }
 
@@ -354,7 +472,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32
     res.vertices.num = _sshape_sphere_num_vertices(slices, stacks);
     res.indices.num = _sshape_sphere_num_indices(slices, stacks);
     res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
-    res.indices.size = res.indices.num * sizeof(uint16_t);
+    res.indices.size = res.indices.num * sizeof(sshape_index_t);
     return res;
 }
 
@@ -364,7 +482,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint
     res.vertices.num = _sshape_cylinder_num_vertices(slices, stacks);
     res.indices.num = _sshape_cylinder_num_indices(slices, stacks);
     res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
-    res.indices.size = res.indices.num * sizeof(uint16_t);
+    res.indices.size = res.indices.num * sizeof(sshape_index_t);
     return res;
 }
 
@@ -374,8 +492,69 @@ SOKOL_API_IMPL sshape_sizes_t sshape_torus_buffer_sizes(uint32_t sides, uint32_t
     res.vertices.num = _sshape_torus_num_vertices(sides, rings);
     res.indices.num = _sshape_torus_num_indices(sides, rings);
     res.vertices.size = res.vertices.num * sizeof(sshape_vertex_t);
-    res.indices.size = res.indices.num * sizeof(uint16_t);
+    res.indices.size = res.indices.num * sizeof(sshape_index_t);
     return res;
+}
+
+/*
+    Geometry layout for plane (4 tiles):
+    +--+--+--+--+
+    |\ |\ |\ |\ |
+    | \| \| \| \|
+    +--+--+--+--+    25 vertices (tiles + 1) * (tiles + 1)
+    |\ |\ |\ |\ |    32 triangles (tiles + 1) * (tiles + 1) * 2
+    | \| \| \| \|
+    +--+--+--+--+
+    |\ |\ |\ |\ |
+    | \| \| \| \|
+    +--+--+--+--+
+    |\ |\ |\ |\ |
+    | \| \| \| \|
+    +--+--+--+--+
+*/
+SOKOL_API_IMPL sshape_build_t sshape_build_plane(const sshape_build_t* in_state, const sshape_plane_t* in_params) {
+    SOKOL_ASSERT(in_state && in_params);
+    const sshape_plane_t params = _sshape_plane_defaults(in_params);
+    const uint32_t num_vertices = _sshape_plane_num_vertices(params.tiles);
+    const uint32_t num_indices = _sshape_plane_num_indices(params.tiles);
+    sshape_build_t state = *in_state;
+    if (!_sshape_validate_build_state(&state, num_vertices, num_indices)) {
+        state.valid = false;
+        return state;
+    }
+    state.valid = true;
+    _sshape_advance_offset(&state.vertices);
+    _sshape_advance_offset(&state.indices);
+
+    // write vertices
+    float x0 = -params.width * 0.5f;
+    float z0 =  params.depth * 0.5f;
+    float dx = params.width / params.tiles;
+    float dz = -params.depth / params.tiles;
+    float duv = 1.0f / params.tiles;
+    sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, _sshape_vec4(0.0f, 1.0f, 0.0f, 0.0f));
+    for (uint32_t ix = 0; ix <= params.tiles; ix++) {
+        for (uint32_t iz = 0; iz <= params.tiles; iz++) {
+            sshape_vec4_t pos = _sshape_vec4(x0 + dx*ix, z0 + dz*iz, 0.0f, 1.0f);
+            sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            sshape_vec2_t uv = _sshape_vec2(duv*ix, duv*iz);
+            _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
+        }
+    }
+
+    // write indices
+    sshape_index_t start_index = _sshape_base_index(&state);
+    for (uint32_t j = 0; j < params.tiles; j++) {
+        for (uint32_t i = 0; i < params.tiles; i++) {
+            sshape_index_t i0 = start_index + (j * (params.tiles + 1)) + i;
+            sshape_index_t i1 = i0 + 1;
+            sshape_index_t i2 = i0 + params.tiles + 1;
+            sshape_index_t i3 = i2 + 1;
+            _sshape_add_triangle(&state, i0, i1, i2);
+            _sshape_add_triangle(&state, i0, i3, i2);
+        }
+    }
+    return state;
 }
 
 #endif // SOKOL_SHAPE_IMPL
