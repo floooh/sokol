@@ -112,8 +112,8 @@ typedef struct sshape_sizes_t {
 typedef struct sshape_build_item_t {
     void* buf_ptr;          // pointer to start of output buffer
     uint32_t buf_size;      // size in bytes of output buffer
-    uint32_t data_offset;   // current data offset from buffer start
-    uint32_t data_size;     // current length of data in bytes
+    uint32_t data_size;     // size in bytes of valid data in buffer
+    uint32_t shape_offset;  // data offset of the most recent shape
 } sshape_build_item_t;
 
 typedef struct sshape_build_t {
@@ -209,6 +209,7 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #define SOKOL_SHAPE_IMPL_INCLUDED (1)
 
 #include <string.h> // memcpy
+#include <stddef.h> // offsetof
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -347,7 +348,10 @@ static bool _sshape_validate_build_item(const sshape_build_item_t* item, uint32_
     if (0 == item->buf_size) {
         return false;
     }
-    if ((item->data_offset + item->data_size + build_size) > item->buf_size) {
+    if ((item->data_size + build_size) > item->buf_size) {
+        return false;
+    }
+    if (item->shape_offset > item->data_size) {
         return false;
     }
     return true;
@@ -364,12 +368,11 @@ static bool _sshape_validate_build_state(const sshape_build_t* state, uint32_t n
 }
 
 static void _sshape_advance_offset(sshape_build_item_t* item) {
-    item->data_offset += item->data_size;
-    item->data_size = 0;
+    item->shape_offset = item->data_size;
 }
 
 static sshape_index_t _sshape_base_index(const sshape_build_t* state) {
-    return state->indices.data_offset / sizeof(sshape_index_t);
+    return state->vertices.shape_offset / sizeof(sshape_vertex_t);
 }
 
 static sshape_plane_t _sshape_plane_defaults(const sshape_plane_t* params) {
@@ -394,7 +397,7 @@ static sshape_box_t _sshape_box_defaults(const sshape_box_t* params) {
 }
 
 static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_vec4_t norm, sshape_vec2_t uv, uint32_t color) {
-    uint32_t offset = state->vertices.data_offset + state->vertices.data_size;
+    uint32_t offset = state->vertices.data_size;
     SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= state->vertices.buf_size);
     state->vertices.data_size += sizeof(sshape_vertex_t);
     sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)state->vertices.buf_ptr + offset);
@@ -410,7 +413,7 @@ static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_
 }
 
 static void _sshape_add_triangle(sshape_build_t* state, sshape_index_t i0, sshape_index_t i1, sshape_index_t i2) {
-    uint32_t offset = state->indices.data_offset + state->indices.data_size;
+    uint32_t offset = state->indices.data_size;
     SOKOL_ASSERT((offset + 3*sizeof(sshape_index_t)) <= state->indices.buf_size);
     state->indices.data_size += 3*sizeof(sshape_index_t);
     sshape_index_t* i_ptr = (sshape_index_t*) ((uint8_t*)state->indices.buf_ptr + offset);
@@ -556,7 +559,7 @@ SOKOL_API_IMPL sshape_build_t sshape_build_plane(const sshape_build_t* in_state,
             sshape_index_t i1 = i0 + 1;
             sshape_index_t i2 = i0 + params.tiles + 1;
             sshape_index_t i3 = i2 + 1;
-            _sshape_add_triangle(&state, i0, i1, i2);
+            _sshape_add_triangle(&state, i0, i1, i3);
             _sshape_add_triangle(&state, i0, i3, i2);
         }
     }
@@ -611,7 +614,7 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
         sshape_vec4_t norm = _sshape_vec4((0==left_right) ? -1.0f:1.0f, 0.0f, 0.0f, 0.0f);
         sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
         for (uint32_t iy = 0; iy <= params.tiles; iy++) {
-            pos.y = (0==left_right) ? (y1 - dy * iy) : (y1 + dy * iy);
+            pos.y = (0==left_right) ? (y1 - dy * iy) : (y0 + dy * iy);
             for (uint32_t iz = 0; iz <= params.tiles; iz++) {
                 pos.z = z0 + dz * iz;
                 sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
@@ -656,5 +659,69 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
     return state;
 }
 
+SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_build_t* state) {
+    SOKOL_ASSERT(state && state->valid);
+    sg_buffer_desc desc = { 0 };
+    desc.size = state->vertices.data_size;
+    desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
+    desc.usage = SG_USAGE_IMMUTABLE;
+    desc.content = state->vertices.buf_ptr;
+    return desc;
+}
+
+SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_build_t* state) {
+    SOKOL_ASSERT(state && state->valid);
+    sg_buffer_desc desc = { 0 };
+    desc.size = state->indices.data_size;
+    desc.type = SG_BUFFERTYPE_INDEXBUFFER;
+    desc.usage = SG_USAGE_IMMUTABLE;
+    desc.content = state->indices.buf_ptr;
+    return desc;
+}
+
+SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_build_t* state) {
+    SOKOL_ASSERT(state && state->valid);
+    SOKOL_ASSERT(state->indices.shape_offset < state->indices.data_size);
+    SOKOL_ASSERT(0 == (state->indices.shape_offset & (sizeof(sshape_index_t) - 1)));
+    SOKOL_ASSERT(0 == (state->indices.data_size & (sizeof(sshape_index_t) - 1)));
+    sshape_element_range_t range = { 0 };
+    range.base_element = state->indices.shape_offset / sizeof(sshape_index_t);
+    range.num_elements = (state->indices.data_size - state->indices.shape_offset) / sizeof(sshape_index_t);
+    return range;
+}
+
+SOKOL_API_IMPL sg_buffer_layout_desc sshape_buffer_layout_desc(void) {
+    sg_buffer_layout_desc desc = { 0 };
+    desc.stride = sizeof(sshape_vertex_t);
+    return desc;
+}
+
+SOKOL_API_IMPL sg_vertex_attr_desc sshape_position_attr_desc(void) {
+    sg_vertex_attr_desc desc = { 0 };
+    desc.offset = offsetof(sshape_vertex_t, position);
+    desc.format = SG_VERTEXFORMAT_FLOAT3;
+    return desc;
+}
+
+SOKOL_API_IMPL sg_vertex_attr_desc sshape_normal_attr_desc(void) {
+    sg_vertex_attr_desc desc = { 0 };
+    desc.offset = offsetof(sshape_vertex_t, normal);
+    desc.format = SG_VERTEXFORMAT_FLOAT3;
+    return desc;
+}
+
+SOKOL_API_IMPL sg_vertex_attr_desc sshape_texcoord_attr_desc(void) {
+    sg_vertex_attr_desc desc = { 0 };
+    desc.offset = offsetof(sshape_vertex_t, texcoord);
+    desc.format = SG_VERTEXFORMAT_FLOAT2;
+    return desc;
+}
+
+SOKOL_API_IMPL sg_vertex_attr_desc sshape_color_attr_desc(void) {
+    sg_vertex_attr_desc desc = { 0 };
+    desc.offset = offsetof(sshape_vertex_t, color);
+    desc.format = SG_VERTEXFORMAT_UBYTE4N;
+    return desc;
+}
 
 #endif // SOKOL_SHAPE_IMPL
