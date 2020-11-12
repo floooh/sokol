@@ -24,6 +24,7 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
+        #define SOKOL_WAYLAND
 
     Optionally provide the following defines with your own implementations:
 
@@ -67,6 +68,7 @@
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux with EGL: X11, Xi, Xcursor, EGL, GL (or GLESv2), dl, pthread, m(?)
     - on Linux with GLX: X11, Xi, Xcursor, GL, dl, pthread, m(?)
+    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client
     - on Android: GLESv3, EGL, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
@@ -1783,13 +1785,15 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if defined(SOKOL_GLCORE33)
-        #if !defined(SOKOL_FORCE_EGL)
-            #define _SAPP_GLX (1)
+    #if !defined(SOKOL_WAYLAND)
+        #if defined(SOKOL_GLCORE33)
+            #if !defined(SOKOL_FORCE_EGL)
+                #define _SAPP_GLX (1)
+            #endif
+        #elif !defined(SOKOL_WAYLAND) && !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
+            #error("sokol_app.h: unknown 3D API selected for Linux (X11), must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
         #endif
-    #elif !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
-        #error("sokol_app.h: unknown 3D API selected for Linux, must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
-    #endif
+    #endif /* !SOKOL_WAYLAND */
 #else
 #error "sokol_app.h: Unknown platform"
 #endif
@@ -1957,20 +1961,39 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <android/looper.h>
     #include <EGL/egl.h>
 #elif defined(_SAPP_LINUX)
-    #define GL_GLEXT_PROTOTYPES
-    #include <X11/Xlib.h>
-    #include <X11/Xutil.h>
-    #include <X11/XKBlib.h>
-    #include <X11/keysym.h>
-    #include <X11/Xresource.h>
-    #include <X11/Xatom.h>
-    #include <X11/extensions/XInput2.h>
-    #include <X11/Xcursor/Xcursor.h>
-    #include <X11/cursorfont.h> /* XC_* font cursors */
-    #include <X11/Xmd.h> /* CARD32 */
-    #if !defined(_SAPP_GLX)
+    #if !defined(SOKOL_WAYLAND)
+        #define GL_GLEXT_PROTOTYPES
+        #include <X11/Xlib.h>
+        #include <X11/Xutil.h>
+        #include <X11/XKBlib.h>
+        #include <X11/keysym.h>
+        #include <X11/Xresource.h>
+        #include <X11/Xatom.h>
+        #include <X11/extensions/XInput2.h>
+        #include <X11/Xcursor/Xcursor.h>
+        #include <X11/cursorfont.h> /* XC_* font cursors */
+        #include <X11/Xmd.h> /* CARD32 */
+        #if !defined(_SAPP_GLX)
+            #include <EGL/egl.h>
+        #endif
+    #else /* SOKOL_WAYLAND */
         #include <EGL/egl.h>
-    #endif
+        #include <sys/epoll.h>
+        #include <unistd.h>
+        #include <wayland-client.h>
+        #include <wayland-egl.h>
+
+        /* if given, use the xdg-client header file path, which must be
+         * an absolute path or otherwise a relative path to this
+         * sokol_app.h file otherwise fall back to a manually curated
+         * stripped-down version of used xdg-extensions further down in
+         * the LINUX DECLARATIONS section */
+        /* WL-TODO: find a way to correctly include the header file */
+        #if defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
+            #include SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH
+        #endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
+    #endif /* SOKOL_WAYLAND */
+    #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
@@ -2479,6 +2502,79 @@ typedef struct {
 /*== LINUX DECLARATIONS ======================================================*/
 #if defined(_SAPP_LINUX)
 
+#if defined(SOKOL_WAYLAND)
+/* used for formatting eglChooseConfig() error in _sapp_wl_egl_setup() */
+#include <stdio.h>
+#include <string.h>
+
+#if !defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
+/* NOTE: This is a manually curated list of declarations/definitions of
+ * used elements belonging to wayland's xdg-client protocol extension,
+ * if no specific version is given via
+ * SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH.
+ *
+ * Check your distributions wayland installation for the `xdg-shell`
+ * protocol extension file/header for details.
+ *
+ * Original copyright:
+ *
+ *  Copyright © 2008-2013 Kristian Høgsberg
+ *  Copyright © 2013      Rafael Antognolli
+ *  Copyright © 2013      Jasper St. Pierre
+ *  Copyright © 2010-2013 Intel Corporation
+ *  Copyright © 2015-2017 Samsung Electronics Co., Ltd
+ *  Copyright © 2015-2017 Red Hat Inc.
+
+ *  Permission is hereby granted, free of charge, to any person obtaining a
+ *  copy of this software and associated documentation files (the "Software"),
+ *  to deal in the Software without restriction, including without limitation
+ *  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ *  and/or sell copies of the Software, and to permit persons to whom the
+ *  Software is furnished to do so, subject to the following conditions:
+
+ *  The above copyright notice and this permission notice (including the next
+ *  paragraph) shall be included in all copies or substantial portions of the
+ *  Software.
+
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ *  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ *  DEALINGS IN THE SOFTWARE.
+ *
+ */
+/* WL-TODO: manually define used xdg-shell extensions */
+#endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
+
+#define _SAPP_WAYLAND_MAX_EPOLL_EVENTS 10
+
+typedef struct {
+    /* wayland specific objects/globals */
+    struct wl_compositor* compositor;
+    struct wl_display* display;
+    struct wl_egl_window* egl_window;
+    struct wl_event_queue* event_queue;
+    struct wl_registry* registry;
+    struct wl_surface* surface;
+    struct xdg_surface* shell;
+    struct xdg_toplevel* toplevel;
+    struct xdg_wm_base* wm_base;
+
+    /* EGL specific objects */
+    EGLContext* egl_context;
+    EGLDisplay* egl_display;
+    EGLSurface* egl_surface;
+
+    /* custom event loop state */
+    int epoll_fd;
+    int event_fd;
+    struct epoll_event events[_SAPP_WAYLAND_MAX_EPOLL_EVENTS];
+} _sapp_wl_t;
+
+#elif /* SOKOL_WAYLAND */
+
 #define _SAPP_X11_XDND_VERSION (5)
 
 #define GLX_VENDOR 1
@@ -2625,7 +2721,8 @@ typedef struct {
 
 #endif // _SAPP_GLX
 
-#endif // _SAPP_LINUX
+#endif /* SOKOL_WAYLAND */
+#endif /* _SAPP_LINUX */
 
 /*== COMMON DECLARATIONS =====================================================*/
 
@@ -2726,12 +2823,16 @@ typedef struct {
     #elif defined(_SAPP_ANDROID)
         _sapp_android_t android;
     #elif defined(_SAPP_LINUX)
+        #if defined(SOKOL_WAYLAND)
+        _sapp_wl_t wl;
+        #elif /* SOKOL_WAYLAND */
         _sapp_x11_t x11;
         #if defined(_SAPP_GLX)
             _sapp_glx_t glx;
         #else
             _sapp_egl_t egl;
-        #endif
+        #endif /* _SAPP_GLX */
+        #endif /* SOKOL_WAYLAND */
     #endif
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -9379,6 +9480,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 /*== LINUX ==================================================================*/
 #if defined(_SAPP_LINUX)
 
+#if !defined(SOKOL_WAYLAND)
 /* see GLFW's xkb_unicode.c */
 static const struct _sapp_x11_codepair {
   uint16_t keysym;
@@ -11724,7 +11826,7 @@ _SOKOL_PRIVATE void _sapp_egl_destroy(void) {
 
 #endif /* _SAPP_GLX */
 
-_SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
         obscure runtime error if the user has forgotten to add -pthread to
         the compiler or linker options. They have no other purpose.
@@ -11803,6 +11905,378 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_destroy_cursors();
     XCloseDisplay(_sapp.x11.display);
     _sapp_discard_state();
+}
+
+#else /* SOKOL_WAYLAND */
+
+_SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
+    if (NULL != _sapp.wl.egl_surface) eglDestroySurface(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+    if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
+    if (NULL != _sapp.wl.egl_context) eglDestroyContext(_sapp.wl.egl_display, _sapp.wl.egl_context);
+
+    if (NULL != _sapp.wl.toplevel) xdg_toplevel_destroy(_sapp.wl.toplevel);
+    if (NULL != _sapp.wl.shell) xdg_surface_destroy(_sapp.wl.shell);
+    if (NULL != _sapp.wl.wm_base) xdg_wm_base_destroy(_sapp.wl.wm_base);
+    if (NULL != _sapp.wl.surface) wl_surface_destroy(_sapp.wl.surface);
+    if (NULL != _sapp.wl.compositor) wl_compositor_destroy(_sapp.wl.compositor);
+    if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
+    if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
+
+    epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_DEL, _sapp.wl.event_fd, NULL);
+    close(_sapp.wl.event_fd);
+    close(_sapp.wl.epoll_fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
+    _SOKOL_UNUSED(data);
+    xdg_wm_base_pong(wm_base, serial);
+}
+
+_SOKOL_PRIVATE const struct xdg_wm_base_listener _sapp_wl_wm_base_listener = {
+    .ping = _sapp_wl_wm_base_ping,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(version);
+
+    if (0 == strcmp(interface, wl_compositor_interface.name)) {
+        /* bind to version 4 for: `wl_surface_damage_buffer` */
+        _sapp.wl.compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+    } else if (0 == strcmp(interface, xdg_wm_base_interface.name)) {
+        _sapp.wl.wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+        xdg_wm_base_add_listener(_sapp.wl.wm_base, &_sapp_wl_wm_base_listener, NULL);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_registry_handle_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(registry);
+    _SOKOL_UNUSED(name);
+}
+
+_SOKOL_PRIVATE const struct wl_registry_listener _sapp_wl_registry_listener = {
+    .global = _sapp_wl_registry_handle_global,
+    .global_remove = _sapp_wl_registry_handle_global_remove,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_shell_handle_configure(void* data, struct xdg_surface* shell, uint32_t serial) {
+    xdg_surface_ack_configure(shell, serial);
+    if (NULL != _sapp.wl.egl_display && NULL != _sapp.wl.egl_surface) {
+        _sapp_frame();
+        eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+    }
+    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
+    wl_surface_commit(_sapp.wl.surface);
+}
+
+_SOKOL_PRIVATE const struct xdg_surface_listener _sapp_wl_shell_listener = {
+  .configure = _sapp_wl_shell_handle_configure,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_toplevel* toplevel, int32_t width, int32_t height, struct wl_array* states) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(toplevel);
+    _SOKOL_UNUSED(states);
+
+    if (0 == height || 0 == width) {
+        _sapp.window_width = _sapp.desc.width;
+        _sapp.window_height = _sapp.desc.height;
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+    } else {
+        _sapp.window_height = (int) height;
+        _sapp.window_width = (int) width;
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+    }
+
+    if (NULL != _sapp.wl.egl_window) {
+        wl_egl_window_resize(_sapp.wl.egl_window, _sapp.window_width, _sapp.window_height, 0, 0);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplevel* toplevel) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(toplevel);
+
+    _sapp.quit_ordered = true;
+}
+
+_SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
+  .configure = _sapp_wl_toplevel_handle_configure,
+  .close = _sapp_wl_toplevel_handle_close,
+};
+
+/* forward this listener interface for its handler to self-reference to it */
+extern const struct wl_callback_listener _sapp_wl_callback_listener;
+
+_SOKOL_PRIVATE void _sapp_wl_surface_frame_done(void* data, struct wl_callback* cb, uint32_t time) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(time);
+
+    wl_callback_destroy(cb);
+    cb = wl_surface_frame(_sapp.wl.surface);
+    wl_callback_add_listener(cb, &_sapp_wl_callback_listener, NULL);
+
+    _sapp_frame();
+
+    eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
+    wl_surface_commit(_sapp.wl.surface);
+}
+
+const struct wl_callback_listener _sapp_wl_callback_listener = {
+    .done = _sapp_wl_surface_frame_done,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
+    _sapp.wl.display = wl_display_connect(NULL);
+    if (NULL == _sapp.wl.display) {
+        _sapp_fail("wayland: wl_display_connect() failed");
+    }
+
+    _sapp.wl.event_queue = wl_display_create_queue(_sapp.wl.display);
+    wl_proxy_set_queue((struct wl_proxy *) _sapp.wl.display, _sapp.wl.event_queue);
+    if (NULL == _sapp.wl.event_queue) {
+        _sapp_fail("wayland: wl_proxy_set_queue() failed");
+    }
+
+    _sapp.wl.registry = wl_display_get_registry(_sapp.wl.display);
+
+    wl_registry_add_listener(_sapp.wl.registry, &_sapp_wl_registry_listener, NULL);
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    if (NULL == _sapp.wl.compositor) {
+        _sapp_fail("wayland: wl_register_add_listener() failed");
+    }
+
+    _sapp.wl.surface = wl_compositor_create_surface(_sapp.wl.compositor);
+    if (NULL == _sapp.wl.surface) {
+        _sapp_fail("wayland: wl_compositor_create_surface() failed");
+    }
+
+    _sapp.wl.shell = xdg_wm_base_get_xdg_surface(_sapp.wl.wm_base, _sapp.wl.surface);
+    if (NULL == _sapp.wl.shell) {
+       _sapp_fail("wayland: xdg_wm_base_get_xdg_surface() failed");
+    }
+
+    xdg_surface_add_listener(_sapp.wl.shell, &_sapp_wl_shell_listener, &_sapp.wl);
+    _sapp.wl.toplevel = xdg_surface_get_toplevel(_sapp.wl.shell);
+    if (NULL == _sapp.wl.toplevel) {
+        _sapp_fail("wayland: xdg_surface_get_toplevel() failed");
+    }
+    xdg_toplevel_add_listener(_sapp.wl.toplevel, &_sapp_wl_toplevel_listener, &_sapp.wl);
+    xdg_toplevel_set_title(_sapp.wl.toplevel, desc->window_title);
+    wl_surface_commit(_sapp.wl.surface);
+
+    /* WL-TODO: setup high dpi */
+}
+
+_SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
+#if defined(SOKOL_GLCORE33)
+    if (!eglBindAPI(EGL_OPENGL_API)) {
+        _sapp_fail("wayland: eglBindAPI() failed");
+    }
+#else /* SOKOL_GLCORE33 */
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        _sapp_fail("wayland: eglBindAPI() failed");
+    }
+#endif /* SOKOL_GLCORE33 */
+
+    _sapp.wl.egl_display = eglGetDisplay((EGLNativeDisplayType) _sapp.wl.display);
+    if (EGL_NO_DISPLAY == _sapp.wl.egl_display) {
+        _sapp_fail("wayland: eglGetDisplay() failed");
+    }
+
+    EGLint major, minor;
+    if (EGL_TRUE != eglInitialize(_sapp.wl.egl_display, &major, &minor)) {
+        _sapp_fail("wayland: eglInitialize() failed");
+    }
+
+    EGLint alpha = desc->alpha ? 8 : 0;
+    EGLint sample_buffers = desc->sample_count > 1 ? 1 : 0;
+
+    EGLint total_config_count;
+    eglGetConfigs(_sapp.wl.egl_display, NULL, 0, &total_config_count);
+    EGLConfig* egl_configs = (EGLConfig *) _sapp_malloc(total_config_count * sizeof(EGLConfig));
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, alpha,
+
+#if defined(SOKOL_GLCORE33)
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+#else /* SOKOL_GLCORE33 */
+        EGL_RENDERABLE_TYPE, desc->gl_force_gles2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,
+#endif /* SOKOL_GLCORE33 */
+
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SAMPLE_BUFFERS, sample_buffers,
+        EGL_SAMPLES, desc->sample_count,
+
+        EGL_NONE,
+    };
+
+    EGLint config_count;
+    if (!eglChooseConfig(_sapp.wl.egl_display, attribs, egl_configs, total_config_count, &config_count)) {
+        _sapp_free(egl_configs);
+
+        /* format the egl error into a printable string */
+        const char* fmt = "wayland: eglChooseConfig() failed (%x)";
+        const size_t len = strlen(fmt) + 16;
+        char* msg = _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, eglGetError());
+        _sapp_fail(msg);
+    }
+
+    int32_t egl_config_id = -1;
+    for (int32_t i = 0; i < config_count; i++) {
+        EGLConfig c = egl_configs[i];
+        EGLint r, g, b, a, d, s, m, n;
+        EGLBoolean res = eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_RED_SIZE, &r);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_GREEN_SIZE, &g);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_BLUE_SIZE, &b);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_ALPHA_SIZE, &a);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_DEPTH_SIZE, &d);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_STENCIL_SIZE, &s);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_SAMPLE_BUFFERS, &m);
+        res &= eglGetConfigAttrib(_sapp.wl.egl_display, c, EGL_SAMPLES, &n);
+
+        if (EGL_TRUE == res && 8 == r && 8 == g && 8 == b && 8 == alpha &&
+            24 == d && 8 == s && sample_buffers == m && desc->sample_count == n) {
+            egl_config_id = i;
+            break;
+        }
+    }
+
+    /* use config 0 if no config matches the desired one */
+    egl_config_id = 0 <= egl_config_id ? egl_config_id : 0;
+
+    EGLint context_attrib[] = {
+#if defined(SOKOL_GLCORE33)
+        EGL_CONTEXT_MAJOR_VERSION, 3,
+        EGL_CONTEXT_MINOR_VERSION, 3,
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+#else /* SOKOL_GLCORE33 */
+        EGL_CONTEXT_CLIENT_VERSION, desc->gl_force_gles ? 2 : 3,
+#endif /* SOKOL_GLCORE33 */
+
+        EGL_NONE,
+    };
+
+    _sapp.wl.egl_context = eglCreateContext(_sapp.wl.egl_display, egl_configs[egl_config_id], EGL_NO_CONTEXT, context_attrib);
+    if (EGL_NO_CONTEXT == _sapp.wl.egl_context) {
+        _sapp_free(egl_configs);
+        _sapp_fail("wayland: eglCreateContext() failed");
+    }
+
+    int w = _sapp_def(desc->width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+    int h = _sapp_def(desc->height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
+    _sapp.wl.egl_window = wl_egl_window_create(_sapp.wl.surface, w, h);
+    if (EGL_NO_CONTEXT == _sapp.wl.egl_window) {
+        _sapp_free(egl_configs);
+        _sapp_fail("wayland: wl_egl_window_create() failed");
+    }
+
+    _sapp.wl.egl_surface = eglCreateWindowSurface(_sapp.wl.egl_display, egl_configs[egl_config_id],
+                                                  (EGLNativeWindowType) _sapp.wl.egl_window, NULL);
+    _sapp_free(egl_configs);
+    if (EGL_NO_SURFACE == _sapp.wl.egl_window) {
+        _sapp_fail("wayland: eglCreateWindowSurface() failed");
+    }
+
+    eglSwapInterval(_sapp.wl.display, 1);
+    if (!eglMakeCurrent(_sapp.wl.egl_display, _sapp.wl.egl_surface, _sapp.wl.egl_surface, _sapp.wl.egl_context)) {
+        _sapp_fail("wayland: eglMakeCurrent() failed");
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_sighandler_setup(void) {
+    _sapp.wl.epoll_fd = epoll_create1(0);
+    if (0 > _sapp.wl.epoll_fd) {
+        _sapp_fail("wayland: epoll_create1() failed");
+    }
+
+    SOKOL_ASSERT(NULL != _sapp.wl.display);
+    _sapp.wl.event_fd = wl_display_get_fd(_sapp.wl.display);
+    if (0 > _sapp.wl.event_fd) {
+        _sapp_fail("wayland: wl_display_get_fd() failed");
+    }
+
+    struct epoll_event ev = { 0 };
+    ev.events = EPOLLIN;
+    ev.data.fd = _sapp.wl.event_fd;
+    if (0 > epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_ADD, _sapp.wl.event_fd, &ev)) {
+        _sapp_fail("wayland: epoll_ctl() failed");
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
+    _sapp_init_state(desc);
+    _sapp_wl_setup(&_sapp.desc);
+    _sapp_wl_egl_setup(&_sapp.desc);
+    _sapp_wl_sighandler_setup();
+
+    struct wl_callback* cb = wl_surface_frame(_sapp.wl.surface);
+    wl_callback_add_listener(cb, &_sapp_wl_callback_listener, NULL);
+
+    /* WL-TODO: setup xkb context */
+
+    _sapp.valid = true;
+    while (!_sapp.quit_ordered) {
+        /* exhaust event queue */
+        while (0 > wl_display_prepare_read_queue(_sapp.wl.display, _sapp.wl.event_queue)) {
+            wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
+        }
+        wl_display_flush(_sapp.wl.display);
+
+        size_t event_count = epoll_wait(_sapp.wl.epoll_fd, _sapp.wl.events, _SAPP_WAYLAND_MAX_EPOLL_EVENTS, -1);
+        for (size_t i = 0; i < event_count; i++) {
+            if (_sapp.wl.event_fd == _sapp.wl.events[i].data.fd) {
+                /* NOTE: check _sapp_wl_setup() for wl_proxy_set_queue()
+                 * call, that sets the custom event_queue as proxy for
+                 * default display, that's why the following call is not
+                 * explicitly stating the queue to read events for/from */
+                wl_display_read_events(_sapp.wl.display);
+            }
+        }
+
+        wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
+
+        if (_sapp.quit_requested && !_sapp.quit_ordered) {
+            /* WL-TODO: give user code a chance to intervene */
+
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+    }
+
+    _sapp_call_cleanup();
+    _sapp_wl_cleanup();
+    _sapp_discard_state();
+}
+#endif /* SOKOL_WAYLAND */
+
+_SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+    /* The following lines are here to trigger a linker error instead of an
+        obscure runtime error if the user has forgotten to add -pthread to
+        the compiler or linker options. They have no other purpose.
+    */
+    pthread_attr_t pthread_attr;
+    pthread_attr_init(&pthread_attr);
+    pthread_attr_destroy(&pthread_attr);
+
+    #if !defined(SOKOL_WAYLAND)
+    _sapp_linux_x11_run(desc);
+    #else /* SOKOL_WAYLAND */
+    _sapp_linux_wl_run(desc);
+    #endif /* SOKOL_WAYLAND */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -11925,7 +12399,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND) && !defined(_SAPP_GLX)
         return _sapp.egl.display;
     #else
         return 0;
@@ -11936,7 +12410,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND) && !defined(_SAPP_GLX)
         return _sapp.egl.context;
     #else
         return 0;
@@ -11975,7 +12449,11 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #elif defined(_SAPP_UWP)
     _sapp_uwp_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
+    #if !defined(SOKOL_WAYLAND)
     _sapp_x11_toggle_fullscreen();
+    #else /* SOKOL_WAYLAND */
+    /* WL-TODO: _sapp_wl_toggle_fullscreen(); */
+    #endif /* SOKOL_WAYLAND */
     #endif
 }
 
@@ -11987,7 +12465,11 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #elif defined(_SAPP_WIN32)
         _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_WAYLAND)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
+        #else /* SOKOL_WAYLAND */
+        /* WL-TODO: _sapp_wl_show_mouse(show); */
+        #endif /* SOKOL_WAYLAND */
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_EMSCRIPTEN)
@@ -12009,7 +12491,11 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #elif defined(_SAPP_WIN32)
     _sapp_win32_lock_mouse(lock);
     #elif defined(_SAPP_LINUX)
+    #if !defined(SOKOL_WAYLAND)
     _sapp_x11_lock_mouse(lock);
+    #else /* SOKOL_WAYLAND */
+    /* WL-TODO: _sapp_wl_lock_mouse(lock); */
+    #endif /* SOKOL_WAYLAND */
     #else
     _sapp.mouse.locked = lock;
     #endif
@@ -12099,7 +12585,11 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #elif defined(_SAPP_WIN32)
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_WAYLAND)
         _sapp_x11_update_window_title();
+        #else /* SOKOL_WAYLAND */
+        /* WL-TODO: _sapp_wl_update_window_title(); */
+        #endif /* SOKOL_WAYLAND */
     #endif
 }
 
@@ -12124,7 +12614,7 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
         _sapp_macos_set_icon(desc, num_images);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_icon(desc, num_images);
-    #elif defined(_SAPP_LINUX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND)
         _sapp_x11_set_icon(desc, num_images);
     #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_set_icon(desc, num_images);
