@@ -110,8 +110,8 @@ typedef struct sshape_sizes_t {
 
 /* in/out struct to keep track of mesh-build state */
 typedef struct sshape_build_item_t {
-    void* buf_ptr;          // pointer to start of output buffer
-    uint32_t buf_size;      // size in bytes of output buffer
+    void* buffer_ptr;          // pointer to start of output buffer
+    uint32_t buffer_size;      // size in bytes of output buffer
     uint32_t data_size;     // size in bytes of valid data in buffer
     uint32_t shape_offset;  // data offset of the most recent shape
 } sshape_build_item_t;
@@ -139,8 +139,8 @@ typedef struct sshape_box_t {
 
 typedef struct sshape_sphere_t {
     float radius;                   // default: 0.5
-    uint32_t slices;                // default: FIXME
-    uint32_t stacks;                // default: FIXME
+    uint32_t slices;                // default: 5
+    uint32_t stacks;                // default: 4
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_sphere_t;
@@ -210,6 +210,7 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 
 #include <string.h> // memcpy
 #include <stddef.h> // offsetof
+#include <math.h>   // sinf, cosf
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -342,13 +343,13 @@ static uint32_t _sshape_torus_num_indices(uint32_t sides, uint32_t rings) {
 }
 
 static bool _sshape_validate_build_item(const sshape_build_item_t* item, uint32_t build_size) {
-    if (0 == item->buf_ptr) {
+    if (0 == item->buffer_ptr) {
         return false;
     }
-    if (0 == item->buf_size) {
+    if (0 == item->buffer_size) {
         return false;
     }
-    if ((item->data_size + build_size) > item->buf_size) {
+    if ((item->data_size + build_size) > item->buffer_size) {
         return false;
     }
     if (item->shape_offset > item->data_size) {
@@ -396,11 +397,21 @@ static sshape_box_t _sshape_box_defaults(const sshape_box_t* params) {
     return res;
 }
 
+static sshape_sphere_t _sshape_sphere_defaults(const sshape_sphere_t* params) {
+    sshape_sphere_t res = *params;
+    res.radius = _sshape_def_flt(res.radius, 0.5f);
+    res.slices = _sshape_def(res.slices, 5);
+    res.stacks = _sshape_def(res.stacks, 4);
+    res.color = _sshape_def(res.color, _sshape_white);
+    res.transform = _sshape_mat4_isnull(&res.transform) ? _sshape_mat4_identity() : res.transform;
+    return res;
+}
+
 static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_vec4_t norm, sshape_vec2_t uv, uint32_t color) {
     uint32_t offset = state->vertices.data_size;
-    SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= state->vertices.buf_size);
+    SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= state->vertices.buffer_size);
     state->vertices.data_size += sizeof(sshape_vertex_t);
-    sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)state->vertices.buf_ptr + offset);
+    sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)state->vertices.buffer_ptr + offset);
     v_ptr->position.x = pos.x;
     v_ptr->position.y = pos.y;
     v_ptr->position.z = pos.z;
@@ -414,9 +425,9 @@ static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_
 
 static void _sshape_add_triangle(sshape_build_t* state, sshape_index_t i0, sshape_index_t i1, sshape_index_t i2) {
     uint32_t offset = state->indices.data_size;
-    SOKOL_ASSERT((offset + 3*sizeof(sshape_index_t)) <= state->indices.buf_size);
+    SOKOL_ASSERT((offset + 3*sizeof(sshape_index_t)) <= state->indices.buffer_size);
     state->indices.data_size += 3*sizeof(sshape_index_t);
-    sshape_index_t* i_ptr = (sshape_index_t*) ((uint8_t*)state->indices.buf_ptr + offset);
+    sshape_index_t* i_ptr = (sshape_index_t*) ((uint8_t*)state->indices.buffer_ptr + offset);
     i_ptr[0] = i0;
     i_ptr[1] = i1;
     i_ptr[2] = i2;
@@ -659,13 +670,98 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
     return state;
 }
 
+/*
+    Geometry layout for spheres is as follows (for 5 slices, 4 stacks):
+
+    +  +  +  +  +  +        north pole
+    |\ |\ |\ |\ |\
+    | \| \| \| \| \
+    +--+--+--+--+--+        30 vertices (slices + 1) * (stacks + 1)
+    |\ |\ |\ |\ |\ |        30 triangles (2 * slices * stacks) - (2 * slices)
+    | \| \| \| \| \|        2 orphaned vertices
+    +--+--+--+--+--+
+    |\ |\ |\ |\ |\ |
+    | \| \| \| \| \|
+    +--+--+--+--+--+
+     \ |\ |\ |\ |\ |
+      \| \| \| \| \|
+    +  +  +  +  +  +        south pole
+*/
+SOKOL_API_IMPL sshape_build_t sshape_build_sphere(const sshape_build_t* in_state, const sshape_sphere_t* in_params) {
+    SOKOL_ASSERT(in_state && in_params);
+    const sshape_sphere_t params = _sshape_sphere_defaults(in_params);
+    const uint32_t num_vertices = _sshape_sphere_num_vertices(params.slices, params.stacks);
+    const uint32_t num_indices = _sshape_sphere_num_indices(params.slices, params.stacks);
+    sshape_build_t state = *in_state;
+    if (!_sshape_validate_build_state(&state, num_vertices, num_indices)) {
+        state.valid = false;
+        return state;
+    }
+    state.valid = true;
+    _sshape_advance_offset(&state.vertices);
+    _sshape_advance_offset(&state.indices);
+
+    const float pi = 3.14159265358979323846;
+    const float two_pi = 2.0f * pi;
+    const float du = 1.0f / params.slices;
+    const float dv = 1.0f / params.stacks;
+
+    // generate vertices
+    for (uint32_t stack = 0; stack <= params.stacks; stack++) {
+        const float stack_angle = (pi * stack) / params.stacks;
+        const float sin_stack = sinf(stack_angle);
+        const float cos_stack = cosf(stack_angle);
+        for (uint32_t slice = 0; slice <= params.slices; slice++) {
+            const float slice_angle = (two_pi * slice) / params.slices;
+            const float sin_slice = sinf(slice_angle);
+            const float cos_slice = cosf(slice_angle);
+            sshape_vec4_t norm = _sshape_vec4(sin_slice * sin_stack, cos_slice * sin_stack, cos_stack, 0.0f);
+            sshape_vec4_t pos = _sshape_vec4(norm.x * params.radius, norm.y * params.radius, norm.z * params.radius, 1.0f);
+            sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+            sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            sshape_vec2_t uv = _sshape_vec2(slice * du, stack * dv);
+            _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
+        }
+    }
+
+    // generate indices
+    sshape_index_t start_index = _sshape_base_index(&state);
+
+    // north-pole triangles
+    {
+        sshape_index_t row_a = start_index;
+        sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice, row_b + slice + 1);
+        }
+    }
+    // stack triangles
+    for (uint32_t stack = 1; stack < params.stacks - 1; stack++) {
+        sshape_index_t row_a = start_index + stack * (params.slices + 1);
+        sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_a + slice + 1);
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice, row_b + slice + 1);
+        }
+    }
+    // south-pole triangles
+    {
+        sshape_index_t row_a = start_index + (params.stacks - 1) * (params.slices + 1);
+        sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_a + slice + 1);
+        }
+    }
+    return state;
+}
+
 SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_build_t* state) {
     SOKOL_ASSERT(state && state->valid);
     sg_buffer_desc desc = { 0 };
     desc.size = state->vertices.data_size;
     desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     desc.usage = SG_USAGE_IMMUTABLE;
-    desc.content = state->vertices.buf_ptr;
+    desc.content = state->vertices.buffer_ptr;
     return desc;
 }
 
@@ -675,7 +771,7 @@ SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_build_t* sta
     desc.size = state->indices.data_size;
     desc.type = SG_BUFFERTYPE_INDEXBUFFER;
     desc.usage = SG_USAGE_IMMUTABLE;
-    desc.content = state->indices.buf_ptr;
+    desc.content = state->indices.buffer_ptr;
     return desc;
 }
 
