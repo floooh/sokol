@@ -147,9 +147,9 @@ typedef struct sshape_sphere_t {
 
 typedef struct sshape_cylinder_t {
     float radius;                   // default: 0.5
-    float length;                   // default: 1.0
-    uint32_t slices;                // default: FIXME
-    uint32_t stacks;                // default: FIXME
+    float height;                   // default: 1.0
+    uint32_t slices;                // default: 5
+    uint32_t stacks;                // default: 1
     uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_cylinder_t;
@@ -407,6 +407,17 @@ static sshape_sphere_t _sshape_sphere_defaults(const sshape_sphere_t* params) {
     return res;
 }
 
+static sshape_cylinder_t _sshape_cylinder_defaults(const sshape_cylinder_t* params) {
+    sshape_cylinder_t res = *params;
+    res.radius = _sshape_def_flt(res.radius, 0.5f);
+    res.height = _sshape_def_flt(res.height, 1.0f);
+    res.slices = _sshape_def(res.slices, 5);
+    res.stacks = _sshape_def(res.stacks, 1);
+    res.color = _sshape_def(res.color, _sshape_white);
+    res.transform = _sshape_mat4_isnull(&res.transform) ? _sshape_mat4_identity() : res.transform;
+    return res;
+}
+
 static void _sshape_add_vertex(sshape_build_t* state, sshape_vec4_t pos, sshape_vec4_t norm, sshape_vec2_t uv, uint32_t color) {
     uint32_t offset = state->vertices.data_size;
     SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= state->vertices.buffer_size);
@@ -555,9 +566,9 @@ SOKOL_API_IMPL sshape_build_t sshape_build_plane(const sshape_build_t* in_state,
     sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, _sshape_vec4(0.0f, 1.0f, 0.0f, 0.0f));
     for (uint32_t ix = 0; ix <= params.tiles; ix++) {
         for (uint32_t iz = 0; iz <= params.tiles; iz++) {
-            sshape_vec4_t pos = _sshape_vec4(x0 + dx*ix, z0 + dz*iz, 0.0f, 1.0f);
-            sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-            sshape_vec2_t uv = _sshape_vec2(duv*ix, duv*iz);
+            const sshape_vec4_t pos = _sshape_vec4(x0 + dx*ix, 0.0f, z0 + dz*iz, 1.0f);
+            const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            const sshape_vec2_t uv = _sshape_vec2(duv*ix, duv*iz);
             _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
         }
     }
@@ -566,10 +577,10 @@ SOKOL_API_IMPL sshape_build_t sshape_build_plane(const sshape_build_t* in_state,
     sshape_index_t start_index = _sshape_base_index(&state);
     for (uint32_t j = 0; j < params.tiles; j++) {
         for (uint32_t i = 0; i < params.tiles; i++) {
-            sshape_index_t i0 = start_index + (j * (params.tiles + 1)) + i;
-            sshape_index_t i1 = i0 + 1;
-            sshape_index_t i2 = i0 + params.tiles + 1;
-            sshape_index_t i3 = i2 + 1;
+            const sshape_index_t i0 = start_index + (j * (params.tiles + 1)) + i;
+            const sshape_index_t i1 = i0 + 1;
+            const sshape_index_t i2 = i0 + params.tiles + 1;
+            const sshape_index_t i3 = i2 + 1;
             _sshape_add_triangle(&state, i0, i1, i3);
             _sshape_add_triangle(&state, i0, i3, i2);
         }
@@ -606,14 +617,14 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
     // bottom/top vertices
     for (uint32_t top_bottom = 0; top_bottom < 2; top_bottom++) {
         sshape_vec4_t pos = _sshape_vec4(0.0f, (0==top_bottom) ? y0:y1, 0.0f, 0.0f);
-        sshape_vec4_t norm = _sshape_vec4(0.0f, (0==top_bottom) ? -1.0f:1.0f, 0.0f, 0.0f);
-        sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+        const sshape_vec4_t norm = _sshape_vec4(0.0f, (0==top_bottom) ? -1.0f:1.0f, 0.0f, 0.0f);
+        const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
         for (uint32_t ix = 0; ix <= params.tiles; ix++) {
             pos.x = (0==top_bottom) ? (x0 + dx * ix) : (x1 - dx * ix);
             for (uint32_t iz = 0; iz <= params.tiles; iz++) {
                 pos.z = z0 + dz * iz;
-                sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-                sshape_vec2_t uv = _sshape_vec2(ix * duv, iz * duv);
+                const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+                const sshape_vec2_t uv = _sshape_vec2(ix * duv, iz * duv);
                 _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
             }
         }
@@ -622,14 +633,14 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
     // left/right vertices
     for (uint32_t left_right = 0; left_right < 2; left_right++) {
         sshape_vec4_t pos = _sshape_vec4((0==left_right) ? x0:x1, 0.0f, 0.0f, 0.0f);
-        sshape_vec4_t norm = _sshape_vec4((0==left_right) ? -1.0f:1.0f, 0.0f, 0.0f, 0.0f);
-        sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+        const sshape_vec4_t norm = _sshape_vec4((0==left_right) ? -1.0f:1.0f, 0.0f, 0.0f, 0.0f);
+        const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
         for (uint32_t iy = 0; iy <= params.tiles; iy++) {
             pos.y = (0==left_right) ? (y1 - dy * iy) : (y0 + dy * iy);
             for (uint32_t iz = 0; iz <= params.tiles; iz++) {
                 pos.z = z0 + dz * iz;
-                sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-                sshape_vec2_t uv = _sshape_vec2(iy * duv, iz * duv);
+                const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+                const sshape_vec2_t uv = _sshape_vec2(iy * duv, iz * duv);
                 _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
             }
         }
@@ -638,14 +649,14 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
     // front/back vertices
     for (uint32_t front_back = 0; front_back < 2; front_back++) {
         sshape_vec4_t pos = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? z0:z1, 0.0f);
-        sshape_vec4_t norm = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? -1.0f:1.0f, 0.0f);
-        sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+        const sshape_vec4_t norm = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? -1.0f:1.0f, 0.0f);
+        const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
         for (uint32_t ix = 0; ix <= params.tiles; ix++) {
             pos.x = (0==front_back) ? (x1 - dx * ix) : (x0 + dx * ix);
             for (uint32_t iy = 0; iy <= params.tiles; iy++) {
                 pos.y = y0 + dy * iy;
-                sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-                sshape_vec2_t uv = _sshape_vec2(ix * duv, iy * duv);
+                const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+                const sshape_vec2_t uv = _sshape_vec2(ix * duv, iy * duv);
                 _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
             }
         }
@@ -653,15 +664,15 @@ SOKOL_API_IMPL sshape_build_t sshape_build_box(const sshape_build_t* in_state, c
 
     // build indices
     const sshape_index_t verts_per_face = (params.tiles + 1) * (params.tiles + 1);
-    sshape_index_t start_index = _sshape_base_index(&state);
+    const sshape_index_t start_index = _sshape_base_index(&state);
     for (uint32_t face = 0; face < 6; face++) {
         sshape_index_t face_start_index = start_index + face * verts_per_face;
         for (uint32_t j = 0; j < params.tiles; j++) {
             for (uint32_t i = 0; i < params.tiles; i++) {
-                sshape_index_t i0 = face_start_index + (j * (params.tiles + 1)) + i;
-                sshape_index_t i1 = i0 + 1;
-                sshape_index_t i2 = i0 + params.tiles + 1;
-                sshape_index_t i3 = i2 + 1;
+                const sshape_index_t i0 = face_start_index + (j * (params.tiles + 1)) + i;
+                const sshape_index_t i1 = i0 + 1;
+                const sshape_index_t i2 = i0 + params.tiles + 1;
+                const sshape_index_t i3 = i2 + 1;
                 _sshape_add_triangle(&state, i0, i1, i3);
                 _sshape_add_triangle(&state, i0, i3, i2);
             }
@@ -701,7 +712,7 @@ SOKOL_API_IMPL sshape_build_t sshape_build_sphere(const sshape_build_t* in_state
     _sshape_advance_offset(&state.vertices);
     _sshape_advance_offset(&state.indices);
 
-    const float pi = 3.14159265358979323846;
+    const float pi = 3.14159265358979323846f;
     const float two_pi = 2.0f * pi;
     const float du = 1.0f / params.slices;
     const float dv = 1.0f / params.stacks;
@@ -715,30 +726,30 @@ SOKOL_API_IMPL sshape_build_t sshape_build_sphere(const sshape_build_t* in_state
             const float slice_angle = (two_pi * slice) / params.slices;
             const float sin_slice = sinf(slice_angle);
             const float cos_slice = cosf(slice_angle);
-            sshape_vec4_t norm = _sshape_vec4(sin_slice * sin_stack, cos_slice * sin_stack, cos_stack, 0.0f);
-            sshape_vec4_t pos = _sshape_vec4(norm.x * params.radius, norm.y * params.radius, norm.z * params.radius, 1.0f);
-            sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
-            sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-            sshape_vec2_t uv = _sshape_vec2(slice * du, stack * dv);
+            const sshape_vec4_t norm = _sshape_vec4(sin_slice * sin_stack, cos_stack, cos_slice * sin_stack, 0.0f);
+            const sshape_vec4_t pos = _sshape_vec4(norm.x * params.radius, norm.y * params.radius, norm.z * params.radius, 1.0f);
+            const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+            const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            const sshape_vec2_t uv = _sshape_vec2(slice * du, stack * dv);
             _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
         }
     }
 
     // generate indices
-    sshape_index_t start_index = _sshape_base_index(&state);
+    const sshape_index_t start_index = _sshape_base_index(&state);
 
     // north-pole triangles
     {
-        sshape_index_t row_a = start_index;
-        sshape_index_t row_b = row_a + params.slices + 1;
+        const sshape_index_t row_a = start_index;
+        const sshape_index_t row_b = row_a + params.slices + 1;
         for (uint32_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&state, row_a + slice, row_b + slice, row_b + slice + 1);
         }
     }
     // stack triangles
     for (uint32_t stack = 1; stack < params.stacks - 1; stack++) {
-        sshape_index_t row_a = start_index + stack * (params.slices + 1);
-        sshape_index_t row_b = row_a + params.slices + 1;
+        const sshape_index_t row_a = start_index + stack * (params.slices + 1);
+        const sshape_index_t row_b = row_a + params.slices + 1;
         for (uint32_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_a + slice + 1);
             _sshape_add_triangle(&state, row_a + slice, row_b + slice, row_b + slice + 1);
@@ -746,10 +757,125 @@ SOKOL_API_IMPL sshape_build_t sshape_build_sphere(const sshape_build_t* in_state
     }
     // south-pole triangles
     {
-        sshape_index_t row_a = start_index + (params.stacks - 1) * (params.slices + 1);
-        sshape_index_t row_b = row_a + params.slices + 1;
+        const sshape_index_t row_a = start_index + (params.stacks - 1) * (params.slices + 1);
+        const sshape_index_t row_b = row_a + params.slices + 1;
         for (uint32_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_a + slice + 1);
+        }
+    }
+    return state;
+}
+
+/*
+    Geometry for cylinders is as follows (2 stacks, 5 slices):
+
+    +  +  +  +  +  +
+    |\ |\ |\ |\ |\
+    | \| \| \| \| \
+    +--+--+--+--+--+
+    +--+--+--+--+--+    42 vertices (2 wasted) (slices + 1) * (stacks + 5)
+    |\ |\ |\ |\ |\ |    30 triangles (2 * slices * stacks) + (2 * slices)
+    | \| \| \| \| \|
+    +--+--+--+--+--+
+    |\ |\ |\ |\ |\ |
+    | \| \| \| \| \|
+    +--+--+--+--+--+
+    +--+--+--+--+--+
+     \ |\ |\ |\ |\ |
+      \| \| \| \| \|
+    +  +  +  +  +  +
+*/
+static void _sshape_build_cylinder_cap_pole(sshape_build_t* state, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v) {
+    const sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
+    const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, pos_y, 0.0f, 1.0f));
+    for (uint32_t slice = 0; slice <= params->slices; slice++) {
+        const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+        _sshape_add_vertex(state, tpos, tnorm, uv, params->color);
+    }
+}
+
+static void _sshape_build_cylinder_cap_ring(sshape_build_t* state, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v) {
+    const float two_pi = 2.0 * 3.14159265358979323846;
+    const sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
+    for (uint32_t slice = 0; slice <= params->slices; slice++) {
+        const float slice_angle = (two_pi * slice) / params->slices;
+        const float sin_slice = sinf(slice_angle);
+        const float cos_slice = cosf(slice_angle);
+        const sshape_vec4_t pos = _sshape_vec4(sin_slice * params->radius, pos_y, cos_slice * params->radius, 1.0f);
+        const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, pos);
+        const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+        _sshape_add_vertex(state, tpos, tnorm, uv, params->color);
+    }
+}
+
+SOKOL_API_DECL sshape_build_t sshape_build_cylinder(const sshape_build_t* in_state, const sshape_cylinder_t* in_params) {
+    SOKOL_ASSERT(in_state && in_params);
+    const sshape_cylinder_t params = _sshape_cylinder_defaults(in_params);
+    const uint32_t num_vertices = _sshape_cylinder_num_vertices(params.slices, params.stacks);
+    const uint32_t num_indices = _sshape_cylinder_num_indices(params.slices, params.stacks);
+    sshape_build_t state = *in_state;
+    if (!_sshape_validate_build_state(&state, num_vertices, num_indices)) {
+        state.valid = false;
+        return state;
+    }
+    state.valid = true;
+    _sshape_advance_offset(&state.vertices);
+    _sshape_advance_offset(&state.indices);
+
+    const float two_pi = 2.0f * 3.14159265358979323846f;
+    const float dv = 1.0f / (params.stacks + 2);
+    const float du = 1.0f / params.slices;
+    const float y0 = params.height * 0.5f;
+    const float y1 = -params.height * 0.5f;
+    const float dy = params.height / params.stacks;
+
+    // generate vertices
+    _sshape_build_cylinder_cap_pole(&state, &params, y0, 1.0f, du, 0.0f);
+    _sshape_build_cylinder_cap_ring(&state, &params, y0, 1.0f, du, dv);
+    for (uint32_t stack = 0; stack <= params.stacks; stack++) {
+        const float y = y0 - dy * stack;
+        const float v = dv * stack + dv;
+        for (uint32_t slice = 0; slice <= params.slices; slice++) {
+            const float slice_angle = (two_pi * slice) / params.slices;
+            const float sin_slice = sinf(slice_angle);
+            const float cos_slice = cosf(slice_angle);
+            const sshape_vec4_t pos = _sshape_vec4(sin_slice * params.radius, y, cos_slice * params.radius, 1.0f);
+            const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            const sshape_vec4_t norm = _sshape_vec4(sin_slice, 0.0f, cos_slice, 0.0f);
+            const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+            const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+            _sshape_add_vertex(&state, tpos, tnorm, uv, params.color);
+        }
+    }
+    _sshape_build_cylinder_cap_ring(&state, &params, y1, -1.0f, du, 1.0f - dv);
+    _sshape_build_cylinder_cap_pole(&state, &params, y1, -1.0f, du, 1.0f);
+
+    // generate indices
+    const sshape_index_t start_index = _sshape_base_index(&state);
+
+    // top-cap indices
+    {
+        const sshape_index_t row_a = start_index;
+        const sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_b + slice);
+        }
+    }
+    // shaft triangles
+    for (uint32_t stack = 0; stack < params.stacks; stack++) {
+        const sshape_index_t row_a = start_index + (stack + 2) * (params.slices + 1);
+        const sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_a + slice + 1, row_b + slice + 1);
+            _sshape_add_triangle(&state, row_a + slice, row_b + slice + 1, row_b + slice);
+        }
+    }
+    // bottom-cap indices
+    {
+        const sshape_index_t row_a = start_index + (params.stacks + 3) * (params.slices + 1);
+        const sshape_index_t row_b = row_a + params.slices + 1;
+        for (uint32_t slice = 0; slice < params.slices; slice++) {
+            _sshape_add_triangle(&state, row_a + slice, row_a + slice + 1, row_b + slice + 1);
         }
     }
     return state;
