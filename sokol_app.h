@@ -68,7 +68,7 @@
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux with EGL: X11, Xi, Xcursor, EGL, GL (or GLESv2), dl, pthread, m(?)
     - on Linux with GLX: X11, Xi, Xcursor, GL, dl, pthread, m(?)
-    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client
+    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client, xkbcommon
     - on Android: GLESv3, EGL, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
@@ -1979,9 +1979,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #else /* SOKOL_WAYLAND */
         #include <EGL/egl.h>
         #include <sys/epoll.h>
+        #include <sys/mman.h>
         #include <unistd.h>
         #include <wayland-client.h>
         #include <wayland-egl.h>
+        #include <xkbcommon/xkbcommon.h>
 
         /* if given, use the xdg-client header file path, which must be
          * an absolute path or otherwise a relative path to this
@@ -2556,7 +2558,9 @@ typedef struct {
     struct wl_display* display;
     struct wl_egl_window* egl_window;
     struct wl_event_queue* event_queue;
+    struct wl_keyboard* keyboard;
     struct wl_registry* registry;
+    struct wl_seat* seat;
     struct wl_surface* surface;
     struct xdg_surface* shell;
     struct xdg_toplevel* toplevel;
@@ -2571,6 +2575,12 @@ typedef struct {
     int epoll_fd;
     int event_fd;
     struct epoll_event events[_SAPP_WAYLAND_MAX_EPOLL_EVENTS];
+
+    /* xkb specific objects */
+    struct xkb_context* xkb_context;
+    struct xkb_state* xkb_state;
+    struct xkb_keymap* xkb_keymap;
+    bool repeat_mask[SAPP_MAX_KEYCODES];
 } _sapp_wl_t;
 
 #elif /* SOKOL_WAYLAND */
@@ -11909,6 +11919,155 @@ _SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
 
 #else /* SOKOL_WAYLAND */
 
+_SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
+    switch (sym) {
+        case XKB_KEY_KP_Space:     return SAPP_KEYCODE_SPACE;
+        case XKB_KEY_apostrophe:   return SAPP_KEYCODE_APOSTROPHE;
+        case XKB_KEY_comma:        return SAPP_KEYCODE_COMMA;
+        case XKB_KEY_minus:        return SAPP_KEYCODE_MINUS;
+        case XKB_KEY_period:       return SAPP_KEYCODE_PERIOD;
+        case XKB_KEY_slash:        return SAPP_KEYCODE_SLASH;
+        case XKB_KEY_0:            return SAPP_KEYCODE_0;
+        case XKB_KEY_1:            return SAPP_KEYCODE_1;
+        case XKB_KEY_2:            return SAPP_KEYCODE_2;
+        case XKB_KEY_3:            return SAPP_KEYCODE_3;
+        case XKB_KEY_4:            return SAPP_KEYCODE_4;
+        case XKB_KEY_5:            return SAPP_KEYCODE_5;
+        case XKB_KEY_6:            return SAPP_KEYCODE_6;
+        case XKB_KEY_7:            return SAPP_KEYCODE_7;
+        case XKB_KEY_8:            return SAPP_KEYCODE_8;
+        case XKB_KEY_9:            return SAPP_KEYCODE_9;
+        case XKB_KEY_semicolon:    return SAPP_KEYCODE_SEMICOLON;
+        case XKB_KEY_equal:        return SAPP_KEYCODE_EQUAL;
+        case XKB_KEY_a:            return SAPP_KEYCODE_A;
+        case XKB_KEY_b:            return SAPP_KEYCODE_B;
+        case XKB_KEY_c:            return SAPP_KEYCODE_C;
+        case XKB_KEY_d:            return SAPP_KEYCODE_D;
+        case XKB_KEY_e:            return SAPP_KEYCODE_E;
+        case XKB_KEY_f:            return SAPP_KEYCODE_F;
+        case XKB_KEY_g:            return SAPP_KEYCODE_G;
+        case XKB_KEY_h:            return SAPP_KEYCODE_H;
+        case XKB_KEY_i:            return SAPP_KEYCODE_I;
+        case XKB_KEY_j:            return SAPP_KEYCODE_J;
+        case XKB_KEY_k:            return SAPP_KEYCODE_K;
+        case XKB_KEY_l:            return SAPP_KEYCODE_L;
+        case XKB_KEY_m:            return SAPP_KEYCODE_M;
+        case XKB_KEY_n:            return SAPP_KEYCODE_N;
+        case XKB_KEY_o:            return SAPP_KEYCODE_O;
+        case XKB_KEY_p:            return SAPP_KEYCODE_P;
+        case XKB_KEY_q:            return SAPP_KEYCODE_Q;
+        case XKB_KEY_r:            return SAPP_KEYCODE_R;
+        case XKB_KEY_s:            return SAPP_KEYCODE_S;
+        case XKB_KEY_t:            return SAPP_KEYCODE_T;
+        case XKB_KEY_u:            return SAPP_KEYCODE_U;
+        case XKB_KEY_v:            return SAPP_KEYCODE_V;
+        case XKB_KEY_w:            return SAPP_KEYCODE_W;
+        case XKB_KEY_x:            return SAPP_KEYCODE_X;
+        case XKB_KEY_y:            return SAPP_KEYCODE_Y;
+        case XKB_KEY_z:            return SAPP_KEYCODE_Z;
+        case XKB_KEY_bracketleft:  return SAPP_KEYCODE_LEFT_BRACKET;
+        case XKB_KEY_backslash:    return SAPP_KEYCODE_BACKSLASH;
+        case XKB_KEY_bracketright: return SAPP_KEYCODE_RIGHT_BRACKET;
+        case XKB_KEY_grave:        return SAPP_KEYCODE_GRAVE_ACCENT;
+        case XKB_KEY_Escape:       return SAPP_KEYCODE_ESCAPE;
+        case XKB_KEY_Return:       return SAPP_KEYCODE_ENTER;
+        case XKB_KEY_Tab:          return SAPP_KEYCODE_TAB;
+        case XKB_KEY_BackSpace:    return SAPP_KEYCODE_BACKSPACE;
+        case XKB_KEY_Insert:       return SAPP_KEYCODE_INSERT;
+        case XKB_KEY_Delete:       return SAPP_KEYCODE_DELETE;
+        case XKB_KEY_Right:        return SAPP_KEYCODE_RIGHT;
+        case XKB_KEY_Left:         return SAPP_KEYCODE_LEFT;
+        case XKB_KEY_Down:         return SAPP_KEYCODE_DOWN;
+        case XKB_KEY_Up:           return SAPP_KEYCODE_UP;
+        case XKB_KEY_Page_Up:      return SAPP_KEYCODE_PAGE_UP;
+        case XKB_KEY_Page_Down:    return SAPP_KEYCODE_PAGE_DOWN;
+        case XKB_KEY_Home:         return SAPP_KEYCODE_HOME;
+        case XKB_KEY_End:          return SAPP_KEYCODE_END;
+        case XKB_KEY_Caps_Lock:    return SAPP_KEYCODE_CAPS_LOCK;
+        case XKB_KEY_Scroll_Lock:  return SAPP_KEYCODE_SCROLL_LOCK;
+        case XKB_KEY_Num_Lock:     return SAPP_KEYCODE_NUM_LOCK;
+        case XKB_KEY_Print:        return SAPP_KEYCODE_PRINT_SCREEN;
+        case XKB_KEY_Pause:        return SAPP_KEYCODE_PAUSE;
+        case XKB_KEY_F1:           return SAPP_KEYCODE_F1;
+        case XKB_KEY_F2:           return SAPP_KEYCODE_F2;
+        case XKB_KEY_F3:           return SAPP_KEYCODE_F3;
+        case XKB_KEY_F4:           return SAPP_KEYCODE_F4;
+        case XKB_KEY_F5:           return SAPP_KEYCODE_F5;
+        case XKB_KEY_F6:           return SAPP_KEYCODE_F6;
+        case XKB_KEY_F7:           return SAPP_KEYCODE_F7;
+        case XKB_KEY_F8:           return SAPP_KEYCODE_F8;
+        case XKB_KEY_F9:           return SAPP_KEYCODE_F9;
+        case XKB_KEY_F10:          return SAPP_KEYCODE_F10;
+        case XKB_KEY_F11:          return SAPP_KEYCODE_F11;
+        case XKB_KEY_F12:          return SAPP_KEYCODE_F12;
+        case XKB_KEY_F13:          return SAPP_KEYCODE_F13;
+        case XKB_KEY_F14:          return SAPP_KEYCODE_F14;
+        case XKB_KEY_F15:          return SAPP_KEYCODE_F15;
+        case XKB_KEY_F16:          return SAPP_KEYCODE_F16;
+        case XKB_KEY_F17:          return SAPP_KEYCODE_F17;
+        case XKB_KEY_F18:          return SAPP_KEYCODE_F18;
+        case XKB_KEY_F19:          return SAPP_KEYCODE_F19;
+        case XKB_KEY_F20:          return SAPP_KEYCODE_F20;
+        case XKB_KEY_F21:          return SAPP_KEYCODE_F21;
+        case XKB_KEY_F22:          return SAPP_KEYCODE_F22;
+        case XKB_KEY_F23:          return SAPP_KEYCODE_F23;
+        case XKB_KEY_F24:          return SAPP_KEYCODE_F24;
+        case XKB_KEY_F25:          return SAPP_KEYCODE_F25;
+        case XKB_KEY_KP_0:         return SAPP_KEYCODE_KP_0;
+        case XKB_KEY_KP_1:         return SAPP_KEYCODE_KP_1;
+        case XKB_KEY_KP_2:         return SAPP_KEYCODE_KP_2;
+        case XKB_KEY_KP_3:         return SAPP_KEYCODE_KP_3;
+        case XKB_KEY_KP_4:         return SAPP_KEYCODE_KP_4;
+        case XKB_KEY_KP_5:         return SAPP_KEYCODE_KP_5;
+        case XKB_KEY_KP_6:         return SAPP_KEYCODE_KP_6;
+        case XKB_KEY_KP_7:         return SAPP_KEYCODE_KP_7;
+        case XKB_KEY_KP_8:         return SAPP_KEYCODE_KP_8;
+        case XKB_KEY_KP_9:         return SAPP_KEYCODE_KP_9;
+        case XKB_KEY_KP_Decimal:   return SAPP_KEYCODE_KP_DECIMAL;
+        case XKB_KEY_KP_Divide:    return SAPP_KEYCODE_KP_DIVIDE;
+        case XKB_KEY_KP_Multiply:  return SAPP_KEYCODE_KP_MULTIPLY;
+        case XKB_KEY_KP_Subtract:  return SAPP_KEYCODE_KP_SUBTRACT;
+        case XKB_KEY_KP_Add:       return SAPP_KEYCODE_KP_ADD;
+        case XKB_KEY_KP_Enter:     return SAPP_KEYCODE_KP_ENTER;
+        case XKB_KEY_KP_Equal:     return SAPP_KEYCODE_KP_EQUAL;
+        case XKB_KEY_Shift_L:      return SAPP_KEYCODE_LEFT_SHIFT;
+        case XKB_KEY_Control_L:    return SAPP_KEYCODE_LEFT_CONTROL;
+        case XKB_KEY_Meta_L:
+        case XKB_KEY_Alt_L:        return SAPP_KEYCODE_LEFT_ALT;
+        case XKB_KEY_Super_L:      return SAPP_KEYCODE_LEFT_SUPER;
+        case XKB_KEY_Shift_R:      return SAPP_KEYCODE_RIGHT_SHIFT;
+        case XKB_KEY_Control_R:    return SAPP_KEYCODE_RIGHT_CONTROL;
+        case XKB_KEY_Meta_R:
+        case XKB_KEY_Alt_R:        return SAPP_KEYCODE_RIGHT_ALT;
+        case XKB_KEY_Super_R:      return SAPP_KEYCODE_RIGHT_SUPER;
+        case XKB_KEY_Menu:         return SAPP_KEYCODE_MENU;
+        case SAPP_KEYCODE_WORLD_1:
+        case SAPP_KEYCODE_WORLD_2:
+        default:                   return SAPP_KEYCODE_INVALID;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_wl_get_modifiers(void) {
+    uint32_t modifiers = 0;
+
+    enum xkb_state_component active_mask = XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED;
+
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_SHIFT, active_mask)) {
+        modifiers |= SAPP_MODIFIER_SHIFT;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_CTRL, active_mask)) {
+        modifiers |= SAPP_MODIFIER_CTRL;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_ALT, active_mask)) {
+        modifiers |= SAPP_MODIFIER_ALT;
+    }
+    if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_LOGO, active_mask)) {
+        modifiers |= SAPP_MODIFIER_SUPER;
+    }
+
+    return modifiers;
+}
+
 _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.egl_surface) eglDestroySurface(_sapp.wl.egl_display, _sapp.wl.egl_surface);
     if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
@@ -11921,10 +12080,36 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.compositor) wl_compositor_destroy(_sapp.wl.compositor);
     if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
+    if (NULL != _sapp.wl.keyboard) wl_keyboard_destroy(_sapp.wl.keyboard);
+    if (NULL != _sapp.wl.seat) wl_seat_destroy(_sapp.wl.seat);
+
+    if (NULL != _sapp.wl.xkb_keymap) xkb_keymap_unref(_sapp.wl.xkb_keymap);
+    if (NULL != _sapp.wl.xkb_state) xkb_state_unref(_sapp.wl.xkb_state);
+    if (NULL != _sapp.wl.xkb_context) xkb_context_unref(_sapp.wl.xkb_context);
 
     epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_DEL, _sapp.wl.event_fd, NULL);
     close(_sapp.wl.event_fd);
     close(_sapp.wl.epoll_fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_key_event(sapp_event_type type, sapp_keycode key, bool is_repeat, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp.event.key_code = key;
+        _sapp.event.key_repeat = is_repeat;
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_char_event(uint32_t utf32_char, bool is_repeat, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp.event.char_code = utf32_char;
+        _sapp.event.key_repeat = is_repeat;
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
@@ -11934,6 +12119,126 @@ _SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_bas
 
 _SOKOL_PRIVATE const struct xdg_wm_base_listener _sapp_wl_wm_base_listener = {
     .ping = _sapp_wl_wm_base_ping,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t key_state) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(time);
+
+    xkb_keysym_t sym = xkb_state_key_get_one_sym(_sapp.wl.xkb_state, key + 8);
+    sapp_keycode code = _sapp_wl_translate_key(sym);
+
+    if (_sapp_events_enabled()) {
+        uint32_t modifiers = _sapp_wl_get_modifiers();
+
+        if (WL_KEYBOARD_KEY_STATE_PRESSED == key_state) {
+            bool is_repeat = _sapp.wl.repeat_mask[code];
+            _sapp.wl.repeat_mask[code] = true;
+            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, code, is_repeat, modifiers);
+
+            const uint32_t utf32_char = xkb_keysym_to_utf32(sym);
+            if (utf32_char) {
+                _sapp_wl_char_event(utf32_char, is_repeat, modifiers);
+            }
+        } else if (WL_KEYBOARD_KEY_STATE_RELEASED == key_state) {
+            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_UP, code, false, modifiers);
+            _sapp.wl.repeat_mask[code] = false;
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_enter(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface, struct wl_array* keys) {
+    _SOKOL_UNUSED(surface);
+
+    uint32_t* key;
+    wl_array_for_each(key, keys) {
+        _sapp_wl_keyboard_key(data, keyboard, serial, 0, *key, WL_KEYBOARD_KEY_STATE_PRESSED);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t format, int32_t fd, uint32_t size) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+
+    char* keymap_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (MAP_FAILED == keymap_shm) {
+        _sapp_fail("wayland: unable to read keymap via mmap()");
+    }
+
+    switch (format) {
+        case WL_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP:
+            SOKOL_LOG("no keymap retrieved from compositor\n");
+            break;
+        case WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1:
+            xkb_keymap_unref(_sapp.wl.xkb_keymap);
+            xkb_state_unref(_sapp.wl.xkb_state);
+            _sapp.wl.xkb_keymap = xkb_keymap_new_from_string(_sapp.wl.xkb_context, keymap_shm, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+            _sapp.wl.xkb_state = xkb_state_new(_sapp.wl.xkb_keymap);
+            break;
+        default:
+            break;
+    }
+
+    munmap(keymap_shm, size);
+    close(fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(surface);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(serial);
+
+    xkb_state_update_mask(_sapp.wl.xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_keyboard_repeat_info(void* data, struct wl_keyboard *keyboard, int32_t rate, int32_t delay) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(keyboard);
+    _SOKOL_UNUSED(rate);
+    _SOKOL_UNUSED(delay);
+}
+
+_SOKOL_PRIVATE const struct wl_keyboard_listener _sapp_wl_keyboard_listener = {
+    .enter = _sapp_wl_keyboard_enter,
+    .key = _sapp_wl_keyboard_key,
+    .keymap = _sapp_wl_keyboard_keymap,
+    .leave = _sapp_wl_keyboard_leave,
+    .modifiers = _sapp_wl_keyboard_modifiers,
+    .repeat_info = _sapp_wl_keyboard_repeat_info,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
+    _SOKOL_UNUSED(data);
+
+    bool has_keyboard = capabilities & WL_SEAT_CAPABILITY_KEYBOARD;
+
+    if (has_keyboard && NULL == _sapp.wl.keyboard) {
+        _sapp.wl.keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(_sapp.wl.keyboard, &_sapp_wl_keyboard_listener, NULL);
+    } else if (!has_keyboard && NULL != _sapp.wl.keyboard) {
+        wl_keyboard_release(_sapp.wl.keyboard);
+        _sapp.wl.keyboard = NULL;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_seat_handle_name(void* data, struct wl_seat* seat, const char* name) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(seat);
+    _SOKOL_UNUSED(name);
+}
+
+_SOKOL_PRIVATE const struct wl_seat_listener _sapp_wl_seat_listener = {
+    .capabilities = _sapp_wl_seat_handle_capabilities,
+    .name = _sapp_wl_seat_handle_name,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
@@ -11946,6 +12251,13 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
     } else if (0 == strcmp(interface, xdg_wm_base_interface.name)) {
         _sapp.wl.wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
         xdg_wm_base_add_listener(_sapp.wl.wm_base, &_sapp_wl_wm_base_listener, NULL);
+    } else if (0 == strcmp(interface, wl_seat_interface.name)) {
+        /* bind to version 3 for:
+         * - `wl_keyboard_release`,
+         * - `wl_pointer_release`,
+         * - `wl_pointer_release`, */
+        _sapp.wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 3);
+        wl_seat_add_listener(_sapp.wl.seat, &_sapp_wl_seat_listener, NULL);
     }
 }
 
@@ -12069,6 +12381,8 @@ _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
     xdg_toplevel_add_listener(_sapp.wl.toplevel, &_sapp_wl_toplevel_listener, &_sapp.wl);
     xdg_toplevel_set_title(_sapp.wl.toplevel, desc->window_title);
     wl_surface_commit(_sapp.wl.surface);
+
+    _sapp.wl.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
     /* WL-TODO: setup high dpi */
 }
@@ -12224,8 +12538,6 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
 
     struct wl_callback* cb = wl_surface_frame(_sapp.wl.surface);
     wl_callback_add_listener(cb, &_sapp_wl_callback_listener, NULL);
-
-    /* WL-TODO: setup xkb context */
 
     _sapp.valid = true;
     while (!_sapp.quit_ordered) {
