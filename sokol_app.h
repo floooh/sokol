@@ -12092,6 +12092,35 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     close(_sapp.wl.epoll_fd);
 }
 
+_SOKOL_PRIVATE void _sapp_wl_app_event(sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_resize_window(int width, int height) {
+    if (0 == height || 0 == width) {
+        return;
+    }
+
+    bool was_resized = true;
+
+    /* WL-TODO: reconfigure fb sizes independently from window sizes
+     * re: high dpi */
+    _sapp.window_height = height;
+    _sapp.window_width = width;
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.window_height;
+
+    if (was_resized) {
+        if (NULL != _sapp.wl.egl_window) {
+            wl_egl_window_resize(_sapp.wl.egl_window, _sapp.window_width, _sapp.window_height, 0, 0);
+        }
+        _sapp_wl_app_event(SAPP_EVENTTYPE_RESIZED);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_wl_key_event(sapp_event_type type, sapp_keycode key, bool is_repeat, uint32_t modifiers) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -12291,20 +12320,32 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_to
     _SOKOL_UNUSED(toplevel);
     _SOKOL_UNUSED(states);
 
-    if (0 == height || 0 == width) {
-        _sapp.window_width = _sapp.desc.width;
-        _sapp.window_height = _sapp.desc.height;
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
-    } else {
-        _sapp.window_height = (int) height;
-        _sapp.window_width = (int) width;
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
+    bool is_activated = false;
+    bool is_resizing = false;
+
+    int* toplevel_state;
+    wl_array_for_each(toplevel_state, states) {
+        switch (*toplevel_state) {
+            case XDG_TOPLEVEL_STATE_ACTIVATED:
+                is_activated = true;
+                break;
+            case XDG_TOPLEVEL_STATE_RESIZING:
+                is_resizing = true;
+                break;
+            case XDG_TOPLEVEL_STATE_FULLSCREEN:
+            case XDG_TOPLEVEL_STATE_MAXIMIZED:
+            case XDG_TOPLEVEL_STATE_TILED_BOTTOM:
+            case XDG_TOPLEVEL_STATE_TILED_LEFT:
+            case XDG_TOPLEVEL_STATE_TILED_RIGHT:
+            case XDG_TOPLEVEL_STATE_TILED_TOP:
+            default:
+                break;
+        }
     }
 
-    if (NULL != _sapp.wl.egl_window) {
-        wl_egl_window_resize(_sapp.wl.egl_window, _sapp.window_width, _sapp.window_height, 0, 0);
+    _sapp_wl_app_event(is_activated ? SAPP_EVENTTYPE_RESUMED : SAPP_EVENTTYPE_SUSPENDED);
+    if (is_resizing) {
+        _sapp_wl_resize_window((int) width, (int) height);
     }
 }
 
@@ -12312,7 +12353,8 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplev
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(toplevel);
 
-    _sapp.quit_ordered = true;
+    _sapp.quit_requested = true;
+    _sapp_wl_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
 }
 
 _SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
@@ -12560,12 +12602,8 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
 
         wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
 
-        if (_sapp.quit_requested && !_sapp.quit_ordered) {
-            /* WL-TODO: give user code a chance to intervene */
-
-            if (_sapp.quit_requested) {
-                _sapp.quit_ordered = true;
-            }
+        if (_sapp.quit_requested) {
+            _sapp.quit_ordered = true;
         }
     }
 
