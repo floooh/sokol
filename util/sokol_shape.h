@@ -981,14 +981,14 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
             const float cos_theta = cosf(theta);
 
             // torus surface position
-            const float spx = cos_theta * (params.radius + (params.ring_radius * cos_phi));
+            const float spx = cos_theta * (params.radius - (params.ring_radius * cos_phi));
             const float spy = sin_phi * params.ring_radius;
-            const float spz = sin_theta * (params.radius + (params.ring_radius * cos_phi));
+            const float spz = -sin_theta * (params.radius - (params.ring_radius * cos_phi));
 
             // torus position with ring-radius zero (for normal computation)
             const float ipx = cos_theta * params.radius;
             const float ipy = 0.0f;
-            const float ipz = sin_theta * params.radius;
+            const float ipz = -sin_theta * params.radius;
 
             const sshape_vec4_t pos = _sshape_vec4(spx, spy, spz, 1.0f);
             const sshape_vec4_t norm = _sshape_vec4_norm(_sshape_vec4(spx - ipx, spy - ipy, spz - ipz, 0.0f));
