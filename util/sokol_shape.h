@@ -127,6 +127,7 @@ typedef struct sshape_plane_t {
     float width, depth;             // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
+    bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_plane_t;
 
@@ -134,6 +135,7 @@ typedef struct sshape_box_t {
     float width, height, depth;     // default: 1.0
     uint32_t tiles;                 // default: 1
     uint32_t color;                 // default: white
+    bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_box_t;
 
@@ -142,6 +144,7 @@ typedef struct sshape_sphere_t {
     uint32_t slices;                // default: 5
     uint32_t stacks;                // default: 4
     uint32_t color;                 // default: white
+    bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_sphere_t;
 
@@ -151,6 +154,7 @@ typedef struct sshape_cylinder_t {
     uint32_t slices;                // default: 5
     uint32_t stacks;                // default: 1
     uint32_t color;                 // default: white
+    bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_cylinder_t;
 
@@ -160,6 +164,7 @@ typedef struct sshape_torus_t {
     uint32_t sides;                 // default: 5
     uint32_t rings;                 // default: 5
     uint32_t color;                 // default: white
+    bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_torus_t;
 
@@ -466,6 +471,20 @@ static void _sshape_add_triangle(sshape_buffer_t* buf, sshape_index_t i0, sshape
     i_ptr[2] = i2;
 }
 
+static uint32_t _sshape_rand_color(uint32_t* xorshift_state) {
+    // xorshift32
+    uint32_t x = *xorshift_state;
+    x ^= x<<13;
+    x ^= x>>17;
+    x ^= x<<5;
+    *xorshift_state = x;
+
+    // rand => bright color with alpha 1.0
+    x |= 0xFF000000;
+    return x;
+
+}
+
 /*=== PUBLIC API FUNCTIONS ===================================================*/
 SOKOL_API_IMPL uint32_t sshape_color_4f(float r, float g, float b, float a) {
     return _sshape_pack_rgbaf(r, g, b, a);
@@ -580,6 +599,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* in_buf,
     _sshape_advance_offset(&buf.indices);
 
     // write vertices
+    uint32_t rand_seed = 0x12345678;
     const float x0 = -params.width * 0.5f;
     const float z0 =  params.depth * 0.5f;
     const float dx =  params.width / params.tiles;
@@ -591,7 +611,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* in_buf,
             const sshape_vec4_t pos = _sshape_vec4(x0 + dx*ix, 0.0f, z0 + dz*iz, 1.0f);
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
             const sshape_vec2_t uv = _sshape_vec2(duv*ix, duv*iz);
-            _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+            const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+            _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
     }
 
@@ -625,6 +646,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
     _sshape_advance_offset(&buf.indices);
 
     // build vertices
+    uint32_t rand_seed = 0x12345678;
     const float x0 = -params.width * 0.5f;
     const float x1 =  params.width * 0.5f;
     const float y0 = -params.height * 0.5f;
@@ -647,7 +669,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
                 pos.z = z0 + dz * iz;
                 const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
                 const sshape_vec2_t uv = _sshape_vec2(ix * duv, iz * duv);
-                _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+                const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+                _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
             }
         }
     }
@@ -663,7 +686,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
                 pos.z = z0 + dz * iz;
                 const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
                 const sshape_vec2_t uv = _sshape_vec2(iy * duv, iz * duv);
-                _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+                const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+                _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
             }
         }
     }
@@ -679,7 +703,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
                 pos.y = y0 + dy * iy;
                 const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
                 const sshape_vec2_t uv = _sshape_vec2(ix * duv, iy * duv);
-                _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+                const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+                _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
             }
         }
     }
@@ -734,6 +759,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
     _sshape_advance_offset(&buf.vertices);
     _sshape_advance_offset(&buf.indices);
 
+    uint32_t rand_seed = 0x12345678;
     const float pi = 3.14159265358979323846f;
     const float two_pi = 2.0f * pi;
     const float du = 1.0f / params.slices;
@@ -748,12 +774,13 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
             const float slice_angle = (two_pi * slice) / params.slices;
             const float sin_slice = sinf(slice_angle);
             const float cos_slice = cosf(slice_angle);
-            const sshape_vec4_t norm = _sshape_vec4(sin_slice * sin_stack, cos_stack, cos_slice * sin_stack, 0.0f);
+            const sshape_vec4_t norm = _sshape_vec4(-sin_slice * sin_stack, cos_stack, cos_slice * sin_stack, 0.0f);
             const sshape_vec4_t pos = _sshape_vec4(norm.x * params.radius, norm.y * params.radius, norm.z * params.radius, 1.0f);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
             const sshape_vec2_t uv = _sshape_vec2(slice * du, stack * dv);
-            _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+            const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+            _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
     }
 
@@ -807,16 +834,17 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
       \| \| \| \| \|
     +  +  +  +  +  +
 */
-static void _sshape_build_cylinder_cap_pole(sshape_buffer_t* buf, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v) {
+static void _sshape_build_cylinder_cap_pole(sshape_buffer_t* buf, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v, uint32_t* rand_seed) {
     const sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
     const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, pos_y, 0.0f, 1.0f));
     for (uint32_t slice = 0; slice <= params->slices; slice++) {
         const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
-        _sshape_add_vertex(buf, tpos, tnorm, uv, params->color);
+        const uint32_t color = params->random_colors ? _sshape_rand_color(rand_seed) : params->color;
+        _sshape_add_vertex(buf, tpos, tnorm, uv, color);
     }
 }
 
-static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v) {
+static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v, uint32_t* rand_seed) {
     const float two_pi = 2.0 * 3.14159265358979323846;
     const sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
     for (uint32_t slice = 0; slice <= params->slices; slice++) {
@@ -826,7 +854,8 @@ static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_c
         const sshape_vec4_t pos = _sshape_vec4(sin_slice * params->radius, pos_y, cos_slice * params->radius, 1.0f);
         const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, pos);
         const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
-        _sshape_add_vertex(buf, tpos, tnorm, uv, params->color);
+        const uint32_t color = params->random_colors ? _sshape_rand_color(rand_seed) : params->color;
+        _sshape_add_vertex(buf, tpos, tnorm, uv, color);
     }
 }
 
@@ -844,6 +873,7 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     _sshape_advance_offset(&buf.vertices);
     _sshape_advance_offset(&buf.indices);
 
+    uint32_t rand_seed = 0x12345678;
     const float two_pi = 2.0f * 3.14159265358979323846f;
     const float du = 1.0f / params.slices;
     const float dv = 1.0f / (params.stacks + 2);
@@ -852,8 +882,8 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     const float dy = params.height / params.stacks;
 
     // generate vertices
-    _sshape_build_cylinder_cap_pole(&buf, &params, y0, 1.0f, du, 0.0f);
-    _sshape_build_cylinder_cap_ring(&buf, &params, y0, 1.0f, du, dv);
+    _sshape_build_cylinder_cap_pole(&buf, &params, y0, 1.0f, du, 0.0f, &rand_seed);
+    _sshape_build_cylinder_cap_ring(&buf, &params, y0, 1.0f, du, dv, &rand_seed);
     for (uint32_t stack = 0; stack <= params.stacks; stack++) {
         const float y = y0 - dy * stack;
         const float v = dv * stack + dv;
@@ -866,11 +896,12 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
             const sshape_vec4_t norm = _sshape_vec4(sin_slice, 0.0f, cos_slice, 0.0f);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
             const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
-            _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+            const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+            _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
     }
-    _sshape_build_cylinder_cap_ring(&buf, &params, y1, -1.0f, du, 1.0f - dv);
-    _sshape_build_cylinder_cap_pole(&buf, &params, y1, -1.0f, du, 1.0f);
+    _sshape_build_cylinder_cap_ring(&buf, &params, y1, -1.0f, du, 1.0f - dv, &rand_seed);
+    _sshape_build_cylinder_cap_pole(&buf, &params, y1, -1.0f, du, 1.0f, &rand_seed);
 
     // generate indices
     const sshape_index_t start_index = _sshape_base_index(&buf);
@@ -934,6 +965,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
     _sshape_advance_offset(&buf.vertices);
     _sshape_advance_offset(&buf.indices);
 
+    uint32_t rand_seed = 0x12345678;
     const float two_pi = 2.0f * 3.14159265358979323846f;
     const float dv = 1.0f / params.sides;
     const float du = 1.0f / params.rings;
@@ -951,19 +983,20 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
             // torus surface position
             const float spx = cos_theta * (params.radius + (params.ring_radius * cos_phi));
             const float spy = sin_phi * params.ring_radius;
-            const float spz = -sin_theta * (params.radius + (params.ring_radius * cos_phi));
+            const float spz = sin_theta * (params.radius + (params.ring_radius * cos_phi));
 
             // torus position with ring-radius zero (for normal computation)
             const float ipx = cos_theta * params.radius;
             const float ipy = 0.0f;
-            const float ipz = -sin_theta * params.radius;
+            const float ipz = sin_theta * params.radius;
 
             const sshape_vec4_t pos = _sshape_vec4(spx, spy, spz, 1.0f);
             const sshape_vec4_t norm = _sshape_vec4_norm(_sshape_vec4(spx - ipx, spy - ipy, spz - ipz, 0.0f));
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
             const sshape_vec2_t uv = _sshape_vec2(side * du, ring * dv);
-            _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+            const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
+            _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
     }
 
@@ -983,20 +1016,24 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
 SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf) {
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
-    desc.size = buf->vertices.data_size;
-    desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
-    desc.usage = SG_USAGE_IMMUTABLE;
-    desc.content = buf->vertices.buffer_ptr;
+    if (buf->valid) {
+        desc.size = buf->vertices.data_size;
+        desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
+        desc.usage = SG_USAGE_IMMUTABLE;
+        desc.content = buf->vertices.buffer_ptr;
+    }
     return desc;
 }
 
 SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf) {
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
-    desc.size = buf->indices.data_size;
-    desc.type = SG_BUFFERTYPE_INDEXBUFFER;
-    desc.usage = SG_USAGE_IMMUTABLE;
-    desc.content = buf->indices.buffer_ptr;
+    if (buf->valid) {
+        desc.size = buf->indices.data_size;
+        desc.type = SG_BUFFERTYPE_INDEXBUFFER;
+        desc.usage = SG_USAGE_IMMUTABLE;
+        desc.content = buf->indices.buffer_ptr;
+    }
     return desc;
 }
 
@@ -1007,7 +1044,12 @@ SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t
     SOKOL_ASSERT(0 == (buf->indices.data_size & (sizeof(sshape_index_t) - 1)));
     sshape_element_range_t range = { 0 };
     range.base_element = buf->indices.shape_offset / sizeof(sshape_index_t);
-    range.num_elements = (buf->indices.data_size - buf->indices.shape_offset) / sizeof(sshape_index_t);
+    if (buf->valid) {
+        range.num_elements = (buf->indices.data_size - buf->indices.shape_offset) / sizeof(sshape_index_t);
+    }
+    else {
+        range.num_elements = 0;
+    }
     return range;
 }
 
