@@ -155,10 +155,11 @@ typedef struct sshape_cylinder_t {
 } sshape_cylinder_t;
 
 typedef struct sshape_torus_t {
-    float ring_radius;              // default: ???
-    float radius;                   // default: ???
-    uint32_t sides;                 // default: ???
-    uint32_t rings;                 // default: ???
+    float radius;                   // default: 0.5f
+    float ring_radius;              // default: 0.2f
+    uint32_t sides;                 // default: 5
+    uint32_t rings;                 // default: 5
+    uint32_t color;                 // default: white
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_torus_t;
 
@@ -265,6 +266,16 @@ static inline uint32_t _sshape_pack_rgbaf(float r, float g, float b, float a) {
 
 static inline sshape_vec4_t _sshape_vec4(float x, float y, float z, float w) {
     return (sshape_vec4_t) { x, y, z, w };
+}
+
+static inline sshape_vec4_t _sshape_vec4_norm(sshape_vec4_t v) {
+    float l = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z + v.w*v.w);
+    if (l != 0.0f) {
+        return (sshape_vec4_t) { v.x/l, v.y/l, v.z/l, v.w/l };
+    }
+    else {
+        return (sshape_vec4_t) { 0.0f, 1.0f, 0.0f, 0.0f };
+    }
 }
 
 static inline sshape_vec2_t _sshape_vec2(float x, float y) {
@@ -413,6 +424,17 @@ static sshape_cylinder_t _sshape_cylinder_defaults(const sshape_cylinder_t* para
     res.height = _sshape_def_flt(res.height, 1.0f);
     res.slices = _sshape_def(res.slices, 5);
     res.stacks = _sshape_def(res.stacks, 1);
+    res.color = _sshape_def(res.color, _sshape_white);
+    res.transform = _sshape_mat4_isnull(&res.transform) ? _sshape_mat4_identity() : res.transform;
+    return res;
+}
+
+static sshape_torus_t _sshape_torus_defaults(const sshape_torus_t* params) {
+    sshape_torus_t res = *params;
+    res.radius = _sshape_def_flt(res.radius, 0.5f);
+    res.ring_radius = _sshape_def_flt(res.ring_radius, 0.2f);
+    res.sides = _sshape_def_flt(res.sides, 5);
+    res.rings = _sshape_def_flt(res.rings, 5);
     res.color = _sshape_def(res.color, _sshape_white);
     res.transform = _sshape_mat4_isnull(&res.transform) ? _sshape_mat4_identity() : res.transform;
     return res;
@@ -823,8 +845,8 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     _sshape_advance_offset(&buf.indices);
 
     const float two_pi = 2.0f * 3.14159265358979323846f;
-    const float dv = 1.0f / (params.stacks + 2);
     const float du = 1.0f / params.slices;
+    const float dv = 1.0f / (params.stacks + 2);
     const float y0 = params.height * 0.5f;
     const float y1 = -params.height * 0.5f;
     const float dy = params.height / params.stacks;
@@ -898,7 +920,65 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     | \| \| \| \| \|
     +--+--+--+--+--+
 */
+SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf, const sshape_torus_t* in_params) {
+    SOKOL_ASSERT(in_buf && in_params);
+    const sshape_torus_t params = _sshape_torus_defaults(in_params);
+    const uint32_t num_vertices = _sshape_torus_num_vertices(params.sides, params.rings);
+    const uint32_t num_indices = _sshape_torus_num_indices(params.sides, params.rings);
+    sshape_buffer_t buf = *in_buf;
+    if (!_sshape_validate_buffer(&buf, num_vertices, num_indices)) {
+        buf.valid = false;
+        return buf;
+    }
+    buf.valid = true;
+    _sshape_advance_offset(&buf.vertices);
+    _sshape_advance_offset(&buf.indices);
 
+    const float two_pi = 2.0f * 3.14159265358979323846f;
+    const float dv = 1.0f / params.sides;
+    const float du = 1.0f / params.rings;
+
+    // generate vertices
+    for (uint32_t side = 0; side <= params.sides; side++) {
+        const float phi = (side * two_pi) / params.sides;
+        const float sin_phi = sinf(phi);
+        const float cos_phi = cosf(phi);
+        for (uint32_t ring = 0; ring <= params.rings; ring++) {
+            const float theta = (ring * two_pi) / params.rings;
+            const float sin_theta = sinf(theta);
+            const float cos_theta = cosf(theta);
+
+            // torus surface position
+            const float spx = cos_theta * (params.radius + (params.ring_radius * cos_phi));
+            const float spy = sin_phi * params.ring_radius;
+            const float spz = -sin_theta * (params.radius + (params.ring_radius * cos_phi));
+
+            // torus position with ring-radius zero (for normal computation)
+            const float ipx = cos_theta * params.radius;
+            const float ipy = 0.0f;
+            const float ipz = -sin_theta * params.radius;
+
+            const sshape_vec4_t pos = _sshape_vec4(spx, spy, spz, 1.0f);
+            const sshape_vec4_t norm = _sshape_vec4_norm(_sshape_vec4(spx - ipx, spy - ipy, spz - ipz, 0.0f));
+            const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
+            const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
+            const sshape_vec2_t uv = _sshape_vec2(side * du, ring * dv);
+            _sshape_add_vertex(&buf, tpos, tnorm, uv, params.color);
+        }
+    }
+
+    // generate indices
+    const sshape_index_t start_index = _sshape_base_index(&buf);
+    for (uint32_t side = 0; side < params.sides; side++) {
+        const sshape_index_t row_a = start_index + side * (params.rings + 1);
+        const sshape_index_t row_b = row_a + params.rings + 1;
+        for (uint32_t ring = 0; ring < params.rings; ring++) {
+            _sshape_add_triangle(&buf, row_a + ring, row_a + ring + 1, row_b + ring + 1);
+            _sshape_add_triangle(&buf, row_a + ring, row_b + ring + 1, row_b + ring);
+        }
+    }
+    return buf;
+}
 
 SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf) {
     SOKOL_ASSERT(buf && buf->valid);
