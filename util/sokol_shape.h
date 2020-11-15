@@ -778,7 +778,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
             const sshape_vec4_t pos = _sshape_vec4(norm.x * params.radius, norm.y * params.radius, norm.z * params.radius, 1.0f);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
-            const sshape_vec2_t uv = _sshape_vec2(slice * du, stack * dv);
+            const sshape_vec2_t uv = _sshape_vec2(1.0f - slice * du, 1.0f - stack * dv);
             const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
             _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
@@ -838,7 +838,7 @@ static void _sshape_build_cylinder_cap_pole(sshape_buffer_t* buf, const sshape_c
     const sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
     const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, pos_y, 0.0f, 1.0f));
     for (uint32_t slice = 0; slice <= params->slices; slice++) {
-        const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+        const sshape_vec2_t uv = _sshape_vec2(slice * du, 1.0f - v);
         const uint32_t color = params->random_colors ? _sshape_rand_color(rand_seed) : params->color;
         _sshape_add_vertex(buf, tpos, tnorm, uv, color);
     }
@@ -853,7 +853,7 @@ static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_c
         const float cos_slice = cosf(slice_angle);
         const sshape_vec4_t pos = _sshape_vec4(sin_slice * params->radius, pos_y, cos_slice * params->radius, 1.0f);
         const sshape_vec4_t tpos = _sshape_mat4_mul(&params->transform, pos);
-        const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+        const sshape_vec2_t uv = _sshape_vec2(slice * du, 1.0f - v);
         const uint32_t color = params->random_colors ? _sshape_rand_color(rand_seed) : params->color;
         _sshape_add_vertex(buf, tpos, tnorm, uv, color);
     }
@@ -895,7 +895,7 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
             const sshape_vec4_t norm = _sshape_vec4(sin_slice, 0.0f, cos_slice, 0.0f);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
-            const sshape_vec2_t uv = _sshape_vec2(slice * du, v);
+            const sshape_vec2_t uv = _sshape_vec2(slice * du, 1.0f - v);
             const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
             _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
@@ -981,20 +981,20 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
             const float cos_theta = cosf(theta);
 
             // torus surface position
-            const float spx = cos_theta * (params.radius - (params.ring_radius * cos_phi));
+            const float spx = sin_theta * (params.radius - (params.ring_radius * cos_phi));
             const float spy = sin_phi * params.ring_radius;
-            const float spz = -sin_theta * (params.radius - (params.ring_radius * cos_phi));
+            const float spz = cos_theta * (params.radius - (params.ring_radius * cos_phi));
 
             // torus position with ring-radius zero (for normal computation)
-            const float ipx = cos_theta * params.radius;
+            const float ipx = sin_theta * params.radius;
             const float ipy = 0.0f;
-            const float ipz = -sin_theta * params.radius;
+            const float ipz = cos_theta * params.radius;
 
             const sshape_vec4_t pos = _sshape_vec4(spx, spy, spz, 1.0f);
             const sshape_vec4_t norm = _sshape_vec4_norm(_sshape_vec4(spx - ipx, spy - ipy, spz - ipz, 0.0f));
             const sshape_vec4_t tpos = _sshape_mat4_mul(&params.transform, pos);
             const sshape_vec4_t tnorm = _sshape_mat4_mul(&params.transform, norm);
-            const sshape_vec2_t uv = _sshape_vec2(side * du, ring * dv);
+            const sshape_vec2_t uv = _sshape_vec2(ring * du, 1.0f - side * dv);
             const uint32_t color = params.random_colors ? _sshape_rand_color(&rand_seed) : params.color;
             _sshape_add_vertex(&buf, tpos, tnorm, uv, color);
         }
