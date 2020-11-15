@@ -2826,9 +2826,9 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
-        const CGSize fb_size = [_sapp.macos.view drawableSize];
-        _sapp.framebuffer_width = fb_size.width;
-        _sapp.framebuffer_height = fb_size.height;
+        const NSRect fb_rect = [_sapp.macos.view bounds];
+        _sapp.framebuffer_width = fb_rect.size.width * _sapp.dpi_scale;
+        _sapp.framebuffer_height = fb_rect.size.height * _sapp.dpi_scale;
     #elif defined(SOKOL_GLCORE33)
         const NSRect fb_rect = [_sapp.macos.view convertRectToBacking:[_sapp.macos.view frame]];
         _sapp.framebuffer_width = fb_rect.size.width;
@@ -2850,6 +2850,12 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.window_height = 1;
     }
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
+
+    /* also make sure the MTKView drawable size is uptodate */
+    #if defined(SOKOL_METAL)
+    CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+    _sapp.macos.view.drawableSize = drawable_size;
+    #endif
 }
 
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
@@ -2997,12 +3003,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp.macos.view.sampleCount = _sapp.sample_count;
+        _sapp.macos.view.autoResizeDrawable = false;
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-        if (!_sapp.desc.high_dpi) {
-            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-            _sapp.macos.view.drawableSize = drawable_size;
-        }
         _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
