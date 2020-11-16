@@ -311,6 +311,8 @@
     sg_draw(green_cube.base_element, green_cube.num_elements, 1);
     ```
 
+    ...that's about all :)
+
     LICENSE
     =======
     zlib/libpng license
