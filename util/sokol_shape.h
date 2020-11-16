@@ -9,13 +9,15 @@
     before you include this file in *one* C or C++ file to create the
     implementation.
 
+    Include the following headers before including sokol_shape.h:
+
+        sokol_gfx.h
+
     ...optionally provide the following macros to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
 
     If sokol_shape.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -25,11 +27,289 @@
     On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
-    Include the following headers before including sokol_shape.h:
+    FEATURE OVERVIEW
+    ================
+    sokol_shape.h creates vertices and indices for simple shapes and
+    builds structs which can be plugged into sokol-gfx resource
+    creation descriptor structs.
 
-        sokol_gfx.h
+    The following shape types are supported:
 
-    [TOOD: DOCS]
+        - plane
+        - cube
+        - sphere (with poles, not geodesic)
+        - cylinder
+        - torus (donut)
+
+    Generated vertices look like this:
+
+        typedef struct sshape_vertex_t {
+            float x, y, z;
+            uint32_t normal;        // packed normal as BYTE4N
+            uint16_t u, v;          // packed uv coords as USHORT2N
+            uint32_t color;         // packed color as UBYTE4N (r,g,b,a);
+        } sshape_vertex_t;
+
+    Indices are generally 16-bits wide (SG_INDEXTYPE_UINT16) and the indices
+    are written as triangle-lists (SG_PRIMITIVETYPE_TRIANGLES).
+
+    For a complete code example see:
+
+    https://github.com/floooh/sokol-samples/blob/master/sapp/shapes-sapp.c
+
+    STEP-BY-STEP:
+    =============
+
+    Setup an sshape_buffer_t struct with pointers to memory buffer where
+    generated vertices and indices will be written to:
+
+    ```c
+    sshape_vertex_t vertices[512];
+    uint16_t indices[4096];
+
+    sshape_buffer_t buf = {
+        .vertices = {
+            .buffer_ptr = vertices,
+            .buffer_size = sizeof(vertices)
+        },
+        .indices = {
+            .buffer_ptr = indices,
+            .buffer_size = sizeof(indices)
+        }
+    };
+    ```
+
+    To find out how big those memory buffers must be (in case you want
+    to allocate dynamically) call the following functions:
+
+    ```c
+    sshape_sizes_t sshape_plane_sizes(uint32_t tiles);
+    sshape_sizes_t sshape_box_sizes(uint32_t tiles);
+    sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stacks);
+    sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t stacks);
+    sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings);
+    ```
+
+    The returned sshape_sizes_t struct contains vertex- and index-counts
+    as well as the equivalent buffer sizes in bytes. For instance:
+
+    ```c
+    sshape_sizes_t sizes = sshape_sphere_sizes(36, 12);
+    uint32_t num_vertices = sizes.vertices.num;
+    uint32_t num_indices = sizes.indices.num;
+    uint32_t vertex_buffer_size = sizes.vertices.size;
+    uint32_t index_buffer_size = sizes.indices.size;
+    ```
+
+    With the sshape_buffer_t struct that was setup earlier, call any
+    of the shape-builder functions:
+
+    ```c
+    sshape_buffer_t sshape_build_plane(const sshape_buffer_t* buf, const sshape_plane_t* params);
+    sshape_buffer_t sshape_build_box(const sshape_buffer_t* buf, const sshape_box_t* params);
+    sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* buf, const sshape_sphere_t* params);
+    sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* buf, const sshape_cylinder_t* params);
+    sshape_buffer_t sshape_build_torus(const sshape_buffer_t* buf, const sshape_torus_t* params);
+    ```
+
+    Note how the sshape_buffer_t struct is both an input value and the
+    return value. This can be used to append multiple shapes into the
+    same vertex- and index-buffers (more on this later).
+
+    The second argument is a struct which holds creation parameters.
+
+    For instance to build a sphere with radius 2, 36 "cake slices" and 12 stacks:
+
+    ```c
+    sshape_buffer_t buf = ...;
+    buf = sshape_build_sphere(&buf, &(sshape_sphere_t){
+        .radius = 2.0f,
+        .slices = 36,
+        .stacks = 12,
+    });
+    assert(buf.valid);
+    ```
+
+    If the provided buffers are big enough to hold all generated vertices and
+    indices, sshape_buffer_t.valid will be true.
+
+    The shape creation parameters have "useful defaults", refer to the
+    actual C struct declarations below to look up those defaults.
+
+    You can also provide additional creation parameters, like a common vertex
+    color, a debug-helper to randomize colors, and a 4x4 transform matrix
+    to move, rotate and scale the generated matrices:
+
+    ```c
+    sshape_buffer_t buf = ...;
+    buf = sshape_build_sphere(&buf, &(sshape_sphere_t){
+        .radius = 2.0f,
+        .slices = 36,
+        .stacks = 12,
+        // set vertex color to red+opaque
+        .color = sshape_color_4f(1.0f, 0.0f, 0.0f, 1.0f),
+        // set position to y = 2.0
+        .transform = {
+            .m = {
+                { 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f },
+                { 0.0f, 2.0f, 0.0f, 1.0f },
+            }
+        }
+    });
+    assert(buf.valid);
+    ```
+
+    The following helper functions are offered to build a packed
+    color value or to convert from external matrix types:
+
+    ```c
+    uint32_t sshape_color_4f(float r, float g, float b, float a);
+    uint32_t sshape_color_3f(float r, float g, float b);
+    uint32_t sshape_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+    uint32_t sshape_color_3b(uint8_t r, uint8_t g, uint8_t b);
+    sshape_mat4_t sshape_mat4(const float m[16]);
+    sshape_mat4_t sshape_mat4_transpose(const float m[16]);
+    ```
+
+    After the shape builder function has been called, the following functions
+    are used to extract the build result for plugging into sokol_gfx.h:
+
+    ```c
+    sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
+    sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
+    sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
+    sg_buffer_layout_desc sshape_buffer_layout_desc(void);
+    sg_vertex_attr_desc sshape_position_attr_desc(void);
+    sg_vertex_attr_desc sshape_normal_attr_desc(void);
+    sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
+    sg_vertex_attr_desc sshape_color_attr_desc(void);
+    ```
+
+    The sshape_element_range_t struct contains the base-index and number of
+    indices which can be plugged into the sg_draw() call:
+
+    ```c
+    sshape_element_range_t elms = sshape_element_range(&buf);
+    ...
+    sg_draw(elms.base_element, elms.num_elements, 1);
+    ```
+
+    To create sokol-gfx vertex- and index-buffers from the generated
+    shape data:
+
+    ```c
+    // create sokol-gfx vertex buffer
+    sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&buf);
+    sg_buffer vbuf = sg_make_buffer(&vbuf_desc;
+
+    // create sokol-gfx index buffer
+    sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&buf);
+    sg_buffer ibuf = sg_make_buffer(&ibuf_desc);
+    ```
+
+    The remaining functions are used to populate the vertex-layout item
+    in sg_pipeline_desc, note that these functions don't depend on the
+    created geometry, they always return the same result:
+
+    ```c
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .layout = {
+            .buffers[0] = sshape_buffer_layout_desc(),
+            .attrs = {
+                [0] = sshape_position_attr_desc(),
+                [1] = ssape_normal_attr_desc(),
+                [2] = sshape_texcoord_attr_desc(),
+                [3] = sshape_color_attr_desc()
+            }
+        },
+        ...
+    });
+    ```
+
+    Note that you don't have to use all generated vertex attributes in the
+    pipeline's vertex layout, the sg_buffer_layout_desc struct returned
+    by sshape_buffer_layout_desc() contains the correct vertex stride
+    to skip vertex components.
+
+    WRITING MULTIPLE SHAPES INTO THE SAME BUFFER
+    ============================================
+    You can merge multiple shapes into the same vertex- and
+    index-buffers and either render them as a single shape, or
+    in separate draw calls.
+
+    To build a single shape made of two cubes which can be rendered
+    in a single draw-call:
+
+    ```
+    sshape_vertex_t vertices[128];
+    uint16_t indices[16];
+
+    sshape_buffer_t buf = {
+        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
+        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+    };
+
+    // first cube at pos x=-2.0 (with default size of 1x1x1)
+    buf = sshape_build_cube(&buf, &(sshape_box_t){
+        .transform = {
+            .m = {
+                { 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f },
+                {-2.0f, 0.0f, 0.0f, 1.0f },
+            }
+        }
+    });
+    // ...and append another cube at pos pos=+1.0
+    buf = sshape_build_cube(&buf, &(sshape_box_t){
+        .transform = {
+            .m = {
+                { 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f },
+                {-2.0f, 0.0f, 0.0f, 1.0f },
+            }
+        }
+    });
+    assert(buf.valid);
+
+    // skipping buffer- and pipeline-creation...
+
+    sshape_element_range_t elms = sshape_element_range(&buf);
+    sg_draw(elms.base_element, elms.num_elements, 1);
+    ```
+
+    To render the two cubes in separate draw-calls, the element-ranges used
+    in the sg_draw() calls must be captured right after calling the
+    builder-functions:
+
+    ```c
+    sshape_vertex_t vertices[128];
+    uint16_t indices[16];
+    sshape_buffer_t buf = {
+        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
+        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+    };
+
+    // build a red cube...
+    buf = sshape_build_cube(&buf, &(sshape_box_t){
+        .color = sshape_color_3b(255, 0, 0)
+    });
+    sshape_element_range_t red_cube = sshape_element_range(&buf);
+
+    // append a green cube to the same vertex-/index-buffer:
+    buf = sshape_build_cube(&bud, &sshape_box_t){
+        .color = sshape_color_3b(0, 255, 0);
+    });
+    sshape_element_range_t green_cube = sshape_element_range(&buf);
+
+    // skipping buffer- and pipeline-creation...
+
+    sg_draw(red_cube.base_element, red_cube.num_elements, 1);
+    sg_draw(green_cube.base_element, green_cube.num_elements, 1);
+    ```
 
     LICENSE
     =======
@@ -79,7 +359,7 @@ extern "C" {
 #endif
 
 /* a 4x4 matrix wrapper struct */
-typedef struct sshape_mat4_t { float v[4][4]; } sshape_mat4_t;
+typedef struct sshape_mat4_t { float m[4][4]; } sshape_mat4_t;
 
 /* vertex layout of the generated geometry */
 typedef struct sshape_vertex_t {
@@ -108,8 +388,8 @@ typedef struct sshape_sizes_t {
 
 /* in/out struct to keep track of mesh-build state */
 typedef struct sshape_buffer_item_t {
-    void* buffer_ptr;          // pointer to start of output buffer
-    uint32_t buffer_size;      // size in bytes of output buffer
+    void* buffer_ptr;       // pointer to start of output buffer
+    uint32_t buffer_size;   // size in bytes of output buffer
     uint32_t data_size;     // size in bytes of valid data in buffer
     uint32_t shape_offset;  // data offset of the most recent shape
 } sshape_buffer_item_t;
@@ -181,9 +461,9 @@ SOKOL_API_DECL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t st
 SOKOL_API_DECL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings);
 
 /* extract sokol-gfx desc structs and primitive ranges from build state */
+SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
 SOKOL_API_DECL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
 SOKOL_API_DECL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
-SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
 SOKOL_API_DECL sg_buffer_layout_desc sshape_buffer_layout_desc(void);
 SOKOL_API_DECL sg_vertex_attr_desc sshape_position_attr_desc(void);
 SOKOL_API_DECL sg_vertex_attr_desc sshape_normal_attr_desc(void);
@@ -219,29 +499,9 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
-#ifndef SOKOL_DEBUG
-    #ifndef NDEBUG
-        #define SOKOL_DEBUG (1)
-    #endif
-#endif
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-
-#ifndef SOKOL_LOG
-    #ifdef SOKOL_DEBUG
-        #include <stdio.h>
-        #define SOKOL_LOG(s) { SOKOL_ASSERT(s); puts(s); }
-    #else
-        #define SOKOL_LOG(s)
-    #endif
-#endif
-#ifndef SOKOL_UNREACHABLE
-    #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
-#endif
-#ifndef _SOKOL_UNUSED
-    #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
 #define _sshape_def(val, def) (((val) == 0) ? (def) : (val))
@@ -304,7 +564,7 @@ static inline _sshape_vec2_t _sshape_vec2(float x, float y) {
 static bool _sshape_mat4_isnull(const sshape_mat4_t* m) {
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
-            if (0.0f != m->v[y][x]) {
+            if (0.0f != m->m[y][x]) {
                 return false;
             }
         }
@@ -326,10 +586,10 @@ static sshape_mat4_t _sshape_mat4_identity(void) {
 
 static _sshape_vec4_t _sshape_mat4_mul(const sshape_mat4_t* m, _sshape_vec4_t v) {
     _sshape_vec4_t res = {
-        m->v[0][0]*v.x + m->v[1][0]*v.y + m->v[2][0]*v.z + m->v[3][0]*v.w,
-        m->v[0][1]*v.x + m->v[1][1]*v.y + m->v[2][1]*v.z + m->v[3][1]*v.w,
-        m->v[0][2]*v.x + m->v[1][2]*v.y + m->v[2][2]*v.z + m->v[3][2]*v.w,
-        m->v[0][3]*v.x + m->v[1][3]*v.y + m->v[2][3]*v.z + m->v[3][3]*v.w
+        m->m[0][0]*v.x + m->m[1][0]*v.y + m->m[2][0]*v.z + m->m[3][0]*v.w,
+        m->m[0][1]*v.x + m->m[1][1]*v.y + m->m[2][1]*v.z + m->m[3][1]*v.w,
+        m->m[0][2]*v.x + m->m[1][2]*v.y + m->m[2][2]*v.z + m->m[3][2]*v.w,
+        m->m[0][3]*v.x + m->m[1][3]*v.y + m->m[2][3]*v.z + m->m[3][3]*v.w
     };
     return res;
 }
@@ -518,7 +778,7 @@ SOKOL_API_IMPL uint32_t sshape_color_3b(uint8_t r, uint8_t g, uint8_t b) {
 
 SOKOL_API_IMPL sshape_mat4_t sshape_mat4(const float m[16]) {
     sshape_mat4_t res;
-    memcpy(&res.v[0][0], &m[0], 64);
+    memcpy(&res.m[0][0], &m[0], 64);
     return res;
 }
 
@@ -526,7 +786,7 @@ SOKOL_API_IMPL sshape_mat4_t sshape_mat4_transpose(const float m[16]) {
     sshape_mat4_t res;
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
-            res.v[r][c] = m[c*4 + r];
+            res.m[r][c] = m[c*4 + r];
         }
     }
     return res;
