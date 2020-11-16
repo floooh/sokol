@@ -86,6 +86,7 @@ extern "C" {
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
+typedef struct sg_context_desc sg_context_desc;
 SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
 #endif
 
