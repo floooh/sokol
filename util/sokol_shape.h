@@ -123,7 +123,7 @@ typedef struct sshape_buffer_t {
 /* TODO: documentation on build-parameter structs */
 typedef struct sshape_plane_t {
     float width, depth;             // default: 1.0
-    uint32_t tiles;                 // default: 1
+    uint16_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
@@ -131,7 +131,7 @@ typedef struct sshape_plane_t {
 
 typedef struct sshape_box_t {
     float width, height, depth;     // default: 1.0
-    uint32_t tiles;                 // default: 1
+    uint16_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
@@ -139,8 +139,8 @@ typedef struct sshape_box_t {
 
 typedef struct sshape_sphere_t {
     float radius;                   // default: 0.5
-    uint32_t slices;                // default: 5
-    uint32_t stacks;                // default: 4
+    uint16_t slices;                // default: 5
+    uint16_t stacks;                // default: 4
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
@@ -149,8 +149,8 @@ typedef struct sshape_sphere_t {
 typedef struct sshape_cylinder_t {
     float radius;                   // default: 0.5
     float height;                   // default: 1.0
-    uint32_t slices;                // default: 5
-    uint32_t stacks;                // default: 1
+    uint16_t slices;                // default: 5
+    uint16_t stacks;                // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
@@ -159,8 +159,8 @@ typedef struct sshape_cylinder_t {
 typedef struct sshape_torus_t {
     float radius;                   // default: 0.5f
     float ring_radius;              // default: 0.2f
-    uint32_t sides;                 // default: 5
-    uint32_t rings;                 // default: 5
+    uint16_t sides;                 // default: 5
+    uint16_t rings;                 // default: 5
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
     sshape_mat4_t transform;        // default: identity matrix
@@ -405,7 +405,7 @@ static void _sshape_advance_offset(sshape_buffer_item_t* item) {
 }
 
 static uint16_t _sshape_base_index(const sshape_buffer_t* buf) {
-    return buf->vertices.shape_offset / sizeof(sshape_vertex_t);
+    return (uint16_t) (buf->vertices.shape_offset / sizeof(sshape_vertex_t));
 }
 
 static sshape_plane_t _sshape_plane_defaults(const sshape_plane_t* params) {
@@ -632,8 +632,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* in_buf,
 
     // write indices
     uint16_t start_index = _sshape_base_index(&buf);
-    for (uint32_t j = 0; j < params.tiles; j++) {
-        for (uint32_t i = 0; i < params.tiles; i++) {
+    for (uint16_t j = 0; j < params.tiles; j++) {
+        for (uint16_t i = 0; i < params.tiles; i++) {
             const uint16_t i0 = start_index + (j * (params.tiles + 1)) + i;
             const uint16_t i1 = i0 + 1;
             const uint16_t i2 = i0 + params.tiles + 1;
@@ -726,10 +726,10 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
     // build indices
     const uint16_t verts_per_face = (params.tiles + 1) * (params.tiles + 1);
     const uint16_t start_index = _sshape_base_index(&buf);
-    for (uint32_t face = 0; face < 6; face++) {
+    for (uint16_t face = 0; face < 6; face++) {
         uint16_t face_start_index = start_index + face * verts_per_face;
-        for (uint32_t j = 0; j < params.tiles; j++) {
-            for (uint32_t i = 0; i < params.tiles; i++) {
+        for (uint16_t j = 0; j < params.tiles; j++) {
+            for (uint16_t i = 0; i < params.tiles; i++) {
                 const uint16_t i0 = face_start_index + (j * (params.tiles + 1)) + i;
                 const uint16_t i1 = i0 + 1;
                 const uint16_t i2 = i0 + params.tiles + 1;
@@ -805,15 +805,15 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
     {
         const uint16_t row_a = start_index;
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice, row_b + slice + 1);
         }
     }
     // stack triangles
-    for (uint32_t stack = 1; stack < params.stacks - 1; stack++) {
+    for (uint16_t stack = 1; stack < params.stacks - 1; stack++) {
         const uint16_t row_a = start_index + stack * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice + 1, row_a + slice + 1);
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice, row_b + slice + 1);
         }
@@ -822,7 +822,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
     {
         const uint16_t row_a = start_index + (params.stacks - 1) * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice + 1, row_a + slice + 1);
         }
     }
@@ -859,7 +859,7 @@ static void _sshape_build_cylinder_cap_pole(sshape_buffer_t* buf, const sshape_c
 }
 
 static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_cylinder_t* params, float pos_y, float norm_y, float du, float v, uint32_t* rand_seed) {
-    const float two_pi = 2.0 * 3.14159265358979323846;
+    const float two_pi = 2.0f * 3.14159265358979323846f;
     const _sshape_vec4_t tnorm = _sshape_mat4_mul(&params->transform, _sshape_vec4(0.0f, norm_y, 0.0f, 0.0f));
     for (uint32_t slice = 0; slice <= params->slices; slice++) {
         const float slice_angle = (two_pi * slice) / params->slices;
@@ -924,15 +924,15 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     {
         const uint16_t row_a = start_index;
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice + 1, row_b + slice);
         }
     }
     // shaft triangles
-    for (uint32_t stack = 0; stack < params.stacks; stack++) {
+    for (uint16_t stack = 0; stack < params.stacks; stack++) {
         const uint16_t row_a = start_index + (stack + 2) * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_a + slice + 1, row_b + slice + 1);
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice + 1, row_b + slice);
         }
@@ -941,7 +941,7 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     {
         const uint16_t row_a = start_index + (params.stacks + 3) * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
-        for (uint32_t slice = 0; slice < params.slices; slice++) {
+        for (uint16_t slice = 0; slice < params.slices; slice++) {
             _sshape_add_triangle(&buf, row_a + slice, row_a + slice + 1, row_b + slice + 1);
         }
     }
@@ -1016,10 +1016,10 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
 
     // generate indices
     const uint16_t start_index = _sshape_base_index(&buf);
-    for (uint32_t side = 0; side < params.sides; side++) {
+    for (uint16_t side = 0; side < params.sides; side++) {
         const uint16_t row_a = start_index + side * (params.rings + 1);
         const uint16_t row_b = row_a + params.rings + 1;
-        for (uint32_t ring = 0; ring < params.rings; ring++) {
+        for (uint16_t ring = 0; ring < params.rings; ring++) {
             _sshape_add_triangle(&buf, row_a + ring, row_a + ring + 1, row_b + ring + 1);
             _sshape_add_triangle(&buf, row_a + ring, row_b + ring + 1, row_b + ring);
         }
