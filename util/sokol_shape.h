@@ -53,9 +53,18 @@
     Indices are generally 16-bits wide (SG_INDEXTYPE_UINT16) and the indices
     are written as triangle-lists (SG_PRIMITIVETYPE_TRIANGLES).
 
-    For a complete code example see:
+    EXAMPLES:
+    =========
+
+    Create multiple shapes into the same vertex- and index-buffer and
+    render with separate draw calls:
 
     https://github.com/floooh/sokol-samples/blob/master/sapp/shapes-sapp.c
+
+    Same as the above, but pre-transform shapes and merge them into a single
+    shape that's rendered with a single draw call.
+
+    https://github.com/floooh/sokol-samples/blob/master/sapp/shapes-transform-sapp.c
 
     STEP-BY-STEP:
     =============
@@ -137,8 +146,9 @@
     actual C struct declarations below to look up those defaults.
 
     You can also provide additional creation parameters, like a common vertex
-    color, a debug-helper to randomize colors, and a 4x4 transform matrix
-    to move, rotate and scale the generated matrices:
+    color, a debug-helper to randomize colors, tell the shape builder function
+    to merge the new shape with the previous shape into the same draw-element-range,
+    or a 4x4 transform matrix to move, rotate and scale the generated matrices:
 
     ```c
     sshape_buffer_t buf = ...;
@@ -146,6 +156,8 @@
         .radius = 2.0f,
         .slices = 36,
         .stacks = 12,
+        // merge with previous shape into a single element-range
+        .merge = true,
         // set vertex color to red+opaque
         .color = sshape_color_4f(1.0f, 0.0f, 0.0f, 1.0f),
         // set position to y = 2.0
@@ -263,7 +275,10 @@
         }
     });
     // ...and append another cube at pos pos=+1.0
+    // NOTE the .merge = true, this tells the shape builder
+    // function to not advance the current shape start offset
     buf = sshape_build_cube(&buf, &(sshape_box_t){
+        .merge = true,
         .transform = {
             .m = {
                 { 1.0f, 0.0f, 0.0f, 0.0f },
@@ -408,6 +423,7 @@ typedef struct sshape_plane_t {
     uint16_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
+    bool merge;                     // if true merge with previous shape (default: false)
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_plane_t;
 
@@ -416,6 +432,7 @@ typedef struct sshape_box_t {
     uint16_t tiles;                 // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
+    bool merge;                     // if true merge with previous shape (default: false)
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_box_t;
 
@@ -425,6 +442,7 @@ typedef struct sshape_sphere_t {
     uint16_t stacks;                // default: 4
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
+    bool merge;                     // if true merge with previous shape (default: false)
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_sphere_t;
 
@@ -435,6 +453,7 @@ typedef struct sshape_cylinder_t {
     uint16_t stacks;                // default: 1
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
+    bool merge;                     // if true merge with previous shape (default: false)
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_cylinder_t;
 
@@ -445,6 +464,7 @@ typedef struct sshape_torus_t {
     uint16_t rings;                 // default: 5
     uint32_t color;                 // default: white
     bool random_colors;             // default: false
+    bool merge;                     // if true merge with previous shape (default: false)
     sshape_mat4_t transform;        // default: identity matrix
 } sshape_torus_t;
 
@@ -667,7 +687,7 @@ static void _sshape_advance_offset(sshape_buffer_item_t* item) {
 }
 
 static uint16_t _sshape_base_index(const sshape_buffer_t* buf) {
-    return (uint16_t) (buf->vertices.shape_offset / sizeof(sshape_vertex_t));
+    return (uint16_t) (buf->vertices.data_size / sizeof(sshape_vertex_t));
 }
 
 static sshape_plane_t _sshape_plane_defaults(const sshape_plane_t* params) {
@@ -871,8 +891,11 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* in_buf,
         return buf;
     }
     buf.valid = true;
-    _sshape_advance_offset(&buf.vertices);
-    _sshape_advance_offset(&buf.indices);
+    const uint16_t start_index = _sshape_base_index(&buf);
+    if (!params.merge) {
+        _sshape_advance_offset(&buf.vertices);
+        _sshape_advance_offset(&buf.indices);
+    }
 
     // write vertices
     uint32_t rand_seed = 0x12345678;
@@ -893,7 +916,6 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* in_buf,
     }
 
     // write indices
-    uint16_t start_index = _sshape_base_index(&buf);
     for (uint16_t j = 0; j < params.tiles; j++) {
         for (uint16_t i = 0; i < params.tiles; i++) {
             const uint16_t i0 = start_index + (j * (params.tiles + 1)) + i;
@@ -918,8 +940,11 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
         return buf;
     }
     buf.valid = true;
-    _sshape_advance_offset(&buf.vertices);
-    _sshape_advance_offset(&buf.indices);
+    const uint16_t start_index = _sshape_base_index(&buf);
+    if (!params.merge) {
+        _sshape_advance_offset(&buf.vertices);
+        _sshape_advance_offset(&buf.indices);
+    }
 
     // build vertices
     uint32_t rand_seed = 0x12345678;
@@ -936,7 +961,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
 
     // bottom/top vertices
     for (uint32_t top_bottom = 0; top_bottom < 2; top_bottom++) {
-        _sshape_vec4_t pos = _sshape_vec4(0.0f, (0==top_bottom) ? y0:y1, 0.0f, 0.0f);
+        _sshape_vec4_t pos = _sshape_vec4(0.0f, (0==top_bottom) ? y0:y1, 0.0f, 1.0f);
         const _sshape_vec4_t norm = _sshape_vec4(0.0f, (0==top_bottom) ? -1.0f:1.0f, 0.0f, 0.0f);
         const _sshape_vec4_t tnorm = _sshape_vec4_norm(_sshape_mat4_mul(&params.transform, norm));
         for (uint32_t ix = 0; ix <= params.tiles; ix++) {
@@ -953,7 +978,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
 
     // left/right vertices
     for (uint32_t left_right = 0; left_right < 2; left_right++) {
-        _sshape_vec4_t pos = _sshape_vec4((0==left_right) ? x0:x1, 0.0f, 0.0f, 0.0f);
+        _sshape_vec4_t pos = _sshape_vec4((0==left_right) ? x0:x1, 0.0f, 0.0f, 1.0f);
         const _sshape_vec4_t norm = _sshape_vec4((0==left_right) ? -1.0f:1.0f, 0.0f, 0.0f, 0.0f);
         const _sshape_vec4_t tnorm = _sshape_vec4_norm(_sshape_mat4_mul(&params.transform, norm));
         for (uint32_t iy = 0; iy <= params.tiles; iy++) {
@@ -970,7 +995,7 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
 
     // front/back vertices
     for (uint32_t front_back = 0; front_back < 2; front_back++) {
-        _sshape_vec4_t pos = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? z0:z1, 0.0f);
+        _sshape_vec4_t pos = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? z0:z1, 1.0f);
         const _sshape_vec4_t norm = _sshape_vec4(0.0f, 0.0f, (0==front_back) ? -1.0f:1.0f, 0.0f);
         const _sshape_vec4_t tnorm = _sshape_vec4_norm(_sshape_mat4_mul(&params.transform, norm));
         for (uint32_t ix = 0; ix <= params.tiles; ix++) {
@@ -987,7 +1012,6 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_box(const sshape_buffer_t* in_buf, c
 
     // build indices
     const uint16_t verts_per_face = (params.tiles + 1) * (params.tiles + 1);
-    const uint16_t start_index = _sshape_base_index(&buf);
     for (uint16_t face = 0; face < 6; face++) {
         uint16_t face_start_index = start_index + face * verts_per_face;
         for (uint16_t j = 0; j < params.tiles; j++) {
@@ -1032,8 +1056,11 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
         return buf;
     }
     buf.valid = true;
-    _sshape_advance_offset(&buf.vertices);
-    _sshape_advance_offset(&buf.indices);
+    const uint16_t start_index = _sshape_base_index(&buf);
+    if (!params.merge) {
+        _sshape_advance_offset(&buf.vertices);
+        _sshape_advance_offset(&buf.indices);
+    }
 
     uint32_t rand_seed = 0x12345678;
     const float pi = 3.14159265358979323846f;
@@ -1061,10 +1088,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
     }
 
     // generate indices
-    const uint16_t start_index = _sshape_base_index(&buf);
-
-    // north-pole triangles
     {
+        // north-pole triangles
         const uint16_t row_a = start_index;
         const uint16_t row_b = row_a + params.slices + 1;
         for (uint16_t slice = 0; slice < params.slices; slice++) {
@@ -1080,8 +1105,8 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* in_buf
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice, row_b + slice + 1);
         }
     }
-    // south-pole triangles
     {
+        // south-pole triangles
         const uint16_t row_a = start_index + (params.stacks - 1) * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
         for (uint16_t slice = 0; slice < params.slices; slice++) {
@@ -1146,8 +1171,11 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
         return buf;
     }
     buf.valid = true;
-    _sshape_advance_offset(&buf.vertices);
-    _sshape_advance_offset(&buf.indices);
+    const uint16_t start_index = _sshape_base_index(&buf);
+    if (!params.merge) {
+        _sshape_advance_offset(&buf.vertices);
+        _sshape_advance_offset(&buf.indices);
+    }
 
     uint32_t rand_seed = 0x12345678;
     const float two_pi = 2.0f * 3.14159265358979323846f;
@@ -1180,10 +1208,8 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
     _sshape_build_cylinder_cap_pole(&buf, &params, y1, -1.0f, du, 1.0f, &rand_seed);
 
     // generate indices
-    const uint16_t start_index = _sshape_base_index(&buf);
-
-    // top-cap indices
     {
+        // top-cap indices
         const uint16_t row_a = start_index;
         const uint16_t row_b = row_a + params.slices + 1;
         for (uint16_t slice = 0; slice < params.slices; slice++) {
@@ -1199,8 +1225,8 @@ SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_b
             _sshape_add_triangle(&buf, row_a + slice, row_b + slice + 1, row_b + slice);
         }
     }
-    // bottom-cap indices
     {
+        // bottom-cap indices
         const uint16_t row_a = start_index + (params.stacks + 3) * (params.slices + 1);
         const uint16_t row_b = row_a + params.slices + 1;
         for (uint16_t slice = 0; slice < params.slices; slice++) {
@@ -1238,8 +1264,11 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
         return buf;
     }
     buf.valid = true;
-    _sshape_advance_offset(&buf.vertices);
-    _sshape_advance_offset(&buf.indices);
+    const uint16_t start_index = _sshape_base_index(&buf);
+    if (!params.merge) {
+        _sshape_advance_offset(&buf.vertices);
+        _sshape_advance_offset(&buf.indices);
+    }
 
     uint32_t rand_seed = 0x12345678;
     const float two_pi = 2.0f * 3.14159265358979323846f;
@@ -1277,7 +1306,6 @@ SOKOL_API_IMPL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* in_buf,
     }
 
     // generate indices
-    const uint16_t start_index = _sshape_base_index(&buf);
     for (uint16_t side = 0; side < params.sides; side++) {
         const uint16_t row_a = start_index + side * (params.rings + 1);
         const uint16_t row_b = row_a + params.rings + 1;
