@@ -69,7 +69,7 @@
     STEP-BY-STEP:
     =============
 
-    Setup an sshape_buffer_t struct with pointers to memory buffer where
+    Setup an sshape_buffer_t struct with pointers to memory buffers where
     generated vertices and indices will be written to:
 
     ```c
@@ -136,11 +136,14 @@
         .slices = 36,
         .stacks = 12,
     });
-    assert(buf.valid);
     ```
 
     If the provided buffers are big enough to hold all generated vertices and
-    indices, sshape_buffer_t.valid will be true.
+    indices, the "valid" field in the result will be true:
+
+    ```c
+    assert(buf.valid);
+    ```
 
     The shape creation parameters have "useful defaults", refer to the
     actual C struct declarations below to look up those defaults.
@@ -417,7 +420,7 @@ typedef struct sshape_buffer_t {
     sshape_buffer_item_t indices;
 } sshape_buffer_t;
 
-/* TODO: documentation on build-parameter structs */
+/* creation parameters for the different shape types */
 typedef struct sshape_plane_t {
     float width, depth;             // default: 1.0
     uint16_t tiles;                 // default: 1
