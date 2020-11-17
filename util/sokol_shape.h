@@ -817,7 +817,7 @@ SOKOL_API_IMPL sshape_mat4_t sshape_mat4_transpose(const float m[16]) {
     return res;
 }
 
-SOKOL_API_IMPL sshape_sizes_t sshape_plane_buffer_sizes(uint32_t tiles) {
+SOKOL_API_IMPL sshape_sizes_t sshape_plane_sizes(uint32_t tiles) {
     SOKOL_ASSERT(tiles >= 1);
     sshape_sizes_t res = { 0 };
     res.vertices.num = _sshape_plane_num_vertices(tiles);
@@ -827,7 +827,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_plane_buffer_sizes(uint32_t tiles) {
     return res;
 }
 
-SOKOL_API_IMPL sshape_sizes_t sshape_box_buffer_sizes(uint32_t tiles) {
+SOKOL_API_IMPL sshape_sizes_t sshape_box_sizes(uint32_t tiles) {
     SOKOL_ASSERT(tiles >= 1);
     sshape_sizes_t res = { 0 };
     res.vertices.num = _sshape_box_num_vertices(tiles);
@@ -837,7 +837,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_box_buffer_sizes(uint32_t tiles) {
     return res;
 }
 
-SOKOL_API_IMPL sshape_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32_t stacks) {
+SOKOL_API_IMPL sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stacks) {
     SOKOL_ASSERT((slices >= 3) && (stacks >= 2));
     sshape_sizes_t res = { 0 };
     res.vertices.num = _sshape_sphere_num_vertices(slices, stacks);
@@ -847,7 +847,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_sphere_buffer_sizes(uint32_t slices, uint32
     return res;
 }
 
-SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint32_t stacks) {
+SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t stacks) {
     SOKOL_ASSERT((slices >= 3) && (stacks >= 1));
     sshape_sizes_t res = { 0 };
     res.vertices.num = _sshape_cylinder_num_vertices(slices, stacks);
@@ -857,7 +857,7 @@ SOKOL_API_IMPL sshape_sizes_t sshape_cylinder_buffer_sizes(uint32_t slices, uint
     return res;
 }
 
-SOKOL_API_IMPL sshape_sizes_t sshape_torus_buffer_sizes(uint32_t sides, uint32_t rings) {
+SOKOL_API_IMPL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings) {
     SOKOL_ASSERT((sides >= 3) && (rings >= 3));
     sshape_sizes_t res = { 0 };
     res.vertices.num = _sshape_torus_num_vertices(sides, rings);
