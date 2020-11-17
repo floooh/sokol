@@ -37,7 +37,7 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 - [**sokol\_gfx\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h): debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 - [**sokol\_debugtext.h**](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h): a simple text renderer using vintage home computer fonts
 - [**sokol\_memtrack.h**](https://github.com/floooh/sokol/blob/master/util/sokol_memtrack.h): easily track memory allocations in sokol headers
-- [**sokol\_shape.h**](https://github.com/floooh/sokol/blob/master/util/sokol_shape.h): generate simple shape geometries and plug them into sokol-gfx creation structs
+- [**sokol\_shape.h**](https://github.com/floooh/sokol/blob/master/util/sokol_shape.h): generate simple shapes and plug them into sokol-gfx resource creation structs
 
 ## Notes
 
