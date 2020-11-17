@@ -6,13 +6,19 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**08-Nov-2020** PSA about RenderDoc 1.10 and sokol_app.h D3D11/DXGI)
+[See what's new](#updates) (**17-Nov-2020** new utility header: sokol_shape.h)
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
+
+Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
 [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
 [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
+
+Command line tools: https://github.com/floooh/sokol-tools
+
+Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 ## Core libraries
 
@@ -31,6 +37,7 @@ cross-platform libraries for C and C++, written in C.
 - [**sokol\_gfx\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h): debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
 - [**sokol\_debugtext.h**](https://github.com/floooh/sokol/blob/master/util/sokol_debugtext.h): a simple text renderer using vintage home computer fonts
 - [**sokol\_memtrack.h**](https://github.com/floooh/sokol/blob/master/util/sokol_memtrack.h): easily track memory allocations in sokol headers
+- [**sokol\_shape.h**](https://github.com/floooh/sokol/blob/master/util/sokol_shape.h): generate simple shape geometries and plug them into sokol-gfx creation structs
 
 ## Notes
 
@@ -39,12 +46,6 @@ Sokol headers is to provide a collection of cross-platform APIs with a
 minimal footprint on the web platform while still being useful.
 
 The core headers are standalone and can be used independently from each other.
-
-Sample code is in a separate repo: https://github.com/floooh/sokol-samples
-
-Command line tools: https://github.com/floooh/sokol-tools
-
-Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 ### Why C:
 
@@ -437,6 +438,13 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **17-Nov-2020**: A new utility header **sokol_shape.h** to generate
+  vertices+indices for simple shapes (plane, box, sphere, cylinder and torus),
+  which seamlessly plug into the sokol_gfx.h resource creation functions. As
+  with most new utility headers, the initial functionality is a bit bare bones
+  and the public API shouldn't be considered stable yet. Check the sokol-samples
+  webpage for new and updates samples: https://floooh.github.io/sokol-html5/
 
 - **08-Nov-2020** PSA: It appears that RenderDoc v1.10 chokes on the new
   D3D11/DXGI swapchain code from 10-Oct-2020 in sokol_app.h. The current
