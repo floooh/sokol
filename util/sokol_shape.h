@@ -521,6 +521,12 @@ SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #include <stddef.h> // offsetof
 #include <math.h>   // sinf, cosf
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+#endif
+
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
 #endif
@@ -1394,4 +1400,7 @@ SOKOL_API_IMPL sg_vertex_attr_desc sshape_color_attr_desc(void) {
     return desc;
 }
 
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 #endif // SOKOL_SHAPE_IMPL
