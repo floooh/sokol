@@ -16,7 +16,7 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_MEMTRACK_API_DECL      - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_memtrack.h is compiled as a DLL, define the following before
@@ -73,13 +73,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef SOKOL_API_DECL
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_MEMTRACK_API_DECL)
+    #define SOKOL_MEMTRACK_API_DECL SOKOL_API_DECL
+#endif
+
+#ifndef SOKOL_MEMTRACK_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#define SOKOL_MEMTRACK_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_MEMTRACK_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_MEMTRACK_API_DECL extern
 #endif
 #endif
 
@@ -92,7 +96,7 @@ typedef struct smemtrack_info_t {
     int num_bytes;
 } smemtrack_info_t;
 
-SOKOL_API_DECL smemtrack_info_t smemtrack_info(void);
+SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
