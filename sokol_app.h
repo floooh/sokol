@@ -2553,6 +2553,14 @@ typedef struct {
 
 #define _SAPP_WAYLAND_MAX_EPOLL_EVENTS 10
 
+struct _sapp_wl_touchpoint {
+    bool changed;
+    bool valid;
+    float x;
+    float y;
+    int32_t id;
+};
+
 typedef struct {
     /* wayland specific objects/globals */
     struct wl_compositor* compositor;
@@ -2564,6 +2572,7 @@ typedef struct {
     struct wl_registry* registry;
     struct wl_seat* seat;
     struct wl_surface* surface;
+    struct wl_touch* touch;
     struct xdg_surface* shell;
     struct xdg_toplevel* toplevel;
     struct xdg_wm_base* wm_base;
@@ -2583,6 +2592,9 @@ typedef struct {
     struct xkb_state* xkb_state;
     struct xkb_keymap* xkb_keymap;
     bool repeat_mask[SAPP_MAX_KEYCODES];
+
+    /* accumulated touch state */
+    struct _sapp_wl_touchpoint touchpoints[SAPP_MAX_TOUCHPOINTS];
 } _sapp_wl_t;
 
 #elif /* SOKOL_WAYLAND */
@@ -12070,6 +12082,27 @@ _SOKOL_PRIVATE uint32_t _sapp_wl_get_modifiers(void) {
     return modifiers;
 }
 
+_SOKOL_PRIVATE struct _sapp_wl_touchpoint* _sapp_wl_get_touchpoint(int32_t id) {
+    char point_id = -1;
+    for (char i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+        if (id == _sapp.wl.touchpoints[i].id) {
+            _sapp.wl.touchpoints[i].changed = true;
+            _sapp.wl.touchpoints[i].valid = true;
+            return &_sapp.wl.touchpoints[i];
+        }
+        if (-1 == point_id && !_sapp.wl.touchpoints[i].valid) {
+            point_id = i;
+        }
+    }
+    if (-1 == point_id) {
+        return NULL;
+    }
+
+    _sapp.wl.touchpoints[point_id].valid = true;
+    _sapp.wl.touchpoints[point_id].id = id;
+    return &_sapp.wl.touchpoints[point_id];
+}
+
 _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.egl_surface) eglDestroySurface(_sapp.wl.egl_display, _sapp.wl.egl_surface);
     if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
@@ -12082,6 +12115,7 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.compositor) wl_compositor_destroy(_sapp.wl.compositor);
     if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
+    if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
     if (NULL != _sapp.wl.pointer) wl_pointer_destroy(_sapp.wl.pointer);
     if (NULL != _sapp.wl.keyboard) wl_keyboard_destroy(_sapp.wl.keyboard);
     if (NULL != _sapp.wl.seat) wl_seat_destroy(_sapp.wl.seat);
@@ -12179,6 +12213,35 @@ _SOKOL_PRIVATE void _sapp_wl_scroll_event(bool is_vertical_axis, double value, u
         } else {
             _sapp.event.scroll_y = (float) value;
         }
+        _sapp.event.modifiers = modifiers;
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint32_t modifiers) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(type);
+        char max_touchpoints = 0;
+        for (char i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+            if (_sapp.wl.touchpoints[i].valid) {
+                sapp_touchpoint* point = &_sapp.event.touches[max_touchpoints++];
+                point->identifier = _sapp.wl.touchpoints[i].id;
+                point->pos_x = _sapp.dpi_scale * _sapp.wl.touchpoints[i].x;
+                point->pos_y = _sapp.dpi_scale * _sapp.wl.touchpoints[i].y;
+                point->changed = _sapp.wl.touchpoints[i].changed;
+
+                if (id == _sapp.wl.touchpoints[i].id && SAPP_EVENTTYPE_TOUCHES_ENDED == type) {
+                    _sapp.wl.touchpoints[i].valid = false;
+                }
+            }
+            if (SAPP_EVENTTYPE_TOUCHES_CANCELLED == type) {
+                _sapp.wl.touchpoints[i].valid = false;
+            }
+        }
+        if (max_touchpoints > SAPP_MAX_TOUCHPOINTS) {
+            max_touchpoints = SAPP_MAX_TOUCHPOINTS;
+        }
+        _sapp.event.num_touches = max_touchpoints;
         _sapp.event.modifiers = modifiers;
         _sapp_call_event(&_sapp.event);
     }
@@ -12410,11 +12473,87 @@ _SOKOL_PRIVATE const struct wl_pointer_listener _sapp_wl_pointer_listener = {
     .motion = _sapp_wl_pointer_motion,
 };
 
+_SOKOL_PRIVATE void _sapp_wl_touch_cancel(void* data, struct wl_touch* touch) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_CANCELLED, 0, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_down(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, struct wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(surface);
+
+    struct _sapp_wl_touchpoint* point = _sapp_wl_get_touchpoint(id);
+    if (NULL != point) {
+        point->x = (float) wl_fixed_to_double(x);
+        point->y = (float) wl_fixed_to_double(y);
+    }
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_BEGAN, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_frame(void* data, struct wl_touch* touch) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_motion(void* data, struct wl_touch* touch, uint32_t time, int32_t id, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(time);
+
+    struct _sapp_wl_touchpoint* point = _sapp_wl_get_touchpoint(id);
+    if (NULL != point) {
+        point->x = (float) wl_fixed_to_double(x);
+        point->y = (float) wl_fixed_to_double(y);
+    }
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_MOVED, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_orientation(void* data, struct wl_touch* touch, int32_t id, wl_fixed_t orientation) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(id);
+    _SOKOL_UNUSED(orientation);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_shape(void* data, struct wl_touch* touch, int32_t id, wl_fixed_t major, wl_fixed_t minor) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(id);
+    _SOKOL_UNUSED(major);
+    _SOKOL_UNUSED(minor);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_touch_up(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, int32_t id) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(touch);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(time);
+
+    _sapp_wl_get_touchpoint(id);
+    _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_ENDED, id, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE const struct wl_touch_listener _sapp_wl_touch_listener = {
+    .cancel = _sapp_wl_touch_cancel,
+    .down = _sapp_wl_touch_down,
+    .frame = _sapp_wl_touch_frame,
+    .motion = _sapp_wl_touch_motion,
+    .orientation = _sapp_wl_touch_orientation,
+    .shape = _sapp_wl_touch_shape,
+    .up = _sapp_wl_touch_up,
+};
+
 _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
     _SOKOL_UNUSED(data);
 
     bool has_keyboard = capabilities & WL_SEAT_CAPABILITY_KEYBOARD;
     bool has_pointer = capabilities & WL_SEAT_CAPABILITY_POINTER;
+    bool has_touch = capabilities & WL_SEAT_CAPABILITY_TOUCH;
 
     if (has_keyboard && NULL == _sapp.wl.keyboard) {
         _sapp.wl.keyboard = wl_seat_get_keyboard(seat);
@@ -12430,6 +12569,15 @@ _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat
     } else if (!has_pointer && NULL != _sapp.wl.pointer) {
         wl_pointer_release(_sapp.wl.pointer);
         _sapp.wl.pointer = NULL;
+    }
+
+    if (has_touch && NULL == _sapp.wl.touch) {
+        _sapp.wl.touch = wl_seat_get_touch(seat);
+        wl_touch_add_listener(_sapp.wl.touch, &_sapp_wl_touch_listener, NULL);
+        memset(&_sapp.wl.touchpoints, 0, sizeof(_sapp.wl.touchpoints));
+    } else if (!has_touch && NULL != _sapp.wl.touch) {
+        wl_touch_release(_sapp.wl.touch);
+        _sapp.wl.touch = NULL;
     }
 }
 
