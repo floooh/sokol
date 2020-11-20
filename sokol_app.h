@@ -3988,10 +3988,10 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_notify_keyboard_hidden(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_onpaste(const char* str) {
-    if (_sapp.clipboard.enabled) {
-        _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    if (_sapp.main_window->clipboard.enabled) {
+        _sapp_strcpy(str, _sapp.main_window->clipboard.buffer, _sapp.main_window->clipboard.buf_size);
         if (_sapp_events_enabled()) {
-            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
     }
@@ -4003,44 +4003,44 @@ EMSCRIPTEN_KEEPALIVE int _sapp_html5_get_ask_leave_site(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_begin_drop(int num) {
-    if (!_sapp.drop.enabled) {
+    if (!_sapp.main_window->drop.enabled) {
         return;
     }
     if (num < 0) {
         num = 0;
     }
-    if (num > _sapp.drop.max_files) {
-        num = _sapp.drop.max_files;
+    if (num > _sapp.main_window->drop.max_files) {
+        num = _sapp.main_window->drop.max_files;
     }
-    _sapp.drop.num_files = num;
-    _sapp_clear_drop_buffer();
+    _sapp.main_window->drop.num_files = num;
+    _sapp_clear_drop_buffer(_sapp.main_window);
 }
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_drop(int i, const char* name) {
     /* NOTE: name is only the filename part, not a path */
-    if (!_sapp.drop.enabled) {
+    if (!_sapp.main_window->drop.enabled) {
         return;
     }
     if (0 == name) {
         return;
     }
-    SOKOL_ASSERT(_sapp.drop.num_files <= _sapp.drop.max_files);
-    if ((i < 0) || (i >= _sapp.drop.num_files)) {
+    SOKOL_ASSERT(_sapp.main_window->drop.num_files <= _sapp.main_window->drop.max_files);
+    if ((i < 0) || (i >= _sapp.main_window->drop.num_files)) {
         return;
     }
-    if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
+    if (!_sapp_strcpy(name, _sapp_dropped_file_path_ptr(_sapp.main_window, i), _sapp.main_window->drop.max_path_length)) {
         SOKOL_LOG("sokol_app.h: dropped file path too long!\n");
-        _sapp.drop.num_files = 0;
+        _sapp.main_window->drop.num_files = 0;
     }
 }
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
-    if (!_sapp.drop.enabled) {
+    if (!_sapp.main_window->drop.enabled) {
         return;
     }
-    if (0 == _sapp.drop.num_files) {
+    if (0 == _sapp.main_window->drop.num_files) {
         /* there was an error copying the filenames */
-        _sapp_clear_drop_buffer();
+        _sapp_clear_drop_buffer(_sapp.main_window);
         return;
 
     }
@@ -4049,7 +4049,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
         _sapp.mouse.y = (float)y * _sapp.dpi_scale;
         _sapp.mouse.dx = 0.0f;
         _sapp.mouse.dy = 0.0f;
-        _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_FILES_DROPPED);
         _sapp_call_event(&_sapp.event);
     }
 }
@@ -4350,28 +4350,28 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
         w = ui_event->windowInnerWidth;
     }
     else {
-        _sapp.window_width = (int) w;
+        _sapp.main_window->window_width = (int) w;
     }
     if (h < 1.0) {
         h = ui_event->windowInnerHeight;
     }
     else {
-        _sapp.window_height = (int) h;
+        _sapp.main_window->window_height = (int) h;
     }
-    if (_sapp.desc.high_dpi) {
+    if (_sapp.desc.window.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
-    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    _sapp.main_window->framebuffer_width = (int) (w * _sapp.dpi_scale);
+    _sapp.main_window->framebuffer_height = (int) (h * _sapp.dpi_scale);
+    SOKOL_ASSERT((_sapp.main_window->framebuffer_width > 0) && (_sapp.main_window->framebuffer_height > 0));
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.main_window->framebuffer_width, _sapp.main_window->framebuffer_height);
     #if defined(SOKOL_WGPU)
         /* on WebGPU: recreate size-dependent rendering surfaces */
         _sapp_emsc_wgpu_surfaces_discard();
         _sapp_emsc_wgpu_surfaces_create();
     #endif
     if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_RESIZED);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_RESIZED);
         _sapp_call_event(&_sapp.event);
     }
     return true;
@@ -4420,7 +4420,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
-            _sapp_init_event(type);
+            _sapp_init_event(_sapp.main_window, type);
             if (emsc_event->ctrlKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
             }
@@ -4459,7 +4459,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
     if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_MOUSE_SCROLL);
         if (emsc_event->mouse.ctrlKey) {
             _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
         }
@@ -4510,7 +4510,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             bool send_keyup_followup = false;
-            _sapp_init_event(type);
+            _sapp_init_event(_sapp.main_window, type);
             _sapp.event.key_repeat = emsc_event->repeat;
             if (emsc_event->ctrlKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
@@ -4651,7 +4651,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
                 break;
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
-            _sapp_init_event(type);
+            _sapp_init_event(_sapp.main_window, type);
             if (emsc_event->ctrlKey) {
                 _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
             }
@@ -4798,7 +4798,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* re
         default:                                    type = SAPP_EVENTTYPE_INVALID; break;
     }
     if (_sapp_events_enabled() && (SAPP_EVENTTYPE_INVALID != type)) {
-        _sapp_init_event(type);
+        _sapp_init_event(_sapp.main_window, type);
         _sapp_call_event(&_sapp.event);
     }
     return true;
@@ -4807,10 +4807,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_webgl_context_cb(int emsc_type, const void* re
 _SOKOL_PRIVATE void _sapp_emsc_webgl_init(void) {
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
-    attrs.alpha = _sapp.desc.alpha;
+    attrs.alpha = _sapp.desc.window.alpha;
     attrs.depth = true;
     attrs.stencil = true;
-    attrs.antialias = _sapp.sample_count > 1;
+    attrs.antialias = _sapp.main_window->sample_count > 1;
     attrs.premultipliedAlpha = _sapp.desc.html5_premultiplied_alpha;
     attrs.preserveDrawingBuffer = _sapp.desc.html5_preserve_drawing_buffer;
     attrs.enableExtensionsByDefault = true;
@@ -4892,28 +4892,28 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void) {
     memset(&ds_desc, 0, sizeof(ds_desc));
     ds_desc.usage = WGPUTextureUsage_OutputAttachment;
     ds_desc.dimension = WGPUTextureDimension_2D;
-    ds_desc.size.width = (uint32_t) _sapp.framebuffer_width;
-    ds_desc.size.height = (uint32_t) _sapp.framebuffer_height;
+    ds_desc.size.width = (uint32_t) _sapp.main_window->framebuffer_width;
+    ds_desc.size.height = (uint32_t) _sapp.main_window->framebuffer_height;
     ds_desc.size.depth = 1;
     ds_desc.arrayLayerCount = 1;
     ds_desc.format = WGPUTextureFormat_Depth24PlusStencil8;
     ds_desc.mipLevelCount = 1;
-    ds_desc.sampleCount = _sapp.sample_count;
+    ds_desc.sampleCount = _sapp.main_window->sample_count;
     _sapp.emsc.wgpu.depth_stencil_tex = wgpuDeviceCreateTexture(_sapp.emsc.wgpu.device, &ds_desc);
     _sapp.emsc.wgpu.depth_stencil_view = wgpuTextureCreateView(_sapp.emsc.wgpu.depth_stencil_tex, 0);
 
-    if (_sapp.sample_count > 1) {
+    if (_sapp.main_window->sample_count > 1) {
         WGPUTextureDescriptor msaa_desc;
         memset(&msaa_desc, 0, sizeof(msaa_desc));
         msaa_desc.usage = WGPUTextureUsage_OutputAttachment;
         msaa_desc.dimension = WGPUTextureDimension_2D;
-        msaa_desc.size.width = (uint32_t) _sapp.framebuffer_width;
-        msaa_desc.size.height = (uint32_t) _sapp.framebuffer_height;
+        msaa_desc.size.width = (uint32_t) _sapp.main_window->framebuffer_width;
+        msaa_desc.size.height = (uint32_t) _sapp.main_window->framebuffer_height;
         msaa_desc.size.depth = 1;
         msaa_desc.arrayLayerCount = 1;
         msaa_desc.format = _sapp.emsc.wgpu.render_format;
         msaa_desc.mipLevelCount = 1;
-        msaa_desc.sampleCount = _sapp.sample_count;
+        msaa_desc.sampleCount = _sapp.main_window->sample_count;
         _sapp.emsc.wgpu.msaa_tex = wgpuDeviceCreateTexture(_sapp.emsc.wgpu.device, &msaa_desc);
         _sapp.emsc.wgpu.msaa_view = wgpuTextureCreateView(_sapp.emsc.wgpu.msaa_tex, 0);
     }
@@ -4963,10 +4963,10 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     sapp_js_add_beforeunload_listener();
-    if (_sapp.clipboard.enabled) {
+    if (_sapp.main_window->clipboard.enabled) {
         sapp_js_add_clipboard_listener();
     }
-    if (_sapp.drop.enabled) {
+    if (_sapp.main_window->drop.enabled) {
         sapp_js_add_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -4992,10 +4992,10 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     sapp_js_remove_beforeunload_listener();
-    if (_sapp.clipboard.enabled) {
+    if (_sapp.main_window->clipboard.enabled) {
         sapp_js_remove_clipboard_listener();
     }
-    if (_sapp.drop.enabled) {
+    if (_sapp.main_window->drop.enabled) {
         sapp_js_remove_dragndrop_listeners(&_sapp.html5_canvas_selector[1]);
     }
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -5036,7 +5036,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
     /* quit-handling */
     if (_sapp.quit_requested) {
-        _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_QUIT_REQUESTED);
         _sapp_call_event(&_sapp.event);
         if (_sapp.quit_requested) {
             _sapp.quit_ordered = true;
@@ -5045,6 +5045,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
     if (_sapp.quit_ordered) {
         _sapp_emsc_unregister_eventhandlers();
         _sapp_call_cleanup();
+        _sapp_discard_pools();
         _sapp_discard_state();
         return EM_FALSE;
     }
@@ -5053,25 +5054,28 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp_setup_pools(desc);
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
     _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
-        w = (double) _sapp.desc.width;
-        h = (double) _sapp.desc.height;
+        w = (double) _sapp.desc.window.width;
+        h = (double) _sapp.desc.window.height;
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
-    if (_sapp.desc.high_dpi) {
+    if (_sapp.desc.window.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.window_width = (int) w;
-    _sapp.window_height = (int) h;
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
-    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
+    sapp_window main_window_id = sapp_create_window(&desc->window);
+    _sapp.main_window = _sapp_lookup_window(main_window_id.id);
+    _sapp.main_window->window_width = (int) w;
+    _sapp.main_window->window_height = (int) h;
+    _sapp.main_window->framebuffer_width = (int) (w * _sapp.dpi_scale);
+    _sapp.main_window->framebuffer_height = (int) (h * _sapp.dpi_scale);
+    emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.main_window->framebuffer_width, _sapp.main_window->framebuffer_height);
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
     #elif defined(SOKOL_WGPU)
@@ -10801,7 +10805,7 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
 }
 
 SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
-    SOKOL_ASSERT(_sapp.drop.enabled);
+    SOKOL_ASSERT(_sapp.main_window->drop.enabled);
     SOKOL_ASSERT(request);
     SOKOL_ASSERT(request->callback);
     SOKOL_ASSERT(request->buffer_ptr);
@@ -10809,7 +10813,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
     #if defined(_SAPP_EMSCRIPTEN)
         const int index = request->dropped_file_index;
         sapp_html5_fetch_error error_code = SAPP_HTML5_FETCH_ERROR_NO_ERROR;
-        if ((index < 0) || (index >= _sapp.drop.num_files)) {
+        if ((index < 0) || (index >= _sapp.main_window->drop.num_files)) {
             error_code = SAPP_HTML5_FETCH_ERROR_OTHER;
         }
         if (sapp_html5_get_dropped_file_size(index) > request->buffer_size) {
@@ -10986,7 +10990,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_device(void) {
 SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
-        if (_sapp.sample_count > 1) {
+        if (_sapp.main_window->sample_count > 1) {
             return (const void*) _sapp.emsc.wgpu.msaa_view;
         }
         else {
@@ -11000,7 +11004,7 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_render_view(void) {
 SOKOL_API_IMPL const void* sapp_wgpu_get_resolve_view(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
-        if (_sapp.sample_count > 1) {
+        if (_sapp.main_window->sample_count > 1) {
             return (const void*) _sapp.emsc.wgpu.swapchain_view;
         }
         else {
