@@ -2551,7 +2551,16 @@ typedef struct {
 /* WL-TODO: manually define used xdg-shell extensions */
 #endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
 
+#define _SAPP_WAYLAND_DEFAULT_DPI_SCALE 1.0f
 #define _SAPP_WAYLAND_MAX_EPOLL_EVENTS 10
+#define _SAPP_WAYLAND_MAX_OUTPUTS 8
+
+struct _sapp_wl_output {
+    struct wl_output* output;
+
+    bool active;
+    int32_t factor;
+};
 
 struct _sapp_wl_touchpoint {
     bool changed;
@@ -2595,6 +2604,10 @@ typedef struct {
 
     /* accumulated touch state */
     struct _sapp_wl_touchpoint touchpoints[SAPP_MAX_TOUCHPOINTS];
+
+    /* output data for scaling/rotating/etc. */
+    unsigned char max_outputs;
+    struct _sapp_wl_output outputs[_SAPP_WAYLAND_MAX_OUTPUTS];
 } _sapp_wl_t;
 
 #elif /* SOKOL_WAYLAND */
@@ -12108,6 +12121,11 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
     if (NULL != _sapp.wl.egl_context) eglDestroyContext(_sapp.wl.egl_display, _sapp.wl.egl_context);
 
+    for (unsigned char i = 0; i < _sapp.wl.max_outputs; i++) {
+        if (NULL != _sapp.wl.outputs[i].output) wl_output_destroy(_sapp.wl.outputs[i].output);
+    }
+    _sapp.wl.max_outputs = 0;
+
     if (NULL != _sapp.wl.toplevel) xdg_toplevel_destroy(_sapp.wl.toplevel);
     if (NULL != _sapp.wl.shell) xdg_surface_destroy(_sapp.wl.shell);
     if (NULL != _sapp.wl.wm_base) xdg_wm_base_destroy(_sapp.wl.wm_base);
@@ -12157,16 +12175,22 @@ _SOKOL_PRIVATE void _sapp_wl_resize_window(int width, int height) {
         return;
     }
 
-    bool was_resized = true;
-
-    /* WL-TODO: reconfigure fb sizes independently from window sizes
-     * re: high dpi */
-    _sapp.window_height = height;
-    _sapp.window_width = width;
-    _sapp.framebuffer_width = _sapp.window_width;
-    _sapp.framebuffer_height = _sapp.window_height;
-
-    if (was_resized) {
+    int32_t max_dpi_scale = 1;
+    if (_sapp.desc.high_dpi) {
+        /* scale to highest dpi factor of active outputs */
+        for (unsigned char i = 0; i < _sapp.wl.max_outputs; i++) {
+            if (_sapp.wl.outputs[i].active && _sapp.wl.outputs[i].factor > max_dpi_scale) {
+                max_dpi_scale = _sapp.wl.outputs[i].factor;
+            }
+        }
+    }
+    if (height != _sapp.window_height || width != _sapp.window_width || (int32_t) _sapp.dpi_scale != max_dpi_scale) {
+        _sapp.window_height = height;
+        _sapp.window_width = width;
+        _sapp.dpi_scale = (float) max_dpi_scale;
+        _sapp.framebuffer_height = _sapp.dpi_scale * _sapp.window_height;
+        _sapp.framebuffer_width = _sapp.dpi_scale * _sapp.window_width;
+        wl_surface_set_buffer_scale(_sapp.wl.surface, max_dpi_scale);
         if (NULL != _sapp.wl.egl_window) {
             wl_egl_window_resize(_sapp.wl.egl_window, _sapp.window_width, _sapp.window_height, 0, 0);
         }
@@ -12592,6 +12616,47 @@ _SOKOL_PRIVATE const struct wl_seat_listener _sapp_wl_seat_listener = {
     .name = _sapp_wl_seat_handle_name,
 };
 
+_SOKOL_PRIVATE void _sapp_wl_output_done(void* data, struct wl_output* output) {
+    struct _sapp_wl_output* out = data;
+    wl_output_set_user_data(output, out);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_geometry(void* data, struct wl_output* output, int32_t x, int32_t y, int32_t physical_width, int32_t physical_height, int32_t subpixel, const char* make, const char* model, int32_t transform) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(output);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+    _SOKOL_UNUSED(physical_width);
+    _SOKOL_UNUSED(physical_height);
+    _SOKOL_UNUSED(subpixel);
+    _SOKOL_UNUSED(make);
+    _SOKOL_UNUSED(model);
+    _SOKOL_UNUSED(transform);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_mode(void* data, struct wl_output* output, uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(output);
+    _SOKOL_UNUSED(flags);
+    _SOKOL_UNUSED(width);
+    _SOKOL_UNUSED(height);
+    _SOKOL_UNUSED(refresh);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_output_scale(void* data, struct wl_output* output, int32_t factor) {
+    _SOKOL_UNUSED(output);
+
+    struct _sapp_wl_output* out = data;
+    out->factor = factor;
+}
+
+_SOKOL_PRIVATE const struct wl_output_listener _sapp_wl_output_listener = {
+    .done = _sapp_wl_output_done,
+    .geometry = _sapp_wl_output_geometry,
+    .mode = _sapp_wl_output_mode,
+    .scale = _sapp_wl_output_scale,
+};
+
 _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(version);
@@ -12609,6 +12674,19 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
          * - `wl_pointer_release`, */
         _sapp.wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 3);
         wl_seat_add_listener(_sapp.wl.seat, &_sapp_wl_seat_listener, NULL);
+    } else if (0 == strcmp(interface, wl_output_interface.name)) {
+        if (_SAPP_WAYLAND_MAX_OUTPUTS > _sapp.wl.max_outputs) {
+            struct _sapp_wl_output* output = &_sapp.wl.outputs[_sapp.wl.max_outputs];
+
+            /* bind to version 2 for: `wl_output_done` */
+            output->output = wl_registry_bind(registry, name, &wl_output_interface, 2);
+            output->factor = _SAPP_WAYLAND_DEFAULT_DPI_SCALE;
+
+            if (NULL != output->output) {
+                wl_output_add_listener(output->output, &_sapp_wl_output_listener, output);
+                _sapp.wl.max_outputs++;
+            }
+        }
     }
 }
 
@@ -12621,6 +12699,29 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global_remove(void* data, struct wl
 _SOKOL_PRIVATE const struct wl_registry_listener _sapp_wl_registry_listener = {
     .global = _sapp_wl_registry_handle_global,
     .global_remove = _sapp_wl_registry_handle_global_remove,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_surface_enter(void* data, struct wl_surface* surface, struct wl_output* output) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(surface);
+
+    struct _sapp_wl_output* out = wl_output_get_user_data(output);
+    out->active = true;
+    _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_surface_leave(void* data, struct wl_surface* surface, struct wl_output* output) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(surface);
+
+    struct _sapp_wl_output* out = wl_output_get_user_data(output);
+    out->active = false;
+    _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
+}
+
+_SOKOL_PRIVATE const struct wl_surface_listener _sapp_wl_surface_listener = {
+    .enter = _sapp_wl_surface_enter,
+    .leave = _sapp_wl_surface_leave,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_shell_handle_configure(void* data, struct xdg_surface* shell, uint32_t serial) {
@@ -12731,13 +12832,14 @@ _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
     if (NULL == _sapp.wl.surface) {
         _sapp_fail("wayland: wl_compositor_create_surface() failed");
     }
+    wl_surface_add_listener(_sapp.wl.surface, &_sapp_wl_surface_listener, NULL);
 
     _sapp.wl.shell = xdg_wm_base_get_xdg_surface(_sapp.wl.wm_base, _sapp.wl.surface);
     if (NULL == _sapp.wl.shell) {
        _sapp_fail("wayland: xdg_wm_base_get_xdg_surface() failed");
     }
-
     xdg_surface_add_listener(_sapp.wl.shell, &_sapp_wl_shell_listener, &_sapp.wl);
+
     _sapp.wl.toplevel = xdg_surface_get_toplevel(_sapp.wl.shell);
     if (NULL == _sapp.wl.toplevel) {
         _sapp_fail("wayland: xdg_surface_get_toplevel() failed");
@@ -12747,8 +12849,6 @@ _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
     wl_surface_commit(_sapp.wl.surface);
 
     _sapp.wl.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-
-    /* WL-TODO: setup high dpi */
 }
 
 _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
