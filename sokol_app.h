@@ -1694,6 +1694,18 @@ typedef struct {
     ID3D11DeviceContext* device_context;
     IDXGIFactory* dxgi_factory;
 } _sapp_d3d11_t;
+
+typedef struct {
+    ID3D11Texture2D* rt;
+    ID3D11RenderTargetView* rtv;
+    ID3D11Texture2D* msaa_rt;
+    ID3D11RenderTargetView* msaa_rtv;
+    ID3D11Texture2D* ds;
+    ID3D11DepthStencilView* dsv;
+    DXGI_SWAP_CHAIN_DESC swap_chain_desc;
+    IDXGISwapChain* swap_chain;
+} _sapp_d3d11_window_t;
+
 #endif
 
 /*== WIN32 DECLARATIONS ======================================================*/
@@ -1798,6 +1810,10 @@ typedef struct {
     HWND msg_hwnd;
     HDC msg_dc;
 } _sapp_wgl_t;
+
+typedef struct {
+    HGLRC gl_ctx;
+} _sapp_wgl_window_t;
 #endif // SOKOL_GLCORE33
 
 #endif // _SAPP_WIN32
@@ -2090,19 +2106,11 @@ typedef struct {
     _sapp_mouse_t mouse;
     #if defined(_SAPP_WIN32)
         _sapp_win32_window_t win32;
-        
         // TODO, move into gl/d3d substructs
         #if defined(SOKOL_GLCORE33)
-            HGLRC gl_ctx;
+            _sapp_wgl_window_t wgl;
         #elif defined(SOKOL_D3D11)
-            ID3D11Texture2D* rt;
-            ID3D11RenderTargetView* rtv;
-            ID3D11Texture2D* msaa_rt;
-            ID3D11RenderTargetView* msaa_rtv;
-            ID3D11Texture2D* ds;
-            ID3D11DepthStencilView* dsv;
-            DXGI_SWAP_CHAIN_DESC swap_chain_desc;
-            IDXGISwapChain* swap_chain;
+            _sapp_d3d11_window_t d3d11;
         #endif
     #elif defined(_SAPP_LINUX)
         _sapp_x11_window_t x11;
@@ -2125,6 +2133,9 @@ typedef struct {
     float dpi_scale;
     uint64_t frame_count;
     sapp_event event;
+    _sapp_pool_t window_pool;
+    _sapp_window_t* windows;
+    _sapp_window_t* main_window;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2152,11 +2163,6 @@ typedef struct {
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
 
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
-
-    // TODO: Desktop only? Ignore completely for html5/android/iOS?
-    _sapp_pool_t window_pool;
-    _sapp_window_t* windows;
-    _sapp_window_t* main_window;
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -2740,6 +2746,14 @@ _SOKOL_PRIVATE int _sapp_slot_index(uint32_t id) {
     int slot_index = (int) (id & _SAPP_SLOT_MASK);
     SOKOL_ASSERT(_SAPP_INVALID_SLOT_INDEX != slot_index);
     return slot_index;
+}
+
+/* create sapp_window handle from id */
+_SOKOL_PRIVATE sapp_window _sapp_window(uint32_t id) {
+    SOKOL_ASSERT(id != SAPP_INVALID_ID);
+    sapp_window window_id;
+    window_id.id = id;
+    return window_id;
 }
 
 /* returns pointer to resource by id without matching id check */
@@ -5453,6 +5467,14 @@ static inline HRESULT _sapp_dxgi_CreateSwapChain(IDXGIFactory* self, ID3D11Devic
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_CreateDXGIFactory(IDXGIFactory** dxgi_factory) {
+    #if defined(__cplusplus)
+        return CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)dxgi_factory);
+    #else
+        return CreateDXGIFactory(&IID_IDXGIFactory, (void**)&_sapp.d3d11.dxgi_factory);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device(void) {
     int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     #if defined(SOKOL_DEBUG)
@@ -5474,12 +5496,12 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device(void) {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
     // We need a dxgi factory to create multiple swapchains
-    hr = CreateDXGIFactory(&IID_IDXGIFactory, (void**)&_sapp.d3d11.dxgi_factory);
+    hr = _sapp_dxgi_CreateDXGIFactory(&_sapp.d3d11.dxgi_factory);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.dxgi_factory);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_swapchain(_sapp_window_t* window) {
-    DXGI_SWAP_CHAIN_DESC* sc_desc = &window->swap_chain_desc;
+    DXGI_SWAP_CHAIN_DESC* sc_desc = &window->d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = window->framebuffer_width;
     sc_desc->BufferDesc.Height = window->framebuffer_height;
     sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -5503,10 +5525,10 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_swapchain(_sapp_window_t* window) {
         _sapp.d3d11.dxgi_factory,               /* dxgi_factory */
         _sapp.d3d11.device,                     /* *pDevice */
         sc_desc,                                /* Swapchain Desc */
-        &window->swap_chain                     /* ppSwapChain */
+        &window->d3d11.swap_chain               /* ppSwapChain */
         );
 
-    SOKOL_ASSERT(SUCCEEDED(hr) && window->swap_chain);
+    SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.swap_chain);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device() {
@@ -5516,28 +5538,28 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_device() {
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_swapchain(_sapp_window_t* window) {
-    _SAPP_SAFE_RELEASE(window->swap_chain);
+    _SAPP_SAFE_RELEASE(window->d3d11.swap_chain);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(_sapp_window_t* window) {
-    SOKOL_ASSERT(0 == window->rt);
-    SOKOL_ASSERT(0 == window->rtv);
-    SOKOL_ASSERT(0 == window->msaa_rt);
-    SOKOL_ASSERT(0 == window->msaa_rtv);
-    SOKOL_ASSERT(0 == window->ds);
-    SOKOL_ASSERT(0 == window->dsv);
+    SOKOL_ASSERT(0 == window->d3d11.rt);
+    SOKOL_ASSERT(0 == window->d3d11.rtv);
+    SOKOL_ASSERT(0 == window->d3d11.msaa_rt);
+    SOKOL_ASSERT(0 == window->d3d11.msaa_rtv);
+    SOKOL_ASSERT(0 == window->d3d11.ds);
+    SOKOL_ASSERT(0 == window->d3d11.dsv);
 
     HRESULT hr;
 
     /* view for the swapchain-created framebuffer */
     #ifdef __cplusplus
-    hr = _sapp_dxgi_GetBuffer(window->swap_chain, 0, IID_ID3D11Texture2D, (void**)&window->rt);
+    hr = _sapp_dxgi_GetBuffer(window->d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&window->d3d11.rt);
     #else
-    hr = _sapp_dxgi_GetBuffer(window->swap_chain, 0, &IID_ID3D11Texture2D, (void**)&window->rt);
+    hr = _sapp_dxgi_GetBuffer(window->d3d11.swap_chain, 0, &IID_ID3D11Texture2D, (void**)&window->d3d11.rt);
     #endif
-    SOKOL_ASSERT(SUCCEEDED(hr) && window->rt);
-    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)window->rt, NULL, &window->rtv);
-    SOKOL_ASSERT(SUCCEEDED(hr) && window->rtv);
+    SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.rt);
+    hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)window->d3d11.rt, NULL, &window->d3d11.rtv);
+    SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.rtv);
 
     /* common desc for MSAA and depth-stencil texture */
     D3D11_TEXTURE2D_DESC tex_desc;
@@ -5554,34 +5576,34 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(_sapp_window_t* win
     /* create MSAA texture and view if antialiasing requested */
     if (window->sample_count > 1) {
         tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &window->msaa_rt);
-        SOKOL_ASSERT(SUCCEEDED(hr) && window->msaa_rt);
-        hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)window->msaa_rt, NULL, &window->msaa_rtv);
-        SOKOL_ASSERT(SUCCEEDED(hr) && window->msaa_rtv);
+        hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &window->d3d11.msaa_rt);
+        SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.msaa_rt);
+        hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)window->d3d11.msaa_rt, NULL, &window->d3d11.msaa_rtv);
+        SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.msaa_rtv);
     }
 
     /* texture and view for the depth-stencil-surface */
     tex_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
     tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &window->ds);
-    SOKOL_ASSERT(SUCCEEDED(hr) && window->ds);
-    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)window->ds, NULL, &window->dsv);
-    SOKOL_ASSERT(SUCCEEDED(hr) && window->dsv);
+    hr = _sapp_d3d11_CreateTexture2D(_sapp.d3d11.device, &tex_desc, NULL, &window->d3d11.ds);
+    SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.ds);
+    hr = _sapp_d3d11_CreateDepthStencilView(_sapp.d3d11.device, (ID3D11Resource*)window->d3d11.ds, NULL, &window->d3d11.dsv);
+    SOKOL_ASSERT(SUCCEEDED(hr) && window->d3d11.dsv);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(_sapp_window_t* window) {
-    _SAPP_SAFE_RELEASE(window->rt);
-    _SAPP_SAFE_RELEASE(window->rtv);
-    _SAPP_SAFE_RELEASE(window->msaa_rt);
-    _SAPP_SAFE_RELEASE(window->msaa_rtv);
-    _SAPP_SAFE_RELEASE(window->ds);
-    _SAPP_SAFE_RELEASE(window->dsv);
+    _SAPP_SAFE_RELEASE(window->d3d11.rt);
+    _SAPP_SAFE_RELEASE(window->d3d11.rtv);
+    _SAPP_SAFE_RELEASE(window->d3d11.msaa_rt);
+    _SAPP_SAFE_RELEASE(window->d3d11.msaa_rtv);
+    _SAPP_SAFE_RELEASE(window->d3d11.ds);
+    _SAPP_SAFE_RELEASE(window->d3d11.dsv);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(_sapp_window_t* window) {
-    if (window->swap_chain) {
+    if (window->d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target(window);
-        _sapp_dxgi_ResizeBuffers(window->swap_chain, window->swap_chain_desc.BufferCount, window->framebuffer_width, window->framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(window->d3d11.swap_chain, window->d3d11.swap_chain_desc.BufferCount, window->framebuffer_width, window->framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
         _sapp_d3d11_create_default_render_target(window);
     }
 }
@@ -5589,11 +5611,11 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(_sapp_window_t* win
 _SOKOL_PRIVATE void _sapp_d3d11_present(_sapp_window_t* window) {
     /* do MSAA resolve if needed */
     if (window->sample_count > 1) {
-        SOKOL_ASSERT(window->rt);
-        SOKOL_ASSERT(window->msaa_rt);
-        _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)window->rt, 0, (ID3D11Resource*)window->msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
+        SOKOL_ASSERT(window->d3d11.rt);
+        SOKOL_ASSERT(window->d3d11.msaa_rt);
+        _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)window->d3d11.rt, 0, (ID3D11Resource*)window->d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
     }
-    _sapp_dxgi_Present(window->swap_chain, window->swap_interval, 0);
+    _sapp_dxgi_Present(window->d3d11.swap_chain, window->swap_interval, 0);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -5817,8 +5839,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(_sapp_window_t* window) {
         WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
         0, 0
     };
-    window->gl_ctx = _sapp.wgl.CreateContextAttribsARB(window->win32.dc, 0, attrs);
-    if (!window->gl_ctx) {
+    window->wgl.gl_ctx = _sapp.wgl.CreateContextAttribsARB(window->win32.dc, 0, attrs);
+    if (!window->wgl.gl_ctx) {
         const DWORD err = GetLastError();
         if (err == (0xc0070000 | ERROR_INVALID_VERSION_ARB)) {
             _sapp_fail("WGL: Driver does not support OpenGL version 3.3\n");
@@ -5833,7 +5855,7 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(_sapp_window_t* window) {
             _sapp_fail("WGL: Failed to create OpenGL context");
         }
     }
-    _sapp.wgl.MakeCurrent(window->win32.dc, window->gl_ctx);
+    _sapp.wgl.MakeCurrent(window->win32.dc, window->wgl.gl_ctx);
     if (_sapp.wgl.ext_swap_control) {
         /* FIXME: DwmIsCompositionEnabled() (see GLFW) */
         _sapp.wgl.SwapIntervalEXT(window->swap_interval);
@@ -5841,9 +5863,9 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(_sapp_window_t* window) {
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_destroy_context(_sapp_window_t* window) {
-    SOKOL_ASSERT(window->gl_ctx);
-    _sapp.wgl.DeleteContext(window->gl_ctx);
-    window->gl_ctx = 0;
+    SOKOL_ASSERT(window->wgl.gl_ctx);
+    _sapp.wgl.DeleteContext(window->wgl.gl_ctx);
+    window->wgl.gl_ctx = 0;
 }
 
 _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(_sapp_window_t* window) {
@@ -6139,7 +6161,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 else {
                     // TODO: wo we want to give the user a per window opportunity to cancel closure requests?
                     _sapp_win32_uwp_app_event(window, SAPP_EVENTTYPE_WINDOW_CLOSED);
-                    sapp_destroy_window((sapp_window){ .id = window->id });
+                    sapp_destroy_window(_sapp_window(window->id));
                 }
                 return 0;
             case WM_SYSCOMMAND:
@@ -6561,8 +6583,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessage(&msg);
             }
         }
-        // TODO: add handle to sapp_t?
-        sapp_make_context_current((sapp_window){ .id = _sapp.main_window->id });
+        sapp_make_context_current(_sapp_window(_sapp.main_window->id));
         _sapp_frame();
 
         // TODO: Not ideal, since we're checking for valid ids, but probably still better than keeping an additional linked list?
@@ -6600,7 +6621,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     for (int i = 1; i < _sapp.window_pool.size; i++) {
         if(_sapp.windows[i].id != SAPP_INVALID_ID){
             // TODO: Is there a better way to handle this instead of creating a tmp object?
-            sapp_destroy_window((sapp_window){ .id=_sapp.windows[i].id });
+            sapp_destroy_window(_sapp_window(_sapp.windows[i].id));
         }
     }
     #if defined(SOKOL_D3D11)
@@ -6675,7 +6696,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 // Helper functions
 _SOKOL_PRIVATE void _sapp_uwp_configure_dpi(float monitor_dpi) {
     _sapp.uwp.dpi.window_scale = monitor_dpi / 96.0f;
-    if (_sapp.desc.high_dpi) {
+    if (_sapp.desc.window.high_dpi) {
         _sapp.uwp.dpi.content_scale = _sapp.uwp.dpi.window_scale;
         _sapp.uwp.dpi.mouse_scale = 1.0f * _sapp.uwp.dpi.window_scale;
     }
@@ -10549,7 +10570,7 @@ SOKOL_API_DECL void sapp_destroy_window(sapp_window window_id){
             _sapp_d3d11_destroy_default_render_target(window);
             _sapp_d3d11_destroy_swapchain(window);
         #elif defined(SOKOL_GLCORE33)
-            _sapp.wgl.MakeCurrent(window->win32.dc, window->gl_ctx);
+            _sapp.wgl.MakeCurrent(window->win32.dc, window->wgl.gl_ctx);
             _sapp_wgl_destroy_context(window);
         #endif
 
@@ -10583,7 +10604,7 @@ SOKOL_API_DECL void sapp_make_context_current(sapp_window window_id){
         #if defined(SOKOL_D3D11)
             // Do nothing?
         #elif defined(SOKOL_GLCORE33)
-            _sapp.wgl.MakeCurrent(window->win32.dc, window->gl_ctx);
+            _sapp.wgl.MakeCurrent(window->win32.dc, window->wgl.gl_ctx);
         #endif
     #elif defined(_SAPP_LINUX)
         _sapp_glx_make_current(window);
@@ -10683,13 +10704,7 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
 }
 
 SOKOL_API_DECL bool sapp_is_fullscreen() {
-    // TODO: fix struct literal?
-    return sapp_window_is_fullscreen((sapp_window){ .id=_sapp.main_window->id });
-}
-
-SOKOL_API_DECL void sapp_toggle_fullscreen() {
-    // TODO: fix struct literal?
-    sapp_window_toggle_fullscreen((sapp_window){ .id=_sapp.main_window->id });
+    return sapp_window_is_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
 SOKOL_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id) {
@@ -10697,6 +10712,10 @@ SOKOL_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id) {
     SOKOL_ASSERT(window);
 
     return window->fullscreen;
+}
+
+SOKOL_API_DECL void sapp_toggle_fullscreen() {
+    sapp_window_toggle_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
 SOKOL_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id) {
@@ -10734,7 +10753,7 @@ SOKOL_API_IMPL void sapp_window_show_mouse(sapp_window window_id, bool show) {
 
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
 SOKOL_API_IMPL void sapp_show_mouse(bool show) {
-    sapp_window_show_mouse((sapp_window){ .id = _sapp.main_window->id }, show);
+    sapp_window_show_mouse(_sapp_window(_sapp.main_window->id), show);
 }
 
 SOKOL_API_IMPL bool sapp_window_mouse_shown(sapp_window window_id) {
@@ -10745,11 +10764,11 @@ SOKOL_API_IMPL bool sapp_window_mouse_shown(sapp_window window_id) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    return sapp_window_mouse_shown((sapp_window){ .id = _sapp.main_window->id });
+    return sapp_window_mouse_shown(_sapp_window(_sapp.main_window->id));
 }
 
 SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
-    sapp_window_lock_mouse((sapp_window){ .id = _sapp.main_window->id }, lock);
+    sapp_window_lock_mouse(_sapp_window(_sapp.main_window->id), lock);
 }
 
 SOKOL_API_IMPL void sapp_window_lock_mouse(sapp_window window_id, bool lock) {
@@ -10771,7 +10790,7 @@ SOKOL_API_IMPL void sapp_window_lock_mouse(sapp_window window_id, bool lock) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_locked(void) {
-    return sapp_window_mouse_locked((sapp_window){ .id = _sapp.main_window->id });
+    return sapp_window_mouse_locked(_sapp_window(_sapp.main_window->id));
 }
 
 SOKOL_API_IMPL bool sapp_window_mouse_locked(sapp_window window_id) {
@@ -10868,11 +10887,11 @@ SOKOL_API_IMPL int sapp_window_get_num_dropped_files(sapp_window window_id) {
 }
 
 SOKOL_API_IMPL int sapp_get_num_dropped_files() {
-    return sapp_window_get_num_dropped_files((sapp_window) { .id=_sapp.main_window->id });
+    return sapp_window_get_num_dropped_files(_sapp_window(_sapp.main_window->id));
 }
 
 SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
-    return sapp_window_get_dropped_file_path((sapp_window) { .id=_sapp.main_window->id }, index);
+    return sapp_window_get_dropped_file_path(_sapp_window(_sapp.main_window->id), index);
 }
 
 SOKOL_API_IMPL const char* sapp_window_get_dropped_file_path(sapp_window window_id, int index) {
@@ -11035,11 +11054,11 @@ SOKOL_API_IMPL const void* sapp_d3d11_window_get_render_target_view(sapp_window 
     SOKOL_ASSERT(window);
 
     #if defined(SOKOL_D3D11)
-        if (window->msaa_rtv) {
-            return window->msaa_rtv;
+        if (window->d3d11.msaa_rtv) {
+            return window->d3d11.msaa_rtv;
         }
         else {
-            return window->rtv;
+            return window->d3d11.rtv;
         }
     #else
         return 0;
@@ -11057,7 +11076,7 @@ SOKOL_API_IMPL const void* sapp_d3d11_window_get_depth_stencil_view(sapp_window 
     SOKOL_ASSERT(window);
 
     #if defined(SOKOL_D3D11)
-        return window->dsv;
+        return window->d3d11.dsv;
     #else
         return 0;
     #endif
