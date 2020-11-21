@@ -2112,6 +2112,8 @@ typedef struct {
         #elif defined(SOKOL_D3D11)
             _sapp_d3d11_window_t d3d11;
         #endif
+    #elif defined(_SAPP_UWP)
+        _sapp_d3d11_window_t d3d11;
     #elif defined(_SAPP_LINUX)
         _sapp_x11_window_t x11;
         _sapp_glx_window_t glx;
@@ -6740,7 +6742,7 @@ _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow cons
 
 _SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton btn, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
+        _sapp_init_event(_sapp.main_window, type);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.mouse_button = btn;
         _sapp_call_event(&_sapp.event);
@@ -6749,7 +6751,7 @@ _SOKOL_PRIVATE void _sapp_uwp_mouse_event(sapp_event_type type, sapp_mousebutton
 
 _SOKOL_PRIVATE void _sapp_uwp_scroll_event(float delta, bool horizontal, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled()) {
-        _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_MOUSE_SCROLL);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.scroll_x = horizontal ? (-delta / 30.0f) : 0.0f;
         _sapp.event.scroll_y = horizontal ? 0.0f : (delta / 30.0f);
@@ -6806,18 +6808,18 @@ _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI
     auto key_status = args.KeyStatus();
     uint32_t ext_scan_code = key_status.ScanCode | (key_status.IsExtendedKey ? 0x100 : 0);
     if (_sapp_events_enabled() && (ext_scan_code < SAPP_MAX_KEYCODES)) {
-        _sapp_init_event(type);
+        _sapp_init_event(_sapp.main_window, type);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.key_code = _sapp.keycodes[ext_scan_code];
         _sapp.event.key_repeat = type == SAPP_EVENTTYPE_KEY_UP ? false : key_status.WasKeyDown;
         _sapp_call_event(&_sapp.event);
         /* check if a CLIPBOARD_PASTED event must be sent too */
-        if (_sapp.clipboard.enabled &&
+        if (_sapp.main_window->clipboard.enabled &&
             (type == SAPP_EVENTTYPE_KEY_DOWN) &&
             (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
             (_sapp.event.key_code == SAPP_KEYCODE_V))
         {
-            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
         }
     }
@@ -6825,7 +6827,7 @@ _SOKOL_PRIVATE void _sapp_uwp_key_event(sapp_event_type type, winrt::Windows::UI
 
 _SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows::UI::Core::CoreWindow const& sender_window) {
     if (_sapp_events_enabled() && (c >= 32)) {
-        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_CHAR);
         _sapp.event.modifiers = _sapp_uwp_mods(sender_window);
         _sapp.event.char_code = c;
         _sapp.event.key_repeat = repeat;
@@ -6835,14 +6837,14 @@ _SOKOL_PRIVATE void _sapp_uwp_char_event(uint32_t c, bool repeat, winrt::Windows
 
 _SOKOL_PRIVATE void _sapp_uwp_toggle_fullscreen(void) {
     auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    _sapp.fullscreen = appView.IsFullScreenMode();
-    if (!_sapp.fullscreen) {
+    _sapp.main_window->fullscreen = appView.IsFullScreenMode();
+    if (!_sapp.main_window->fullscreen) {
         appView.TryEnterFullScreenMode();
     }
     else {
         appView.ExitFullScreenMode();
     }
-    _sapp.fullscreen = appView.IsFullScreenMode();
+    _sapp.main_window->fullscreen = appView.IsFullScreenMode();
 }
 
 namespace {/* Empty namespace to ensure internal linkage (same as _SOKOL_PRIVATE) */
@@ -7070,12 +7072,12 @@ void DeviceResources::CreateDeviceResources() {
 
 void DeviceResources::CreateWindowSizeDependentResources() {
     // Cleanup Sokol Context (these are non-owning raw pointers)
-    _sapp.d3d11.rt = nullptr;
-    _sapp.d3d11.rtv = nullptr;
-    _sapp.d3d11.msaa_rt = nullptr;
-    _sapp.d3d11.msaa_rtv = nullptr;
-    _sapp.d3d11.ds = nullptr;
-    _sapp.d3d11.dsv = nullptr;
+    _sapp.main_window->d3d11.rt = nullptr;
+    _sapp.main_window->d3d11.rtv = nullptr;
+    _sapp.main_window->d3d11.msaa_rt = nullptr;
+    _sapp.main_window->d3d11.msaa_rtv = nullptr;
+    _sapp.main_window->d3d11.ds = nullptr;
+    _sapp.main_window->d3d11.dsv = nullptr;
 
     // Clear the previous window size specific context.
     ID3D11RenderTargetView* nullViews[] = { nullptr };
@@ -7155,8 +7157,8 @@ void DeviceResources::CreateWindowSizeDependentResources() {
         winrt::check_hresult(dxgiDevice->SetMaximumFrameLatency(1));
 
         // Setup Sokol Context
-        winrt::check_hresult(swapChain->GetDesc(&_sapp.d3d11.swap_chain_desc));
-        _sapp.d3d11.swap_chain = m_swapChain.as<IDXGISwapChain3>().detach();
+        winrt::check_hresult(swapChain->GetDesc(&_sapp.main_window->d3d11.swap_chain_desc));
+        _sapp.main_window->d3d11.swap_chain = m_swapChain.as<IDXGISwapChain3>().detach();
     }
 
     // Set the proper orientation for the swap chain, and generate 2D and
@@ -7188,7 +7190,7 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dRenderTarget.get(), nullptr, m_d3dRenderTargetView.put()));
 
     // Create MSAA texture and view if needed
-    if (_sapp.sample_count > 1) {
+    if (_sapp.main_window->sample_count > 1) {
         CD3D11_TEXTURE2D_DESC1 msaaTexDesc(
             DXGI_FORMAT_B8G8R8A8_UNORM,
             lround(m_d3dRenderTargetSize.Width),
@@ -7198,8 +7200,8 @@ void DeviceResources::CreateWindowSizeDependentResources() {
             D3D11_BIND_RENDER_TARGET,
             D3D11_USAGE_DEFAULT,
             0,  // cpuAccessFlags
-            _sapp.sample_count,
-            _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
+            _sapp.main_window->sample_count,
+            _sapp.main_window->sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
         );
         winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&msaaTexDesc, nullptr, m_d3dMSAARenderTarget.put()));
         winrt::check_hresult(m_d3dDevice->CreateRenderTargetView1(m_d3dMSAARenderTarget.get(), nullptr, m_d3dMSAARenderTargetView.put()));
@@ -7215,8 +7217,8 @@ void DeviceResources::CreateWindowSizeDependentResources() {
         D3D11_BIND_DEPTH_STENCIL,
         D3D11_USAGE_DEFAULT,
         0,  // cpuAccessFlag
-        _sapp.sample_count,
-        _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
+        _sapp.main_window->sample_count,
+        _sapp.main_window->sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0
     );
     winrt::check_hresult(m_d3dDevice->CreateTexture2D1(&depthStencilDesc, nullptr, m_d3dDepthStencil.put()));
 
@@ -7224,19 +7226,19 @@ void DeviceResources::CreateWindowSizeDependentResources() {
     winrt::check_hresult(m_d3dDevice->CreateDepthStencilView(m_d3dDepthStencil.get(), nullptr, m_d3dDepthStencilView.put()));
 
     // Set sokol window and framebuffer sizes
-    _sapp.window_width = (int) m_logicalSize.Width;
-    _sapp.window_height = (int) m_logicalSize.Height;
-    _sapp.framebuffer_width = lround(m_d3dRenderTargetSize.Width);
-    _sapp.framebuffer_height = lround(m_d3dRenderTargetSize.Height);
+    _sapp.main_window->window_width = (int) m_logicalSize.Width;
+    _sapp.main_window->window_height = (int) m_logicalSize.Height;
+    _sapp.main_window->framebuffer_width = lround(m_d3dRenderTargetSize.Width);
+    _sapp.main_window->framebuffer_height = lround(m_d3dRenderTargetSize.Height);
 
     // Setup Sokol Context
-    _sapp.d3d11.rt = m_d3dRenderTarget.as<ID3D11Texture2D>().get();
-    _sapp.d3d11.rtv = m_d3dRenderTargetView.as<ID3D11RenderTargetView>().get();
-    _sapp.d3d11.ds = m_d3dDepthStencil.as<ID3D11Texture2D>().get();
-    _sapp.d3d11.dsv = m_d3dDepthStencilView.get();
-    if (_sapp.sample_count > 1) {
-        _sapp.d3d11.msaa_rt = m_d3dMSAARenderTarget.as<ID3D11Texture2D>().get();
-        _sapp.d3d11.msaa_rtv = m_d3dMSAARenderTargetView.as<ID3D11RenderTargetView>().get();
+    _sapp.main_window->d3d11.rt = m_d3dRenderTarget.as<ID3D11Texture2D>().get();
+    _sapp.main_window->d3d11.rtv = m_d3dRenderTargetView.as<ID3D11RenderTargetView>().get();
+    _sapp.main_window->d3d11.ds = m_d3dDepthStencil.as<ID3D11Texture2D>().get();
+    _sapp.main_window->d3d11.dsv = m_d3dDepthStencilView.get();
+    if (_sapp.main_window->sample_count > 1) {
+        _sapp.main_window->d3d11.msaa_rt = m_d3dMSAARenderTarget.as<ID3D11Texture2D>().get();
+        _sapp.main_window->d3d11.msaa_rtv = m_d3dMSAARenderTargetView.as<ID3D11RenderTargetView>().get();
     }
 
     // Sokol app is now valid
@@ -7363,7 +7365,7 @@ void DeviceResources::Trim() {
 void DeviceResources::Present() {
 
     // MSAA resolve if needed
-    if (_sapp.sample_count > 1) {
+    if (_sapp.main_window->sample_count > 1) {
         m_d3dContext->ResolveSubresource(m_d3dRenderTarget.get(), 0, m_d3dMSAARenderTarget.get(), 0, DXGI_FORMAT_B8G8R8A8_UNORM);
         m_d3dContext->DiscardView1(m_d3dMSAARenderTargetView.get(), nullptr, 0);
     }
@@ -7537,44 +7539,44 @@ void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationVie
     _SOKOL_UNUSED(args);
     _SOKOL_UNUSED(applicationView);
     auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.width, (float)_sapp.desc.height);
+    auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.window.width, (float)_sapp.desc.window.height);
     appView.SetPreferredMinSize(targetSize);
     appView.TryResizeView(targetSize);
 
     // Disabling this since it can only append the title to the app name (Title - Appname).
     // There's no way of just setting a string to be the window title.
-    //appView.Title(_sapp.window_title_wide);
+    //appView.Title(_sapp.main_window->window_title_wide);
 
     // Run() won't start until the CoreWindow is activated.
     winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Activate();
-    if (_sapp.desc.fullscreen) {
+    if (_sapp.desc.window.fullscreen) {
         appView.TryEnterFullScreenMode();
     }
-    _sapp.fullscreen = appView.IsFullScreenMode();
+    _sapp.main_window->fullscreen = appView.IsFullScreenMode();
 }
 
 void App::OnSuspending(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::ApplicationModel::SuspendingEventArgs const& args) {
     _SOKOL_UNUSED(sender);
     _SOKOL_UNUSED(args);
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_SUSPENDED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, SAPP_EVENTTYPE_SUSPENDED);
 }
 
 void App::OnResuming(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::Foundation::IInspectable const& args) {
     _SOKOL_UNUSED(args);
     _SOKOL_UNUSED(sender);
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESUMED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, SAPP_EVENTTYPE_RESUMED);
 }
 
 void App::OnWindowSizeChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::WindowSizeChangedEventArgs const& args) {
     _SOKOL_UNUSED(args);
     m_deviceResources->SetLogicalSize(winrt::Windows::Foundation::Size(sender.Bounds().Width, sender.Bounds().Height));
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, SAPP_EVENTTYPE_RESIZED);
 }
 
 void App::OnVisibilityChanged(winrt::Windows::UI::Core::CoreWindow const& sender, winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
     _SOKOL_UNUSED(sender);
     m_windowVisible = args.Visible();
-    _sapp_win32_uwp_app_event(m_windowVisible ? SAPP_EVENTTYPE_RESTORED : SAPP_EVENTTYPE_ICONIFIED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, m_windowVisible ? SAPP_EVENTTYPE_RESTORED : SAPP_EVENTTYPE_ICONIFIED);
 }
 
 void App::OnBackRequested(winrt::Windows::Foundation::IInspectable const& sender, winrt::Windows::UI::Core::BackRequestedEventArgs const& args) {
@@ -7622,13 +7624,13 @@ void App::OnPointerMoved(winrt::Windows::UI::Core::CoreWindow const& sender, win
     const float new_x = (float)(int)(position.X * _sapp.uwp.dpi.mouse_scale + 0.5f);
     const float new_y = (float)(int)(position.Y * _sapp.uwp.dpi.mouse_scale + 0.5f);
     // don't update dx/dy in the very first event
-    if (_sapp.mouse.pos_valid) {
-        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-        _sapp.mouse.dy = new_y - _sapp.mouse.y;
+    if (_sapp.main_window->mouse.pos_valid) {
+        _sapp.main_window->mouse.dx = new_x - _sapp.main_window->mouse.x;
+        _sapp.main_window->mouse.dy = new_y - _sapp.main_window->mouse.y;
     }
-    _sapp.mouse.x = new_x;
-    _sapp.mouse.y = new_y;
-    _sapp.mouse.pos_valid = true;
+    _sapp.main_window->mouse.x = new_x;
+    _sapp.main_window->mouse.y = new_y;
+    _sapp.main_window->mouse.pos_valid = true;
     if (!_sapp.uwp.mouse_tracked) {
         _sapp.uwp.mouse_tracked = true;
         _sapp_uwp_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, sender);
@@ -7648,14 +7650,14 @@ void App::OnDpiChanged(winrt::Windows::Graphics::Display::DisplayInformation con
     // NOTE: UNTESTED
     _SOKOL_UNUSED(args);
     m_deviceResources->SetDpi(sender.LogicalDpi());
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, SAPP_EVENTTYPE_RESIZED);
 }
 
 void App::OnOrientationChanged(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
     // NOTE: UNTESTED
     _SOKOL_UNUSED(args);
     m_deviceResources->SetCurrentOrientation(sender.CurrentOrientation());
-    _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+    _sapp_win32_uwp_app_event(_sapp.main_window, SAPP_EVENTTYPE_RESIZED);
 }
 
 void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::DisplayInformation const& sender, winrt::Windows::Foundation::IInspectable const& args) {
@@ -7669,8 +7671,11 @@ void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::Displa
 
 _SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp_setup_pools(desc);
+    sapp_window window_id = sapp_create_window(&desc->window);
+    _sapp.main_window = _sapp_lookup_window(window_id.id);
+    SOKOL_ASSERT(_sapp.main_window);
     _sapp_win32_uwp_init_keytable();
-    _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     winrt::Windows::ApplicationModel::Core::CoreApplication::Run(winrt::make<App>());
 }
 
@@ -10523,7 +10528,7 @@ SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
 #endif
 
 SOKOL_API_DECL sapp_window sapp_main_window(){
-    return (sapp_window){ .id=_sapp.main_window->id };
+    return _sapp_window(_sapp.main_window->id);
 }
 
 SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
@@ -10544,6 +10549,8 @@ SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
             #elif defined(SOKOL_GLCORE33)
                 _sapp_wgl_create_context(window);
             #endif
+        #elif defined(_SAPP_UWP)
+            _sapp_win32_uwp_utf8_to_wide(window->window_title, window->window_title_wide, sizeof(window->window_title_wide));
         #elif defined(_SAPP_LINUX)
             Visual* visual = 0;
             int depth = 0;
