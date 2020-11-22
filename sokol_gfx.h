@@ -11492,7 +11492,7 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
 /*
     How BindGroups work in WebGPU:
 
-    - up to 4 bind groups can be bound simultanously
+    - up to 4 bind groups can be bound simultaneously
     - up to 16 bindings per bind group
     - 'binding' slots are local per bind group
     - in the shader:
