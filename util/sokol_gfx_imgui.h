@@ -698,8 +698,8 @@ _SOKOL_PRIVATE void igSetTooltip(const char* fmt,...) {
     ImGui::SetTooltipV(fmt,args);
     va_end(args);
 }
-_SOKOL_PRIVATE bool igSliderFloat(const char* label,float* v,float v_min,float v_max,const char* format,float power) {
-    return ImGui::SliderFloat(label,v,v_min,v_max,format,power);
+_SOKOL_PRIVATE bool igSliderFloat(const char* label,float* v,float v_min,float v_max,const char* format,ImGuiSliderFlags flags) {
+    return ImGui::SliderFloat(label,v,v_min,v_max,format,flags);
 }
 _SOKOL_PRIVATE void igImage(ImTextureID user_texture_id,const ImVec2 size,const ImVec2 uv0,const ImVec2 uv1,const ImVec4 tint_col,const ImVec4 border_col) {
     return ImGui::Image(user_texture_id,size,uv0,uv1,tint_col,border_col);
@@ -2762,7 +2762,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
         sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
         if (_sg_imgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format)) {
             igPushIDInt((int)img.id);
-            igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", 2.0f);
+            igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
             igImage((ImTextureID)(intptr_t)img.id, IMVEC2(w, h), IMVEC2(0,0), IMVEC2(1,1), IMVEC4(1,1,1,1), IMVEC4(0,0,0,0));
