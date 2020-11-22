@@ -12785,28 +12785,6 @@ _SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
   .close = _sapp_wl_toplevel_handle_close,
 };
 
-/* forward this listener interface for its handler to self-reference to it */
-extern const struct wl_callback_listener _sapp_wl_callback_listener;
-
-_SOKOL_PRIVATE void _sapp_wl_surface_frame_done(void* data, struct wl_callback* cb, uint32_t time) {
-    _SOKOL_UNUSED(data);
-    _SOKOL_UNUSED(time);
-
-    wl_callback_destroy(cb);
-    cb = wl_surface_frame(_sapp.wl.surface);
-    wl_callback_add_listener(cb, &_sapp_wl_callback_listener, NULL);
-
-    _sapp_frame();
-
-    eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
-    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
-    wl_surface_commit(_sapp.wl.surface);
-}
-
-const struct wl_callback_listener _sapp_wl_callback_listener = {
-    .done = _sapp_wl_surface_frame_done,
-};
-
 _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
     _sapp.wl.display = wl_display_connect(NULL);
     if (NULL == _sapp.wl.display) {
@@ -13000,9 +12978,6 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
     _sapp_wl_egl_setup(&_sapp.desc);
     _sapp_wl_sighandler_setup();
 
-    struct wl_callback* cb = wl_surface_frame(_sapp.wl.surface);
-    wl_callback_add_listener(cb, &_sapp_wl_callback_listener, NULL);
-
     _sapp.valid = true;
     while (!_sapp.quit_ordered) {
         /* exhaust event queue */
@@ -13021,6 +12996,11 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
                 wl_display_read_events(_sapp.wl.display);
             }
         }
+
+        _sapp_frame();
+        eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
+        wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
+        wl_surface_commit(_sapp.wl.surface);
 
         wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
 
