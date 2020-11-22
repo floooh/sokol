@@ -500,7 +500,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #if defined(SOKOL_DUMMY_BACKEND)
     // No audio API needed for SOKOL_DUMMY_BACKEND
 #elif defined(__APPLE__)
+    #include <TargetConditionals.h>
     #include <AudioToolbox/AudioToolbox.h>
+    #include <AVFoundation/AVFoundation.h>
 #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     #define ALSA_PCM_NEW_HW_PARAMS_API
     #include <alsa/asoundlib.h>
@@ -588,6 +590,9 @@ typedef struct {
 
 typedef struct {
     AudioQueueRef ca_audio_queue;
+#if defined(TARGET_OS_IOS)
+    void* ca_interruption_handler;
+#endif
 } _saudio_backend_t;
 
 /*=== ALSA BACKEND DECLARATIONS ==============================================*/
@@ -963,6 +968,56 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 /*=== COREAUDIO BACKEND IMPLEMENTATION =======================================*/
 #elif defined(__APPLE__)
 
+#if TARGET_OS_IOS
+@interface _saudio_interruption_handler:NSObject {
+}
+@end
+
+@implementation _saudio_interruption_handler
+-(id)init
+{
+    self = [super init];
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handle_interruption:) name:AVAudioSessionInterruptionNotification object:session];
+    return self;
+}
+
+-(void)dealloc
+{
+    [self remove_handler];
+}
+
+-(void)remove_handler
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"AVAudioSessionInterruptionNotification" object:nil];
+}
+
+-(void)handle_interruption:(NSNotification*)notification
+{
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    OSStatus res;
+    NSDictionary* dict = notification.userInfo;
+    SOKOL_ASSERT(dict);
+    NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
+    switch (type) {
+    case AVAudioSessionInterruptionTypeBegan:
+        res = AudioQueuePause(_saudio.backend.ca_audio_queue);
+        SOKOL_ASSERT(res == 0);
+        [session setActive:false error:nil];
+        break;
+    case AVAudioSessionInterruptionTypeEnded:
+        [session setActive:true error:nil];
+        res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+        SOKOL_ASSERT(res == 0);
+        break;
+    default:
+        break;
+    }
+}
+@end
+#endif
+
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
@@ -985,6 +1040,16 @@ _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, Audi
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
 
+#if defined(TARGET_OS_IOS)
+    /* activate audio session */
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
+    [session setActive:true error:nil];
+
+    /* create interruption handler */
+    _saudio.backend.ca_interruption_handler = (__bridge_retained void*)[[_saudio_interruption_handler alloc] init];
+#endif
     /* create an audio queue with fp32 samples */
     AudioStreamBasicDescription fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -1024,6 +1089,19 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     AudioQueueStop(_saudio.backend.ca_audio_queue, true);
     AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
     _saudio.backend.ca_audio_queue = NULL;
+#if defined(TARGET_OS_IOS)
+    /* remove interruption handler */
+    if (_saudio.backend.ca_interruption_handler != NULL) {
+        _saudio_interruption_handler* interruption_handler = (__bridge_transfer _saudio_interruption_handler*)_saudio.backend.ca_interruption_handler;
+        [interruption_handler remove_handler];
+        _saudio.backend.ca_interruption_handler = NULL;
+    }
+
+    /* deactivate audio session */
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    [session setActive:false error:nil];;
+#endif
 }
 
 /*=== ALSA BACKEND IMPLEMENTATION ============================================*/
