@@ -302,8 +302,10 @@
     THE COREAUDIO BACKEND
     =====================
     The CoreAudio backend is selected on macOS and iOS (__APPLE__ is defined).
-    Since the CoreAudio API is implemented in C (not Objective-C) the
+    Since the CoreAudio API is implemented in C (not Objective-C) on macOS the
     implementation part of Sokol Audio can be included into a C source file.
+    However on iOS, Sokol Audio must be compiled as Objective-C due to it's
+    reliance on the AVAudioSession object.
 
     For thread synchronisation, the CoreAudio backend will use the
     pthread_mutex_* functions.
@@ -502,7 +504,9 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif defined(__APPLE__)
     #include <TargetConditionals.h>
     #include <AudioToolbox/AudioToolbox.h>
+#if TARGET_OS_IOS
     #include <AVFoundation/AVFoundation.h>
+#endif
 #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     #define ALSA_PCM_NEW_HW_PARAMS_API
     #include <alsa/asoundlib.h>
