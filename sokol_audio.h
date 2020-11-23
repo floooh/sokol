@@ -590,7 +590,7 @@ typedef struct {
 
 typedef struct {
     AudioQueueRef ca_audio_queue;
-#if defined(TARGET_OS_IOS)
+#if TARGET_OS_IOS
     void* ca_interruption_handler;
 #endif
 } _saudio_backend_t;
@@ -1040,7 +1040,7 @@ _SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, Audi
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
 
-#if defined(TARGET_OS_IOS)
+#if TARGET_OS_IOS
     /* activate audio session */
     AVAudioSession* session = [AVAudioSession sharedInstance];
     SOKOL_ASSERT(session);
@@ -1089,7 +1089,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     AudioQueueStop(_saudio.backend.ca_audio_queue, true);
     AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
     _saudio.backend.ca_audio_queue = NULL;
-#if defined(TARGET_OS_IOS)
+#if TARGET_OS_IOS
     /* remove interruption handler */
     if (_saudio.backend.ca_interruption_handler != NULL) {
         _saudio_interruption_handler* interruption_handler = (__bridge_transfer _saudio_interruption_handler*)_saudio.backend.ca_interruption_handler;
