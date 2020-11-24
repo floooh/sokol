@@ -12163,6 +12163,18 @@ _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_wl_set_fullscreen(bool is_fullscreen) {
+    if (NULL == _sapp.wl.toplevel) {
+        return;
+    }
+
+    if (is_fullscreen) {
+        xdg_toplevel_set_fullscreen(_sapp.wl.toplevel, NULL);
+    } else {
+        xdg_toplevel_unset_fullscreen(_sapp.wl.toplevel);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_wl_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
@@ -12171,7 +12183,7 @@ _SOKOL_PRIVATE void _sapp_wl_app_event(sapp_event_type type) {
 }
 
 _SOKOL_PRIVATE void _sapp_wl_resize_window(int width, int height) {
-    if (0 == height || 0 == width) {
+    if (_sapp.first_frame || 0 == height || 0 == width) {
         return;
     }
 
@@ -12269,6 +12281,11 @@ _SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint3
         _sapp.event.modifiers = modifiers;
         _sapp_call_event(&_sapp.event);
     }
+}
+
+_SOKOL_PRIVATE void _sapp_wl_toggle_fullscreen() {
+    _sapp.fullscreen = !_sapp.fullscreen;
+    _sapp_wl_set_fullscreen(_sapp.fullscreen);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
@@ -12743,20 +12760,17 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_to
     _SOKOL_UNUSED(toplevel);
     _SOKOL_UNUSED(states);
 
-    bool is_activated = false;
     bool is_resizing = false;
 
     int* toplevel_state;
     wl_array_for_each(toplevel_state, states) {
         switch (*toplevel_state) {
             case XDG_TOPLEVEL_STATE_ACTIVATED:
-                is_activated = true;
-                break;
+            case XDG_TOPLEVEL_STATE_FULLSCREEN:
+            case XDG_TOPLEVEL_STATE_MAXIMIZED:
             case XDG_TOPLEVEL_STATE_RESIZING:
                 is_resizing = true;
                 break;
-            case XDG_TOPLEVEL_STATE_FULLSCREEN:
-            case XDG_TOPLEVEL_STATE_MAXIMIZED:
             case XDG_TOPLEVEL_STATE_TILED_BOTTOM:
             case XDG_TOPLEVEL_STATE_TILED_LEFT:
             case XDG_TOPLEVEL_STATE_TILED_RIGHT:
@@ -12766,7 +12780,6 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_to
         }
     }
 
-    _sapp_wl_app_event(is_activated ? SAPP_EVENTTYPE_RESUMED : SAPP_EVENTTYPE_SUSPENDED);
     if (is_resizing) {
         _sapp_wl_resize_window((int) width, (int) height);
     }
@@ -12977,6 +12990,9 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
     _sapp_wl_setup(&_sapp.desc);
     _sapp_wl_egl_setup(&_sapp.desc);
     _sapp_wl_sighandler_setup();
+    if (_sapp.fullscreen) {
+        _sapp_wl_set_fullscreen(true);
+    }
 
     _sapp.valid = true;
     while (!_sapp.quit_ordered) {
@@ -13204,7 +13220,7 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #if !defined(SOKOL_WAYLAND)
     _sapp_x11_toggle_fullscreen();
     #else /* SOKOL_WAYLAND */
-    /* WL-TODO: _sapp_wl_toggle_fullscreen(); */
+    _sapp_wl_toggle_fullscreen();
     #endif /* SOKOL_WAYLAND */
     #endif
 }
