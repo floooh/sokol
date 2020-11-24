@@ -964,7 +964,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 #elif defined(__APPLE__)
 
 /* NOTE: the buffer data callback is called on a separate thread! */
-_SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
+_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
     if (_saudio_has_callback()) {
         const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
@@ -996,7 +996,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.mBytesPerFrame = sizeof(float) * _saudio.num_channels;
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
-    OSStatus res = AudioQueueNewOutput(&fmt, _sapp_ca_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
+    OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
     SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue);
 
     /* create 2 audio buffers */
@@ -1056,15 +1056,15 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    int dir; unsigned int rate; 
+    int dir; unsigned int rate;
     int rc = snd_pcm_open(&_saudio.backend.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
         SOKOL_LOG("sokol_audio.h: snd_pcm_open() failed");
         return false;
     }
 
-    /* configuration works by restricting the 'configuration space' step 
-       by step, we require all parameters except the sample rate to 
+    /* configuration works by restricting the 'configuration space' step
+       by step, we require all parameters except the sample rate to
        match perfectly
     */
     snd_pcm_hw_params_t* params = 0;
