@@ -1,2 +1,5 @@
 exports:
   header-dirs: [ ".", "util" ]
+imports:
+  fips-utils:
+    git: https://github.com/fips-libs/fips-utils
