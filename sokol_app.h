@@ -3837,14 +3837,14 @@ int main(int argc, char* argv[]) {
 
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
+        _sapp_init_event(_sapp.main_window, type);
         _sapp_call_event(&_sapp.event);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>* touches, UIEvent* event) {
     if (_sapp_events_enabled()) {
-        _sapp_init_event(type);
+        _sapp_init_event(_sapp.main_window, type);
         NSEnumerator* enumerator = event.allTouches.objectEnumerator;
         UITouch* ios_touch;
         while ((ios_touch = [enumerator nextObject])) {
@@ -3865,8 +3865,8 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.window_width = (int) screen_rect.size.width;
-    _sapp.window_height = (int) screen_rect.size.height;
+    _sapp.main_window->window_width = (int) screen_rect.size.width;
+    _sapp.main_window->window_height = (int) screen_rect.size.height;
     int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
         const CGSize fb_size = _sapp.ios.view.drawableSize;
@@ -3877,12 +3877,12 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
         cur_fb_height = (int) _sapp.ios.view.drawableHeight;
     #endif
     const bool dim_changed =
-        (_sapp.framebuffer_width != cur_fb_width) ||
-        (_sapp.framebuffer_height != cur_fb_height);
-    _sapp.framebuffer_width = cur_fb_width;
-    _sapp.framebuffer_height = cur_fb_height;
-    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+        (_sapp.main_window->framebuffer_width != cur_fb_width) ||
+        (_sapp.main_window->framebuffer_height != cur_fb_height);
+    _sapp.main_window->framebuffer_width = cur_fb_width;
+    _sapp.main_window->framebuffer_height = cur_fb_height;
+    SOKOL_ASSERT((_sapp.main_window->framebuffer_width > 0) && (_sapp.main_window->framebuffer_height > 0));
+    _sapp.dpi_scale = (float)_sapp.main_window->framebuffer_width / (float) _sapp.main_window->window_width;
     if (dim_changed && !_sapp.first_frame) {
         _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
     }
@@ -3931,26 +3931,26 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
-    _sapp.window_width = screen_rect.size.width;
-    _sapp.window_height = screen_rect.size.height;
-    if (_sapp.desc.high_dpi) {
-        _sapp.framebuffer_width = 2 * _sapp.window_width;
-        _sapp.framebuffer_height = 2 * _sapp.window_height;
+    _sapp.main_window->window_width = screen_rect.size.width;
+    _sapp.main_window->window_height = screen_rect.size.height;
+    if (_sapp.desc.window.high_dpi) {
+        _sapp.main_window->framebuffer_width = 2 * _sapp.main_window->window_width;
+        _sapp.main_window->framebuffer_height = 2 * _sapp.main_window->window_height;
     }
     else {
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
+        _sapp.main_window->framebuffer_width = _sapp.main_window->window_width;
+        _sapp.main_window->framebuffer_height = _sapp.main_window->window_height;
     }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+    _sapp.dpi_scale = (float)_sapp.main_window->framebuffer_width / (float) _sapp.main_window->window_width;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.main_window->swap_interval;
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.ios.view.sampleCount = _sapp.sample_count;
-        if (_sapp.desc.high_dpi) {
+        _sapp.ios.view.sampleCount = _sapp.main_window->sample_count;
+        if (_sapp.desc.window.high_dpi) {
             _sapp.ios.view.contentScaleFactor = 2.0;
         }
         else {
@@ -3983,7 +3983,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.enableSetNeedsDisplay = NO;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
-        if (_sapp.desc.high_dpi) {
+        if (_sapp.desc.window.high_dpi) {
             _sapp.ios.view.contentScaleFactor = 2.0;
         }
         else {
@@ -3991,7 +3991,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.main_window->swap_interval;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #endif
     [_sapp.ios.window makeKeyAndVisible];
@@ -4063,7 +4063,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                 if (c >= 32) {
                     /* ignore surrogates for now */
                     if ((c < 0xD800) || (c > 0xDFFF)) {
-                        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+                        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_CHAR);
                         _sapp.event.char_code = c;
                         _sapp_call_event(&_sapp.event);
                     }
@@ -4076,10 +4076,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
                         default: break;
                     }
                     if (k != SAPP_KEYCODE_INVALID) {
-                        _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+                        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_KEY_DOWN);
                         _sapp.event.key_code = k;
                         _sapp_call_event(&_sapp.event);
-                        _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+                        _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_KEY_UP);
                         _sapp.event.key_code = k;
                         _sapp_call_event(&_sapp.event);
                     }
@@ -4088,10 +4088,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         else {
             /* this was a backspace */
-            _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+            _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_KEY_DOWN);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
             _sapp_call_event(&_sapp.event);
-            _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+            _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_KEY_UP);
             _sapp.event.key_code = SAPP_KEYCODE_BACKSPACE;
             _sapp_call_event(&_sapp.event);
         }
@@ -11117,7 +11117,7 @@ SOKOL_API_IMPL const void* sapp_metal_window_get_renderpass_descriptor(sapp_wind
         #if defined(_SAPP_MACOS)
             const void* obj = (__bridge const void*) [window->macos.view currentRenderPassDescriptor];
         #else
-            const void* obj = (__bridge const void*) [window->ios.view currentRenderPassDescriptor];
+            const void* obj = (__bridge const void*) [_sapp.ios.view currentRenderPassDescriptor];
         #endif
         SOKOL_ASSERT(obj);
         return obj;
@@ -11139,7 +11139,7 @@ SOKOL_API_IMPL const void* sapp_metal_window_get_drawable(sapp_window window_id)
         #if defined(_SAPP_MACOS)
             const void* obj = (__bridge const void*) [window->macos.view currentDrawable];
         #else
-            const void* obj = (__bridge const void*) [window->ios.view currentDrawable];
+            const void* obj = (__bridge const void*) [_sapp.ios.view currentDrawable];
         #endif
         SOKOL_ASSERT(obj);
         return obj;
