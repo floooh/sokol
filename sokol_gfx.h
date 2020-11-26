@@ -2147,6 +2147,8 @@ typedef struct sg_pass_info {
 */
 typedef struct sg_gl_context_desc {
     bool force_gles2;
+    void (*context_make_current_userdata_cb)(void*);
+    void* user_data;
 } sg_gl_context_desc;
 
 typedef struct sg_mtl_context_desc {
@@ -2205,7 +2207,7 @@ typedef struct sg_desc {
 } sg_desc;
 
 /* setup and misc functions */
-SOKOL_API_DECL void sg_setup(const sg_desc* desc);
+SOKOL_API_DECL sg_context sg_setup(const sg_desc* desc);
 SOKOL_API_DECL void sg_shutdown(void);
 SOKOL_API_DECL bool sg_isvalid(void);
 SOKOL_API_DECL void sg_reset_state_cache(void);
@@ -2284,7 +2286,7 @@ SOKOL_API_DECL void sg_fail_pipeline(sg_pipeline pip_id);
 SOKOL_API_DECL void sg_fail_pass(sg_pass pass_id);
 
 /* rendering contexts (optional) */
-SOKOL_API_DECL sg_context sg_setup_context(void);
+SOKOL_API_DECL sg_context sg_setup_context(const sg_context_desc* desc);
 SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
 SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 
@@ -2310,7 +2312,7 @@ SOKOL_API_DECL const void* sg_mtl_render_command_encoder(void);
 } /* extern "C" */
 
 /* reference-based equivalents for c++ */
-inline void sg_setup(const sg_desc& desc) { return sg_setup(&desc); }
+inline sg_context sg_setup(const sg_desc& desc) { return sg_setup(&desc); }
 
 inline sg_buffer sg_make_buffer(const sg_buffer_desc& desc) { return sg_make_buffer(&desc); }
 inline sg_image sg_make_image(const sg_image_desc& desc) { return sg_make_image(&desc); }
@@ -3060,6 +3062,8 @@ typedef _sg_attachment_common_t _sg_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
+    void (*context_make_current_userdata_cb)(void*);
+    void* user_data;
     #if !defined(SOKOL_GLES2)
     GLuint vao;
     #endif
@@ -3111,6 +3115,7 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
+    void (*make_context_current_cb)(void*);
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -3203,6 +3208,11 @@ typedef _sg_attachment_common_t _sg_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
+    const void* (*render_target_view_cb)(void);
+    const void* (*render_target_view_userdata_cb)(void*);
+    const void* (*depth_stencil_view_cb)(void);
+    const void* (*depth_stencil_view_userdata_cb)(void*);
+    void* user_data;
 } _sg_d3d11_context_t;
 typedef _sg_d3d11_context_t _sg_context_t;
 
@@ -4081,9 +4091,10 @@ _SOKOL_PRIVATE void _sg_dummy_reset_state_cache(void) {
     /* empty*/
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_dummy_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
+    _SOKOL_UNUSED(desc);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -5594,14 +5605,21 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
 _SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
+    if(ctx != NULL) {
+        ctx->context_make_current_userdata_cb(ctx->user_data);
+    }
+
     _sg.gl.cur_context = ctx;
     _sg_gl_reset_state_cache();
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
+    SOKOL_ASSERT(desc);
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
+    ctx->context_make_current_userdata_cb = desc->gl.context_make_current_userdata_cb;
+    ctx->user_data = desc->gl.user_data;
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
@@ -7641,9 +7659,14 @@ _SOKOL_PRIVATE void _sg_d3d11_activate_context(_sg_context_t* ctx) {
     _sg_d3d11_clear_state();
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     SOKOL_ASSERT(ctx);
     _SOKOL_UNUSED(ctx);
+    ctx->render_target_view_cb = desc->d3d11.render_target_view_cb;
+    ctx->render_target_view_userdata_cb = desc->d3d11.render_target_view_userdata_cb;
+    ctx->depth_stencil_view_cb = desc->d3d11.depth_stencil_view_cb;
+    ctx->depth_stencil_view_userdata_cb = desc->d3d11.depth_stencil_view_userdata_cb;
+    ctx->user_data = desc->d3d11.user_data;
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -8390,11 +8413,15 @@ _SOKOL_PRIVATE _sg_image_t* _sg_d3d11_pass_ds_image(const _sg_pass_t* pass) {
     return pass->d3d11.ds_att.image;
 }
 
+// DISCUSS: Had to to forward declare this method here :/
+_SOKOL_PRIVATE _sg_context_t* _sg_lookup_context(const _sg_pools_t* p, uint32_t ctx_id);
 _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
-    SOKOL_ASSERT(_sg.d3d11.rtv_cb || _sg.d3d11.rtv_userdata_cb);
-    SOKOL_ASSERT(_sg.d3d11.dsv_cb || _sg.d3d11.dsv_userdata_cb);
+    _sg_context_t* cur_context = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
+    SOKOL_ASSERT(cur_context);
+    SOKOL_ASSERT(cur_context->render_target_view_cb || cur_context->render_target_view_userdata_cb);
+    SOKOL_ASSERT(cur_context->depth_stencil_view_cb || cur_context->depth_stencil_view_userdata_cb);
     _sg.d3d11.in_pass = true;
     _sg.d3d11.cur_width = w;
     _sg.d3d11.cur_height = h;
@@ -8416,19 +8443,19 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
         _sg.d3d11.cur_pass_id.id = SG_INVALID_ID;
         _sg.d3d11.num_rtvs = 1;
         if (_sg.d3d11.rtv_cb) {
-            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_cb();
+            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) cur_context->render_target_view_cb();
         }
         else {
-            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_userdata_cb(_sg.d3d11.user_data);
+            _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) cur_context->render_target_view_userdata_cb(cur_context->user_data);
         }
         for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg.d3d11.cur_rtvs[i] = 0;
         }
         if (_sg.d3d11.dsv_cb) {
-            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) _sg.d3d11.dsv_cb();
+            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) cur_context->depth_stencil_view_cb();
         }
         else {
-            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) _sg.d3d11.dsv_userdata_cb(_sg.d3d11.user_data);
+            _sg.d3d11.cur_dsv = (ID3D11DepthStencilView*) cur_context->depth_stencil_view_userdata_cb(cur_context->user_data);
         }
         SOKOL_ASSERT(_sg.d3d11.cur_rtvs[0] && _sg.d3d11.cur_dsv);
     }
@@ -12192,17 +12219,17 @@ static inline void _sg_activate_context(_sg_context_t* ctx) {
     #endif
 }
 
-static inline sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+static inline sg_resource_state _sg_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_context(ctx);
+    return _sg_gl_create_context(ctx, desc);
     #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_context(ctx);
+    return _sg_mtl_create_context(ctx, desc);
     #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_context(ctx);
+    return _sg_d3d11_create_context(ctx, desc);
     #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_context(ctx);
+    return _sg_wgpu_create_context(ctx, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_context(ctx);
+    return _sg_dummy_create_context(ctx, desc);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13992,7 +14019,7 @@ _SOKOL_PRIVATE void _sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     #define _SG_CLEAR(type, item) { memset(&item, 0, sizeof(item)); }
 #endif
 
-SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
+SOKOL_API_IMPL sg_context sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     _SG_CLEAR(_sg_state_t, _sg);
@@ -14025,7 +14052,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.frame_index = 1;
     _sg_setup_backend(&_sg.desc);
     _sg.valid = true;
-    sg_setup_context();
+    return sg_setup_context(&_sg.desc.context);
 }
 
 SOKOL_API_IMPL void sg_shutdown(void) {
@@ -14076,14 +14103,14 @@ SOKOL_API_IMPL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt) {
     return _sg.formats[fmt_index];
 }
 
-SOKOL_API_IMPL sg_context sg_setup_context(void) {
+SOKOL_API_IMPL sg_context sg_setup_context(const sg_context_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     sg_context res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.context_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.context_pool, &_sg.pools.contexts[slot_index].slot, slot_index);
         _sg_context_t* ctx = _sg_context_at(&_sg.pools, res.id);
-        ctx->slot.state = _sg_create_context(ctx);
+        ctx->slot.state = _sg_create_context(ctx, desc);
         SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
         _sg_activate_context(ctx);
     }
