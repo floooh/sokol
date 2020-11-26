@@ -1112,8 +1112,23 @@ typedef struct sapp_desc {
     void (*event_userdata_cb)(const sapp_event*, void*);
     void (*fail_userdata_cb)(const char*, void*);
 
-    // TODO: currently is a breaking change to move everything into the window struct. Probably makes sense to just expose them instead and there's a bit of a "double up"
-    sapp_window_desc window;            /* main window configuration */
+    /* DISCUSS: this currently is an almost exact copy of sapp_window_desc, but changing this into window struct here would be a breaking change */
+    int width;                          /* the preferred width of the window / canvas */
+    int height;                         /* the preferred height of the window / canvas */
+    int sample_count;                   /* MSAA sample count */
+    int swap_interval;                  /* the preferred swap interval (ignored on some platforms) */
+    bool fullscreen;                    /* whether the window should be created in fullscreen mode */
+    bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
+    const char* window_title;           /* the window title as UTF-8 encoded string */
+    bool high_dpi;                      /* whether the rendering canvas is full-resolution on HighDPI displays */
+    bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
+    bool enable_dragndrop;              /* enable file dropping (drag'n'drop), default is false */
+    int max_dropped_files;              /* max number of dropped files to process (default: 1) */
+    int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
+    bool enable_clipboard;              /* enable clipboard access, default is false */
+    int clipboard_size;                 /* max size of clipboard content in bytes */
+
+    sapp_window_desc window;
    
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -1161,12 +1176,12 @@ extern sapp_desc sokol_main(int argc, char* argv[]);
 /* returns true after sokol-app has been initialized */
 SOKOL_API_DECL bool sapp_isvalid(void);
 /* returns the current framebuffer width in pixels */
-SOKOL_API_DECL int sapp_width(sapp_window window_id);
-/* returns the current framebuffer height in pixels */
-SOKOL_API_DECL int sapp_height(sapp_window window_id);
-/* returns the current framebuffer width in pixels */
+SOKOL_API_DECL int sapp_width();
+/* returns the current framebuffer width in pixels for specified window */
 SOKOL_API_DECL int sapp_window_width(sapp_window window_id);
 /* returns the current framebuffer height in pixels */
+SOKOL_API_DECL int sapp_height();
+/* returns the current framebuffer height in pixels for specified window */
 SOKOL_API_DECL int sapp_window_height(sapp_window window_id);
 /* get default framebuffer color pixel format */
 SOKOL_API_DECL int sapp_color_format(void);
@@ -1245,9 +1260,11 @@ SOKOL_API_DECL sapp_window sapp_main_window();
 SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc);
 /* destroy a window */
 SOKOL_API_DECL void sapp_destroy_window(sapp_window window);
-/* set the window title (only on desktop platforms) */
-SOKOL_API_DECL void sapp_set_window_title(sapp_window window, const char* str);
-/* make window context current */
+/* set the window title (only on desktop platforms) of main_window */
+SOKOL_API_DECL void sapp_set_window_title(const char* str);
+/* set the window title (only on desktop platforms) of specified window */
+SOKOL_API_DECL void sapp_window_set_window_title(sapp_window window, const char* str);
+/* make window context current TODO: make it a gl specific operation sapp_gl_make_context_current */
 SOKOL_API_DECL void sapp_make_context_current(sapp_window window);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
@@ -2684,6 +2701,23 @@ _SOKOL_PRIVATE sapp_window_desc _sapp_window_desc_defaults(const sapp_window_des
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     sapp_desc desc = *in_desc;
+
+    /* for compatibility we copy these values into the window struct */
+    desc.window.width = in_desc->width;
+    desc.window.height = in_desc->height;
+    desc.window.sample_count = in_desc->sample_count;
+    desc.window.swap_interval = in_desc->swap_interval;
+    desc.window.window_title = in_desc->window_title;
+    desc.window.fullscreen = in_desc->fullscreen;
+    desc.window.high_dpi = in_desc->high_dpi;
+    desc.window.max_dropped_files = in_desc->max_dropped_files;
+    desc.window.max_dropped_file_path_length = in_desc->max_dropped_file_path_length;
+    desc.window.clipboard_size = in_desc->clipboard_size;
+    desc.window.alpha = in_desc->alpha;
+    desc.window.enable_clipboard = in_desc->enable_clipboard;
+    desc.window.enable_dragndrop = in_desc->enable_dragndrop;
+    desc.window.user_cursor = in_desc->user_cursor;
+
     desc.window = _sapp_window_desc_defaults(&in_desc->window);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
     desc.window_pool_size = _sapp_def(desc.window_pool_size, 1);
@@ -2752,17 +2786,16 @@ _SOKOL_PRIVATE void _sapp_pool_free_index(_sapp_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-_SOKOL_PRIVATE void _sapp_setup_pools(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_setup_pools() {
     // Sanity check that we don't expect >1 windows on anything but desktop
     #if !defined(_SAPP_WIN32) && !defined(_SAPP_MACOS) && !defined(_SAPP_LINUX)
         // TODO: better place for this validation?
-        SOKOL_ASSERT(desc->window_pool_size == 1);
+        SOKOL_ASSERT(_sapp.desc.window_pool_size == 1);
     #endif
 
-    SOKOL_ASSERT(desc);
     /* note: the pools here will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((desc->window_pool_size > 0) && (desc->window_pool_size < _SAPP_MAX_POOL_SIZE));
-    _sapp_init_pool(&_sapp.window_pool, desc->window_pool_size);
+    SOKOL_ASSERT((_sapp.desc.window_pool_size > 0) && (_sapp.desc.window_pool_size < _SAPP_MAX_POOL_SIZE));
+    _sapp_init_pool(&_sapp.window_pool, _sapp.desc.window_pool_size);
     size_t window_pool_byte_size = sizeof(_sapp_window_t) * _sapp.window_pool.size;
     _sapp.windows = (_sapp_window_t*) SOKOL_MALLOC(window_pool_byte_size);
     SOKOL_ASSERT(_sapp.windows);
@@ -3075,7 +3108,7 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_setup_pools(desc);
+    _sapp_setup_pools();
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
@@ -3821,6 +3854,7 @@ _SOKOL_PRIVATE void _sapp_ios_discard_state(void) {
 
 _SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp_setup_pools();
     static int argc = 1;
     static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_app_delegate class]));
@@ -3929,6 +3963,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 @implementation _sapp_app_delegate
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+
+     sapp_window window_id = sapp_create_window(&_sapp.desc.window);
+    _sapp.main_window = _sapp_lookup_window(window_id.id);
+
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
     _sapp.main_window->window_width = screen_rect.size.width;
@@ -5204,7 +5242,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_setup_pools(desc);
+    _sapp_setup_pools();
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
     _sapp_emsc_keytable_init();
     double w, h;
@@ -5219,7 +5257,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     if (_sapp.desc.window.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    sapp_window main_window_id = sapp_create_window(&desc->window);
+    sapp_window main_window_id = sapp_create_window(&_sapp.desc.window);
     _sapp.main_window = _sapp_lookup_window(main_window_id.id);
     _sapp.main_window->window_width = (int) w;
     _sapp.main_window->window_height = (int) h;
@@ -6662,7 +6700,7 @@ _SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_setup_pools(desc);
+    _sapp_setup_pools();
     _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_init_dpi();
@@ -6684,7 +6722,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_load_extensions();
     #endif
 
-    sapp_window main_window_id = sapp_create_window(&desc->window);
+    sapp_window main_window_id = sapp_create_window(&_sapp.desc.window);
     _sapp.main_window = _sapp_lookup_window(main_window_id.id);
     _sapp.valid = true;
 
@@ -7787,8 +7825,8 @@ void App::OnDisplayContentsInvalidated(winrt::Windows::Graphics::Display::Displa
 
 _SOKOL_PRIVATE void _sapp_uwp_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_setup_pools(desc);
-    sapp_window window_id = sapp_create_window(&desc->window);
+    _sapp_setup_pools();
+    sapp_window window_id = sapp_create_window(&_sapp.desc.window);
     _sapp.main_window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(_sapp.main_window);
     _sapp_win32_uwp_init_keytable();
@@ -10530,7 +10568,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_setup_pools(desc);
+    _sapp_setup_pools();
 
     XInitThreads();
     XrmInitialize();
@@ -10547,7 +10585,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_create_hidden_cursor();
     _sapp_glx_init();
 
-    sapp_window main_window = sapp_create_window(&desc->window);
+    sapp_window main_window = sapp_create_window(&_sapp.desc.window);
     _sapp.main_window = _sapp_lookup_window(main_window.id);
     SOKOL_ASSERT(_sapp.main_window);
     
@@ -10654,10 +10692,9 @@ SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
     if(window_id.id != SAPP_INVALID_ID){
         _sapp_window_t* window = _sapp_init_window(window_id, &desc_def);
 
-        // TODO: Deal with macOS/Linux/etc. handling
         #if defined(_SAPP_WIN32)
             _sapp_win32_uwp_utf8_to_wide(window->window_title, window->window_title_wide, sizeof(window->window_title_wide));
-            _sapp_win32_create_window(window, desc);
+            _sapp_win32_create_window(window, &desc_def);
 
             #if defined(SOKOL_D3D11)
                 _sapp_d3d11_create_swapchain(window);
@@ -10674,7 +10711,7 @@ SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
             _sapp_x11_create_window(window, visual, depth);
             _sapp_glx_create_context(window);
         #elif defined(_SAPP_MACOS)
-            _sapp_macos_create_window(window, desc);
+            _sapp_macos_create_window(window, &desc_def);
         #endif    
     }
     else {
@@ -10756,7 +10793,11 @@ SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
     return _sapp.frame_count;
 }
 
-SOKOL_API_IMPL int sapp_width(sapp_window window_id) {
+SOKOL_API_IMPL int sapp_width() {
+    return sapp_window_width(sapp_main_window());
+}
+
+SOKOL_API_IMPL int sapp_window_width(sapp_window window_id) {
     SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
@@ -10796,7 +10837,11 @@ SOKOL_API_IMPL int sapp_window_sample_count(sapp_window window_id) {
     return window->sample_count;
 }
 
-SOKOL_API_IMPL int sapp_height(sapp_window window_id) {
+SOKOL_API_IMPL int sapp_height() {
+    return sapp_window_height(sapp_main_window());
+}
+
+SOKOL_API_IMPL int sapp_window_height(sapp_window window_id) {
     SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
@@ -10993,7 +11038,11 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     return sapp_window_get_clipboard_string(sapp_main_window());
 }
 
-SOKOL_API_IMPL void sapp_set_window_title(sapp_window window_id, const char* title) {
+SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
+    sapp_window_set_window_title(sapp_main_window(), title);
+}
+
+SOKOL_API_IMPL void sapp_window_set_window_title(sapp_window window_id, const char* title) {
     SOKOL_ASSERT(title);
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
