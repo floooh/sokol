@@ -1264,14 +1264,17 @@ SOKOL_API_DECL void sapp_destroy_window(sapp_window window);
 SOKOL_API_DECL void sapp_set_window_title(const char* str);
 /* set the window title (only on desktop platforms) of specified window */
 SOKOL_API_DECL void sapp_window_set_window_title(sapp_window window, const char* str);
-/* make window context current TODO: make it a gl specific operation sapp_gl_make_context_current */
-SOKOL_API_DECL void sapp_make_context_current(sapp_window window);
+/* returns true if window is still valid */
+SOKOL_API_DECL bool sapp_window_isvalid(sapp_window window);
+
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
 SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
 
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_API_DECL bool sapp_gles2(void);
+/* GL: make window gl context current */
+SOKOL_API_DECL void sapp_gl_make_context_current(sapp_window window);
 
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
 SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
@@ -2141,6 +2144,7 @@ typedef struct {
 typedef struct _sapp_window_t {
     uint32_t id;
     bool fullscreen;
+    bool user_cursor;
     int window_width;
     int window_height;
     int framebuffer_width;
@@ -2154,7 +2158,6 @@ typedef struct _sapp_window_t {
     _sapp_mouse_t mouse;
     #if defined(_SAPP_WIN32)
         _sapp_win32_window_t win32;
-        // TODO, move into gl/d3d substructs
         #if defined(SOKOL_GLCORE33)
             _sapp_wgl_window_t wgl;
         #elif defined(SOKOL_D3D11)
@@ -2789,7 +2792,7 @@ _SOKOL_PRIVATE void _sapp_pool_free_index(_sapp_pool_t* pool, int slot_index) {
 _SOKOL_PRIVATE void _sapp_setup_pools() {
     // Sanity check that we don't expect >1 windows on anything but desktop
     #if !defined(_SAPP_WIN32) && !defined(_SAPP_MACOS) && !defined(_SAPP_LINUX)
-        // TODO: better place for this validation?
+        // DISCUSS: better place for this validation?
         SOKOL_ASSERT(_sapp.desc.window_pool_size == 1);
     #endif
 
@@ -2878,6 +2881,7 @@ _SOKOL_PRIVATE _sapp_window_t* _sapp_init_window(sapp_window window_id, const sa
     window->framebuffer_width = desc->width;
     window->framebuffer_height = desc->height;
     window->fullscreen = desc->fullscreen;
+    window->user_cursor = desc->user_cursor;
 
     _sapp_strcpy(desc->window_title, window->window_title, sizeof(window->window_title));
     // TODO: do we need the below still? Potentially if we keep a desc in the window_t
@@ -3824,9 +3828,8 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
-    _SOKOL_UNUSED(event);
-    // TODO: this needs fixing, shouldn't read from the sapp_desc
-    if (_sapp.desc.window.user_cursor) {
+    _SOKOL_UNUSED(event)
+    if (window->user_cursor) {
         _sapp_macos_app_event(window, SAPP_EVENTTYPE_UPDATE_CURSOR);
     }
 }
@@ -4235,10 +4238,10 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
 
     }
     if (_sapp_events_enabled()) {
-        _sapp.mouse.x = (float)x * _sapp.dpi_scale;
-        _sapp.mouse.y = (float)y * _sapp.dpi_scale;
-        _sapp.mouse.dx = 0.0f;
-        _sapp.mouse.dy = 0.0f;
+        _sapp.main_window->mouse.x = (float)x * _sapp.dpi_scale;
+        _sapp.main_window->mouse.y = (float)y * _sapp.dpi_scale;
+        _sapp.main_window->mouse.dx = 0.0f;
+        _sapp.main_window->mouse.dy = 0.0f;
         _sapp_init_event(_sapp.main_window, SAPP_EVENTTYPE_FILES_DROPPED);
         _sapp_call_event(&_sapp.event);
     }
@@ -4457,7 +4460,7 @@ EM_JS(void, sapp_js_pointer_init, (const char* c_str_target), {
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockchange_cb(int emsc_type, const EmscriptenPointerlockChangeEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
-    _sapp.mouse.locked = emsc_event->isActive;
+    _sapp.main_window->mouse.locked = emsc_event->isActive;
     return EM_TRUE;
 }
 
@@ -4465,7 +4468,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_pointerlockerror_cb(int emsc_type, const void*
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(reserved);
     _SOKOL_UNUSED(user_data);
-    _sapp.mouse.locked = false;
+    _sapp.main_window->mouse.locked = false;
     _sapp.emsc.mouse_lock_requested = false;
     return true;
 }
@@ -4569,20 +4572,20 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
-    if (_sapp.mouse.locked) {
-        _sapp.mouse.dx = (float) emsc_event->movementX;
-        _sapp.mouse.dy = (float) emsc_event->movementY;
+    if (_sapp.main_window->mouse.locked) {
+        _sapp.main_window->mouse.dx = (float) emsc_event->movementX;
+        _sapp.main_window->mouse.dy = (float) emsc_event->movementY;
     }
     else {
         float new_x = emsc_event->targetX * _sapp.dpi_scale;
         float new_y = emsc_event->targetY * _sapp.dpi_scale;
-        if (_sapp.mouse.pos_valid) {
-            _sapp.mouse.dx = new_x - _sapp.mouse.x;
-            _sapp.mouse.dy = new_y - _sapp.mouse.y;
+        if (_sapp.main_window->mouse.pos_valid) {
+            _sapp.main_window->mouse.dx = new_x - _sapp.main_window->mouse.x;
+            _sapp.main_window->mouse.dy = new_y - _sapp.main_window->mouse.y;
         }
-        _sapp.mouse.x = new_x;
-        _sapp.mouse.y = new_y;
-        _sapp.mouse.pos_valid = true;
+        _sapp.main_window->mouse.x = new_x;
+        _sapp.main_window->mouse.y = new_y;
+        _sapp.main_window->mouse.pos_valid = true;
     }
     if (_sapp_events_enabled() && (emsc_event->button >= 0) && (emsc_event->button < SAPP_MAX_MOUSEBUTTONS)) {
         sapp_event_type type;
@@ -6171,7 +6174,7 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(_sapp_window_t* window, bool lock) {
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(_sapp_window_t* window) {
     RECT rect;
     if (GetClientRect(window->win32.hwnd, &rect)) {
-        // TODO: should dpi scale be per window? I don't even know if that's possible
+        // DISCUSS: should dpi scale be per window? I don't even know if that's possible
         window->window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
         window->window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
         const int fb_width = (int)((float)window->window_width * _sapp.win32.dpi.content_scale);
@@ -6315,7 +6318,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 else {
-                    // TODO: wo we want to give the user a per window opportunity to cancel closure requests?
+                    // DISCUSS: wo we want to give the user a per window opportunity to cancel closure requests?
                     _sapp_win32_uwp_app_event(window, SAPP_EVENTTYPE_WINDOW_CLOSED);
                     sapp_destroy_window(_sapp_window(window->id));
                 }
@@ -6351,7 +6354,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
                 break;
             case WM_SETCURSOR:
-                if (_sapp.desc.window.user_cursor) {
+                if (window->user_cursor) {
                     if (LOWORD(lParam) == HTCLIENT) {
                         _sapp_win32_uwp_app_event(window, SAPP_EVENTTYPE_UPDATE_CURSOR);
                         return 1;
@@ -6472,7 +6475,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(window->win32.hwnd, 1);
                 break;
             case WM_TIMER:
-                // TODO: I think we may have to consider current context here, since in the run situation of update, we ensure that the main context is active
+                // TODO: I think we may have to consider current context here, since in the run situation of update, we ensure that the main context is active.
+                // This also currently pauses ALL windows, not just the one being resized.
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
                     _sapp_d3d11_present(window);
@@ -6739,10 +6743,10 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessage(&msg);
             }
         }
-        sapp_make_context_current(_sapp_window(_sapp.main_window->id));
+        sapp_gl_make_context_current(_sapp_window(_sapp.main_window->id));
         _sapp_frame();
 
-        // TODO: Not ideal, since we're checking for valid ids, but probably still better than keeping an additional linked list?
+        // DISCUSS: Not ideal, since we're checking for valid ids, but probably still better than keeping an additional linked list?
         for (int i = 1; i < _sapp.window_pool.size; i++) {
             if(_sapp.windows[i].id != SAPP_INVALID_ID){
                 _sapp_window_t* window = &_sapp.windows[i];
@@ -10591,7 +10595,6 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     
     _sapp.valid = true;
     while (!_sapp.quit_ordered) {
-        // TODO: handle all windows
         _sapp_glx_make_current(_sapp.main_window);
         int count = XPending(_sapp.x11.display);
         while (count--) {
@@ -10601,7 +10604,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         }
         _sapp_frame();
 
-        // TODO: Not ideal, since we're checking for valid ids, but probably still better than keeping an additional linked list?
+        // DISCUSS: Not ideal, since we're checking for valid ids, but probably still better than keeping an additional linked list?
         for (int i = 1; i < _sapp.window_pool.size; i++) {
             if(_sapp.windows[i].id != SAPP_INVALID_ID){
                 _sapp_window_t* window = &_sapp.windows[i];
@@ -10625,7 +10628,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     for (int i = 1; i < _sapp.window_pool.size; i++) {
         if(_sapp.windows[i].id != SAPP_INVALID_ID){
             // TODO: Is there a better way to handle this instead of creating a tmp object?
-            sapp_destroy_window((sapp_window){ .id=_sapp.windows[i].id });
+            sapp_destroy_window(_sapp_window(_sapp.windows[i].id) });
         }
     }
     
@@ -10712,6 +10715,8 @@ SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
             _sapp_glx_create_context(window);
         #elif defined(_SAPP_MACOS)
             _sapp_macos_create_window(window, &desc_def);
+        #else
+            _SOKOL_UNUSED(window);
         #endif    
     }
     else {
@@ -10725,7 +10730,6 @@ SOKOL_API_DECL void sapp_destroy_window(sapp_window window_id){
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
 
-    // TODO: Deal with macOS/Linux/etc. handling
     // Destroy context
     #if defined(_SAPP_WIN32)
         #if defined(SOKOL_D3D11)
@@ -10759,26 +10763,31 @@ SOKOL_API_DECL void sapp_destroy_window(sapp_window window_id){
     _sapp_pool_free_index(&_sapp.window_pool, slot_index);
 }
 
-SOKOL_API_DECL void sapp_make_context_current(sapp_window window_id){
-    SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
-    _sapp_window_t* window = _sapp_lookup_window(window_id.id);
-    SOKOL_ASSERT(window);
+SOKOL_API_DECL void sapp_gl_make_context_current(sapp_window window_id){
+    #if defined(SOKOL_GLCORE33)
+        SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
+        _sapp_window_t* window = _sapp_lookup_window(window_id.id);
+        SOKOL_ASSERT(window);
 
-    #if defined(_SAPP_WIN32)
-        #if defined(SOKOL_D3D11)
-            // Do nothing?
-        #elif defined(SOKOL_GLCORE33)
+        #if defined(_SAPP_WIN32)
             _sapp.wgl.MakeCurrent(window->win32.dc, window->wgl.gl_ctx);
+        #elif defined(_SAPP_LINUX)
+            _sapp_glx_make_current(window);
+        #elif defined(_SAPP_MACOS)
+            [[window->macos.view openGLContext] makeCurrentContext];
         #endif
-    #elif defined(_SAPP_LINUX)
-        _sapp_glx_make_current(window);
-    #elif defined(_SAPP_MACOS) && defined(SOKOL_GLCORE33)
-        [[window->macos.view openGLContext] makeCurrentContext];
+    #else
+        _SOKOL_UNUSED(window_id);
     #endif
 }
 
 SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
+}
+
+SOKOL_API_DECL bool sapp_window_isvalid(sapp_window window) {
+    bool is_valid = !(window.id == SAPP_INVALID_ID) && _sapp_lookup_window(window.id);
+    return is_valid;
 }
 
 SOKOL_API_IMPL void* sapp_userdata(void) {
@@ -10904,6 +10913,8 @@ SOKOL_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id) {
     _sapp_uwp_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
     _sapp_x11_toggle_fullscreen(window);
+    #else
+    _SOKOL_UNUSED(window);
     #endif
 }
 
@@ -10953,6 +10964,7 @@ SOKOL_API_IMPL void sapp_window_lock_mouse(sapp_window window_id, bool lock) {
     _sapp_macos_lock_mouse(window, lock);
     #elif defined(_SAPP_EMSCRIPTEN)
     _sapp_emsc_lock_mouse(lock);
+    _SOKOL_UNUSED(window);
     #elif defined(_SAPP_WIN32)
     // TODO: window specific lock
     _sapp_win32_lock_mouse(_sapp.main_window, lock);
@@ -11171,6 +11183,7 @@ SOKOL_API_IMPL const void* sapp_metal_window_get_renderpass_descriptor(sapp_wind
         SOKOL_ASSERT(obj);
         return obj;
     #else
+        _SOKOL_UNUSED(window);
         return 0;
     #endif
 }
@@ -11193,6 +11206,7 @@ SOKOL_API_IMPL const void* sapp_metal_window_get_drawable(sapp_window window_id)
         SOKOL_ASSERT(obj);
         return obj;
     #else
+        _SOKOL_UNUSED(window);
         return 0;
     #endif
 }
@@ -11292,6 +11306,7 @@ SOKOL_API_IMPL const void* sapp_win32_window_get_hwnd(sapp_window window_id) {
     #if defined(_SAPP_WIN32)
         return window->win32.hwnd;
     #else
+        _SOKOL_UNUSED(window);
         return 0;
     #endif
 }
