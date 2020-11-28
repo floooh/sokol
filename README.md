@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](#updates) (**28-Nov-2020** per-header SOKOL_IMPL and SOKOL_API_DECL macros)
+[**See what's new**](#updates) (**28-Nov-2020** per-header SOKOL_IMPL and SOKOL_API_DECL defines)
 
 ## Examples and Related Projects
 
@@ -442,9 +442,9 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
 # Updates
 
 - **28-Nov-2020**: In addition to the generic SOKOL_API_DECL and SOKOL_IMPL
-macros there are now header-specific versions SOKOL_xxx_API_DECL and
+defines there are now header-specific versions SOKOL_xxx_API_DECL and
 SOKOL_xxx_IMPL (for instance SOKOL_GFX_API_DECL and SOKOL_GFX_IMPL). The
-original motivation for splitting the SOKOL_API_DECL macros up is described
+original motivation for splitting the SOKOL_API_DECL defines up is described
 here: https://github.com/floooh/sokol/issues/428). The same change for
 SOKOL_IMPL also finally unifies the approach used in the utility headers (in
 the ```util``` subdirectory), which exclusively used the SOKOL_xxx_IMPL
