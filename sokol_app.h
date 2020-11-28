@@ -30,6 +30,7 @@
         SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
         SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
         SOKOL_APP_API_DECL  - public function declaration prefix (default: extern)
+        SOKOL_API_DECL      - same as SOKOL_APP_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
         SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
         SOKOL_FREE          - your own free function (default: free(p))

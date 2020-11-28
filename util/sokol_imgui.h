@@ -40,6 +40,7 @@
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_IMGUI_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_IMGUI_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_imgui.h is compiled as a DLL, define the following before

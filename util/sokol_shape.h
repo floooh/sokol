@@ -17,6 +17,7 @@
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_SHAPE_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_SHAPE_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_shape.h is compiled as a DLL, define the following before

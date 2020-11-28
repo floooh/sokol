@@ -39,6 +39,7 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
     SOKOL_GFX_API_DECL  - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_GFX_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 

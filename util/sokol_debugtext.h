@@ -26,7 +26,8 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_DEBUGTEXT_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_DEBUGTEXT_API_DECL    - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_DEBUGTEXT_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
@@ -2195,7 +2196,7 @@ static const uint8_t _sdtx_font_oric[2048] = {
           frag_color = texture(tex, uv).xxxx * color;
         }
         @end
-        
+
         @program debugtext vs fs
 */
 #if defined(SOKOL_GLCORE33)

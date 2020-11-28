@@ -17,6 +17,7 @@
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
     SOKOL_AUDIO_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_AUDIO_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)

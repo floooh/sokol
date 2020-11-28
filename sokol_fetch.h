@@ -17,6 +17,7 @@
     SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
     SOKOL_FETCH_API_DECL        - public function declaration prefix (default: extern)
+    SOKOL_API_DECL              - same as SOKOL_FETCH_API_DECL
     SOKOL_API_IMPL              - public function implementation prefix (default: -)
     SFETCH_MAX_PATH             - max length of UTF-8 filesystem path / URL (default: 1024 bytes)
     SFETCH_MAX_USERDATA_UINT64  - max size of embedded userdata in number of uint64_t, userdata

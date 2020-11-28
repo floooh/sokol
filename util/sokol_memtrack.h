@@ -16,7 +16,8 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_MEMTRACK_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_MEMTRACK_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_MEMTRACK_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_memtrack.h is compiled as a DLL, define the following before

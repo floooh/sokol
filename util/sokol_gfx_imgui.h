@@ -45,6 +45,7 @@
         SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
         SOKOL_FREE(p)       -- your own memory free function, default: free(p)
         SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_DECL      - same as SOKOL_GFX_IMGUI_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_gfx_imgui.h is compiled as a DLL, define the following before

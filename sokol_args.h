@@ -16,6 +16,7 @@
     SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
     SOKOL_ARGS_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_ARGS_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_args.h is compiled as a DLL, define the following before
