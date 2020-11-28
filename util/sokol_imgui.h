@@ -39,7 +39,8 @@
     to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_IMGUI_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_IMGUI_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_imgui.h is compiled as a DLL, define the following before
@@ -47,7 +48,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_IMGUI_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     Include the following headers before sokol_imgui.h (both before including
@@ -204,13 +205,17 @@
 #error "Please include sokol_app.h before sokol_imgui.h"
 #endif
 
-#ifndef SOKOL_API_DECL
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_IMGUI_API_DECL)
+    #define SOKOL_IMGUI_API_DECL SOKOL_API_DECL
+#endif
+
+#ifndef SOKOL_IMGUI_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#define SOKOL_IMGUI_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_IMGUI_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_IMGUI_API_DECL extern
 #endif
 #endif
 
@@ -229,13 +234,13 @@ typedef struct simgui_desc_t {
     bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
 } simgui_desc_t;
 
-SOKOL_API_DECL void simgui_setup(const simgui_desc_t* desc);
-SOKOL_API_DECL void simgui_new_frame(int width, int height, double delta_time);
-SOKOL_API_DECL void simgui_render(void);
+SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
+SOKOL_IMGUI_API_DECL void simgui_new_frame(int width, int height, double delta_time);
+SOKOL_IMGUI_API_DECL void simgui_render(void);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-SOKOL_API_DECL bool simgui_handle_event(const sapp_event* ev);
+SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
 #endif
-SOKOL_API_DECL void simgui_shutdown(void);
+SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
