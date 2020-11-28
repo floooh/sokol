@@ -6,7 +6,9 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[See what's new](#updates) (**28-Nov-2020** per-header SOKOL_IMPL and SOKOL_API_DECL macros)
+[**See what's new**](#updates) (**28-Nov-2020** per-header SOKOL_IMPL and SOKOL_API_DECL macros)
+
+## Examples and Related Projects
 
 [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
 
@@ -16,9 +18,9 @@ Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
 [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
-Command line tools: https://github.com/floooh/sokol-tools
-
 Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
+
+Command line tools: https://github.com/floooh/sokol-tools
 
 ## Core libraries
 
