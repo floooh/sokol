@@ -5,7 +5,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_FETCH_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -830,12 +831,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_FETCH_API_DECL)
-    #define SOKOL_FETCH_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FETCH_IMPL)
+#define SOKOL_FETCH_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_FETCH_API_DECL)
+#define SOKOL_FETCH_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_FETCH_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_FETCH_IMPL)
 #define SOKOL_FETCH_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_FETCH_API_DECL __declspec(dllimport)
@@ -950,7 +953,7 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 #endif // SOKOL_FETCH_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_FETCH_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
@@ -2510,5 +2513,5 @@ SOKOL_API_IMPL void sfetch_cancel(sfetch_handle_t h) {
     }
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_FETCH_IMPL */
 

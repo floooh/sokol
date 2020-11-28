@@ -6,7 +6,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-
+        #define SOKOL_IMPL or
         #define SOKOL_FONTSTASH_IMPL
 
     before you include this file in *one* C or C++ file to create the
@@ -160,12 +160,14 @@
 #error "Please include sokol_gfx.h before sokol_fontstash.h"
 #endif
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_FONTSTASH_API_DECL)
-    #define SOKOL_FONTSTASH_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FONTSTASH_IMPL)
+#define SOKOL_FONTSTASH_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_FONTSTASH_API_DECL)
+#define SOKOL_FONTSTASH_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_FONTSTASH_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_FONTSTASH_IMPL)
 #define SOKOL_FONTSTASH_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_FONTSTASH_API_DECL __declspec(dllimport)

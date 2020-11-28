@@ -5,7 +5,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_AUDIO_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -375,12 +376,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_AUDIO_API_DECL)
-    #define SOKOL_AUDIO_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_AUDIO_IMPL)
+#define SOKOL_AUDIO_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_AUDIO_API_DECL)
+#define SOKOL_AUDIO_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_AUDIO_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_AUDIO_IMPL)
 #define SOKOL_AUDIO_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_AUDIO_API_DECL __declspec(dllimport)
@@ -435,7 +438,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif // SOKOL_AUDIO_INCLUDED
 
 /*=== IMPLEMENTATION =========================================================*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
@@ -1914,4 +1917,4 @@ SOKOL_API_IMPL int saudio_push(const float* frames, int num_frames) {
 #pragma warning(pop)
 #endif
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_AUDIO_IMPL */

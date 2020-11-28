@@ -5,7 +5,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_GFX_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -574,12 +575,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_API_DECL)
-    #define SOKOL_GFX_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMPL)
+#define SOKOL_GFX_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_API_DECL)
+#define SOKOL_GFX_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_GFX_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GFX_IMPL)
 #define SOKOL_GFX_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_GFX_API_DECL __declspec(dllimport)
@@ -2344,7 +2347,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
 #endif // SOKOL_GFX_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
 #if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
@@ -14917,4 +14920,4 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
 #pragma warning(pop)
 #endif
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_GFX_IMPL */

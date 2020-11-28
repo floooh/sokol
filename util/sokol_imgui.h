@@ -5,7 +5,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-
+        #define SOKOL_IMPL or
         #define SOKOL_IMGUI_IMPL
 
     before you include this file in *one* C or C++ file to create the
@@ -205,12 +205,14 @@
 #error "Please include sokol_app.h before sokol_imgui.h"
 #endif
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_IMGUI_API_DECL)
-    #define SOKOL_IMGUI_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_IMGUI_IMPL)
+#define SOKOL_IMGUI_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_IMGUI_API_DECL)
+#define SOKOL_IMGUI_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_IMGUI_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMGUI_IMPL)
 #define SOKOL_IMGUI_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_IMGUI_API_DECL __declspec(dllimport)

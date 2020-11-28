@@ -5,6 +5,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+        #define SOKOL_IMPL or
         #define SOKOL_DEBUGTEXT_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
@@ -393,12 +394,14 @@
 #error "Please include sokol_gfx.h before sokol_debugtext.h"
 #endif
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_DEBUGTEXT_API_DECL)
-    #define SOKOL_DEBUGTEXT_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_DEBUGTEXT_IMPL)
+#define SOKOL_DEBUGTEXT_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_DEBUGTEXT_API_DECL)
+#define SOKOL_DEBUGTEXT_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_DEBUGTEXT_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_DEBUGTEXT_IMPL)
 #define SOKOL_DEBUGTEXT_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_DEBUGTEXT_API_DECL __declspec(dllimport)

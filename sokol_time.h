@@ -5,7 +5,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_TIME_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -102,12 +103,14 @@
 #define SOKOL_TIME_INCLUDED (1)
 #include <stdint.h>
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_TIME_API_DECL)
-    #define SOKOL_TIME_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_TIME_IMPL)
+#define SOKOL_TIME_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_TIME_API_DECL)
+#define SOKOL_TIME_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_TIME_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_TIME_IMPL)
 #define SOKOL_TIME_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_TIME_API_DECL __declspec(dllimport)
@@ -137,7 +140,7 @@ SOKOL_TIME_API_DECL double stm_ns(uint64_t ticks);
 #endif // SOKOL_TIME_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_TIME_IMPL
 #define SOKOL_TIME_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
@@ -316,5 +319,5 @@ SOKOL_API_IMPL double stm_us(uint64_t ticks) {
 SOKOL_API_IMPL double stm_ns(uint64_t ticks) {
     return (double)ticks;
 }
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_TIME_IMPL */
 

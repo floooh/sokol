@@ -5,7 +5,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_APP_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -860,12 +861,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_APP_API_DECL)
-    #define SOKOL_APP_API_DECL SOKOL_API_DECL
+#if defined(SOKOL_IMPL) && !defined(SOKOL_APP_IMPL)
+#define SOKOL_APP_IMPL
 #endif
-
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_APP_API_DECL)
+#define SOKOL_APP_API_DECL SOKOL_API_DECL
+#endif
 #ifndef SOKOL_APP_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_APP_IMPL)
 #define SOKOL_APP_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
 #define SOKOL_APP_API_DECL __declspec(dllimport)
@@ -1273,7 +1276,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
 #include <string.h> /* memset */
@@ -10573,4 +10576,4 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_APP_IMPL */
