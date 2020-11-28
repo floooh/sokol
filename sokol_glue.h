@@ -12,7 +12,7 @@
     ...optionally provide the following macros to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_GLUE_API_DECL - public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_glue.h is compiled as a DLL, define the following before
@@ -20,7 +20,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GLUE_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     OVERVIEW
@@ -71,13 +71,17 @@
 */
 #define SOKOL_GLUE_INCLUDED
 
-#ifndef SOKOL_API_DECL
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GLUE_API_DECL)
+    #define SOKOL_GLUE_API_DECL SOKOL_API_DECL
+#endif
+
+#ifndef SOKOL_GLUE_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#define SOKOL_GLUE_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GLUE_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GLUE_API_DECL extern
 #endif
 #endif
 
@@ -86,7 +90,7 @@ extern "C" {
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
 #endif
 
 #ifdef __cplusplus

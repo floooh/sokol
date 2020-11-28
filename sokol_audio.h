@@ -16,7 +16,7 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_AUDIO_API_DECL- public function declaration prefix (default: extern)
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)
@@ -26,7 +26,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_AUDIO_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     FEATURE OVERVIEW
@@ -374,13 +374,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_AUDIO_API_DECL)
+    #define SOKOL_AUDIO_API_DECL SOKOL_API_DECL
+#endif
+
+#ifndef SOKOL_AUDIO_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#define SOKOL_AUDIO_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_AUDIO_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_AUDIO_API_DECL extern
 #endif
 #endif
 
@@ -400,25 +404,25 @@ typedef struct saudio_desc {
 } saudio_desc;
 
 /* setup sokol-audio */
-SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
+SOKOL_AUDIO_API_DECL void saudio_setup(const saudio_desc* desc);
 /* shutdown sokol-audio */
-SOKOL_API_DECL void saudio_shutdown(void);
+SOKOL_AUDIO_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
-SOKOL_API_DECL bool saudio_isvalid(void);
+SOKOL_AUDIO_API_DECL bool saudio_isvalid(void);
 /* return the saudio_desc.user_data pointer */
-SOKOL_API_DECL void* saudio_userdata(void);
+SOKOL_AUDIO_API_DECL void* saudio_userdata(void);
 /* return a copy of the original saudio_desc struct */
-SOKOL_API_DECL saudio_desc saudio_query_desc(void);
+SOKOL_AUDIO_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
-SOKOL_API_DECL int saudio_sample_rate(void);
+SOKOL_AUDIO_API_DECL int saudio_sample_rate(void);
 /* return actual backend buffer size in number of frames */
-SOKOL_API_DECL int saudio_buffer_frames(void);
+SOKOL_AUDIO_API_DECL int saudio_buffer_frames(void);
 /* actual number of channels */
-SOKOL_API_DECL int saudio_channels(void);
+SOKOL_AUDIO_API_DECL int saudio_channels(void);
 /* get current number of frames to fill packet queue */
-SOKOL_API_DECL int saudio_expect(void);
+SOKOL_AUDIO_API_DECL int saudio_expect(void);
 /* push sample frames from main thread, returns number of frames actually pushed */
-SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
+SOKOL_AUDIO_API_DECL int saudio_push(const float* frames, int num_frames);
 
 #ifdef __cplusplus
 } /* extern "C" */

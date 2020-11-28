@@ -44,7 +44,7 @@
                                default: SOKOL_ASSERT(false)
         SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
         SOKOL_FREE(p)       -- your own memory free function, default: free(p)
-        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_gfx_imgui.h is compiled as a DLL, define the following before
@@ -52,7 +52,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GFX_IMGUI_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     STEP BY STEP:
@@ -165,13 +165,17 @@
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
 #endif
 
-#ifndef SOKOL_API_DECL
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_IMGUI_API_DECL)
+    #define SOKOL_GFX_IMGUI_API_DECL SOKOL_API_DECL
+#endif
+
+#ifndef SOKOL_GFX_IMGUI_API_DECL
 #if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GFX_IMGUI_API_DECL extern
 #endif
 #endif
 
@@ -563,25 +567,25 @@ typedef struct {
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
-SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
