@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_ARGS_IMPL)
+#define SOKOL_ARGS_IMPL
+#endif
 #ifndef SOKOL_ARGS_INCLUDED
 /*
     sokol_args.h    -- cross-platform key/value arg-parsing for web and native
@@ -249,9 +252,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_ARGS_IMPL)
-#define SOKOL_ARGS_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_ARGS_API_DECL)
 #define SOKOL_ARGS_API_DECL SOKOL_API_DECL
 #endif

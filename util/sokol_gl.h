@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GL_IMPL)
+#define SOKOL_GL_IMPL
+#endif
 #ifndef SOKOL_GL_INCLUDED
 /*
     sokol_gl.h -- OpenGL 1.x style rendering on top of sokol_gfx.h
@@ -447,9 +450,6 @@
 #error "Please include sokol_gfx.h before sokol_gl.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_GL_IMPL)
-#define SOKOL_GL_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_GL_API_DECL)
 #define SOKOL_GL_API_DECL SOKOL_API_DECL
 #endif

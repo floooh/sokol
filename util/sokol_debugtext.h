@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_DEBUGTEXT_IMPL)
+#define SOKOL_DEBUGTEXT_IMPL
+#endif
 #ifndef SOKOL_DEBUGTEXT_INCLUDED
 /*
     sokol_debugtext.h   - simple ASCII debug text rendering on top of sokol_gfx.h
@@ -394,9 +397,6 @@
 #error "Please include sokol_gfx.h before sokol_debugtext.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_DEBUGTEXT_IMPL)
-#define SOKOL_DEBUGTEXT_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_DEBUGTEXT_API_DECL)
 #define SOKOL_DEBUGTEXT_API_DECL SOKOL_API_DECL
 #endif

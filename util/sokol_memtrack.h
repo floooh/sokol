@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_MEMTRACK_IMPL)
+#define SOKOL_MEMTRACK_IMPL
+#endif
 #ifndef SOKOL_MEMTRACK_INCLUDED
 /*
     sokol_memtrack.h -- memory allocation wrapper to track memory usage
@@ -74,9 +77,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_MEMTRACK_IMPL)
-#define SOKOL_MEMTRACK_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_MEMTRACK_API_DECL)
 #define SOKOL_MEMTRACK_API_DECL SOKOL_API_DECL
 #endif

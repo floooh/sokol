@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_TIME_IMPL)
+#define SOKOL_TIME_IMPL
+#endif
 #ifndef SOKOL_TIME_INCLUDED
 /*
     sokol_time.h    -- simple cross-platform time measurement
@@ -103,9 +106,6 @@
 #define SOKOL_TIME_INCLUDED (1)
 #include <stdint.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_TIME_IMPL)
-#define SOKOL_TIME_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_TIME_API_DECL)
 #define SOKOL_TIME_API_DECL SOKOL_API_DECL
 #endif

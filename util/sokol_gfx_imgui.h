@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMGUI_IMPL)
+#define SOKOL_GFX_IMGUI_IMPL
+#endif
 #ifndef SOKOL_GFX_IMGUI_INCLUDED
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
@@ -166,9 +169,6 @@
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMGUI_IMPL)
-#define SOKOL_GFX_IMGUI_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_IMGUI_API_DECL)
 #define SOKOL_GFX_IMGUI_API_DECL SOKOL_API_DECL
 #endif

@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GLUE_IMPL)
+#define SOKOL_GLUE_IMPL
+#endif
 #ifndef SOKOL_GLUE_INCLUDED
 /*
     sokol_glue.h -- glue helper functions for sokol headers
@@ -73,9 +76,6 @@
 */
 #define SOKOL_GLUE_INCLUDED
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_GLUE_IMPL)
-#define SOKOL_GLUE_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_GLUE_API_DECL)
 #define SOKOL_GLUE_API_DECL SOKOL_API_DECL
 #endif

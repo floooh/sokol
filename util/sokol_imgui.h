@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_IMGUI_IMPL)
+#define SOKOL_IMGUI_IMPL
+#endif
 #ifndef SOKOL_IMGUI_INCLUDED
 /*
     sokol_imgui.h -- drop-in Dear ImGui renderer/event-handler for sokol_gfx.h
@@ -205,9 +208,6 @@
 #error "Please include sokol_app.h before sokol_imgui.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_IMGUI_IMPL)
-#define SOKOL_IMGUI_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_IMGUI_API_DECL)
 #define SOKOL_IMGUI_API_DECL SOKOL_API_DECL
 #endif

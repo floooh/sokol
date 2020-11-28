@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FETCH_IMPL)
+#define SOKOL_FETCH_IMPL
+#endif
 #ifndef SOKOL_FETCH_INCLUDED
 /*
     sokol_fetch.h -- asynchronous data loading/streaming
@@ -831,9 +834,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_FETCH_IMPL)
-#define SOKOL_FETCH_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_FETCH_API_DECL)
 #define SOKOL_FETCH_API_DECL SOKOL_API_DECL
 #endif

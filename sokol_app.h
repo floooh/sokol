@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_APP_IMPL)
+#define SOKOL_APP_IMPL
+#endif
 #ifndef SOKOL_APP_INCLUDED
 /*
     sokol_app.h -- cross-platform application wrapper
@@ -861,9 +864,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_APP_IMPL)
-#define SOKOL_APP_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_APP_API_DECL)
 #define SOKOL_APP_API_DECL SOKOL_API_DECL
 #endif

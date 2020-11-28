@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FONTSTASH_IMPL)
+#define SOKOL_FONTSTASH_IMPL
+#endif
 #ifndef SOKOL_FONTSTASH_INCLUDED
 /*
     sokol_fontstash.h -- renderer for https://github.com/memononen/fontstash
@@ -160,9 +163,6 @@
 #error "Please include sokol_gfx.h before sokol_fontstash.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_FONTSTASH_IMPL)
-#define SOKOL_FONTSTASH_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_FONTSTASH_API_DECL)
 #define SOKOL_FONTSTASH_API_DECL SOKOL_API_DECL
 #endif

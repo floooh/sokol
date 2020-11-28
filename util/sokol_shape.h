@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_SHAPE_IMPL)
+#define SOKOL_SHAPE_IMPL
+#endif
 #ifndef SOKOL_SHAPE_INCLUDED
 /*
     sokol_shape.h -- create simple primitive shapes for sokol_gfx.h
@@ -366,9 +369,6 @@
 #error "Please include sokol_gfx.h before sokol_shape.h"
 #endif
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_SHAPE_IMPL)
-#define SOKOL_SHAPE_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_SHAPE_API_DECL)
 #define SOKOL_SHAPE_API_DECL SOKOL_API_DECL
 #endif

@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_AUDIO_IMPL)
+#define SOKOL_AUDIO_IMPL
+#endif
 #ifndef SOKOL_AUDIO_INCLUDED
 /*
     sokol_audio.h -- cross-platform audio-streaming API
@@ -376,9 +379,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(SOKOL_IMPL) && !defined(SOKOL_AUDIO_IMPL)
-#define SOKOL_AUDIO_IMPL
-#endif
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_AUDIO_API_DECL)
 #define SOKOL_AUDIO_API_DECL SOKOL_API_DECL
 #endif
