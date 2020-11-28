@@ -441,7 +441,7 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
 
 # Updates
 
-- **22-Nov-2020**: In addition to the generic SOKOL_API_DECL and SOKOL_IMPL
+- **28-Nov-2020**: In addition to the generic SOKOL_API_DECL and SOKOL_IMPL
 macros there are now header-specific versions SOKOL_xxx_API_DECL and
 SOKOL_xxx_IMPL (for instance SOKOL_GFX_API_DECL and SOKOL_GFX_IMPL). The
 original motivation for splitting the SOKOL_API_DECL macros up is described
