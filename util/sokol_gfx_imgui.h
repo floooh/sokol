@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMGUI_IMPL)
+#define SOKOL_GFX_IMGUI_IMPL
+#endif
 #ifndef SOKOL_GFX_IMGUI_INCLUDED
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
@@ -5,7 +8,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-
+        #define SOKOL_IMPL or
         #define SOKOL_GFX_IMGUI_IMPL
 
     before you include this file in *one* C or C++ file to create the
@@ -44,7 +47,8 @@
                                default: SOKOL_ASSERT(false)
         SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
         SOKOL_FREE(p)       -- your own memory free function, default: free(p)
-        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_DECL      - same as SOKOL_GFX_IMGUI_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_gfx_imgui.h is compiled as a DLL, define the following before
@@ -52,7 +56,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GFX_IMGUI_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     STEP BY STEP:
@@ -165,13 +169,16 @@
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_IMGUI_API_DECL)
+#define SOKOL_GFX_IMGUI_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_GFX_IMGUI_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GFX_IMGUI_IMPL)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GFX_IMGUI_API_DECL extern
 #endif
 #endif
 
@@ -563,25 +570,25 @@ typedef struct {
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
-SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -698,8 +705,8 @@ _SOKOL_PRIVATE void igSetTooltip(const char* fmt,...) {
     ImGui::SetTooltipV(fmt,args);
     va_end(args);
 }
-_SOKOL_PRIVATE bool igSliderFloat(const char* label,float* v,float v_min,float v_max,const char* format,float power) {
-    return ImGui::SliderFloat(label,v,v_min,v_max,format,power);
+_SOKOL_PRIVATE bool igSliderFloat(const char* label,float* v,float v_min,float v_max,const char* format,ImGuiSliderFlags flags) {
+    return ImGui::SliderFloat(label,v,v_min,v_max,format,flags);
 }
 _SOKOL_PRIVATE void igImage(ImTextureID user_texture_id,const ImVec2 size,const ImVec2 uv0,const ImVec2 uv1,const ImVec4 tint_col,const ImVec4 border_col) {
     return ImGui::Image(user_texture_id,size,uv0,uv1,tint_col,border_col);
@@ -2762,7 +2769,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
         sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
         if (_sg_imgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format)) {
             igPushIDInt((int)img.id);
-            igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", 2.0f);
+            igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
             igImage((ImTextureID)(intptr_t)img.id, IMVEC2(w, h), IMVEC2(0,0), IMVEC2(1,1), IMVEC4(1,1,1,1), IMVEC4(0,0,0,0));

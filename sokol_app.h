@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_APP_IMPL)
+#define SOKOL_APP_IMPL
+#endif
 #ifndef SOKOL_APP_INCLUDED
 /*
     sokol_app.h -- cross-platform application wrapper
@@ -5,7 +8,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_APP_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -29,7 +33,8 @@
         SOKOL_ABORT()       - called after an unrecoverable error (default: abort())
         SOKOL_WIN32_FORCE_MAIN  - define this on Win32 to use a main() entry point instead of WinMain
         SOKOL_NO_ENTRY      - define this if sokol_app.h shouldn't "hijack" the main() function
-        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_APP_API_DECL  - public function declaration prefix (default: extern)
+        SOKOL_API_DECL      - same as SOKOL_APP_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
         SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
         SOKOL_FREE          - your own free function (default: free(p))
@@ -44,7 +49,7 @@
 
         SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_APP_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     If you use sokol_app.h together with sokol_gfx.h, include both headers
@@ -859,13 +864,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_APP_API_DECL)
+#define SOKOL_APP_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_APP_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_APP_IMPL)
+#define SOKOL_APP_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_APP_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_APP_API_DECL extern
 #endif
 #endif
 
@@ -1174,160 +1182,160 @@ typedef struct sapp_html5_fetch_request {
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
 /* returns true after sokol-app has been initialized */
-SOKOL_API_DECL bool sapp_isvalid(void);
+SOKOL_APP_API_DECL bool sapp_isvalid(void);
 /* returns the current framebuffer width in pixels */
-SOKOL_API_DECL int sapp_width();
+SOKOL_APP_API_DECL int sapp_width();
 /* returns the current framebuffer width in pixels for specified window */
-SOKOL_API_DECL int sapp_window_width(sapp_window window_id);
+SOKOL_APP_API_DECL int sapp_window_width(sapp_window window_id);
 /* returns the current framebuffer height in pixels */
-SOKOL_API_DECL int sapp_height();
+SOKOL_APP_API_DECL int sapp_height();
 /* returns the current framebuffer height in pixels for specified window */
-SOKOL_API_DECL int sapp_window_height(sapp_window window_id);
+SOKOL_APP_API_DECL int sapp_window_height(sapp_window window_id);
 /* get default framebuffer color pixel format */
-SOKOL_API_DECL int sapp_color_format(void);
+SOKOL_APP_API_DECL int sapp_color_format(void);
 /* get default framebuffer depth pixel format */
-SOKOL_API_DECL int sapp_depth_format(void);
+SOKOL_APP_API_DECL int sapp_depth_format(void);
 /* get default framebuffer sample count */
-SOKOL_API_DECL int sapp_sample_count(void);
+SOKOL_APP_API_DECL int sapp_sample_count(void);
 /* get window default framebuffer sample count */
-SOKOL_API_DECL int sapp_window_sample_count(sapp_window window_id);
+SOKOL_APP_API_DECL int sapp_window_sample_count(sapp_window window_id);
 /* returns true when high_dpi was requested and actually running in a high-dpi scenario */
-SOKOL_API_DECL bool sapp_high_dpi(void);
+SOKOL_APP_API_DECL bool sapp_high_dpi(void);
 /* returns the dpi scaling factor (window pixels to framebuffer pixels) */
-SOKOL_API_DECL float sapp_dpi_scale(void);
+SOKOL_APP_API_DECL float sapp_dpi_scale(void);
 /* show or hide the mobile device onscreen keyboard */
-SOKOL_API_DECL void sapp_show_keyboard(bool show);
+SOKOL_APP_API_DECL void sapp_show_keyboard(bool show);
 /* return true if the mobile device onscreen keyboard is currently shown */
-SOKOL_API_DECL bool sapp_keyboard_shown(void);
+SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
 /* query fullscreen mode for default window */
-SOKOL_API_DECL bool sapp_is_fullscreen();
+SOKOL_APP_API_DECL bool sapp_is_fullscreen();
 /* toggle fullscreen mode for default window */
-SOKOL_API_DECL void sapp_toggle_fullscreen();
+SOKOL_APP_API_DECL void sapp_toggle_fullscreen();
 /* query fullscreen mode for a window */
-SOKOL_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id);
+SOKOL_APP_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id);
 /* toggle fullscreen mode for a window*/
-SOKOL_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id);
+SOKOL_APP_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id);
 /* show or hide the mouse cursor for the main window */
-SOKOL_API_DECL void sapp_show_mouse(bool show);
+SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor for the specified window */
-SOKOL_API_DECL void sapp_window_show_mouse(sapp_window, bool show);
+SOKOL_APP_API_DECL void sapp_window_show_mouse(sapp_window, bool show);
 /* is the mouse cursor shown or hidden for the main window */
-SOKOL_API_DECL bool sapp_mouse_shown();
+SOKOL_APP_API_DECL bool sapp_mouse_shown();
 /* is the mouse cursor shown or hidden for the specified window */
-SOKOL_API_DECL bool sapp_window_mouse_shown(sapp_window window_id);
+SOKOL_APP_API_DECL bool sapp_window_mouse_shown(sapp_window window_id);
 /* enable/disable mouse-pointer-lock mode for main window */
-SOKOL_API_DECL void sapp_lock_mouse(bool lock);
+SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
 /* enable/disable mouse-pointer-lock mode for specified window */
-SOKOL_API_DECL void sapp_window_lock_mouse(sapp_window window_id, bool lock);
+SOKOL_APP_API_DECL void sapp_window_lock_mouse(sapp_window window_id, bool lock);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) for main window*/
-SOKOL_API_DECL bool sapp_mouse_locked(void);
+SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) for specified window */
-SOKOL_API_DECL bool sapp_window_mouse_locked(sapp_window);
+SOKOL_APP_API_DECL bool sapp_window_mouse_locked(sapp_window);
 /* return the userdata pointer optionally provided in sapp_desc */
-SOKOL_API_DECL void* sapp_userdata(void);
+SOKOL_APP_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
-SOKOL_API_DECL sapp_desc sapp_query_desc(void);
+SOKOL_APP_API_DECL sapp_desc sapp_query_desc(void);
 /* initiate a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
-SOKOL_API_DECL void sapp_request_quit(void);
+SOKOL_APP_API_DECL void sapp_request_quit(void);
 /* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
-SOKOL_API_DECL void sapp_cancel_quit(void);
+SOKOL_APP_API_DECL void sapp_cancel_quit(void);
 /* initiate a "hard quit" (quit application without sending SAPP_EVENTTYPE_QUIT_REQUSTED) */
-SOKOL_API_DECL void sapp_quit(void);
+SOKOL_APP_API_DECL void sapp_quit(void);
 /* call from inside event callback to consume the current event (don't forward to platform) */
-SOKOL_API_DECL void sapp_consume_event(void);
+SOKOL_APP_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
-SOKOL_API_DECL uint64_t sapp_frame_count(void);
+SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
 /* write string into main window clipboard */
-SOKOL_API_DECL void sapp_set_clipboard_string(const char* str);
+SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* write string into window clipboard */
-SOKOL_API_DECL void sapp_window_set_clipboard_string(sapp_window window_id, const char* str);
+SOKOL_APP_API_DECL void sapp_window_set_clipboard_string(sapp_window window_id, const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) for main window*/
-SOKOL_API_DECL const char* sapp_get_clipboard_string(void);
+SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) for specific window */
-SOKOL_API_DECL const char* sapp_window_get_clipboard_string(sapp_window window_id);
+SOKOL_APP_API_DECL const char* sapp_window_get_clipboard_string(sapp_window window_id);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
-SOKOL_API_DECL int sapp_get_num_dropped_files(void);
+SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) for a specific window */
-SOKOL_API_DECL int sapp_window_get_num_dropped_files(sapp_window window_id);
+SOKOL_APP_API_DECL int sapp_window_get_num_dropped_files(sapp_window window_id);
 /* gets the dropped file paths */
-SOKOL_API_DECL const char* sapp_get_dropped_file_path(int index);
+SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 /* gets the dropped file paths for window */
-SOKOL_API_DECL const char* sapp_window_get_dropped_file_path(sapp_window window_id, int index);
+SOKOL_APP_API_DECL const char* sapp_window_get_dropped_file_path(sapp_window window_id, int index);
 
 /* returns this applications default/main window */
-SOKOL_API_DECL sapp_window sapp_main_window();
+SOKOL_APP_API_DECL sapp_window sapp_main_window();
 /* create a new child window */
-SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc);
+SOKOL_APP_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc);
 /* destroy a window */
-SOKOL_API_DECL void sapp_destroy_window(sapp_window window);
+SOKOL_APP_API_DECL void sapp_destroy_window(sapp_window window);
 /* set the window title (only on desktop platforms) of main_window */
-SOKOL_API_DECL void sapp_set_window_title(const char* str);
+SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
 /* set the window title (only on desktop platforms) of specified window */
-SOKOL_API_DECL void sapp_window_set_window_title(sapp_window window, const char* str);
+SOKOL_APP_API_DECL void sapp_window_set_window_title(sapp_window window, const char* str);
 /* returns true if window is still valid */
-SOKOL_API_DECL bool sapp_window_isvalid(sapp_window window);
+SOKOL_APP_API_DECL bool sapp_window_isvalid(sapp_window window);
 
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
-SOKOL_API_DECL int sapp_run(const sapp_desc* desc);
+SOKOL_APP_API_DECL int sapp_run(const sapp_desc* desc);
 
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
-SOKOL_API_DECL bool sapp_gles2(void);
+SOKOL_APP_API_DECL bool sapp_gles2(void);
 /* GL: make window gl context current */
-SOKOL_API_DECL void sapp_gl_make_context_current(sapp_window window);
+SOKOL_APP_API_DECL void sapp_gl_make_context_current(sapp_window window);
 
 /* HTML5: enable or disable the hardwired "Leave Site?" dialog box */
-SOKOL_API_DECL void sapp_html5_ask_leave_site(bool ask);
+SOKOL_APP_API_DECL void sapp_html5_ask_leave_site(bool ask);
 /* HTML5: get byte size of a dropped file */
-SOKOL_API_DECL uint32_t sapp_html5_get_dropped_file_size(int index);
+SOKOL_APP_API_DECL uint32_t sapp_html5_get_dropped_file_size(int index);
 /* HTML5: asynchronously load the content of a dropped file */
-SOKOL_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request);
+SOKOL_APP_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request);
 
 /* Metal: get bridged pointer to Metal device object */
-SOKOL_API_DECL const void* sapp_metal_get_device(void);
+SOKOL_APP_API_DECL const void* sapp_metal_get_device(void);
 /* Metal: get bridged pointer to this frame's renderpass descriptor */
-SOKOL_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
+SOKOL_APP_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
 /* Metal: get bridged pointer to this frame's renderpass descriptor of specified window */
-SOKOL_API_DECL const void* sapp_metal_window_get_renderpass_descriptor(sapp_window window);
+SOKOL_APP_API_DECL const void* sapp_metal_window_get_renderpass_descriptor(sapp_window window);
 /* Metal: get bridged pointer to current drawable */
-SOKOL_API_DECL const void* sapp_metal_get_drawable(void);
+SOKOL_APP_API_DECL const void* sapp_metal_get_drawable(void);
 /* Metal: get bridged pointer for drawable of specified window */
-SOKOL_API_DECL const void* sapp_metal_window_get_drawable(sapp_window window);
+SOKOL_APP_API_DECL const void* sapp_metal_window_get_drawable(sapp_window window);
 /* macOS: get bridged pointer to macOS NSWindow for the main window */
-SOKOL_API_DECL const void* sapp_macos_get_window(void);
+SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
 /* macOS: get bridged pointer to macOS NSWindow for specified window */
-SOKOL_API_DECL const void* sapp_macos_window_get_window(sapp_window window_id);
+SOKOL_APP_API_DECL const void* sapp_macos_window_get_window(sapp_window window_id);
 /* iOS: get bridged pointer to iOS UIWindow */
-SOKOL_API_DECL const void* sapp_ios_get_window(void);
+SOKOL_APP_APP_API_DECL const void* sapp_ios_get_window(void);
 
 /* D3D11: get pointer to ID3D11Device object */
-SOKOL_API_DECL const void* sapp_d3d11_get_device(void);
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
 /* D3D11: get pointer to ID3D11DeviceContext object */
-SOKOL_API_DECL const void* sapp_d3d11_get_device_context(void);
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_device_context(void);
 /* D3D11: get pointer to ID3D11RenderTargetView object */
-SOKOL_API_DECL const void* sapp_d3d11_get_render_target_view(void);
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 /* D3D11: get pointer to ID3D11RenderTargetView object */
-SOKOL_API_DECL const void* sapp_d3d11_window_get_render_target_view(sapp_window window_id);
+SOKOL_APP_API_DECL const void* sapp_d3d11_window_get_render_target_view(sapp_window window_id);
 /* D3D11: get pointer to ID3D11DepthStencilView */
-SOKOL_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_depth_stencil_view(void);
 /* D3D11: get pointer to ID3D11DepthStencilView */
-SOKOL_API_DECL const void* sapp_d3d11_window_get_depth_stencil_view(sapp_window window_id);
+SOKOL_APP_API_DECL const void* sapp_d3d11_window_get_depth_stencil_view(sapp_window window_id);
 /* Win32: get the HWND window handle of the main window */
-SOKOL_API_DECL const void* sapp_win32_get_hwnd(void);
+SOKOL_APP_API_DECL const void* sapp_win32_get_hwnd(void);
 /* Win32: get the HWND window handle of the specified window */
-SOKOL_API_DECL const void* sapp_win32_window_get_hwnd(sapp_window window_id);
+SOKOL_APP_API_DECL const void* sapp_win32_window_get_hwnd(sapp_window window_id);
 
 /* WebGPU: get WGPUDevice handle */
-SOKOL_API_DECL const void* sapp_wgpu_get_device(void);
+SOKOL_APP_API_DECL const void* sapp_wgpu_get_device(void);
 /* WebGPU: get swapchain's WGPUTextureView handle for rendering */
-SOKOL_API_DECL const void* sapp_wgpu_get_render_view(void);
+SOKOL_APP_API_DECL const void* sapp_wgpu_get_render_view(void);
 /* WebGPU: get swapchain's MSAA-resolve WGPUTextureView (may return null) */
-SOKOL_API_DECL const void* sapp_wgpu_get_resolve_view(void);
+SOKOL_APP_API_DECL const void* sapp_wgpu_get_resolve_view(void);
 /* WebGPU: get swapchain's WGPUTextureView for the depth-stencil surface */
-SOKOL_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
+SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 
 /* Android: get native activity handle */
-SOKOL_API_DECL const void* sapp_android_get_native_activity(void);
+SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -1348,7 +1356,7 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif // SOKOL_APP_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
 #include <string.h> /* memset */
@@ -10929,22 +10937,22 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-SOKOL_API_DECL bool sapp_is_fullscreen() {
+SOKOL_APP_API_DECL bool sapp_is_fullscreen() {
     return sapp_window_is_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
-SOKOL_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id) {
+SOKOL_APP_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id) {
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
 
     return window->fullscreen;
 }
 
-SOKOL_API_DECL void sapp_toggle_fullscreen() {
+SOKOL_APP_API_DECL void sapp_toggle_fullscreen() {
     sapp_window_toggle_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
-SOKOL_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id) {
+SOKOL_APP_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id) {
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
 
@@ -11413,4 +11421,4 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_APP_IMPL */

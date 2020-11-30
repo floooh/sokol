@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_DEBUGTEXT_IMPL)
+#define SOKOL_DEBUGTEXT_IMPL
+#endif
 #ifndef SOKOL_DEBUGTEXT_INCLUDED
 /*
     sokol_debugtext.h   - simple ASCII debug text rendering on top of sokol_gfx.h
@@ -5,6 +8,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+        #define SOKOL_IMPL or
         #define SOKOL_DEBUGTEXT_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
@@ -26,7 +30,8 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_DEBUGTEXT_API_DECL    - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_DEBUGTEXT_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
@@ -36,7 +41,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_DEBUGTEXT_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     Include the following headers before including sokol_debugtext.h:
@@ -392,13 +397,16 @@
 #error "Please include sokol_gfx.h before sokol_debugtext.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_DEBUGTEXT_API_DECL)
+#define SOKOL_DEBUGTEXT_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_DEBUGTEXT_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_DEBUGTEXT_IMPL)
+#define SOKOL_DEBUGTEXT_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_DEBUGTEXT_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_DEBUGTEXT_API_DECL extern
 #endif
 #endif
 
@@ -490,58 +498,58 @@ typedef struct sdtx_desc_t {
 } sdtx_desc_t;
 
 /* initialization/shutdown */
-SOKOL_API_DECL void sdtx_setup(const sdtx_desc_t* desc);
-SOKOL_API_DECL void sdtx_shutdown(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_setup(const sdtx_desc_t* desc);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_shutdown(void);
 
 /* builtin font data (use to populate sdtx_desc.font[]) */
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_kc853(void);
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_kc854(void);
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_z1013(void);
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_cpc(void);
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_c64(void);
-SOKOL_API_DECL sdtx_font_desc_t sdtx_font_oric(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_kc853(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_kc854(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_z1013(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_cpc(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_c64(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_font_desc_t sdtx_font_oric(void);
 
 /* context functions */
-SOKOL_API_DECL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc);
-SOKOL_API_DECL void sdtx_destroy_context(sdtx_context ctx);
-SOKOL_API_DECL void sdtx_set_context(sdtx_context ctx);
-SOKOL_API_DECL sdtx_context sdtx_get_context(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_make_context(const sdtx_context_desc_t* desc);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_destroy_context(sdtx_context ctx);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_set_context(sdtx_context ctx);
+SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
 
 /* draw and rewind the current context */
-SOKOL_API_DECL void sdtx_draw(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
 
 /* switch to a different font */
-SOKOL_API_DECL void sdtx_font(int font_index);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_font(int font_index);
 
 /* set a new virtual canvas size in screen pixels */
-SOKOL_API_DECL void sdtx_canvas(float w, float h);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_canvas(float w, float h);
 
 /* set a new origin in character grid coordinates */
-SOKOL_API_DECL void sdtx_origin(float x, float y);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_origin(float x, float y);
 
 /* cursor movement functions (relative to origin in character grid coordinates) */
-SOKOL_API_DECL void sdtx_home(void);
-SOKOL_API_DECL void sdtx_pos(float x, float y);
-SOKOL_API_DECL void sdtx_pos_x(float x);
-SOKOL_API_DECL void sdtx_pos_y(float y);
-SOKOL_API_DECL void sdtx_move(float dx, float dy);
-SOKOL_API_DECL void sdtx_move_x(float dx);
-SOKOL_API_DECL void sdtx_move_y(float dy);
-SOKOL_API_DECL void sdtx_crlf(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_home(void);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_pos(float x, float y);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_pos_x(float x);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_pos_y(float y);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_move(float dx, float dy);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_move_x(float dx);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_move_y(float dy);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_crlf(void);
 
 /* set the current text color */
-SOKOL_API_DECL void sdtx_color3b(uint8_t r, uint8_t g, uint8_t b);              // RGB 0..255, A=255
-SOKOL_API_DECL void sdtx_color3f(float r, float g, float b);                    // RGB 0.0f..1.0f, A=1.0f
-SOKOL_API_DECL void sdtx_color4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // RGBA 0..255
-SOKOL_API_DECL void sdtx_color4f(float r, float g, float b, float a);           // RGBA 0.0f..1.0f
-SOKOL_API_DECL void sdtx_color1i(uint32_t rgba);                                // ABGR 0xAABBGGRR
+SOKOL_DEBUGTEXT_API_DECL void sdtx_color3b(uint8_t r, uint8_t g, uint8_t b);              // RGB 0..255, A=255
+SOKOL_DEBUGTEXT_API_DECL void sdtx_color3f(float r, float g, float b);                    // RGB 0.0f..1.0f, A=1.0f
+SOKOL_DEBUGTEXT_API_DECL void sdtx_color4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);   // RGBA 0..255
+SOKOL_DEBUGTEXT_API_DECL void sdtx_color4f(float r, float g, float b, float a);           // RGBA 0.0f..1.0f
+SOKOL_DEBUGTEXT_API_DECL void sdtx_color1i(uint32_t rgba);                                // ABGR 0xAABBGGRR
 
 /* text rendering */
-SOKOL_API_DECL void sdtx_putc(char c);
-SOKOL_API_DECL void sdtx_puts(const char* str);             // does NOT append newline!
-SOKOL_API_DECL void sdtx_putr(const char* str, int len);    // 'put range', also stops at zero-char
-SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
-SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putc(char c);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_puts(const char* str);             // does NOT append newline!
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, int len);    // 'put range', also stops at zero-char
+SOKOL_DEBUGTEXT_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
+SOKOL_DEBUGTEXT_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -2191,7 +2199,7 @@ static const uint8_t _sdtx_font_oric[2048] = {
           frag_color = texture(tex, uv).xxxx * color;
         }
         @end
-        
+
         @program debugtext vs fs
 */
 #if defined(SOKOL_GLCORE33)
@@ -4089,7 +4097,7 @@ SOKOL_API_IMPL void sdtx_color1i(uint32_t rgba) {
     }
 }
 
-SOKOL_API_DECL void sdtx_putc(char chr) {
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putc(char chr) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
@@ -4097,7 +4105,7 @@ SOKOL_API_DECL void sdtx_putc(char chr) {
     }
 }
 
-SOKOL_API_DECL void sdtx_puts(const char* str) {
+SOKOL_DEBUGTEXT_API_DECL void sdtx_puts(const char* str) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
@@ -4108,7 +4116,7 @@ SOKOL_API_DECL void sdtx_puts(const char* str) {
     }
 }
 
-SOKOL_API_DECL void sdtx_putr(const char* str, int len) {
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, int len) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
@@ -4122,7 +4130,7 @@ SOKOL_API_DECL void sdtx_putr(const char* str, int len) {
     }
 }
 
-SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args) {
+SOKOL_DEBUGTEXT_API_DECL int sdtx_vprintf(const char* fmt, va_list args) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
     int res = SOKOL_VSNPRINTF(_sdtx.fmt_buf, _sdtx.fmt_buf_size, fmt, args);
@@ -4132,7 +4140,7 @@ SOKOL_API_DECL int sdtx_vprintf(const char* fmt, va_list args) {
     return res;
 }
 
-SOKOL_API_DECL int sdtx_printf(const char* fmt, ...) {
+SOKOL_DEBUGTEXT_API_DECL int sdtx_printf(const char* fmt, ...) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     SOKOL_ASSERT(_sdtx.fmt_buf && (_sdtx.fmt_buf_size >= 2));
     va_list args;

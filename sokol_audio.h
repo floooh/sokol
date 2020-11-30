@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_AUDIO_IMPL)
+#define SOKOL_AUDIO_IMPL
+#endif
 #ifndef SOKOL_AUDIO_INCLUDED
 /*
     sokol_audio.h -- cross-platform audio-streaming API
@@ -5,7 +8,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_AUDIO_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -16,7 +20,8 @@
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_AUDIO_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_AUDIO_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)
@@ -26,7 +31,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_AUDIO_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     FEATURE OVERVIEW
@@ -374,13 +379,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_AUDIO_API_DECL)
+#define SOKOL_AUDIO_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_AUDIO_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_AUDIO_IMPL)
+#define SOKOL_AUDIO_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_AUDIO_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_AUDIO_API_DECL extern
 #endif
 #endif
 
@@ -400,25 +408,25 @@ typedef struct saudio_desc {
 } saudio_desc;
 
 /* setup sokol-audio */
-SOKOL_API_DECL void saudio_setup(const saudio_desc* desc);
+SOKOL_AUDIO_API_DECL void saudio_setup(const saudio_desc* desc);
 /* shutdown sokol-audio */
-SOKOL_API_DECL void saudio_shutdown(void);
+SOKOL_AUDIO_API_DECL void saudio_shutdown(void);
 /* true after setup if audio backend was successfully initialized */
-SOKOL_API_DECL bool saudio_isvalid(void);
+SOKOL_AUDIO_API_DECL bool saudio_isvalid(void);
 /* return the saudio_desc.user_data pointer */
-SOKOL_API_DECL void* saudio_userdata(void);
+SOKOL_AUDIO_API_DECL void* saudio_userdata(void);
 /* return a copy of the original saudio_desc struct */
-SOKOL_API_DECL saudio_desc saudio_query_desc(void);
+SOKOL_AUDIO_API_DECL saudio_desc saudio_query_desc(void);
 /* actual sample rate */
-SOKOL_API_DECL int saudio_sample_rate(void);
+SOKOL_AUDIO_API_DECL int saudio_sample_rate(void);
 /* return actual backend buffer size in number of frames */
-SOKOL_API_DECL int saudio_buffer_frames(void);
+SOKOL_AUDIO_API_DECL int saudio_buffer_frames(void);
 /* actual number of channels */
-SOKOL_API_DECL int saudio_channels(void);
+SOKOL_AUDIO_API_DECL int saudio_channels(void);
 /* get current number of frames to fill packet queue */
-SOKOL_API_DECL int saudio_expect(void);
+SOKOL_AUDIO_API_DECL int saudio_expect(void);
 /* push sample frames from main thread, returns number of frames actually pushed */
-SOKOL_API_DECL int saudio_push(const float* frames, int num_frames);
+SOKOL_AUDIO_API_DECL int saudio_push(const float* frames, int num_frames);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -430,7 +438,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif // SOKOL_AUDIO_INCLUDED
 
 /*=== IMPLEMENTATION =========================================================*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
@@ -964,7 +972,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 #elif defined(__APPLE__)
 
 /* NOTE: the buffer data callback is called on a separate thread! */
-_SOKOL_PRIVATE void _sapp_ca_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
+_SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
     if (_saudio_has_callback()) {
         const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
@@ -996,7 +1004,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.mBytesPerFrame = sizeof(float) * _saudio.num_channels;
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
-    OSStatus res = AudioQueueNewOutput(&fmt, _sapp_ca_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
+    OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
     SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue);
 
     /* create 2 audio buffers */
@@ -1056,15 +1064,15 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    int dir; unsigned int rate; 
+    int dir; unsigned int rate;
     int rc = snd_pcm_open(&_saudio.backend.device, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (rc < 0) {
         SOKOL_LOG("sokol_audio.h: snd_pcm_open() failed");
         return false;
     }
 
-    /* configuration works by restricting the 'configuration space' step 
-       by step, we require all parameters except the sample rate to 
+    /* configuration works by restricting the 'configuration space' step
+       by step, we require all parameters except the sample rate to
        match perfectly
     */
     snd_pcm_hw_params_t* params = 0;
@@ -1909,4 +1917,4 @@ SOKOL_API_IMPL int saudio_push(const float* frames, int num_frames) {
 #pragma warning(pop)
 #endif
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_AUDIO_IMPL */

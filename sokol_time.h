@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_TIME_IMPL)
+#define SOKOL_TIME_IMPL
+#endif
 #ifndef SOKOL_TIME_INCLUDED
 /*
     sokol_time.h    -- simple cross-platform time measurement
@@ -5,13 +8,15 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_TIME_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
     Optionally provide the following defines with your own implementations:
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_TIME_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_TIME_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_time.h is compiled as a DLL, define the following before
@@ -19,7 +24,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_TIME_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     void stm_setup();
@@ -101,13 +106,16 @@
 #define SOKOL_TIME_INCLUDED (1)
 #include <stdint.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_TIME_API_DECL)
+#define SOKOL_TIME_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_TIME_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_TIME_IMPL)
+#define SOKOL_TIME_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_TIME_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_TIME_API_DECL extern
 #endif
 #endif
 
@@ -115,16 +123,16 @@
 extern "C" {
 #endif
 
-SOKOL_API_DECL void stm_setup(void);
-SOKOL_API_DECL uint64_t stm_now(void);
-SOKOL_API_DECL uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
-SOKOL_API_DECL uint64_t stm_since(uint64_t start_ticks);
-SOKOL_API_DECL uint64_t stm_laptime(uint64_t* last_time);
-SOKOL_API_DECL uint64_t stm_round_to_common_refresh_rate(uint64_t frame_ticks);
-SOKOL_API_DECL double stm_sec(uint64_t ticks);
-SOKOL_API_DECL double stm_ms(uint64_t ticks);
-SOKOL_API_DECL double stm_us(uint64_t ticks);
-SOKOL_API_DECL double stm_ns(uint64_t ticks);
+SOKOL_TIME_API_DECL void stm_setup(void);
+SOKOL_TIME_API_DECL uint64_t stm_now(void);
+SOKOL_TIME_API_DECL uint64_t stm_diff(uint64_t new_ticks, uint64_t old_ticks);
+SOKOL_TIME_API_DECL uint64_t stm_since(uint64_t start_ticks);
+SOKOL_TIME_API_DECL uint64_t stm_laptime(uint64_t* last_time);
+SOKOL_TIME_API_DECL uint64_t stm_round_to_common_refresh_rate(uint64_t frame_ticks);
+SOKOL_TIME_API_DECL double stm_sec(uint64_t ticks);
+SOKOL_TIME_API_DECL double stm_ms(uint64_t ticks);
+SOKOL_TIME_API_DECL double stm_us(uint64_t ticks);
+SOKOL_TIME_API_DECL double stm_ns(uint64_t ticks);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -132,7 +140,7 @@ SOKOL_API_DECL double stm_ns(uint64_t ticks);
 #endif // SOKOL_TIME_INCLUDED
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_TIME_IMPL
 #define SOKOL_TIME_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
@@ -311,5 +319,5 @@ SOKOL_API_IMPL double stm_us(uint64_t ticks) {
 SOKOL_API_IMPL double stm_ns(uint64_t ticks) {
     return (double)ticks;
 }
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_TIME_IMPL */
 

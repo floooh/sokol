@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMPL)
+#define SOKOL_GFX_IMPL
+#endif
 #ifndef SOKOL_GFX_INCLUDED
 /*
     sokol_gfx.h -- simple 3D API wrapper
@@ -5,7 +8,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_GFX_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -38,7 +42,8 @@
     SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_GFX_API_DECL  - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_GFX_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
 
@@ -47,7 +52,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GFX_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     If you want to compile without deprecated structs and functions,
@@ -573,13 +578,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_API_DECL)
+#define SOKOL_GFX_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_GFX_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GFX_IMPL)
+#define SOKOL_GFX_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GFX_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GFX_API_DECL extern
 #endif
 #endif
 
@@ -2207,88 +2215,88 @@ typedef struct sg_desc {
 } sg_desc;
 
 /* setup and misc functions */
-SOKOL_API_DECL sg_context sg_setup(const sg_desc* desc);
-SOKOL_API_DECL void sg_shutdown(void);
-SOKOL_API_DECL bool sg_isvalid(void);
-SOKOL_API_DECL void sg_reset_state_cache(void);
-SOKOL_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
-SOKOL_API_DECL void sg_push_debug_group(const char* name);
-SOKOL_API_DECL void sg_pop_debug_group(void);
+SOKOL_GFX_API_DECL sg_context sg_setup(const sg_desc* desc);
+SOKOL_GFX_API_DECL void sg_shutdown(void);
+SOKOL_GFX_API_DECL bool sg_isvalid(void);
+SOKOL_GFX_API_DECL void sg_reset_state_cache(void);
+SOKOL_GFX_API_DECL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks);
+SOKOL_GFX_API_DECL void sg_push_debug_group(const char* name);
+SOKOL_GFX_API_DECL void sg_pop_debug_group(void);
 
 /* resource creation, destruction and updating */
-SOKOL_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
-SOKOL_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
-SOKOL_API_DECL sg_shader sg_make_shader(const sg_shader_desc* desc);
-SOKOL_API_DECL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc);
-SOKOL_API_DECL sg_pass sg_make_pass(const sg_pass_desc* desc);
-SOKOL_API_DECL void sg_destroy_buffer(sg_buffer buf);
-SOKOL_API_DECL void sg_destroy_image(sg_image img);
-SOKOL_API_DECL void sg_destroy_shader(sg_shader shd);
-SOKOL_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
-SOKOL_API_DECL void sg_destroy_pass(sg_pass pass);
-SOKOL_API_DECL void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
-SOKOL_API_DECL void sg_update_image(sg_image img, const sg_image_content* data);
-SOKOL_API_DECL int sg_append_buffer(sg_buffer buf, const void* data_ptr, int data_size);
-SOKOL_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
+SOKOL_GFX_API_DECL sg_buffer sg_make_buffer(const sg_buffer_desc* desc);
+SOKOL_GFX_API_DECL sg_image sg_make_image(const sg_image_desc* desc);
+SOKOL_GFX_API_DECL sg_shader sg_make_shader(const sg_shader_desc* desc);
+SOKOL_GFX_API_DECL sg_pipeline sg_make_pipeline(const sg_pipeline_desc* desc);
+SOKOL_GFX_API_DECL sg_pass sg_make_pass(const sg_pass_desc* desc);
+SOKOL_GFX_API_DECL void sg_destroy_buffer(sg_buffer buf);
+SOKOL_GFX_API_DECL void sg_destroy_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_destroy_shader(sg_shader shd);
+SOKOL_GFX_API_DECL void sg_destroy_pipeline(sg_pipeline pip);
+SOKOL_GFX_API_DECL void sg_destroy_pass(sg_pass pass);
+SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const void* data_ptr, int data_size);
+SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_content* data);
+SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const void* data_ptr, int data_size);
+SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 
 /* rendering functions */
-SOKOL_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
-SOKOL_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
-SOKOL_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
-SOKOL_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
-SOKOL_API_DECL void sg_apply_pipeline(sg_pipeline pip);
-SOKOL_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
-SOKOL_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
-SOKOL_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
-SOKOL_API_DECL void sg_end_pass(void);
-SOKOL_API_DECL void sg_commit(void);
+SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
+SOKOL_GFX_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
+SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
+SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
+SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
+SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
+SOKOL_GFX_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
+SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
+SOKOL_GFX_API_DECL void sg_end_pass(void);
+SOKOL_GFX_API_DECL void sg_commit(void);
 
 /* getting information */
-SOKOL_API_DECL sg_desc sg_query_desc(void);
-SOKOL_API_DECL sg_backend sg_query_backend(void);
-SOKOL_API_DECL sg_features sg_query_features(void);
-SOKOL_API_DECL sg_limits sg_query_limits(void);
-SOKOL_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
+SOKOL_GFX_API_DECL sg_desc sg_query_desc(void);
+SOKOL_GFX_API_DECL sg_backend sg_query_backend(void);
+SOKOL_GFX_API_DECL sg_features sg_query_features(void);
+SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
+SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
 /* get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID) */
-SOKOL_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
-SOKOL_API_DECL sg_resource_state sg_query_image_state(sg_image img);
-SOKOL_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
-SOKOL_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
-SOKOL_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_shader_state(sg_shader shd);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_pipeline_state(sg_pipeline pip);
+SOKOL_GFX_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
 /* get runtime information about a resource */
-SOKOL_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
-SOKOL_API_DECL sg_image_info sg_query_image_info(sg_image img);
-SOKOL_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
-SOKOL_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
-SOKOL_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
+SOKOL_GFX_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
+SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
+SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
+SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
+SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
 /* get resource creation desc struct with their default values replaced */
-SOKOL_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
-SOKOL_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
-SOKOL_API_DECL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
-SOKOL_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
-SOKOL_API_DECL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
+SOKOL_GFX_API_DECL sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc* desc);
+SOKOL_GFX_API_DECL sg_image_desc sg_query_image_defaults(const sg_image_desc* desc);
+SOKOL_GFX_API_DECL sg_shader_desc sg_query_shader_defaults(const sg_shader_desc* desc);
+SOKOL_GFX_API_DECL sg_pipeline_desc sg_query_pipeline_defaults(const sg_pipeline_desc* desc);
+SOKOL_GFX_API_DECL sg_pass_desc sg_query_pass_defaults(const sg_pass_desc* desc);
 
 /* separate resource allocation and initialization (for async setup) */
-SOKOL_API_DECL sg_buffer sg_alloc_buffer(void);
-SOKOL_API_DECL sg_image sg_alloc_image(void);
-SOKOL_API_DECL sg_shader sg_alloc_shader(void);
-SOKOL_API_DECL sg_pipeline sg_alloc_pipeline(void);
-SOKOL_API_DECL sg_pass sg_alloc_pass(void);
-SOKOL_API_DECL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc);
-SOKOL_API_DECL void sg_init_image(sg_image img_id, const sg_image_desc* desc);
-SOKOL_API_DECL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
-SOKOL_API_DECL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
-SOKOL_API_DECL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
-SOKOL_API_DECL void sg_fail_buffer(sg_buffer buf_id);
-SOKOL_API_DECL void sg_fail_image(sg_image img_id);
-SOKOL_API_DECL void sg_fail_shader(sg_shader shd_id);
-SOKOL_API_DECL void sg_fail_pipeline(sg_pipeline pip_id);
-SOKOL_API_DECL void sg_fail_pass(sg_pass pass_id);
+SOKOL_GFX_API_DECL sg_buffer sg_alloc_buffer(void);
+SOKOL_GFX_API_DECL sg_image sg_alloc_image(void);
+SOKOL_GFX_API_DECL sg_shader sg_alloc_shader(void);
+SOKOL_GFX_API_DECL sg_pipeline sg_alloc_pipeline(void);
+SOKOL_GFX_API_DECL sg_pass sg_alloc_pass(void);
+SOKOL_GFX_API_DECL void sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_image(sg_image img_id, const sg_image_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc* desc);
+SOKOL_GFX_API_DECL void sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc);
+SOKOL_GFX_API_DECL void sg_fail_buffer(sg_buffer buf_id);
+SOKOL_GFX_API_DECL void sg_fail_image(sg_image img_id);
+SOKOL_GFX_API_DECL void sg_fail_shader(sg_shader shd_id);
+SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip_id);
+SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass_id);
 
 /* rendering contexts (optional) */
-SOKOL_API_DECL sg_context sg_setup_context(const sg_context_desc* desc);
-SOKOL_API_DECL void sg_activate_context(sg_context ctx_id);
-SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
+SOKOL_GFX_API_DECL sg_context sg_setup_context(const sg_context_desc* desc);
+SOKOL_GFX_API_DECL void sg_activate_context(sg_context ctx_id);
+SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
 /* Backend-specific helper functions, these may come in handy for mixing
    sokol-gfx rendering with 'native backend' rendering functions.
@@ -2297,13 +2305,13 @@ SOKOL_API_DECL void sg_discard_context(sg_context ctx_id);
 */
 
 /* D3D11: return ID3D11Device */
-SOKOL_API_DECL const void* sg_d3d11_device(void);
+SOKOL_GFX_API_DECL const void* sg_d3d11_device(void);
 
 /* Metal: return __bridge-casted MTLDevice */
-SOKOL_API_DECL const void* sg_mtl_device(void);
+SOKOL_GFX_API_DECL const void* sg_mtl_device(void);
 
 /* Metal: return __bridge-casted MTLRenderCommandEncoder in current pass (or zero if outside pass) */
-SOKOL_API_DECL const void* sg_mtl_render_command_encoder(void);
+SOKOL_GFX_API_DECL const void* sg_mtl_render_command_encoder(void);
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -2341,7 +2349,7 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
 #endif // SOKOL_GFX_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_GFX_IMPL
 #define SOKOL_GFX_IMPL_INCLUDED (1)
 
 #if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
@@ -11533,7 +11541,7 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
 /*
     How BindGroups work in WebGPU:
 
-    - up to 4 bind groups can be bound simultanously
+    - up to 4 bind groups can be bound simultaneously
     - up to 16 bindings per bind group
     - 'binding' slots are local per bind group
     - in the shader:
@@ -14953,4 +14961,4 @@ SOKOL_API_IMPL const void* sg_mtl_render_command_encoder(void) {
 #pragma warning(pop)
 #endif
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_GFX_IMPL */

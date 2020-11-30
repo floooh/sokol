@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FETCH_IMPL)
+#define SOKOL_FETCH_IMPL
+#endif
 #ifndef SOKOL_FETCH_INCLUDED
 /*
     sokol_fetch.h -- asynchronous data loading/streaming
@@ -5,7 +8,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_FETCH_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -16,7 +20,8 @@
     SOKOL_FREE(p)               - your own free function (default: free(p))
     SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
-    SOKOL_API_DECL              - public function declaration prefix (default: extern)
+    SOKOL_FETCH_API_DECL        - public function declaration prefix (default: extern)
+    SOKOL_API_DECL              - same as SOKOL_FETCH_API_DECL
     SOKOL_API_IMPL              - public function implementation prefix (default: -)
     SFETCH_MAX_PATH             - max length of UTF-8 filesystem path / URL (default: 1024 bytes)
     SFETCH_MAX_USERDATA_UINT64  - max size of embedded userdata in number of uint64_t, userdata
@@ -29,7 +34,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_FETCH_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     NOTE: The following documentation talks a lot about "IO threads". Actual
@@ -829,13 +834,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_FETCH_API_DECL)
+#define SOKOL_FETCH_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_FETCH_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_FETCH_IMPL)
+#define SOKOL_FETCH_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_FETCH_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_FETCH_API_DECL extern
 #endif
 #endif
 
@@ -904,35 +912,35 @@ typedef struct sfetch_request_t {
 } sfetch_request_t;
 
 /* setup sokol-fetch (can be called on multiple threads) */
-SOKOL_API_DECL void sfetch_setup(const sfetch_desc_t* desc);
+SOKOL_FETCH_API_DECL void sfetch_setup(const sfetch_desc_t* desc);
 /* discard a sokol-fetch context */
-SOKOL_API_DECL void sfetch_shutdown(void);
+SOKOL_FETCH_API_DECL void sfetch_shutdown(void);
 /* return true if sokol-fetch has been setup */
-SOKOL_API_DECL bool sfetch_valid(void);
+SOKOL_FETCH_API_DECL bool sfetch_valid(void);
 /* get the desc struct that was passed to sfetch_setup() */
-SOKOL_API_DECL sfetch_desc_t sfetch_desc(void);
+SOKOL_FETCH_API_DECL sfetch_desc_t sfetch_desc(void);
 /* return the max userdata size in number of bytes (SFETCH_MAX_USERDATA_UINT64 * sizeof(uint64_t)) */
-SOKOL_API_DECL int sfetch_max_userdata_bytes(void);
+SOKOL_FETCH_API_DECL int sfetch_max_userdata_bytes(void);
 /* return the value of the SFETCH_MAX_PATH implementation config value */
-SOKOL_API_DECL int sfetch_max_path(void);
+SOKOL_FETCH_API_DECL int sfetch_max_path(void);
 
 /* send a fetch-request, get handle to request back */
-SOKOL_API_DECL sfetch_handle_t sfetch_send(const sfetch_request_t* request);
+SOKOL_FETCH_API_DECL sfetch_handle_t sfetch_send(const sfetch_request_t* request);
 /* return true if a handle is valid *and* the request is alive */
-SOKOL_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
+SOKOL_FETCH_API_DECL bool sfetch_handle_valid(sfetch_handle_t h);
 /* do per-frame work, moves requests into and out of IO threads, and invokes response-callbacks */
-SOKOL_API_DECL void sfetch_dowork(void);
+SOKOL_FETCH_API_DECL void sfetch_dowork(void);
 
 /* bind a data buffer to a request (request must not currently have a buffer bound, must be called from response callback */
-SOKOL_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size);
+SOKOL_FETCH_API_DECL void sfetch_bind_buffer(sfetch_handle_t h, void* buffer_ptr, uint32_t buffer_size);
 /* clear the 'buffer binding' of a request, returns previous buffer pointer (can be 0), must be called from response callback */
-SOKOL_API_DECL void* sfetch_unbind_buffer(sfetch_handle_t h);
+SOKOL_FETCH_API_DECL void* sfetch_unbind_buffer(sfetch_handle_t h);
 /* cancel a request that's in flight (will call response callback with .cancelled + .finished) */
-SOKOL_API_DECL void sfetch_cancel(sfetch_handle_t h);
+SOKOL_FETCH_API_DECL void sfetch_cancel(sfetch_handle_t h);
 /* pause a request (will call response callback each frame with .paused) */
-SOKOL_API_DECL void sfetch_pause(sfetch_handle_t h);
+SOKOL_FETCH_API_DECL void sfetch_pause(sfetch_handle_t h);
 /* continue a paused request */
-SOKOL_API_DECL void sfetch_continue(sfetch_handle_t h);
+SOKOL_FETCH_API_DECL void sfetch_continue(sfetch_handle_t h);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -945,7 +953,7 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 #endif // SOKOL_FETCH_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_FETCH_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
 #include <string.h> /* memset, memcpy */
 
@@ -2505,5 +2513,5 @@ SOKOL_API_IMPL void sfetch_cancel(sfetch_handle_t h) {
     }
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_FETCH_IMPL */
 
