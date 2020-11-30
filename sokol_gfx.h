@@ -3115,7 +3115,6 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
-    void (*make_context_current_cb)(void*);
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -3346,6 +3345,11 @@ typedef _sg_attachment_common_t _sg_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
+    const void* (*renderpass_descriptor_cb)(void);
+    const void* (*renderpass_descriptor_userdata_cb)(void*);
+    const void* (*drawable_cb)(void);
+    const void* (*drawable_userdata_cb)(void*);
+    void* user_data;
 } _sg_mtl_context_t;
 typedef _sg_mtl_context_t _sg_context_t;
 
@@ -3367,11 +3371,6 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    const void*(*renderpass_descriptor_cb)(void);
-    const void*(*renderpass_descriptor_userdata_cb)(void*);
-    const void*(*drawable_cb)(void);
-    const void*(*drawable_userdata_cb)(void*);
-    void* user_data;
     uint32_t frame_index;
     uint32_t cur_frame_rotate_index;
     uint32_t ub_size;
@@ -5605,7 +5604,7 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
 _SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.gl.valid);
     /* NOTE: ctx can be 0 to unset the current context */
-    if(ctx != NULL) {
+    if(ctx != NULL && ctx->context_make_current_userdata_cb) {
         ctx->context_make_current_userdata_cb(ctx->user_data);
     }
 
@@ -5620,6 +5619,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx, const
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
     ctx->context_make_current_userdata_cb = desc->gl.context_make_current_userdata_cb;
     ctx->user_data = desc->gl.user_data;
+    ctx->context_make_current_userdata_cb(ctx->user_data);
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
@@ -6329,6 +6329,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
 
+    _SG_GL_CHECK_ERROR();
+
     /* clear color and depth-stencil attachments if needed */
     bool clear_color = false;
     for (int i = 0; i < num_color_atts; i++) {
@@ -6373,6 +6375,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         _sg.gl.cache.cur_pipeline = 0;
         _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
     }
+    _SG_GL_CHECK_ERROR();
     bool use_mrt_clear = (0 != pass);
     #if defined(SOKOL_GLES2)
     use_mrt_clear = false;
@@ -6406,6 +6409,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     }
     #if !defined SOKOL_GLES2
     else {
+        _SG_GL_CHECK_ERROR();
         SOKOL_ASSERT(pass);
         for (int i = 0; i < num_color_atts; i++) {
             if (action->colors[i].action == SG_ACTION_CLEAR) {
@@ -9423,11 +9427,6 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
     _sg.mtl.valid = true;
-    _sg.mtl.renderpass_descriptor_cb = desc->context.metal.renderpass_descriptor_cb;
-    _sg.mtl.renderpass_descriptor_userdata_cb = desc->context.metal.renderpass_descriptor_userdata_cb;
-    _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
-    _sg.mtl.drawable_userdata_cb = desc->context.metal.drawable_userdata_cb;
-    _sg.mtl.user_data = desc->context.metal.user_data;
     _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
@@ -9497,9 +9496,15 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     SOKOL_ASSERT(ctx);
-    _SOKOL_UNUSED(ctx);
+
+    ctx->drawable_cb = desc->metal.drawable_cb;
+    ctx->drawable_userdata_cb = desc->metal.drawable_userdata_cb;
+    ctx->renderpass_descriptor_cb = desc->metal.renderpass_descriptor_cb;
+    ctx->renderpass_descriptor_userdata_cb = desc->metal.renderpass_descriptor_userdata_cb;
+    ctx->user_data = desc->metal.user_data;
+
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -10013,12 +10018,18 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_ds_image(const _sg_pass_t* pass) {
     return pass->mtl.ds_att.image;
 }
 
+// DISCUSS: Had to to forward declare this method here :/
+_SOKOL_PRIVATE _sg_context_t* _sg_lookup_context(const _sg_pools_t* p, uint32_t ctx_id);
 _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(_sg.mtl.renderpass_descriptor_cb || _sg.mtl.renderpass_descriptor_userdata_cb);
+
+    _sg_context_t* cur_context = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
+    SOKOL_ASSERT(cur_context);
+    SOKOL_ASSERT(cur_context->renderpass_descriptor_cb || cur_context->renderpass_descriptor_userdata_cb);
+
     _sg.mtl.in_pass = true;
     _sg.mtl.cur_width = w;
     _sg.mtl.cur_height = h;
@@ -10044,11 +10055,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     }
     else {
         /* default render pass, call user-provided callback to provide render pass descriptor */
-        if (_sg.mtl.renderpass_descriptor_cb) {
-            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_cb();
+        if (cur_context->renderpass_descriptor_cb) {
+            pass_desc = (__bridge MTLRenderPassDescriptor*) cur_context->renderpass_descriptor_cb();
         }
         else {
-            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
+            pass_desc = (__bridge MTLRenderPassDescriptor*) cur_context->renderpass_descriptor_userdata_cb(cur_context->user_data);
         }
 
     }
@@ -10159,9 +10170,12 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
 _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
-    SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+
+    _sg_context_t* cur_context = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
+    SOKOL_ASSERT(cur_context);
+    SOKOL_ASSERT(cur_context->drawable_cb || cur_context->drawable_userdata_cb);
 
     #if defined(_SG_TARGET_MACOS)
     [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, _sg.mtl.cur_ub_offset)];
@@ -10169,11 +10183,11 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
 
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = nil;
-    if (_sg.mtl.drawable_cb) {
-        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
+    if (cur_context->drawable_cb) {
+        cur_drawable = (__bridge id<MTLDrawable>) cur_context->drawable_cb();
     }
     else {
-        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
+        cur_drawable = (__bridge id<MTLDrawable>) cur_context->drawable_userdata_cb(cur_context->user_data);
     }
     [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
     [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
