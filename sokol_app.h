@@ -1646,14 +1646,13 @@ inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     - (instancetype)initWithSappWindow:(struct _sapp_window_t*)initWindow;
     @end
 #elif defined(SOKOL_GLCORE33)
-    @interface _sapp_macos_view : NSOpenGLView
+    @interface _sapp_macos_view : NSView
     {
         struct _sapp_window_t* window;
+        NSTrackingArea* trackingArea;
     }
     - (instancetype)initWithSappWindow:(struct _sapp_window_t*)initWindow
-                    initWithFrame:(NSRect)frameRect
-                    pixelFormat:(NSOpenGLPixelFormat*)glPixelFormat;
-    - (void)timerFired:(id)sender;
+                    initWithFrame:(NSRect)frameRect;
     @end
 #endif // SOKOL_GLCORE33
 
@@ -1671,6 +1670,9 @@ typedef struct {
     NSTrackingArea* tracking_area;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
+    #if defined(SOKOL_GLCORE33)
+    NSOpenGLContext* gl_ctx;
+    #endif
 } _sapp_macos_window_t;
 
 #endif // _SAPP_MACOS
@@ -3110,6 +3112,22 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     #endif    
 }
 
+void _sapp_macos_process_window_events(void){
+    NSEvent* event;
+    
+    do {
+        event = [NSApp nextEventMatchingMask: NSAnyEventMask
+                 untilDate: nil
+                 inMode: NSDefaultRunLoopMode
+                 dequeue: YES];
+        
+        if(event != NULL)
+            [NSApp sendEvent:event];
+    }
+    while (event != NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_macos_frame(void);
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_setup_pools();
@@ -3120,8 +3138,29 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     NSApp.delegate = _sapp.macos.app_dlg;
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
-    // NOTE: [NSApp run] never returns, instead cleanup code
-    // must be put into applicationWillTerminate
+    
+    while(!_sapp.quit_ordered){
+        _sapp_macos_frame();
+        
+        for (int i = 1; i < _sapp.window_pool.size; i++) {
+            if(_sapp.windows[i].id != SAPP_INVALID_ID){
+                _sapp_window_t* window = &_sapp.windows[i];
+
+                #if defined(SOKOL_METAL)
+                [window->macos.view draw];
+                #else
+                [window->macos.gl_ctx update];
+                [window->macos.gl_ctx flushBuffer];
+                #endif
+            }
+        }
+
+        _sapp_macos_process_window_events();
+    }
+
+    _sapp_call_cleanup();
+    _sapp_macos_discard_state();
+    _sapp_discard_state();
 }
 
 /* MacOS entry function */
@@ -3311,8 +3350,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
     }
     /* always make the main window the current context before frame() cb */
-    [[_sapp.main_window->macos.view openGLContext] makeCurrentContext];
-
+    #if defined(SOKOL_GLCORE33)
+        [_sapp.main_window->macos.gl_ctx makeCurrentContext];
+    #endif
+    
     _sapp_frame();
     if (_sapp.quit_requested) {
         /* triggers a shouldClose event but doesn't actually close the window, see windowShouldClose */
@@ -3350,14 +3391,17 @@ _SOKOL_PRIVATE void _sapp_macos_create_window(_sapp_window_t* window, const sapp
     window->macos.window.releasedWhenClosed = NO; // this is necessary for proper cleanup in applicationWillTerminate
     window->macos.window.title = [NSString stringWithUTF8String:window->window_title];
     window->macos.window.acceptsMouseMovedEvents = YES;
-    window->macos.window.restorable = YES;
+    // NOTE: The user would need to provide serialization of window manually for this to be useful.
+    window->macos.window.restorable = NO;
 
     window->macos.win_dlg = [[_sapp_macos_window_delegate alloc] initWithSappWindow:window];
-    window->macos.window.delegate = window->macos.win_dlg;
+    [window->macos.window setDelegate:window->macos.win_dlg];
     #if defined(SOKOL_METAL)
         window->macos.view = [[_sapp_macos_view alloc] initWithSappWindow:window];
         [window->macos.view updateTrackingAreas];
         window->macos.view.preferredFramesPerSecond = 60 / window->swap_interval;
+        window->macos.view.paused = true;
+        window->macos.view.enableSetNeedsDisplay = false;
         window->macos.view.device = _sapp.macos.mtl_device;
         window->macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         window->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3390,9 +3434,7 @@ _SOKOL_PRIVATE void _sapp_macos_create_window(_sapp_window_t* window, const sapp
 
         window->macos.view = [[_sapp_macos_view alloc]
             initWithSappWindow:window
-            initWithFrame:window_rect
-            pixelFormat:glpixelformat_obj];
-        _SAPP_OBJC_RELEASE(glpixelformat_obj);
+            initWithFrame:window_rect];
         [window->macos.view updateTrackingAreas];
         if (desc->high_dpi) {
             [window->macos.view setWantsBestResolutionOpenGLSurface:YES];
@@ -3401,16 +3443,15 @@ _SOKOL_PRIVATE void _sapp_macos_create_window(_sapp_window_t* window, const sapp
             [window->macos.view setWantsBestResolutionOpenGLSurface:NO];
         }
 
-        window->macos.window.contentView = window->macos.view;
+        [window->macos.window setContentView:window->macos.view];
         [window->macos.window makeFirstResponder:window->macos.view];
 
-        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:window->macos.view
-            selector:@selector(timerFired:)
-            userInfo:nil
-            repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
-        timer_obj = nil;
+        window->macos.gl_ctx = [[NSOpenGLContext alloc] initWithFormat:glpixelformat_obj shareContext:nil];
+        SOKOL_ASSERT(window->macos.gl_ctx != nil);
+
+        _SAPP_OBJC_RELEASE(glpixelformat_obj);
+
+        [window->macos.gl_ctx setView:window->macos.view];
     #endif
 
     if (window->fullscreen) {
@@ -3429,11 +3470,14 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
     _SAPP_OBJC_RELEASE(window->macos.tracking_area);
     _SAPP_OBJC_RELEASE(window->macos.win_dlg);
     _SAPP_OBJC_RELEASE(window->macos.view);
+    #if defined(SOKOL_GLCORE33)
+    _SAPP_OBJC_RELEASE(window->macos.gl_ctx);
+    #endif
     
     [window->macos.window close];
     _SAPP_OBJC_RELEASE(window->macos.window);
 
-    /* NOTE: glfw does a NSAutoreleasePool drain at this point, should we add this? */
+    /* DISCUSS: glfw does a NSAutoreleasePool drain at this point, should we add this? */
 }
 
 @implementation _sapp_macos_app_delegate
@@ -3450,6 +3494,8 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
     // TODO: I moved a fullscreen check into create_window, which means the fullscreen event won't arrive due to
     // sapp being invalid. Problematic? User knows it's a fullscreen at startup.
     _sapp.valid = true;
+    
+    [NSApp stop:nil];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -3602,14 +3648,20 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
 #elif defined(SOKOL_GLCORE33)
 - (instancetype)initWithSappWindow:(struct _sapp_window_t*)initWindow
                      initWithFrame:(NSRect)frameRect
-                       pixelFormat:(NSOpenGLPixelFormat*)glPixelFormat
 {
-    self = [super initWithFrame:frameRect pixelFormat:glPixelFormat];
+    self = [super initWithFrame:frameRect];
     if(self != nil){
         window = initWindow;
+        trackingArea = nil;
     }
     
     return self;
+}
+
+- (void)dealloc
+{
+    [trackingArea release];
+    [super dealloc];
 }
 
 /* NOTE: this is a hack/fix when the initial window size has been clipped by
@@ -3623,27 +3675,18 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
 */
 - (void)reshape {
     _sapp_macos_update_dimensions(window);
-    [super reshape];
 }
-- (void)timerFired:(id)sender {
-    _SOKOL_UNUSED(sender);
-    [self setNeedsDisplay:YES];
-}
+
 - (void)prepareOpenGL {
-    [super prepareOpenGL];
     GLint swapInt = 1;
-    NSOpenGLContext* ctx = [window->macos.view openGLContext];
-    [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
-    [ctx makeCurrentContext];
+    [window->macos.gl_ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+    [window->macos.gl_ctx makeCurrentContext];
 }
 #endif
 
+// TODO: check if this is needed
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
-    _sapp_macos_frame();
-    #if !defined(SOKOL_METAL)
-    [[window->macos.view openGLContext] flushBuffer];
-    #endif
 }
 
 - (BOOL)isOpaque {
@@ -3828,7 +3871,7 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* window) {
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
-    _SOKOL_UNUSED(event)
+    _SOKOL_UNUSED(event);
     if (window->user_cursor) {
         _sapp_macos_app_event(window, SAPP_EVENTTYPE_UPDATE_CURSOR);
     }
@@ -10774,7 +10817,7 @@ SOKOL_API_DECL void sapp_gl_make_context_current(sapp_window window_id){
         #elif defined(_SAPP_LINUX)
             _sapp_glx_make_current(window);
         #elif defined(_SAPP_MACOS)
-            [[window->macos.view openGLContext] makeCurrentContext];
+            [window->macos.gl_ctx makeCurrentContext];
         #endif
     #else
         _SOKOL_UNUSED(window_id);
