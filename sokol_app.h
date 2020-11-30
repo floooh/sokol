@@ -10671,7 +10671,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     for (int i = 1; i < _sapp.window_pool.size; i++) {
         if(_sapp.windows[i].id != SAPP_INVALID_ID){
             // TODO: Is there a better way to handle this instead of creating a tmp object?
-            sapp_destroy_window(_sapp_window(_sapp.windows[i].id) });
+            sapp_destroy_window(_sapp_window(_sapp.windows[i].id));
         }
     }
     
