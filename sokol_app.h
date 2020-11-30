@@ -1306,7 +1306,7 @@ SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
 /* macOS: get bridged pointer to macOS NSWindow for specified window */
 SOKOL_APP_API_DECL const void* sapp_macos_window_get_window(sapp_window window_id);
 /* iOS: get bridged pointer to iOS UIWindow */
-SOKOL_APP_APP_API_DECL const void* sapp_ios_get_window(void);
+SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
 
 /* D3D11: get pointer to ID3D11Device object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
@@ -10735,11 +10735,11 @@ SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
 }
 #endif
 
-SOKOL_API_DECL sapp_window sapp_main_window(){
+SOKOL_APP_IMPL sapp_window sapp_main_window(){
     return _sapp_window(_sapp.main_window->id);
 }
 
-SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
+SOKOL_API_IMPL sapp_window sapp_create_window(const sapp_window_desc* desc){
     SOKOL_ASSERT(desc);
     sapp_window_desc desc_def = _sapp_window_desc_defaults(desc);
     sapp_window window_id = _sapp_alloc_window();
@@ -10776,7 +10776,7 @@ SOKOL_API_DECL sapp_window sapp_create_window(const sapp_window_desc* desc){
     return window_id;
 }
 
-SOKOL_API_DECL void sapp_destroy_window(sapp_window window_id){
+SOKOL_API_IMPL void sapp_destroy_window(sapp_window window_id){
     SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
@@ -10814,7 +10814,7 @@ SOKOL_API_DECL void sapp_destroy_window(sapp_window window_id){
     _sapp_pool_free_index(&_sapp.window_pool, slot_index);
 }
 
-SOKOL_API_DECL void sapp_gl_make_context_current(sapp_window window_id){
+SOKOL_API_IMPL void sapp_gl_make_context_current(sapp_window window_id){
     #if defined(SOKOL_GLCORE33)
         SOKOL_ASSERT(window_id.id != SAPP_INVALID_ID);
         _sapp_window_t* window = _sapp_lookup_window(window_id.id);
@@ -10836,7 +10836,7 @@ SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
 }
 
-SOKOL_API_DECL bool sapp_window_isvalid(sapp_window window) {
+SOKOL_API_IMPL bool sapp_window_isvalid(sapp_window window) {
     bool is_valid = !(window.id == SAPP_INVALID_ID) && _sapp_lookup_window(window.id);
     return is_valid;
 }
@@ -10937,22 +10937,22 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-SOKOL_APP_API_DECL bool sapp_is_fullscreen() {
+SOKOL_API_IMPL bool sapp_is_fullscreen() {
     return sapp_window_is_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
-SOKOL_APP_API_DECL bool sapp_window_is_fullscreen(sapp_window window_id) {
+SOKOL_API_IMPL bool sapp_window_is_fullscreen(sapp_window window_id) {
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
 
     return window->fullscreen;
 }
 
-SOKOL_APP_API_DECL void sapp_toggle_fullscreen() {
+SOKOL_API_IMPL void sapp_toggle_fullscreen() {
     sapp_window_toggle_fullscreen(_sapp_window(_sapp.main_window->id));
 }
 
-SOKOL_APP_API_DECL void sapp_window_toggle_fullscreen(sapp_window window_id) {
+SOKOL_API_IMPL void sapp_window_toggle_fullscreen(sapp_window window_id) {
     _sapp_window_t* window = _sapp_lookup_window(window_id.id);
     SOKOL_ASSERT(window);
 
