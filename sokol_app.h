@@ -1996,6 +1996,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
             #include SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH
         #endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
+        #if defined(SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH)
+            #include SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH
+        #endif /*SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH*/
     #endif /* SOKOL_WAYLAND */
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -2607,6 +2610,8 @@ typedef struct {
     /* pointer/cursor related data */
     struct wl_cursor *cursor;
     struct wl_surface *cursor_surface;
+    struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
+    struct zwp_relative_pointer_v1 *relative_pointer;
     uint32_t serial;
 
     /* accumulated touch state */
@@ -12141,6 +12146,8 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
     if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
+    if (NULL != _sapp.wl.relative_pointer) zwp_relative_pointer_v1_destroy(_sapp.wl.relative_pointer);
+    if (NULL != _sapp.wl.relative_pointer_manager) zwp_relative_pointer_manager_v1_destroy(_sapp.wl.relative_pointer_manager);
     if (NULL != _sapp.wl.pointer) wl_pointer_destroy(_sapp.wl.pointer);
     if (NULL != _sapp.wl.cursor_surface) wl_surface_destroy(_sapp.wl.cursor_surface);
     if (NULL != _sapp.wl.keyboard) wl_keyboard_destroy(_sapp.wl.keyboard);
@@ -12533,14 +12540,8 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_motion(void* data, struct wl_pointer* point
 
     float new_x = (float) wl_fixed_to_double(surface_x) * _sapp.dpi_scale;
     float new_y = (float) wl_fixed_to_double(surface_y) * _sapp.dpi_scale;
-    /* don't update dx/dy in the very first update */
-    if (_sapp.mouse.pos_valid) {
-        _sapp.mouse.dx = new_x - _sapp.mouse.x;
-        _sapp.mouse.dy = new_y - _sapp.mouse.y;
-    }
     _sapp.mouse.x = new_x;
     _sapp.mouse.y = new_y;
-    _sapp.mouse.pos_valid = true;
     _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
 }
 
@@ -12554,6 +12555,27 @@ _SOKOL_PRIVATE const struct wl_pointer_listener _sapp_wl_pointer_listener = {
     .frame = _sapp_wl_pointer_frame,
     .leave = _sapp_wl_pointer_leave,
     .motion = _sapp_wl_pointer_motion,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_relative_pointer_motion(void* data, struct zwp_relative_pointer_v1* relative_pointer, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(relative_pointer);
+    _SOKOL_UNUSED(utime_hi);
+    _SOKOL_UNUSED(utime_lo);
+    _SOKOL_UNUSED(dx_unaccel);
+    _SOKOL_UNUSED(dy_unaccel);
+
+    /* don't update dx/dy in the very first update */
+    if (_sapp.mouse.pos_valid) {
+        _sapp.mouse.dx = (float) wl_fixed_to_double(dx);
+        _sapp.mouse.dy = (float) wl_fixed_to_double(dy);
+    }
+    _sapp.mouse.pos_valid = true;
+    _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+}
+
+_SOKOL_PRIVATE const struct zwp_relative_pointer_v1_listener _sapp_wl_relative_pointer_listener = {
+    .relative_motion = _sapp_wl_relative_pointer_motion,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_touch_cancel(void* data, struct wl_touch* touch) {
@@ -12653,6 +12675,11 @@ _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat
     if (has_pointer && NULL == _sapp.wl.pointer) {
         _sapp.wl.pointer = wl_seat_get_pointer(seat);
         wl_pointer_add_listener(_sapp.wl.pointer, &_sapp_wl_pointer_listener, NULL);
+
+        if (NULL != _sapp.wl.relative_pointer_manager) {
+            _sapp.wl.relative_pointer = zwp_relative_pointer_manager_v1_get_relative_pointer(_sapp.wl.relative_pointer_manager, _sapp.wl.pointer);
+            zwp_relative_pointer_v1_add_listener(_sapp.wl.relative_pointer, &_sapp_wl_relative_pointer_listener, NULL);
+        }
 
         if (NULL == _sapp.wl.cursor_surface) {
             struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24, _sapp.wl.shm);
@@ -12766,6 +12793,8 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
         }
     } else if (0 == strcmp(interface, wl_shm_interface.name)) {
         _sapp.wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+    } else if (0 == strcmp(interface, zwp_relative_pointer_manager_v1_interface.name)) {
+        _sapp.wl.relative_pointer_manager = wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
     }
 }
 
