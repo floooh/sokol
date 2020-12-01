@@ -99,51 +99,53 @@
 
     FEATURE/PLATFORM MATRIX
     =======================
-                        | Windows | macOS | Linux |  iOS  | Android | UWP  | HTML5
-    --------------------+---------+-------+-------+-------+---------+------+-------
-    gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---
-    gles2/webgl         | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    gles3/webgl2        | ---     | ---   | YES(2)| YES   | YES     | ---  | YES
-    metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---
-    d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | YES
-    CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | YES
-    MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_SCROLL        | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | YES
-    RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | YES
-    IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???
-    key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | YES
-    screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | YES
-    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | YES
+                        | Windows | macOS | Linux  |  iOS  | Android | UWP  | HTML5
+    --------------------+---------+-------+--------+-------+---------+------+-------
+    gl 3.x              | YES     | YES   | YES    | ---   | ---     | ---  | ---
+    gles2/webgl         | ---     | ---   | YES(2) | YES   | YES     | ---  | YES
+    gles3/webgl2        | ---     | ---   | YES(2) | YES   | YES     | ---  | YES
+    metal               | ---     | YES   | ---    | YES   | ---     | ---  | ---
+    d3d11               | YES     | ---   | ---    | ---   | ---     | YES  | ---
+    KEY_DOWN            | YES     | YES   | YES    | SOME  | TODO    | YES  | YES
+    KEY_UP              | YES     | YES   | YES    | SOME  | TODO    | YES  | YES
+    CHAR                | YES     | YES   | YES    | YES   | TODO    | YES  | YES
+    MOUSE_DOWN          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_UP            | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_SCROLL        | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_MOVE          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_ENTER         | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    MOUSE_LEAVE         | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    TOUCHES_BEGAN       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_MOVED       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_ENDED       | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    TOUCHES_CANCELLED   | ---     | ---   | YES(3) | YES   | YES     | TODO | YES
+    RESIZED             | YES     | YES   | YES    | YES   | YES     | YES  | YES
+    ICONIFIED           | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
+    RESTORED            | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
+    FOCUSED             | YES     | YES   | YES(4) | ---   | ---     | ---  | YES
+    UNFOCUSED           | YES     | YES   | YES(4) | ---   | ---     | ---  | YES
+    SUSPENDED           | ---     | ---   | ---    | YES   | YES     | YES  | TODO
+    RESUMED             | ---     | ---   | ---    | YES   | YES     | YES  | TODO
+    QUIT_REQUESTED      | YES     | YES   | YES    | ---   | ---     | ---  | YES
+    IME                 | TODO    | TODO? | TODO   | ???   | TODO    | ---  | ???
+    key repeat flag     | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    windowed            | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
+    fullscreen          | YES     | YES   | YES    | YES   | YES     | YES  | ---
+    mouse hide          | YES     | YES   | YES    | ---   | ---     | YES  | YES
+    mouse lock          | YES     | YES   | YES(4) | ---   | ---     | TODO | YES
+    set cursor type     | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
+    screen keyboard     | ---     | ---   | ---    | YES   | TODO    | TODO | YES
+    swap interval       | YES     | YES   | YES(4) | YES   | TODO    | ---  | YES
+    high-dpi            | YES     | YES   | YES(3) | YES   | YES     | YES  | YES
+    clipboard           | YES     | YES   | TODO   | ---   | ---     | TODO | YES
+    MSAA                | YES     | YES   | YES(4) | YES   | YES     | TODO | YES
+    drag'n'drop         | YES     | YES   | YES(4) | ---   | ---     | TODO | YES
+    window icon         | YES     | YES(1)| YES(4) | ---   | ---     | TODO | YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
-    (2) supported with EGL only (not GLX)
+    (2) supported with EGL only (not GLX, nor wayland)
+    (3) supported with wayland only, not on X11
+    (4) supported with X11 only, not on wayland
 
     STEP BY STEP
     ============
