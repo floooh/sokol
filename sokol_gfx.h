@@ -1961,11 +1961,21 @@ typedef struct sg_trace_hooks {
     void (*alloc_shader)(sg_shader result, void* user_data);
     void (*alloc_pipeline)(sg_pipeline result, void* user_data);
     void (*alloc_pass)(sg_pass result, void* user_data);
+    void (*dealloc_buffer)(sg_buffer buf_id, void* user_data);
+    void (*dealloc_image)(sg_image img_id, void* user_data);
+    void (*dealloc_shader)(sg_shader shd_id, void* user_data);
+    void (*dealloc_pipeline)(sg_pipeline pip_id, void* user_data);
+    void (*dealloc_pass)(sg_pass pass_id, void* user_data);
     void (*init_buffer)(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data);
     void (*init_image)(sg_image img_id, const sg_image_desc* desc, void* user_data);
     void (*init_shader)(sg_shader shd_id, const sg_shader_desc* desc, void* user_data);
     void (*init_pipeline)(sg_pipeline pip_id, const sg_pipeline_desc* desc, void* user_data);
     void (*init_pass)(sg_pass pass_id, const sg_pass_desc* desc, void* user_data);
+    void (*uninit_buffer)(sg_buffer buf_id, void* user_data);
+    void (*uninit_image)(sg_image img_id, void* user_data);
+    void (*uninit_shader)(sg_shader shd_id, void* user_data);
+    void (*uninit_pipeline)(sg_pipeline pip_id, void* user_data);
+    void (*uninit_pass)(sg_pass pass_id, void* user_data);
     void (*fail_buffer)(sg_buffer buf_id, void* user_data);
     void (*fail_image)(sg_image img_id, void* user_data);
     void (*fail_shader)(sg_shader shd_id, void* user_data);
@@ -12694,34 +12704,57 @@ _SOKOL_PRIVATE void _sg_pool_free_index(_sg_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
+_SOKOL_PRIVATE void _sg_reset_slot(_sg_slot_t* slot) {
+    SOKOL_ASSERT(slot);
+    memset(slot, 0, sizeof(_sg_slot_t));
+}
+
 _SOKOL_PRIVATE void _sg_reset_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
+    _sg_slot_t slot = buf->slot;
     memset(buf, 0, sizeof(_sg_buffer_t));
+    buf->slot = slot;
+    buf->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_reset_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
+    _sg_slot_t slot = img->slot;
     memset(img, 0, sizeof(_sg_image_t));
+    img->slot = slot;
+    img->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_reset_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
+    _sg_slot_t slot = shd->slot;
     memset(shd, 0, sizeof(_sg_shader_t));
+    shd->slot = slot;
+    shd->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_reset_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
+    _sg_slot_t slot = pip->slot;
     memset(pip, 0, sizeof(_sg_pipeline_t));
+    pip->slot = slot;
+    pip->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_reset_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
+    _sg_slot_t slot = pass->slot;
     memset(pass, 0, sizeof(_sg_pass_t));
+    pass->slot = slot;
+    pass->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_reset_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    _sg_slot_t slot = ctx->slot;
     memset(ctx, 0, sizeof(_sg_context_t));
+    ctx->slot = slot;
+    ctx->slot.state = SG_RESOURCESTATE_ALLOC;
 }
 
 _SOKOL_PRIVATE void _sg_setup_pools(_sg_pools_t* p, const sg_desc* desc) {
@@ -13902,26 +13935,41 @@ _SOKOL_PRIVATE sg_pass _sg_alloc_pass(void) {
 
 _SOKOL_PRIVATE void _sg_dealloc_buffer(sg_buffer buf_id) {
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID);
+    _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_reset_slot(&buf->slot);
     _sg_pool_free_index(&_sg.pools.buffer_pool, _sg_slot_index(buf_id.id));
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_image(sg_image img_id) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID);
+    _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_reset_slot(&img->slot);
     _sg_pool_free_index(&_sg.pools.image_pool, _sg_slot_index(img_id.id));
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_shader(sg_shader shd_id) {
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID);
+    _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
+    SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_reset_slot(&shd->slot);
     _sg_pool_free_index(&_sg.pools.shader_pool, _sg_slot_index(shd_id.id));
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID);
+    _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
+    SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_reset_slot(&pip->slot);
     _sg_pool_free_index(&_sg.pools.pipeline_pool, _sg_slot_index(pip_id.id));
 }
 
 _SOKOL_PRIVATE void _sg_dealloc_pass(sg_pass pass_id) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID);
+    _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
+    SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
+    _sg_reset_slot(&pass->slot);
     _sg_pool_free_index(&_sg.pools.pass_pool, _sg_slot_index(pass_id.id));
 }
 
@@ -14225,6 +14273,7 @@ SOKOL_API_IMPL void sg_discard_context(sg_context ctx_id) {
     if (ctx) {
         _sg_destroy_context(ctx);
         _sg_reset_context(ctx);
+        _sg_reset_slot(&ctx->slot);
         _sg_pool_free_index(&_sg.pools.context_pool, _sg_slot_index(ctx_id.id));
     }
     _sg.active_context.id = SG_INVALID_ID;
