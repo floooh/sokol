@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](#updates) (**28-Nov-2020** per-header SOKOL_IMPL and SOKOL_API_DECL defines)
+[**See what's new**](#updates) (**02-Dec-2020** sokol_gfx.h: new sg_uninit_xxx() and sg_dealloc_xxx() functions)
 
 ## Examples and Related Projects
 
@@ -441,6 +441,19 @@ Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage exampl
 
 # Updates
 
+- **02-Dec-2020**: sokol_gfx.h has a couple new public API functions for
+destroying resources in two steps:
+    - sg_uninit_buffer + sg_dealloc_buffer
+    - sg_uninit_image + sg_dealloc_image
+    - sg_uninit_shader + sg_dealloc_shader
+    - sg_uninit_pipeline + sg_dealloc_pipeline
+    - sg_uninit_pass + sg_dealloc_pass
+
+    Calling both functions in this order is identical with calling the
+    traditional sg_destroy_xxx() functions. See this PR for more details:
+    https://github.com/floooh/sokol/pull/435. Many thanks to @oviano for the
+    PR!
+
 - **28-Nov-2020**: In addition to the generic SOKOL_API_DECL and SOKOL_IMPL
 defines there are now header-specific versions SOKOL_xxx_API_DECL and
 SOKOL_xxx_IMPL (for instance SOKOL_GFX_API_DECL and SOKOL_GFX_IMPL). The
@@ -448,9 +461,9 @@ original motivation for splitting the SOKOL_API_DECL defines up is described
 here: https://github.com/floooh/sokol/issues/428). The same change for
 SOKOL_IMPL also finally unifies the approach used in the utility headers (in
 the ```util``` subdirectory), which exclusively used the SOKOL_xxx_IMPL
-pattern with the core headers which exclusively used SOKOL_IMPL before
-(all headers accept both patterns now).
-Many thanks to @iboB for providing the API_DECL PR!
+pattern with the core headers which exclusively used SOKOL_IMPL before (all
+headers accept both patterns now). Many thanks to @iboB for providing the
+API_DECL PR!
 
 - **17-Nov-2020**: A new utility header **sokol_shape.h** to generate
   vertices+indices for simple shapes (plane, box, sphere, cylinder and torus),
