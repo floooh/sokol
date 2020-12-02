@@ -132,7 +132,7 @@
     windowed            | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
     fullscreen          | YES     | YES   | YES    | YES   | YES     | YES  | ---
     mouse hide          | YES     | YES   | YES    | ---   | ---     | YES  | YES
-    mouse lock          | YES     | YES   | YES(4) | ---   | ---     | TODO | YES
+    mouse lock          | YES     | YES   | YES    | ---   | ---     | TODO | YES
     set cursor type     | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
     screen keyboard     | ---     | ---   | ---    | YES   | TODO    | TODO | YES
     swap interval       | YES     | YES   | YES(4) | YES   | TODO    | ---  | YES
@@ -1998,6 +1998,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
             #include SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH
         #endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
+        #if defined(SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH)
+            #include SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH
+        #endif /* SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH */
         #if defined(SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH)
             #include SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH
         #endif /*SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH*/
@@ -2612,6 +2615,8 @@ typedef struct {
     /* pointer/cursor related data */
     struct wl_cursor *cursor;
     struct wl_surface *cursor_surface;
+    struct zwp_locked_pointer_v1 *locked_pointer;
+    struct zwp_pointer_constraints_v1 *pointer_constraints;
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_relative_pointer_v1 *relative_pointer;
     uint32_t serial;
@@ -12148,6 +12153,8 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
     if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
+    if (NULL != _sapp.wl.locked_pointer) zwp_locked_pointer_v1_destroy(_sapp.wl.locked_pointer);
+    if (NULL != _sapp.wl.pointer_constraints) zwp_pointer_constraints_v1_destroy(_sapp.wl.pointer_constraints);
     if (NULL != _sapp.wl.relative_pointer) zwp_relative_pointer_v1_destroy(_sapp.wl.relative_pointer);
     if (NULL != _sapp.wl.relative_pointer_manager) zwp_relative_pointer_manager_v1_destroy(_sapp.wl.relative_pointer_manager);
     if (NULL != _sapp.wl.pointer) wl_pointer_destroy(_sapp.wl.pointer);
@@ -12173,6 +12180,25 @@ _SOKOL_PRIVATE void _sapp_wl_show_mouse(bool show, uint32_t serial) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_wl_locked_pointer_locked(void* data, struct zwp_locked_pointer_v1* locked_pointer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(locked_pointer);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_locked_pointer_unlocked(void* data, struct zwp_locked_pointer_v1* locked_pointer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(locked_pointer);
+    if (NULL != _sapp.wl.locked_pointer) {
+        zwp_locked_pointer_v1_destroy(_sapp.wl.locked_pointer);
+        _sapp.wl.locked_pointer = NULL;
+    }
+}
+
+_SOKOL_PRIVATE const struct zwp_locked_pointer_v1_listener _sapp_wl_locked_pointer_listener = {
+    .locked = _sapp_wl_locked_pointer_locked,
+    .unlocked = _sapp_wl_locked_pointer_unlocked,
+};
+
 _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
     if (lock == _sapp.mouse.locked) {
         return;
@@ -12180,12 +12206,13 @@ _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
     _sapp.mouse.dx = 0.0f;
     _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = lock;
-    if (_sapp.mouse.locked) {
-        /* WL-TODO: hide/lock cursor
-         *          - use pointer-constaints protocol extension */
-    } else {
-        /* WL-TODO: show/unlock cursor
-         *          - use pointer-constaints protocol extension */
+    if (NULL != _sapp.wl.pointer && NULL != _sapp.wl.pointer_constraints) {
+        if (_sapp.mouse.locked) {
+            _sapp.wl.locked_pointer = zwp_pointer_constraints_v1_lock_pointer(_sapp.wl.pointer_constraints, _sapp.wl.surface, _sapp.wl.pointer, NULL, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT);
+            zwp_locked_pointer_v1_add_listener(_sapp.wl.locked_pointer, &_sapp_wl_locked_pointer_listener, NULL);
+        } else {
+            _sapp_wl_locked_pointer_unlocked(NULL, NULL);
+        }
     }
 }
 
@@ -12797,6 +12824,8 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
         _sapp.wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     } else if (0 == strcmp(interface, zwp_relative_pointer_manager_v1_interface.name)) {
         _sapp.wl.relative_pointer_manager = wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
+    } else if (0 == strcmp(interface, zwp_pointer_constraints_v1_interface.name)) {
+        _sapp.wl.pointer_constraints = wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1);
     }
 }
 
