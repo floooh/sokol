@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GFX_IMGUI_IMPL)
+#define SOKOL_GFX_IMGUI_IMPL
+#endif
 #ifndef SOKOL_GFX_IMGUI_INCLUDED
 /*
     sokol_gfx_imgui.h -- debug-inspection UI for sokol_gfx.h using Dear ImGui
@@ -5,7 +8,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-
+        #define SOKOL_IMPL or
         #define SOKOL_GFX_IMGUI_IMPL
 
     before you include this file in *one* C or C++ file to create the
@@ -44,7 +47,8 @@
                                default: SOKOL_ASSERT(false)
         SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
         SOKOL_FREE(p)       -- your own memory free function, default: free(p)
-        SOKOL_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
+        SOKOL_API_DECL      - same as SOKOL_GFX_IMGUI_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_gfx_imgui.h is compiled as a DLL, define the following before
@@ -52,7 +56,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GFX_IMGUI_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     STEP BY STEP:
@@ -165,13 +169,16 @@
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GFX_IMGUI_API_DECL)
+#define SOKOL_GFX_IMGUI_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_GFX_IMGUI_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GFX_IMGUI_IMPL)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GFX_IMGUI_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GFX_IMGUI_API_DECL extern
 #endif
 #endif
 
@@ -296,11 +303,21 @@ typedef enum {
     SG_IMGUI_CMD_ALLOC_SHADER,
     SG_IMGUI_CMD_ALLOC_PIPELINE,
     SG_IMGUI_CMD_ALLOC_PASS,
+    SG_IMGUI_CMD_DEALLOC_BUFFER,
+    SG_IMGUI_CMD_DEALLOC_IMAGE,
+    SG_IMGUI_CMD_DEALLOC_SHADER,
+    SG_IMGUI_CMD_DEALLOC_PIPELINE,
+    SG_IMGUI_CMD_DEALLOC_PASS,
     SG_IMGUI_CMD_INIT_BUFFER,
     SG_IMGUI_CMD_INIT_IMAGE,
     SG_IMGUI_CMD_INIT_SHADER,
     SG_IMGUI_CMD_INIT_PIPELINE,
     SG_IMGUI_CMD_INIT_PASS,
+    SG_IMGUI_CMD_UNINIT_BUFFER,
+    SG_IMGUI_CMD_UNINIT_IMAGE,
+    SG_IMGUI_CMD_UNINIT_SHADER,
+    SG_IMGUI_CMD_UNINIT_PIPELINE,
+    SG_IMGUI_CMD_UNINIT_PASS,
     SG_IMGUI_CMD_FAIL_BUFFER,
     SG_IMGUI_CMD_FAIL_IMAGE,
     SG_IMGUI_CMD_FAIL_SHADER,
@@ -440,6 +457,26 @@ typedef struct {
 
 typedef struct {
     sg_buffer buffer;
+} sg_imgui_args_dealloc_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_dealloc_image_t;
+
+typedef struct {
+    sg_shader shader;
+} sg_imgui_args_dealloc_shader_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_dealloc_pipeline_t;
+
+typedef struct {
+    sg_pass pass;
+} sg_imgui_args_dealloc_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
 } sg_imgui_args_init_buffer_t;
 
 typedef struct {
@@ -457,6 +494,26 @@ typedef struct {
 typedef struct {
     sg_pass pass;
 } sg_imgui_args_init_pass_t;
+
+typedef struct {
+    sg_buffer buffer;
+} sg_imgui_args_uninit_buffer_t;
+
+typedef struct {
+    sg_image image;
+} sg_imgui_args_uninit_image_t;
+
+typedef struct {
+    sg_shader shader;
+} sg_imgui_args_uninit_shader_t;
+
+typedef struct {
+    sg_pipeline pipeline;
+} sg_imgui_args_uninit_pipeline_t;
+
+typedef struct {
+    sg_pass pass;
+} sg_imgui_args_uninit_pass_t;
 
 typedef struct {
     sg_buffer buffer;
@@ -509,11 +566,21 @@ typedef union {
     sg_imgui_args_alloc_shader_t alloc_shader;
     sg_imgui_args_alloc_pipeline_t alloc_pipeline;
     sg_imgui_args_alloc_pass_t alloc_pass;
+    sg_imgui_args_dealloc_buffer_t dealloc_buffer;
+    sg_imgui_args_dealloc_image_t dealloc_image;
+    sg_imgui_args_dealloc_shader_t dealloc_shader;
+    sg_imgui_args_dealloc_pipeline_t dealloc_pipeline;
+    sg_imgui_args_dealloc_pass_t dealloc_pass;
     sg_imgui_args_init_buffer_t init_buffer;
     sg_imgui_args_init_image_t init_image;
     sg_imgui_args_init_shader_t init_shader;
     sg_imgui_args_init_pipeline_t init_pipeline;
     sg_imgui_args_init_pass_t init_pass;
+    sg_imgui_args_uninit_buffer_t uninit_buffer;
+    sg_imgui_args_uninit_image_t uninit_image;
+    sg_imgui_args_uninit_shader_t uninit_shader;
+    sg_imgui_args_uninit_pipeline_t uninit_pipeline;
+    sg_imgui_args_uninit_pass_t uninit_pass;
     sg_imgui_args_fail_buffer_t fail_buffer;
     sg_imgui_args_fail_image_t fail_image;
     sg_imgui_args_fail_shader_t fail_shader;
@@ -563,25 +630,25 @@ typedef struct {
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
-SOKOL_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_content(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_content(sg_imgui_t* ctx);
 
-SOKOL_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
-SOKOL_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_buffers_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_images_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_shaders_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_pipelines_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_passes_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capture_window(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx);
 
 #if defined(__cplusplus)
 } /* extern "C" */
@@ -1650,6 +1717,41 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             }
             break;
 
+        case SG_IMGUI_CMD_DEALLOC_BUFFER:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.dealloc_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_dealloc_buffer() => %s", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_DEALLOC_IMAGE:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.dealloc_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_dealloc_image() => %s", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_DEALLOC_SHADER:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.dealloc_shader.shader);
+                _sg_imgui_snprintf(&str, "%d: sg_dealloc_shader() => %s", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_DEALLOC_PIPELINE:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.dealloc_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_dealloc_pipeline() => %s", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_DEALLOC_PASS:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.dealloc_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_dealloc_pass() => %s", index, res_id.buf);
+            }
+            break;
+
         case SG_IMGUI_CMD_INIT_BUFFER:
             {
                 sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.init_buffer.buffer);
@@ -1682,6 +1784,41 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             {
                 sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.init_pass.pass);
                 _sg_imgui_snprintf(&str, "%d: sg_init_pass(pass=%s, desc=..)", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_UNINIT_BUFFER:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.uninit_buffer.buffer);
+                _sg_imgui_snprintf(&str, "%d: sg_uninit_buffer(buf=%s, desc=..)", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_UNINIT_IMAGE:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_image_id_string(ctx, item->args.uninit_image.image);
+                _sg_imgui_snprintf(&str, "%d: sg_uninit_image(img=%s, desc=..)", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_UNINIT_SHADER:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_shader_id_string(ctx, item->args.uninit_shader.shader);
+                _sg_imgui_snprintf(&str, "%d: sg_uninit_shader(shd=%s, desc=..)", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_UNINIT_PIPELINE:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pipeline_id_string(ctx, item->args.uninit_pipeline.pipeline);
+                _sg_imgui_snprintf(&str, "%d: sg_uninit_pipeline(pip=%s, desc=..)", index, res_id.buf);
+            }
+            break;
+
+        case SG_IMGUI_CMD_UNINIT_PASS:
+            {
+                sg_imgui_str_t res_id = _sg_imgui_pass_id_string(ctx, item->args.uninit_pass.pass);
+                _sg_imgui_snprintf(&str, "%d: sg_uninit_pass(pass=%s, desc=..)", index, res_id.buf);
             }
             break;
 
@@ -2234,6 +2371,76 @@ _SOKOL_PRIVATE void _sg_imgui_alloc_pass(sg_pass result, void* user_data) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_imgui_dealloc_buffer(sg_buffer buf_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_DEALLOC_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.dealloc_buffer.buffer = buf_id;
+    }
+    if (ctx->hooks.dealloc_buffer) {
+        ctx->hooks.dealloc_buffer(buf_id, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_dealloc_image(sg_image img_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_DEALLOC_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.dealloc_image.image = img_id;
+    }
+    if (ctx->hooks.dealloc_image) {
+        ctx->hooks.dealloc_image(img_id, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_dealloc_shader(sg_shader shd_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_DEALLOC_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.dealloc_shader.shader = shd_id;
+    }
+    if (ctx->hooks.dealloc_shader) {
+        ctx->hooks.dealloc_shader(shd_id, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_dealloc_pipeline(sg_pipeline pip_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_DEALLOC_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.dealloc_pipeline.pipeline = pip_id;
+    }
+    if (ctx->hooks.dealloc_pipeline) {
+        ctx->hooks.dealloc_pipeline(pip_id, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_dealloc_pass(sg_pass pass_id, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_DEALLOC_PASS;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.dealloc_pass.pass = pass_id;
+    }
+    if (ctx->hooks.dealloc_pass) {
+        ctx->hooks.dealloc_pass(pass_id, ctx->hooks.user_data);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_imgui_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
@@ -2316,6 +2523,91 @@ _SOKOL_PRIVATE void _sg_imgui_init_pass(sg_pass pass_id, const sg_pass_desc* des
     }
     if (pass_id.id != SG_INVALID_ID) {
         _sg_imgui_pass_created(ctx, pass_id, _sg_imgui_slot_index(pass_id.id), desc);
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_uninit_buffer(sg_buffer buf, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_UNINIT_BUFFER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.uninit_buffer.buffer = buf;
+    }
+    if (ctx->hooks.uninit_buffer) {
+        ctx->hooks.uninit_buffer(buf, ctx->hooks.user_data);
+    }
+    if (buf.id != SG_INVALID_ID) {
+        _sg_imgui_buffer_destroyed(ctx, _sg_imgui_slot_index(buf.id));
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_uninit_image(sg_image img, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_UNINIT_IMAGE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.uninit_image.image = img;
+    }
+    if (ctx->hooks.uninit_image) {
+        ctx->hooks.uninit_image(img, ctx->hooks.user_data);
+    }
+    if (img.id != SG_INVALID_ID) {
+        _sg_imgui_image_destroyed(ctx, _sg_imgui_slot_index(img.id));
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_uninit_shader(sg_shader shd, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_UNINIT_SHADER;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.uninit_shader.shader = shd;
+    }
+    if (ctx->hooks.uninit_shader) {
+        ctx->hooks.uninit_shader(shd, ctx->hooks.user_data);
+    }
+    if (shd.id != SG_INVALID_ID) {
+        _sg_imgui_shader_destroyed(ctx, _sg_imgui_slot_index(shd.id));
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_uninit_pipeline(sg_pipeline pip, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_UNINIT_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.uninit_pipeline.pipeline = pip;
+    }
+    if (ctx->hooks.uninit_pipeline) {
+        ctx->hooks.uninit_pipeline(pip, ctx->hooks.user_data);
+    }
+    if (pip.id != SG_INVALID_ID) {
+        _sg_imgui_pipeline_destroyed(ctx, _sg_imgui_slot_index(pip.id));
+    }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_uninit_pass(sg_pass pass, void* user_data) {
+    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
+    SOKOL_ASSERT(ctx);
+    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = SG_IMGUI_CMD_UNINIT_PIPELINE;
+        item->color = _SG_IMGUI_COLOR_RSRC;
+        item->args.uninit_pass.pass = pass;
+    }
+    if (ctx->hooks.uninit_pass) {
+        ctx->hooks.uninit_pass(pass, ctx->hooks.user_data);
+    }
+    if (pass.id != SG_INVALID_ID) {
+        _sg_imgui_pass_destroyed(ctx, _sg_imgui_slot_index(pass.id));
     }
 }
 
@@ -3482,11 +3774,21 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     hooks.alloc_shader = _sg_imgui_alloc_shader;
     hooks.alloc_pipeline = _sg_imgui_alloc_pipeline;
     hooks.alloc_pass = _sg_imgui_alloc_pass;
+    hooks.dealloc_buffer = _sg_imgui_dealloc_buffer;
+    hooks.dealloc_image = _sg_imgui_dealloc_image;
+    hooks.dealloc_shader = _sg_imgui_dealloc_shader;
+    hooks.dealloc_pipeline = _sg_imgui_dealloc_pipeline;
+    hooks.dealloc_pass = _sg_imgui_dealloc_pass;
     hooks.init_buffer = _sg_imgui_init_buffer;
     hooks.init_image = _sg_imgui_init_image;
     hooks.init_shader = _sg_imgui_init_shader;
     hooks.init_pipeline = _sg_imgui_init_pipeline;
     hooks.init_pass = _sg_imgui_init_pass;
+    hooks.uninit_buffer = _sg_imgui_uninit_buffer;
+    hooks.uninit_image = _sg_imgui_uninit_image;
+    hooks.uninit_shader = _sg_imgui_uninit_shader;
+    hooks.uninit_pipeline = _sg_imgui_uninit_pipeline;
+    hooks.uninit_pass = _sg_imgui_uninit_pass;
     hooks.fail_buffer = _sg_imgui_fail_buffer;
     hooks.fail_image = _sg_imgui_fail_image;
     hooks.fail_shader = _sg_imgui_fail_shader;

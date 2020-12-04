@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GL_IMPL)
+#define SOKOL_GL_IMPL
+#endif
 #ifndef SOKOL_GL_INCLUDED
 /*
     sokol_gl.h -- OpenGL 1.x style rendering on top of sokol_gfx.h
@@ -5,6 +8,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+        #define SOKOL_IMPL or
         #define SOKOL_GL_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
@@ -25,7 +29,8 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_GL_API_DECL   - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_GL_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
@@ -35,7 +40,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GL_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     Include the following headers before including sokol_gl.h:
@@ -445,13 +450,16 @@
 #error "Please include sokol_gfx.h before sokol_gl.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GL_API_DECL)
+#define SOKOL_GL_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_GL_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GL_IMPL)
+#define SOKOL_GL_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GL_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GL_API_DECL extern
 #endif
 #endif
 
@@ -488,92 +496,92 @@ typedef struct sgl_desc_t {
 } sgl_desc_t;
 
 /* setup/shutdown/misc */
-SOKOL_API_DECL void sgl_setup(const sgl_desc_t* desc);
-SOKOL_API_DECL void sgl_shutdown(void);
-SOKOL_API_DECL sgl_error_t sgl_error(void);
-SOKOL_API_DECL void sgl_defaults(void);
-SOKOL_API_DECL float sgl_rad(float deg);
-SOKOL_API_DECL float sgl_deg(float rad);
+SOKOL_GL_API_DECL void sgl_setup(const sgl_desc_t* desc);
+SOKOL_GL_API_DECL void sgl_shutdown(void);
+SOKOL_GL_API_DECL sgl_error_t sgl_error(void);
+SOKOL_GL_API_DECL void sgl_defaults(void);
+SOKOL_GL_API_DECL float sgl_rad(float deg);
+SOKOL_GL_API_DECL float sgl_deg(float rad);
 
 /* create and destroy pipeline objects */
-SOKOL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
-SOKOL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
+SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
-SOKOL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
-SOKOL_API_DECL void sgl_enable_texture(void);
-SOKOL_API_DECL void sgl_disable_texture(void);
-SOKOL_API_DECL void sgl_texture(sg_image img);
+SOKOL_GL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_enable_texture(void);
+SOKOL_GL_API_DECL void sgl_disable_texture(void);
+SOKOL_GL_API_DECL void sgl_texture(sg_image img);
 
 /* pipeline stack functions */
-SOKOL_API_DECL void sgl_default_pipeline(void);
-SOKOL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
-SOKOL_API_DECL void sgl_push_pipeline(void);
-SOKOL_API_DECL void sgl_pop_pipeline(void);
+SOKOL_GL_API_DECL void sgl_default_pipeline(void);
+SOKOL_GL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
+SOKOL_GL_API_DECL void sgl_push_pipeline(void);
+SOKOL_GL_API_DECL void sgl_pop_pipeline(void);
 
 /* matrix stack functions */
-SOKOL_API_DECL void sgl_matrix_mode_modelview(void);
-SOKOL_API_DECL void sgl_matrix_mode_projection(void);
-SOKOL_API_DECL void sgl_matrix_mode_texture(void);
-SOKOL_API_DECL void sgl_load_identity(void);
-SOKOL_API_DECL void sgl_load_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
-SOKOL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
-SOKOL_API_DECL void sgl_scale(float x, float y, float z);
-SOKOL_API_DECL void sgl_translate(float x, float y, float z);
-SOKOL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
-SOKOL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
-SOKOL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
-SOKOL_API_DECL void sgl_push_matrix(void);
-SOKOL_API_DECL void sgl_pop_matrix(void);
+SOKOL_GL_API_DECL void sgl_matrix_mode_modelview(void);
+SOKOL_GL_API_DECL void sgl_matrix_mode_projection(void);
+SOKOL_GL_API_DECL void sgl_matrix_mode_texture(void);
+SOKOL_GL_API_DECL void sgl_load_identity(void);
+SOKOL_GL_API_DECL void sgl_load_matrix(const float m[16]);
+SOKOL_GL_API_DECL void sgl_load_transpose_matrix(const float m[16]);
+SOKOL_GL_API_DECL void sgl_mult_matrix(const float m[16]);
+SOKOL_GL_API_DECL void sgl_mult_transpose_matrix(const float m[16]);
+SOKOL_GL_API_DECL void sgl_rotate(float angle_rad, float x, float y, float z);
+SOKOL_GL_API_DECL void sgl_scale(float x, float y, float z);
+SOKOL_GL_API_DECL void sgl_translate(float x, float y, float z);
+SOKOL_GL_API_DECL void sgl_frustum(float l, float r, float b, float t, float n, float f);
+SOKOL_GL_API_DECL void sgl_ortho(float l, float r, float b, float t, float n, float f);
+SOKOL_GL_API_DECL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far);
+SOKOL_GL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z);
+SOKOL_GL_API_DECL void sgl_push_matrix(void);
+SOKOL_GL_API_DECL void sgl_pop_matrix(void);
 
 /* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
-SOKOL_API_DECL void sgl_t2f(float u, float v);
-SOKOL_API_DECL void sgl_c3f(float r, float g, float b);
-SOKOL_API_DECL void sgl_c4f(float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_c3b(uint8_t r, uint8_t g, uint8_t b);
-SOKOL_API_DECL void sgl_c4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_c1i(uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_t2f(float u, float v);
+SOKOL_GL_API_DECL void sgl_c3f(float r, float g, float b);
+SOKOL_GL_API_DECL void sgl_c4f(float r, float g, float b, float a);
+SOKOL_GL_API_DECL void sgl_c3b(uint8_t r, uint8_t g, uint8_t b);
+SOKOL_GL_API_DECL void sgl_c4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_GL_API_DECL void sgl_c1i(uint32_t rgba);
 
 /* define primitives, each begin/end is one draw command */
-SOKOL_API_DECL void sgl_begin_points(void);
-SOKOL_API_DECL void sgl_begin_lines(void);
-SOKOL_API_DECL void sgl_begin_line_strip(void);
-SOKOL_API_DECL void sgl_begin_triangles(void);
-SOKOL_API_DECL void sgl_begin_triangle_strip(void);
-SOKOL_API_DECL void sgl_begin_quads(void);
-SOKOL_API_DECL void sgl_v2f(float x, float y);
-SOKOL_API_DECL void sgl_v3f(float x, float y, float z);
-SOKOL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
-SOKOL_API_DECL void sgl_v3f_t2f(float x, float y, float z, float u, float v);
-SOKOL_API_DECL void sgl_v2f_c3f(float x, float y, float r, float g, float b);
-SOKOL_API_DECL void sgl_v2f_c3b(float x, float y, uint8_t r, uint8_t g, uint8_t b);
-SOKOL_API_DECL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v2f_c4b(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v2f_c1i(float x, float y, uint32_t rgba);
-SOKOL_API_DECL void sgl_v3f_c3f(float x, float y, float z, float r, float g, float b);
-SOKOL_API_DECL void sgl_v3f_c3b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b);
-SOKOL_API_DECL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v3f_c4b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v3f_c1i(float x, float y, float z, uint32_t rgba);
-SOKOL_API_DECL void sgl_v2f_t2f_c3f(float x, float y, float u, float v, float r, float g, float b);
-SOKOL_API_DECL void sgl_v2f_t2f_c3b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b);
-SOKOL_API_DECL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v2f_t2f_c4b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v2f_t2f_c1i(float x, float y, float u, float v, uint32_t rgba);
-SOKOL_API_DECL void sgl_v3f_t2f_c3f(float x, float y, float z, float u, float v, float r, float g, float b);
-SOKOL_API_DECL void sgl_v3f_t2f_c3b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b);
-SOKOL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
-SOKOL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
-SOKOL_API_DECL void sgl_end(void);
+SOKOL_GL_API_DECL void sgl_begin_points(void);
+SOKOL_GL_API_DECL void sgl_begin_lines(void);
+SOKOL_GL_API_DECL void sgl_begin_line_strip(void);
+SOKOL_GL_API_DECL void sgl_begin_triangles(void);
+SOKOL_GL_API_DECL void sgl_begin_triangle_strip(void);
+SOKOL_GL_API_DECL void sgl_begin_quads(void);
+SOKOL_GL_API_DECL void sgl_v2f(float x, float y);
+SOKOL_GL_API_DECL void sgl_v3f(float x, float y, float z);
+SOKOL_GL_API_DECL void sgl_v2f_t2f(float x, float y, float u, float v);
+SOKOL_GL_API_DECL void sgl_v3f_t2f(float x, float y, float z, float u, float v);
+SOKOL_GL_API_DECL void sgl_v2f_c3f(float x, float y, float r, float g, float b);
+SOKOL_GL_API_DECL void sgl_v2f_c3b(float x, float y, uint8_t r, uint8_t g, uint8_t b);
+SOKOL_GL_API_DECL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a);
+SOKOL_GL_API_DECL void sgl_v2f_c4b(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_GL_API_DECL void sgl_v2f_c1i(float x, float y, uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_v3f_c3f(float x, float y, float z, float r, float g, float b);
+SOKOL_GL_API_DECL void sgl_v3f_c3b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b);
+SOKOL_GL_API_DECL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a);
+SOKOL_GL_API_DECL void sgl_v3f_c4b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_GL_API_DECL void sgl_v3f_c1i(float x, float y, float z, uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_v2f_t2f_c3f(float x, float y, float u, float v, float r, float g, float b);
+SOKOL_GL_API_DECL void sgl_v2f_t2f_c3b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b);
+SOKOL_GL_API_DECL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a);
+SOKOL_GL_API_DECL void sgl_v2f_t2f_c4b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_GL_API_DECL void sgl_v2f_t2f_c1i(float x, float y, float u, float v, uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_v3f_t2f_c3f(float x, float y, float z, float u, float v, float r, float g, float b);
+SOKOL_GL_API_DECL void sgl_v3f_t2f_c3b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b);
+SOKOL_GL_API_DECL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a);
+SOKOL_GL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_GL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_end(void);
 
 /* render everything */
-SOKOL_API_DECL void sgl_draw(void);
+SOKOL_GL_API_DECL void sgl_draw(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -3193,7 +3201,7 @@ SOKOL_API_IMPL void sgl_lookat(float eye_x, float eye_y, float eye_z, float cent
     _sgl_lookat(_sgl_matrix(), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
 }
 
-SOKOL_API_DECL void sgl_push_matrix(void) {
+SOKOL_GL_API_DECL void sgl_push_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
     _sgl.matrix_dirty = true;
@@ -3208,7 +3216,7 @@ SOKOL_API_DECL void sgl_push_matrix(void) {
     }
 }
 
-SOKOL_API_DECL void sgl_pop_matrix(void) {
+SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
     _sgl.matrix_dirty = true;

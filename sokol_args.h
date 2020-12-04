@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_ARGS_IMPL)
+#define SOKOL_ARGS_IMPL
+#endif
 #ifndef SOKOL_ARGS_INCLUDED
 /*
     sokol_args.h    -- cross-platform key/value arg-parsing for web and native
@@ -5,7 +8,8 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_ARGS_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
@@ -15,7 +19,8 @@
     SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
     SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
     SOKOL_FREE(p)       - your own free() implementation (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_ARGS_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_ARGS_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_args.h is compiled as a DLL, define the following before
@@ -23,7 +28,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_ARGS_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     OVERVIEW
@@ -247,13 +252,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_ARGS_API_DECL)
+#define SOKOL_ARGS_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_ARGS_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_ARGS_IMPL)
+#define SOKOL_ARGS_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_ARGS_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_ARGS_API_DECL extern
 #endif
 #endif
 
@@ -269,29 +277,29 @@ typedef struct sargs_desc {
 } sargs_desc;
 
 /* setup sokol-args */
-SOKOL_API_DECL void sargs_setup(const sargs_desc* desc);
+SOKOL_ARGS_API_DECL void sargs_setup(const sargs_desc* desc);
 /* shutdown sokol-args */
-SOKOL_API_DECL void sargs_shutdown(void);
+SOKOL_ARGS_API_DECL void sargs_shutdown(void);
 /* true between sargs_setup() and sargs_shutdown() */
-SOKOL_API_DECL bool sargs_isvalid(void);
+SOKOL_ARGS_API_DECL bool sargs_isvalid(void);
 /* test if an argument exists by key name */
-SOKOL_API_DECL bool sargs_exists(const char* key);
+SOKOL_ARGS_API_DECL bool sargs_exists(const char* key);
 /* get value by key name, return empty string if key doesn't exist */
-SOKOL_API_DECL const char* sargs_value(const char* key);
+SOKOL_ARGS_API_DECL const char* sargs_value(const char* key);
 /* get value by key name, return provided default if key doesn't exist */
-SOKOL_API_DECL const char* sargs_value_def(const char* key, const char* def);
+SOKOL_ARGS_API_DECL const char* sargs_value_def(const char* key, const char* def);
 /* return true if val arg matches the value associated with key */
-SOKOL_API_DECL bool sargs_equals(const char* key, const char* val);
+SOKOL_ARGS_API_DECL bool sargs_equals(const char* key, const char* val);
 /* return true if key's value is "true", "yes" or "on" */
-SOKOL_API_DECL bool sargs_boolean(const char* key);
+SOKOL_ARGS_API_DECL bool sargs_boolean(const char* key);
 /* get index of arg by key name, return -1 if not exists */
-SOKOL_API_DECL int sargs_find(const char* key);
+SOKOL_ARGS_API_DECL int sargs_find(const char* key);
 /* get number of parsed arguments */
-SOKOL_API_DECL int sargs_num_args(void);
+SOKOL_ARGS_API_DECL int sargs_num_args(void);
 /* get key name of argument at index, or empty string */
-SOKOL_API_DECL const char* sargs_key_at(int index);
+SOKOL_ARGS_API_DECL const char* sargs_key_at(int index);
 /* get value string of argument at index, or empty string */
-SOKOL_API_DECL const char* sargs_value_at(int index);
+SOKOL_ARGS_API_DECL const char* sargs_value_at(int index);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -303,7 +311,7 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #endif // SOKOL_ARGS_INCLUDED
 
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_ARGS_IMPL
 #define SOKOL_ARGS_IMPL_INCLUDED (1)
 #include <string.h> /* memset, strcmp */
 
@@ -759,4 +767,4 @@ SOKOL_API_IMPL bool sargs_boolean(const char* key) {
            (0 == strcmp("on", val));
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_ARGS_IMPL */

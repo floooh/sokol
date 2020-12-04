@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_GLUE_IMPL)
+#define SOKOL_GLUE_IMPL
+#endif
 #ifndef SOKOL_GLUE_INCLUDED
 /*
     sokol_glue.h -- glue helper functions for sokol headers
@@ -5,14 +8,16 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-        #define SOKOL_IMPL
+        #define SOKOL_IMPL or
+        #define SOKOL_GLUE_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
 
     ...optionally provide the following macros to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_GLUE_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_GLUE_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_glue.h is compiled as a DLL, define the following before
@@ -20,7 +25,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_GLUE_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     OVERVIEW
@@ -71,13 +76,16 @@
 */
 #define SOKOL_GLUE_INCLUDED
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GLUE_API_DECL)
+#define SOKOL_GLUE_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_GLUE_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_GLUE_IMPL)
+#define SOKOL_GLUE_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_GLUE_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_GLUE_API_DECL extern
 #endif
 #endif
 
@@ -86,7 +94,7 @@ extern "C" {
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
 #endif
 
 #ifdef __cplusplus
@@ -95,7 +103,7 @@ SOKOL_API_DECL sg_context_desc sapp_sgcontext(void);
 #endif /* SOKOL_GLUE_INCLUDED */
 
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_GLUE_IMPL
 #define SOKOL_GLUE_IMPL_INCLUDED (1)
 #include <string.h> /* memset */
 
@@ -126,4 +134,4 @@ SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
 }
 #endif
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_GLUE_IMPL */

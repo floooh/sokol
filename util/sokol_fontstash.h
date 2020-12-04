@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_FONTSTASH_IMPL)
+#define SOKOL_FONTSTASH_IMPL
+#endif
 #ifndef SOKOL_FONTSTASH_INCLUDED
 /*
     sokol_fontstash.h -- renderer for https://github.com/memononen/fontstash
@@ -6,7 +9,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
-
+        #define SOKOL_IMPL or
         #define SOKOL_FONTSTASH_IMPL
 
     before you include this file in *one* C or C++ file to create the
@@ -27,7 +30,8 @@
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
     SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_FONTSTASH_API_DECL    - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_FONTSTASH_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
@@ -159,23 +163,26 @@
 #error "Please include sokol_gfx.h before sokol_fontstash.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_FONTSTASH_API_DECL)
+#define SOKOL_FONTSTASH_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_FONTSTASH_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_FONTSTASH_IMPL)
+#define SOKOL_FONTSTASH_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_FONTSTASH_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_FONTSTASH_API_DECL extern
 #endif
 #endif
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-SOKOL_API_DECL FONScontext* sfons_create(int width, int height, int flags);
-SOKOL_API_DECL void sfons_destroy(FONScontext* ctx);
-SOKOL_API_DECL void sfons_flush(FONScontext* ctx);
-SOKOL_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_FONTSTASH_API_DECL FONScontext* sfons_create(int width, int height, int flags);
+SOKOL_FONTSTASH_API_DECL void sfons_destroy(FONScontext* ctx);
+SOKOL_FONTSTASH_API_DECL void sfons_flush(FONScontext* ctx);
+SOKOL_FONTSTASH_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 #ifdef __cplusplus
 } /* extern "C" */

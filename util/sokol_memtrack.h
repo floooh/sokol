@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_MEMTRACK_IMPL)
+#define SOKOL_MEMTRACK_IMPL
+#endif
 #ifndef SOKOL_MEMTRACK_INCLUDED
 /*
     sokol_memtrack.h -- memory allocation wrapper to track memory usage
@@ -16,7 +19,8 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_MEMTRACK_API_DECL - public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_MEMTRACK_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_memtrack.h is compiled as a DLL, define the following before
@@ -73,13 +77,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_MEMTRACK_API_DECL)
+#define SOKOL_MEMTRACK_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_MEMTRACK_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_MEMTRACK_IMPL)
+#define SOKOL_MEMTRACK_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_MEMTRACK_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_MEMTRACK_API_DECL extern
 #endif
 #endif
 
@@ -92,7 +99,7 @@ typedef struct smemtrack_info_t {
     int num_bytes;
 } smemtrack_info_t;
 
-SOKOL_API_DECL smemtrack_info_t smemtrack_info(void);
+SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -100,7 +107,7 @@ SOKOL_API_DECL smemtrack_info_t smemtrack_info(void);
 #endif /* SOKOL_MEMTRACK_INCLUDED */
 
 /*=== IMPLEMENTATION =========================================================*/
-#ifdef SOKOL_IMPL
+#ifdef SOKOL_MEMTRACK_IMPL
 #define SOKOL_MEMTRACK_IMPL_INCLUDED (1)
 #include <stdlib.h> /* malloc, free, calloc */
 #include <string.h> /* memset */
@@ -161,4 +168,4 @@ SOKOL_API_IMPL smemtrack_info_t smemtrack_info(void) {
     return _smemtrack.state;
 }
 
-#endif /* SOKOL_IMPL */
+#endif /* SOKOL_MEMTRACK_IMPL */

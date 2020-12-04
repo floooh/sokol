@@ -1,3 +1,6 @@
+#if defined(SOKOL_IMPL) && !defined(SOKOL_SHAPE_IMPL)
+#define SOKOL_SHAPE_IMPL
+#endif
 #ifndef SOKOL_SHAPE_INCLUDED
 /*
     sokol_shape.h -- create simple primitive shapes for sokol_gfx.h
@@ -5,6 +8,7 @@
     Project URL: https://github.com/floooh/sokol
 
     Do this:
+        #define SOKOL_IMPL or
         #define SOKOL_SHAPE_IMPL
     before you include this file in *one* C or C++ file to create the
     implementation.
@@ -16,7 +20,8 @@
     ...optionally provide the following macros to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_API_DECL      - public function declaration prefix (default: extern)
+    SOKOL_SHAPE_API_DECL- public function declaration prefix (default: extern)
+    SOKOL_API_DECL      - same as SOKOL_SHAPE_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     If sokol_shape.h is compiled as a DLL, define the following before
@@ -24,7 +29,7 @@
 
     SOKOL_DLL
 
-    On Windows, SOKOL_DLL will define SOKOL_API_DECL as __declspec(dllexport)
+    On Windows, SOKOL_DLL will define SOKOL_SHAPE_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
     FEATURE OVERVIEW
@@ -364,13 +369,16 @@
 #error "Please include sokol_gfx.h before sokol_shape.h"
 #endif
 
-#ifndef SOKOL_API_DECL
-#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_IMPL)
-#define SOKOL_API_DECL __declspec(dllexport)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_SHAPE_API_DECL)
+#define SOKOL_SHAPE_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_SHAPE_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_SHAPE_IMPL)
+#define SOKOL_SHAPE_API_DECL __declspec(dllexport)
 #elif defined(_WIN32) && defined(SOKOL_DLL)
-#define SOKOL_API_DECL __declspec(dllimport)
+#define SOKOL_SHAPE_API_DECL __declspec(dllimport)
 #else
-#define SOKOL_API_DECL extern
+#define SOKOL_SHAPE_API_DECL extern
 #endif
 #endif
 
@@ -472,38 +480,38 @@ typedef struct sshape_torus_t {
 } sshape_torus_t;
 
 /* shape builder functions */
-SOKOL_API_DECL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* buf, const sshape_plane_t* params);
-SOKOL_API_DECL sshape_buffer_t sshape_build_box(const sshape_buffer_t* buf, const sshape_box_t* params);
-SOKOL_API_DECL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* buf, const sshape_sphere_t* params);
-SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* buf, const sshape_cylinder_t* params);
-SOKOL_API_DECL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* buf, const sshape_torus_t* params);
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_plane(const sshape_buffer_t* buf, const sshape_plane_t* params);
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_box(const sshape_buffer_t* buf, const sshape_box_t* params);
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_sphere(const sshape_buffer_t* buf, const sshape_sphere_t* params);
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* buf, const sshape_cylinder_t* params);
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_torus(const sshape_buffer_t* buf, const sshape_torus_t* params);
 
 /* query required vertex- and index-buffer sizes in bytes */
-SOKOL_API_DECL sshape_sizes_t sshape_plane_sizes(uint32_t tiles);
-SOKOL_API_DECL sshape_sizes_t sshape_box_sizes(uint32_t tiles);
-SOKOL_API_DECL sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stacks);
-SOKOL_API_DECL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t stacks);
-SOKOL_API_DECL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings);
+SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_plane_sizes(uint32_t tiles);
+SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_box_sizes(uint32_t tiles);
+SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_sphere_sizes(uint32_t slices, uint32_t stacks);
+SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_cylinder_sizes(uint32_t slices, uint32_t stacks);
+SOKOL_SHAPE_API_DECL sshape_sizes_t sshape_torus_sizes(uint32_t sides, uint32_t rings);
 
 /* extract sokol-gfx desc structs and primitive ranges from build state */
-SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
-SOKOL_API_DECL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
-SOKOL_API_DECL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
-SOKOL_API_DECL sg_buffer_layout_desc sshape_buffer_layout_desc(void);
-SOKOL_API_DECL sg_vertex_attr_desc sshape_position_attr_desc(void);
-SOKOL_API_DECL sg_vertex_attr_desc sshape_normal_attr_desc(void);
-SOKOL_API_DECL sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
-SOKOL_API_DECL sg_vertex_attr_desc sshape_color_attr_desc(void);
+SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf);
+SOKOL_SHAPE_API_DECL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* buf);
+SOKOL_SHAPE_API_DECL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* buf);
+SOKOL_SHAPE_API_DECL sg_buffer_layout_desc sshape_buffer_layout_desc(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_position_attr_desc(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_normal_attr_desc(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_texcoord_attr_desc(void);
+SOKOL_SHAPE_API_DECL sg_vertex_attr_desc sshape_color_attr_desc(void);
 
 /* helper functions to build packed color value from floats or bytes */
-SOKOL_API_DECL uint32_t sshape_color_4f(float r, float g, float b, float a);
-SOKOL_API_DECL uint32_t sshape_color_3f(float r, float g, float b);
-SOKOL_API_DECL uint32_t sshape_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-SOKOL_API_DECL uint32_t sshape_color_3b(uint8_t r, uint8_t g, uint8_t b);
+SOKOL_SHAPE_API_DECL uint32_t sshape_color_4f(float r, float g, float b, float a);
+SOKOL_SHAPE_API_DECL uint32_t sshape_color_3f(float r, float g, float b);
+SOKOL_SHAPE_API_DECL uint32_t sshape_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_SHAPE_API_DECL uint32_t sshape_color_3b(uint8_t r, uint8_t g, uint8_t b);
 
 /* adapter function for filling matrix struct from generic float[16] array */
-SOKOL_API_DECL sshape_mat4_t sshape_mat4(const float m[16]);
-SOKOL_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
+SOKOL_SHAPE_API_DECL sshape_mat4_t sshape_mat4(const float m[16]);
+SOKOL_SHAPE_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -1169,7 +1177,7 @@ static void _sshape_build_cylinder_cap_ring(sshape_buffer_t* buf, const sshape_c
     }
 }
 
-SOKOL_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_buf, const sshape_cylinder_t* in_params) {
+SOKOL_SHAPE_API_DECL sshape_buffer_t sshape_build_cylinder(const sshape_buffer_t* in_buf, const sshape_cylinder_t* in_params) {
     SOKOL_ASSERT(in_buf && in_params);
     const sshape_cylinder_t params = _sshape_cylinder_defaults(in_params);
     const uint32_t num_vertices = _sshape_cylinder_num_vertices(params.slices, params.stacks);
@@ -1350,7 +1358,7 @@ SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* bu
     return desc;
 }
 
-SOKOL_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf) {
+SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_buffer_t* buf) {
     SOKOL_ASSERT(buf && buf->valid);
     SOKOL_ASSERT(buf->indices.shape_offset < buf->indices.data_size);
     SOKOL_ASSERT(0 == (buf->indices.shape_offset & (sizeof(uint16_t) - 1)));
