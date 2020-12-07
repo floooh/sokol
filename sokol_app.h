@@ -13151,6 +13151,11 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
     _sapp_wl_cleanup();
     _sapp_discard_state();
 }
+
+_SOKOL_PRIVATE void _sapp_wl_update_window_title(void) {
+    xdg_toplevel_set_title(_sapp.wl.toplevel, _sapp.window_title);
+}
+
 #endif /* SOKOL_WAYLAND */
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
@@ -13478,7 +13483,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
         #if !defined(SOKOL_WAYLAND)
         _sapp_x11_update_window_title();
         #else /* SOKOL_WAYLAND */
-        /* WL-TODO: _sapp_wl_update_window_title(); */
+        _sapp_wl_update_window_title();
         #endif /* SOKOL_WAYLAND */
     #endif
 }
