@@ -76,8 +76,8 @@
 
     - on macOS with Metal: Cocoa, QuartzCore, Metal, MetalKit
     - on macOS with GL: Cocoa, QuartzCore, OpenGL
-    - on iOS with Metal: UIKit, Metal, MetalKit
-    - on iOS with GL: UIKit, OpenGLES, GLKit
+    - on iOS with Metal: Foundation, UIKit, Metal, MetalKit
+    - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux: X11, Xi, Xcursor, GL, dl, pthread, m(?)
     - on Android: GLESv3, EGL, log, android
     - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
