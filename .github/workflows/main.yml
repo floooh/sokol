@@ -181,25 +181,25 @@ jobs:
           run: |
             cd workspace/sokol-samples
             python fips make cube-emsc wasm-ninja-release
-    android:
-        runs-on: ubuntu-latest
-        steps:
-        - uses: actions/checkout@v1
-        - name: prepare
-          run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-            yes | python fips setup android
-        - name: sapp-android-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-android-make-debug
-        - name: sapp-android-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-android-make-release
+#    android:
+#        runs-on: ubuntu-latest
+#        steps:
+#        - uses: actions/checkout@v1
+#        - name: prepare
+#          run: |
+#            mkdir workspace
+#            cd workspace
+#            git clone https://github.com/floooh/sokol-samples
+#            cd sokol-samples
+#            yes | python fips setup android
+#        - name: sapp-android-make-debug
+#          run: |
+#            cd workspace/sokol-samples
+#            python fips build sapp-android-make-debug
+#        - name: sapp-android-make-release
+#          run: |
+#            cd workspace/sokol-samples
+#            python fips build sapp-android-make-release
     uwp:
         runs-on: windows-latest
         steps:
