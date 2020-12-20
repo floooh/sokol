@@ -5767,6 +5767,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
             for (int slot = 0; slot < img->cmn.num_slots; slot++) {
                 glGenTextures(1, &img->gl.tex[slot]);
+                SOKOL_ASSERT(img->gl.tex[slot]);
                 _sg_gl_cache_store_texture_binding(0);
                 _sg_gl_cache_bind_texture(0, img->gl.target, img->gl.tex[slot]);
                 GLenum gl_min_filter = _sg_gl_filter(img->cmn.min_filter);
@@ -10968,10 +10969,10 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
 }
 
 /* helper function to compute number of bytes needed in staging buffer to copy image data */
-_SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* img, const sg_image_content* content) {
+_SOKOL_PRIVATE uint32_t _sg_wgpu_image_content_buffer_size(const _sg_image_t* img) {
     uint32_t num_bytes = 0;
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
         const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
@@ -10992,7 +10993,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer stg_buf, uint8_t*
     SOKOL_ASSERT(content);
     uint32_t stg_offset = stg_base_offset;
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth : 1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
     const sg_pixel_format fmt = img->cmn.pixel_format;
     WGPUBufferCopyView src_view;
     memset(&src_view, 0, sizeof(src_view));
@@ -11013,7 +11014,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_content(WGPUBuffer stg_buf, uint8_t*
 
             const uint32_t mip_width  = _sg_max(img->cmn.width >> mip_index, 1);
             const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.depth >> mip_index, 1) : 1;
+            const uint32_t mip_depth  = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_max(img->cmn.num_slices >> mip_index, 1) : 1;
             const uint32_t num_rows   = _sg_num_rows(fmt, mip_height);
             const uint32_t src_bytes_per_row   = _sg_row_pitch(fmt, mip_width, 1);
             const uint32_t dst_bytes_per_row   = _sg_row_pitch(fmt, mip_width, _SG_WGPU_ROWPITCH_ALIGN);
@@ -11183,7 +11184,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, uint
 _SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_texture(_sg_image_t* img, const sg_image_content* content) {
     /* similar to _sg_wgpu_staging_copy_to_buffer(), but with image data instead */
     SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
-    uint32_t num_bytes = _sg_wgpu_image_content_buffer_size(img, content);
+    uint32_t num_bytes = _sg_wgpu_image_content_buffer_size(img);
     if ((_sg.wgpu.staging.offset + num_bytes) >= _sg.wgpu.staging.num_bytes) {
         SOKOL_LOG("WGPU: Per frame staging buffer full (in _sg_wgpu_staging_copy_to_texture)!\n");
         return false;
@@ -11338,6 +11339,7 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_context(_sg_context_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_activate_context(_sg_context_t* ctx) {
+    (void)ctx;
     SOKOL_LOG("_sg_wgpu_activate_context: FIXME\n");
 }
 
@@ -11383,7 +11385,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex
     wgpu_tex_desc->size.width = desc->width;
     wgpu_tex_desc->size.height = desc->height;
     if (desc->type == SG_IMAGETYPE_3D) {
-        wgpu_tex_desc->size.depth = desc->depth;
+        wgpu_tex_desc->size.depth = desc->num_slices;
         wgpu_tex_desc->arrayLayerCount = 1;
     }
     else if (desc->type == SG_IMAGETYPE_CUBE) {
@@ -11392,7 +11394,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_texdesc_common(WGPUTextureDescriptor* wgpu_tex
     }
     else {
         wgpu_tex_desc->size.depth = 1;
-        wgpu_tex_desc->arrayLayerCount = desc->layers;
+        wgpu_tex_desc->arrayLayerCount = desc->num_slices;
     }
     wgpu_tex_desc->format = _sg_wgpu_textureformat(desc->pixel_format);
     wgpu_tex_desc->mipLevelCount = desc->num_mipmaps;
@@ -11443,7 +11445,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             if (desc->usage == SG_USAGE_IMMUTABLE && !desc->render_target) {
                 WGPUBufferDescriptor wgpu_buf_desc;
                 memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
-                wgpu_buf_desc.size = _sg_wgpu_image_content_buffer_size(img, &desc->content);
+                wgpu_buf_desc.size = _sg_wgpu_image_content_buffer_size(img);
                 wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
                 WGPUCreateBufferMappedResult map = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
                 SOKOL_ASSERT(map.buffer && map.data);
