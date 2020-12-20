@@ -7706,7 +7706,7 @@ _SOKOL_PRIVATE void _sg_d3d11_destroy_buffer(_sg_buffer_t* buf) {
 
 _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_content* content) {
     const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth:1;
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
     int subres_index = 0;
     for (int face_index = 0; face_index < num_faces; face_index++) {
         for (int slice_index = 0; slice_index < num_slices; slice_index++) {
@@ -7808,7 +7808,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_tex_desc.Height = img->cmn.height;
                 d3d11_tex_desc.MipLevels = img->cmn.num_mipmaps;
                 switch (img->cmn.type) {
-                    case SG_IMAGETYPE_ARRAY:    d3d11_tex_desc.ArraySize = img->cmn.depth; break;
+                    case SG_IMAGETYPE_ARRAY:    d3d11_tex_desc.ArraySize = img->cmn.num_slices; break;
                     case SG_IMAGETYPE_CUBE:     d3d11_tex_desc.ArraySize = 6; break;
                     default:                    d3d11_tex_desc.ArraySize = 1; break;
                 }
@@ -7855,7 +7855,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     case SG_IMAGETYPE_ARRAY:
                         d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
                         d3d11_srv_desc.Texture2DArray.MipLevels = img->cmn.num_mipmaps;
-                        d3d11_srv_desc.Texture2DArray.ArraySize = img->cmn.depth;
+                        d3d11_srv_desc.Texture2DArray.ArraySize = img->cmn.num_slices;
                         break;
                     default:
                         SOKOL_UNREACHABLE; break;
@@ -7887,7 +7887,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 memset(&d3d11_tex_desc, 0, sizeof(d3d11_tex_desc));
                 d3d11_tex_desc.Width = img->cmn.width;
                 d3d11_tex_desc.Height = img->cmn.height;
-                d3d11_tex_desc.Depth = img->cmn.depth;
+                d3d11_tex_desc.Depth = img->cmn.num_slices;
                 d3d11_tex_desc.MipLevels = img->cmn.num_mipmaps;
                 d3d11_tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 d3d11_tex_desc.Format = img->d3d11.format;
@@ -8705,7 +8705,7 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_cont
     }
     SOKOL_ASSERT(d3d11_res);
     const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.depth:1;
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
     int subres_index = 0;
     HRESULT hr;
     _SOKOL_UNUSED(hr);
