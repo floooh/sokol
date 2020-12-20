@@ -137,7 +137,7 @@
     screen keyboard     | ---     | ---   | ---    | YES   | TODO    | TODO | YES
     swap interval       | YES     | YES   | YES(4) | YES   | TODO    | ---  | YES
     high-dpi            | YES     | YES   | YES(3) | YES   | YES     | YES  | YES
-    clipboard           | YES     | YES   | TODO   | ---   | ---     | TODO | YES
+    clipboard           | YES     | YES   | YES(3) | ---   | ---     | TODO | YES
     MSAA                | YES     | YES   | YES(4) | YES   | YES     | TODO | YES
     drag'n'drop         | YES     | YES   | YES(4) | ---   | ---     | TODO | YES
     window icon         | YES     | YES(1)| YES(4) | ---   | ---     | TODO | YES
@@ -2582,6 +2582,8 @@ struct _sapp_wl_touchpoint {
 typedef struct {
     /* wayland specific objects/globals */
     struct wl_compositor* compositor;
+    struct wl_data_device* data_device;
+    struct wl_data_device_manager* data_device_manager;
     struct wl_display* display;
     struct wl_egl_window* egl_window;
     struct wl_event_queue* event_queue;
@@ -12152,6 +12154,8 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.compositor) wl_compositor_destroy(_sapp.wl.compositor);
     if (NULL != _sapp.wl.registry) wl_registry_destroy(_sapp.wl.registry);
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
+    if (NULL != _sapp.wl.data_device) wl_data_device_release(_sapp.wl.data_device);
+    if (NULL != _sapp.wl.data_device_manager) wl_data_device_manager_destroy(_sapp.wl.data_device_manager);
     if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
     if (NULL != _sapp.wl.locked_pointer) zwp_locked_pointer_v1_destroy(_sapp.wl.locked_pointer);
     if (NULL != _sapp.wl.pointer_constraints) zwp_pointer_constraints_v1_destroy(_sapp.wl.pointer_constraints);
@@ -12279,6 +12283,16 @@ _SOKOL_PRIVATE void _sapp_wl_key_event(sapp_event_type type, sapp_keycode key, b
         _sapp.event.key_repeat = is_repeat;
         _sapp.event.modifiers = modifiers;
         _sapp_call_event(&_sapp.event);
+
+        /* check if a CLIPBOARD_PASTED event must be sent too */
+        if (_sapp.clipboard.enabled &&
+            (type == SAPP_EVENTTYPE_KEY_DOWN) &&
+            (_sapp.event.modifiers == SAPP_MODIFIER_CTRL) &&
+            (_sapp.event.key_code == SAPP_KEYCODE_V))
+        {
+            _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+            _sapp_call_event(&_sapp.event);
+        }
     }
 }
 
@@ -12348,6 +12362,71 @@ _SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint3
 _SOKOL_PRIVATE void _sapp_wl_toggle_fullscreen() {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_wl_set_fullscreen(_sapp.fullscreen);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_action(void* data, struct wl_data_source* data_source, uint32_t dnd_action) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+    _SOKOL_UNUSED(dnd_action);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_cancelled(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    wl_data_source_destroy(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_dnd_drop_performed(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_dnd_finished(void* data, struct wl_data_source* data_source) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_send(void* data, struct wl_data_source* data_source, const char* mime_type, int32_t fd) {
+    _SOKOL_UNUSED(data);
+
+    if (0 == strcmp(mime_type, "text/plain")) {
+        write(fd, _sapp.clipboard.buffer, strlen(_sapp.clipboard.buffer));
+    } else {
+        const char* fmt = "Unable to handle clipboard mime type: '%s'!";
+        const size_t len = strlen(fmt) + 32;
+        char* msg = _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, mime_type);
+        SOKOL_LOG(msg);
+        _sapp_free(msg);
+    }
+
+    close(fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_source_handle_target(void* data, struct wl_data_source* data_source, const char* mime_type) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
+    _SOKOL_UNUSED(mime_type);
+}
+
+_SOKOL_PRIVATE const struct wl_data_source_listener _sapp_wl_data_source_listener = {
+    .action = _sapp_wl_data_source_handle_action,
+    .cancelled = _sapp_wl_data_source_handle_cancelled,
+    .dnd_drop_performed = _sapp_wl_data_source_handle_dnd_drop_performed,
+    .dnd_finished = _sapp_wl_data_source_handle_dnd_finished,
+    .send = _sapp_wl_data_source_handle_send,
+    .target = _sapp_wl_data_source_handle_target,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_set_clipboard_string(const char* str) {
+    if (NULL == _sapp.wl.data_device_manager || NULL == _sapp.wl.data_device) {
+        return;
+    }
+
+    struct wl_data_source *source = wl_data_device_manager_create_data_source(_sapp.wl.data_device_manager);
+    wl_data_source_add_listener(source, &_sapp_wl_data_source_listener, NULL);
+    wl_data_source_offer(source, "text/plain");
+
+    wl_data_device_set_selection(_sapp.wl.data_device, source, _sapp.wl.serial);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
@@ -12826,6 +12905,8 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
         _sapp.wl.relative_pointer_manager = wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
     } else if (0 == strcmp(interface, zwp_pointer_constraints_v1_interface.name)) {
         _sapp.wl.pointer_constraints = wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1);
+    } else if (0 == strcmp(interface, wl_data_device_manager_interface.name)) {
+        _sapp.wl.data_device_manager = wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
     }
 }
 
@@ -12907,6 +12988,99 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_to
     }
 }
 
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_action(void* data, struct wl_data_offer* data_offer, uint32_t dnd_action) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+    _SOKOL_UNUSED(dnd_action);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_offer(void* data, struct wl_data_offer* data_offer, const char* mime_type) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+    _SOKOL_UNUSED(mime_type);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_offer_handle_source_actions(void* data, struct wl_data_offer* data_offer, uint32_t source_actions) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_offer);
+    _SOKOL_UNUSED(source_actions);
+}
+
+
+_SOKOL_PRIVATE const struct wl_data_offer_listener _sapp_wl_data_offer_listener = {
+    .action = _sapp_wl_data_offer_handle_action,
+    .offer = _sapp_wl_data_offer_handle_offer,
+    .source_actions = _sapp_wl_data_offer_handle_source_actions,
+};
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_data_offer(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(offer);
+
+    wl_data_offer_add_listener(offer, &_sapp_wl_data_offer_listener, NULL);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_device* data_device) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_enter(void* data, struct wl_data_device* data_device, uint32_t serial, struct wl_surface* surface, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(serial);
+    _SOKOL_UNUSED(surface);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+    _SOKOL_UNUSED(offer);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_leave(void* data, struct wl_data_device* data_device) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_motion(void* data, struct wl_data_device* data_device, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(time);
+    _SOKOL_UNUSED(x);
+    _SOKOL_UNUSED(y);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
+    _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_device);
+    _SOKOL_UNUSED(offer);
+
+    if (NULL == offer) {
+        return;
+    }
+
+    int fds[2];
+    pipe(fds);
+    wl_data_offer_receive(offer, "text/plain", fds[1]);
+    close(fds[1]);
+
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    ssize_t n = read(fds[0], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    _sapp.clipboard.buffer[n] = 0;
+    close(fds[0]);
+
+    wl_data_offer_destroy(offer);
+}
+
+_SOKOL_PRIVATE const struct wl_data_device_listener _sapp_wl_data_device_listener = {
+    .data_offer = _sapp_wl_data_device_handle_data_offer,
+    .drop = _sapp_wl_data_device_handle_drop,
+    .enter = _sapp_wl_data_device_handle_enter,
+    .leave = _sapp_wl_data_device_handle_leave,
+    .motion = _sapp_wl_data_device_handle_motion,
+    .selection = _sapp_wl_data_device_handle_selection,
+};
+
 _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplevel* toplevel) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(toplevel);
@@ -12962,6 +13136,11 @@ _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
     wl_surface_commit(_sapp.wl.surface);
 
     _sapp.wl.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
+    if (NULL != _sapp.wl.seat && NULL != _sapp.wl.data_device_manager && _sapp.clipboard.enabled) {
+        _sapp.wl.data_device = wl_data_device_manager_get_data_device(_sapp.wl.data_device_manager, _sapp.wl.seat);
+        wl_data_device_add_listener(_sapp.wl.data_device, &_sapp_wl_data_device_listener, NULL);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
@@ -13450,6 +13629,10 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
+    #elif defined(_SAPP_LINUX)
+    #if defined(SOKOL_WAYLAND)
+        _sapp_wl_set_clipboard_string(str);
+    #endif /* SOKOL_WAYLAND */
     #else
         /* not implemented */
     #endif
@@ -13466,6 +13649,10 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
+    #elif defined(_SAPP_LINUX)
+    #if defined(SOKOL_WAYLAND)
+        return _sapp.clipboard.buffer;
+    #endif /* SOKOL_WAYLAND */
     #else
         /* not implemented */
         return _sapp.clipboard.buffer;
