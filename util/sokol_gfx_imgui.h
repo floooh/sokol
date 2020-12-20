@@ -3083,7 +3083,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             igText("Render Target:     %s", desc->render_target ? "YES":"NO");
             igText("Width:             %d", desc->width);
             igText("Height:            %d", desc->height);
-            igText("Depth:             %d", desc->depth);
+            igText("Num Slices:        %d", desc->num_slices);
             igText("Num Mipmaps:       %d", desc->num_mipmaps);
             igText("Pixel Format:      %s", _sg_imgui_pixelformat_string(desc->pixel_format));
             igText("Sample Count:      %d", desc->sample_count);
@@ -3346,7 +3346,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_attachment(sg_imgui_t* ctx, const sg_attachme
         _sg_imgui_show_image(ctx, att->image);
     }
     igText("  Mip Level: %d", att->mip_level);
-    igText("  Face/Layer/Slice: %d", att->layer);
+    igText("  Slice: %d", att->slice);
     _sg_imgui_draw_embedded_image(ctx, att->image, img_scale);
 }
 
