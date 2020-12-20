@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](#updates) (**02-Dec-2020** sokol_gfx.h: new sg_uninit_xxx() and sg_dealloc_xxx() functions)
+[**See what's new**](#updates) (**20-Dec-2020** sokol_gfx.h/sokol_app.h: minor but breaking API changes)
 
 ## Examples and Related Projects
 
@@ -440,6 +440,21 @@ See the sokol_args.h header for a more complete documentation, and the [Tiny
 Emulators](https://floooh.github.io/tiny8bit/) for more interesting usage examples.
 
 # Updates
+
+- **20-Dec-2020**: A couple of minor breaking changes in the sokol_gfx.h and
+sokol_app.h APIs as preparation for the upcoming automatic language binding
+generation:
+    - in **sokol_gfx.h** nested unions have been removed:
+        - **sg_image_desc.depth/.layers** has been renamed to **.num_slices**
+        - **sg_attachment_desc.face/.layer/.slice** has been unified to **.slice**
+    - in **sokol_app.h** the return value of **sapp_run()** has been changed from
+      **int** to **void** (the function always returned zero anyway)
+
+    Non-breaking (or at most potentially breaking) changes:
+    - expressions in enums have been replaced with integer literals (e.g. (1<<2) becomes 4)
+    - the value of **SAPP_MOUSEBUTTON_INVALID** has been changed from -1 to 0x100
+
+    For more information about the upcoming automatic language-bindings generation [see this bog post](https://floooh.github.io/2020/08/23/sokol-bindgen.html)
 
 - **02-Dec-2020**: sokol_gfx.h has a couple new public API functions for
 destroying resources in two steps:
