@@ -1048,17 +1048,17 @@ typedef struct sapp_touchpoint {
 } sapp_touchpoint;
 
 typedef enum sapp_mousebutton {
-    SAPP_MOUSEBUTTON_INVALID = -1,
-    SAPP_MOUSEBUTTON_LEFT = 0,
-    SAPP_MOUSEBUTTON_RIGHT = 1,
-    SAPP_MOUSEBUTTON_MIDDLE = 2,
+    SAPP_MOUSEBUTTON_LEFT = 0x0,
+    SAPP_MOUSEBUTTON_RIGHT = 0x1,
+    SAPP_MOUSEBUTTON_MIDDLE = 0x2,
+    SAPP_MOUSEBUTTON_INVALID = 0x100,
 } sapp_mousebutton;
 
 enum {
-    SAPP_MODIFIER_SHIFT = (1<<0),
-    SAPP_MODIFIER_CTRL = (1<<1),
-    SAPP_MODIFIER_ALT = (1<<2),
-    SAPP_MODIFIER_SUPER = (1<<3)
+    SAPP_MODIFIER_SHIFT = 0x1,
+    SAPP_MODIFIER_CTRL = 0x2,
+    SAPP_MODIFIER_ALT = 0x4,
+    SAPP_MODIFIER_SUPER = 0x8
 };
 
 typedef struct sapp_event {
@@ -1211,7 +1211,7 @@ SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
 
 /* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
-SOKOL_APP_API_DECL int sapp_run(const sapp_desc* desc);
+SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_APP_API_DECL bool sapp_gles2(void);
@@ -1261,7 +1261,7 @@ SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
 } /* extern "C" */
 
 /* reference-based equivalents for C++ */
-inline int sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
+inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #endif
 
@@ -10100,7 +10100,7 @@ int main(int argc, char* argv[]) {
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
-SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
+SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     #if defined(_SAPP_MACOS)
         _sapp_macos_run(desc);
@@ -10118,7 +10118,6 @@ SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
         // calling sapp_run() directly is not supported on Android)
         _sapp_fail("sapp_run() not supported on this platform!");
     #endif
-    return 0;
 }
 
 /* this is just a stub so the linker doesn't complain */
@@ -10131,9 +10130,8 @@ sapp_desc sokol_main(int argc, char* argv[]) {
 }
 #else
 /* likewise, in normal mode, sapp_run() is just an empty stub */
-SOKOL_API_IMPL int sapp_run(const sapp_desc* desc) {
+SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     _SOKOL_UNUSED(desc);
-    return 0;
 }
 #endif
 

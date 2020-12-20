@@ -864,7 +864,7 @@ typedef struct sfetch_desc_t {
 typedef struct sfetch_handle_t { uint32_t id; } sfetch_handle_t;
 
 /* error codes */
-typedef enum {
+typedef enum sfetch_error_t {
     SFETCH_ERROR_NO_ERROR,
     SFETCH_ERROR_FILE_NOT_FOUND,
     SFETCH_ERROR_NO_BUFFER,
