@@ -20,6 +20,8 @@ Sample code is in a separate repo: https://github.com/floooh/sokol-samples
 
 Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
+A 'single-file' Pacman clone in C99: https://github.com/floooh/pacman.c/
+
 Command line tools: https://github.com/floooh/sokol-tools
 
 ## Core libraries
