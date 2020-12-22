@@ -404,25 +404,13 @@ def gen_module(inp):
             gen_func_c(decl, prefix)
             gen_func_zig(decl, prefix)
 
-def gen_zig(input_path, output_path):
-    reset_globals()
-    try:
-        print(f">>> {input_path} => {output_path}")
-        with open(input_path, 'r') as f_inp:
-            inp = json.load(f_inp)
-            gen_module(inp)
-            with open(output_path, 'w', newline='\n') as f_outp:
-                f_outp.write(out_lines)
-    except EnvironmentError as err:
-        print(f"{err}")
-
-def main():
+def gen_zig(input_ir):
     if not os.path.isdir('zig/'):
         os.mkdir('zig')
     if not os.path.isdir('zig/sokol'):
         os.mkdir('zig/sokol')
-    gen_zig('sokol_gfx.json', 'zig/sokol/gfx.zig')
-    gen_zig('sokol_app.json', 'zig/sokol/app.zig')
-
-if __name__ == '__main__':
-    main()
+    reset_globals()
+    gen_module(input_ir)
+    output_path = f"zig/sokol/{input_ir['module']}.zig"
+    with open(output_path, 'w', newline='\n') as f_outp:
+        f_outp.write(out_lines)

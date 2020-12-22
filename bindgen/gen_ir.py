@@ -1,12 +1,7 @@
 #-------------------------------------------------------------------------------
-#   Read an AST file generated with:
-#
-#   clang -Xclang -ast-dump=json header.h >header.ast.sjon
-#
-#   ...and generate a simplified JSON file with the public API declaration.
+#   Generate an intermediate representation of a clang AST dump.
 #-------------------------------------------------------------------------------
-import json
-import sys
+import json, sys, subprocess
 
 def is_api_decl(decl, prefix):
     if 'name' in decl:
@@ -90,36 +85,19 @@ def parse_decl(decl):
     else:
         return None
 
-def parse_ast(ast, module, prefix):
+def clang(header_path):
+    return subprocess.check_output(['clang', '-Xclang', '-ast-dump=json', header_path])
+
+def gen_ir(header_path, module, prefix):
+    ast = clang(header_path)
+    inp = json.loads(ast)
     outp = {}
     outp['module'] = module
     outp['prefix'] = prefix
     outp['decls'] = []
-    for decl in ast['inner']:
+    for decl in inp['inner']:
         if is_api_decl(decl, prefix):
             outp_decl = parse_decl(decl)
             if outp_decl is not None:
                 outp['decls'].append(outp_decl)
     return outp
-
-def gen_json(input_path, output_path, module_name, prefix):
-    try:
-        print(f">>> {input_path} => {output_path}")
-        with open(input_path, 'r') as f_inp:
-            inp = json.load(f_inp)
-            outp = parse_ast(inp, module_name, prefix)
-            with open(output_path, 'w') as f_outp:
-                json.dump(outp, f_outp, indent='  ')
-    except EnvironmentError as err:
-        print(f"{err}")
-
-def main():
-    gen_json('sokol_gfx.ast.json', 'sokol_gfx.json', 'sokol_gfx', 'sg_')
-    gen_json('sokol_app.ast.json', 'sokol_app.json', 'sokol_app', 'sapp_')
-    gen_json('sokol_audio.ast.json', 'sokol_audio.json', 'sokol_audio', 'saudio_')
-    gen_json('sokol_args.ast.json', 'sokol_args.json', 'sokol_args', 'sargs_')
-    gen_json('sokol_time.ast.json', 'sokol_time.json', 'sokol_time', 'stm_')
-    gen_json('sokol_fetch.ast.json', 'sokol_fetch.json', 'sokol_fetch', 'sfetch_')
-
-if __name__ == '__main__':
-    main()
