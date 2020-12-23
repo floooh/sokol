@@ -88,7 +88,7 @@ def parse_decl(decl):
 def clang(header_path):
     return subprocess.check_output(['clang', '-Xclang', '-ast-dump=json', header_path])
 
-def gen_ir(header_path, module, prefix):
+def gen(header_path, module, prefix):
     ast = clang(header_path)
     inp = json.loads(ast)
     outp = {}

@@ -1,4 +1,4 @@
 *.json
 *.zig
-zig/
-
+__pycache__/
+sokol-zig/

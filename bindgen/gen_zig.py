@@ -6,7 +6,7 @@
 #   - functions are camelCase
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
-import json, re, os
+import json, re, os, shutil
 
 struct_types = []
 enum_types = []
@@ -404,13 +404,14 @@ def gen_module(inp):
             gen_func_c(decl, prefix)
             gen_func_zig(decl, prefix)
 
-def gen_zig(input_ir):
-    if not os.path.isdir('zig/'):
-        os.mkdir('zig')
-    if not os.path.isdir('zig/sokol'):
-        os.mkdir('zig/sokol')
+def prepare():
+    if not os.path.isdir('sokol-zig/src/sokol'):
+        os.makedirs('sokol-zig/src/sokol')
+
+def gen(c_header_path, input_ir):
     reset_globals()
     gen_module(input_ir)
-    output_path = f"zig/sokol/{input_ir['module']}.zig"
+    shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/{os.path.basename(c_header_path)}')
+    output_path = f"sokol-zig/src/sokol/{input_ir['module']}.zig"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
