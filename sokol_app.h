@@ -1140,11 +1140,9 @@ typedef struct sapp_html5_fetch_response {
     void* user_data;        /* user-provided user data pointer */
 } sapp_html5_fetch_response;
 
-typedef void (*sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
-
 typedef struct sapp_html5_fetch_request {
     int dropped_file_index;                 /* 0..sapp_get_num_dropped_files()-1 */
-    sapp_html5_fetch_callback callback;     /* response callback function pointer (required) */
+    void (*callback)(const sapp_html5_fetch_response*);     /* response callback function pointer (required) */
     void* buffer_ptr;                       /* pointer to buffer to load data into */
     uint32_t buffer_size;                   /* size in bytes of buffer */
     void* user_data;                        /* optional userdata pointer */
@@ -3744,6 +3742,8 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 extern "C" {
 #endif
 
+typedef void (*_sapp_html5_fetch_callback) (const sapp_html5_fetch_response*);
+
 /* this function is called from a JS event handler when the user hides
     the onscreen keyboard pressing the 'dismiss keyboard key'
 */
@@ -3818,7 +3818,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
     }
 }
 
-EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
+EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, _sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
     sapp_html5_fetch_response response;
     memset(&response, 0, sizeof(response));
     response.succeeded = (0 != success);
@@ -3948,7 +3948,7 @@ EM_JS(uint32_t, sapp_js_dropped_file_size, (int index), {
     }
 });
 
-EM_JS(void, sapp_js_fetch_dropped_file, (int index, sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
+EM_JS(void, sapp_js_fetch_dropped_file, (int index, _sapp_html5_fetch_callback callback, void* buf_ptr, uint32_t buf_size, void* user_data), {
     var reader = new FileReader();
     reader.onload = function(loadEvent) {
         var content = loadEvent.target.result;
