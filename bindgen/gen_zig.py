@@ -134,9 +134,15 @@ def is_const_void_ptr(s):
 def is_void_ptr(s):
     return s == "void *"
 
-def is_prim_ptr(s):
+def is_const_prim_ptr(s):
     for prim_type in prim_types:
         if s == f"const {prim_type} *":
+            return True
+    return False
+
+def is_prim_ptr(s):
+    for prim_type in prim_types:
+        if s == f"{prim_type} *":
             return True
     return False
 
@@ -188,6 +194,8 @@ def as_extern_c_arg_type(arg_type):
         return "[*c]const u8"
     elif is_const_struct_ptr(arg_type):
         return f"[*c]const {as_title_case(extract_ptr_type(arg_type))}"
+    elif is_prim_ptr(arg_type):
+        return f"[*c] {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
         return '???'
 
@@ -214,6 +222,8 @@ def as_zig_arg_type(arg_prefix, arg_type):
     elif is_const_struct_ptr(arg_type):
         # not a bug, pass const structs by value
         return pre + f"{as_title_case(extract_ptr_type(arg_type))}"
+    elif is_prim_ptr(arg_type):
+        return pre + f"* {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
         return arg_prefix + "???"
 
@@ -295,7 +305,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
             l(f"    {field_name}: ?*const c_void = null,")
         elif is_void_ptr(field_type):
             l(f"    {field_name}: ?*c_void = null,")
-        elif is_prim_ptr(field_type):
+        elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(extract_ptr_type(field_type))} = null,")
         elif is_func_ptr(field_type):
             if callconvc_funcptrs:
