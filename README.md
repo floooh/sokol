@@ -22,6 +22,8 @@ Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
 
 A 'single-file' Pacman clone in C99: https://github.com/floooh/pacman.c/
 
+...and in Zig: https://github.com/floooh/pacman.zig/
+
 Command line tools: https://github.com/floooh/sokol-tools
 
 ## Core libraries
