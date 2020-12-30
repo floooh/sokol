@@ -3,7 +3,8 @@ import gen_ir, gen_zig
 tasks = [
     [ '../sokol_gfx.h', 'sg_', 'gfx' ],
     [ '../sokol_app.h', 'sapp_', 'app' ],
-    [ '../sokol_time.h', 'stm_', 'time' ]
+    [ '../sokol_time.h', 'stm_', 'time' ],
+    [ '../sokol_audio.h', 'saudio_', 'audio' ]
 ]
 
 # Zig

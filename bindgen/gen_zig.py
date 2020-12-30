@@ -196,8 +196,10 @@ def as_extern_c_arg_type(arg_type):
         return f"[*c]const {as_title_case(extract_ptr_type(arg_type))}"
     elif is_prim_ptr(arg_type):
         return f"[*c] {as_zig_prim_type(extract_ptr_type(arg_type))}"
+    elif is_const_prim_ptr(arg_type):
+        return f"[*c]const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        return '???'
+        return '??? (as_extern_c_arg_type)'
 
 def as_zig_arg_type(arg_prefix, arg_type):
     # NOTE: if arg_prefix is None, the result is used as return value
@@ -224,8 +226,10 @@ def as_zig_arg_type(arg_prefix, arg_type):
         return pre + f"{as_title_case(extract_ptr_type(arg_type))}"
     elif is_prim_ptr(arg_type):
         return pre + f"* {as_zig_prim_type(extract_ptr_type(arg_type))}"
+    elif is_const_prim_ptr(arg_type):
+        return pre + f"*const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        return arg_prefix + "???"
+        return arg_prefix + "??? (as_zig_arg_type)"
 
 # get C-style arguments of a function pointer as string
 def funcptr_args_c(field_type):
