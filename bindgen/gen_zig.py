@@ -40,7 +40,8 @@ prim_types = {
     'float':        'f32',
     'double':       'f64',
     'uintptr_t':    'usize',
-    'intptr_t':     'isize'
+    'intptr_t':     'isize',
+    'size_t':       'usize'
 }
 
 prim_defaults = {
@@ -57,7 +58,8 @@ prim_defaults = {
     'float':        '0.0',
     'double':       '0.0',
     'uintptr_t':    '0',
-    'intptr_t':     '0'
+    'intptr_t':     '0',
+    'size_t':       '0'
 }
 
 struct_field_type_overrides = {
