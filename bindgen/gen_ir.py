@@ -85,11 +85,14 @@ def parse_decl(decl):
     else:
         return None
 
-def clang(header_path):
-    return subprocess.check_output(['clang', '-Xclang', '-ast-dump=json', header_path])
+def clang(header_path, additional_options):
+    cmd = ['clang', '-Xclang', '-ast-dump=json' ]
+    cmd.extend(additional_options)
+    cmd.append(header_path)
+    return subprocess.check_output(cmd)
 
-def gen(header_path, module, prefix):
-    ast = clang(header_path)
+def gen(header_path, module, prefix, clang_options):
+    ast = clang(header_path, clang_options)
     inp = json.loads(ast)
     outp = {}
     outp['module'] = module

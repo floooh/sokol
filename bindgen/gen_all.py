@@ -15,5 +15,5 @@ for task in tasks:
     c_prefix = task[1]
     module_name = task[2]
     print(f'  {c_header_path} => {module_name}.zig')
-    ir = gen_ir.gen(c_header_path, module_name, c_prefix)
+    ir = gen_ir.gen(c_header_path, module_name, c_prefix, ["-DSOKOL_ZIG_BINDINGS"])
     gen_zig.gen(c_header_path, ir)
