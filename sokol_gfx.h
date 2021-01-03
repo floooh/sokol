@@ -565,6 +565,7 @@
         distribution.
 */
 #define SOKOL_GFX_INCLUDED (1)
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -613,6 +614,14 @@ typedef struct sg_shader   { uint32_t id; } sg_shader;
 typedef struct sg_pipeline { uint32_t id; } sg_pipeline;
 typedef struct sg_pass     { uint32_t id; } sg_pass;
 typedef struct sg_context  { uint32_t id; } sg_context;
+
+/*
+    A pointer/size pair.
+*/
+typedef struct sg_range {
+    const void* ptr;
+    size_t size;
+} sg_range;
 
 /*
     various compile-time constants
@@ -1494,10 +1503,10 @@ typedef struct sg_bindings {
 */
 typedef struct sg_buffer_desc {
     uint32_t _start_canary;
-    int size;
+    size_t size;
     sg_buffer_type type;
     sg_usage usage;
-    const void* content;
+    sg_range content;
     const char* label;
     /* GL specific */
     uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
@@ -1511,23 +1520,6 @@ typedef struct sg_buffer_desc {
 } sg_buffer_desc;
 
 /*
-    sg_subimage_content
-
-    Pointer to and size of a subimage-surface data, this is
-    used to describe the initial content of immutable-usage images,
-    or for updating a dynamic- or stream-usage images.
-
-    For 3D- or array-textures, one sg_subimage_content item
-    describes an entire mipmap level consisting of all array- or
-    3D-slices of the mipmap level. It is only possible to update
-    an entire mipmap level, not parts of it.
-*/
-typedef struct sg_subimage_content {
-    const void* ptr;    /* pointer to subimage data */
-    int size;           /* size in bytes of pointed-to subimage data */
-} sg_subimage_content;
-
-/*
     sg_image_content
 
     Defines the content of an image through a 2D array
@@ -1536,7 +1528,7 @@ typedef struct sg_subimage_content {
     mipmap level.
 */
 typedef struct sg_image_content {
-    sg_subimage_content subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
+    sg_range subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
 } sg_image_content;
 
 /*
@@ -3558,6 +3550,7 @@ typedef enum {
     _SG_VALIDATE_BUFFERDESC_CANARY,
     _SG_VALIDATE_BUFFERDESC_SIZE,
     _SG_VALIDATE_BUFFERDESC_CONTENT,
+    _SG_VALIDATE_BUFFERDESC_CONTENT_SIZE,
     _SG_VALIDATE_BUFFERDESC_NO_CONTENT,
 
     /* image creation */
@@ -5657,8 +5650,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
             _sg_gl_cache_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
-                SOKOL_ASSERT(desc->content);
-                glBufferSubData(gl_target, 0, buf->cmn.size, desc->content);
+                SOKOL_ASSERT(desc->content.ptr);
+                glBufferSubData(gl_target, 0, buf->cmn.size, desc->content.ptr);
             }
             _sg_gl_cache_restore_buffer_binding(gl_target);
         }
@@ -9509,8 +9502,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
         }
         else {
             if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
-                SOKOL_ASSERT(desc->content);
-                mtl_buf = [_sg.mtl.device newBufferWithBytes:desc->content length:buf->cmn.size options:mtl_options];
+                SOKOL_ASSERT(desc->content.ptr);
+                mtl_buf = [_sg.mtl.device newBufferWithBytes:desc->content.ptr length:buf->cmn.size options:mtl_options];
             }
             else {
                 mtl_buf = [_sg.mtl.device newBufferWithLength:buf->cmn.size options:mtl_options];
@@ -12996,7 +12989,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         /* buffer creation validation errors */
         case _SG_VALIDATE_BUFFERDESC_CANARY:        return "sg_buffer_desc not initialized";
         case _SG_VALIDATE_BUFFERDESC_SIZE:          return "sg_buffer_desc.size cannot be 0";
-        case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content)";
+        case _SG_VALIDATE_BUFFERDESC_CONTENT:       return "immutable buffers must be initialized with content (sg_buffer_desc.content.ptr and sg_buffer_desc.content.size)";
+        case _SG_VALIDATE_BUFFERDESC_CONTENT_SIZE:  return "immutable buffer content size differs from buffer size";
         case _SG_VALIDATE_BUFFERDESC_NO_CONTENT:    return "dynamic/stream usage buffers cannot be initialized with content";
 
         /* image creation validation errros */
@@ -13158,10 +13152,11 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
                         (0 != desc->d3d11_buffer) ||
                         (0 != desc->wgpu_buffer);
         if (!injected && (desc->usage == SG_USAGE_IMMUTABLE)) {
-            SOKOL_VALIDATE(0 != desc->content, _SG_VALIDATE_BUFFERDESC_CONTENT);
+            SOKOL_VALIDATE((0 != desc->content.ptr) && (desc->content.size > 0), _SG_VALIDATE_BUFFERDESC_CONTENT);
+            SOKOL_VALIDATE(desc->size == desc->content.size, _SG_VALIDATE_BUFFERDESC_CONTENT_SIZE);
         }
         else {
-            SOKOL_VALIDATE(0 == desc->content, _SG_VALIDATE_BUFFERDESC_NO_CONTENT);
+            SOKOL_VALIDATE(0 == desc->content.ptr, _SG_VALIDATE_BUFFERDESC_NO_CONTENT);
         }
         return SOKOL_VALIDATE_END();
     #endif
@@ -13680,7 +13675,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
                 const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
                 const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
                 const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const int expected_size = bytes_per_slice * img->cmn.num_slices;
+                const size_t expected_size = bytes_per_slice * img->cmn.num_slices;
                 SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= expected_size, _SG_VALIDATE_UPDIMG_SIZE);
             }
         }
@@ -13693,6 +13688,9 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
     sg_buffer_desc def = *desc;
     def.type = _sg_def(def.type, SG_BUFFERTYPE_VERTEXBUFFER);
     def.usage = _sg_def(def.usage, SG_USAGE_IMMUTABLE);
+    if (def.size == 0) {
+        def.size = def.content.size;
+    }
     return def;
 }
 
