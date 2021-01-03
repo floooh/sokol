@@ -60,20 +60,10 @@
 
     SOKOL_NO_DEPRECATED
 
-    API usage validation macros:
-
-    SOKOL_VALIDATE_BEGIN()      - begin a validation block (default:_sg_validate_begin())
-    SOKOL_VALIDATE(cond, err)   - like assert but for API validation (default: _sg_validate(cond, err))
-    SOKOL_VALIDATE_END()        - end a validation block, return true if all checks in block passed (default: bool _sg_validate())
-
-    If you don't want validation errors to be fatal, define SOKOL_VALIDATE_NON_FATAL,
-    be aware though that this may spam SOKOL_LOG messages.
-
     Optionally define the following to force debug checks and validations
     even in release mode:
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
-
 
     sokol_gfx DOES NOT:
     ===================
@@ -803,6 +793,9 @@ typedef struct sg_pixelformat_info {
     bool blend;         /* alpha-blending is supported */
     bool msaa;          /* pixel format can be used as MSAA render target */
     bool depth;         /* pixel format is a depth format */
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[3];
+    #endif
 } sg_pixelformat_info;
 
 /*
@@ -817,6 +810,9 @@ typedef struct sg_features {
     bool imagetype_3d;              /* creation of SG_IMAGETYPE_3D images is supported */
     bool imagetype_array;           /* creation of SG_IMAGETYPE_ARRAY images is supported */
     bool image_clamp_to_border;     /* border color and clamp-to-border UV-wrap mode is supported */
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[3];
+    #endif
 } sg_features;
 
 /*
