@@ -2643,7 +2643,7 @@ typedef struct {
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
-    cmn->size = desc->size;
+    cmn->size = (int) desc->size;
     cmn->append_pos = 0;
     cmn->append_overflow = false;
     cmn->type = desc->type;
@@ -7675,8 +7675,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
         D3D11_SUBRESOURCE_DATA init_data;
         memset(&init_data, 0, sizeof(init_data));
         if (buf->cmn.usage == SG_USAGE_IMMUTABLE) {
-            SOKOL_ASSERT(desc->content);
-            init_data.pSysMem = desc->content;
+            SOKOL_ASSERT(desc->content.ptr);
+            init_data.pSysMem = desc->content.ptr;
             init_data_ptr = &init_data;
         }
         HRESULT hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11.buf);
@@ -7704,9 +7704,9 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_
                 D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
                 const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
                 const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
-                const sg_subimage_content* subimg_content = &(content->subimage[face_index][mip_index]);
-                const int slice_size = subimg_content->size / num_slices;
-                const int slice_offset = slice_size * slice_index;
+                const sg_range* subimg_content = &(content->subimage[face_index][mip_index]);
+                const size_t slice_size = subimg_content->size / num_slices;
+                const size_t slice_offset = slice_size * slice_index;
                 const uint8_t* ptr = (const uint8_t*) subimg_content->ptr;
                 subres_data->pSysMem = ptr + slice_offset;
                 subres_data->SysMemPitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
@@ -8706,9 +8706,9 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_cont
                 const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
                 const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
                 const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-                const sg_subimage_content* subimg_content = &(data->subimage[face_index][mip_index]);
-                const int slice_size = subimg_content->size / num_slices;
-                const int slice_offset = slice_size * slice_index;
+                const sg_range* subimg_content = &(data->subimage[face_index][mip_index]);
+                const size_t slice_size = subimg_content->size / num_slices;
+                const size_t slice_offset = slice_size * slice_index;
                 const uint8_t* slice_ptr = ((const uint8_t*)subimg_content->ptr) + slice_offset;
                 hr = _sg_d3d11_Map(_sg.d3d11.ctx, d3d11_res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
                 SOKOL_ASSERT(SUCCEEDED(hr));
