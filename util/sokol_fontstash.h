@@ -1776,11 +1776,11 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
     _sfons_t* sfons = (_sfons_t*) ctx->params.userPtr;
     if (sfons->img_dirty) {
         sfons->img_dirty = false;
-        sg_image_content content;
-        memset(&content, 0, sizeof(content));
-        content.subimage[0][0].ptr = ctx->texData;
-        content.subimage[0][0].size = sfons->width * sfons->height;
-        sg_update_image(sfons->img, &content);
+        sg_image_data data;
+        memset(&data, 0, sizeof(data));
+        data.subimage[0][0].ptr = ctx->texData;
+        data.subimage[0][0].size = sfons->width * sfons->height;
+        sg_update_image(sfons->img, &data);
     }
 }
 

@@ -3743,8 +3743,8 @@ static void _sdtx_setup_common(void) {
     img_desc.mag_filter = SG_FILTER_NEAREST;
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    img_desc.content.subimage[0][0].ptr = _sdtx.font_pixels;
-    img_desc.content.subimage[0][0].size = sizeof(_sdtx.font_pixels);
+    img_desc.data.subimage[0][0].ptr = _sdtx.font_pixels;
+    img_desc.data.subimage[0][0].size = sizeof(_sdtx.font_pixels);
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
 

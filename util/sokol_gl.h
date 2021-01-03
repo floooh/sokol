@@ -2680,8 +2680,8 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
     img_desc.min_filter = SG_FILTER_NEAREST;
     img_desc.mag_filter = SG_FILTER_NEAREST;
-    img_desc.content.subimage[0][0].ptr = pixels;
-    img_desc.content.subimage[0][0].size = sizeof(pixels);
+    img_desc.data.subimage[0][0].ptr = pixels;
+    img_desc.data.subimage[0][0].size = sizeof(pixels);
     img_desc.label = "sgl-default-texture";
     _sgl.def_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);

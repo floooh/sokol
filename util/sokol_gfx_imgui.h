@@ -2108,7 +2108,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_buffer(sg_buffer buf, const void* data_ptr,
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_content* data, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_data* data, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
