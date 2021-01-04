@@ -3236,7 +3236,8 @@ SOKOL_API_IMPL void sgl_draw(void) {
         uint32_t cur_img_id = SG_INVALID_ID;
         int cur_uniform_index = -1;
         sg_push_debug_group("sokol-gl");
-        sg_update_buffer(_sgl.vbuf, _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t));
+        const sg_range range = { _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t) };
+        sg_update_buffer(_sgl.vbuf, &range);
         _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
         for (int i = 0; i < _sgl.cur_command; i++) {
             const _sgl_command_t* cmd = &_sgl.commands[i];

@@ -4161,7 +4161,8 @@ SOKOL_API_IMPL void sdtx_draw(void) {
         if (num_verts > 0) {
             SOKOL_ASSERT((num_verts % 6) == 0);
             sg_push_debug_group("sokol-debugtext");
-            int vbuf_offset = sg_append_buffer(ctx->vbuf, ctx->vertices, num_verts * sizeof(_sdtx_vertex_t));
+            const sg_range range = { ctx->vertices, num_verts * sizeof(_sdtx_vertex_t) };
+            uint32_t vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
             sg_apply_pipeline(ctx->pip);
             sg_bindings bindings;
             memset(&bindings, 0, sizeof(bindings));

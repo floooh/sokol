@@ -1590,7 +1590,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
         case SG_IMGUI_CMD_UPDATE_BUFFER:
             {
                 sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.update_buffer.buffer);
-                _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data_ptr=.., data_size=%d)",
+                _sg_imgui_snprintf(&str, "%d: sg_update_buffer(buf=%s, data.size=%d)",
                     index, res_id.buf,
                     item->args.update_buffer.data_size);
             }
@@ -1606,7 +1606,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
         case SG_IMGUI_CMD_APPEND_BUFFER:
             {
                 sg_imgui_str_t res_id = _sg_imgui_buffer_id_string(ctx, item->args.append_buffer.buffer);
-                _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data_ptr=.., data_size=%d) => %d",
+                _sg_imgui_snprintf(&str, "%d: sg_append_buffer(buf=%s, data.size=%d) => %d",
                     index, res_id.buf,
                     item->args.append_buffer.data_size,
                     item->args.append_buffer.result);
@@ -2093,7 +2093,7 @@ _SOKOL_PRIVATE void _sg_imgui_destroy_pass(sg_pass pass, void* user_data) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_update_buffer(sg_buffer buf, const void* data_ptr, int data_size, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_update_buffer(sg_buffer buf, const sg_range* data, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
@@ -2101,10 +2101,10 @@ _SOKOL_PRIVATE void _sg_imgui_update_buffer(sg_buffer buf, const void* data_ptr,
         item->cmd = SG_IMGUI_CMD_UPDATE_BUFFER;
         item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.update_buffer.buffer = buf;
-        item->args.update_buffer.data_size = data_size;
+        item->args.update_buffer.data_size = data->size;
     }
     if (ctx->hooks.update_buffer) {
-        ctx->hooks.update_buffer(buf, data_ptr, data_size, ctx->hooks.user_data);
+        ctx->hooks.update_buffer(buf, data, ctx->hooks.user_data);
     }
 }
 
@@ -2122,7 +2122,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_data* da
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const void* data_ptr, int data_size, int result, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const sg_range* data, int result, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
@@ -2130,11 +2130,11 @@ _SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const void* data_ptr,
         item->cmd = SG_IMGUI_CMD_APPEND_BUFFER;
         item->color = _SG_IMGUI_COLOR_RSRC;
         item->args.append_buffer.buffer = buf;
-        item->args.append_buffer.data_size = data_size;
+        item->args.append_buffer.data_size = data->size;
         item->args.append_buffer.result = result;
     }
     if (ctx->hooks.append_buffer) {
-        ctx->hooks.append_buffer(buf, data_ptr, data_size, result, ctx->hooks.user_data);
+        ctx->hooks.append_buffer(buf, data, result, ctx->hooks.user_data);
     }
 }
 

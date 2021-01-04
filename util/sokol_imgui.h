@@ -1923,21 +1923,23 @@ SOKOL_API_IMPL void simgui_render(void) {
 
         /* append vertices and indices to buffers, record start offsets in draw state */
         #if defined(__cplusplus)
-            const int vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
-            const int idx_size = cl->IdxBuffer.size() * sizeof(ImDrawIdx);
+            const uint32_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
+            const uint32_t idx_size = cl->IdxBuffer.size() * sizeof(ImDrawIdx);
             const ImDrawVert* vtx_ptr = &cl->VtxBuffer.front();
             const ImDrawIdx* idx_ptr = &cl->IdxBuffer.front();
         #else
-            const int vtx_size = cl->VtxBuffer.Size * sizeof(ImDrawVert);
-            const int idx_size = cl->IdxBuffer.Size * sizeof(ImDrawIdx);
+            const uint32_t vtx_size = cl->VtxBuffer.Size * sizeof(ImDrawVert);
+            const uint32_t idx_size = cl->IdxBuffer.Size * sizeof(ImDrawIdx);
             const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
             const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
         #endif
         if (vtx_ptr) {
-            vb_offset = sg_append_buffer(bind.vertex_buffers[0], vtx_ptr, vtx_size);
+            const sg_range vtx_range = { vtx_ptr, vtx_size };
+            vb_offset = sg_append_buffer(bind.vertex_buffers[0], &vtx_range);
         }
         if (idx_ptr) {
-            ib_offset = sg_append_buffer(bind.index_buffer, idx_ptr, idx_size);
+            const sg_range idx_range = { idx_ptr, idx_size };
+            ib_offset = sg_append_buffer(bind.index_buffer, &idx_range);
         }
         /* don't render anything if the buffer is in overflow state (this is also
             checked internally in sokol_gfx, draw calls that attempt to draw with
