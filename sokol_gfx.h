@@ -1838,7 +1838,7 @@ typedef struct sg_blend_state {
     sg_blend_op op_alpha;
     uint8_t color_write_mask;
     int color_attachment_count;
-    sg_pixel_format color_format;
+    sg_pixel_format color_formats[SG_MAX_COLOR_ATTACHMENTS];
     sg_pixel_format depth_format;
     float blend_color[4];
 } sg_blend_state;
@@ -2061,7 +2061,7 @@ typedef struct sg_pass_info {
     .uniform_buffer_size    4 MB (4*1024*1024)
     .staging_buffer_size    8 MB (8*1024*1024)
 
-    .context.color_format: default value depends on selected backend:
+    .context.color_formats[SG_MAX_COLOR_ATTACHMENTS]: default values depend on selected backend:
         all GL backends:    SG_PIXELFORMAT_RGBA8
         Metal and D3D11:    SG_PIXELFORMAT_BGRA8
         WGPU:               *no default* (must be queried from WGPU swapchain)
@@ -2528,6 +2528,13 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #ifndef GL_LUMINANCE
     #define GL_LUMINANCE 0x1909
     #endif
+    #ifndef GL_MAX_COLOR_ATTACHMENTS
+    #define GL_MAX_COLOR_ATTACHMENTS 0x8CDF
+    #endif
+    #ifndef GL_COLOR_ATTACHMENT0
+    #define COLOR_ATTACHMENT0 0x8CE0
+    #endif
+
 
     #ifdef SOKOL_GLES2
     #   ifdef GL_ANGLE_instanced_arrays
@@ -2540,6 +2547,9 @@ inline void sg_init_pass(sg_pass pass_id, const sg_pass_desc& desc) { return sg_
     #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
     #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
     #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+    #   elif defined(EXT_draw_buffers)
+    #       define SOKOL_MRT_ENABLED
+    #       define glDrawBuffers(size, bufs) glDrawBuffersEXT(size, bufs)
     #   else
     #       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
     #       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
@@ -2757,7 +2767,7 @@ typedef struct {
     sg_index_type index_type;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
     int color_attachment_count;
-    sg_pixel_format color_format;
+    sg_pixel_format color_formats[SG_MAX_COLOR_ATTACHMENTS];
     sg_pixel_format depth_format;
     int sample_count;
     float depth_bias;
@@ -2773,7 +2783,9 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
         cmn->vertex_layout_valid[i] = false;
     }
     cmn->color_attachment_count = desc->blend.color_attachment_count;
-    cmn->color_format = desc->blend.color_format;
+    for (int i = 0; i < desc->blend.color_attachment_count; i++) {
+        cmn->color_formats[i] = desc->blend.color_formats[i];
+    }
     cmn->depth_format = desc->blend.depth_format;
     cmn->sample_count = desc->rasterizer.sample_count;
     cmn->depth_bias = desc->rasterizer.depth_bias;
@@ -5267,6 +5279,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     bool has_colorbuffer_float = false;
     bool has_float_blend = false;
     bool has_instancing = false;
+    bool has_mrt = false;
     const char* ext = (const char*) glGetString(GL_EXTENSIONS);
     if (ext) {
         has_s3tc = strstr(ext, "_texture_compression_s3tc") || strstr(ext, "_compressed_texture_s3tc");
@@ -5284,6 +5297,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
             has_colorbuffer_half_float = strstr(ext, "_color_buffer_half_float");
         */
         has_instancing = strstr(ext, "_instanced_arrays");
+        has_mrt = strstr(ext, "_draw_buffers");
         _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
     }
 
@@ -5291,7 +5305,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     #if defined(SOKOL_INSTANCING_ENABLED)
         _sg.features.instancing = has_instancing;
     #endif
-    _sg.features.multiple_render_targets = false;
+    _sg.features.multiple_render_targets = has_mrt;
     _sg.features.msaa_render_targets = false;
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
@@ -6195,8 +6209,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     }
 
     /* setup color attachments for the framebuffer */
-    #if !defined(SOKOL_GLES2)
-    if (!_sg.gl.gles2) {
+    #if !defined(SOKOL_GLES2) || defined(SOKOL_MRT_ENABLED)
+    if (_sg.features.multiple_render_targets) {
         GLenum att[SG_MAX_COLOR_ATTACHMENTS] = {
             GL_COLOR_ATTACHMENT0,
             GL_COLOR_ATTACHMENT1,
@@ -9894,7 +9908,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     */
     const int att_count = desc->blend.color_attachment_count;
     for (int i = 0; i < att_count; i++) {
-        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(desc->blend.color_format);
+        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(desc->blend.color_formats[i]);
         rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask((sg_color_mask)desc->blend.color_write_mask);
         rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
         rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(desc->blend.op_alpha);
@@ -11686,7 +11700,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPUColorStateDescriptor cs_desc[SG_MAX_COLOR_ATTACHMENTS];
     memset(cs_desc, 0, sizeof(cs_desc));
-    cs_desc[0].format = _sg_wgpu_textureformat(desc->blend.color_format);
     cs_desc[0].colorBlend.operation = _sg_wgpu_blendop(desc->blend.op_rgb);
     cs_desc[0].colorBlend.srcFactor = _sg_wgpu_blendfactor(desc->blend.src_factor_rgb);
     cs_desc[0].colorBlend.dstFactor = _sg_wgpu_blendfactor(desc->blend.dst_factor_rgb);
@@ -11697,6 +11710,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(desc->blend.color_attachment_count <= SG_MAX_COLOR_ATTACHMENTS);
     for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         cs_desc[i] = cs_desc[0];
+        cs_desc[i].format = _sg_wgpu_textureformat(desc->blend.color_formats[i]);
     }
 
     WGPURenderPipelineDescriptor pip_desc;
@@ -13064,7 +13078,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_APIP_SHADER_EXISTS:       return "sg_apply_pipeline: shader object no longer alive";
         case _SG_VALIDATE_APIP_SHADER_VALID:        return "sg_apply_pipeline: shader object not in valid state";
         case _SG_VALIDATE_APIP_ATT_COUNT:           return "sg_apply_pipeline: color_attachment_count in pipeline doesn't match number of pass color attachments";
-        case _SG_VALIDATE_APIP_COLOR_FORMAT:        return "sg_apply_pipeline: color_format in pipeline doesn't match pass color attachment pixel format";
+        case _SG_VALIDATE_APIP_COLOR_FORMAT:        return "sg_apply_pipeline: color_formats in pipeline doesn't match pass color attachment pixel format";
         case _SG_VALIDATE_APIP_DEPTH_FORMAT:        return "sg_apply_pipeline: depth_format in pipeline doesn't match pass depth attachment pixel format";
         case _SG_VALIDATE_APIP_SAMPLE_COUNT:        return "sg_apply_pipeline: MSAA sample count in pipeline doesn't match render pass attachment sample count";
 
@@ -13410,7 +13424,9 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 sample_count = img->cmn.sample_count;
             }
             else {
-                SOKOL_VALIDATE(img->cmn.pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
+                if (_sg.gl.gles2) {
+                    SOKOL_VALIDATE(img->cmn.pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
+                }
                 SOKOL_VALIDATE(width == img->cmn.width >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(height == img->cmn.height >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(sample_count == img->cmn.sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
@@ -13489,10 +13505,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, _sg.cur_pass.id);
         if (pass) {
             /* an offscreen pass */
-            const _sg_image_t* att_img = _sg_pass_color_image(pass, 0);
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == pass->cmn.num_color_atts, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->cmn.color_format == att_img->cmn.pixel_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
-            SOKOL_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
+            for (int i = 0; i < pip->cmn.color_attachment_count; i++) {
+                const _sg_image_t* att_img = _sg_pass_color_image(pass, i);
+                SOKOL_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
+                SOKOL_VALIDATE(pip->cmn.color_formats[i] == att_img->cmn.pixel_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
+            }            
             const _sg_image_t* att_dsimg = _sg_pass_ds_image(pass);
             if (att_dsimg) {
                 SOKOL_VALIDATE(pip->cmn.depth_format == att_dsimg->cmn.pixel_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
@@ -13504,7 +13522,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         else {
             /* default pass */
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == 1, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->cmn.color_format == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
+            SOKOL_VALIDATE(pip->cmn.color_formats[0] == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
             SOKOL_VALIDATE(pip->cmn.depth_format == _sg.desc.context.depth_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
             SOKOL_VALIDATE(pip->cmn.sample_count == _sg.desc.context.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
         }
@@ -13793,7 +13811,9 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
         def.blend.color_write_mask = (uint8_t) _sg_def((sg_color_mask)def.blend.color_write_mask, SG_COLORMASK_RGBA);
     }
     def.blend.color_attachment_count = _sg_def(def.blend.color_attachment_count, 1);
-    def.blend.color_format = _sg_def(def.blend.color_format, _sg.desc.context.color_format);
+    for (int i = 0; i < def.blend.color_attachment_count; i++) {
+        def.blend.color_formats[i] = _sg_def(def.blend.color_formats[i], _sg.desc.context.color_format);
+    }
     def.blend.depth_format = _sg_def(def.blend.depth_format, _sg.desc.context.depth_format);
 
     def.rasterizer.cull_mode = _sg_def(def.rasterizer.cull_mode, SG_CULLMODE_NONE);
