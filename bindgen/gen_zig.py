@@ -403,9 +403,34 @@ def pre_parse(inp):
             for item in decl['items']:
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
+def gen_helpers(inp):
+    if inp['prefix'] in ['sg_']:
+        l('// helper function to convert "anything" to a Range struct')
+        l('pub fn range(val: anytype) Range {')
+        l('    const type_info = @typeInfo(@TypeOf(val));')
+        l('    switch (type_info) {')
+        l('        .Pointer => {')
+        l('            if (type_info.Pointer.size == .One) {')
+        l('                return .{ .ptr = val, .size = @sizeOf(type_info.Pointer.child) };')
+        l('            }')
+        l('            else {')
+        l('                @compileError("FIXME: pointer types!");')
+        l('            }')
+        l('        },')
+        l('        .Struct, .Array => {')
+        l('            return .{ .ptr = &val, .size = @sizeOf(@TypeOf(val)) };')
+        l('        },')
+        l('        else => {')
+        l('            @compileError("Cannot convert to range!");')
+        l('        }')
+        l('    }')
+        l('}')
+        l('')
+
 def gen_module(inp):
     l('// machine generated, do not edit')
     l('')
+    gen_helpers(inp)
     pre_parse(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:
