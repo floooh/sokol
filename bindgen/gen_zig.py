@@ -410,11 +410,10 @@ def gen_helpers(inp):
         l('    const type_info = @typeInfo(@TypeOf(val));')
         l('    switch (type_info) {')
         l('        .Pointer => {')
-        l('            if (type_info.Pointer.size == .One) {')
-        l('                return .{ .ptr = val, .size = @sizeOf(type_info.Pointer.child) };')
-        l('            }')
-        l('            else {')
-        l('                @compileError("FIXME: pointer types!");')
+        l('            switch (type_info.Pointer.size) {')
+        l('                .One => return .{ .ptr = val, .size = @sizeOf(type_info.Pointer.child) },')
+        l('                .Slice => return .{ .ptr = val.ptr, .size = @sizeOf(type_info.Pointer.child) * val.len },')
+        l('                else => @compileError("FIXME: Pointer type!"),')
         l('            }')
         l('        },')
         l('        .Struct, .Array => {')
@@ -426,6 +425,7 @@ def gen_helpers(inp):
         l('    }')
         l('}')
         l('')
+
 
 def gen_module(inp):
     l('// machine generated, do not edit')
