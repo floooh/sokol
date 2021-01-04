@@ -8655,20 +8655,20 @@ _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
     SOKOL_ASSERT(!_sg.d3d11.in_pass);
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const void* data_ptr, uint32_t data_size) {
-    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
+_SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
     _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr));
-    memcpy(d3d11_msr.pData, data_ptr, data_size);
+    memcpy(d3d11_msr.pData, data->ptr, data->size);
     _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
 }
 
-_SOKOL_PRIVATE uint32_t _sg_d3d11_append_buffer(_sg_buffer_t* buf, const void* data_ptr, uint32_t data_size, bool new_frame) {
-    SOKOL_ASSERT(buf && data_ptr && (data_size > 0));
+_SOKOL_PRIVATE uint32_t _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
@@ -8677,10 +8677,10 @@ _SOKOL_PRIVATE uint32_t _sg_d3d11_append_buffer(_sg_buffer_t* buf, const void* d
     _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr));
     uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
-    memcpy(dst_ptr, data_ptr, data_size);
+    memcpy(dst_ptr, data->ptr, data->size);
     _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
     /* NOTE: this is a requirement from WebGPU, but we want identical behaviour across all backend */
-    return _sg_roundup(data_size, 4);
+    return _sg_roundup(data->size, 4);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data* data) {
@@ -14887,13 +14887,13 @@ SOKOL_API_IMPL uint32_t sg_append_buffer(sg_buffer buf_id, const sg_range* data)
         if ((buf->cmn.append_pos + _sg_roundup(data->size, 4)) > buf->cmn.size) {
             buf->cmn.append_overflow = true;
         }
-        const size_t start_pos = buf->cmn.append_pos;
+        const uint32_t start_pos = buf->cmn.append_pos;
         if (buf->slot.state == SG_RESOURCESTATE_VALID) {
             if (_sg_validate_append_buffer(buf, data)) {
                 if (!buf->cmn.append_overflow && (data->size > 0)) {
                     /* update and append on same buffer in same frame not allowed */
                     SOKOL_ASSERT(buf->cmn.update_frame_index != _sg.frame_index);
-                    size_t copied_num_bytes = _sg_append_buffer(buf, data, buf->cmn.append_frame_index != _sg.frame_index);
+                    uint32_t copied_num_bytes = _sg_append_buffer(buf, data, buf->cmn.append_frame_index != _sg.frame_index);
                     buf->cmn.append_pos += copied_num_bytes;
                     buf->cmn.append_frame_index = _sg.frame_index;
                 }
