@@ -378,7 +378,7 @@ typedef struct {
 
 typedef struct {
     sg_buffer buffer;
-    int data_size;
+    size_t data_size;
 } sg_imgui_args_update_buffer_t;
 
 typedef struct {
@@ -387,8 +387,8 @@ typedef struct {
 
 typedef struct {
     sg_buffer buffer;
-    int data_size;
-    int result;
+    size_t data_size;
+    uint32_t result;
 } sg_imgui_args_append_buffer_t;
 
 typedef struct {
@@ -2122,7 +2122,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_data* da
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const sg_range* data, int result, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const sg_range* data, uint32_t result, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);

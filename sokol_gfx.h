@@ -1922,7 +1922,7 @@ typedef struct sg_trace_hooks {
     void (*destroy_pass)(sg_pass pass, void* user_data);
     void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
-    void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
+    void (*append_buffer)(sg_buffer buf, const sg_range* data, uint32_t result, void* user_data);
     void (*begin_default_pass)(const sg_pass_action* pass_action, int width, int height, void* user_data);
     void (*begin_pass)(sg_pass pass, const sg_pass_action* pass_action, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
@@ -5818,7 +5818,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                             gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
                         const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        const int data_size = desc->data.subimage[face_index][mip_index].size;
+                        const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                         int mip_width = img->cmn.width >> mip_index;
                         if (mip_width == 0) {
                             mip_width = 1;
