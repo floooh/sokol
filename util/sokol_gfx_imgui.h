@@ -422,9 +422,8 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    int ub_index;
-    const void* data;
-    int num_bytes;
+    uint32_t ub_index;
+    size_t data_size;
     sg_pipeline pipeline;   /* the pipeline which was active at this call */
     uint32_t ubuf_pos;      /* start of copied data in capture buffer */
 } sg_imgui_args_apply_uniforms_t;
@@ -1496,16 +1495,16 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_
     return &bucket->items[index];
 }
 
-_SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const void* data, int num_bytes) {
+_SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const sg_range* data) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
-    const uint32_t required_size = bucket->ubuf_pos + num_bytes;
+    const uint32_t required_size = bucket->ubuf_pos + data->size;
     if (required_size > bucket->ubuf_size) {
         _sg_imgui_capture_grow_ubuf(ctx, required_size);
     }
     SOKOL_ASSERT(required_size <= bucket->ubuf_size);
-    memcpy(bucket->ubuf + bucket->ubuf_pos, data, num_bytes);
+    memcpy(bucket->ubuf + bucket->ubuf_pos, data->ptr, data->size);
     const uint32_t pos = bucket->ubuf_pos;
-    bucket->ubuf_pos += num_bytes;
+    bucket->ubuf_pos += data->size;
     SOKOL_ASSERT(bucket->ubuf_pos <= bucket->ubuf_size);
     return pos;
 }
@@ -1659,11 +1658,11 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_capture_item_string(sg_imgui_t* ctx, int
             break;
 
         case SG_IMGUI_CMD_APPLY_UNIFORMS:
-            _sg_imgui_snprintf(&str, "%d: sg_apply_uniforms(stage=%s, ub_index=%d, data=.., num_bytes=%d)",
+            _sg_imgui_snprintf(&str, "%d: sg_apply_uniforms(stage=%s, ub_index=%d, data.size=%d)",
                 index,
                 _sg_imgui_shaderstage_string(item->args.apply_uniforms.stage),
                 item->args.apply_uniforms.ub_index,
-                item->args.apply_uniforms.num_bytes);
+                item->args.apply_uniforms.data_size);
             break;
 
         case SG_IMGUI_CMD_DRAW:
@@ -2237,9 +2236,10 @@ _SOKOL_PRIVATE void _sg_imgui_apply_bindings(const sg_bindings* bindings, void* 
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(data);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
     if (item) {
         item->cmd = SG_IMGUI_CMD_APPLY_UNIFORMS;
@@ -2247,13 +2247,12 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index
         sg_imgui_args_apply_uniforms_t* args = &item->args.apply_uniforms;
         args->stage = stage;
         args->ub_index = ub_index;
-        args->data = data;
-        args->num_bytes = num_bytes;
+        args->data_size = data->size;
         args->pipeline = ctx->cur_pipeline;
-        args->ubuf_pos = _sg_imgui_capture_uniforms(ctx, data, num_bytes);
+        args->ubuf_pos = _sg_imgui_capture_uniforms(ctx, data);
     }
     if (ctx->hooks.apply_uniforms) {
-        ctx->hooks.apply_uniforms(stage, ub_index, data, num_bytes, ctx->hooks.user_data);
+        ctx->hooks.apply_uniforms(stage, ub_index, data, ctx->hooks.user_data);
     }
 }
 
@@ -3454,14 +3453,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
     const sg_shader_uniform_block_desc* ub_desc = (args->stage == SG_SHADERSTAGE_VS) ?
         &shd_ui->desc.vs.uniform_blocks[args->ub_index] :
         &shd_ui->desc.fs.uniform_blocks[args->ub_index];
-    SOKOL_ASSERT(args->num_bytes <= ub_desc->size);
+    SOKOL_ASSERT(args->data_size <= ub_desc->size);
     bool draw_dump = false;
     if (ub_desc->uniforms[0].type == SG_UNIFORMTYPE_INVALID) {
         draw_dump = true;
     }
 
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
-    SOKOL_ASSERT((args->ubuf_pos + args->num_bytes) <= bucket->ubuf_size);
+    SOKOL_ASSERT((args->ubuf_pos + args->data_size) <= bucket->ubuf_size);
     const float* uptrf = (const float*) (bucket->ubuf + args->ubuf_pos);
     if (!draw_dump) {
         for (int i = 0; i < SG_MAX_UB_MEMBERS; i++) {

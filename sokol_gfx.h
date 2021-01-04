@@ -1686,7 +1686,7 @@ typedef struct sg_shader_uniform_desc {
 } sg_shader_uniform_desc;
 
 typedef struct sg_shader_uniform_block_desc {
-    int size;
+    size_t size;
     sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
 } sg_shader_uniform_block_desc;
 
@@ -1929,7 +1929,7 @@ typedef struct sg_trace_hooks {
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_pipeline)(sg_pipeline pip, void* user_data);
     void (*apply_bindings)(const sg_bindings* bindings, void* user_data);
-    void (*apply_uniforms)(sg_shader_stage stage, int ub_index, const void* data, int num_bytes, void* user_data);
+    void (*apply_uniforms)(sg_shader_stage stage, uint32_t ub_index, const sg_range* data, void* user_data);
     void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
     void (*end_pass)(void* user_data);
     void (*commit)(void* user_data);
@@ -2231,7 +2231,7 @@ SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, b
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
-SOKOL_GFX_API_DECL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes);
+SOKOL_GFX_API_DECL void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
@@ -2324,6 +2324,7 @@ inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg
 inline void sg_begin_default_pass(const sg_pass_action& pass_action, int width, int height) { return sg_begin_default_pass(&pass_action, width, height); }
 inline void sg_begin_pass(sg_pass pass, const sg_pass_action& pass_action) { return sg_begin_pass(pass, &pass_action); }
 inline void sg_apply_bindings(const sg_bindings& bindings) { return sg_apply_bindings(&bindings); }
+inline void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range& data) { return sg_apply_uniforms(stage, ub_index, &data); }
 
 inline sg_buffer_desc sg_query_buffer_defaults(const sg_buffer_desc& desc) { return sg_query_buffer_defaults(&desc); }
 inline sg_image_desc sg_query_image_defaults(const sg_image_desc& desc) { return sg_query_image_defaults(&desc); }
@@ -2703,7 +2704,7 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
 }
 
 typedef struct {
-    int size;
+    uint32_t size;
 } _sg_uniform_block_t;
 
 typedef struct {
@@ -2712,8 +2713,8 @@ typedef struct {
 } _sg_shader_image_t;
 
 typedef struct {
-    int num_uniform_blocks;
-    int num_images;
+    uint32_t num_uniform_blocks;
+    uint32_t num_images;
     _sg_uniform_block_t uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
     _sg_shader_image_t images[SG_MAX_SHADERSTAGE_IMAGES];
 } _sg_shader_stage_t;
@@ -4254,14 +4255,13 @@ _SOKOL_PRIVATE void _sg_dummy_apply_bindings(
     _SOKOL_UNUSED(fs_imgs); _SOKOL_UNUSED(num_fs_imgs);
 }
 
-_SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    SOKOL_ASSERT(data && (num_bytes > 0));
+_SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     _SOKOL_UNUSED(stage_index);
     _SOKOL_UNUSED(ub_index);
     _SOKOL_UNUSED(data);
-    _SOKOL_UNUSED(num_bytes);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_instances) {
@@ -5959,12 +5959,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
-        for (int ub_index = 0; ub_index < shd->cmn.stage[stage_index].num_uniform_blocks; ub_index++) {
+        for (uint32_t ub_index = 0; ub_index < shd->cmn.stage[stage_index].num_uniform_blocks; ub_index++) {
             const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
             SOKOL_ASSERT(ub_desc->size > 0);
             _sg_gl_uniform_block_t* ub = &gl_stage->uniform_blocks[ub_index];
             SOKOL_ASSERT(ub->num_uniforms == 0);
-            int cur_uniform_offset = 0;
+            uint32_t cur_uniform_offset = 0;
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
@@ -5996,7 +5996,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS)? &desc->vs : &desc->fs;
         _sg_gl_shader_stage_t* gl_stage = &shd->gl.stage[stage_index];
-        for (int img_index = 0; img_index < shd->cmn.stage[stage_index].num_images; img_index++) {
+        for (uint32_t img_index = 0; img_index < shd->cmn.stage[stage_index].num_images; img_index++) {
             const sg_shader_image_desc* img_desc = &stage_desc->images[img_index];
             SOKOL_ASSERT(img_desc->type != _SG_IMAGETYPE_DEFAULT);
             _sg_gl_shader_image_t* gl_img = &gl_stage->images[img_index];
@@ -6644,8 +6644,8 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _sg_pipeline_t* pip,
     _sg_buffer_t** vbs, const int* vb_offsets, int num_vbs,
     _sg_buffer_t* ib, int ib_offset,
-    _sg_image_t** vs_imgs, int num_vs_imgs,
-    _sg_image_t** fs_imgs, int num_fs_imgs)
+    _sg_image_t** vs_imgs, uint32_t num_vs_imgs,
+    _sg_image_t** fs_imgs, uint32_t num_fs_imgs)
 {
     SOKOL_ASSERT(pip);
     _SOKOL_UNUSED(num_fs_imgs);
@@ -6660,7 +6660,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
         const _sg_gl_shader_stage_t* gl_stage = &pip->shader->gl.stage[stage_index];
         _sg_image_t** imgs = (stage_index == SG_SHADERSTAGE_VS)? vs_imgs : fs_imgs;
         SOKOL_ASSERT(((stage_index == SG_SHADERSTAGE_VS)? num_vs_imgs : num_fs_imgs) == stage->num_images);
-        for (int img_index = 0; img_index < stage->num_images; img_index++) {
+        for (uint32_t img_index = 0; img_index < stage->num_images; img_index++) {
             const _sg_gl_shader_image_t* gl_shd_img = &gl_stage->images[img_index];
             if (gl_shd_img->gl_tex_slot != -1) {
                 _sg_image_t* img = imgs[img_index];
@@ -6732,15 +6732,14 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    _SOKOL_UNUSED(num_bytes);
-    SOKOL_ASSERT(data && (num_bytes > 0));
+_SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->slot.id == _sg.gl.cache.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->slot.id == _sg.gl.cache.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks > ub_index);
-    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size == num_bytes);
+    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size == data->size);
     const _sg_gl_shader_stage_t* gl_stage = &_sg.gl.cache.cur_pipeline->shader->gl.stage[stage_index];
     const _sg_gl_uniform_block_t* gl_ub = &gl_stage->uniform_blocks[ub_index];
     for (int u_index = 0; u_index < gl_ub->num_uniforms; u_index++) {
@@ -6749,7 +6748,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
         if (u->gl_loc == -1) {
             continue;
         }
-        GLfloat* ptr = (GLfloat*) (((uint8_t*)data) + u->offset);
+        GLfloat* ptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
         switch (u->type) {
             case SG_UNIFORMTYPE_INVALID:
                 break;
@@ -10312,33 +10311,33 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
     }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(data && (num_bytes > 0));
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
-    SOKOL_ASSERT((_sg.mtl.cur_ub_offset + num_bytes) <= _sg.mtl.ub_size);
+    SOKOL_ASSERT((_sg.mtl.cur_ub_offset + data->size) <= _sg.mtl.ub_size);
     SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && _sg.mtl.state_cache.cur_pipeline->shader);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline->shader->slot.id == _sg.mtl.state_cache.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.mtl.state_cache.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(num_bytes <= _sg.mtl.state_cache.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(data->size <= _sg.mtl.state_cache.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
 
     /* copy to global uniform buffer, record offset into cmd encoder, and advance offset */
     uint8_t* dst = &_sg.mtl.cur_ub_base_ptr[_sg.mtl.cur_ub_offset];
-    memcpy(dst, data, num_bytes);
+    memcpy(dst, data->ptr, data->size);
     if (stage_index == SG_SHADERSTAGE_VS) {
         [_sg.mtl.cmd_encoder setVertexBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
     else {
         [_sg.mtl.cmd_encoder setFragmentBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
-    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + num_bytes, _SG_MTL_UB_ALIGN);
+    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + data->size, _SG_MTL_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
@@ -12523,17 +12522,17 @@ static inline void _sg_apply_bindings(
     #endif
 }
 
-static inline void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+static inline void _sg_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    _sg_gl_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    _sg_mtl_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_uniforms(stage_index, ub_index, data, num_bytes);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_uniforms(stage_index, ub_index, data, num_bytes);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    _sg_dummy_apply_uniforms(stage_index, ub_index, data);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13279,7 +13278,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 if (ub_desc->size > 0) {
                     SOKOL_VALIDATE(uniform_blocks_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UBS);
                     bool uniforms_continuous = true;
-                    int uniform_offset = 0;
+                    uint32_t uniform_offset = 0;
                     int num_uniforms = 0;
                     for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                         const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
@@ -13564,7 +13563,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         /* has expected vertex shader images */
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        for (uint32_t i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_VS];
             if (bindings->vs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_VS_IMGS);
@@ -13580,7 +13579,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         }
 
         /* has expected fragment shader images */
-        for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
+        for (uint32_t i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
             _sg_shader_stage_t* stage = &pip->shader->cmn.stage[SG_SHADERSTAGE_FS];
             if (bindings->fs_images[i].id != SG_INVALID_ID) {
                 SOKOL_VALIDATE(i < stage->num_images, _SG_VALIDATE_ABND_FS_IMGS);
@@ -13598,12 +13597,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    _SOKOL_UNUSED(data);
+_SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(stage_index);
         _SOKOL_UNUSED(ub_index);
-        _SOKOL_UNUSED(num_bytes);
+        _SOKOL_UNUSED(data);
         return true;
     #else
         SOKOL_ASSERT((stage_index == SG_SHADERSTAGE_VS) || (stage_index == SG_SHADERSTAGE_FS));
@@ -13619,7 +13617,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, int
         SOKOL_VALIDATE(ub_index < stage->num_uniform_blocks, _SG_VALIDATE_AUB_NO_UB_AT_SLOT);
 
         /* check that the provided data size doesn't exceed the uniform block size */
-        SOKOL_VALIDATE(num_bytes <= stage->uniform_blocks[ub_index].size, _SG_VALIDATE_AUB_SIZE);
+        SOKOL_VALIDATE(data->size <= stage->uniform_blocks[ub_index].size, _SG_VALIDATE_AUB_SIZE);
 
         return SOKOL_VALIDATE_END();
     #endif
@@ -14777,12 +14775,12 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     }
 }
 
-SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes) {
+SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
-    SOKOL_ASSERT(data && (num_bytes > 0));
-    if (!_sg_validate_apply_uniforms(stage, ub_index, data, num_bytes)) {
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    if (!_sg_validate_apply_uniforms(stage, ub_index, data)) {
         _sg.next_draw_valid = false;
         _SG_TRACE_NOARGS(err_draw_invalid);
         return;
@@ -14794,8 +14792,8 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     if (!_sg.next_draw_valid) {
         _SG_TRACE_NOARGS(err_draw_invalid);
     }
-    _sg_apply_uniforms(stage, ub_index, data, num_bytes);
-    _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data, num_bytes);
+    _sg_apply_uniforms(stage, ub_index, data);
+    _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data);
 }
 
 SOKOL_API_IMPL void sg_draw(int base_element, int num_elements, int num_instances) {

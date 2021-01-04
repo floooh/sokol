@@ -3270,7 +3270,8 @@ SOKOL_API_IMPL void sgl_draw(void) {
                             cur_img_id = args->img.id;
                         }
                         if (cur_uniform_index != args->uniform_index) {
-                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
+                            const sg_range ub_range = { &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
+                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
                             cur_uniform_index = args->uniform_index;
                         }
                         /* FIXME: what if number of vertices doesn't match the primitive type? */
