@@ -95,6 +95,7 @@ extern "C" {
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_context_desc sapp_window_sgcontext(sapp_window window_id);
 #endif
 
 #ifdef __cplusplus
@@ -112,26 +113,67 @@ SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
 #endif
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
-SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
+
+// DISCUSS: Not a huge fan of doing the handle->void* casts here
+_SOKOL_PRIVATE void _sapp_gl_make_context_current_cb(void* user_data) {
+    sapp_window window_id;
+    window_id.id = (uint32_t)(uintptr_t)user_data;
+    sapp_gl_make_context_current(window_id);
+}
+
+_SOKOL_PRIVATE const void* _sapp_metal_window_get_renderpass_descriptor_cb(void* user_data) {
+    sapp_window window_id;
+    window_id.id = (uint32_t)(uintptr_t)user_data;
+    return sapp_metal_window_get_renderpass_descriptor(window_id);
+}
+
+_SOKOL_PRIVATE const void* _sapp_metal_window_get_drawable_cb(void* user_data) {
+    sapp_window window_id;
+    window_id.id = (uint32_t)(uintptr_t)user_data;
+    return sapp_metal_window_get_drawable(window_id);
+}
+
+_SOKOL_PRIVATE const void* _sapp_d3d11_window_get_render_target_view_cb(void* user_data) {
+    sapp_window window_id;
+    window_id.id = (uint32_t)(uintptr_t)user_data;
+    return sapp_d3d11_window_get_render_target_view(window_id);
+}
+
+_SOKOL_PRIVATE const void* _sapp_d3d11_window_get_depth_stencil_cb(void* user_data) {
+    sapp_window window_id;
+    window_id.id = (uint32_t)(uintptr_t)user_data;
+    return sapp_d3d11_window_get_depth_stencil_view(window_id);
+}
+
+SOKOL_API_IMPL sg_context_desc sapp_window_sgcontext(sapp_window window_id) {
     sg_context_desc desc;
     memset(&desc, 0, sizeof(desc));
     desc.color_format = (sg_pixel_format) sapp_color_format();
     desc.depth_format = (sg_pixel_format) sapp_depth_format();
-    desc.sample_count = sapp_sample_count();
+    desc.sample_count = sapp_window_sample_count(window_id);
     desc.gl.force_gles2 = sapp_gles2();
+    desc.gl.context_make_current_userdata_cb = _sapp_gl_make_context_current_cb;
+    desc.gl.user_data = (void*) (uintptr_t)window_id.id;
     desc.metal.device = sapp_metal_get_device();
-    desc.metal.renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor;
-    desc.metal.drawable_cb = sapp_metal_get_drawable;
+    desc.metal.renderpass_descriptor_userdata_cb = _sapp_metal_window_get_renderpass_descriptor_cb;
+    desc.metal.drawable_userdata_cb = _sapp_metal_window_get_drawable_cb;
+    desc.metal.user_data = (void*) (uintptr_t)window_id.id;
     desc.d3d11.device = sapp_d3d11_get_device();
     desc.d3d11.device_context = sapp_d3d11_get_device_context();
-    desc.d3d11.render_target_view_cb = sapp_d3d11_get_render_target_view;
-    desc.d3d11.depth_stencil_view_cb = sapp_d3d11_get_depth_stencil_view;
+    desc.d3d11.render_target_view_userdata_cb = _sapp_d3d11_window_get_render_target_view_cb;
+    desc.d3d11.depth_stencil_view_userdata_cb = _sapp_d3d11_window_get_depth_stencil_cb;
+    desc.d3d11.user_data = (void*) (uintptr_t)window_id.id;
     desc.wgpu.device = sapp_wgpu_get_device();
     desc.wgpu.render_view_cb = sapp_wgpu_get_render_view;
     desc.wgpu.resolve_view_cb = sapp_wgpu_get_resolve_view;
     desc.wgpu.depth_stencil_view_cb = sapp_wgpu_get_depth_stencil_view;
     return desc;
 }
+
+SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
+    return sapp_window_sgcontext(sapp_main_window());
+}
+
 #endif
 
 #endif /* SOKOL_GLUE_IMPL */
