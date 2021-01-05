@@ -6255,8 +6255,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
                     return SG_RESOURCESTATE_FAILED;
                 }
                 /* setup color attachments for the framebuffer */
-                #if !defined(SOKOL_GLES2)
-                if (!_sg.gl.gles2) {
+                #if !defined(SOKOL_GLES2) || defined(SOKOL_MRT_ENABLED)
+                if (_sg.features.multiple_render_targets) {
                     const GLenum gl_draw_bufs = GL_COLOR_ATTACHMENT0;
                     glDrawBuffers(1, &gl_draw_bufs);
                 }
@@ -13424,9 +13424,11 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 sample_count = img->cmn.sample_count;
             }
             else {
-                if (_sg.gl.gles2) {
-                    SOKOL_VALIDATE(img->cmn.pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
-                }
+                #if defined(_SOKOL_ANY_GL)
+                    if (_sg.gl.gles2) {
+                        SOKOL_VALIDATE(img->cmn.pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
+                    }
+                #endif
                 SOKOL_VALIDATE(width == img->cmn.width >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(height == img->cmn.height >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(sample_count == img->cmn.sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
