@@ -2735,10 +2735,10 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.byte_code = _sgl_vs_bytecode_hlsl4;
-        shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_hlsl4);
-        shd_desc.fs.byte_code = _sgl_fs_bytecode_hlsl4;
-        shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_hlsl4);
+        shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_hlsl4;
+        shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_hlsl4);
+        shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_hlsl4;
+        shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _sgl_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_wgpu);

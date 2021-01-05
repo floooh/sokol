@@ -3708,10 +3708,10 @@ static void _sdtx_setup_common(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.byte_code = _sdtx_vs_bytecode_d3d11;
-        shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_d3d11);
-        shd_desc.fs.byte_code = _sdtx_fs_bytecode_d3d11;
-        shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_d3d11);
+        shd_desc.vs.bytecode.ptr = _sdtx_vs_bytecode_d3d11;
+        shd_desc.vs.bytecode.size = sizeof(_sdtx_vs_bytecode_d3d11);
+        shd_desc.fs.bytecode.ptr = _sdtx_fs_bytecode_d3d11;
+        shd_desc.fs.bytecode.size = sizeof(_sdtx_fs_bytecode_d3d11);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _sdtx_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_wgpu);

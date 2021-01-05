@@ -8081,12 +8081,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     const void* vs_ptr = 0, *fs_ptr = 0;
     SIZE_T vs_length = 0, fs_length = 0;
     ID3DBlob* vs_blob = 0, *fs_blob = 0;
-    if (desc->vs.byte_code && desc->fs.byte_code) {
+    if (desc->vs.bytecode.ptr && desc->fs.bytecode.ptr) {
         /* create from shader byte code */
-        vs_ptr = desc->vs.byte_code;
-        fs_ptr = desc->fs.byte_code;
-        vs_length = desc->vs.byte_code_size;
-        fs_length = desc->fs.byte_code_size;
+        vs_ptr = desc->vs.bytecode.ptr;
+        fs_ptr = desc->fs.bytecode.ptr;
+        vs_length = desc->vs.bytecode.size;
+        fs_length = desc->fs.bytecode.size;
     }
     else {
         /* compile from shader source code */

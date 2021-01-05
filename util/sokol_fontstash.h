@@ -1641,10 +1641,10 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
                     break;
             }
         #elif defined(SOKOL_D3D11)
-            shd_desc.vs.byte_code = _sfons_vs_bytecode_hlsl4;
-            shd_desc.vs.byte_code_size = sizeof(_sfons_vs_bytecode_hlsl4);
-            shd_desc.fs.byte_code = _sfons_fs_bytecode_hlsl4;
-            shd_desc.fs.byte_code_size = sizeof(_sfons_fs_bytecode_hlsl4);
+            shd_desc.vs.bytecode.ptr = _sfons_vs_bytecode_hlsl4;
+            shd_desc.vs.bytecode.size = sizeof(_sfons_vs_bytecode_hlsl4);
+            shd_desc.fs.bytecode.ptr = _sfons_fs_bytecode_hlsl4;
+            shd_desc.fs.bytecode.size = sizeof(_sfons_fs_bytecode_hlsl4);
         #elif defined(SOKOL_WGPU)
             shd_desc.vs.byte_code = _sfons_vs_bytecode_wgpu;
             shd_desc.vs.byte_code_size = sizeof(_sfons_vs_bytecode_wgpu);
