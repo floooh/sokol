@@ -595,8 +595,8 @@ typedef struct {
 } sg_imgui_capture_item_t;
 
 typedef struct {
-    uint32_t ubuf_size;     /* size of uniform capture buffer in bytes */
-    uint32_t ubuf_pos;      /* current uniform buffer pos */
+    size_t ubuf_size;       /* size of uniform capture buffer in bytes */
+    size_t ubuf_pos;        /* current uniform buffer pos */
     uint8_t* ubuf;          /* buffer for capturing uniform updates */
     uint32_t num_items;
     sg_imgui_capture_item_t items[SG_IMGUI_MAX_FRAMECAPTURE_ITEMS];
@@ -1497,7 +1497,7 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_
 
 _SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const sg_range* data) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
-    const uint32_t required_size = bucket->ubuf_pos + data->size;
+    const size_t required_size = bucket->ubuf_pos + data->size;
     if (required_size > bucket->ubuf_size) {
         _sg_imgui_capture_grow_ubuf(ctx, required_size);
     }
@@ -3508,7 +3508,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
         }
     }
     else {
-        const uint32_t num_floats = ub_desc->size / sizeof(float);
+        const size_t num_floats = ub_desc->size / sizeof(float);
         for (uint32_t i = 0; i < num_floats; i++) {
             igText("%.3f, ", uptrf[i]);
             if (((i + 1) % 4) != 0) {

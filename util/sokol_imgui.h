@@ -1969,7 +1969,6 @@ SOKOL_API_IMPL void simgui_render(void) {
                 // need to re-apply all state after calling a user callback
                 sg_apply_viewport(0, 0, fb_width, fb_height, true);
                 sg_apply_pipeline(_simgui.pip);
-                const sg_range ub_data = { &vs_params, sizeof(vs_params) };
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_data);
                 sg_apply_bindings(&bind);
             }

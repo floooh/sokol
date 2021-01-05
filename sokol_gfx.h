@@ -2704,7 +2704,7 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
 }
 
 typedef struct {
-    uint32_t size;
+    size_t size;
 } _sg_uniform_block_t;
 
 typedef struct {
@@ -8064,7 +8064,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
-        for (int ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
+        for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
             const _sg_uniform_block_t* ub = &cmn_stage->uniform_blocks[ub_index];
 
             /* create a D3D constant buffer for each uniform block */
@@ -8140,7 +8140,7 @@ _SOKOL_PRIVATE void _sg_d3d11_destroy_shader(_sg_shader_t* shd) {
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
-        for (int ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
+        for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
             if (d3d11_stage->cbufs[ub_index]) {
                 _sg_d3d11_Release(d3d11_stage->cbufs[ub_index]);
             }
@@ -8615,19 +8615,18 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
     _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, d3d11_fs_smps);
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
-    _SOKOL_UNUSED(num_bytes);
+_SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.d3d11.ctx && _sg.d3d11.in_pass);
-    SOKOL_ASSERT(data && (num_bytes > 0));
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline && _sg.d3d11.cur_pipeline->slot.id == _sg.d3d11.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.d3d11.cur_pipeline->shader && _sg.d3d11.cur_pipeline->shader->slot.id == _sg.d3d11.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(num_bytes == _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(data->size == _sg.d3d11.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
     ID3D11Buffer* cb = _sg.d3d11.cur_pipeline->shader->d3d11.stage[stage_index].cbufs[ub_index];
     SOKOL_ASSERT(cb);
-    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data, 0, 0);
+    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cb, 0, NULL, data->ptr, 0, 0);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
@@ -12528,7 +12527,7 @@ static inline void _sg_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_i
     #elif defined(SOKOL_METAL)
     _sg_mtl_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    _sg_d3d11_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_WGPU)
     _sg_wgpu_apply_uniforms(stage_index, ub_index, data, num_bytes);
     #elif defined(SOKOL_DUMMY_BACKEND)
