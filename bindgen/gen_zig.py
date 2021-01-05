@@ -406,7 +406,7 @@ def pre_parse(inp):
 def gen_helpers(inp):
     if inp['prefix'] in ['sg_']:
         l('// helper function to convert "anything" to a Range struct')
-        l('pub fn range(val: anytype) Range {')
+        l('pub fn asRange(val: anytype) Range {')
         l('    const type_info = @typeInfo(@TypeOf(val));')
         l('    switch (type_info) {')
         l('        .Pointer => {')
