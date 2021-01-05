@@ -1698,8 +1698,7 @@ typedef struct sg_shader_image_desc {
 
 typedef struct sg_shader_stage_desc {
     const char* source;
-    const uint8_t* byte_code;
-    int byte_code_size;
+    sg_range bytecode;
     const char* entry;
     const char* d3d11_target;
     sg_shader_uniform_block_desc uniform_blocks[SG_MAX_SHADERSTAGE_UBS];
@@ -9773,10 +9772,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     id<MTLFunction> fs_func;
     const char* vs_entry = desc->vs.entry;
     const char* fs_entry = desc->fs.entry;
-    if (desc->vs.byte_code && desc->fs.byte_code) {
+    if (desc->vs.bytecode.ptr && desc->fs.bytecode.ptr) {
         /* separate byte code provided */
-        vs_lib = _sg_mtl_library_from_bytecode(desc->vs.byte_code, desc->vs.byte_code_size);
-        fs_lib = _sg_mtl_library_from_bytecode(desc->fs.byte_code, desc->fs.byte_code_size);
+        vs_lib = _sg_mtl_library_from_bytecode(desc->vs.bytecode.ptr, desc->vs.bytecode.size);
+        fs_lib = _sg_mtl_library_from_bytecode(desc->fs.bytecode.ptr, desc->fs.bytecode.size);
         if (nil == vs_lib || nil == fs_lib) {
             return SG_RESOURCESTATE_FAILED;
         }
@@ -13245,8 +13244,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             SOKOL_VALIDATE(0 != desc->fs.source, _SG_VALIDATE_SHADERDESC_SOURCE);
         #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
             /* on Metal or D3D11, must provide shader source code or byte code */
-            SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
-            SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->vs.source)||(0 != desc->vs.bytecode.ptr), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.bytecode.ptr), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
         #elif defined(SOKOL_WGPU)
             /* on WGPU byte code must be provided */
             SOKOL_VALIDATE((0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_BYTECODE);
@@ -13263,11 +13262,11 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             }
         }
         /* if shader byte code, the size must also be provided */
-        if (0 != desc->vs.byte_code) {
-            SOKOL_VALIDATE(desc->vs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
+        if (0 != desc->vs.bytecode.ptr) {
+            SOKOL_VALIDATE(desc->vs.bytecode.size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
-        if (0 != desc->fs.byte_code) {
-            SOKOL_VALIDATE(desc->fs.byte_code_size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
+        if (0 != desc->fs.bytecode.ptr) {
+            SOKOL_VALIDATE(desc->fs.bytecode.size > 0, _SG_VALIDATE_SHADERDESC_NO_BYTECODE_SIZE);
         }
         for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
             const sg_shader_stage_desc* stage_desc = (stage_index == 0)? &desc->vs : &desc->fs;
