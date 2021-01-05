@@ -425,7 +425,7 @@ typedef struct {
     uint32_t ub_index;
     size_t data_size;
     sg_pipeline pipeline;   /* the pipeline which was active at this call */
-    uint32_t ubuf_pos;      /* start of copied data in capture buffer */
+    size_t ubuf_pos;        /* start of copied data in capture buffer */
 } sg_imgui_args_apply_uniforms_t;
 
 typedef struct {
@@ -805,7 +805,7 @@ _SOKOL_PRIVATE int _sg_imgui_uniform_size(sg_uniform_type type, int count) {
     }
 }
 
-_SOKOL_PRIVATE void* _sg_imgui_alloc(int size) {
+_SOKOL_PRIVATE void* _sg_imgui_alloc(size_t size) {
     SOKOL_ASSERT(size > 0);
     return SOKOL_MALLOC(size);
 }
@@ -816,7 +816,7 @@ _SOKOL_PRIVATE void _sg_imgui_free(void* ptr) {
     }
 }
 
-_SOKOL_PRIVATE void* _sg_imgui_realloc(void* old_ptr, int old_size, int new_size) {
+_SOKOL_PRIVATE void* _sg_imgui_realloc(void* old_ptr, size_t old_size, size_t new_size) {
     SOKOL_ASSERT((new_size > 0) && (new_size > old_size));
     void* new_ptr = SOKOL_MALLOC(new_size);
     SOKOL_ASSERT(new_ptr);
@@ -1464,11 +1464,11 @@ _SOKOL_PRIVATE void _sg_imgui_capture_next_frame(sg_imgui_t* ctx) {
     bucket->ubuf_pos = 0;
 }
 
-_SOKOL_PRIVATE void _sg_imgui_capture_grow_ubuf(sg_imgui_t* ctx, uint32_t required_size) {
+_SOKOL_PRIVATE void _sg_imgui_capture_grow_ubuf(sg_imgui_t* ctx, size_t required_size) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
     SOKOL_ASSERT(required_size > bucket->ubuf_size);
-    int old_size = bucket->ubuf_size;
-    int new_size = required_size + (required_size>>1);  /* allocate a bit ahead */
+    size_t old_size = bucket->ubuf_size;
+    size_t new_size = required_size + (required_size>>1);  /* allocate a bit ahead */
     bucket->ubuf_size = new_size;
     bucket->ubuf = (uint8_t*) _sg_imgui_realloc(bucket->ubuf, old_size, new_size);
 }
@@ -1495,7 +1495,7 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_
     return &bucket->items[index];
 }
 
-_SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const sg_range* data) {
+_SOKOL_PRIVATE size_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const sg_range* data) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_write_bucket(ctx);
     const size_t required_size = bucket->ubuf_pos + data->size;
     if (required_size > bucket->ubuf_size) {
@@ -1503,7 +1503,7 @@ _SOKOL_PRIVATE uint32_t _sg_imgui_capture_uniforms(sg_imgui_t* ctx, const sg_ran
     }
     SOKOL_ASSERT(required_size <= bucket->ubuf_size);
     memcpy(bucket->ubuf + bucket->ubuf_pos, data->ptr, data->size);
-    const uint32_t pos = bucket->ubuf_pos;
+    const size_t pos = bucket->ubuf_pos;
     bucket->ubuf_pos += data->size;
     SOKOL_ASSERT(bucket->ubuf_pos <= bucket->ubuf_size);
     return pos;
