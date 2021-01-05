@@ -1742,16 +1742,16 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.byte_code = _simgui_vs_bytecode_metal_macos;
-                shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bytecode_metal_macos);
-                shd_desc.fs.byte_code = _simgui_fs_bytecode_metal_macos;
-                shd_desc.fs.byte_code_size = sizeof(_simgui_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode.ptr = _simgui_vs_bytecode_metal_macos;
+                shd_desc.vs.bytecode.size = sizeof(_simgui_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode.ptr = _simgui_fs_bytecode_metal_macos;
+                shd_desc.fs.bytecode.size = sizeof(_simgui_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.byte_code = _simgui_vs_bytecode_metal_ios;
-                shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bytecode_metal_ios);
-                shd_desc.fs.byte_code = _simgui_fs_bytecode_metal_ios;
-                shd_desc.fs.byte_code_size = sizeof(_simgui_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode.ptr = _simgui_vs_bytecode_metal_ios;
+                shd_desc.vs.bytecode.size = sizeof(_simgui_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode.ptr = _simgui_fs_bytecode_metal_ios;
+                shd_desc.fs.bytecode.size = sizeof(_simgui_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _simgui_vs_source_metal_sim;

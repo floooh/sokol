@@ -2718,16 +2718,16 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.byte_code = _sgl_vs_bytecode_metal_macos;
-                shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_metal_macos);
-                shd_desc.fs.byte_code = _sgl_fs_bytecode_metal_macos;
-                shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_metal_macos;
+                shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_metal_macos;
+                shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.byte_code = _sgl_vs_bytecode_metal_ios;
-                shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_metal_ios);
-                shd_desc.fs.byte_code = _sgl_fs_bytecode_metal_ios;
-                shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_metal_ios;
+                shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_metal_ios;
+                shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _sgl_vs_source_metal_sim;

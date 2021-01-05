@@ -858,11 +858,11 @@ _SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
     return (const char*) dst;
 }
 
-_SOKOL_PRIVATE const uint8_t* _sg_imgui_bin_dup(const uint8_t* src, int num_bytes) {
+_SOKOL_PRIVATE const void* _sg_imgui_bin_dup(const void* src, size_t num_bytes) {
     SOKOL_ASSERT(src && (num_bytes > 0));
-    uint8_t* dst = (uint8_t*) _sg_imgui_alloc(num_bytes);
+    void* dst = _sg_imgui_alloc(num_bytes);
     memcpy(dst, src, num_bytes);
-    return (const uint8_t*) dst;
+    return (const void*) dst;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_snprintf(sg_imgui_str_t* dst, const char* fmt, ...) {
@@ -1352,14 +1352,14 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
     if (shd->desc.vs.source) {
         shd->desc.vs.source = _sg_imgui_str_dup(shd->desc.vs.source);
     }
-    if (shd->desc.vs.byte_code) {
-        shd->desc.vs.byte_code = _sg_imgui_bin_dup(shd->desc.vs.byte_code, shd->desc.vs.byte_code_size);
+    if (shd->desc.vs.bytecode.ptr) {
+        shd->desc.vs.bytecode.ptr = _sg_imgui_bin_dup(shd->desc.vs.bytecode.ptr, shd->desc.vs.bytecode.size);
     }
     if (shd->desc.fs.source) {
         shd->desc.fs.source = _sg_imgui_str_dup(shd->desc.fs.source);
     }
-    if (shd->desc.fs.byte_code) {
-        shd->desc.fs.byte_code = _sg_imgui_bin_dup(shd->desc.fs.byte_code, shd->desc.fs.byte_code_size);
+    if (shd->desc.fs.bytecode.ptr) {
+        shd->desc.fs.bytecode.ptr = _sg_imgui_bin_dup(shd->desc.fs.bytecode.ptr, shd->desc.fs.bytecode.size);
     }
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         sg_shader_attr_desc* ad = &shd->desc.attrs[i];
@@ -1382,17 +1382,17 @@ _SOKOL_PRIVATE void _sg_imgui_shader_destroyed(sg_imgui_t* ctx, int slot_index) 
         _sg_imgui_free((void*)shd->desc.vs.source);
         shd->desc.vs.source = 0;
     }
-    if (shd->desc.vs.byte_code) {
-        _sg_imgui_free((void*)shd->desc.vs.byte_code);
-        shd->desc.vs.byte_code = 0;
+    if (shd->desc.vs.bytecode.ptr) {
+        _sg_imgui_free((void*)shd->desc.vs.bytecode.ptr);
+        shd->desc.vs.bytecode.ptr = 0;
     }
     if (shd->desc.fs.source) {
         _sg_imgui_free((void*)shd->desc.fs.source);
         shd->desc.fs.source = 0;
     }
-    if (shd->desc.fs.byte_code) {
-        _sg_imgui_free((void*)shd->desc.fs.byte_code);
-        shd->desc.fs.byte_code = 0;
+    if (shd->desc.fs.bytecode.ptr) {
+        _sg_imgui_free((void*)shd->desc.fs.bytecode.ptr);
+        shd->desc.fs.bytecode.ptr = 0;
     }
 }
 
@@ -3179,7 +3179,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
             igTreePop();
         }
     }
-    else if (stage->byte_code) {
+    else if (stage->bytecode.ptr) {
         if (igTreeNodeStr("Byte Code")) {
             igText("Byte-code display currently not supported.");
             igTreePop();

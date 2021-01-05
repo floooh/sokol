@@ -9749,7 +9749,7 @@ _SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_compile_library(const char* src) {
     return lib;
 }
 
-_SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const uint8_t* ptr, int num_bytes) {
+_SOKOL_PRIVATE id<MTLLibrary> _sg_mtl_library_from_bytecode(const void* ptr, size_t num_bytes) {
     NSError* err = NULL;
     dispatch_data_t lib_data = dispatch_data_create(ptr, num_bytes, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     id<MTLLibrary> lib = [_sg.mtl.device newLibraryWithData:lib_data error:&err];

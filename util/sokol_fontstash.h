@@ -1624,16 +1624,16 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
             shd_desc.fs.entry = "main0";
             switch (sg_query_backend()) {
                 case SG_BACKEND_METAL_MACOS:
-                    shd_desc.vs.byte_code = _sfons_vs_bytecode_metal_macos;
-                    shd_desc.vs.byte_code_size = sizeof(_sfons_vs_bytecode_metal_macos);
-                    shd_desc.fs.byte_code = _sfons_fs_bytecode_metal_macos;
-                    shd_desc.fs.byte_code_size = sizeof(_sfons_fs_bytecode_metal_macos);
+                    shd_desc.vs.bytecode.ptr = _sfons_vs_bytecode_metal_macos;
+                    shd_desc.vs.bytecode.size = sizeof(_sfons_vs_bytecode_metal_macos);
+                    shd_desc.fs.bytecode.ptr = _sfons_fs_bytecode_metal_macos;
+                    shd_desc.fs.bytecode.size = sizeof(_sfons_fs_bytecode_metal_macos);
                     break;
                 case SG_BACKEND_METAL_IOS:
-                    shd_desc.vs.byte_code = _sfons_vs_bytecode_metal_ios;
-                    shd_desc.vs.byte_code_size = sizeof(_sfons_vs_bytecode_metal_ios);
-                    shd_desc.fs.byte_code = _sfons_fs_bytecode_metal_ios;
-                    shd_desc.fs.byte_code_size = sizeof(_sfons_fs_bytecode_metal_ios);
+                    shd_desc.vs.bytecode.ptr = _sfons_vs_bytecode_metal_ios;
+                    shd_desc.vs.bytecode.size = sizeof(_sfons_vs_bytecode_metal_ios);
+                    shd_desc.fs.bytecode.ptr = _sfons_fs_bytecode_metal_ios;
+                    shd_desc.fs.bytecode.size = sizeof(_sfons_fs_bytecode_metal_ios);
                     break;
                 default:
                     shd_desc.vs.source = _sfons_vs_source_metal_sim;
