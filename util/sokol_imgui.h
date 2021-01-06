@@ -1901,12 +1901,12 @@ SOKOL_API_IMPL void simgui_render(void) {
 
     sg_apply_pipeline(_simgui.pip);
     _simgui_vs_params_t vs_params;
-    memset(&vs_params, 0, sizeof(vs_params));
+    memset((void*)&vs_params, 0, sizeof(vs_params));
     vs_params.disp_size.x = io->DisplaySize.x;
     vs_params.disp_size.y = io->DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
     sg_bindings bind;
-    memset(&bind, 0, sizeof(bind));
+    memset((void*)&bind, 0, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
     ImTextureID tex_id = io->Fonts->TexID;
