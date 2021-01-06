@@ -630,8 +630,8 @@ typedef struct sg_range {
 } sg_range;
 
 #if defined(__cplusplus)
-#define SG_RANGE(x) { &x, sizeof(x) }
-#define SG_RANGE_REF(x) { &x, sizeof(x) }
+#define SG_RANGE(x) sg_range{ &x, sizeof(x) }
+#define SG_RANGE_REF(x) sg_range{ &x, sizeof(x) }
 #else
 #define SG_RANGE(x) (sg_range){ &x, sizeof(x) }
 #define SG_RANGE_REF(x) &(sg_range){ &x, sizeof(x) }
