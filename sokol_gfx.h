@@ -629,6 +629,10 @@ typedef struct sg_range {
     size_t size;
 } sg_range;
 
+// disabling this for every includer isn't great, but the warning is also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#endif
 #if defined(__cplusplus)
 #define SG_RANGE(x) sg_range{ &x, sizeof(x) }
 #define SG_RANGE_REF(x) sg_range{ &x, sizeof(x) }
