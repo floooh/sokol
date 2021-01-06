@@ -2972,16 +2972,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
         _sapp.window_width = screen_rect.size.width;
         _sapp.window_height = screen_rect.size.height;
-        if (_sapp.desc.high_dpi) {
-            _sapp.framebuffer_width = 2 * _sapp.window_width;
-            _sapp.framebuffer_height = 2 * _sapp.window_height;
-        }
-        else {
-            _sapp.framebuffer_width = _sapp.window_width;
-            _sapp.framebuffer_height = _sapp.window_height;
-        }
-        _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     }
+    if (_sapp.desc.high_dpi) {
+        _sapp.framebuffer_width = 2 * _sapp.window_width;
+        _sapp.framebuffer_height = 2 * _sapp.window_height;
+    }
+    else {
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+    }
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
