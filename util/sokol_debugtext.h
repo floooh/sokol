@@ -3691,16 +3691,12 @@ static void _sdtx_setup_common(void) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.bytecode.ptr = _sdtx_vs_bytecode_metal_macos;
-                shd_desc.vs.bytecode.size = sizeof(_sdtx_vs_bytecode_metal_macos);
-                shd_desc.fs.bytecode.ptr = _sdtx_fs_bytecode_metal_macos;
-                shd_desc.fs.bytecode.size = sizeof(_sdtx_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.bytecode.ptr = _sdtx_vs_bytecode_metal_ios;
-                shd_desc.vs.bytecode.size = sizeof(_sdtx_vs_bytecode_metal_ios);
-                shd_desc.fs.bytecode.ptr = _sdtx_fs_bytecode_metal_ios;
-                shd_desc.fs.bytecode.size = sizeof(_sdtx_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _sdtx_vs_src_metal_sim;
@@ -3708,10 +3704,8 @@ static void _sdtx_setup_common(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.bytecode.ptr = _sdtx_vs_bytecode_d3d11;
-        shd_desc.vs.bytecode.size = sizeof(_sdtx_vs_bytecode_d3d11);
-        shd_desc.fs.bytecode.ptr = _sdtx_fs_bytecode_d3d11;
-        shd_desc.fs.bytecode.size = sizeof(_sdtx_fs_bytecode_d3d11);
+        shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_d3d11);
+        shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_d3d11);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _sdtx_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_wgpu);
@@ -3743,8 +3737,7 @@ static void _sdtx_setup_common(void) {
     img_desc.mag_filter = SG_FILTER_NEAREST;
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    img_desc.data.subimage[0][0].ptr = _sdtx.font_pixels;
-    img_desc.data.subimage[0][0].size = sizeof(_sdtx.font_pixels);
+    img_desc.data.subimage[0][0] = SG_RANGE(_sdtx.font_pixels);
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
 

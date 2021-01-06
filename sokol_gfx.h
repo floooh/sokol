@@ -616,12 +616,26 @@ typedef struct sg_pass     { uint32_t id; } sg_pass;
 typedef struct sg_context  { uint32_t id; } sg_context;
 
 /*
-    A pointer/size pair.
+    sg_range is a pointer-size-pair struct used to pass memory
+    blobs into sokol-gfx. When initialized from a value type
+    (array or struct), use the SG_RANGE() macro to build
+    an sg_range struct. For functions which take either a
+    sg_range pointer, or a (C++) sg_range reference, use the
+    SG_RANGE_REF macro as a solution which compiles both in
+    C and C++.
 */
 typedef struct sg_range {
     const void* ptr;
     size_t size;
 } sg_range;
+
+#if defined(__cplusplus)
+#define SG_RANGE(x) { &x, sizeof(x) }
+#define SG_RANGE_REF(x) { &x, sizeof(x) }
+#else
+#define SG_RANGE(x) (sg_range){ &x, sizeof(x) }
+#define SG_RANGE_REF(x) &(sg_range){ &x, sizeof(x) }
+#endif
 
 /*
     various compile-time constants

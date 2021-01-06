@@ -1742,16 +1742,12 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.bytecode.ptr = _simgui_vs_bytecode_metal_macos;
-                shd_desc.vs.bytecode.size = sizeof(_simgui_vs_bytecode_metal_macos);
-                shd_desc.fs.bytecode.ptr = _simgui_fs_bytecode_metal_macos;
-                shd_desc.fs.bytecode.size = sizeof(_simgui_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.bytecode.ptr = _simgui_vs_bytecode_metal_ios;
-                shd_desc.vs.bytecode.size = sizeof(_simgui_vs_bytecode_metal_ios);
-                shd_desc.fs.bytecode.ptr = _simgui_fs_bytecode_metal_ios;
-                shd_desc.fs.bytecode.size = sizeof(_simgui_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _simgui_vs_source_metal_sim;
@@ -1759,10 +1755,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.bytecode.ptr = _simgui_vs_bytecode_hlsl4;
-        shd_desc.vs.bytecode.size = sizeof(_simgui_vs_bytecode_hlsl4);
-        shd_desc.fs.bytecode.ptr = _simgui_fs_bytecode_hlsl4;
-        shd_desc.fs.bytecode.size = sizeof(_simgui_fs_bytecode_hlsl4);
+        shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_hlsl4);
+        shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _simgui_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bytecode_wgpu);
@@ -1910,8 +1904,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     memset(&vs_params, 0, sizeof(vs_params));
     vs_params.disp_size.x = io->DisplaySize.x;
     vs_params.disp_size.y = io->DisplaySize.y;
-    const sg_range ub_data = { &vs_params, sizeof(vs_params) };
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_data);
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
     sg_bindings bind;
     memset(&bind, 0, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
@@ -1970,7 +1963,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                 // need to re-apply all state after calling a user callback
                 sg_apply_viewport(0, 0, fb_width, fb_height, true);
                 sg_apply_pipeline(_simgui.pip);
-                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_data);
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
                 sg_apply_bindings(&bind);
             }
             else {

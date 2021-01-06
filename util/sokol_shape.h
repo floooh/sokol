@@ -222,7 +222,7 @@
     ```c
     // create sokol-gfx vertex buffer
     sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&buf);
-    sg_buffer vbuf = sg_make_buffer(&vbuf_desc;
+    sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
 
     // create sokol-gfx index buffer
     sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&buf);

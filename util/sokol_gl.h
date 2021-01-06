@@ -2680,8 +2680,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
     img_desc.min_filter = SG_FILTER_NEAREST;
     img_desc.mag_filter = SG_FILTER_NEAREST;
-    img_desc.data.subimage[0][0].ptr = pixels;
-    img_desc.data.subimage[0][0].size = sizeof(pixels);
+    img_desc.data.subimage[0][0] = SG_RANGE(pixels);
     img_desc.label = "sgl-default-texture";
     _sgl.def_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);
@@ -2718,16 +2717,12 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_metal_macos;
-                shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_metal_macos);
-                shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_metal_macos;
-                shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_metal_ios;
-                shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_metal_ios);
-                shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_metal_ios;
-                shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _sgl_vs_source_metal_sim;
@@ -2735,10 +2730,8 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.bytecode.ptr = _sgl_vs_bytecode_hlsl4;
-        shd_desc.vs.bytecode.size = sizeof(_sgl_vs_bytecode_hlsl4);
-        shd_desc.fs.bytecode.ptr = _sgl_fs_bytecode_hlsl4;
-        shd_desc.fs.bytecode.size = sizeof(_sgl_fs_bytecode_hlsl4);
+        shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_hlsl4);
+        shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _sgl_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_wgpu);
