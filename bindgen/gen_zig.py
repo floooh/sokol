@@ -27,6 +27,14 @@ def reset_globals():
 re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
 re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
+module_names = {
+    'sg_':      'gfx',
+    'sapp_':    'app',
+    'stm_':     'time',
+    'saudio_':  'audio',
+    'sgl_':     'sgl'
+}
+
 prim_types = {
     'int':          'i32',
     'bool':         'bool',
@@ -61,6 +69,12 @@ prim_defaults = {
     'uintptr_t':    '0',
     'intptr_t':     '0',
     'size_t':       '0'
+}
+
+func_name_overrides = {
+    'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
+    'sgl_deg': 'sgl_as_degrees',
+    'sgl_rad': 'sgl_as_radians'
 }
 
 struct_field_type_overrides = {
@@ -99,6 +113,12 @@ def check_struct_field_type_override(struct_name, field_name, orig_type):
         return struct_field_type_overrides[s]
     else:
         return orig_type
+
+def check_func_name_override(func_name):
+    if func_name in func_name_overrides:
+        return func_name_overrides[func_name]
+    else:
+        return func_name
 
 # PREFIX_BLA_BLUB to bla_blub
 def as_snake_case(s, prefix):
@@ -386,7 +406,7 @@ def gen_func_c(decl, prefix):
 
 def gen_func_zig(decl, prefix):
     c_func_name = decl['name']
-    zig_func_name = as_camel_case(decl['name'])
+    zig_func_name = as_camel_case(check_func_name_override(decl['name']))
     zig_res_type = funcdecl_res_zig(decl, prefix)
     l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {funcdecl_res_zig(decl, prefix)} {{")
     if zig_res_type != 'void':
@@ -420,6 +440,12 @@ def pre_parse(inp):
             for item in decl['items']:
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
+def gen_imports(inp, dep_prefixes):
+    for dep_prefix in dep_prefixes:
+        dep_module_name = module_names[dep_prefix]
+        l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
+        l('')
+
 def gen_helpers(inp):
     if inp['prefix'] in ['sg_']:
         l('// helper function to convert "anything" to a Range struct')
@@ -444,9 +470,10 @@ def gen_helpers(inp):
         l('')
 
 
-def gen_module(inp):
+def gen_module(inp, dep_prefixes):
     l('// machine generated, do not edit')
     l('')
+    gen_imports(inp, dep_prefixes)
     gen_helpers(inp)
     pre_parse(inp)
     prefix = inp['prefix']
@@ -464,17 +491,20 @@ def gen_module(inp):
                 gen_func_zig(decl, prefix)
 
 def prepare():
+    print('Generating zig bindings:')
     if not os.path.isdir('sokol-zig/src/sokol'):
         os.makedirs('sokol-zig/src/sokol')
     if not os.path.isdir('sokol-zig/src/sokol/c'):
         os.makedirs('sokol-zig/src/sokol/c')
 
-def gen(c_header_path, module_name, c_prefix, dep_prefixes):
+def gen(c_header_path, c_prefix, dep_c_prefixes):
+    module_name = module_names[c_prefix]
+    print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/c/{os.path.basename(c_header_path)}')
     c_source_path = f'sokol-zig/src/sokol/c/{os.path.splitext(os.path.basename(c_header_path))[0]}.c'
-    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix,  dep_prefixes)
-    gen_module(ir)
+    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
+    gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-zig/src/sokol/{ir['module']}.zig"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
