@@ -6,6 +6,7 @@
 #   - functions are camelCase
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
+import gen_ir
 import json, re, os, shutil
 
 struct_types = []
@@ -88,12 +89,13 @@ def as_snake_case(s, prefix):
         outp = outp[len(prefix):]
     return outp
 
-# prefix_bla_blub => BlaBlub
+# prefix_bla_blub(_t)
 def as_title_case(s):
     parts = s.lower().split('_')[1:]
     outp = ''
     for part in parts:
-        outp += part.capitalize()
+        if (part != 't'):
+            outp += part.capitalize()
     return outp
 
 # prefix_bla_blub => blaBlub
@@ -434,25 +436,30 @@ def gen_module(inp):
     pre_parse(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:
-        kind = decl['kind']
-        if kind == 'struct':
-            gen_struct(decl, prefix)
-        elif kind == 'consts':
-            gen_consts(decl, prefix)
-        elif kind == 'enum':
-            gen_enum(decl, prefix)
-        elif kind == 'func':
-            gen_func_c(decl, prefix)
-            gen_func_zig(decl, prefix)
+        if not decl['is_dep']:
+            kind = decl['kind']
+            if kind == 'struct':
+                gen_struct(decl, prefix)
+            elif kind == 'consts':
+                gen_consts(decl, prefix)
+            elif kind == 'enum':
+                gen_enum(decl, prefix)
+            elif kind == 'func':
+                gen_func_c(decl, prefix)
+                gen_func_zig(decl, prefix)
 
 def prepare():
     if not os.path.isdir('sokol-zig/src/sokol'):
         os.makedirs('sokol-zig/src/sokol')
+    if not os.path.isdir('sokol-zig/src/sokol/c'):
+        os.makedirs('sokol-zig/src/sokol/c')
 
-def gen(c_header_path, input_ir):
+def gen(c_header_path, module_name, c_prefix, dep_prefixes):
     reset_globals()
-    gen_module(input_ir)
-    shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/{os.path.basename(c_header_path)}')
-    output_path = f"sokol-zig/src/sokol/{input_ir['module']}.zig"
+    shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/c/{os.path.basename(c_header_path)}')
+    c_source_path = f'sokol-zig/src/sokol/c/{os.path.splitext(os.path.basename(c_header_path))[0]}.c'
+    ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix,  dep_prefixes)
+    gen_module(ir)
+    output_path = f"sokol-zig/src/sokol/{ir['module']}.zig"
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
