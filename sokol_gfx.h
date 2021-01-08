@@ -4275,7 +4275,7 @@ _SOKOL_PRIVATE void _sg_dummy_apply_bindings(
 _SOKOL_PRIVATE void _sg_dummy_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
-    SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
+    SOKOL_ASSERT(ub_index < SG_MAX_SHADERSTAGE_UBS);
     _SOKOL_UNUSED(stage_index);
     _SOKOL_UNUSED(ub_index);
     _SOKOL_UNUSED(data);
@@ -13621,7 +13621,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_uniforms(sg_shader_stage stage_index, uin
         return true;
     #else
         SOKOL_ASSERT((stage_index == SG_SHADERSTAGE_VS) || (stage_index == SG_SHADERSTAGE_FS));
-        SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
+        SOKOL_ASSERT(ub_index < SG_MAX_SHADERSTAGE_UBS);
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(_sg.cur_pipeline.id != SG_INVALID_ID, _SG_VALIDATE_AUB_NO_PIPELINE);
         const _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, _sg.cur_pipeline.id);
@@ -14794,7 +14794,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
 SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT((stage == SG_SHADERSTAGE_VS) || (stage == SG_SHADERSTAGE_FS));
-    SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
+    SOKOL_ASSERT(ub_index < SG_MAX_SHADERSTAGE_UBS);
     SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     if (!_sg_validate_apply_uniforms(stage, ub_index, data)) {
         _sg.next_draw_valid = false;
