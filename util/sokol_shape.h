@@ -399,8 +399,8 @@ typedef struct sshape_vertex_t {
 
 /* a range of draw-elements (sg_draw(int base_element, int num_element, ...)) */
 typedef struct sshape_element_range_t {
-    int base_element;
-    int num_elements;
+    uint32_t base_element;
+    uint32_t num_elements;
 } sshape_element_range_t;
 
 /* number of elements and byte size of build actions */

@@ -429,9 +429,9 @@ typedef struct {
 } sg_imgui_args_apply_uniforms_t;
 
 typedef struct {
-    int base_element;
-    int num_elements;
-    int num_instances;
+    uint32_t base_element;
+    uint32_t num_elements;
+    uint32_t num_instances;
 } sg_imgui_args_draw_t;
 
 typedef struct {
@@ -2256,7 +2256,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, uint32_t ub_
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw(int base_element, int num_elements, int num_instances, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
