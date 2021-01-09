@@ -14830,7 +14830,6 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, 
 
 SOKOL_API_IMPL void sg_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances) {
     SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT((base_element >= 0) && (num_elements >= 0) && (num_instances >= 0));
     #if defined(SOKOL_DEBUG)
         if (!_sg.bindings_valid) {
             SOKOL_LOG("attempting to draw without resource bindings");
