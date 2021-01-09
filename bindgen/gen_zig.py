@@ -9,30 +9,31 @@
 import gen_ir
 import json, re, os, shutil
 
-struct_types = []
-enum_types = []
-enum_items = {}
-out_lines = ''
-
-def reset_globals():
-    global struct_types
-    global enum_types
-    global enum_items
-    global out_lines
-    struct_types = []
-    enum_types = []
-    enum_items = {}
-    out_lines = ''
-
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
-
 module_names = {
     'sg_':      'gfx',
     'sapp_':    'app',
     'stm_':     'time',
     'saudio_':  'audio',
-    'sgl_':     'sgl'
+    'sgl_':     'gl'
+}
+
+c_source_paths = {
+    'sg_':      'sokol-zig/src/sokol/c/sokol_app_gfx.c',
+    'sapp_':    'sokol-zig/src/sokol/c/sokol_app_gfx.c',
+    'stm_':     'sokol-zig/src/sokol/c/sokol_time.c',
+    'saudio_':  'sokol-zig/src/sokol/c/sokol_audio.c',
+    'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c'
+}
+
+func_name_overrides = {
+    'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
+    'sgl_deg': 'sgl_as_degrees',
+    'sgl_rad': 'sgl_as_radians'
+}
+
+struct_field_type_overrides = {
+    'sg_context_desc.color_format': 'int',
+    'sg_context_desc.depth_format': 'int',
 }
 
 prim_types = {
@@ -71,16 +72,23 @@ prim_defaults = {
     'size_t':       '0'
 }
 
-func_name_overrides = {
-    'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
-    'sgl_deg': 'sgl_as_degrees',
-    'sgl_rad': 'sgl_as_radians'
-}
+struct_types = []
+enum_types = []
+enum_items = {}
+out_lines = ''
 
-struct_field_type_overrides = {
-    'sg_context_desc.color_format': 'int',
-    'sg_context_desc.depth_format': 'int',
-}
+def reset_globals():
+    global struct_types
+    global enum_types
+    global enum_items
+    global out_lines
+    struct_types = []
+    enum_types = []
+    enum_items = {}
+    out_lines = ''
+
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -499,10 +507,10 @@ def prepare():
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     module_name = module_names[c_prefix]
+    c_source_path = c_source_paths[c_prefix]
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
     shutil.copyfile(c_header_path, f'sokol-zig/src/sokol/c/{os.path.basename(c_header_path)}')
-    c_source_path = f'sokol-zig/src/sokol/c/{os.path.splitext(os.path.basename(c_header_path))[0]}.c'
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-zig/src/sokol/{ir['module']}.zig"
