@@ -509,7 +509,9 @@ SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
 SOKOL_GL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_viewportf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_enable_texture(void);
 SOKOL_GL_API_DECL void sgl_disable_texture(void);
 SOKOL_GL_API_DECL void sgl_texture(sg_image img);
@@ -2862,6 +2864,10 @@ SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_lef
     }
 }
 
+SOKOL_API_IMPL void sgl_viewportf(float x, float y, float w, float h, bool origin_top_left) {
+    sgl_viewport((int)x, (int)y, (int)w, (int)h, origin_top_left);
+}
+
 SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
@@ -2874,6 +2880,10 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
         cmd->args.scissor_rect.h = h;
         cmd->args.scissor_rect.origin_top_left = origin_top_left;
     }
+}
+
+SOKOL_API_IMPL void sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left) {
+    sgl_scissor_rect((int)x, (int)y, (int)w, (int)h, origin_top_left);
 }
 
 SOKOL_API_IMPL void sgl_enable_texture(void) {

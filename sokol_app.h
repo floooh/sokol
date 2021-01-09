@@ -1155,8 +1155,12 @@ extern sapp_desc sokol_main(int argc, char* argv[]);
 SOKOL_APP_API_DECL bool sapp_isvalid(void);
 /* returns the current framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_width(void);
+/* same as sapp_width(), but returns float */
+SOKOL_APP_API_DECL float sapp_widthf(void);
 /* returns the current framebuffer height in pixels */
 SOKOL_APP_API_DECL int sapp_height(void);
+/* same as sapp_height(), but returns float */
+SOKOL_APP_API_DECL float sapp_heightf(void);
 /* get default framebuffer color pixel format */
 SOKOL_APP_API_DECL int sapp_color_format(void);
 /* get default framebuffer depth pixel format */
@@ -10155,6 +10159,18 @@ SOKOL_API_IMPL int sapp_width(void) {
     return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
+SOKOL_API_IMPL float sapp_widthf(void) {
+    return (float)sapp_width();
+}
+
+SOKOL_API_IMPL int sapp_height(void) {
+    return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
+}
+
+SOKOL_API_IMPL float sapp_heightf(void) {
+    return (float)sapp_height();
+}
+
 SOKOL_API_IMPL int sapp_color_format(void) {
     #if defined(_SAPP_EMSCRIPTEN) && defined(SOKOL_WGPU)
         switch (_sapp.emsc.wgpu.render_format) {
@@ -10179,10 +10195,6 @@ SOKOL_API_IMPL int sapp_depth_format(void) {
 
 SOKOL_API_IMPL int sapp_sample_count(void) {
     return _sapp.sample_count;
-}
-
-SOKOL_API_IMPL int sapp_height(void) {
-    return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
 
 SOKOL_API_IMPL bool sapp_high_dpi(void) {

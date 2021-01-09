@@ -2243,9 +2243,12 @@ SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 
 /* rendering functions */
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
+SOKOL_GFX_API_DECL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height);
 SOKOL_GFX_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
+SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
+SOKOL_GFX_API_DECL void sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_pipeline(sg_pipeline pip);
 SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
 SOKOL_GFX_API_DECL void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data);
@@ -2339,6 +2342,7 @@ inline sg_pass sg_make_pass(const sg_pass_desc& desc) { return sg_make_pass(&des
 inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
 
 inline void sg_begin_default_pass(const sg_pass_action& pass_action, int width, int height) { return sg_begin_default_pass(&pass_action, width, height); }
+inline void sg_begin_default_passf(const sg_pass_action& pass_action, float width, float height) { return sg_begin_default_passf(&pass_action, width, height); }
 inline void sg_begin_pass(sg_pass pass, const sg_pass_action& pass_action) { return sg_begin_pass(pass, &pass_action); }
 inline void sg_apply_bindings(const sg_bindings& bindings) { return sg_apply_bindings(&bindings); }
 inline void sg_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range& data) { return sg_apply_uniforms(stage, ub_index, &data); }
@@ -14655,6 +14659,10 @@ SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int
     _SG_TRACE_ARGS(begin_default_pass, pass_action, width, height);
 }
 
+SOKOL_API_IMPL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height) {
+    sg_begin_default_pass(pass_action, (int)width, (int)height);
+}
+
 SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_action) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(pass_action);
@@ -14688,6 +14696,10 @@ SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool 
     _SG_TRACE_ARGS(apply_viewport, x, y, width, height, origin_top_left);
 }
 
+SOKOL_API_IMPL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left) {
+    sg_apply_viewport((int)x, (int)y, (int)width, (int)height, origin_top_left);
+}
+
 SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.pass_valid) {
@@ -14696,6 +14708,10 @@ SOKOL_API_IMPL void sg_apply_scissor_rect(int x, int y, int width, int height, b
     }
     _sg_apply_scissor_rect(x, y, width, height, origin_top_left);
     _SG_TRACE_ARGS(apply_scissor_rect, x, y, width, height, origin_top_left);
+}
+
+SOKOL_API_IMPL void sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left) {
+    sg_apply_scissor_rect((int)x, (int)y, (int)width, (int)height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
