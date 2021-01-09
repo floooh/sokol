@@ -10030,7 +10030,13 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
+extern int pthread_yield(void); // see below
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+    // The following line is here to trigger a linker error instead of an
+    // obscure runtime error if the user has forgotten to add -pthread to
+    // the compiler or linker options. It has no other purpose.
+    pthread_yield();
+
     _sapp_init_state(desc);
     _sapp.x11.window_state = NormalState;
 
