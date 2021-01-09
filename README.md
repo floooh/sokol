@@ -25,7 +25,7 @@ cross-platform libraries for C and C++, written in C.
 - ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
 [source](https://github.com/bqqbarbhg/spear))
 
-- [Command line tools](https://github.com/floooh/ sokol-tools) (shader compiler)
+- [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
 
 ## Core libraries
 
