@@ -438,7 +438,9 @@ def gen_func_zig(decl, prefix):
         arg_name = param_decl['name']
         arg_type = param_decl['type']
         if is_const_struct_ptr(arg_type):
-            s += "&" + arg_name
+            s += f"&{arg_name}"
+        elif is_string_ptr(arg_type):
+            s += f"@ptrCast([*c]const u8,{arg_name})"
         else:
             s += arg_name
     s += ");"
