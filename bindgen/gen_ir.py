@@ -79,7 +79,8 @@ def parse_func(decl):
     if 'inner' in decl:
         for param in decl['inner']:
             if param['kind'] != 'ParmVarDecl':
-                sys.exit(f"ERROR: func param kind must be 'ParmVarDecl' ({decl['name']})")
+                print(f"warning: ignoring func {decl['name']} (unsupported parameter type)")
+                return None
             outp_param = {}
             outp_param['name'] = param['name']
             outp_param['type'] = filter_types(param['type']['qualType'])

@@ -391,6 +391,7 @@
 #define SOKOL_DEBUGTEXT_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t
 #include <stdarg.h> // va_list
 
 #if !defined(SOKOL_GFX_INCLUDED)
@@ -427,6 +428,27 @@ typedef struct sdtx_context { uint32_t id; } sdtx_context;
 static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 
 /*
+    sdtx_range is a pointer-size-pair struct used to pass memory
+    blobs into sokol-debugtext. When initialized from a value type
+    (array or struct), use the SDTX_RANGE() macro to build
+    an sdtx_range struct.
+*/
+typedef struct sdtx_range {
+    const void* ptr;
+    size_t size;
+} sdtx_range;
+
+// disabling this for every includer isn't great, but the warning is also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#endif
+#if defined(__cplusplus)
+#define SDTX_RANGE(x) sdtx_range{ &x, sizeof(x) }
+#else
+#define SDTX_RANGE(x) (sdtx_range){ &x, sizeof(x) }
+#endif
+
+/*
     sdtx_font_desc_t
 
     Describes the pixel data of a font. A font consists of up to
@@ -450,8 +472,7 @@ static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 #define SDTX_MAX_FONTS (8)
 
 typedef struct sdtx_font_desc_t {
-    const uint8_t* ptr;     // pointer to font pixel data
-    int16_t size;           // byte size of font pixel data
+    sdtx_range data;        // pointer/size of font pixel data
     uint8_t first_char;     // first character index in font pixel data
     uint8_t last_char;      // last character index in font pixel data, inclusive (default: 255)
 } sdtx_font_desc_t;
@@ -465,7 +486,7 @@ typedef struct sdtx_font_desc_t {
     of text.
 */
 typedef struct sdtx_context_desc_t {
-    int char_buf_size;                      // max number of characters rendered in one frame, default: 4096
+    uint32_t char_buf_size;                 // max number of characters rendered in one frame, default: 4096
     float canvas_width;                     // the initial virtual canvas width, default: 640
     float canvas_height;                    // the initial virtual canvas height, default: 400
     int tab_width;                          // tab width in number of characters, default: 4
@@ -491,8 +512,8 @@ typedef struct sdtx_context_desc_t {
         sdtx_font_oric()
 */
 typedef struct sdtx_desc_t {
-    int context_pool_size;                  // max number of rendering contexts that can be created, default: 8
-    int printf_buf_size;                    // size of internal buffer for snprintf(), default: 4096
+    uint32_t context_pool_size;             // max number of rendering contexts that can be created, default: 8
+    uint32_t printf_buf_size;               // size of internal buffer for snprintf(), default: 4096
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
 } sdtx_desc_t;
@@ -519,7 +540,7 @@ SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
 
 /* switch to a different font */
-SOKOL_DEBUGTEXT_API_DECL void sdtx_font(int font_index);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_font(uint32_t font_index);
 
 /* set a new virtual canvas size in screen pixels */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_canvas(float w, float h);
@@ -3375,7 +3396,7 @@ typedef struct {
     _sdtx_vertex_t* vertices;
     sg_buffer vbuf;
     sg_pipeline pip;
-    int cur_font;
+    uint32_t cur_font;
     _sdtx_float2_t canvas_size;
     _sdtx_float2_t glyph_size;
     _sdtx_float2_t origin;
@@ -3571,7 +3592,7 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     SOKOL_ASSERT(ctx->desc.canvas_height > 0.0f);
 
     const uint32_t max_vertices = 6 * ctx->desc.char_buf_size;
-    const int vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
+    const uint32_t vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
     ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
     ctx->cur_vertex_ptr = ctx->vertices;
@@ -3640,11 +3661,11 @@ static bool _sdtx_is_default_context(sdtx_context ctx_id) {
 
 /* unpack linear 8x8 bits-per-pixel font data into 2D byte-per-pixel texture data */
 static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pixels) {
-    SOKOL_ASSERT(font_desc->ptr);
-    SOKOL_ASSERT((font_desc->size > 0) && ((font_desc->size % 8) == 0));
+    SOKOL_ASSERT(font_desc->data.ptr);
+    SOKOL_ASSERT((font_desc->data.size > 0) && ((font_desc->data.size % 8) == 0));
     SOKOL_ASSERT(font_desc->first_char <= font_desc->last_char);
-    SOKOL_ASSERT((((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->size);
-    const uint8_t* ptr = font_desc->ptr;
+    SOKOL_ASSERT((((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->data.size);
+    const uint8_t* ptr = (const uint8_t*) font_desc->data.ptr;
     for (int chr = font_desc->first_char; chr <= font_desc->last_char; chr++) {
         for (int line = 0; line < 8; line++) {
             uint8_t bits = *ptr++;
@@ -3722,7 +3743,7 @@ static void _sdtx_setup_common(void) {
     memset(_sdtx.font_pixels, 0xFF, sizeof(_sdtx.font_pixels));
     const int unpacked_font_size = 256 * 8 * 8;
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (_sdtx.desc.fonts[i].ptr) {
+        if (_sdtx.desc.fonts[i].data.ptr) {
             _sdtx_unpack_font(&_sdtx.desc.fonts[i], &_sdtx.font_pixels[i * unpacked_font_size]);
         }
     }
@@ -3844,7 +3865,7 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
     desc.context_pool_size = _sdtx_def(desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
     desc.printf_buf_size = _sdtx_def(desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (desc.fonts[i].ptr) {
+        if (desc.fonts[i].data.ptr) {
             desc.fonts[i].last_char = _sdtx_def(desc.fonts[i].last_char, 255);
         }
     }
@@ -3877,32 +3898,32 @@ SOKOL_API_IMPL void sdtx_shutdown(void) {
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_kc853(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_kc853, sizeof(_sdtx_font_kc853), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_kc853, sizeof(_sdtx_font_kc853) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_kc854(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_kc854, sizeof(_sdtx_font_kc854), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_kc854, sizeof(_sdtx_font_kc854) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_z1013(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_z1013, sizeof(_sdtx_font_z1013), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_z1013, sizeof(_sdtx_font_z1013) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_cpc(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_cpc, sizeof(_sdtx_font_cpc), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_cpc, sizeof(_sdtx_font_cpc) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_c64(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_c64, sizeof(_sdtx_font_c64), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_c64, sizeof(_sdtx_font_c64) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_oric(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_oric, sizeof(_sdtx_font_oric), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_oric, sizeof(_sdtx_font_oric) }, 0, 255 };
     return desc;
 }
 
@@ -3948,7 +3969,7 @@ SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
     return _sdtx.cur_ctx_id;
 }
 
-SOKOL_API_IMPL void sdtx_font(int font_index) {
+SOKOL_API_IMPL void sdtx_font(uint32_t font_index) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     SOKOL_ASSERT((font_index >= 0) && (font_index < SDTX_MAX_FONTS));
     _sdtx_context_t* ctx = _sdtx.cur_ctx;

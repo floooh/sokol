@@ -1,11 +1,12 @@
 import os, gen_zig
 
 tasks = [
-    [ '../sokol_gfx.h',     'sg_',      [] ],
-    [ '../sokol_app.h',     'sapp_',    [] ],
-    [ '../sokol_time.h',    'stm_',     [] ],
-    [ '../sokol_audio.h',   'saudio_',  [] ],
-    [ '../util/sokol_gl.h', 'sgl_',     ['sg_'] ],
+    [ '../sokol_gfx.h',            'sg_',       [] ],
+    [ '../sokol_app.h',            'sapp_',     [] ],
+    [ '../sokol_time.h',           'stm_',      [] ],
+    [ '../sokol_audio.h',          'saudio_',   [] ],
+    [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
+    [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
 ]
 
 # Zig

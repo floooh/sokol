@@ -14,7 +14,8 @@ module_names = {
     'sapp_':    'app',
     'stm_':     'time',
     'saudio_':  'audio',
-    'sgl_':     'gl'
+    'sgl_':     'gl',
+    'sdtx_':    'debugtext',
 }
 
 c_source_paths = {
@@ -22,8 +23,14 @@ c_source_paths = {
     'sapp_':    'sokol-zig/src/sokol/c/sokol_app_gfx.c',
     'stm_':     'sokol-zig/src/sokol/c/sokol_time.c',
     'saudio_':  'sokol-zig/src/sokol/c/sokol_audio.c',
-    'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c'
+    'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
+    'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
 }
+
+func_name_ignores = [
+    'sdtx_printf',
+    'sdtx_vprintf',
+]
 
 func_name_overrides = {
     'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
@@ -39,6 +46,7 @@ struct_field_type_overrides = {
 prim_types = {
     'int':          'i32',
     'bool':         'bool',
+    'char':         'u8',
     'int8_t':       'i8',
     'uint8_t':      'u8',
     'int16_t':      'i16',
@@ -121,6 +129,9 @@ def check_struct_field_type_override(struct_name, field_name, orig_type):
         return struct_field_type_overrides[s]
     else:
         return orig_type
+
+def check_func_name_ignore(func_name):
+    return func_name in func_name_ignores
 
 def check_func_name_override(func_name):
     if func_name in func_name_overrides:
@@ -495,8 +506,9 @@ def gen_module(inp, dep_prefixes):
             elif kind == 'enum':
                 gen_enum(decl, prefix)
             elif kind == 'func':
-                gen_func_c(decl, prefix)
-                gen_func_zig(decl, prefix)
+                if not check_func_name_ignore(decl['name']):
+                    gen_func_c(decl, prefix)
+                    gen_func_zig(decl, prefix)
 
 def prepare():
     print('Generating zig bindings:')
