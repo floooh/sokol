@@ -16,6 +16,7 @@ module_names = {
     'saudio_':  'audio',
     'sgl_':     'gl',
     'sdtx_':    'debugtext',
+    'sshape_':  'shape',
 }
 
 c_source_paths = {
@@ -25,6 +26,7 @@ c_source_paths = {
     'saudio_':  'sokol-zig/src/sokol/c/sokol_audio.c',
     'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
     'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
+    'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
 }
 
 func_name_ignores = [
@@ -396,11 +398,16 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
             array_type = extract_array_type(field_type)
             array_nums = extract_array_nums(field_type)
             if is_prim_type(array_type):
-                l(f"// FIXME: 2D array with primitive type: {field_name}")
+                zig_type = as_zig_prim_type(array_type)
+                def_val = type_default_value(array_type)
             elif is_struct_type(array_type):
                 zig_type = as_zig_struct_type(array_type, prefix)
-                t0 = f"[{array_nums[0]}][{array_nums[1]}]{zig_type}"
-                l(f"    {field_name}: {t0} = [_][{array_nums[1]}]{zig_type}{{[_]{zig_type}{{ .{{ }} }}**{array_nums[1]}}}**{array_nums[0]},")
+                def_val = ".{ }"
+            else:
+                zig_type = "???"
+                def_val = "???"
+            t0 = f"[{array_nums[0]}][{array_nums[1]}]{zig_type}"
+            l(f"    {field_name}: {t0} = [_][{array_nums[1]}]{zig_type}{{[_]{zig_type}{{ {def_val} }}**{array_nums[1]}}}**{array_nums[0]},")
         else:
             l(f"// FIXME: {field_name}: {field_type};")
     l("};")
@@ -468,7 +475,7 @@ def gen_imports(inp, dep_prefixes):
         l('')
 
 def gen_helpers(inp):
-    if inp['prefix'] in ['sg_', 'sdtx_']:
+    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
         l('// helper function to convert "anything" to a Range struct')
         l('pub fn asRange(val: anytype) Range {')
         l('    const type_info = @typeInfo(@TypeOf(val));')

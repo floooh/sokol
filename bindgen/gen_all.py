@@ -7,6 +7,7 @@ tasks = [
     [ '../sokol_audio.h',          'saudio_',   [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
     [ '../util/sokol_debugtext.h', 'sdtx_',     ['sg_'] ],
+    [ '../util/sokol_shape.h',     'sshape_',   ['sg_'] ],
 ]
 
 # Zig
