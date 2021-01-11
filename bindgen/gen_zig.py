@@ -272,7 +272,7 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     elif is_const_void_ptr(arg_type):
         return pre + "?*const c_void"
     elif is_string_ptr(arg_type):
-        return pre + "[]const u8"
+        return pre + "[:0]const u8"
     elif is_const_struct_ptr(arg_type):
         # not a bug, pass const structs by value
         return pre + f"{as_zig_struct_type(extract_ptr_type(arg_type), prefix)}"
@@ -288,7 +288,7 @@ def funcptr_args_c(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
     s = ""
     for token in tokens:
-        arg_type = token.strip();
+        arg_type = token.strip()
         if s != "":
             s += ", "
         c_arg = as_extern_c_arg_type(arg_type, prefix)
