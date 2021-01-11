@@ -468,7 +468,7 @@ def gen_imports(inp, dep_prefixes):
         l('')
 
 def gen_helpers(inp):
-    if inp['prefix'] in ['sg_']:
+    if inp['prefix'] in ['sg_', 'sdtx_']:
         l('// helper function to convert "anything" to a Range struct')
         l('pub fn asRange(val: anytype) Range {')
         l('    const type_info = @typeInfo(@TypeOf(val));')
@@ -489,7 +489,28 @@ def gen_helpers(inp):
         l('    }')
         l('}')
         l('')
-
+    if inp['prefix'] == 'sdtx_':
+        l('// std.fmt compatible Writer')
+        l('pub const Writer = struct {')
+        l('    pub const Error = error { };')
+        l('    pub fn writeAll(self: Writer, bytes: []const u8) Error!void {')
+        l('        for (bytes) |byte| {')
+        l('            putc(byte);')
+        l('        }')
+        l('    }')
+        l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: u64) Error!void {')
+        l('        var i: u64 = 0;')
+        l('        while (i < n): (i += 1) {')
+        l('            putc(byte);')
+        l('        }')
+        l('    }')
+        l('};')
+        l('// std.fmt-style formatted print')
+        l('pub fn print(comptime fmt: anytype, args: anytype) void {')
+        l('    var writer: Writer = .{};')
+        l('    @import("std").fmt.format(writer, fmt, args) catch {};')
+        l('}')
+        l('')
 
 def gen_module(inp, dep_prefixes):
     l('// machine generated, do not edit')
