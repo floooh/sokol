@@ -1807,12 +1807,18 @@ typedef struct sg_buffer_layout_desc {
     int stride;
     sg_vertex_step step_func;
     int step_rate;
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[2];
+    #endif
 } sg_buffer_layout_desc;
 
 typedef struct sg_vertex_attr_desc {
     int buffer_index;
     int offset;
     sg_vertex_format format;
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[2];
+    #endif
 } sg_vertex_attr_desc;
 
 typedef struct sg_layout_desc {
