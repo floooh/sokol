@@ -1389,9 +1389,9 @@ SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_bu
     SOKOL_ASSERT(0 == (buf->indices.shape_offset & (sizeof(uint16_t) - 1)));
     SOKOL_ASSERT(0 == (buf->indices.data_size & (sizeof(uint16_t) - 1)));
     sshape_element_range_t range = { 0 };
-    range.base_element = buf->indices.shape_offset / sizeof(uint16_t);
+    range.base_element = (uint32_t) (buf->indices.shape_offset / sizeof(uint16_t));
     if (buf->valid) {
-        range.num_elements = (buf->indices.data_size - buf->indices.shape_offset) / sizeof(uint16_t);
+        range.num_elements = (uint32_t) ((buf->indices.data_size - buf->indices.shape_offset) / sizeof(uint16_t));
     }
     else {
         range.num_elements = 0;
