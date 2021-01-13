@@ -5770,6 +5770,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                 GLenum gl_mag_filter = _sg_gl_filter(img->cmn.mag_filter);
                 glTexParameteri(img->gl.target, GL_TEXTURE_MIN_FILTER, gl_min_filter);
                 glTexParameteri(img->gl.target, GL_TEXTURE_MAG_FILTER, gl_mag_filter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, img->cmn.num_mipmaps - 1);
                 if (_sg.gl.ext_anisotropic && (img->cmn.max_anisotropy > 1)) {
                     GLint max_aniso = (GLint) img->cmn.max_anisotropy;
                     if (max_aniso > _sg.gl.max_anisotropy) {
