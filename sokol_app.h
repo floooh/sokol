@@ -1539,6 +1539,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
+    #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
 #endif
 
 /*== MACOS DECLARATIONS ======================================================*/
@@ -10030,12 +10031,14 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-extern int pthread_yield(void); // see below
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
-    // The following line is here to trigger a linker error instead of an
-    // obscure runtime error if the user has forgotten to add -pthread to
-    // the compiler or linker options. It has no other purpose.
-    pthread_yield();
+    /* The following lines are here to trigger a linker error instead of an
+        obscure runtime error if the user has forgotten to add -pthread to
+        the compiler or linker options. They have no other purpose.
+    */
+    pthread_attr_t pthread_attr;
+    pthread_attr_init(&pthread_attr);
+    pthread_attr_destroy(&pthread_attr);
 
     _sapp_init_state(desc);
     _sapp.x11.window_state = NormalState;
