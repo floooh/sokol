@@ -1543,6 +1543,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
+    #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
 #endif
 
 /*== MACOS DECLARATIONS ======================================================*/
@@ -2976,16 +2977,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
         _sapp.window_width = screen_rect.size.width;
         _sapp.window_height = screen_rect.size.height;
-        if (_sapp.desc.high_dpi) {
-            _sapp.framebuffer_width = 2 * _sapp.window_width;
-            _sapp.framebuffer_height = 2 * _sapp.window_height;
-        }
-        else {
-            _sapp.framebuffer_width = _sapp.window_width;
-            _sapp.framebuffer_height = _sapp.window_height;
-        }
-        _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     }
+    if (_sapp.desc.high_dpi) {
+        _sapp.framebuffer_width = 2 * _sapp.window_width;
+        _sapp.framebuffer_height = 2 * _sapp.window_height;
+    }
+    else {
+        _sapp.framebuffer_width = _sapp.window_width;
+        _sapp.framebuffer_height = _sapp.window_height;
+    }
+    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
@@ -10035,6 +10036,14 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 }
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
+    /* The following lines are here to trigger a linker error instead of an
+        obscure runtime error if the user has forgotten to add -pthread to
+        the compiler or linker options. They have no other purpose.
+    */
+    pthread_attr_t pthread_attr;
+    pthread_attr_init(&pthread_attr);
+    pthread_attr_destroy(&pthread_attr);
+
     _sapp_init_state(desc);
     _sapp.x11.window_state = NormalState;
 

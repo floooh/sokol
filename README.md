@@ -10,21 +10,22 @@ cross-platform libraries for C and C++, written in C.
 
 ## Examples and Related Projects
 
-[Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM.
+ - [Live Samples](https://floooh.github.io/sokol-html5/index.html) via WASM ([source](https://github.com/floooh/sokol-samples))
 
-Sample code is in a separate repo: https://github.com/floooh/sokol-samples
+- [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
-[LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
+- [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
 
-[Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
+- [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
-Tiny 8-bit emulators: https://floooh.github.io/tiny8bit/
+- A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), ... an in [Zig](https://github.com/floooh/pacman.zig/)
 
-A 'single-file' Pacman clone in C99: https://github.com/floooh/pacman.c/
+- A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
 
-...and in Zig: https://github.com/floooh/pacman.zig/
+- ['Dealer's Dungeon'](https://dealers-dungeon.com/demo/) ([lower graphics quality](https://dealers-dungeon.com/demo/?q=3),
+[source](https://github.com/bqqbarbhg/spear))
 
-Command line tools: https://github.com/floooh/sokol-tools
+- [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
 
 ## Core libraries
 
