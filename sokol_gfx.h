@@ -1364,14 +1364,23 @@ typedef enum sg_blend_op {
     should be disabled.
 */
 typedef enum sg_color_mask {
-    _SG_COLORMASK_DEFAULT = 0,  /* value 0 reserved for default-init */
-    SG_COLORMASK_NONE = 0x10,   /* special value for 'all channels disabled */
-    SG_COLORMASK_R = 0x1,
-    SG_COLORMASK_G = 0x2,
-    SG_COLORMASK_B = 0x4,
-    SG_COLORMASK_A = 0x8,
-    SG_COLORMASK_RGB = 0x7,
-    SG_COLORMASK_RGBA = 0xF,
+    _SG_COLORMASK_DEFAULT = 0,    /* value 0 reserved for default-init */
+    SG_COLORMASK_NONE   = 0x10,   /* special value for 'all channels disabled */
+    SG_COLORMASK_R      = 0x1,
+    SG_COLORMASK_G      = 0x2,
+    SG_COLORMASK_RG     = 0x3,
+    SG_COLORMASK_B      = 0x4,
+    SG_COLORMASK_RB     = 0x5,
+    SG_COLORMASK_GB     = 0x6,
+    SG_COLORMASK_RGB    = 0x7,
+    SG_COLORMASK_A      = 0x8,
+    SG_COLORMASK_RA     = 0x9,
+    SG_COLORMASK_GA     = 0xA,
+    SG_COLORMASK_RGA    = 0xB,
+    SG_COLORMASK_BA     = 0xC,
+    SG_COLORMASK_RBA    = 0xD,
+    SG_COLORMASK_GBA    = 0xE,
+    SG_COLORMASK_RGBA   = 0xF,
     _SG_COLORMASK_FORCE_U32 = 0x7FFFFFFF
 } sg_color_mask;
 
@@ -1852,7 +1861,7 @@ typedef struct sg_blend_state {
     sg_blend_factor src_factor_alpha;
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
-    uint8_t color_write_mask;
+    sg_color_mask color_write_mask;
     int color_attachment_count;
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
