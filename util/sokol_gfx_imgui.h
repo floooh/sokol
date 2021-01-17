@@ -1154,7 +1154,7 @@ _SOKOL_PRIVATE const char* _sg_imgui_blendop_string(sg_blend_op op) {
     }
 }
 
-_SOKOL_PRIVATE const char* _sg_imgui_colormask_string(uint8_t m) {
+_SOKOL_PRIVATE const char* _sg_imgui_colormask_string(sg_color_mask m) {
     static const char* str[] = {
         "NONE",
         "R",
