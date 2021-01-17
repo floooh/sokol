@@ -8292,7 +8292,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(desc->blend.src_factor_alpha);
     bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(desc->blend.dst_factor_alpha);
     bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(desc->blend.op_alpha);
-    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask((sg_color_mask)desc->blend.color_write_mask);
+    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(desc->blend.color_write_mask);
     hr = _sg_d3d11_CreateBlendState(_sg.d3d11.dev, &bs_desc, &pip->d3d11.bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.bs);
 
@@ -9924,7 +9924,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     const int att_count = desc->blend.color_attachment_count;
     for (int i = 0; i < att_count; i++) {
         rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(desc->blend.color_format);
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask((sg_color_mask)desc->blend.color_write_mask);
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(desc->blend.color_write_mask);
         rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
         rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(desc->blend.op_alpha);
         rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(desc->blend.op_rgb);
@@ -13820,12 +13820,7 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     def.blend.src_factor_alpha = _sg_def(def.blend.src_factor_alpha, SG_BLENDFACTOR_ONE);
     def.blend.dst_factor_alpha = _sg_def(def.blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO);
     def.blend.op_alpha = _sg_def(def.blend.op_alpha, SG_BLENDOP_ADD);
-    if (def.blend.color_write_mask == SG_COLORMASK_NONE) {
-        def.blend.color_write_mask = 0;
-    }
-    else {
-        def.blend.color_write_mask = (uint8_t) _sg_def((sg_color_mask)def.blend.color_write_mask, SG_COLORMASK_RGBA);
-    }
+    def.blend.color_write_mask = _sg_def(def.blend.color_write_mask, SG_COLORMASK_RGBA);
     def.blend.color_attachment_count = _sg_def(def.blend.color_attachment_count, 1);
     def.blend.color_format = _sg_def(def.blend.color_format, _sg.desc.context.color_format);
     def.blend.depth_format = _sg_def(def.blend.depth_format, _sg.desc.context.depth_format);
