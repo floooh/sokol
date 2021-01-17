@@ -346,7 +346,6 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
     struct_name = decl['name']
     zig_type = struct_name if use_raw_name else as_zig_struct_type(struct_name, prefix)
     l(f"pub const {zig_type} = {'extern ' if use_extern else ''}struct {{")
-    #l(f"    pub fn init(options: anytype) {zig_type} {{ var item: {zig_type} = .{{ }}; init_with(&item, options); return item; }}")
     for field in decl['fields']:
         field_name = field['name']
         field_type = field['type']
@@ -434,7 +433,7 @@ def gen_func_zig(decl, prefix):
     c_func_name = decl['name']
     zig_func_name = as_camel_case(check_func_name_override(decl['name']))
     zig_res_type = funcdecl_res_zig(decl, prefix)
-    l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {funcdecl_res_zig(decl, prefix)} {{")
+    l(f"pub inline fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {funcdecl_res_zig(decl, prefix)} {{")
     if zig_res_type != 'void':
         s = f"    return {c_func_name}("
     else:
