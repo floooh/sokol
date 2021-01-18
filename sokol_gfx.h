@@ -1196,7 +1196,7 @@ typedef enum sg_uniform_type {
     sg_cull_mode
 
     The face-culling mode, this is used in the
-    sg_pipeline_desc.rasterizer.cull_mode member when creating a
+    sg_pipeline_desc.cull_mode member when creating a
     pipeline object.
 
     The default cull mode is SG_CULLMODE_NONE
@@ -1214,7 +1214,7 @@ typedef enum sg_cull_mode {
     sg_face_winding
 
     The vertex-winding rule that determines a front-facing primitive. This
-    is used in the member sg_pipeline_desc.rasterizer.face_winding
+    is used in the member sg_pipeline_desc.face_winding
     when creating a pipeline object.
 
     The default winding is SG_FACEWINDING_CW (clockwise)
@@ -1234,10 +1234,11 @@ typedef enum sg_face_winding {
     This is used when creating pipeline objects in the members:
 
     sg_pipeline_desc
-        .depth_stencil
-            .depth_compare_func
-            .stencil_front.compare_func
-            .stencil_back.compare_func
+        .depth
+            .compare_func
+        .stencil
+            .front.compare_func
+            .back.compare_func
 
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
@@ -1264,12 +1265,12 @@ typedef enum sg_compare_func {
     object in the members:
 
     sg_pipeline_desc
-        .depth_stencil
-            .stencil_front
+        .stencil
+            .front
                 .fail_op
                 .depth_fail_op
                 .pass_op
-            .stencil_back
+            .back
                 .fail_op
                 .depth_fail_op
                 .pass_op
@@ -1297,11 +1298,12 @@ typedef enum sg_stencil_op {
     This is used in the following members when creating a pipeline object:
 
     sg_pipeline_desc
-        .blend
-            .src_factor_rgb
-            .dst_factor_rgb
-            .src_factor_alpha
-            .dst_factor_alpha
+        .colors[]
+            .blend
+                .src_factor_rgb
+                .dst_factor_rgb
+                .src_factor_alpha
+                .dst_factor_alpha
 
     The default value is SG_BLENDFACTOR_ONE for source
     factors, and SG_BLENDFACTOR_ZERO for destination factors.
@@ -1335,9 +1337,10 @@ typedef enum sg_blend_factor {
     creating a pipeline object:
 
     sg_pipeline_desc
-        .blend
-            .op_rgb
-            .op_alpha
+        .colors[]
+            .blend
+                .op_rgb
+                .op_alpha
 
     The default value is SG_BLENDOP_ADD.
 */
@@ -1355,7 +1358,7 @@ typedef enum sg_blend_op {
 
     Selects the color channels when writing a fragment color to the
     framebuffer. This is used in the members
-    sg_pipeline_desc.blend.color_write_mask when creating a pipeline object.
+    sg_pipeline_desc.colors[].write_mask when creating a pipeline object.
 
     The default colormask is SG_COLORMASK_RGBA (write all colors channels)
 
@@ -1752,9 +1755,7 @@ typedef struct sg_shader_desc {
     - a shader object
     - the 3D primitive type (points, lines, triangles, ...)
     - the index type (none, 16- or 32-bit)
-    - depth-stencil state
-    - alpha-blending state
-    - rasterizer state
+    - all the remaining fixed-function-pipeline state
 
     If the vertex data has no gaps between vertex components, you can omit
     the .layout.buffers[].stride and layout.attrs[].offset items (leave them
@@ -1792,7 +1793,7 @@ typedef struct sg_shader_desc {
             .pass_op:               SG_STENCILOP_KEEP
             .compare_func           SG_COMPAREFUNC_ALWAYS
     .depth:
-        .pixel_format               SG_PIXELFORMAT_DEPTHSTENCIL
+        .pixel_format               sg_desc.context.depth_format
         .write_enabled:             false
         .compare_func:              SG_COMPAREFUNC_ALWAYS
         .bias:                      0.0f
