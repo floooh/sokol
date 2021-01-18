@@ -1657,9 +1657,9 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         sg_pipeline_desc pip_desc;
         memset(&pip_desc, 0, sizeof(pip_desc));
         pip_desc.shader = sfons->shd;
-        pip_desc.blend.enabled = true;
-        pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pip_desc.colors[0].blend.enabled = true;
+        pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
         sfons->pip = sgl_make_pipeline(&pip_desc);
     }
 
