@@ -662,6 +662,13 @@ enum {
 };
 
 /*
+    sg_color
+
+    An RGBA color value
+*/
+typedef struct sg_color { float r, g, b, a; } sg_color;
+
+/*
     sg_backend
 
     The active 3D-API backend, use the function sg_query_backend()
@@ -1435,17 +1442,17 @@ typedef enum sg_action {
 */
 typedef struct sg_color_attachment_action {
     sg_action action;
-    float val[4];
+    sg_color value;
 } sg_color_attachment_action;
 
 typedef struct sg_depth_attachment_action {
     sg_action action;
-    float val;
+    float value;
 } sg_depth_attachment_action;
 
 typedef struct sg_stencil_attachment_action {
     sg_action action;
-    uint8_t val;
+    uint8_t value;
 } sg_stencil_attachment_action;
 
 typedef struct sg_pass_action {
@@ -1766,6 +1773,7 @@ typedef struct sg_shader_desc {
 
     The default configuration is as follows:
 
+    .shader:            0 (must be initialized with a valid sg_shader id!)
     .layout:
         .buffers[]:         vertex buffer layouts
             .stride:        0 (if no stride is given it will be computed)
@@ -1775,43 +1783,42 @@ typedef struct sg_shader_desc {
             .buffer_index   0 the vertex buffer bind slot
             .offset         0 (offsets can be omitted if the vertex layout has no gaps)
             .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
-    .shader:            0 (must be initialized with a valid sg_shader id!)
-    .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
-    .index_type:        SG_INDEXTYPE_NONE
-    .cull_mode:                     SG_CULLMODE_NONE
-    .face_winding:                  SG_FACEWINDING_CW
-    .sample_count:                  sg_desc.context.sample_count
-    .alpha_to_coverage_enabled:     false
-    .stencil:
-        .enabled:                   false
-        .read_mask:                 0
-        .write_mask:                0
-        .ref:                       0
-        .front, back:
-            .fail_op:               SG_STENCILOP_KEEP
-            .depth_fail_op:         SG_STENCILOP_KEEP
-            .pass_op:               SG_STENCILOP_KEEP
-            .compare_func           SG_COMPAREFUNC_ALWAYS
     .depth:
-        .pixel_format               sg_desc.context.depth_format
-        .write_enabled:             false
-        .compare_func:              SG_COMPAREFUNC_ALWAYS
-        .bias:                      0.0f
-        .bias_slope_scale:          0.0f
-        .bias_clamp:                0.0f
-    .color_attachment_count         1
-    .colors[0..color_attachment_count]
-        .pixel_format               sg_desc.context.color_format
-        .write_mask:                SG_COLORMASK_RGBA
+        .pixel_format:      sg_desc.context.depth_format
+        .compare:           SG_COMPAREFUNC_ALWAYS
+        .write_enabled:     false
+        .bias:              0.0f
+        .bias_slope_scale:  0.0f
+        .bias_clamp:        0.0f
+    .stencil:
+        .enabled:           false
+        .front/back:
+            .compare:       SG_COMPAREFUNC_ALWAYS
+            .depth_fail_op: SG_STENCILOP_KEEP
+            .pass_op:       SG_STENCILOP_KEEP
+            .compare:       SG_COMPAREFUNC_ALWAYS
+        .read_mask:         0
+        .write_mask:        0
+        .ref:               0
+    .color_count            1
+    .colors[0..color_count]
+        .pixel_format       [0]: sg_desc.context.color_format, else [0].pixel_format
+        .write_mask:        [0]: SG_COLORMASK_RGBA, else [0].write_mask
         .blend:
-            .enabled:               false
-            .src_factor_rgb:        SG_BLENDFACTOR_ONE
-            .dst_factor_rgb:        SG_BLENDFACTOR_ZERO
-            .op_rgb:                SG_BLENDOP_ADD
-            .src_factor_alpha:      SG_BLENDFACTOR_ONE
-            .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
-            .op_alpha:              SG_BLENDOP_ADD
+            .enabled:           [0]: false, else [0].blending_enabled
+            .src_factor_rgb:    [0]: SG_BLENDFACTOR_ONE, else [0].src_factor_rgb
+            .dst_factor_rgb:    [0]: SG_BLENDFACTOR_ZERO, else [0].dst_factor_rgb
+            .op_rgb:            [0]: SG_BLENDOP_ADD, else [0].op_rgb
+            .src_factor_alpha:  [0]: SG_BLENDFACTOR_ONE, else [0].src_factor_alpha
+            .dst_factor_alpha:  [0]: SG_BLENDFACTOR_ZERO, else [0].dst_factor_alpha
+            .op_alpha:          [0]: SG_BLENDOP_ADD, else [0].op_alpha
+    .primitive_type:            SG_PRIMITIVETYPE_TRIANGLES
+    .index_type:                SG_INDEXTYPE_NONE
+    .cull_mode:                 SG_CULLMODE_NONE
+    .face_winding:              SG_FACEWINDING_CW
+    .sample_count:              sg_desc.context.sample_count
     .blend_color:               { 0.0f, 0.0f, 0.0f, 0.0f }
+    .alpha_to_coverage_enabled: false
     .label  0       (optional string label for trace hooks)
 */
 typedef struct sg_buffer_layout_desc {
@@ -1837,32 +1844,32 @@ typedef struct sg_layout_desc {
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_layout_desc;
 
-typedef struct sg_pipeline_stencil_face_desc {
+typedef struct sg_stencil_face_state {
+    sg_compare_func compare;
     sg_stencil_op fail_op;
     sg_stencil_op depth_fail_op;
     sg_stencil_op pass_op;
-    sg_compare_func compare_func;
-} sg_pipeline_stencil_face_desc;
+} sg_stencil_face_state;
 
-typedef struct sg_pipeline_stencil_desc {
+typedef struct sg_stencil_state {
     bool enabled;
+    sg_stencil_face_state front;
+    sg_stencil_face_state back;
     uint8_t read_mask;
     uint8_t write_mask;
     uint8_t ref;
-    sg_pipeline_stencil_face_desc front;
-    sg_pipeline_stencil_face_desc back;
-} sg_pipeline_stencil_desc;
+} sg_stencil_state;
 
-typedef struct sg_pipeline_depth_desc {
+typedef struct sg_depth_state {
     sg_pixel_format pixel_format;
+    sg_compare_func compare;
     bool write_enabled;
-    sg_compare_func compare_func;
     float bias;
     float bias_slope_scale;
     float bias_clamp;
-} sg_pipeline_depth_desc;
+} sg_depth_state;
 
-typedef struct sg_pipeline_blend_desc {
+typedef struct sg_blend_state {
     bool enabled;
     sg_blend_factor src_factor_rgb;
     sg_blend_factor dst_factor_rgb;
@@ -1870,29 +1877,29 @@ typedef struct sg_pipeline_blend_desc {
     sg_blend_factor src_factor_alpha;
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
-} sg_pipeline_blend_desc;
+} sg_blend_state;
 
-typedef struct sg_pipeline_color_desc {
+typedef struct sg_color_state {
     sg_pixel_format pixel_format;
     sg_color_mask write_mask;
-    sg_pipeline_blend_desc blend;
-} sg_pipeline_color_desc;
+    sg_blend_state blend;
+} sg_color_state;
 
 typedef struct sg_pipeline_desc {
     uint32_t _start_canary;
     sg_shader shader;
     sg_layout_desc layout;
+    sg_depth_state depth;
+    sg_stencil_state stencil;
+    uint32_t color_count;
+    sg_color_state colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_primitive_type primitive_type;
     sg_index_type index_type;
-    int sample_count;
-    sg_face_winding face_winding;
-    bool alpha_to_coverage_enabled;
-    sg_pipeline_depth_desc depth;
-    sg_pipeline_stencil_desc stencil;
-    uint32_t color_attachment_count;
-    sg_pipeline_color_desc colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_cull_mode cull_mode;
-    float blend_color[4];
+    sg_face_winding face_winding;
+    int sample_count;
+    sg_color blend_color;
+    bool alpha_to_coverage_enabled;
     const char* label;
     uint32_t _end_canary;
 } sg_pipeline_desc;
@@ -2802,17 +2809,17 @@ typedef struct {
     float depth_bias;
     float depth_bias_slope_scale;
     float depth_bias_clamp;
-    float blend_color[4];
+    sg_color blend_color;
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc->color_attachment_count < SG_MAX_COLOR_ATTACHMENTS);
+    SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
     cmn->shader_id = desc->shader;
     cmn->index_type = desc->index_type;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         cmn->vertex_layout_valid[i] = false;
     }
-    cmn->color_attachment_count = desc->color_attachment_count;
+    cmn->color_attachment_count = desc->color_count;
     for (uint32_t i = 0; i < cmn->color_attachment_count; i++) {
         cmn->color_formats[i] = desc->colors[i].pixel_format;
     }
@@ -2821,9 +2828,7 @@ _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const s
     cmn->depth_bias = desc->depth.bias;
     cmn->depth_bias_slope_scale = desc->depth.bias_slope_scale;
     cmn->depth_bias_clamp = desc->depth.bias_clamp;
-    for (int i = 0; i < 4; i++) {
-        cmn->blend_color[i] = desc->blend_color[i];
-    }
+    cmn->blend_color = desc->blend_color;
 }
 
 typedef struct {
@@ -4090,19 +4095,19 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (to->colors[i].action  == _SG_ACTION_DEFAULT) {
             to->colors[i].action = SG_ACTION_CLEAR;
-            to->colors[i].val[0] = SG_DEFAULT_CLEAR_RED;
-            to->colors[i].val[1] = SG_DEFAULT_CLEAR_GREEN;
-            to->colors[i].val[2] = SG_DEFAULT_CLEAR_BLUE;
-            to->colors[i].val[3] = SG_DEFAULT_CLEAR_ALPHA;
+            to->colors[i].value.r = SG_DEFAULT_CLEAR_RED;
+            to->colors[i].value.g = SG_DEFAULT_CLEAR_GREEN;
+            to->colors[i].value.b = SG_DEFAULT_CLEAR_BLUE;
+            to->colors[i].value.a = SG_DEFAULT_CLEAR_ALPHA;
         }
     }
     if (to->depth.action == _SG_ACTION_DEFAULT) {
         to->depth.action = SG_ACTION_CLEAR;
-        to->depth.val = SG_DEFAULT_CLEAR_DEPTH;
+        to->depth.value = SG_DEFAULT_CLEAR_DEPTH;
     }
     if (to->stencil.action == _SG_ACTION_DEFAULT) {
         to->stencil.action = SG_ACTION_CLEAR;
-        to->stencil.val = SG_DEFAULT_CLEAR_STENCIL;
+        to->stencil.value = SG_DEFAULT_CLEAR_STENCIL;
     }
 }
 
@@ -9930,18 +9935,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         rp_desc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
     }
     */
-    for (uint32_t i = 0; i < desc->color_attachment_count; i++) {
+    for (uint32_t i = 0; i < desc->color_count; i++) {
         SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
-        const sg_pipeline_color_desc* cdesc = &desc->colors[i];
-        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(cdesc->pixel_format);
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(cdesc->write_mask);
-        rp_desc.colorAttachments[i].blendingEnabled = cdesc->blend.enabled;
-        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(cdesc->blend.op_alpha);
-        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(cdesc->blend.op_rgb);
-        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(cdesc->blend.dst_factor_alpha);
-        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cdesc->blend.dst_factor_rgb);
-        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cdesc->blend.src_factor_alpha);
-        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cdesc->blend.src_factor_rgb);
+        const sg_color_state* cs = &desc->colors[i];
+        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(cs->pixel_format);
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(cs->write_mask);
+        rp_desc.colorAttachments[i].blendingEnabled = cs->blend.enabled;
+        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(cs->blend.op_alpha);
+        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(cs->blend.op_rgb);
+        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_alpha);
+        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_rgb);
+        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
+        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
     }
     NSError* err = NULL;
     id<MTLRenderPipelineState> mtl_rps = [_sg.mtl.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
@@ -9954,23 +9959,23 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 
     /* depth-stencil-state */
     MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
-    ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare_func);
+    ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare);
     ds_desc.depthWriteEnabled = desc->depth.write_enabled;
     if (desc->stencil.enabled) {
-        const sg_pipeline_stencil_face_desc* sb = &desc->stencil.back;
+        const sg_stencil_face_state* sb = &desc->stencil.back;
         ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
         ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sb->fail_op);
         ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sb->depth_fail_op);
         ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sb->pass_op);
-        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare_func);
+        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare);
         ds_desc.backFaceStencil.readMask = desc->stencil.read_mask;
         ds_desc.backFaceStencil.writeMask = desc->stencil.write_mask;
-        const sg_pipeline_stencil_face_desc* sf = &desc->stencil.front;
+        const sg_stencil_face_state* sf = &desc->stencil.front;
         ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
         ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sf->fail_op);
         ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sf->depth_fail_op);
         ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sf->pass_op);
-        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare_func);
+        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare);
         ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
         ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
     }
@@ -10094,8 +10099,8 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             const bool is_msaa = (att_img->cmn.sample_count > 1);
             pass_desc.colorAttachments[i].loadAction = _sg_mtl_load_action(action->colors[i].action);
             pass_desc.colorAttachments[i].storeAction = is_msaa ? MTLStoreActionMultisampleResolve : MTLStoreActionStore;
-            const float* c = &(action->colors[i].val[0]);
-            pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c[0], c[1], c[2], c[3]);
+            sg_color c = action->colors[i].value;
+            pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
             if (is_msaa) {
                 SOKOL_ASSERT(att_img->mtl.msaa_tex != _SG_MTL_INVALID_SLOT_INDEX);
                 SOKOL_ASSERT(att_img->mtl.tex[mtl_att->image->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
@@ -10136,23 +10141,23 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             SOKOL_ASSERT(ds_att_img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-            pass_desc.depthAttachment.clearDepth = action->depth.val;
+            pass_desc.depthAttachment.clearDepth = action->depth.value;
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-                pass_desc.stencilAttachment.clearStencil = action->stencil.val;
+                pass_desc.stencilAttachment.clearStencil = action->stencil.value;
             }
         }
     }
     else {
         /* setup pass descriptor for default rendering */
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].action);
-        const float* c = &(action->colors[0].val[0]);
-        pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c[0], c[1], c[2], c[3]);
+        sg_color c = action->colors[0].value;
+        pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
         pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-        pass_desc.depthAttachment.clearDepth = action->depth.val;
+        pass_desc.depthAttachment.clearDepth = action->depth.value;
         pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-        pass_desc.stencilAttachment.clearStencil = action->stencil.val;
+        pass_desc.stencilAttachment.clearStencil = action->stencil.value;
     }
 
     /* create a render command encoder, this might return nil if window is minimized */
@@ -10271,8 +10276,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     if ((_sg.mtl.state_cache.cur_pipeline != pip) || (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg.mtl.state_cache.cur_pipeline = pip;
         _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
-        const float* c = pip->cmn.blend_color;
-        [_sg.mtl.cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
+        sg_color c = pip->cmn.blend_color;
+        [_sg.mtl.cmd_encoder setBlendColorRed:c.r green:c.g blue:c.b alpha:c.a];
         [_sg.mtl.cmd_encoder setCullMode:pip->mtl.cull_mode];
         [_sg.mtl.cmd_encoder setFrontFacingWinding:pip->mtl.winding];
         [_sg.mtl.cmd_encoder setStencilReferenceValue:pip->mtl.stencil_ref];
@@ -13819,31 +13824,34 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     def.face_winding = _sg_def(def.face_winding, SG_FACEWINDING_CW);
     def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
 
+    def.stencil.front.compare = _sg_def(def.stencil.front.compare, SG_COMPAREFUNC_ALWAYS);
     def.stencil.front.fail_op = _sg_def(def.stencil.front.fail_op, SG_STENCILOP_KEEP);
     def.stencil.front.depth_fail_op = _sg_def(def.stencil.front.depth_fail_op, SG_STENCILOP_KEEP);
     def.stencil.front.pass_op = _sg_def(def.stencil.front.pass_op, SG_STENCILOP_KEEP);
-    def.stencil.front.compare_func = _sg_def(def.stencil.front.compare_func, SG_COMPAREFUNC_ALWAYS);
+    def.stencil.back.compare = _sg_def(def.stencil.back.compare, SG_COMPAREFUNC_ALWAYS);
     def.stencil.back.fail_op = _sg_def(def.stencil.back.fail_op, SG_STENCILOP_KEEP);
     def.stencil.back.depth_fail_op = _sg_def(def.stencil.back.depth_fail_op, SG_STENCILOP_KEEP);
     def.stencil.back.pass_op = _sg_def(def.stencil.back.pass_op, SG_STENCILOP_KEEP);
-    def.stencil.back.compare_func = _sg_def(def.stencil.back.compare_func, SG_COMPAREFUNC_ALWAYS);
 
-    def.depth.compare_func = _sg_def(def.depth.compare_func, SG_COMPAREFUNC_ALWAYS);
+    def.depth.compare = _sg_def(def.depth.compare, SG_COMPAREFUNC_ALWAYS);
     def.depth.pixel_format = _sg_def(def.depth.pixel_format, _sg.desc.context.depth_format);
-    def.color_attachment_count = _sg_def(def.color_attachment_count, 1);
-    if (def.color_attachment_count > SG_MAX_COLOR_ATTACHMENTS) {
-        def.color_attachment_count = SG_MAX_COLOR_ATTACHMENTS;
+    def.color_count = _sg_def(def.color_count, 1);
+    if (def.color_count > SG_MAX_COLOR_ATTACHMENTS) {
+        def.color_count = SG_MAX_COLOR_ATTACHMENTS;
     }
-    for (uint32_t i = 0; i < def.color_attachment_count; i++) {
-        sg_pipeline_color_desc* cdesc = &def.colors[i];
-        cdesc->pixel_format = _sg_def(cdesc->pixel_format, _sg.desc.context.color_format);
-        cdesc->write_mask = _sg_def(cdesc->write_mask, SG_COLORMASK_RGBA);
-        cdesc->blend.src_factor_rgb = _sg_def(cdesc->blend.src_factor_rgb, SG_BLENDFACTOR_ONE);
-        cdesc->blend.dst_factor_rgb = _sg_def(cdesc->blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO);
-        cdesc->blend.op_rgb = _sg_def(cdesc->blend.op_rgb, SG_BLENDOP_ADD);
-        cdesc->blend.src_factor_alpha = _sg_def(cdesc->blend.src_factor_alpha, SG_BLENDFACTOR_ONE);
-        cdesc->blend.dst_factor_alpha = _sg_def(cdesc->blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO);
-        cdesc->blend.op_alpha = _sg_def(cdesc->blend.op_alpha, SG_BLENDOP_ADD);
+    for (uint32_t i = 0; i < def.color_count; i++) {
+        sg_color_state* cs = &def.colors[i];
+        const sg_color_state* cs0 = &def.colors[0];
+        cs->pixel_format = _sg_def(cs->pixel_format, (i==0) ? _sg.desc.context.color_format : cs0->pixel_format);
+        cs->write_mask = _sg_def(cs->write_mask, (i==0) ? SG_COLORMASK_RGBA : cs0->write_mask);
+        sg_blend_state* bs = &def.colors[i].blend;
+        const sg_blend_state* bs0 = &def.colors[0].blend;
+        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, (i==0) ? SG_BLENDFACTOR_ONE : bs0->src_factor_rgb);
+        bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, (i==0) ? SG_BLENDFACTOR_ZERO : bs0->dst_factor_rgb);
+        bs->op_rgb = _sg_def(bs->op_rgb, (i==0) ? SG_BLENDOP_ADD : bs0->op_rgb);
+        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, (i==0) ? SG_BLENDFACTOR_ONE : bs0->src_factor_alpha);
+        bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, (i==0) ? SG_BLENDFACTOR_ZERO : bs0->dst_factor_alpha);
+        bs->op_alpha = _sg_def(bs->op_alpha, (i==0) ? SG_BLENDOP_ADD : bs0->op_alpha);
     }
 
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
