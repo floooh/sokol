@@ -2838,7 +2838,7 @@ typedef struct {
 } _sg_pass_attachment_common_t;
 
 typedef struct {
-    uint32 num_color_atts;
+    uint32_t num_color_atts;
     _sg_pass_attachment_common_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
     _sg_pass_attachment_common_t ds_att;
 } _sg_pass_common_t;
@@ -4212,8 +4212,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_ima
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    const sg_attachment_desc* att_desc;
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    const sg_pass_attachment_desc* att_desc;
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->dmy.color_atts[i].image);
