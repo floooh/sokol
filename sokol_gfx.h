@@ -1802,16 +1802,16 @@ typedef struct sg_shader_desc {
         .ref:               0
     .color_count            1
     .colors[0..color_count]
-        .pixel_format       [0]: sg_desc.context.color_format, else [0].pixel_format
-        .write_mask:        [0]: SG_COLORMASK_RGBA, else [0].write_mask
+        .pixel_format       sg_desc.context.color_format
+        .write_mask:        SG_COLORMASK_RGBA
         .blend:
-            .enabled:           [0]: false, else [0].blending_enabled
-            .src_factor_rgb:    [0]: SG_BLENDFACTOR_ONE, else [0].src_factor_rgb
-            .dst_factor_rgb:    [0]: SG_BLENDFACTOR_ZERO, else [0].dst_factor_rgb
-            .op_rgb:            [0]: SG_BLENDOP_ADD, else [0].op_rgb
-            .src_factor_alpha:  [0]: SG_BLENDFACTOR_ONE, else [0].src_factor_alpha
-            .dst_factor_alpha:  [0]: SG_BLENDFACTOR_ZERO, else [0].dst_factor_alpha
-            .op_alpha:          [0]: SG_BLENDOP_ADD, else [0].op_alpha
+            .enabled:           false
+            .src_factor_rgb:    SG_BLENDFACTOR_ONE
+            .dst_factor_rgb:    SG_BLENDFACTOR_ZERO
+            .op_rgb:            SG_BLENDOP_ADD
+            .src_factor_alpha:  SG_BLENDFACTOR_ONE
+            .dst_factor_alpha:  SG_BLENDFACTOR_ZERO
+            .op_alpha:          SG_BLENDOP_ADD
     .primitive_type:            SG_PRIMITIVETYPE_TRIANGLES
     .index_type:                SG_INDEXTYPE_NONE
     .cull_mode:                 SG_CULLMODE_NONE
@@ -13841,17 +13841,15 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
     }
     for (uint32_t i = 0; i < def.color_count; i++) {
         sg_color_state* cs = &def.colors[i];
-        const sg_color_state* cs0 = &def.colors[0];
-        cs->pixel_format = _sg_def(cs->pixel_format, (i==0) ? _sg.desc.context.color_format : cs0->pixel_format);
-        cs->write_mask = _sg_def(cs->write_mask, (i==0) ? SG_COLORMASK_RGBA : cs0->write_mask);
+        cs->pixel_format = _sg_def(cs->pixel_format, _sg.desc.context.color_format);
+        cs->write_mask = _sg_def(cs->write_mask, SG_COLORMASK_RGBA);
         sg_blend_state* bs = &def.colors[i].blend;
-        const sg_blend_state* bs0 = &def.colors[0].blend;
-        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, (i==0) ? SG_BLENDFACTOR_ONE : bs0->src_factor_rgb);
-        bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, (i==0) ? SG_BLENDFACTOR_ZERO : bs0->dst_factor_rgb);
-        bs->op_rgb = _sg_def(bs->op_rgb, (i==0) ? SG_BLENDOP_ADD : bs0->op_rgb);
-        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, (i==0) ? SG_BLENDFACTOR_ONE : bs0->src_factor_alpha);
-        bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, (i==0) ? SG_BLENDFACTOR_ZERO : bs0->dst_factor_alpha);
-        bs->op_alpha = _sg_def(bs->op_alpha, (i==0) ? SG_BLENDOP_ADD : bs0->op_alpha);
+        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, SG_BLENDFACTOR_ONE);
+        bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+        bs->op_rgb = _sg_def(bs->op_rgb, SG_BLENDOP_ADD);
+        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, SG_BLENDFACTOR_ONE);
+        bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+        bs->op_alpha = _sg_def(bs->op_alpha, SG_BLENDOP_ADD);
     }
 
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
