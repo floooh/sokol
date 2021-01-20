@@ -3092,7 +3092,7 @@ typedef struct {
         sg_stencil_state stencil;
         sg_primitive_type primitive_type;
         sg_blend_state blend;
-        sg_color_mask color_write_mask;
+        sg_color_mask color_write_mask[SG_MAX_COLOR_ATTACHMENTS];
         sg_cull_mode cull_mode;
         sg_face_winding face_winding;
         int sample_count;
@@ -3141,7 +3141,7 @@ typedef struct {
     sg_depth_state depth;
     sg_stencil_state stencil;
     sg_blend_state blend;
-    sg_color_mask color_write_mask;
+    sg_color_mask color_write_mask[SG_MAX_COLOR_ATTACHMENTS];
     sg_cull_mode cull_mode;
     sg_face_winding face_winding;
     bool polygon_offset_enabled;
@@ -5580,7 +5580,9 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
         /* standalone state */
-        _sg.gl.cache.color_write_mask = SG_COLORMASK_RGBA;
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
+        }
         _sg.gl.cache.cull_mode = SG_CULLMODE_NONE;
         _sg.gl.cache.face_winding = SG_FACEWINDING_CW;
         _sg.gl.cache.sample_count = 1;
@@ -6081,7 +6083,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     pip->gl.stencil = desc->stencil;
     // FIXME: blend color and write mask per draw-buffer-attachment (requires GL4)
     pip->gl.blend = desc->colors[0].blend;
-    pip->gl.color_write_mask = desc->colors[0].write_mask;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        pip->gl.color_write_mask[i] = desc->colors[i].write_mask;
+    }
     pip->gl.cull_mode = desc->cull_mode;
     pip->gl.face_winding = desc->face_winding;
     pip->gl.sample_count = desc->sample_count;
@@ -6374,9 +6378,16 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
 
     bool need_pip_cache_flush = false;
     if (clear_color) {
-        if (_sg.gl.cache.color_write_mask != SG_COLORMASK_RGBA) {
-            need_pip_cache_flush = true;
-            _sg.gl.cache.color_write_mask = SG_COLORMASK_RGBA;
+        bool need_color_mask_flush = false;
+        // NOTE: not a bug to iterate over all possible color attachments
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (SG_COLORMASK_RGBA != _sg.gl.cache.color_write_mask[i]) {
+                need_pip_cache_flush = true;
+                need_color_mask_flush = true;
+                _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
+            }
+        }
+        if (need_color_mask_flush) {
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         }
     }
@@ -6653,12 +6664,25 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         }
 
         /* standalone state */
-        if (pip->gl.color_write_mask != _sg.gl.cache.color_write_mask) {
-            _sg.gl.cache.color_write_mask = pip->gl.color_write_mask;
-            glColorMask((pip->gl.color_write_mask & SG_COLORMASK_R) != 0,
-                        (pip->gl.color_write_mask & SG_COLORMASK_G) != 0,
-                        (pip->gl.color_write_mask & SG_COLORMASK_B) != 0,
-                        (pip->gl.color_write_mask & SG_COLORMASK_A) != 0);
+        for (uint32_t i = 0; i < pip->cmn.color_attachment_count; i++) {
+            if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
+                const sg_color_mask cm = pip->gl.color_write_mask[i];
+                _sg.gl.cache.color_write_mask[i] = cm;
+                #ifdef SOKOL_GLCORE33
+                    glColorMaski(i,
+                                (cm & SG_COLORMASK_R) != 0,
+                                (cm & SG_COLORMASK_G) != 0,
+                                (cm & SG_COLORMASK_B) != 0,
+                                (cm & SG_COLORMASK_A) != 0);
+                #else
+                    if (0 == i) {
+                        glColorMask((cm & SG_COLORMASK_R) != 0,
+                                    (cm & SG_COLORMASK_G) != 0,
+                                    (cm & SG_COLORMASK_B) != 0,
+                                    (cm & SG_COLORMASK_A) != 0);
+                    }
+                #endif
+            }
         }
 
         if (!_sg_fequal(pip->cmn.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
@@ -6713,6 +6737,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             glUseProgram(pip->shader->gl.prog);
         }
     }
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_bindings(
