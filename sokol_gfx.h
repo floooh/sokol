@@ -6428,7 +6428,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
             #ifdef SOKOL_GLCORE33
             glClearDepth(action->depth.value);
             #else
-            glClearDepthf(action->depth.val);
+            glClearDepthf(action->depth.value);
             #endif
         }
         if (clear_stencil) {
