@@ -3096,7 +3096,6 @@ typedef struct {
         sg_cull_mode cull_mode;
         sg_face_winding face_winding;
         int sample_count;
-        sg_color blend_color;
         bool alpha_to_coverage_enabled;
     } gl;
 } _sg_gl_pipeline_t;
@@ -6087,7 +6086,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     pip->gl.cull_mode = desc->cull_mode;
     pip->gl.face_winding = desc->face_winding;
     pip->gl.sample_count = desc->sample_count;
-    pip->gl.blend_color = desc->blend_color;
     pip->gl.alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
 
     /* resolve vertex attributes */
@@ -6664,12 +6662,12 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
                         (pip->gl.color_write_mask & SG_COLORMASK_A) != 0);
         }
 
-        if (!_sg_fequal(pip->gl.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
-            !_sg_fequal(pip->gl.blend_color.g, _sg.gl.cache.blend_color.g, 0.0001f) ||
-            !_sg_fequal(pip->gl.blend_color.b, _sg.gl.cache.blend_color.b, 0.0001f) ||
-            !_sg_fequal(pip->gl.blend_color.a, _sg.gl.cache.blend_color.a, 0.0001f))
+        if (!_sg_fequal(pip->cmn.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.g, _sg.gl.cache.blend_color.g, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.b, _sg.gl.cache.blend_color.b, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.a, _sg.gl.cache.blend_color.a, 0.0001f))
         {
-            sg_color c = pip->gl.blend_color;
+            sg_color c = pip->cmn.blend_color;
             _sg.gl.cache.blend_color = c;
             glBlendColor(c.r, c.g, c.b, c.a);
         }
