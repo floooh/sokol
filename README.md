@@ -18,7 +18,7 @@ cross-platform libraries for C and C++, written in C.
 
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
-- A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), ... an in [Zig](https://github.com/floooh/pacman.zig/)
+- A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
 
