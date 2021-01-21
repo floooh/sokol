@@ -2359,6 +2359,7 @@ typedef int  GLint;
     _SAPP_XMACRO(glUniform1i,                       void, (GLint location, GLint v0)) \
     _SAPP_XMACRO(glDisable,                         void, (GLenum cap)) \
     _SAPP_XMACRO(glColorMask,                       void, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SAPP_XMACRO(glColorMaski,                      void, (GLuint buf, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
     _SAPP_XMACRO(glBindBuffer,                      void, (GLenum target, GLuint buffer)) \
     _SAPP_XMACRO(glDeleteVertexArrays,              void, (GLsizei n, const GLuint * arrays)) \
     _SAPP_XMACRO(glDepthMask,                       void, (GLboolean flag)) \
