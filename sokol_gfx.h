@@ -8259,7 +8259,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     _sg_pipeline_common_init(&pip->cmn, desc);
     pip->d3d11.index_format = _sg_d3d11_index_format(pip->cmn.index_type);
     pip->d3d11.topology = _sg_d3d11_primitive_topology(desc->primitive_type);
-    pip->d3d11.stencil_ref = desc->depth_stencil.stencil_ref;
+    pip->d3d11.stencil_ref = desc->stencil.ref;
 
     /* create input layout object */
     HRESULT hr;
@@ -8310,14 +8310,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     D3D11_RASTERIZER_DESC rs_desc;
     memset(&rs_desc, 0, sizeof(rs_desc));
     rs_desc.FillMode = D3D11_FILL_SOLID;
-    rs_desc.CullMode = _sg_d3d11_cull_mode(desc->rasterizer.cull_mode);
-    rs_desc.FrontCounterClockwise = desc->rasterizer.face_winding == SG_FACEWINDING_CCW;
+    rs_desc.CullMode = _sg_d3d11_cull_mode(desc->cull_mode);
+    rs_desc.FrontCounterClockwise = desc->face_winding == SG_FACEWINDING_CCW;
     rs_desc.DepthBias = (INT) pip->cmn.depth_bias;
     rs_desc.DepthBiasClamp = pip->cmn.depth_bias_clamp;
     rs_desc.SlopeScaledDepthBias = pip->cmn.depth_bias_slope_scale;
     rs_desc.DepthClipEnable = TRUE;
     rs_desc.ScissorEnable = TRUE;
-    rs_desc.MultisampleEnable = desc->rasterizer.sample_count > 1;
+    rs_desc.MultisampleEnable = desc->sample_count > 1;
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = _sg_d3d11_CreateRasterizerState(_sg.d3d11.dev, &rs_desc, &pip->d3d11.rs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.rs);
@@ -8326,37 +8326,52 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     D3D11_DEPTH_STENCIL_DESC dss_desc;
     memset(&dss_desc, 0, sizeof(dss_desc));
     dss_desc.DepthEnable = TRUE;
-    dss_desc.DepthWriteMask = desc->depth_stencil.depth_write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-    dss_desc.DepthFunc = _sg_d3d11_compare_func(desc->depth_stencil.depth_compare_func);
-    dss_desc.StencilEnable = desc->depth_stencil.stencil_enabled;
-    dss_desc.StencilReadMask = desc->depth_stencil.stencil_read_mask;
-    dss_desc.StencilWriteMask = desc->depth_stencil.stencil_write_mask;
-    const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
+    dss_desc.DepthWriteMask = desc->depth.write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+    dss_desc.DepthFunc = _sg_d3d11_compare_func(desc->depth.compare);
+    dss_desc.StencilEnable = desc->stencil.enabled;
+    dss_desc.StencilReadMask = desc->stencil.read_mask;
+    dss_desc.StencilWriteMask = desc->stencil.write_mask;
+    const sg_stencil_face_state* sf = &desc->stencil.front;
     dss_desc.FrontFace.StencilFailOp = _sg_d3d11_stencil_op(sf->fail_op);
     dss_desc.FrontFace.StencilDepthFailOp = _sg_d3d11_stencil_op(sf->depth_fail_op);
     dss_desc.FrontFace.StencilPassOp = _sg_d3d11_stencil_op(sf->pass_op);
-    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(sf->compare_func);
-    const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
+    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(sf->compare);
+    const sg_stencil_face_state* sb = &desc->stencil.back;
     dss_desc.BackFace.StencilFailOp = _sg_d3d11_stencil_op(sb->fail_op);
     dss_desc.BackFace.StencilDepthFailOp = _sg_d3d11_stencil_op(sb->depth_fail_op);
     dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(sb->pass_op);
-    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare_func);
+    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare);
     hr = _sg_d3d11_CreateDepthStencilState(_sg.d3d11.dev, &dss_desc, &pip->d3d11.dss);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.dss);
 
     /* create blend state */
     D3D11_BLEND_DESC bs_desc;
     memset(&bs_desc, 0, sizeof(bs_desc));
-    bs_desc.AlphaToCoverageEnable = desc->rasterizer.alpha_to_coverage_enabled;
-    bs_desc.IndependentBlendEnable = FALSE;
-    bs_desc.RenderTarget[0].BlendEnable = desc->blend.enabled;
-    bs_desc.RenderTarget[0].SrcBlend = _sg_d3d11_blend_factor(desc->blend.src_factor_rgb);
-    bs_desc.RenderTarget[0].DestBlend = _sg_d3d11_blend_factor(desc->blend.dst_factor_rgb);
-    bs_desc.RenderTarget[0].BlendOp = _sg_d3d11_blend_op(desc->blend.op_rgb);
-    bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(desc->blend.src_factor_alpha);
-    bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(desc->blend.dst_factor_alpha);
-    bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(desc->blend.op_alpha);
-    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(desc->blend.color_write_mask);
+    bs_desc.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
+    bs_desc.IndependentBlendEnable = TRUE;
+    {
+        uint32_t i = 0;
+        for (i = 0; i < desc->color_count; i++) {
+            const sg_blend_state* src = &desc->colors[i].blend;
+            D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
+            dst->BlendEnable = src->enabled;
+            dst->SrcBlend = _sg_d3d11_blend_factor(src->src_factor_rgb);
+            dst->DestBlend = _sg_d3d11_blend_factor(src->dst_factor_rgb);
+            dst->BlendOp = _sg_d3d11_blend_op(src->op_rgb);
+            dst->SrcBlendAlpha = _sg_d3d11_blend_factor(src->src_factor_alpha);
+            dst->DestBlendAlpha = _sg_d3d11_blend_factor(src->dst_factor_alpha);
+            dst->BlendOpAlpha = _sg_d3d11_blend_op(src->op_alpha);
+            dst->RenderTargetWriteMask = _sg_d3d11_color_write_mask(desc->colors[i].write_mask);
+        }
+        for (; i < 8; i++) {
+            D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
+            dst->BlendEnable = FALSE;
+            dst->SrcBlend = dst->SrcBlendAlpha = D3D11_BLEND_ONE;
+            dst->DestBlend = dst->DestBlendAlpha = D3D11_BLEND_ZERO;
+            dst->BlendOp = dst->BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            dst->RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        }
+    }
     hr = _sg_d3d11_CreateBlendState(_sg.d3d11.dev, &bs_desc, &pip->d3d11.bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.bs);
 
@@ -8386,8 +8401,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* att_desc = &desc->color_attachments[i];
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+        const sg_pass_attachment_desc* att_desc = &desc->color_attachments[i];
         _SOKOL_UNUSED(att_desc);
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         _sg_image_t* att_img = att_images[i];
@@ -8441,7 +8456,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     SOKOL_ASSERT(0 == pass->d3d11.ds_att.dsv);
     if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
         const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
-        const sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
+        const sg_pass_attachment_desc* att_desc = &desc->depth_stencil_attachment;
         _SOKOL_UNUSED(att_desc);
         _sg_image_t* att_img = att_images[ds_img_index];
         SOKOL_ASSERT(att_img && (att_img->slot.id == att_desc->image.id));
@@ -8555,7 +8570,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     /* perform clear action */
     for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
         if (action->colors[i].action == SG_ACTION_CLEAR) {
-            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], action->colors[i].val);
+            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], &action->colors[i].value.r);
         }
     }
     UINT ds_flags = 0;
@@ -8566,7 +8581,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
         ds_flags |= D3D11_CLEAR_STENCIL;
     }
     if ((0 != ds_flags) && _sg.d3d11.cur_dsv) {
-        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.val, action->stencil.val);
+        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.value, action->stencil.value);
     }
 }
 
@@ -8648,7 +8663,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
 
     _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
     _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
-    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, pip->cmn.blend_color, 0xFFFFFFFF);
+    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, &pip->cmn.blend_color.r, 0xFFFFFFFF);
     _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
     _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
     _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
