@@ -2247,14 +2247,14 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         desc.shader = _sgl.shd;
     }
     desc.index_type = SG_INDEXTYPE_NONE;
-    desc.blend.color_format = _sgl.desc.color_format;
-    desc.blend.depth_format = _sgl.desc.depth_format;
-    desc.rasterizer.sample_count = _sgl.desc.sample_count;
-    if (desc.rasterizer.face_winding == _SG_FACEWINDING_DEFAULT) {
-        desc.rasterizer.face_winding = _sgl.desc.face_winding;
+    desc.sample_count = _sgl.desc.sample_count;
+    if (desc.face_winding == _SG_FACEWINDING_DEFAULT) {
+        desc.face_winding = _sgl.desc.face_winding;
     }
-    if (desc.blend.color_write_mask == _SG_COLORMASK_DEFAULT) {
-        desc.blend.color_write_mask = SG_COLORMASK_RGB;
+    desc.depth.pixel_format = _sgl.desc.depth_format;
+    desc.colors[0].pixel_format = _sgl.desc.color_format;
+    if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
+        desc.colors[0].write_mask = SG_COLORMASK_RGB;
     }
 
     _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
@@ -2749,7 +2749,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     /* create default pipeline object */
     sg_pipeline_desc def_pip_desc;
     memset(&def_pip_desc, 0, sizeof(def_pip_desc));
-    def_pip_desc.depth_stencil.depth_write_enabled = true;
+    def_pip_desc.depth.write_enabled = true;
     _sgl.def_pip = _sgl_make_pipeline(&def_pip_desc);
     sg_pop_debug_group();
 

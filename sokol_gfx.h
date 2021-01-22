@@ -662,6 +662,13 @@ enum {
 };
 
 /*
+    sg_color
+
+    An RGBA color value
+*/
+typedef struct sg_color { float r, g, b, a; } sg_color;
+
+/*
     sg_backend
 
     The active 3D-API backend, use the function sg_query_backend()
@@ -830,13 +837,15 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing;                /* hardware instancing supported */
-    bool origin_top_left;           /* framebuffer and texture origin is in top left corner */
-    bool multiple_render_targets;   /* offscreen render passes can have multiple render targets attached */
-    bool msaa_render_targets;       /* offscreen render passes support MSAA antialiasing */
-    bool imagetype_3d;              /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array;           /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool image_clamp_to_border;     /* border color and clamp-to-border UV-wrap mode is supported */
+    bool instancing;                    /* hardware instancing supported */
+    bool origin_top_left;               /* framebuffer and texture origin is in top left corner */
+    bool multiple_render_targets;       /* offscreen render passes can have multiple render targets attached */
+    bool msaa_render_targets;           /* offscreen render passes support MSAA antialiasing */
+    bool imagetype_3d;                  /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array;               /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_clamp_to_border;         /* border color and clamp-to-border UV-wrap mode is supported */
+    bool mrt_independent_blend_state;   /* multiple-render-target rendering can use per-render-target blend state */
+    bool mrt_independent_write_mask;    /* multiple-render-target rendering can use per-render-target color write masks */
     #if defined(SOKOL_ZIG_BINDINGS)
     uint32_t __pad[3];
     #endif
@@ -1196,7 +1205,7 @@ typedef enum sg_uniform_type {
     sg_cull_mode
 
     The face-culling mode, this is used in the
-    sg_pipeline_desc.rasterizer.cull_mode member when creating a
+    sg_pipeline_desc.cull_mode member when creating a
     pipeline object.
 
     The default cull mode is SG_CULLMODE_NONE
@@ -1214,7 +1223,7 @@ typedef enum sg_cull_mode {
     sg_face_winding
 
     The vertex-winding rule that determines a front-facing primitive. This
-    is used in the member sg_pipeline_desc.rasterizer.face_winding
+    is used in the member sg_pipeline_desc.face_winding
     when creating a pipeline object.
 
     The default winding is SG_FACEWINDING_CW (clockwise)
@@ -1234,10 +1243,11 @@ typedef enum sg_face_winding {
     This is used when creating pipeline objects in the members:
 
     sg_pipeline_desc
-        .depth_stencil
-            .depth_compare_func
-            .stencil_front.compare_func
-            .stencil_back.compare_func
+        .depth
+            .compare_func
+        .stencil
+            .front.compare_func
+            .back.compare_func
 
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
@@ -1264,12 +1274,12 @@ typedef enum sg_compare_func {
     object in the members:
 
     sg_pipeline_desc
-        .depth_stencil
-            .stencil_front
+        .stencil
+            .front
                 .fail_op
                 .depth_fail_op
                 .pass_op
-            .stencil_back
+            .back
                 .fail_op
                 .depth_fail_op
                 .pass_op
@@ -1297,11 +1307,12 @@ typedef enum sg_stencil_op {
     This is used in the following members when creating a pipeline object:
 
     sg_pipeline_desc
-        .blend
-            .src_factor_rgb
-            .dst_factor_rgb
-            .src_factor_alpha
-            .dst_factor_alpha
+        .colors[]
+            .blend
+                .src_factor_rgb
+                .dst_factor_rgb
+                .src_factor_alpha
+                .dst_factor_alpha
 
     The default value is SG_BLENDFACTOR_ONE for source
     factors, and SG_BLENDFACTOR_ZERO for destination factors.
@@ -1335,9 +1346,10 @@ typedef enum sg_blend_factor {
     creating a pipeline object:
 
     sg_pipeline_desc
-        .blend
-            .op_rgb
-            .op_alpha
+        .colors[]
+            .blend
+                .op_rgb
+                .op_alpha
 
     The default value is SG_BLENDOP_ADD.
 */
@@ -1355,7 +1367,7 @@ typedef enum sg_blend_op {
 
     Selects the color channels when writing a fragment color to the
     framebuffer. This is used in the members
-    sg_pipeline_desc.blend.color_write_mask when creating a pipeline object.
+    sg_pipeline_desc.colors[].write_mask when creating a pipeline object.
 
     The default colormask is SG_COLORMASK_RGBA (write all colors channels)
 
@@ -1432,17 +1444,17 @@ typedef enum sg_action {
 */
 typedef struct sg_color_attachment_action {
     sg_action action;
-    float val[4];
+    sg_color value;
 } sg_color_attachment_action;
 
 typedef struct sg_depth_attachment_action {
     sg_action action;
-    float val;
+    float value;
 } sg_depth_attachment_action;
 
 typedef struct sg_stencil_attachment_action {
     sg_action action;
-    uint8_t val;
+    uint8_t value;
 } sg_stencil_attachment_action;
 
 typedef struct sg_pass_action {
@@ -1752,9 +1764,7 @@ typedef struct sg_shader_desc {
     - a shader object
     - the 3D primitive type (points, lines, triangles, ...)
     - the index type (none, 16- or 32-bit)
-    - depth-stencil state
-    - alpha-blending state
-    - rasterizer state
+    - all the remaining fixed-function-pipeline state
 
     If the vertex data has no gaps between vertex components, you can omit
     the .layout.buffers[].stride and layout.attrs[].offset items (leave them
@@ -1765,6 +1775,7 @@ typedef struct sg_shader_desc {
 
     The default configuration is as follows:
 
+    .shader:            0 (must be initialized with a valid sg_shader id!)
     .layout:
         .buffers[]:         vertex buffer layouts
             .stride:        0 (if no stride is given it will be computed)
@@ -1774,42 +1785,42 @@ typedef struct sg_shader_desc {
             .buffer_index   0 the vertex buffer bind slot
             .offset         0 (offsets can be omitted if the vertex layout has no gaps)
             .format         SG_VERTEXFORMAT_INVALID (must be initialized!)
-    .shader:            0 (must be initialized with a valid sg_shader id!)
-    .primitive_type:    SG_PRIMITIVETYPE_TRIANGLES
-    .index_type:        SG_INDEXTYPE_NONE
-    .depth_stencil:
-        .stencil_front, .stencil_back:
-            .fail_op:               SG_STENCILOP_KEEP
-            .depth_fail_op:         SG_STENCILOP_KEEP
-            .pass_op:               SG_STENCILOP_KEEP
-            .compare_func           SG_COMPAREFUNC_ALWAYS
-        .depth_compare_func:    SG_COMPAREFUNC_ALWAYS
-        .depth_write_enabled:   false
-        .stencil_enabled:       false
-        .stencil_read_mask:     0
-        .stencil_write_mask:    0
-        .stencil_ref:           0
-    .blend:
-        .enabled:               false
-        .src_factor_rgb:        SG_BLENDFACTOR_ONE
-        .dst_factor_rgb:        SG_BLENDFACTOR_ZERO
-        .op_rgb:                SG_BLENDOP_ADD
-        .src_factor_alpha:      SG_BLENDFACTOR_ONE
-        .dst_factor_alpha:      SG_BLENDFACTOR_ZERO
-        .op_alpha:              SG_BLENDOP_ADD
-        .color_write_mask:      SG_COLORMASK_RGBA
-        .color_attachment_count 1
-        .color_format           SG_PIXELFORMAT_RGBA8
-        .depth_format           SG_PIXELFORMAT_DEPTHSTENCIL
-        .blend_color:           { 0.0f, 0.0f, 0.0f, 0.0f }
-    .rasterizer:
-        .alpha_to_coverage_enabled:     false
-        .cull_mode:                     SG_CULLMODE_NONE
-        .face_winding:                  SG_FACEWINDING_CW
-        .sample_count:                  sg_desc.context.sample_count
-        .depth_bias:                    0.0f
-        .depth_bias_slope_scale:        0.0f
-        .depth_bias_clamp:              0.0f
+    .depth:
+        .pixel_format:      sg_desc.context.depth_format
+        .compare:           SG_COMPAREFUNC_ALWAYS
+        .write_enabled:     false
+        .bias:              0.0f
+        .bias_slope_scale:  0.0f
+        .bias_clamp:        0.0f
+    .stencil:
+        .enabled:           false
+        .front/back:
+            .compare:       SG_COMPAREFUNC_ALWAYS
+            .depth_fail_op: SG_STENCILOP_KEEP
+            .pass_op:       SG_STENCILOP_KEEP
+            .compare:       SG_COMPAREFUNC_ALWAYS
+        .read_mask:         0
+        .write_mask:        0
+        .ref:               0
+    .color_count            1
+    .colors[0..color_count]
+        .pixel_format       sg_desc.context.color_format
+        .write_mask:        SG_COLORMASK_RGBA
+        .blend:
+            .enabled:           false
+            .src_factor_rgb:    SG_BLENDFACTOR_ONE
+            .dst_factor_rgb:    SG_BLENDFACTOR_ZERO
+            .op_rgb:            SG_BLENDOP_ADD
+            .src_factor_alpha:  SG_BLENDFACTOR_ONE
+            .dst_factor_alpha:  SG_BLENDFACTOR_ZERO
+            .op_alpha:          SG_BLENDOP_ADD
+    .primitive_type:            SG_PRIMITIVETYPE_TRIANGLES
+    .index_type:                SG_INDEXTYPE_NONE
+    .cull_mode:                 SG_CULLMODE_NONE
+    .face_winding:              SG_FACEWINDING_CW
+    .sample_count:              sg_desc.context.sample_count
+    .blend_color:               { 0.0f, 0.0f, 0.0f, 0.0f }
+    .alpha_to_coverage_enabled: false
     .label  0       (optional string label for trace hooks)
 */
 typedef struct sg_buffer_layout_desc {
@@ -1835,23 +1846,30 @@ typedef struct sg_layout_desc {
     sg_vertex_attr_desc attrs[SG_MAX_VERTEX_ATTRIBUTES];
 } sg_layout_desc;
 
-typedef struct sg_stencil_state {
+typedef struct sg_stencil_face_state {
+    sg_compare_func compare;
     sg_stencil_op fail_op;
     sg_stencil_op depth_fail_op;
     sg_stencil_op pass_op;
-    sg_compare_func compare_func;
+} sg_stencil_face_state;
+
+typedef struct sg_stencil_state {
+    bool enabled;
+    sg_stencil_face_state front;
+    sg_stencil_face_state back;
+    uint8_t read_mask;
+    uint8_t write_mask;
+    uint8_t ref;
 } sg_stencil_state;
 
-typedef struct sg_depth_stencil_state {
-    sg_stencil_state stencil_front;
-    sg_stencil_state stencil_back;
-    sg_compare_func depth_compare_func;
-    bool depth_write_enabled;
-    bool stencil_enabled;
-    uint8_t stencil_read_mask;
-    uint8_t stencil_write_mask;
-    uint8_t stencil_ref;
-} sg_depth_stencil_state;
+typedef struct sg_depth_state {
+    sg_pixel_format pixel_format;
+    sg_compare_func compare;
+    bool write_enabled;
+    float bias;
+    float bias_slope_scale;
+    float bias_clamp;
+} sg_depth_state;
 
 typedef struct sg_blend_state {
     bool enabled;
@@ -1861,32 +1879,29 @@ typedef struct sg_blend_state {
     sg_blend_factor src_factor_alpha;
     sg_blend_factor dst_factor_alpha;
     sg_blend_op op_alpha;
-    sg_color_mask color_write_mask;
-    int color_attachment_count;
-    sg_pixel_format color_format;
-    sg_pixel_format depth_format;
-    float blend_color[4];
 } sg_blend_state;
 
-typedef struct sg_rasterizer_state {
-    bool alpha_to_coverage_enabled;
-    sg_cull_mode cull_mode;
-    sg_face_winding face_winding;
-    int sample_count;
-    float depth_bias;
-    float depth_bias_slope_scale;
-    float depth_bias_clamp;
-} sg_rasterizer_state;
+typedef struct sg_color_state {
+    sg_pixel_format pixel_format;
+    sg_color_mask write_mask;
+    sg_blend_state blend;
+} sg_color_state;
 
 typedef struct sg_pipeline_desc {
     uint32_t _start_canary;
-    sg_layout_desc layout;
     sg_shader shader;
+    sg_layout_desc layout;
+    sg_depth_state depth;
+    sg_stencil_state stencil;
+    uint32_t color_count;
+    sg_color_state colors[SG_MAX_COLOR_ATTACHMENTS];
     sg_primitive_type primitive_type;
     sg_index_type index_type;
-    sg_depth_stencil_state depth_stencil;
-    sg_blend_state blend;
-    sg_rasterizer_state rasterizer;
+    sg_cull_mode cull_mode;
+    sg_face_winding face_winding;
+    int sample_count;
+    sg_color blend_color;
+    bool alpha_to_coverage_enabled;
     const char* label;
     uint32_t _end_canary;
 } sg_pipeline_desc;
@@ -1913,16 +1928,16 @@ typedef struct sg_pipeline_desc {
 
     In addition, all color-attachment images must have the same pixel format.
 */
-typedef struct sg_attachment_desc {
+typedef struct sg_pass_attachment_desc {
     sg_image image;
     int mip_level;
     int slice;      /* cube texture: face; array texture: layer; 3D texture: slice */
-} sg_attachment_desc;
+} sg_pass_attachment_desc;
 
 typedef struct sg_pass_desc {
     uint32_t _start_canary;
-    sg_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
-    sg_attachment_desc depth_stencil_attachment;
+    sg_pass_attachment_desc color_attachments[SG_MAX_COLOR_ATTACHMENTS];
+    sg_pass_attachment_desc depth_stencil_attachment;
     const char* label;
     uint32_t _end_canary;
 } sg_pass_desc;
@@ -2789,49 +2804,50 @@ typedef struct {
     sg_shader shader_id;
     sg_index_type index_type;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
-    int color_attachment_count;
-    sg_pixel_format color_format;
+    uint32_t color_attachment_count;
+    sg_pixel_format color_formats[SG_MAX_COLOR_ATTACHMENTS];
     sg_pixel_format depth_format;
     int sample_count;
     float depth_bias;
     float depth_bias_slope_scale;
     float depth_bias_clamp;
-    float blend_color[4];
+    sg_color blend_color;
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
     cmn->shader_id = desc->shader;
     cmn->index_type = desc->index_type;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         cmn->vertex_layout_valid[i] = false;
     }
-    cmn->color_attachment_count = desc->blend.color_attachment_count;
-    cmn->color_format = desc->blend.color_format;
-    cmn->depth_format = desc->blend.depth_format;
-    cmn->sample_count = desc->rasterizer.sample_count;
-    cmn->depth_bias = desc->rasterizer.depth_bias;
-    cmn->depth_bias_slope_scale = desc->rasterizer.depth_bias_slope_scale;
-    cmn->depth_bias_clamp = desc->rasterizer.depth_bias_clamp;
-    for (int i = 0; i < 4; i++) {
-        cmn->blend_color[i] = desc->blend.blend_color[i];
+    cmn->color_attachment_count = desc->color_count;
+    for (uint32_t i = 0; i < cmn->color_attachment_count; i++) {
+        cmn->color_formats[i] = desc->colors[i].pixel_format;
     }
+    cmn->depth_format = desc->depth.pixel_format;
+    cmn->sample_count = desc->sample_count;
+    cmn->depth_bias = desc->depth.bias;
+    cmn->depth_bias_slope_scale = desc->depth.bias_slope_scale;
+    cmn->depth_bias_clamp = desc->depth.bias_clamp;
+    cmn->blend_color = desc->blend_color;
 }
 
 typedef struct {
     sg_image image_id;
     int mip_level;
     int slice;
-} _sg_attachment_common_t;
+} _sg_pass_attachment_common_t;
 
 typedef struct {
-    int num_color_atts;
-    _sg_attachment_common_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
-    _sg_attachment_common_t ds_att;
+    uint32_t num_color_atts;
+    _sg_pass_attachment_common_t color_atts[SG_MAX_COLOR_ATTACHMENTS];
+    _sg_pass_attachment_common_t ds_att;
 } _sg_pass_common_t;
 
 _SOKOL_PRIVATE void _sg_pass_common_init(_sg_pass_common_t* cmn, const sg_pass_desc* desc) {
-    const sg_attachment_desc* att_desc;
-    _sg_attachment_common_t* att;
+    const sg_pass_attachment_desc* att_desc;
+    _sg_pass_attachment_common_t* att;
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
@@ -2990,7 +3006,7 @@ typedef struct {
     } dmy;
 } _sg_dummy_pass_t;
 typedef _sg_dummy_pass_t _sg_pass_t;
-typedef _sg_attachment_common_t _sg_attachment_t;
+typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
@@ -3074,10 +3090,15 @@ typedef struct {
     _sg_shader_t* shader;
     struct {
         _sg_gl_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
-        sg_depth_stencil_state depth_stencil;
+        sg_depth_state depth;
+        sg_stencil_state stencil;
         sg_primitive_type primitive_type;
         sg_blend_state blend;
-        sg_rasterizer_state rast;
+        sg_color_mask color_write_mask[SG_MAX_COLOR_ATTACHMENTS];
+        sg_cull_mode cull_mode;
+        sg_face_winding face_winding;
+        int sample_count;
+        bool alpha_to_coverage_enabled;
     } gl;
 } _sg_gl_pipeline_t;
 typedef _sg_gl_pipeline_t _sg_pipeline_t;
@@ -3097,7 +3118,7 @@ typedef struct {
     } gl;
 } _sg_gl_pass_t;
 typedef _sg_gl_pass_t _sg_pass_t;
-typedef _sg_attachment_common_t _sg_attachment_t;
+typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
@@ -3119,10 +3140,16 @@ typedef struct {
 } _sg_gl_texture_bind_slot;
 
 typedef struct {
-    sg_depth_stencil_state ds;
+    sg_depth_state depth;
+    sg_stencil_state stencil;
     sg_blend_state blend;
-    sg_rasterizer_state rast;
+    sg_color_mask color_write_mask[SG_MAX_COLOR_ATTACHMENTS];
+    sg_cull_mode cull_mode;
+    sg_face_winding face_winding;
     bool polygon_offset_enabled;
+    int sample_count;
+    sg_color blend_color;
+    bool alpha_to_coverage_enabled;
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint vertex_buffer;
     GLuint index_buffer;
@@ -3240,7 +3267,7 @@ typedef struct {
     } d3d11;
 } _sg_d3d11_pass_t;
 typedef _sg_d3d11_pass_t _sg_pass_t;
-typedef _sg_attachment_common_t _sg_attachment_t;
+typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
@@ -3373,7 +3400,7 @@ typedef struct {
     } mtl;
 } _sg_mtl_pass_t;
 typedef _sg_mtl_pass_t _sg_pass_t;
-typedef _sg_attachment_common_t _sg_attachment_t;
+typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
@@ -3494,7 +3521,7 @@ typedef struct {
     } wgpu;
 } _sg_wgpu_pass_t;
 typedef _sg_wgpu_pass_t _sg_pass_t;
-typedef _sg_attachment_common_t _sg_attachment_t;
+typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
@@ -3642,7 +3669,6 @@ typedef enum {
     _SG_VALIDATE_PASSDESC_LAYER,
     _SG_VALIDATE_PASSDESC_SLICE,
     _SG_VALIDATE_PASSDESC_IMAGE_NO_RT,
-    _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS,
     _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT,
     _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT,
     _SG_VALIDATE_PASSDESC_IMAGE_SIZES,
@@ -4081,19 +4107,19 @@ _SOKOL_PRIVATE void _sg_resolve_default_pass_action(const sg_pass_action* from, 
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (to->colors[i].action  == _SG_ACTION_DEFAULT) {
             to->colors[i].action = SG_ACTION_CLEAR;
-            to->colors[i].val[0] = SG_DEFAULT_CLEAR_RED;
-            to->colors[i].val[1] = SG_DEFAULT_CLEAR_GREEN;
-            to->colors[i].val[2] = SG_DEFAULT_CLEAR_BLUE;
-            to->colors[i].val[3] = SG_DEFAULT_CLEAR_ALPHA;
+            to->colors[i].value.r = SG_DEFAULT_CLEAR_RED;
+            to->colors[i].value.g = SG_DEFAULT_CLEAR_GREEN;
+            to->colors[i].value.b = SG_DEFAULT_CLEAR_BLUE;
+            to->colors[i].value.a = SG_DEFAULT_CLEAR_ALPHA;
         }
     }
     if (to->depth.action == _SG_ACTION_DEFAULT) {
         to->depth.action = SG_ACTION_CLEAR;
-        to->depth.val = SG_DEFAULT_CLEAR_DEPTH;
+        to->depth.value = SG_DEFAULT_CLEAR_DEPTH;
     }
     if (to->stencil.action == _SG_ACTION_DEFAULT) {
         to->stencil.action = SG_ACTION_CLEAR;
-        to->stencil.val = SG_DEFAULT_CLEAR_STENCIL;
+        to->stencil.value = SG_DEFAULT_CLEAR_STENCIL;
     }
 }
 
@@ -4198,8 +4224,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_ima
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    const sg_attachment_desc* att_desc;
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    const sg_pass_attachment_desc* att_desc;
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->dmy.color_atts[i].image);
@@ -4812,44 +4838,6 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_attachment_format(sg_pixel_format fmt) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_init_attr(_sg_gl_attr_t* attr) {
-    attr->vb_index = -1;
-    attr->divisor = -1;
-}
-
-_SOKOL_PRIVATE void _sg_gl_init_stencil_state(sg_stencil_state* s) {
-    SOKOL_ASSERT(s);
-    s->fail_op = SG_STENCILOP_KEEP;
-    s->depth_fail_op = SG_STENCILOP_KEEP;
-    s->pass_op = SG_STENCILOP_KEEP;
-    s->compare_func = SG_COMPAREFUNC_ALWAYS;
-}
-
-_SOKOL_PRIVATE void _sg_gl_init_depth_stencil_state(sg_depth_stencil_state* s) {
-    SOKOL_ASSERT(s);
-    _sg_gl_init_stencil_state(&s->stencil_front);
-    _sg_gl_init_stencil_state(&s->stencil_back);
-    s->depth_compare_func = SG_COMPAREFUNC_ALWAYS;
-}
-
-_SOKOL_PRIVATE void _sg_gl_init_blend_state(sg_blend_state* s) {
-    SOKOL_ASSERT(s);
-    s->src_factor_rgb = SG_BLENDFACTOR_ONE;
-    s->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
-    s->op_rgb = SG_BLENDOP_ADD;
-    s->src_factor_alpha = SG_BLENDFACTOR_ONE;
-    s->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
-    s->op_alpha = SG_BLENDOP_ADD;
-    s->color_write_mask = SG_COLORMASK_RGBA;
-}
-
-_SOKOL_PRIVATE void _sg_gl_init_rasterizer_state(sg_rasterizer_state* s) {
-    SOKOL_ASSERT(s);
-    s->cull_mode = SG_CULLMODE_NONE;
-    s->face_winding = SG_FACEWINDING_CW;
-    s->sample_count = 1;
-}
-
 /* see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml */
 _SOKOL_PRIVATE void _sg_gl_init_pixelformats(bool has_bgra) {
     #if !defined(SOKOL_GLES2)
@@ -5124,6 +5112,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = true;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -5199,6 +5189,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = false;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -5327,6 +5319,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = false;
 
     /* limits */
     _sg_gl_init_limits();
@@ -5551,7 +5545,9 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         _sg_gl_cache_clear_texture_bindings(true);
         _SG_GL_CHECK_ERROR();
         for (uint32_t i = 0; i < _sg.limits.max_vertex_attrs; i++) {
-            _sg_gl_init_attr(&_sg.gl.cache.attrs[i].gl_attr);
+            _sg_gl_attr_t* attr = &_sg.gl.cache.attrs[i].gl_attr;
+            attr->vb_index = -1;
+            attr->divisor = -1;
             glDisableVertexAttribArray(i);
             _SG_GL_CHECK_ERROR();
         }
@@ -5561,8 +5557,16 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&_sg.gl.cache.prog);
         _SG_GL_CHECK_ERROR();
 
-        /* depth-stencil state */
-        _sg_gl_init_depth_stencil_state(&_sg.gl.cache.ds);
+        /* depth and stencil state */
+        _sg.gl.cache.depth.compare = SG_COMPAREFUNC_ALWAYS;
+        _sg.gl.cache.stencil.front.compare = SG_COMPAREFUNC_ALWAYS;
+        _sg.gl.cache.stencil.front.fail_op = SG_STENCILOP_KEEP;
+        _sg.gl.cache.stencil.front.depth_fail_op = SG_STENCILOP_KEEP;
+        _sg.gl.cache.stencil.front.pass_op = SG_STENCILOP_KEEP;
+        _sg.gl.cache.stencil.back.compare = SG_COMPAREFUNC_ALWAYS;
+        _sg.gl.cache.stencil.back.fail_op = SG_STENCILOP_KEEP;
+        _sg.gl.cache.stencil.back.depth_fail_op = SG_STENCILOP_KEEP;
+        _sg.gl.cache.stencil.back.pass_op = SG_STENCILOP_KEEP;
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
         glDepthMask(GL_FALSE);
@@ -5572,15 +5576,25 @@ _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
         glStencilMask(0);
 
         /* blend state */
-        _sg_gl_init_blend_state(&_sg.gl.cache.blend);
+        _sg.gl.cache.blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
+        _sg.gl.cache.blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+        _sg.gl.cache.blend.op_rgb = SG_BLENDOP_ADD;
+        _sg.gl.cache.blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        _sg.gl.cache.blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+        _sg.gl.cache.blend.op_alpha = SG_BLENDOP_ADD;
         glDisable(GL_BLEND);
         glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-        /* rasterizer state */
-        _sg_gl_init_rasterizer_state(&_sg.gl.cache.rast);
+        /* standalone state */
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
+        }
+        _sg.gl.cache.cull_mode = SG_CULLMODE_NONE;
+        _sg.gl.cache.face_winding = SG_FACEWINDING_CW;
+        _sg.gl.cache.sample_count = 1;
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glPolygonOffset(0.0f, 0.0f);
         glDisable(GL_POLYGON_OFFSET_FILL);
         glDisable(GL_CULL_FACE);
@@ -6073,9 +6087,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
     pip->gl.primitive_type = desc->primitive_type;
-    pip->gl.depth_stencil = desc->depth_stencil;
-    pip->gl.blend = desc->blend;
-    pip->gl.rast = desc->rasterizer;
+    pip->gl.depth = desc->depth;
+    pip->gl.stencil = desc->stencil;
+    // FIXME: blend color and write mask per draw-buffer-attachment (requires GL4)
+    pip->gl.blend = desc->colors[0].blend;
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        pip->gl.color_write_mask[i] = desc->colors[i].write_mask;
+    }
+    pip->gl.cull_mode = desc->cull_mode;
+    pip->gl.face_winding = desc->face_winding;
+    pip->gl.sample_count = desc->sample_count;
+    pip->gl.alpha_to_coverage_enabled = desc->alpha_to_coverage_enabled;
 
     /* resolve vertex attributes */
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
@@ -6142,8 +6164,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     _sg_pass_common_init(&pass->cmn, desc);
 
     /* copy image pointers */
-    const sg_attachment_desc* att_desc;
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    const sg_pass_attachment_desc* att_desc;
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->gl.color_atts[i].image);
@@ -6242,7 +6264,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
     if (is_msaa) {
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg_gl_attachment_t* gl_att = &pass->gl.color_atts[i];
-            _sg_attachment_t* cmn_att = &pass->cmn.color_atts[i];
+            _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
             if (gl_att->image) {
                 SOKOL_ASSERT(0 == gl_att->gl_msaa_resolve_buffer);
                 glGenFramebuffers(1, &gl_att->gl_msaa_resolve_buffer);
@@ -6364,28 +6386,35 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
 
     bool need_pip_cache_flush = false;
     if (clear_color) {
-        if (_sg.gl.cache.blend.color_write_mask != SG_COLORMASK_RGBA) {
-            need_pip_cache_flush = true;
-            _sg.gl.cache.blend.color_write_mask = SG_COLORMASK_RGBA;
+        bool need_color_mask_flush = false;
+        // NOTE: not a bug to iterate over all possible color attachments
+        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+            if (SG_COLORMASK_RGBA != _sg.gl.cache.color_write_mask[i]) {
+                need_pip_cache_flush = true;
+                need_color_mask_flush = true;
+                _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
+            }
+        }
+        if (need_color_mask_flush) {
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         }
     }
     if (clear_depth) {
-        if (!_sg.gl.cache.ds.depth_write_enabled) {
+        if (!_sg.gl.cache.depth.write_enabled) {
             need_pip_cache_flush = true;
-            _sg.gl.cache.ds.depth_write_enabled = true;
+            _sg.gl.cache.depth.write_enabled = true;
             glDepthMask(GL_TRUE);
         }
-        if (_sg.gl.cache.ds.depth_compare_func != SG_COMPAREFUNC_ALWAYS) {
+        if (_sg.gl.cache.depth.compare != SG_COMPAREFUNC_ALWAYS) {
             need_pip_cache_flush = true;
-            _sg.gl.cache.ds.depth_compare_func = SG_COMPAREFUNC_ALWAYS;
+            _sg.gl.cache.depth.compare = SG_COMPAREFUNC_ALWAYS;
             glDepthFunc(GL_ALWAYS);
         }
     }
     if (clear_stencil) {
-        if (_sg.gl.cache.ds.stencil_write_mask != 0xFF) {
+        if (_sg.gl.cache.stencil.write_mask != 0xFF) {
             need_pip_cache_flush = true;
-            _sg.gl.cache.ds.stencil_write_mask = 0xFF;
+            _sg.gl.cache.stencil.write_mask = 0xFF;
             glStencilMask(0xFF);
         }
     }
@@ -6407,20 +6436,20 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         GLbitfield clear_mask = 0;
         if (clear_color) {
             clear_mask |= GL_COLOR_BUFFER_BIT;
-            const float* c = action->colors[0].val;
-            glClearColor(c[0], c[1], c[2], c[3]);
+            const sg_color c = action->colors[0].value;
+            glClearColor(c.r, c.g, c.b, c.a);
         }
         if (clear_depth) {
             clear_mask |= GL_DEPTH_BUFFER_BIT;
             #ifdef SOKOL_GLCORE33
-            glClearDepth(action->depth.val);
+            glClearDepth(action->depth.value);
             #else
-            glClearDepthf(action->depth.val);
+            glClearDepthf(action->depth.value);
             #endif
         }
         if (clear_stencil) {
             clear_mask |= GL_STENCIL_BUFFER_BIT;
-            glClearStencil(action->stencil.val);
+            glClearStencil(action->stencil.value);
         }
         if (0 != clear_mask) {
             glClear(clear_mask);
@@ -6431,18 +6460,18 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
         SOKOL_ASSERT(pass);
         for (int i = 0; i < num_color_atts; i++) {
             if (action->colors[i].action == SG_ACTION_CLEAR) {
-                glClearBufferfv(GL_COLOR, i, action->colors[i].val);
+                glClearBufferfv(GL_COLOR, i, &action->colors[i].value.r);
             }
         }
         if (pass->gl.ds_att.image) {
             if (clear_depth && clear_stencil) {
-                glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.val, action->stencil.val);
+                glClearBufferfi(GL_DEPTH_STENCIL, 0, action->depth.value, action->stencil.value);
             }
             else if (clear_depth) {
-                glClearBufferfv(GL_DEPTH, 0, &action->depth.val);
+                glClearBufferfv(GL_DEPTH, 0, &action->depth.value);
             }
             else if (clear_stencil) {
-                GLint val = (GLint) action->stencil.val;
+                GLint val = (GLint) action->stencil.value;
                 glClearBufferiv(GL_STENCIL, 0, &val);
             }
         }
@@ -6517,156 +6546,198 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
         _sg.gl.cache.cur_primitive_type = _sg_gl_primitive_type(pip->gl.primitive_type);
         _sg.gl.cache.cur_index_type = _sg_gl_index_type(pip->cmn.index_type);
 
-        /* update depth-stencil state */
-        const sg_depth_stencil_state* new_ds = &pip->gl.depth_stencil;
-        sg_depth_stencil_state* cache_ds = &_sg.gl.cache.ds;
-        if (new_ds->depth_compare_func != cache_ds->depth_compare_func) {
-            cache_ds->depth_compare_func = new_ds->depth_compare_func;
-            glDepthFunc(_sg_gl_compare_func(new_ds->depth_compare_func));
-        }
-        if (new_ds->depth_write_enabled != cache_ds->depth_write_enabled) {
-            cache_ds->depth_write_enabled = new_ds->depth_write_enabled;
-            glDepthMask(new_ds->depth_write_enabled);
-        }
-        if (new_ds->stencil_enabled != cache_ds->stencil_enabled) {
-            cache_ds->stencil_enabled = new_ds->stencil_enabled;
-            if (new_ds->stencil_enabled) glEnable(GL_STENCIL_TEST);
-            else glDisable(GL_STENCIL_TEST);
-        }
-        if (new_ds->stencil_write_mask != cache_ds->stencil_write_mask) {
-            cache_ds->stencil_write_mask = new_ds->stencil_write_mask;
-            glStencilMask(new_ds->stencil_write_mask);
-        }
-        for (int i = 0; i < 2; i++) {
-            const sg_stencil_state* new_ss = (i==0)? &new_ds->stencil_front : &new_ds->stencil_back;
-            sg_stencil_state* cache_ss = (i==0)? &cache_ds->stencil_front : &cache_ds->stencil_back;
-            GLenum gl_face = (i==0)? GL_FRONT : GL_BACK;
-            if ((new_ss->compare_func != cache_ss->compare_func) ||
-                (new_ds->stencil_read_mask != cache_ds->stencil_read_mask) ||
-                (new_ds->stencil_ref != cache_ds->stencil_ref))
-            {
-                cache_ss->compare_func = new_ss->compare_func;
-                glStencilFuncSeparate(gl_face,
-                    _sg_gl_compare_func(new_ss->compare_func),
-                    new_ds->stencil_ref,
-                    new_ds->stencil_read_mask);
-            }
-            if ((new_ss->fail_op != cache_ss->fail_op) ||
-                (new_ss->depth_fail_op != cache_ss->depth_fail_op) ||
-                (new_ss->pass_op != cache_ss->pass_op))
-            {
-                cache_ss->fail_op = new_ss->fail_op;
-                cache_ss->depth_fail_op = new_ss->depth_fail_op;
-                cache_ss->pass_op = new_ss->pass_op;
-                glStencilOpSeparate(gl_face,
-                    _sg_gl_stencil_op(new_ss->fail_op),
-                    _sg_gl_stencil_op(new_ss->depth_fail_op),
-                    _sg_gl_stencil_op(new_ss->pass_op));
-            }
-        }
-        cache_ds->stencil_read_mask = new_ds->stencil_read_mask;
-        cache_ds->stencil_ref = new_ds->stencil_ref;
-
-        /* update blend state */
-        const sg_blend_state* new_b = &pip->gl.blend;
-        sg_blend_state* cache_b = &_sg.gl.cache.blend;
-        if (new_b->enabled != cache_b->enabled) {
-            cache_b->enabled = new_b->enabled;
-            if (new_b->enabled) glEnable(GL_BLEND);
-            else glDisable(GL_BLEND);
-        }
-        if ((new_b->src_factor_rgb != cache_b->src_factor_rgb) ||
-            (new_b->dst_factor_rgb != cache_b->dst_factor_rgb) ||
-            (new_b->src_factor_alpha != cache_b->src_factor_alpha) ||
-            (new_b->dst_factor_alpha != cache_b->dst_factor_alpha))
+        /* update depth state */
         {
-            cache_b->src_factor_rgb = new_b->src_factor_rgb;
-            cache_b->dst_factor_rgb = new_b->dst_factor_rgb;
-            cache_b->src_factor_alpha = new_b->src_factor_alpha;
-            cache_b->dst_factor_alpha = new_b->dst_factor_alpha;
-            glBlendFuncSeparate(_sg_gl_blend_factor(new_b->src_factor_rgb),
-                _sg_gl_blend_factor(new_b->dst_factor_rgb),
-                _sg_gl_blend_factor(new_b->src_factor_alpha),
-                _sg_gl_blend_factor(new_b->dst_factor_alpha));
-        }
-        if ((new_b->op_rgb != cache_b->op_rgb) || (new_b->op_alpha != cache_b->op_alpha)) {
-            cache_b->op_rgb = new_b->op_rgb;
-            cache_b->op_alpha = new_b->op_alpha;
-            glBlendEquationSeparate(_sg_gl_blend_op(new_b->op_rgb), _sg_gl_blend_op(new_b->op_alpha));
-        }
-        if (new_b->color_write_mask != cache_b->color_write_mask) {
-            cache_b->color_write_mask = new_b->color_write_mask;
-            glColorMask((new_b->color_write_mask & SG_COLORMASK_R) != 0,
-                        (new_b->color_write_mask & SG_COLORMASK_G) != 0,
-                        (new_b->color_write_mask & SG_COLORMASK_B) != 0,
-                        (new_b->color_write_mask & SG_COLORMASK_A) != 0);
-        }
-        if (!_sg_fequal(new_b->blend_color[0], cache_b->blend_color[0], 0.0001f) ||
-            !_sg_fequal(new_b->blend_color[1], cache_b->blend_color[1], 0.0001f) ||
-            !_sg_fequal(new_b->blend_color[2], cache_b->blend_color[2], 0.0001f) ||
-            !_sg_fequal(new_b->blend_color[3], cache_b->blend_color[3], 0.0001f))
-        {
-            const float* bc = new_b->blend_color;
-            for (int i=0; i<4; i++) {
-                cache_b->blend_color[i] = bc[i];
+            const sg_depth_state* state_ds = &pip->gl.depth;
+            sg_depth_state* cache_ds = &_sg.gl.cache.depth;
+            if (state_ds->compare != cache_ds->compare) {
+                cache_ds->compare = state_ds->compare;
+                glDepthFunc(_sg_gl_compare_func(state_ds->compare));
             }
-            glBlendColor(bc[0], bc[1], bc[2], bc[3]);
+            if (state_ds->write_enabled != cache_ds->write_enabled) {
+                cache_ds->write_enabled = state_ds->write_enabled;
+                glDepthMask(state_ds->write_enabled);
+            }
+            if (!_sg_fequal(state_ds->bias, cache_ds->bias, 0.000001f) ||
+                !_sg_fequal(state_ds->bias_slope_scale, cache_ds->bias_slope_scale, 0.000001f))
+            {
+                /* according to ANGLE's D3D11 backend:
+                    D3D11 SlopeScaledDepthBias ==> GL polygonOffsetFactor
+                    D3D11 DepthBias ==> GL polygonOffsetUnits
+                    DepthBiasClamp has no meaning on GL
+                */
+                cache_ds->bias = state_ds->bias;
+                cache_ds->bias_slope_scale = state_ds->bias_slope_scale;
+                glPolygonOffset(state_ds->bias_slope_scale, state_ds->bias);
+                bool po_enabled = true;
+                if (_sg_fequal(state_ds->bias, 0.0f, 0.000001f) &&
+                    _sg_fequal(state_ds->bias_slope_scale, 0.0f, 0.000001f))
+                {
+                    po_enabled = false;
+                }
+                if (po_enabled != _sg.gl.cache.polygon_offset_enabled) {
+                    _sg.gl.cache.polygon_offset_enabled = po_enabled;
+                    if (po_enabled) {
+                        glEnable(GL_POLYGON_OFFSET_FILL);
+                    }
+                    else {
+                        glDisable(GL_POLYGON_OFFSET_FILL);
+                    }
+                }
+            }
         }
 
-        /* update rasterizer state */
-        const sg_rasterizer_state* new_r = &pip->gl.rast;
-        sg_rasterizer_state* cache_r = &_sg.gl.cache.rast;
-        if (new_r->cull_mode != cache_r->cull_mode) {
-            cache_r->cull_mode = new_r->cull_mode;
-            if (SG_CULLMODE_NONE == new_r->cull_mode) {
+        /* update stencil state */
+        {
+            const sg_stencil_state* state_ss = &pip->gl.stencil;
+            sg_stencil_state* cache_ss = &_sg.gl.cache.stencil;
+            if (state_ss->enabled != cache_ss->enabled) {
+                cache_ss->enabled = state_ss->enabled;
+                if (state_ss->enabled) {
+                    glEnable(GL_STENCIL_TEST);
+                }
+                else {
+                    glDisable(GL_STENCIL_TEST);
+                }
+            }
+            if (state_ss->write_mask != cache_ss->write_mask) {
+                cache_ss->write_mask = state_ss->write_mask;
+                glStencilMask(state_ss->write_mask);
+            }
+            for (int i = 0; i < 2; i++) {
+                const sg_stencil_face_state* state_sfs = (i==0)? &state_ss->front : &state_ss->back;
+                sg_stencil_face_state* cache_sfs = (i==0)? &cache_ss->front : &cache_ss->back;
+                GLenum gl_face = (i==0)? GL_FRONT : GL_BACK;
+                if ((state_sfs->compare != cache_sfs->compare) ||
+                    (state_ss->read_mask != cache_ss->read_mask) ||
+                    (state_ss->ref != cache_ss->ref))
+                {
+                    cache_sfs->compare = state_sfs->compare;
+                    glStencilFuncSeparate(gl_face,
+                        _sg_gl_compare_func(state_sfs->compare),
+                        state_ss->ref,
+                        state_ss->read_mask);
+                }
+                if ((state_sfs->fail_op != cache_sfs->fail_op) ||
+                    (state_sfs->depth_fail_op != cache_sfs->depth_fail_op) ||
+                    (state_sfs->pass_op != cache_sfs->pass_op))
+                {
+                    cache_sfs->fail_op = state_sfs->fail_op;
+                    cache_sfs->depth_fail_op = state_sfs->depth_fail_op;
+                    cache_sfs->pass_op = state_sfs->pass_op;
+                    glStencilOpSeparate(gl_face,
+                        _sg_gl_stencil_op(state_sfs->fail_op),
+                        _sg_gl_stencil_op(state_sfs->depth_fail_op),
+                        _sg_gl_stencil_op(state_sfs->pass_op));
+                }
+            }
+            cache_ss->read_mask = state_ss->read_mask;
+            cache_ss->ref = state_ss->ref;
+        }
+
+        /* update blend state
+            FIXME: separate blend state per color attachment not support, needs GL4
+        */
+        {
+            const sg_blend_state* state_bs = &pip->gl.blend;
+            sg_blend_state* cache_bs = &_sg.gl.cache.blend;
+            if (state_bs->enabled != cache_bs->enabled) {
+                cache_bs->enabled = state_bs->enabled;
+                if (state_bs->enabled) {
+                    glEnable(GL_BLEND);
+                }
+                else {
+                    glDisable(GL_BLEND);
+                }
+            }
+            if ((state_bs->src_factor_rgb != cache_bs->src_factor_rgb) ||
+                (state_bs->dst_factor_rgb != cache_bs->dst_factor_rgb) ||
+                (state_bs->src_factor_alpha != cache_bs->src_factor_alpha) ||
+                (state_bs->dst_factor_alpha != cache_bs->dst_factor_alpha))
+            {
+                cache_bs->src_factor_rgb = state_bs->src_factor_rgb;
+                cache_bs->dst_factor_rgb = state_bs->dst_factor_rgb;
+                cache_bs->src_factor_alpha = state_bs->src_factor_alpha;
+                cache_bs->dst_factor_alpha = state_bs->dst_factor_alpha;
+                glBlendFuncSeparate(_sg_gl_blend_factor(state_bs->src_factor_rgb),
+                    _sg_gl_blend_factor(state_bs->dst_factor_rgb),
+                    _sg_gl_blend_factor(state_bs->src_factor_alpha),
+                    _sg_gl_blend_factor(state_bs->dst_factor_alpha));
+            }
+            if ((state_bs->op_rgb != cache_bs->op_rgb) || (state_bs->op_alpha != cache_bs->op_alpha)) {
+                cache_bs->op_rgb = state_bs->op_rgb;
+                cache_bs->op_alpha = state_bs->op_alpha;
+                glBlendEquationSeparate(_sg_gl_blend_op(state_bs->op_rgb), _sg_gl_blend_op(state_bs->op_alpha));
+            }
+        }
+
+        /* standalone state */
+        for (uint32_t i = 0; i < pip->cmn.color_attachment_count; i++) {
+            if (pip->gl.color_write_mask[i] != _sg.gl.cache.color_write_mask[i]) {
+                const sg_color_mask cm = pip->gl.color_write_mask[i];
+                _sg.gl.cache.color_write_mask[i] = cm;
+                #ifdef SOKOL_GLCORE33
+                    glColorMaski(i,
+                                (cm & SG_COLORMASK_R) != 0,
+                                (cm & SG_COLORMASK_G) != 0,
+                                (cm & SG_COLORMASK_B) != 0,
+                                (cm & SG_COLORMASK_A) != 0);
+                #else
+                    if (0 == i) {
+                        glColorMask((cm & SG_COLORMASK_R) != 0,
+                                    (cm & SG_COLORMASK_G) != 0,
+                                    (cm & SG_COLORMASK_B) != 0,
+                                    (cm & SG_COLORMASK_A) != 0);
+                    }
+                #endif
+            }
+        }
+
+        if (!_sg_fequal(pip->cmn.blend_color.r, _sg.gl.cache.blend_color.r, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.g, _sg.gl.cache.blend_color.g, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.b, _sg.gl.cache.blend_color.b, 0.0001f) ||
+            !_sg_fequal(pip->cmn.blend_color.a, _sg.gl.cache.blend_color.a, 0.0001f))
+        {
+            sg_color c = pip->cmn.blend_color;
+            _sg.gl.cache.blend_color = c;
+            glBlendColor(c.r, c.g, c.b, c.a);
+        }
+        if (pip->gl.cull_mode != _sg.gl.cache.cull_mode) {
+            _sg.gl.cache.cull_mode = pip->gl.cull_mode;
+            if (SG_CULLMODE_NONE == pip->gl.cull_mode) {
                 glDisable(GL_CULL_FACE);
             }
             else {
                 glEnable(GL_CULL_FACE);
-                GLenum gl_mode = (SG_CULLMODE_FRONT == new_r->cull_mode) ? GL_FRONT : GL_BACK;
+                GLenum gl_mode = (SG_CULLMODE_FRONT == pip->gl.cull_mode) ? GL_FRONT : GL_BACK;
                 glCullFace(gl_mode);
             }
         }
-        if (new_r->face_winding != cache_r->face_winding) {
-            cache_r->face_winding = new_r->face_winding;
-            GLenum gl_winding = (SG_FACEWINDING_CW == new_r->face_winding) ? GL_CW : GL_CCW;
+        if (pip->gl.face_winding != _sg.gl.cache.face_winding) {
+            _sg.gl.cache.face_winding = pip->gl.face_winding;
+            GLenum gl_winding = (SG_FACEWINDING_CW == pip->gl.face_winding) ? GL_CW : GL_CCW;
             glFrontFace(gl_winding);
         }
-        if (new_r->alpha_to_coverage_enabled != cache_r->alpha_to_coverage_enabled) {
-            cache_r->alpha_to_coverage_enabled = new_r->alpha_to_coverage_enabled;
-            if (new_r->alpha_to_coverage_enabled) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-            else glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        if (pip->gl.alpha_to_coverage_enabled != _sg.gl.cache.alpha_to_coverage_enabled) {
+            _sg.gl.cache.alpha_to_coverage_enabled = pip->gl.alpha_to_coverage_enabled;
+            if (pip->gl.alpha_to_coverage_enabled) {
+                glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+            }
+            else {
+                glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+            }
         }
         #ifdef SOKOL_GLCORE33
-        if (new_r->sample_count != cache_r->sample_count) {
-            cache_r->sample_count = new_r->sample_count;
-            if (new_r->sample_count > 1) glEnable(GL_MULTISAMPLE);
-            else glDisable(GL_MULTISAMPLE);
+        if (pip->gl.sample_count != _sg.gl.cache.sample_count) {
+            _sg.gl.cache.sample_count = pip->gl.sample_count;
+            if (pip->gl.sample_count > 1) {
+                glEnable(GL_MULTISAMPLE);
+            }
+            else {
+                glDisable(GL_MULTISAMPLE);
+            }
         }
         #endif
-        if (!_sg_fequal(new_r->depth_bias, cache_r->depth_bias, 0.000001f) ||
-            !_sg_fequal(new_r->depth_bias_slope_scale, cache_r->depth_bias_slope_scale, 0.000001f))
-        {
-            /* according to ANGLE's D3D11 backend:
-                D3D11 SlopeScaledDepthBias ==> GL polygonOffsetFactor
-                D3D11 DepthBias ==> GL polygonOffsetUnits
-                DepthBiasClamp has no meaning on GL
-            */
-            cache_r->depth_bias = new_r->depth_bias;
-            cache_r->depth_bias_slope_scale = new_r->depth_bias_slope_scale;
-            glPolygonOffset(new_r->depth_bias_slope_scale, new_r->depth_bias);
-            bool po_enabled = true;
-            if (_sg_fequal(new_r->depth_bias, 0.0f, 0.000001f) &&
-                _sg_fequal(new_r->depth_bias_slope_scale, 0.0f, 0.000001f))
-            {
-                po_enabled = false;
-            }
-            if (po_enabled != _sg.gl.cache.polygon_offset_enabled) {
-                _sg.gl.cache.polygon_offset_enabled = po_enabled;
-                if (po_enabled) glEnable(GL_POLYGON_OFFSET_FILL);
-                else glDisable(GL_POLYGON_OFFSET_FILL);
-            }
-        }
 
         /* bind shader program */
         if (pip->shader->gl.prog != _sg.gl.cache.prog) {
@@ -6674,6 +6745,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_pipeline(_sg_pipeline_t* pip) {
             glUseProgram(pip->shader->gl.prog);
         }
     }
+    _SG_GL_CHECK_ERROR();
 }
 
 _SOKOL_PRIVATE void _sg_gl_apply_bindings(
@@ -7596,6 +7668,8 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -8195,7 +8269,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     _sg_pipeline_common_init(&pip->cmn, desc);
     pip->d3d11.index_format = _sg_d3d11_index_format(pip->cmn.index_type);
     pip->d3d11.topology = _sg_d3d11_primitive_topology(desc->primitive_type);
-    pip->d3d11.stencil_ref = desc->depth_stencil.stencil_ref;
+    pip->d3d11.stencil_ref = desc->stencil.ref;
 
     /* create input layout object */
     HRESULT hr;
@@ -8246,14 +8320,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     D3D11_RASTERIZER_DESC rs_desc;
     memset(&rs_desc, 0, sizeof(rs_desc));
     rs_desc.FillMode = D3D11_FILL_SOLID;
-    rs_desc.CullMode = _sg_d3d11_cull_mode(desc->rasterizer.cull_mode);
-    rs_desc.FrontCounterClockwise = desc->rasterizer.face_winding == SG_FACEWINDING_CCW;
+    rs_desc.CullMode = _sg_d3d11_cull_mode(desc->cull_mode);
+    rs_desc.FrontCounterClockwise = desc->face_winding == SG_FACEWINDING_CCW;
     rs_desc.DepthBias = (INT) pip->cmn.depth_bias;
     rs_desc.DepthBiasClamp = pip->cmn.depth_bias_clamp;
     rs_desc.SlopeScaledDepthBias = pip->cmn.depth_bias_slope_scale;
     rs_desc.DepthClipEnable = TRUE;
     rs_desc.ScissorEnable = TRUE;
-    rs_desc.MultisampleEnable = desc->rasterizer.sample_count > 1;
+    rs_desc.MultisampleEnable = desc->sample_count > 1;
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = _sg_d3d11_CreateRasterizerState(_sg.d3d11.dev, &rs_desc, &pip->d3d11.rs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.rs);
@@ -8262,37 +8336,52 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     D3D11_DEPTH_STENCIL_DESC dss_desc;
     memset(&dss_desc, 0, sizeof(dss_desc));
     dss_desc.DepthEnable = TRUE;
-    dss_desc.DepthWriteMask = desc->depth_stencil.depth_write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
-    dss_desc.DepthFunc = _sg_d3d11_compare_func(desc->depth_stencil.depth_compare_func);
-    dss_desc.StencilEnable = desc->depth_stencil.stencil_enabled;
-    dss_desc.StencilReadMask = desc->depth_stencil.stencil_read_mask;
-    dss_desc.StencilWriteMask = desc->depth_stencil.stencil_write_mask;
-    const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
+    dss_desc.DepthWriteMask = desc->depth.write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+    dss_desc.DepthFunc = _sg_d3d11_compare_func(desc->depth.compare);
+    dss_desc.StencilEnable = desc->stencil.enabled;
+    dss_desc.StencilReadMask = desc->stencil.read_mask;
+    dss_desc.StencilWriteMask = desc->stencil.write_mask;
+    const sg_stencil_face_state* sf = &desc->stencil.front;
     dss_desc.FrontFace.StencilFailOp = _sg_d3d11_stencil_op(sf->fail_op);
     dss_desc.FrontFace.StencilDepthFailOp = _sg_d3d11_stencil_op(sf->depth_fail_op);
     dss_desc.FrontFace.StencilPassOp = _sg_d3d11_stencil_op(sf->pass_op);
-    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(sf->compare_func);
-    const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
+    dss_desc.FrontFace.StencilFunc = _sg_d3d11_compare_func(sf->compare);
+    const sg_stencil_face_state* sb = &desc->stencil.back;
     dss_desc.BackFace.StencilFailOp = _sg_d3d11_stencil_op(sb->fail_op);
     dss_desc.BackFace.StencilDepthFailOp = _sg_d3d11_stencil_op(sb->depth_fail_op);
     dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(sb->pass_op);
-    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare_func);
+    dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare);
     hr = _sg_d3d11_CreateDepthStencilState(_sg.d3d11.dev, &dss_desc, &pip->d3d11.dss);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.dss);
 
     /* create blend state */
     D3D11_BLEND_DESC bs_desc;
     memset(&bs_desc, 0, sizeof(bs_desc));
-    bs_desc.AlphaToCoverageEnable = desc->rasterizer.alpha_to_coverage_enabled;
-    bs_desc.IndependentBlendEnable = FALSE;
-    bs_desc.RenderTarget[0].BlendEnable = desc->blend.enabled;
-    bs_desc.RenderTarget[0].SrcBlend = _sg_d3d11_blend_factor(desc->blend.src_factor_rgb);
-    bs_desc.RenderTarget[0].DestBlend = _sg_d3d11_blend_factor(desc->blend.dst_factor_rgb);
-    bs_desc.RenderTarget[0].BlendOp = _sg_d3d11_blend_op(desc->blend.op_rgb);
-    bs_desc.RenderTarget[0].SrcBlendAlpha = _sg_d3d11_blend_factor(desc->blend.src_factor_alpha);
-    bs_desc.RenderTarget[0].DestBlendAlpha = _sg_d3d11_blend_factor(desc->blend.dst_factor_alpha);
-    bs_desc.RenderTarget[0].BlendOpAlpha = _sg_d3d11_blend_op(desc->blend.op_alpha);
-    bs_desc.RenderTarget[0].RenderTargetWriteMask = _sg_d3d11_color_write_mask(desc->blend.color_write_mask);
+    bs_desc.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
+    bs_desc.IndependentBlendEnable = TRUE;
+    {
+        uint32_t i = 0;
+        for (i = 0; i < desc->color_count; i++) {
+            const sg_blend_state* src = &desc->colors[i].blend;
+            D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
+            dst->BlendEnable = src->enabled;
+            dst->SrcBlend = _sg_d3d11_blend_factor(src->src_factor_rgb);
+            dst->DestBlend = _sg_d3d11_blend_factor(src->dst_factor_rgb);
+            dst->BlendOp = _sg_d3d11_blend_op(src->op_rgb);
+            dst->SrcBlendAlpha = _sg_d3d11_blend_factor(src->src_factor_alpha);
+            dst->DestBlendAlpha = _sg_d3d11_blend_factor(src->dst_factor_alpha);
+            dst->BlendOpAlpha = _sg_d3d11_blend_op(src->op_alpha);
+            dst->RenderTargetWriteMask = _sg_d3d11_color_write_mask(desc->colors[i].write_mask);
+        }
+        for (; i < 8; i++) {
+            D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
+            dst->BlendEnable = FALSE;
+            dst->SrcBlend = dst->SrcBlendAlpha = D3D11_BLEND_ONE;
+            dst->DestBlend = dst->DestBlendAlpha = D3D11_BLEND_ZERO;
+            dst->BlendOp = dst->BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            dst->RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        }
+    }
     hr = _sg_d3d11_CreateBlendState(_sg.d3d11.dev, &bs_desc, &pip->d3d11.bs);
     SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.bs);
 
@@ -8322,8 +8411,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
 
     _sg_pass_common_init(&pass->cmn, desc);
 
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-        const sg_attachment_desc* att_desc = &desc->color_attachments[i];
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+        const sg_pass_attachment_desc* att_desc = &desc->color_attachments[i];
         _SOKOL_UNUSED(att_desc);
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         _sg_image_t* att_img = att_images[i];
@@ -8333,7 +8422,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
         pass->d3d11.color_atts[i].image = att_img;
 
         /* create D3D11 render-target-view */
-        const _sg_attachment_t* cmn_att = &pass->cmn.color_atts[i];
+        const _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
         SOKOL_ASSERT(0 == pass->d3d11.color_atts[i].rtv);
         ID3D11Resource* d3d11_res = 0;
         const bool is_msaa = att_img->cmn.sample_count > 1;
@@ -8377,7 +8466,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     SOKOL_ASSERT(0 == pass->d3d11.ds_att.dsv);
     if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
         const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
-        const sg_attachment_desc* att_desc = &desc->depth_stencil_attachment;
+        const sg_pass_attachment_desc* att_desc = &desc->depth_stencil_attachment;
         _SOKOL_UNUSED(att_desc);
         _sg_image_t* att_img = att_images[ds_img_index];
         SOKOL_ASSERT(att_img && (att_img->slot.id == att_desc->image.id));
@@ -8491,7 +8580,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     /* perform clear action */
     for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
         if (action->colors[i].action == SG_ACTION_CLEAR) {
-            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], action->colors[i].val);
+            _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], &action->colors[i].value.r);
         }
     }
     UINT ds_flags = 0;
@@ -8502,7 +8591,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
         ds_flags |= D3D11_CLEAR_STENCIL;
     }
     if ((0 != ds_flags) && _sg.d3d11.cur_dsv) {
-        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.val, action->stencil.val);
+        _sg_d3d11_ClearDepthStencilView(_sg.d3d11.ctx, _sg.d3d11.cur_dsv, ds_flags, action->depth.value, action->stencil.value);
     }
 }
 
@@ -8519,7 +8608,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     if (_sg.d3d11.cur_pass) {
         SOKOL_ASSERT(_sg.d3d11.cur_pass->slot.id == _sg.d3d11.cur_pass_id.id);
         for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
-            _sg_attachment_t* cmn_att = &_sg.d3d11.cur_pass->cmn.color_atts[i];
+            _sg_pass_attachment_t* cmn_att = &_sg.d3d11.cur_pass->cmn.color_atts[i];
             _sg_image_t* att_img = _sg.d3d11.cur_pass->d3d11.color_atts[i].image;
             SOKOL_ASSERT(att_img && (att_img->slot.id == cmn_att->image_id.id));
             if (att_img->cmn.sample_count > 1) {
@@ -8584,7 +8673,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
 
     _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
     _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
-    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, pip->cmn.blend_color, 0xFFFFFFFF);
+    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, pip->d3d11.bs, &pip->cmn.blend_color.r, 0xFFFFFFFF);
     _sg_d3d11_IASetPrimitiveTopology(_sg.d3d11.ctx, pip->d3d11.topology);
     _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, pip->d3d11.il);
     _sg_d3d11_VSSetShader(_sg.d3d11.ctx, pip->shader->d3d11.vs, NULL, 0);
@@ -9306,6 +9395,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #else
         _sg.features.image_clamp_to_border = false;
     #endif
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
@@ -9870,9 +9961,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     if (SG_INDEXTYPE_NONE != pip->cmn.index_type) {
         pip->mtl.index_type = _sg_mtl_index_type(pip->cmn.index_type);
     }
-    pip->mtl.cull_mode = _sg_mtl_cull_mode(desc->rasterizer.cull_mode);
-    pip->mtl.winding = _sg_mtl_winding(desc->rasterizer.face_winding);
-    pip->mtl.stencil_ref = desc->depth_stencil.stencil_ref;
+    pip->mtl.cull_mode = _sg_mtl_cull_mode(desc->cull_mode);
+    pip->mtl.winding = _sg_mtl_winding(desc->face_winding);
+    pip->mtl.stencil_ref = desc->stencil.ref;
 
     /* create vertex-descriptor */
     MTLVertexDescriptor* vtx_desc = [MTLVertexDescriptor vertexDescriptor];
@@ -9905,13 +9996,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     rp_desc.vertexFunction = _sg_mtl_id(shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
     SOKOL_ASSERT(shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func != _SG_MTL_INVALID_SLOT_INDEX);
     rp_desc.fragmentFunction = _sg_mtl_id(shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
-    rp_desc.sampleCount = desc->rasterizer.sample_count;
-    rp_desc.alphaToCoverageEnabled = desc->rasterizer.alpha_to_coverage_enabled;
+    rp_desc.sampleCount = desc->sample_count;
+    rp_desc.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
     rp_desc.alphaToOneEnabled = NO;
     rp_desc.rasterizationEnabled = YES;
-    rp_desc.depthAttachmentPixelFormat = _sg_mtl_pixel_format(desc->blend.depth_format);
-    if (desc->blend.depth_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
-        rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->blend.depth_format);
+    rp_desc.depthAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
+    if (desc->depth.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
+        rp_desc.stencilAttachmentPixelFormat = _sg_mtl_pixel_format(desc->depth.pixel_format);
     }
     /* FIXME: this only works on macOS 10.13!
     for (int i = 0; i < (SG_MAX_SHADERSTAGE_UBS+SG_MAX_SHADERSTAGE_BUFFERS); i++) {
@@ -9921,17 +10012,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
         rp_desc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
     }
     */
-    const int att_count = desc->blend.color_attachment_count;
-    for (int i = 0; i < att_count; i++) {
-        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(desc->blend.color_format);
-        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(desc->blend.color_write_mask);
-        rp_desc.colorAttachments[i].blendingEnabled = desc->blend.enabled;
-        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(desc->blend.op_alpha);
-        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(desc->blend.op_rgb);
-        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(desc->blend.dst_factor_alpha);
-        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(desc->blend.dst_factor_rgb);
-        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(desc->blend.src_factor_alpha);
-        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(desc->blend.src_factor_rgb);
+    for (uint32_t i = 0; i < desc->color_count; i++) {
+        SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+        const sg_color_state* cs = &desc->colors[i];
+        rp_desc.colorAttachments[i].pixelFormat = _sg_mtl_pixel_format(cs->pixel_format);
+        rp_desc.colorAttachments[i].writeMask = _sg_mtl_color_write_mask(cs->write_mask);
+        rp_desc.colorAttachments[i].blendingEnabled = cs->blend.enabled;
+        rp_desc.colorAttachments[i].alphaBlendOperation = _sg_mtl_blend_op(cs->blend.op_alpha);
+        rp_desc.colorAttachments[i].rgbBlendOperation = _sg_mtl_blend_op(cs->blend.op_rgb);
+        rp_desc.colorAttachments[i].destinationAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_alpha);
+        rp_desc.colorAttachments[i].destinationRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.dst_factor_rgb);
+        rp_desc.colorAttachments[i].sourceAlphaBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_alpha);
+        rp_desc.colorAttachments[i].sourceRGBBlendFactor = _sg_mtl_blend_factor(cs->blend.src_factor_rgb);
     }
     NSError* err = NULL;
     id<MTLRenderPipelineState> mtl_rps = [_sg.mtl.device newRenderPipelineStateWithDescriptor:rp_desc error:&err];
@@ -9944,25 +10036,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 
     /* depth-stencil-state */
     MTLDepthStencilDescriptor* ds_desc = [[MTLDepthStencilDescriptor alloc] init];
-    ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth_stencil.depth_compare_func);
-    ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
-    if (desc->depth_stencil.stencil_enabled) {
-        const sg_stencil_state* sb = &desc->depth_stencil.stencil_back;
+    ds_desc.depthCompareFunction = _sg_mtl_compare_func(desc->depth.compare);
+    ds_desc.depthWriteEnabled = desc->depth.write_enabled;
+    if (desc->stencil.enabled) {
+        const sg_stencil_face_state* sb = &desc->stencil.back;
         ds_desc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
         ds_desc.backFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sb->fail_op);
         ds_desc.backFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sb->depth_fail_op);
         ds_desc.backFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sb->pass_op);
-        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare_func);
-        ds_desc.backFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
-        ds_desc.backFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
-        const sg_stencil_state* sf = &desc->depth_stencil.stencil_front;
+        ds_desc.backFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sb->compare);
+        ds_desc.backFaceStencil.readMask = desc->stencil.read_mask;
+        ds_desc.backFaceStencil.writeMask = desc->stencil.write_mask;
+        const sg_stencil_face_state* sf = &desc->stencil.front;
         ds_desc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
         ds_desc.frontFaceStencil.stencilFailureOperation = _sg_mtl_stencil_op(sf->fail_op);
         ds_desc.frontFaceStencil.depthFailureOperation = _sg_mtl_stencil_op(sf->depth_fail_op);
         ds_desc.frontFaceStencil.depthStencilPassOperation = _sg_mtl_stencil_op(sf->pass_op);
-        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare_func);
-        ds_desc.frontFaceStencil.readMask = desc->depth_stencil.stencil_read_mask;
-        ds_desc.frontFaceStencil.writeMask = desc->depth_stencil.stencil_write_mask;
+        ds_desc.frontFaceStencil.stencilCompareFunction = _sg_mtl_compare_func(sf->compare);
+        ds_desc.frontFaceStencil.readMask = desc->stencil.read_mask;
+        ds_desc.frontFaceStencil.writeMask = desc->stencil.write_mask;
     }
     id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
     _SG_OBJC_RELEASE(ds_desc);
@@ -9985,8 +10077,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image
     _sg_pass_common_init(&pass->cmn, desc);
 
     /* copy image pointers */
-    const sg_attachment_desc* att_desc;
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    const sg_pass_attachment_desc* att_desc;
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
@@ -10075,8 +10167,8 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     if (pass) {
         /* setup pass descriptor for offscreen rendering */
         SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
-            const _sg_attachment_t* cmn_att = &pass->cmn.color_atts[i];
+        for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+            const _sg_pass_attachment_t* cmn_att = &pass->cmn.color_atts[i];
             const _sg_mtl_attachment_t* mtl_att = &pass->mtl.color_atts[i];
             const _sg_image_t* att_img = mtl_att->image;
             SOKOL_ASSERT(att_img->slot.state == SG_RESOURCESTATE_VALID);
@@ -10084,8 +10176,8 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             const bool is_msaa = (att_img->cmn.sample_count > 1);
             pass_desc.colorAttachments[i].loadAction = _sg_mtl_load_action(action->colors[i].action);
             pass_desc.colorAttachments[i].storeAction = is_msaa ? MTLStoreActionMultisampleResolve : MTLStoreActionStore;
-            const float* c = &(action->colors[i].val[0]);
-            pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c[0], c[1], c[2], c[3]);
+            sg_color c = action->colors[i].value;
+            pass_desc.colorAttachments[i].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
             if (is_msaa) {
                 SOKOL_ASSERT(att_img->mtl.msaa_tex != _SG_MTL_INVALID_SLOT_INDEX);
                 SOKOL_ASSERT(att_img->mtl.tex[mtl_att->image->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
@@ -10126,23 +10218,23 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             SOKOL_ASSERT(ds_att_img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-            pass_desc.depthAttachment.clearDepth = action->depth.val;
+            pass_desc.depthAttachment.clearDepth = action->depth.value;
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-                pass_desc.stencilAttachment.clearStencil = action->stencil.val;
+                pass_desc.stencilAttachment.clearStencil = action->stencil.value;
             }
         }
     }
     else {
         /* setup pass descriptor for default rendering */
         pass_desc.colorAttachments[0].loadAction = _sg_mtl_load_action(action->colors[0].action);
-        const float* c = &(action->colors[0].val[0]);
-        pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c[0], c[1], c[2], c[3]);
+        sg_color c = action->colors[0].value;
+        pass_desc.colorAttachments[0].clearColor = MTLClearColorMake(c.r, c.g, c.b, c.a);
         pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
-        pass_desc.depthAttachment.clearDepth = action->depth.val;
+        pass_desc.depthAttachment.clearDepth = action->depth.value;
         pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
-        pass_desc.stencilAttachment.clearStencil = action->stencil.val;
+        pass_desc.stencilAttachment.clearStencil = action->stencil.value;
     }
 
     /* create a render command encoder, this might return nil if window is minimized */
@@ -10261,8 +10353,8 @@ _SOKOL_PRIVATE void _sg_mtl_apply_pipeline(_sg_pipeline_t* pip) {
     if ((_sg.mtl.state_cache.cur_pipeline != pip) || (_sg.mtl.state_cache.cur_pipeline_id.id != pip->slot.id)) {
         _sg.mtl.state_cache.cur_pipeline = pip;
         _sg.mtl.state_cache.cur_pipeline_id.id = pip->slot.id;
-        const float* c = pip->cmn.blend_color;
-        [_sg.mtl.cmd_encoder setBlendColorRed:c[0] green:c[1] blue:c[2] alpha:c[3]];
+        sg_color c = pip->cmn.blend_color;
+        [_sg.mtl.cmd_encoder setBlendColorRed:c.r green:c.g blue:c.b alpha:c.a];
         [_sg.mtl.cmd_encoder setCullMode:pip->mtl.cull_mode];
         [_sg.mtl.cmd_encoder setFrontFacingWinding:pip->mtl.winding];
         [_sg.mtl.cmd_encoder setStencilReferenceValue:pip->mtl.stencil_ref];
@@ -10776,6 +10868,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     /* FIXME: max images size??? */
     _sg.limits.max_image_size_2d = 8 * 1024;
@@ -13077,7 +13171,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_PASSDESC_LAYER:                   return "pass attachment image is array texture, but layer index is too big";
         case _SG_VALIDATE_PASSDESC_SLICE:                   return "pass attachment image is 3d texture, but slice value is too big";
         case _SG_VALIDATE_PASSDESC_IMAGE_NO_RT:             return "pass attachment image must be render targets";
-        case _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS:      return "all pass color attachment images must have the same pixel format";
         case _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT:   return "pass color-attachment images must have a renderable pixel format";
         case _SG_VALIDATE_PASSDESC_DEPTH_INV_PIXELFORMAT:   return "pass depth-attachment image must have depth pixel format";
         case _SG_VALIDATE_PASSDESC_IMAGE_SIZES:             return "all pass attachments must have the same size";
@@ -13093,10 +13186,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_APIP_PIPELINE_VALID:      return "sg_apply_pipeline: pipeline object not in valid state";
         case _SG_VALIDATE_APIP_SHADER_EXISTS:       return "sg_apply_pipeline: shader object no longer alive";
         case _SG_VALIDATE_APIP_SHADER_VALID:        return "sg_apply_pipeline: shader object not in valid state";
-        case _SG_VALIDATE_APIP_ATT_COUNT:           return "sg_apply_pipeline: color_attachment_count in pipeline doesn't match number of pass color attachments";
-        case _SG_VALIDATE_APIP_COLOR_FORMAT:        return "sg_apply_pipeline: color_format in pipeline doesn't match pass color attachment pixel format";
-        case _SG_VALIDATE_APIP_DEPTH_FORMAT:        return "sg_apply_pipeline: depth_format in pipeline doesn't match pass depth attachment pixel format";
-        case _SG_VALIDATE_APIP_SAMPLE_COUNT:        return "sg_apply_pipeline: MSAA sample count in pipeline doesn't match render pass attachment sample count";
+        case _SG_VALIDATE_APIP_ATT_COUNT:           return "sg_apply_pipeline: number of pipeline color attachments doesn't match number of pass color attachments";
+        case _SG_VALIDATE_APIP_COLOR_FORMAT:        return "sg_apply_pipeline: pipeline color attachment pixel format doesn't match pass color attachment pixel format";
+        case _SG_VALIDATE_APIP_DEPTH_FORMAT:        return "sg_apply_pipeline: pipeline depth pixel_format doesn't match pass depth attachment pixel format";
+        case _SG_VALIDATE_APIP_SAMPLE_COUNT:        return "sg_apply_pipeline: pipeline MSAA sample count doesn't match render pass attachment sample count";
 
         /* sg_apply_bindings */
         case _SG_VALIDATE_ABND_PIPELINE:            return "sg_apply_bindings: must be called after sg_apply_pipeline";
@@ -13414,7 +13507,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         sg_pixel_format color_fmt = SG_PIXELFORMAT_NONE;
         int width = -1, height = -1, sample_count = -1;
         for (int att_index = 0; att_index < SG_MAX_COLOR_ATTACHMENTS; att_index++) {
-            const sg_attachment_desc* att = &desc->color_attachments[att_index];
+            const sg_pass_attachment_desc* att = &desc->color_attachments[att_index];
             if (att->image.id == SG_INVALID_ID) {
                 SOKOL_VALIDATE(att_index > 0, _SG_VALIDATE_PASSDESC_NO_COLOR_ATTS);
                 atts_cont = false;
@@ -13441,7 +13534,6 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
                 sample_count = img->cmn.sample_count;
             }
             else {
-                SOKOL_VALIDATE(img->cmn.pixel_format == color_fmt, _SG_VALIDATE_PASSDESC_COLOR_PIXELFORMATS);
                 SOKOL_VALIDATE(width == img->cmn.width >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(height == img->cmn.height >> att->mip_level, _SG_VALIDATE_PASSDESC_IMAGE_SIZES);
                 SOKOL_VALIDATE(sample_count == img->cmn.sample_count, _SG_VALIDATE_PASSDESC_IMAGE_SAMPLE_COUNTS);
@@ -13449,7 +13541,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             SOKOL_VALIDATE(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format), _SG_VALIDATE_PASSDESC_COLOR_INV_PIXELFORMAT);
         }
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-            const sg_attachment_desc* att = &desc->depth_stencil_attachment;
+            const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
             SOKOL_VALIDATE((0 != img) && (img->slot.state == SG_RESOURCESTATE_VALID), _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->cmn.num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
@@ -13481,7 +13573,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass_t* pass) {
         SOKOL_VALIDATE(pass->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_PASS);
 
         for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            const _sg_attachment_t* att = &pass->cmn.color_atts[i];
+            const _sg_pass_attachment_t* att = &pass->cmn.color_atts[i];
             const _sg_image_t* img = _sg_pass_color_image(pass, i);
             if (img) {
                 SOKOL_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
@@ -13490,7 +13582,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(_sg_pass_t* pass) {
         }
         const _sg_image_t* ds_img = _sg_pass_ds_image(pass);
         if (ds_img) {
-            const _sg_attachment_t* att = &pass->cmn.ds_att;
+            const _sg_pass_attachment_t* att = &pass->cmn.ds_att;
             SOKOL_VALIDATE(ds_img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_BEGINPASS_IMAGE);
             SOKOL_VALIDATE(ds_img->slot.id == att->image_id.id, _SG_VALIDATE_BEGINPASS_IMAGE);
         }
@@ -13520,10 +13612,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         const _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, _sg.cur_pass.id);
         if (pass) {
             /* an offscreen pass */
-            const _sg_image_t* att_img = _sg_pass_color_image(pass, 0);
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == pass->cmn.num_color_atts, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->cmn.color_format == att_img->cmn.pixel_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
-            SOKOL_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
+            for (uint32_t i = 0; i < pip->cmn.color_attachment_count; i++) {
+                const _sg_image_t* att_img = _sg_pass_color_image(pass, i);
+                SOKOL_VALIDATE(pip->cmn.color_formats[i] == att_img->cmn.pixel_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
+                SOKOL_VALIDATE(pip->cmn.sample_count == att_img->cmn.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
+            }
             const _sg_image_t* att_dsimg = _sg_pass_ds_image(pass);
             if (att_dsimg) {
                 SOKOL_VALIDATE(pip->cmn.depth_format == att_dsimg->cmn.pixel_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
@@ -13535,7 +13629,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         else {
             /* default pass */
             SOKOL_VALIDATE(pip->cmn.color_attachment_count == 1, _SG_VALIDATE_APIP_ATT_COUNT);
-            SOKOL_VALIDATE(pip->cmn.color_format == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
+            SOKOL_VALIDATE(pip->cmn.color_formats[0] == _sg.desc.context.color_format, _SG_VALIDATE_APIP_COLOR_FORMAT);
             SOKOL_VALIDATE(pip->cmn.depth_format == _sg.desc.context.depth_format, _SG_VALIDATE_APIP_DEPTH_FORMAT);
             SOKOL_VALIDATE(pip->cmn.sample_count == _sg.desc.context.sample_count, _SG_VALIDATE_APIP_SAMPLE_COUNT);
         }
@@ -13803,31 +13897,37 @@ _SOKOL_PRIVATE sg_pipeline_desc _sg_pipeline_desc_defaults(const sg_pipeline_des
 
     def.primitive_type = _sg_def(def.primitive_type, SG_PRIMITIVETYPE_TRIANGLES);
     def.index_type = _sg_def(def.index_type, SG_INDEXTYPE_NONE);
+    def.cull_mode = _sg_def(def.cull_mode, SG_CULLMODE_NONE);
+    def.face_winding = _sg_def(def.face_winding, SG_FACEWINDING_CW);
+    def.sample_count = _sg_def(def.sample_count, _sg.desc.context.sample_count);
 
-    def.depth_stencil.stencil_front.fail_op = _sg_def(def.depth_stencil.stencil_front.fail_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_front.depth_fail_op = _sg_def(def.depth_stencil.stencil_front.depth_fail_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_front.pass_op = _sg_def(def.depth_stencil.stencil_front.pass_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_front.compare_func = _sg_def(def.depth_stencil.stencil_front.compare_func, SG_COMPAREFUNC_ALWAYS);
-    def.depth_stencil.stencil_back.fail_op = _sg_def(def.depth_stencil.stencil_back.fail_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_back.depth_fail_op = _sg_def(def.depth_stencil.stencil_back.depth_fail_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_back.pass_op = _sg_def(def.depth_stencil.stencil_back.pass_op, SG_STENCILOP_KEEP);
-    def.depth_stencil.stencil_back.compare_func = _sg_def(def.depth_stencil.stencil_back.compare_func, SG_COMPAREFUNC_ALWAYS);
-    def.depth_stencil.depth_compare_func = _sg_def(def.depth_stencil.depth_compare_func, SG_COMPAREFUNC_ALWAYS);
+    def.stencil.front.compare = _sg_def(def.stencil.front.compare, SG_COMPAREFUNC_ALWAYS);
+    def.stencil.front.fail_op = _sg_def(def.stencil.front.fail_op, SG_STENCILOP_KEEP);
+    def.stencil.front.depth_fail_op = _sg_def(def.stencil.front.depth_fail_op, SG_STENCILOP_KEEP);
+    def.stencil.front.pass_op = _sg_def(def.stencil.front.pass_op, SG_STENCILOP_KEEP);
+    def.stencil.back.compare = _sg_def(def.stencil.back.compare, SG_COMPAREFUNC_ALWAYS);
+    def.stencil.back.fail_op = _sg_def(def.stencil.back.fail_op, SG_STENCILOP_KEEP);
+    def.stencil.back.depth_fail_op = _sg_def(def.stencil.back.depth_fail_op, SG_STENCILOP_KEEP);
+    def.stencil.back.pass_op = _sg_def(def.stencil.back.pass_op, SG_STENCILOP_KEEP);
 
-    def.blend.src_factor_rgb = _sg_def(def.blend.src_factor_rgb, SG_BLENDFACTOR_ONE);
-    def.blend.dst_factor_rgb = _sg_def(def.blend.dst_factor_rgb, SG_BLENDFACTOR_ZERO);
-    def.blend.op_rgb = _sg_def(def.blend.op_rgb, SG_BLENDOP_ADD);
-    def.blend.src_factor_alpha = _sg_def(def.blend.src_factor_alpha, SG_BLENDFACTOR_ONE);
-    def.blend.dst_factor_alpha = _sg_def(def.blend.dst_factor_alpha, SG_BLENDFACTOR_ZERO);
-    def.blend.op_alpha = _sg_def(def.blend.op_alpha, SG_BLENDOP_ADD);
-    def.blend.color_write_mask = _sg_def(def.blend.color_write_mask, SG_COLORMASK_RGBA);
-    def.blend.color_attachment_count = _sg_def(def.blend.color_attachment_count, 1);
-    def.blend.color_format = _sg_def(def.blend.color_format, _sg.desc.context.color_format);
-    def.blend.depth_format = _sg_def(def.blend.depth_format, _sg.desc.context.depth_format);
-
-    def.rasterizer.cull_mode = _sg_def(def.rasterizer.cull_mode, SG_CULLMODE_NONE);
-    def.rasterizer.face_winding = _sg_def(def.rasterizer.face_winding, SG_FACEWINDING_CW);
-    def.rasterizer.sample_count = _sg_def(def.rasterizer.sample_count, _sg.desc.context.sample_count);
+    def.depth.compare = _sg_def(def.depth.compare, SG_COMPAREFUNC_ALWAYS);
+    def.depth.pixel_format = _sg_def(def.depth.pixel_format, _sg.desc.context.depth_format);
+    def.color_count = _sg_def(def.color_count, 1);
+    if (def.color_count > SG_MAX_COLOR_ATTACHMENTS) {
+        def.color_count = SG_MAX_COLOR_ATTACHMENTS;
+    }
+    for (uint32_t i = 0; i < def.color_count; i++) {
+        sg_color_state* cs = &def.colors[i];
+        cs->pixel_format = _sg_def(cs->pixel_format, _sg.desc.context.color_format);
+        cs->write_mask = _sg_def(cs->write_mask, SG_COLORMASK_RGBA);
+        sg_blend_state* bs = &def.colors[i].blend;
+        bs->src_factor_rgb = _sg_def(bs->src_factor_rgb, SG_BLENDFACTOR_ONE);
+        bs->dst_factor_rgb = _sg_def(bs->dst_factor_rgb, SG_BLENDFACTOR_ZERO);
+        bs->op_rgb = _sg_def(bs->op_rgb, SG_BLENDOP_ADD);
+        bs->src_factor_alpha = _sg_def(bs->src_factor_alpha, SG_BLENDFACTOR_ONE);
+        bs->dst_factor_alpha = _sg_def(bs->dst_factor_alpha, SG_BLENDFACTOR_ZERO);
+        bs->op_alpha = _sg_def(bs->op_alpha, SG_BLENDOP_ADD);
+    }
 
     for (int attr_index = 0; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         sg_vertex_attr_desc* a_desc = &def.layout.attrs[attr_index];

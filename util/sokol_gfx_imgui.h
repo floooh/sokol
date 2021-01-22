@@ -1205,6 +1205,11 @@ _SOKOL_PRIVATE const char* _sg_imgui_bool_string(bool b) {
     return b ? "true" : "false";
 }
 
+_SOKOL_PRIVATE const char* _sg_imgui_color_string(sg_imgui_str_t* dst_str, sg_color color) {
+    _sg_imgui_snprintf(dst_str, "%.3f %.3f %.3f %.3f", color.r, color.g, color.b, color.a);
+    return dst_str->buf;
+}
+
 _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_res_id_string(uint32_t res_id, const char* label) {
     SOKOL_ASSERT(label);
     sg_imgui_str_t res;
@@ -3034,7 +3039,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) 
                 igText("Update Frame Index: %d", info.update_frame_index);
                 igText("Append Frame Index: %d", info.append_frame_index);
                 igText("Append Pos:         %d", info.append_pos);
-                igText("Append Overflow:    %s", info.append_overflow ? "YES":"NO");
+                igText("Append Overflow:    %s", _sg_imgui_bool_string(info.append_overflow));
             }
         }
         else {
@@ -3079,7 +3084,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
             igSeparator();
             igText("Type:              %s", _sg_imgui_imagetype_string(desc->type));
             igText("Usage:             %s", _sg_imgui_usage_string(desc->usage));
-            igText("Render Target:     %s", desc->render_target ? "YES":"NO");
+            igText("Render Target:     %s", _sg_imgui_bool_string(desc->render_target));
             igText("Width:             %d", desc->width);
             igText("Height:            %d", desc->height);
             igText("Num Slices:        %d", desc->num_slices);
@@ -3251,53 +3256,54 @@ _SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_stencil_state(const sg_stencil_state* ss) {
-    igText("Fail Op:       %s", _sg_imgui_stencilop_string(ss->fail_op));
-    igText("Depth Fail Op: %s", _sg_imgui_stencilop_string(ss->depth_fail_op));
-    igText("Pass Op:       %s", _sg_imgui_stencilop_string(ss->pass_op));
-    igText("Compare Func:  %s", _sg_imgui_comparefunc_string(ss->compare_func));
+_SOKOL_PRIVATE void _sg_imgui_draw_stencil_face_state(const sg_stencil_face_state* sfs) {
+    igText("Fail Op:       %s", _sg_imgui_stencilop_string(sfs->fail_op));
+    igText("Depth Fail Op: %s", _sg_imgui_stencilop_string(sfs->depth_fail_op));
+    igText("Pass Op:       %s", _sg_imgui_stencilop_string(sfs->pass_op));
+    igText("Compare:       %s", _sg_imgui_comparefunc_string(sfs->compare));
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_depth_stencil_state(const sg_depth_stencil_state* dss) {
-    igText("Depth Compare Func:  %s", _sg_imgui_comparefunc_string(dss->depth_compare_func));
-    igText("Depth Write Enabled: %s", dss->depth_write_enabled ? "YES":"NO");
-    igText("Stencil Enabled:     %s", dss->stencil_enabled ? "YES":"NO");
-    igText("Stencil Read Mask:   0x%02X", dss->stencil_read_mask);
-    igText("Stencil Write Mask:  0x%02X", dss->stencil_write_mask);
-    igText("Stencil Ref:         0x%02X", dss->stencil_ref);
-    if (igTreeNodeStr("Stencil Front")) {
-        _sg_imgui_draw_stencil_state(&dss->stencil_front);
+_SOKOL_PRIVATE void _sg_imgui_draw_stencil_state(const sg_stencil_state* ss) {
+    igText("Enabled:    %s", _sg_imgui_bool_string(ss->enabled));
+    igText("Read Mask:  0x%02X", ss->read_mask);
+    igText("Write Mask: 0x%02X", ss->write_mask);
+    igText("Ref:        0x%02X", ss->ref);
+    if (igTreeNodeStr("Front")) {
+        _sg_imgui_draw_stencil_face_state(&ss->front);
         igTreePop();
     }
-    if (igTreeNodeStr("Stencil Back")) {
-        _sg_imgui_draw_stencil_state(&dss->stencil_back);
+    if (igTreeNodeStr("Back")) {
+        _sg_imgui_draw_stencil_face_state(&ss->back);
         igTreePop();
     }
+}
+
+_SOKOL_PRIVATE void _sg_imgui_draw_depth_state(const sg_depth_state* ds) {
+    igText("Pixel Format:  %s", _sg_imgui_pixelformat_string(ds->pixel_format));
+    igText("Compare:       %s", _sg_imgui_comparefunc_string(ds->compare));
+    igText("Write Enabled: %s", _sg_imgui_bool_string(ds->write_enabled));
+    igText("Bias:          %f", ds->bias);
+    igText("Bias Slope:    %f", ds->bias_slope_scale);
+    igText("Bias Clamp:    %f", ds->bias_clamp);
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_blend_state(const sg_blend_state* bs) {
-    igText("Blend Enabled:    %s", bs->enabled ? "YES":"NO");
+    igText("Blend Enabled:    %s", _sg_imgui_bool_string(bs->enabled));
     igText("Src Factor RGB:   %s", _sg_imgui_blendfactor_string(bs->src_factor_rgb));
     igText("Dst Factor RGB:   %s", _sg_imgui_blendfactor_string(bs->dst_factor_rgb));
     igText("Op RGB:           %s", _sg_imgui_blendop_string(bs->op_rgb));
     igText("Src Factor Alpha: %s", _sg_imgui_blendfactor_string(bs->src_factor_alpha));
     igText("Dst Factor Alpha: %s", _sg_imgui_blendfactor_string(bs->dst_factor_alpha));
     igText("Op Alpha:         %s", _sg_imgui_blendop_string(bs->op_alpha));
-    igText("Color Write Mask: %s", _sg_imgui_colormask_string(bs->color_write_mask));
-    igText("Attachment Count: %d", bs->color_attachment_count);
-    igText("Color Format:     %s", _sg_imgui_pixelformat_string(bs->color_format));
-    igText("Depth Format:     %s", _sg_imgui_pixelformat_string(bs->depth_format));
-    igText("Blend Color:      %.3f %.3f %.3f %.3f", bs->blend_color[0], bs->blend_color[1], bs->blend_color[2], bs->blend_color[3]);
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_rasterizer_state(const sg_rasterizer_state* rs) {
-    igText("Alpha to Coverage: %s", rs->alpha_to_coverage_enabled ? "YES":"NO");
-    igText("Cull Mode:         %s", _sg_imgui_cullmode_string(rs->cull_mode));
-    igText("Face Winding:      %s", _sg_imgui_facewinding_string(rs->face_winding));
-    igText("Sample Count:      %d", rs->sample_count);
-    igText("Depth Bias:        %f", rs->depth_bias);
-    igText("Depth Bias Slope:  %f", rs->depth_bias_slope_scale);
-    igText("Depth Bias Clamp:  %f", rs->depth_bias_clamp);
+_SOKOL_PRIVATE void _sg_imgui_draw_color_state(const sg_color_state* cs) {
+    igText("Pixel Format:     %s", _sg_imgui_pixelformat_string(cs->pixel_format));
+    igText("Write Mask:       %s", _sg_imgui_colormask_string(cs->write_mask));
+    if (igTreeNodeStr("Blend State:")) {
+        _sg_imgui_draw_blend_state(&cs->blend);
+        igTreePop();
+    }
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline pip) {
@@ -3313,24 +3319,35 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             if (_sg_imgui_draw_shader_link(ctx, pip_ui->desc.shader)) {
                 _sg_imgui_show_shader(ctx, pip_ui->desc.shader);
             }
-            igText("Prim Type:  %s", _sg_imgui_primitivetype_string(pip_ui->desc.primitive_type));
-            igText("Index Type: %s", _sg_imgui_indextype_string(pip_ui->desc.index_type));
             if (igTreeNodeStr("Vertex Layout")) {
                 _sg_imgui_draw_vertex_layout(&pip_ui->desc.layout);
                 igTreePop();
             }
-            if (igTreeNodeStr("Depth Stencil State")) {
-                _sg_imgui_draw_depth_stencil_state(&pip_ui->desc.depth_stencil);
+            if (igTreeNodeStr("Depth State")) {
+                _sg_imgui_draw_depth_state(&pip_ui->desc.depth);
                 igTreePop();
             }
-            if (igTreeNodeStr("Blend State")) {
-                _sg_imgui_draw_blend_state(&pip_ui->desc.blend);
+            if (igTreeNodeStr("Stencil State")) {
+                _sg_imgui_draw_stencil_state(&pip_ui->desc.stencil);
                 igTreePop();
             }
-            if (igTreeNodeStr("Rasterizer State")) {
-                _sg_imgui_draw_rasterizer_state(&pip_ui->desc.rasterizer);
-                igTreePop();
+            igText("Color Count: %d", pip_ui->desc.color_count);
+            for (uint32_t i = 0; i < pip_ui->desc.color_count; i++) {
+                sg_imgui_str_t str;
+                _sg_imgui_snprintf(&str, "Color %d", i);
+                if (igTreeNodeStr(str.buf)) {
+                    _sg_imgui_draw_color_state(&pip_ui->desc.colors[i]);
+                    igTreePop();
+                }
             }
+            igText("Prim Type:      %s", _sg_imgui_primitivetype_string(pip_ui->desc.primitive_type));
+            igText("Index Type:     %s", _sg_imgui_indextype_string(pip_ui->desc.index_type));
+            igText("Cull Mode:      %s", _sg_imgui_cullmode_string(pip_ui->desc.cull_mode));
+            igText("Face Winding:   %s", _sg_imgui_facewinding_string(pip_ui->desc.face_winding));
+            igText("Sample Count:   %d", pip_ui->desc.sample_count);
+            sg_imgui_str_t blend_color_str;
+            igText("Blend Color:    %.3f %.3f %.3f %.3f", _sg_imgui_color_string(&blend_color_str, pip_ui->desc.blend_color));
+            igText("Alpha To Coverage: %s", _sg_imgui_bool_string(pip_ui->desc.alpha_to_coverage_enabled));
         }
         else {
             igText("Pipeline 0x%08X not valid.", pip.id);
@@ -3339,7 +3356,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw_attachment(sg_imgui_t* ctx, const sg_attachment_desc* att, float* img_scale) {
+_SOKOL_PRIVATE void _sg_imgui_draw_pass_attachment(sg_imgui_t* ctx, const sg_pass_attachment_desc* att, float* img_scale) {
     igText("  Image: "); igSameLine(0,-1);
     if (_sg_imgui_draw_image_link(ctx, att->image)) {
         _sg_imgui_show_image(ctx, att->image);
@@ -3363,12 +3380,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
                 }
                 igSeparator();
                 igText("Color Attachment #%d:", i);
-                _sg_imgui_draw_attachment(ctx, &pass_ui->desc.color_attachments[i], &pass_ui->color_image_scale[i]);
+                _sg_imgui_draw_pass_attachment(ctx, &pass_ui->desc.color_attachments[i], &pass_ui->color_image_scale[i]);
             }
             if (pass_ui->desc.depth_stencil_attachment.image.id != SG_INVALID_ID) {
                 igSeparator();
                 igText("Depth-Stencil Attachemnt:");
-                _sg_imgui_draw_attachment(ctx, &pass_ui->desc.depth_stencil_attachment, &pass_ui->ds_image_scale);
+                _sg_imgui_draw_pass_attachment(ctx, &pass_ui->desc.depth_stencil_attachment, &pass_ui->ds_image_scale);
             }
         }
         else {
@@ -3538,15 +3555,12 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
     for (int i = 0; i < num_color_atts; i++) {
         const sg_color_attachment_action* c_att = &action->colors[i];
         igText("  Color Attachment %d:", i);
+        sg_imgui_str_t color_str;
         switch (c_att->action) {
             case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
             case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
             default:
-                igText("    SG_ACTION_CLEAR: %.3f, %.3f, %.3f, %.3f",
-                    c_att->val[0],
-                    c_att->val[1],
-                    c_att->val[2],
-                    c_att->val[3]);
+                igText("    SG_ACTION_CLEAR: %s", _sg_imgui_color_string(&color_str, c_att->value));
                 break;
         }
     }
@@ -3555,14 +3569,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
     switch (d_att->action) {
         case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
         case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
-        default: igText("    SG_ACTION_CLEAR: %.3f", d_att->val); break;
+        default: igText("    SG_ACTION_CLEAR: %.3f", d_att->value); break;
     }
     const sg_stencil_attachment_action* s_att = &action->stencil;
     igText("  Stencil Attachment");
     switch (s_att->action) {
         case SG_ACTION_LOAD: igText("    SG_ACTION_LOAD"); break;
         case SG_ACTION_DONTCARE: igText("    SG_ACTION_DONTCARE"); break;
-        default: igText("    SG_ACTION_CLEAR: 0x%02X", s_att->val); break;
+        default: igText("    SG_ACTION_CLEAR: 0x%02X", s_att->value); break;
     }
 }
 
@@ -3708,6 +3722,8 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     igText("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
     igText("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
     igText("    image_clamp_to_border: %s", _sg_imgui_bool_string(f.image_clamp_to_border));
+    igText("    mrt_independent_blend_state: %s", _sg_imgui_bool_string(f.mrt_independent_blend_state));
+    igText("    mrt_independent_write_mask: %s", _sg_imgui_bool_string(f.mrt_independent_write_mask));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);
