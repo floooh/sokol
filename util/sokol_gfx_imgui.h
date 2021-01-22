@@ -3722,6 +3722,8 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     igText("    imagetype_3d: %s", _sg_imgui_bool_string(f.imagetype_3d));
     igText("    imagetype_array: %s", _sg_imgui_bool_string(f.imagetype_array));
     igText("    image_clamp_to_border: %s", _sg_imgui_bool_string(f.image_clamp_to_border));
+    igText("    mrt_independent_blend_state: %s", _sg_imgui_bool_string(f.mrt_independent_blend_state));
+    igText("    mrt_independent_write_mask: %s", _sg_imgui_bool_string(f.mrt_independent_write_mask));
     sg_limits l = sg_query_limits();
     igText("\nLimits:\n");
     igText("    max_image_size_2d: %d", l.max_image_size_2d);

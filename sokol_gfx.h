@@ -837,13 +837,15 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing;                /* hardware instancing supported */
-    bool origin_top_left;           /* framebuffer and texture origin is in top left corner */
-    bool multiple_render_targets;   /* offscreen render passes can have multiple render targets attached */
-    bool msaa_render_targets;       /* offscreen render passes support MSAA antialiasing */
-    bool imagetype_3d;              /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array;           /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool image_clamp_to_border;     /* border color and clamp-to-border UV-wrap mode is supported */
+    bool instancing;                    /* hardware instancing supported */
+    bool origin_top_left;               /* framebuffer and texture origin is in top left corner */
+    bool multiple_render_targets;       /* offscreen render passes can have multiple render targets attached */
+    bool msaa_render_targets;           /* offscreen render passes support MSAA antialiasing */
+    bool imagetype_3d;                  /* creation of SG_IMAGETYPE_3D images is supported */
+    bool imagetype_array;               /* creation of SG_IMAGETYPE_ARRAY images is supported */
+    bool image_clamp_to_border;         /* border color and clamp-to-border UV-wrap mode is supported */
+    bool mrt_independent_blend_state;   /* multiple-render-target rendering can use per-render-target blend state */
+    bool mrt_independent_write_mask;    /* multiple-render-target rendering can use per-render-target color write masks */
     #if defined(SOKOL_ZIG_BINDINGS)
     uint32_t __pad[3];
     #endif
@@ -5110,6 +5112,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = true;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -5185,6 +5189,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = false;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -5313,6 +5319,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     _sg.features.imagetype_3d = false;
     _sg.features.imagetype_array = false;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = false;
+    _sg.features.mrt_independent_write_mask = false;
 
     /* limits */
     _sg_gl_init_limits();
@@ -7660,6 +7668,8 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = true;
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -9385,6 +9395,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     #else
         _sg.features.image_clamp_to_border = false;
     #endif
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     #if defined(_SG_TARGET_MACOS)
         _sg.limits.max_image_size_2d = 16 * 1024;
@@ -10856,6 +10868,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.imagetype_3d = true;
     _sg.features.imagetype_array = true;
     _sg.features.image_clamp_to_border = false;
+    _sg.features.mrt_independent_blend_state = true;
+    _sg.features.mrt_independent_write_mask = true;
 
     /* FIXME: max images size??? */
     _sg.limits.max_image_size_2d = 8 * 1024;
