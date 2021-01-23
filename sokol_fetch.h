@@ -1942,7 +1942,7 @@ EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr
     req.responseType = 'arraybuffer';
     var need_range_request = (bytes_to_read > 0);
     if (need_range_request) {
-        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read));
+        req.setRequestHeader('Range', 'bytes='+offset+'-'+(offset+bytes_to_read-1));
     }
     req.onreadystatechange = function() {
         if (this.readyState == this.DONE) {
