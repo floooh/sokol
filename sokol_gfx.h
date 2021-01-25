@@ -10464,7 +10464,7 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, uint32_t
     else {
         [_sg.mtl.cmd_encoder setFragmentBufferOffset:_sg.mtl.cur_ub_offset atIndex:ub_index];
     }
-    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + data->size, _SG_MTL_UB_ALIGN);
+    _sg.mtl.cur_ub_offset = (uint32_t) _sg_roundup(_sg.mtl.cur_ub_offset + data->size, _SG_MTL_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances) {
@@ -10525,7 +10525,7 @@ _SOKOL_PRIVATE uint32_t _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range*
     [mtl_buf didModifyRange:NSMakeRange(buf->cmn.append_pos, data->size)];
     #endif
     /* NOTE: this is a requirement from WebGPU, but we want identical behaviour across all backend */
-    return _sg_roundup(data->size, 4);
+    return (uint32_t) _sg_roundup(data->size, 4);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* data) {
