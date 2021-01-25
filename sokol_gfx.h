@@ -5249,6 +5249,13 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
         }
     }
 
+    /* on WebGL2, color_buffer_float also includes 16-bit formats
+       see: https://developer.mozilla.org/en-US/docs/Web/API/EXT_color_buffer_float
+    */
+    #if defined(__EMSCRIPTEN__)
+    has_colorbuffer_half_float = has_colorbuffer_float;
+    #endif
+
     /* limits */
     _sg_gl_init_limits();
 
