@@ -2735,10 +2735,8 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
         shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_hlsl4);
         shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.byte_code = _sgl_vs_bytecode_wgpu;
-        shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_wgpu);
-        shd_desc.fs.byte_code = _sgl_fs_bytecode_wgpu;
-        shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_wgpu);
+        shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_wgpu);
     #else
         shd_desc.vs.source = _sgl_vs_src_dummy;
         shd_desc.fs.source = _sgl_fs_src_dummy;

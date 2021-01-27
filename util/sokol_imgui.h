@@ -1758,10 +1758,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_hlsl4);
         shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.byte_code = _simgui_vs_bytecode_wgpu;
-        shd_desc.vs.byte_code_size = sizeof(_simgui_vs_bytecode_wgpu);
-        shd_desc.fs.byte_code = _simgui_fs_bytecode_wgpu;
-        shd_desc.fs.byte_code_size = sizeof(_simgui_fs_bytecode_wgpu);
+        shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_wgpu);
     #else
         shd_desc.vs.source = _simgui_vs_src_dummy;
         shd_desc.fs.source = _simgui_fs_src_dummy;

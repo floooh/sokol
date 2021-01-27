@@ -11486,7 +11486,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
             SOKOL_ASSERT(desc->data.ptr);
             WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &wgpu_buf_desc);
             buf->wgpu.buf = res.buffer;
-            SOKOL_ASSERT(res.data && ((int)res.dataLength == buf->cmn.size));
+            SOKOL_ASSERT(res.data && (res.dataLength == buf->cmn.size));
             memcpy(res.data, desc->data.ptr, buf->cmn.size);
             wgpuBufferUnmap(res.buffer);
         }
@@ -11658,13 +11658,13 @@ _SOKOL_PRIVATE void _sg_wgpu_destroy_image(_sg_image_t* img) {
 */
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
     SOKOL_ASSERT(shd && desc);
-    SOKOL_ASSERT(desc->vs.byte_code && desc->fs.byte_code);
+    SOKOL_ASSERT(desc->vs.bytecode.ptr && desc->fs.bytecode.ptr);
     _sg_shader_common_init(&shd->cmn, desc);
 
     bool success = true;
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         const sg_shader_stage_desc* stage_desc = (stage_index == SG_SHADERSTAGE_VS) ? &desc->vs : &desc->fs;
-        SOKOL_ASSERT((stage_desc->byte_code_size & 3) == 0);
+        SOKOL_ASSERT((stage_desc->bytecode.size & 3) == 0);
 
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_wgpu_shader_stage_t* wgpu_stage = &shd->wgpu.stage[stage_index];
@@ -11672,8 +11672,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
         _sg_strcpy(&wgpu_stage->entry, stage_desc->entry);
         WGPUShaderModuleDescriptor wgpu_shdmod_desc;
         memset(&wgpu_shdmod_desc, 0, sizeof(wgpu_shdmod_desc));
-        wgpu_shdmod_desc.codeSize = stage_desc->byte_code_size >> 2;
-        wgpu_shdmod_desc.code = (const uint32_t*) stage_desc->byte_code;
+        wgpu_shdmod_desc.codeSize = stage_desc->bytecode.size >> 2;
+        wgpu_shdmod_desc.code = (const uint32_t*) stage_desc->bytecode.ptr;
         wgpu_stage->module = wgpuDeviceCreateShaderModule(_sg.wgpu.dev, &wgpu_shdmod_desc);
         if (0 == wgpu_stage->module) {
             success = false;
@@ -11734,7 +11734,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     SOKOL_ASSERT(shd->wgpu.stage[SG_SHADERSTAGE_FS].bind_group_layout);
     pip->shader = shd;
     _sg_pipeline_common_init(&pip->cmn, desc);
-    pip->wgpu.stencil_ref = (uint32_t) desc->depth_stencil.stencil_ref;
+    pip->wgpu.stencil_ref = (uint32_t) desc->stencil.ref;
 
     WGPUBindGroupLayout pip_bgl[3] = {
         _sg.wgpu.ub.bindgroup_layout,
@@ -11787,27 +11787,27 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPURasterizationStateDescriptor rs_desc;
     memset(&rs_desc, 0, sizeof(rs_desc));
-    rs_desc.frontFace = _sg_wgpu_frontface(desc->rasterizer.face_winding);
-    rs_desc.cullMode = _sg_wgpu_cullmode(desc->rasterizer.cull_mode);
-    rs_desc.depthBias = (int32_t) desc->rasterizer.depth_bias;
-    rs_desc.depthBiasClamp = desc->rasterizer.depth_bias_clamp;
-    rs_desc.depthBiasSlopeScale = desc->rasterizer.depth_bias_slope_scale;
+    rs_desc.frontFace = _sg_wgpu_frontface(desc->face_winding);
+    rs_desc.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
+    rs_desc.depthBias = (int32_t) desc->depth.bias;
+    rs_desc.depthBiasClamp = desc->depth.bias_clamp;
+    rs_desc.depthBiasSlopeScale = desc->depth.bias_slope_scale;
 
     WGPUDepthStencilStateDescriptor ds_desc;
     memset(&ds_desc, 0, sizeof(ds_desc));
-    ds_desc.format = _sg_wgpu_textureformat(desc->blend.depth_format);
-    ds_desc.depthWriteEnabled = desc->depth_stencil.depth_write_enabled;
-    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth_stencil.depth_compare_func);
-    ds_desc.stencilReadMask = desc->depth_stencil.stencil_read_mask;
-    ds_desc.stencilWriteMask = desc->depth_stencil.stencil_write_mask;
-    ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_front.compare_func);
-    ds_desc.stencilFront.failOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.fail_op);
-    ds_desc.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.depth_fail_op);
-    ds_desc.stencilFront.passOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_front.pass_op);
-    ds_desc.stencilBack.compare = _sg_wgpu_comparefunc(desc->depth_stencil.stencil_back.compare_func);
-    ds_desc.stencilBack.failOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.fail_op);
-    ds_desc.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.depth_fail_op);
-    ds_desc.stencilBack.passOp = _sg_wgpu_stencilop(desc->depth_stencil.stencil_back.pass_op);
+    ds_desc.format = _sg_wgpu_textureformat(desc->depth.pixel_format);
+    ds_desc.depthWriteEnabled = desc->depth.write_enabled;
+    ds_desc.depthCompare = _sg_wgpu_comparefunc(desc->depth.compare);
+    ds_desc.stencilReadMask = desc->stencil.read_mask;
+    ds_desc.stencilWriteMask = desc->stencil.write_mask;
+    ds_desc.stencilFront.compare = _sg_wgpu_comparefunc(desc->stencil.front.compare);
+    ds_desc.stencilFront.failOp = _sg_wgpu_stencilop(desc->stencil.front.fail_op);
+    ds_desc.stencilFront.depthFailOp = _sg_wgpu_stencilop(desc->stencil.front.depth_fail_op);
+    ds_desc.stencilFront.passOp = _sg_wgpu_stencilop(desc->stencil.front.pass_op);
+    ds_desc.stencilBack.compare = _sg_wgpu_comparefunc(desc->stencil.back.compare);
+    ds_desc.stencilBack.failOp = _sg_wgpu_stencilop(desc->stencil.back.fail_op);
+    ds_desc.stencilBack.depthFailOp = _sg_wgpu_stencilop(desc->stencil.back.depth_fail_op);
+    ds_desc.stencilBack.passOp = _sg_wgpu_stencilop(desc->stencil.back.pass_op);
 
     WGPUProgrammableStageDescriptor fs_desc;
     memset(&fs_desc, 0, sizeof(fs_desc));
@@ -11816,17 +11816,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
     WGPUColorStateDescriptor cs_desc[SG_MAX_COLOR_ATTACHMENTS];
     memset(cs_desc, 0, sizeof(cs_desc));
-    cs_desc[0].format = _sg_wgpu_textureformat(desc->blend.color_format);
-    cs_desc[0].colorBlend.operation = _sg_wgpu_blendop(desc->blend.op_rgb);
-    cs_desc[0].colorBlend.srcFactor = _sg_wgpu_blendfactor(desc->blend.src_factor_rgb);
-    cs_desc[0].colorBlend.dstFactor = _sg_wgpu_blendfactor(desc->blend.dst_factor_rgb);
-    cs_desc[0].alphaBlend.operation = _sg_wgpu_blendop(desc->blend.op_alpha);
-    cs_desc[0].alphaBlend.srcFactor = _sg_wgpu_blendfactor(desc->blend.src_factor_alpha);
-    cs_desc[0].alphaBlend.dstFactor = _sg_wgpu_blendfactor(desc->blend.dst_factor_alpha);
-    cs_desc[0].writeMask = _sg_wgpu_colorwritemask(desc->blend.color_write_mask);
-    SOKOL_ASSERT(desc->blend.color_attachment_count <= SG_MAX_COLOR_ATTACHMENTS);
-    for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        cs_desc[i] = cs_desc[0];
+    for (uint32_t i = 0; i < desc->color_count; i++) {
+        SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+        cs_desc[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
+        cs_desc[i].colorBlend.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
+        cs_desc[i].colorBlend.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
+        cs_desc[i].colorBlend.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
+        cs_desc[i].alphaBlend.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
+        cs_desc[i].alphaBlend.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
+        cs_desc[i].alphaBlend.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
+        cs_desc[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
     }
 
     WGPURenderPipelineDescriptor pip_desc;
@@ -11838,11 +11837,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.vertexState = &vx_state_desc;
     pip_desc.primitiveTopology  = _sg_wgpu_topology(desc->primitive_type);
     pip_desc.rasterizationState = &rs_desc;
-    pip_desc.sampleCount = desc->rasterizer.sample_count;
-    if (SG_PIXELFORMAT_NONE != desc->blend.depth_format) {
+    pip_desc.sampleCount = desc->sample_count;
+    if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
         pip_desc.depthStencilState = &ds_desc;
     }
-    pip_desc.colorStateCount = desc->blend.color_attachment_count;
+    pip_desc.colorStateCount = desc->color_count;
     pip_desc.colorStates = cs_desc;
     pip_desc.sampleMask = 0xFFFFFFFF;   /* FIXME: ??? */
     pip->wgpu.pip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &pip_desc);
@@ -11866,8 +11865,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
     _sg_pass_common_init(&pass->cmn, desc);
 
     /* copy image pointers and create render-texture views */
-    const sg_attachment_desc* att_desc;
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    const sg_pass_attachment_desc* att_desc;
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
@@ -11921,7 +11920,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
-    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
         if (pass->wgpu.color_atts[i].render_tex_view) {
             wgpuTextureViewRelease(pass->wgpu.color_atts[i].render_tex_view);
             pass->wgpu.color_atts[i].render_tex_view = 0;
@@ -11970,14 +11969,14 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         WGPURenderPassColorAttachmentDescriptor wgpu_color_att_desc[SG_MAX_COLOR_ATTACHMENTS];
         memset(&wgpu_color_att_desc, 0, sizeof(wgpu_color_att_desc));
         SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
-        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+        for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
             const _sg_wgpu_attachment_t* wgpu_att = &pass->wgpu.color_atts[i];
             wgpu_color_att_desc[i].loadOp = _sg_wgpu_load_op(action->colors[i].action);
             wgpu_color_att_desc[i].storeOp = WGPUStoreOp_Store;
-            wgpu_color_att_desc[i].clearColor.r = action->colors[i].val[0];
-            wgpu_color_att_desc[i].clearColor.g = action->colors[i].val[1];
-            wgpu_color_att_desc[i].clearColor.b = action->colors[i].val[2];
-            wgpu_color_att_desc[i].clearColor.a = action->colors[i].val[3];
+            wgpu_color_att_desc[i].clearColor.r = action->colors[i].value.r;
+            wgpu_color_att_desc[i].clearColor.g = action->colors[i].value.g;
+            wgpu_color_att_desc[i].clearColor.b = action->colors[i].value.b;
+            wgpu_color_att_desc[i].clearColor.a = action->colors[i].value.a;
             wgpu_color_att_desc[i].attachment = wgpu_att->render_tex_view;
             if (wgpu_att->image->cmn.sample_count > 1) {
                 wgpu_color_att_desc[i].resolveTarget = wgpu_att->resolve_tex_view;
@@ -11989,9 +11988,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
             WGPURenderPassDepthStencilAttachmentDescriptor wgpu_ds_att_desc;
             memset(&wgpu_ds_att_desc, 0, sizeof(wgpu_ds_att_desc));
             wgpu_ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
-            wgpu_ds_att_desc.clearDepth = action->depth.val;
+            wgpu_ds_att_desc.clearDepth = action->depth.value;
             wgpu_ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
-            wgpu_ds_att_desc.clearStencil = action->stencil.val;
+            wgpu_ds_att_desc.clearStencil = action->stencil.value;
             wgpu_ds_att_desc.attachment = pass->wgpu.ds_att.render_tex_view;
             wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att_desc;
             _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &wgpu_pass_desc);
@@ -12008,10 +12007,10 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         WGPURenderPassColorAttachmentDescriptor color_att_desc;
         memset(&color_att_desc, 0, sizeof(color_att_desc));
         color_att_desc.loadOp = _sg_wgpu_load_op(action->colors[0].action);
-        color_att_desc.clearColor.r = action->colors[0].val[0];
-        color_att_desc.clearColor.g = action->colors[0].val[1];
-        color_att_desc.clearColor.b = action->colors[0].val[2];
-        color_att_desc.clearColor.a = action->colors[0].val[3];
+        color_att_desc.clearColor.r = action->colors[0].value.r;
+        color_att_desc.clearColor.g = action->colors[0].value.g;
+        color_att_desc.clearColor.b = action->colors[0].value.b;
+        color_att_desc.clearColor.a = action->colors[0].value.a;
         color_att_desc.attachment = wgpu_render_view;
         color_att_desc.resolveTarget = wgpu_resolve_view;   /* null if no MSAA rendering */
         pass_desc.colorAttachmentCount = 1;
@@ -12021,9 +12020,9 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
         ds_att_desc.attachment = wgpu_depth_stencil_view;
         SOKOL_ASSERT(0 != ds_att_desc.attachment);
         ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
-        ds_att_desc.clearDepth = action->depth.val;
+        ds_att_desc.clearDepth = action->depth.value;
         ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
-        ds_att_desc.clearStencil = action->stencil.val;
+        ds_att_desc.clearStencil = action->stencil.value;
         pass_desc.depthStencilAttachment = &ds_att_desc;
         _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &pass_desc);
     }
@@ -12130,7 +12129,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
     _sg.wgpu.cur_pipeline = pip;
     _sg.wgpu.cur_pipeline_id.id = pip->slot.id;
     wgpuRenderPassEncoderSetPipeline(_sg.wgpu.pass_enc, pip->wgpu.pip);
-    wgpuRenderPassEncoderSetBlendColor(_sg.wgpu.pass_enc, (WGPUColor*)pip->cmn.blend_color);
+    wgpuRenderPassEncoderSetBlendColor(_sg.wgpu.pass_enc, (WGPUColor*)&pip->cmn.blend_color);
     wgpuRenderPassEncoderSetStencilReference(_sg.wgpu.pass_enc, pip->wgpu.stencil_ref);
 }
 
@@ -12207,31 +12206,31 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_bindings(
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_index, const void* data, int num_bytes) {
+_SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
-    SOKOL_ASSERT(data && (num_bytes > 0));
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     SOKOL_ASSERT((stage_index >= 0) && ((int)stage_index < SG_NUM_SHADER_STAGES));
     SOKOL_ASSERT((ub_index >= 0) && (ub_index < SG_MAX_SHADERSTAGE_UBS));
-    SOKOL_ASSERT((_sg.wgpu.ub.offset + num_bytes) <= _sg.wgpu.ub.num_bytes);
+    SOKOL_ASSERT((_sg.wgpu.ub.offset + data->size) <= _sg.wgpu.ub.num_bytes);
     SOKOL_ASSERT((_sg.wgpu.ub.offset & (_SG_WGPU_STAGING_ALIGN-1)) == 0);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline && _sg.wgpu.cur_pipeline->shader);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->slot.id == _sg.wgpu.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.wgpu.cur_pipeline->shader->slot.id == _sg.wgpu.cur_pipeline->cmn.shader_id.id);
     SOKOL_ASSERT(ub_index < _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
-    SOKOL_ASSERT(num_bytes <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
-    SOKOL_ASSERT(num_bytes <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
+    SOKOL_ASSERT(data->size <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
+    SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
     SOKOL_ASSERT(0 != _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur]);
 
     uint8_t* dst_ptr = _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur] + _sg.wgpu.ub.offset;
-    memcpy(dst_ptr, data, num_bytes);
+    memcpy(dst_ptr, data->ptr, data->size);
     _sg.wgpu.ub.bind_offsets[stage_index][ub_index] = _sg.wgpu.ub.offset;
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
                                       0, /* groupIndex 0 is reserved for uniform buffers */
                                       _sg.wgpu.ub.bindgroup,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
                                       &_sg.wgpu.ub.bind_offsets[0][0]);
-    _sg.wgpu.ub.offset = _sg_roundup(_sg.wgpu.ub.offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.ub.offset = _sg_roundup(_sg.wgpu.ub.offset + data->size, _SG_WGPU_STAGING_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances) {
@@ -12245,16 +12244,16 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(uint32_t base_element, uint32_t num_elements, 
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const void* data, uint32_t num_bytes) {
-    SOKOL_ASSERT(buf && data && (num_bytes > 0));
-    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, 0, data, (uint32_t)num_bytes);
+_SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
+    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, 0, data->ptr, data->size);
     SOKOL_ASSERT(copied_num_bytes > 0); _SOKOL_UNUSED(copied_num_bytes);
 }
 
-_SOKOL_PRIVATE uint32_t _sg_wgpu_append_buffer(_sg_buffer_t* buf, const void* data, uint32_t num_bytes, bool new_frame) {
-    SOKOL_ASSERT(buf && data && (num_bytes > 0));
+_SOKOL_PRIVATE uint32_t _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
+    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     _SOKOL_UNUSED(new_frame);
-    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, buf->cmn.append_pos, data, num_bytes);
+    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, buf->cmn.append_pos, data->ptr, data->size);
     SOKOL_ASSERT(copied_num_bytes > 0); _SOKOL_UNUSED(copied_num_bytes);
     return copied_num_bytes;
 }
@@ -12666,7 +12665,7 @@ static inline void _sg_apply_uniforms(sg_shader_stage stage_index, uint32_t ub_i
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_uniforms(stage_index, ub_index, data, num_bytes);
+    _sg_wgpu_apply_uniforms(stage_index, ub_index, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_apply_uniforms(stage_index, ub_index, data);
     #else
@@ -13385,8 +13384,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             SOKOL_VALIDATE((0 != desc->fs.source)||(0 != desc->fs.bytecode.ptr), _SG_VALIDATE_SHADERDESC_SOURCE_OR_BYTECODE);
         #elif defined(SOKOL_WGPU)
             /* on WGPU byte code must be provided */
-            SOKOL_VALIDATE((0 != desc->vs.byte_code), _SG_VALIDATE_SHADERDESC_BYTECODE);
-            SOKOL_VALIDATE((0 != desc->fs.byte_code), _SG_VALIDATE_SHADERDESC_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->vs.bytecode.ptr), _SG_VALIDATE_SHADERDESC_BYTECODE);
+            SOKOL_VALIDATE((0 != desc->fs.bytecode.ptr), _SG_VALIDATE_SHADERDESC_BYTECODE);
         #else
             /* Dummy Backend, don't require source or bytecode */
         #endif
