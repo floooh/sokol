@@ -691,7 +691,7 @@
     from the application code, and a quit initiated by the application user can
     be intercepted (for instance to show a custom dialog box).
 
-    This 'programmatic quit protocol' is implemented trough 3 functions
+    This 'programmatic quit protocol' is implemented through 3 functions
     and 1 event:
 
         - sapp_quit(): This function simply quits the application without
