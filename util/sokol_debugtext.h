@@ -303,8 +303,10 @@
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = {
+                        .ptr = my_font_data,
+                        .size = sizeof(my_font_data)
+                    },
                     .first_char = ...,
                     .last_char = ...
                 }
@@ -330,14 +332,15 @@
     be rendered).
 
     If you provide such a complete font data array, you can drop the .first_char
-    and .last_char initialization parameters since those default to 0 and 255:
+    and .last_char initialization parameters since those default to 0 and 255,
+    note that you can also use the SDTX_RANGE() helper macro to build the
+    .data item:
 
         sdtx_setup(&sdtx_desc_t){
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = SDTX_RANGE(my_font_data)
                 }
             }
         });
@@ -352,8 +355,7 @@
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = SDTX_RANGE(my_font_data),
                     .first_char = 32,       // could also write ' '
                     .last_char = 90         // could also write 'Z'
                 }
@@ -472,7 +474,7 @@ typedef struct sdtx_range {
 #define SDTX_MAX_FONTS (8)
 
 typedef struct sdtx_font_desc_t {
-    sdtx_range data;        // pointer/size of font pixel data
+    sdtx_range data;        // pointer to and size of font pixel data
     uint8_t first_char;     // first character index in font pixel data
     uint8_t last_char;      // last character index in font pixel data, inclusive (default: 255)
 } sdtx_font_desc_t;
