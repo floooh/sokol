@@ -250,6 +250,13 @@
             this may change from one frame to the next, and it may be different
             from the initial size provided in the sapp_desc struct.
 
+        float sapp_widthf(void)
+        float sapp_heightf(void)
+            These are alternatives to sapp_width() and sapp_height() which return
+            the default framebuffer size as float values instead of integer. This
+            may help to prevent casting back and forth between int and float
+            in more strongly typed languages than C and C++.
+
         int sapp_color_format(void)
         int sapp_depth_format(void)
             The color and depth-stencil pixelformats of the default framebuffer,
@@ -340,6 +347,7 @@
             - the application was suspended or restored (on mobile platforms)
             - the user or application code has asked to quit the application
             - a string was pasted to the system clipboard
+            - one or more files have been dropped onto the application window
 
         To explicitly 'consume' an event and prevent that the event is
         forwarded for further handling to the operating system, call
