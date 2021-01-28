@@ -265,8 +265,8 @@
     uint16_t indices[16];
 
     sshape_buffer_t buf = {
-        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
-        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+        .vertices.buffer = SSHAPE_RANGE(vertices),
+        .indices.buffer  = SSHAPE_RANGE(indices)
     };
 
     // first cube at pos x=-2.0 (with default size of 1x1x1)
@@ -310,8 +310,8 @@
     sshape_vertex_t vertices[128];
     uint16_t indices[16];
     sshape_buffer_t buf = {
-        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
-        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+        .vertices.buffer = SSHAPE_RANGE(vertices),
+        .indices.buffer = SSHAPE_RANGE(indices)
     };
 
     // build a red cube...
