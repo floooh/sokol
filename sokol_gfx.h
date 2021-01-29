@@ -8115,7 +8115,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_load_d3dcompiler_dll(void) {
                 return false;
             }
             /* look up function pointers */
-            _sg.d3d11.D3DCompile_func = (pD3DCompile) GetProcAddress(_sg.d3d11.d3dcompiler_dll, "D3DCompile");
+            _sg.d3d11.D3DCompile_func = (pD3DCompile)(void*) GetProcAddress(_sg.d3d11.d3dcompiler_dll, "D3DCompile");
             SOKOL_ASSERT(_sg.d3d11.D3DCompile_func);
         }
         return 0 != _sg.d3d11.d3dcompiler_dll;
