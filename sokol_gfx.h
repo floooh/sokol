@@ -7,6 +7,8 @@
 
     Project URL: https://github.com/floooh/sokol
 
+    Example code: https://github.com/floooh/sokol-samples
+
     Do this:
         #define SOKOL_IMPL or
         #define SOKOL_GFX_IMPL
@@ -75,16 +77,9 @@
       on how the window and 3D-API context/device was created
 
     - provide a unified shader language, instead 3D-API-specific shader
-      source-code or shader-bytecode must be provided
-
-    For complete code examples using the various backend 3D-APIs, see:
-
-        https://github.com/floooh/sokol-samples
-
-    For an optional shader-cross-compile solution, see:
-
-        https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md
-
+      source-code or shader-bytecode must be provided (for the "official"
+      offline shader cross-compiler, see here:
+      https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
     STEP BY STEP
     ============
@@ -105,6 +100,12 @@
     --- start rendering to the default frame buffer with:
 
             sg_begin_default_pass(const sg_pass_action* actions, int width, int height)
+
+        ...or alternatively with:
+
+            sg_begin_default_passf(const sg_pass_action* actions, float width, float height)
+
+        ...which takes the framebuffer width and height as float values.
 
     --- or start rendering to an offscreen framebuffer with:
 
@@ -131,10 +132,15 @@
 
             sg_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances)
 
-        In the case of no instancing: num_instances should be set to 1 and base_element/num_elements are
-        amounts of vertices. In the case of instancing (meaning num_instances > 1), num elements is the
-        number of vertices in one instance, while base_element remains unchanged. base_element is the index
-        of the first vertex to begin drawing from.
+        The sg_draw() function unifies all the different ways to render primitives
+        in a single call (indexed vs non-indexed rendering, and instanced vs non-instanced
+        rendering). In case of indexed rendering, base_element and num_element specify
+        indices in the currently bound index buffer. In case of non-indexed rendering
+        base_element and num_elements specify vertices in the currently bound
+        vertex-buffer(s). To perform instanced rendering, the rendering pipeline
+        must be setup for instancing (see sg_pipeline_desc below), a separate vertex buffer
+        containing per-instance data must be bound, and the num_instances parameter
+        must be > 1.
 
     --- finish the current rendering pass with:
 
@@ -160,28 +166,36 @@
 
             sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left)
 
+        ...or if you want to specifiy the viewport rectangle with float values:
+
+            sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left)
+
     --- to set a new scissor rect, call:
 
             sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left)
 
-        both sg_apply_viewport() and sg_apply_scissor_rect() must be called
+        ...or with float values:
+
+            sg_apply_scissor_rectf(float x, float y, float width, float height, bool origin_top_left)
+
+        Both sg_apply_viewport() and sg_apply_scissor_rect() must be called
         inside a rendering pass
 
-        beginning a pass will reset the viewport to the size of the framebuffer used
-        in the new pass,
+        Note that sg_begin_default_pass() and sg_begin_pass() will reset both the
+        viewport and scissor rectangles to cover the entire framebuffer.
 
     --- to update (overwrite) the content of buffer and image resources, call:
 
-            sg_update_buffer(sg_buffer buf, const void* ptr, int num_bytes)
-            sg_update_image(sg_image img, const sg_image_content* content)
+            sg_update_buffer(sg_buffer buf, const sg_range* data)
+            sg_update_image(sg_image img, const sg_image_data* data)
 
         Buffers and images to be updated must have been created with
         SG_USAGE_DYNAMIC or SG_USAGE_STREAM
 
-        Only one update per frame is allowed for buffer and image resources.
-        The rationale is to have a simple countermeasure to avoid the CPU
-        scribbling over data the GPU is currently using, or the CPU having to
-        wait for the GPU
+        Only one update per frame is allowed for buffer and image resources when
+        using the sg_update_*() functions. The rationale is to have a simple
+        countermeasure to avoid the CPU scribbling over data the GPU is currently
+        using, or the CPU having to wait for the GPU
 
         Buffer and image updates can be partial, as long as a rendering
         operation only references the valid (updated) data in the
@@ -189,7 +203,7 @@
 
     --- to append a chunk of data to a buffer resource, call:
 
-            uint32_t sg_append_buffer(sg_buffer buf, const void* ptr, int num_bytes)
+            uint32_t sg_append_buffer(sg_buffer buf, const sg_range* data)
 
         The difference to sg_update_buffer() is that sg_append_buffer()
         can be called multiple times per frame to append new data to the
@@ -206,7 +220,7 @@
         for (...) {
             const void* data = ...;
             const int num_bytes = ...;
-            uint32_t offset = sg_append_buffer(buf, data, num_bytes);
+            uint32_t offset = sg_append_buffer(buf, &(sg_range) { .ptr=data, .size=num_bytes });
             bindings.vertex_buffer_offsets[0] = offset;
             sg_apply_pipeline(pip);
             sg_apply_bindings(&bindings);
@@ -616,13 +630,11 @@ typedef struct sg_pass     { uint32_t id; } sg_pass;
 typedef struct sg_context  { uint32_t id; } sg_context;
 
 /*
-    sg_range is a pointer-size-pair struct used to pass memory
-    blobs into sokol-gfx. When initialized from a value type
-    (array or struct), use the SG_RANGE() macro to build
-    an sg_range struct. For functions which take either a
-    sg_range pointer, or a (C++) sg_range reference, use the
-    SG_RANGE_REF macro as a solution which compiles both in
-    C and C++.
+    sg_range is a pointer-size-pair struct used to pass memory blobs into
+    sokol-gfx. When initialized from a value type (array or struct), you can
+    use the SG_RANGE() macro to build an sg_range struct. For functions which
+    take either a sg_range pointer, or a (C++) sg_range reference, use the
+    SG_RANGE_REF macro as a solution which compiles both in C and C++.
 */
 typedef struct sg_range {
     const void* ptr;
@@ -641,12 +653,7 @@ typedef struct sg_range {
 #define SG_RANGE_REF(x) &(sg_range){ &x, sizeof(x) }
 #endif
 
-/*
-    various compile-time constants
-
-    FIXME: it may make sense to convert some of those into defines so
-    that the user code can override them.
-*/
+//  various compile-time constants
 enum {
     SG_INVALID_ID = 0,
     SG_NUM_SHADER_STAGES = 2,
@@ -664,7 +671,7 @@ enum {
 /*
     sg_color
 
-    An RGBA color value
+    An RGBA color value.
 */
 typedef struct sg_color { float r, g, b, a; } sg_color;
 
@@ -674,10 +681,9 @@ typedef struct sg_color { float r, g, b, a; } sg_color;
     The active 3D-API backend, use the function sg_query_backend()
     to get the currently active backend.
 
-    The returned value corresponds with the compile-time define to select
-    a backend, with the only exception of SOKOL_GLES3: this may
-    return SG_BACKEND_GLES2 if the backend has to fallback to GLES2 mode
-    because GLES3 isn't supported.
+    NOTE that SG_BACKEND_GLES2 will be returned if sokol-gfx was
+    compiled with SOKOL_GLES3, but the runtime platform doesn't support
+    GLES3/WebGL2 and sokol-gfx had to fallback to GLES2/WebGL.
 */
 typedef enum sg_backend {
     SG_BACKEND_GLCORE33,
@@ -695,9 +701,10 @@ typedef enum sg_backend {
     sg_pixel_format
 
     sokol_gfx.h basically uses the same pixel formats as WebGPU, since these
-    are supported on most newer GPUs. GLES2 and WebGL has a much smaller
-    subset of available pixel formats. Call sg_query_pixelformat() to check
-    at runtime if a pixel format supports the desired features.
+    are supported on most newer GPUs. GLES2 and WebGL only supports a much
+    smaller subset of actually available pixel formats. Call
+    sg_query_pixelformat() to check at runtime if a pixel format supports the
+    desired features.
 
     A pixelformat name consist of three parts:
 
@@ -821,12 +828,12 @@ typedef enum sg_pixel_format {
     by sg_query_pixelformat().
 */
 typedef struct sg_pixelformat_info {
-    bool sample;        /* pixel format can be sampled in shaders */
-    bool filter;        /* pixel format can be sampled with filtering */
-    bool render;        /* pixel format can be used as render target */
-    bool blend;         /* alpha-blending is supported */
-    bool msaa;          /* pixel format can be used as MSAA render target */
-    bool depth;         /* pixel format is a depth format */
+    bool sample;        // pixel format can be sampled in shaders
+    bool filter;        // pixel format can be sampled with filtering
+    bool render;        // pixel format can be used as render target
+    bool blend;         // alpha-blending is supported
+    bool msaa;          // pixel format can be used as MSAA render target
+    bool depth;         // pixel format is a depth format
     #if defined(SOKOL_ZIG_BINDINGS)
     uint32_t __pad[3];
     #endif
@@ -837,15 +844,15 @@ typedef struct sg_pixelformat_info {
     returned by sg_query_features()
 */
 typedef struct sg_features {
-    bool instancing;                    /* hardware instancing supported */
-    bool origin_top_left;               /* framebuffer and texture origin is in top left corner */
-    bool multiple_render_targets;       /* offscreen render passes can have multiple render targets attached */
-    bool msaa_render_targets;           /* offscreen render passes support MSAA antialiasing */
-    bool imagetype_3d;                  /* creation of SG_IMAGETYPE_3D images is supported */
-    bool imagetype_array;               /* creation of SG_IMAGETYPE_ARRAY images is supported */
-    bool image_clamp_to_border;         /* border color and clamp-to-border UV-wrap mode is supported */
-    bool mrt_independent_blend_state;   /* multiple-render-target rendering can use per-render-target blend state */
-    bool mrt_independent_write_mask;    /* multiple-render-target rendering can use per-render-target color write masks */
+    bool instancing;                    // hardware instancing supported
+    bool origin_top_left;               // framebuffer and texture origin is in top left corner
+    bool multiple_render_targets;       // offscreen render passes can have multiple render targets attached
+    bool msaa_render_targets;           // offscreen render passes support MSAA antialiasing
+    bool imagetype_3d;                  // creation of SG_IMAGETYPE_3D images is supported
+    bool imagetype_array;               // creation of SG_IMAGETYPE_ARRAY images is supported
+    bool image_clamp_to_border;         // border color and clamp-to-border UV-wrap mode is supported
+    bool mrt_independent_blend_state;   // multiple-render-target rendering can use per-render-target blend state
+    bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     #if defined(SOKOL_ZIG_BINDINGS)
     uint32_t __pad[3];
     #endif
@@ -855,12 +862,12 @@ typedef struct sg_features {
     Runtime information about resource limits, returned by sg_query_limit()
 */
 typedef struct sg_limits {
-    uint32_t max_image_size_2d;         /* max width/height of SG_IMAGETYPE_2D images */
-    uint32_t max_image_size_cube;       /* max width/height of SG_IMAGETYPE_CUBE images */
-    uint32_t max_image_size_3d;         /* max width/height/depth of SG_IMAGETYPE_3D images */
-    uint32_t max_image_size_array;      /* max width/height of SG_IMAGETYPE_ARRAY images */
-    uint32_t max_image_array_layers;    /* max number of layers in SG_IMAGETYPE_ARRAY images */
-    uint32_t max_vertex_attrs;          /* <= SG_MAX_VERTEX_ATTRIBUTES (only on some GLES2 impls) */
+    uint32_t max_image_size_2d;         // max width/height of SG_IMAGETYPE_2D images
+    uint32_t max_image_size_cube;       // max width/height of SG_IMAGETYPE_CUBE images
+    uint32_t max_image_size_3d;         // max width/height/depth of SG_IMAGETYPE_3D images
+    uint32_t max_image_size_array;      // max width/height of SG_IMAGETYPE_ARRAY images
+    uint32_t max_image_array_layers;    // max number of layers in SG_IMAGETYPE_ARRAY images
+    uint32_t max_vertex_attrs;          // <= SG_MAX_VERTEX_ATTRIBUTES (only on some GLES2 impls)
 } sg_limits;
 
 /*
@@ -1244,10 +1251,10 @@ typedef enum sg_face_winding {
 
     sg_pipeline_desc
         .depth
-            .compare_func
+            .compare
         .stencil
-            .front.compare_func
-            .back.compare_func
+            .front.compare
+            .back.compar
 
     The default compare func for depth- and stencil-tests is
     SG_COMPAREFUNC_ALWAYS.
@@ -1307,7 +1314,7 @@ typedef enum sg_stencil_op {
     This is used in the following members when creating a pipeline object:
 
     sg_pipeline_desc
-        .colors[]
+        .colors[i]
             .blend
                 .src_factor_rgb
                 .dst_factor_rgb
@@ -1346,7 +1353,7 @@ typedef enum sg_blend_factor {
     creating a pipeline object:
 
     sg_pipeline_desc
-        .colors[]
+        .colors[i]
             .blend
                 .op_rgb
                 .op_alpha
@@ -1365,9 +1372,9 @@ typedef enum sg_blend_op {
 /*
     sg_color_mask
 
-    Selects the color channels when writing a fragment color to the
+    Selects the active color channels when writing a fragment color to the
     framebuffer. This is used in the members
-    sg_pipeline_desc.colors[].write_mask when creating a pipeline object.
+    sg_pipeline_desc.colors[i].write_mask when creating a pipeline object.
 
     The default colormask is SG_COLORMASK_RGBA (write all colors channels)
 
@@ -1518,6 +1525,17 @@ typedef struct sg_bindings {
     when hooking into sg_make_buffer() or sg_init_buffer() via
     the sg_install_trace_hooks() function.
 
+    For immutable buffers which are initialized with initial data,
+    keep the .size item zero-initialized, and set the size together with the
+    pointer to the initial data in the .data item.
+
+    For mutable buffers without initial data, keep the .data item
+    zero-initialized, and set the buffer size in the .size item instead.
+
+    You can also set both size values, but currently both size values must
+    be identical (this may change in the future when the dynamic resource
+    management may become more flexible).
+
     ADVANCED TOPIC: Injecting native 3D-API buffers:
 
     The following struct members allow to inject your own GL, Metal
@@ -1527,7 +1545,7 @@ typedef struct sg_bindings {
     .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_buffer
 
-    You must still provide all other members except the .content member, and
+    You must still provide all other struct items except the .data item, and
     these must match the creation parameters of the native buffers you
     provide. For SG_USAGE_IMMUTABLE, only provide a single native 3D-API
     buffer, otherwise you need to provide SG_NUM_INFLIGHT_FRAMES buffers
@@ -1562,10 +1580,9 @@ typedef struct sg_buffer_desc {
 /*
     sg_image_data
 
-    Defines the content of an image through a 2D array
-    of sg_range structs. The first array dimension
-    is the cubemap face, and the second array dimension the
-    mipmap level.
+    Defines the content of an image through a 2D array of sg_range structs.
+    The first array dimension is the cubemap face, and the second array
+    dimension the mipmap level.
 */
 typedef struct sg_image_data {
     sg_range subimage[SG_CUBEFACE_NUM][SG_MAX_MIPMAPS];
@@ -1574,8 +1591,8 @@ typedef struct sg_image_data {
 /*
     sg_image_desc
 
-    Creation parameters for sg_image objects, used in the
-    sg_make_image() call.
+    Creation parameters for sg_image objects, used in the sg_make_image()
+    call.
 
     The default configuration is:
 
@@ -1587,7 +1604,7 @@ typedef struct sg_image_data {
     .num_mipmaps:       1
     .usage:             SG_USAGE_IMMUTABLE
     .pixel_format:      SG_PIXELFORMAT_RGBA8 for textures, or sg_desc.context.color_format for render targets
-    .sample_count:      1 for textures, or sg_desc.context.sample_count for render target
+    .sample_count:      1 for textures, or sg_desc.context.sample_count for render targets
     .min_filter:        SG_FILTER_NEAREST
     .mag_filter:        SG_FILTER_NEAREST
     .wrap_u:            SG_WRAP_REPEAT
@@ -1611,37 +1628,35 @@ typedef struct sg_image_data {
 
     NOTE:
 
-    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on
-    WebGL/GLES2, use sg_query_features().imagetype_array and
-    sg_query_features().imagetype_3d at runtime to check
-    if array- and 3D-textures are supported.
+    SG_IMAGETYPE_ARRAY and SG_IMAGETYPE_3D are not supported on WebGL/GLES2,
+    use sg_query_features().imagetype_array and
+    sg_query_features().imagetype_3d at runtime to check if array- and
+    3D-textures are supported.
 
     Images with usage SG_USAGE_IMMUTABLE must be fully initialized by
-    providing a valid .data member which points to
-    initialization data.
+    providing a valid .data member which points to initialization data.
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
-    The following struct members allow to inject your own GL, Metal
-    or D3D11 textures into sokol_gfx:
+    The following struct members allow to inject your own GL, Metal or D3D11
+    textures into sokol_gfx:
 
     .gl_textures[SG_NUM_INFLIGHT_FRAMES]
     .mtl_textures[SG_NUM_INFLIGHT_FRAMES]
     .d3d11_texture
     .d3d11_shader_resource_view
 
-    For GL, you can also specify the texture target or leave it empty
-    to use the default texture target for the image type (GL_TEXTURE_2D
-    for SG_IMAGETYPE_2D etc)
+    For GL, you can also specify the texture target or leave it empty to use
+    the default texture target for the image type (GL_TEXTURE_2D for
+    SG_IMAGETYPE_2D etc)
 
     For D3D11, you can provide either a D3D11 texture, or a
-    shader-resource-view, or both. If only a texture is provided,
-    a matching shader-resource-view will be created. If only a
-    shader-resource-view is provided, the texture will be looked
-    up from the shader-resource-view.
+    shader-resource-view, or both. If only a texture is provided, a matching
+    shader-resource-view will be created. If only a shader-resource-view is
+    provided, the texture will be looked up from the shader-resource-view.
 
-    The same rules apply as for injecting native buffers
-    (see sg_buffer_desc documentation for more details).
+    The same rules apply as for injecting native buffers (see sg_buffer_desc
+    documentation for more details).
 */
 typedef struct sg_image_desc {
     uint32_t _start_canary;
@@ -1681,8 +1696,8 @@ typedef struct sg_image_desc {
 /*
     sg_shader_desc
 
-    The structure sg_shader_desc defines all creation parameters
-    for shader programs, used as input to the sg_make_shader() function:
+    The structure sg_shader_desc defines all creation parameters for shader
+    programs, used as input to the sg_make_shader() function:
 
     - reflection information for vertex attributes (vertex shader inputs):
         - vertex attribute name (required for GLES2, optional for GLES3 and GL)
@@ -1713,9 +1728,9 @@ typedef struct sg_image_desc {
     vertex shader stage and "ps_4_0" for the pixel shader stage.
 */
 typedef struct sg_shader_attr_desc {
-    const char* name;           /* GLSL vertex attribute name (only required for GLES2) */
-    const char* sem_name;       /* HLSL semantic name */
-    int sem_index;              /* HLSL semantic index */
+    const char* name;           // GLSL vertex attribute name (only strictly required for GLES2)
+    const char* sem_name;       // HLSL semantic name
+    int sem_index;              // HLSL semantic index
 } sg_shader_attr_desc;
 
 typedef struct sg_shader_uniform_desc {
@@ -1756,21 +1771,20 @@ typedef struct sg_shader_desc {
 /*
     sg_pipeline_desc
 
-    The sg_pipeline_desc struct defines all creation parameters
-    for an sg_pipeline object, used as argument to the
-    sg_make_pipeline() function:
+    The sg_pipeline_desc struct defines all creation parameters for an
+    sg_pipeline object, used as argument to the sg_make_pipeline() function:
 
     - the vertex layout for all input vertex buffers
     - a shader object
     - the 3D primitive type (points, lines, triangles, ...)
     - the index type (none, 16- or 32-bit)
-    - all the remaining fixed-function-pipeline state
+    - all the fixed-function-pipeline state (depth-, stencil-, blend-state, etc...)
 
     If the vertex data has no gaps between vertex components, you can omit
     the .layout.buffers[].stride and layout.attrs[].offset items (leave them
-    default-initialized to 0), sokol-gfx will then compute the offsets and strides
-    from the vertex component formats (.layout.attrs[].format). Please note
-    that ALL vertex attribute offsets must be 0 in order for the
+    default-initialized to 0), sokol-gfx will then compute the offsets and
+    strides from the vertex component formats (.layout.attrs[].format).
+    Please note that ALL vertex attribute offsets must be 0 in order for the
     automatic offset computation to kick in.
 
     The default configuration is as follows:
@@ -1819,7 +1833,7 @@ typedef struct sg_shader_desc {
     .cull_mode:                 SG_CULLMODE_NONE
     .face_winding:              SG_FACEWINDING_CW
     .sample_count:              sg_desc.context.sample_count
-    .blend_color:               { 0.0f, 0.0f, 0.0f, 0.0f }
+    .blend_color:               (sg_color) { 0.0f, 0.0f, 0.0f, 0.0f }
     .alpha_to_coverage_enabled: false
     .label  0       (optional string label for trace hooks)
 */
