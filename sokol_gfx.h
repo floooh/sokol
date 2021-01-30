@@ -2671,21 +2671,19 @@ typedef struct {
 } _sg_slot_t;
 
 /* constants */
-enum {
-    _SG_STRING_SIZE = 16,
-    _SG_SLOT_SHIFT = 16,
-    _SG_SLOT_MASK = (1<<_SG_SLOT_SHIFT)-1,
-    _SG_MAX_POOL_SIZE = (1<<_SG_SLOT_SHIFT),
-    _SG_DEFAULT_BUFFER_POOL_SIZE = 128,
-    _SG_DEFAULT_IMAGE_POOL_SIZE = 128,
-    _SG_DEFAULT_SHADER_POOL_SIZE = 32,
-    _SG_DEFAULT_PIPELINE_POOL_SIZE = 64,
-    _SG_DEFAULT_PASS_POOL_SIZE = 16,
-    _SG_DEFAULT_CONTEXT_POOL_SIZE = 16,
-    _SG_DEFAULT_SAMPLER_CACHE_CAPACITY = 64,
-    _SG_DEFAULT_UB_SIZE = 4 * 1024 * 1024,
-    _SG_DEFAULT_STAGING_SIZE = 8 * 1024 * 1024,
-};
+#define _SG_STRING_SIZE (16)
+#define _SG_SLOT_SHIFT (16)
+#define _SG_SLOT_MASK ((1<<_SG_SLOT_SHIFT)-1)
+#define _SG_MAX_POOL_SIZE (1<<_SG_SLOT_SHIFT)
+#define _SG_DEFAULT_BUFFER_POOL_SIZE (128)
+#define _SG_DEFAULT_IMAGE_POOL_SIZE (128)
+#define _SG_DEFAULT_SHADER_POOL_SIZE (32)
+#define _SG_DEFAULT_PIPELINE_POOL_SIZE (64)
+#define _SG_DEFAULT_PASS_POOL_SIZE (16)
+#define _SG_DEFAULT_CONTEXT_POOL_SIZE (16)
+#define _SG_DEFAULT_SAMPLER_CACHE_CAPACITY (64)
+#define _SG_DEFAULT_UB_SIZE (4 * 1024 * 1024)
+#define _SG_DEFAULT_STAGING_SIZE (8 * 1024 * 1024)
 
 /* fixed-size string */
 typedef struct {
@@ -3192,8 +3190,8 @@ typedef struct {
     bool valid;
     bool gles2;
     bool in_pass;
-    uint32_t cur_pass_width;
-    uint32_t cur_pass_height;
+    int cur_pass_width;
+    int cur_pass_height;
     _sg_context_t* cur_context;
     _sg_pass_t* cur_pass;
     sg_pass cur_pass_id;
