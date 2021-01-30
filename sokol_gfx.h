@@ -11040,7 +11040,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
         wgpuBindGroupLayoutRelease(_sg.wgpu.ub.bindgroup_layout);
         _sg.wgpu.ub.bindgroup_layout = 0;
     }
-    for (int i = 0; i < _sg.wgpu.ub.stage.num; i++) {
+    for (uint32_t i = 0; i < _sg.wgpu.ub.stage.num; i++) {
         if (_sg.wgpu.ub.stage.buf[i]) {
             wgpuBufferRelease(_sg.wgpu.ub.stage.buf[i]);
             _sg.wgpu.ub.stage.buf[i] = 0;
@@ -11059,7 +11059,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus sta
         SOKOL_ASSERT(false);
     }
     SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
-    int index = (int)(intptr_t) user_data;
+    uint32_t index = (uint32_t)(uintptr_t) user_data;
     SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
     SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
     _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
@@ -11078,7 +11078,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
     memset(&_sg.wgpu.ub.bind_offsets, 0, sizeof(_sg.wgpu.ub.bind_offsets));
 
     /* check if a mapped staging buffer is available, otherwise create one */
-    for (int i = 0; i < _sg.wgpu.ub.stage.num; i++) {
+    for (uint32_t i = 0; i < _sg.wgpu.ub.stage.num; i++) {
         if (_sg.wgpu.ub.stage.ptr[i]) {
             _sg.wgpu.ub.stage.cur = i;
             return;
@@ -11120,7 +11120,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) 
     uint32_t num_bytes = 0;
     const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
     const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
-    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+    for (uint32_t mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
         const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
         /* row-pitch must be 256-aligend */
@@ -11239,7 +11239,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_staging_discard(void) {
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
+    for (uint32_t i = 0; i < _sg.wgpu.staging.num; i++) {
         if (_sg.wgpu.staging.buf[i]) {
             wgpuBufferRelease(_sg.wgpu.staging.buf[i]);
             _sg.wgpu.staging.buf[i] = 0;
@@ -11258,7 +11258,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus st
         SOKOL_ASSERT(false);
     }
     SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
-    int index = (int)(intptr_t) user_data;
+    uint32_t index = (uint32_t)(uintptr_t) user_data;
     SOKOL_ASSERT(index < _sg.wgpu.staging.num);
     SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
     _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
@@ -11276,7 +11276,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
     _sg.wgpu.staging.offset = 0;
 
     /* check if mapped staging buffer is available, otherwise create one */
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
+    for (uint32_t i = 0; i < _sg.wgpu.staging.num; i++) {
         if (_sg.wgpu.staging.ptr[i]) {
             _sg.wgpu.staging.cur = i;
             return;
@@ -11365,7 +11365,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_sampler_cache(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_wgpu_destroy_sampler_cache(void) {
     SOKOL_ASSERT(_sg.wgpu.sampler_cache.items);
     SOKOL_ASSERT(_sg.wgpu.sampler_cache.num_items <= _sg.wgpu.sampler_cache.capacity);
-    for (int i = 0; i < _sg.wgpu.sampler_cache.num_items; i++) {
+    for (uint32_t i = 0; i < _sg.wgpu.sampler_cache.num_items; i++) {
         wgpuSamplerRelease((WGPUSampler)_sg_smpcache_sampler(&_sg.wgpu.sampler_cache, i));
     }
     _sg_smpcache_discard(&_sg.wgpu.sampler_cache);
@@ -11772,7 +11772,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     memset(&vb_desc, 0, sizeof(vb_desc));
     WGPUVertexAttributeDescriptor va_desc[SG_MAX_SHADERSTAGE_BUFFERS][SG_MAX_VERTEX_ATTRIBUTES];
     memset(&va_desc, 0, sizeof(va_desc));
-    int vb_idx = 0;
+    uint32_t vb_idx = 0;
     for (; vb_idx < SG_MAX_SHADERSTAGE_BUFFERS; vb_idx++) {
         const sg_buffer_layout_desc* src_vb_desc = &desc->layout.buffers[vb_idx];
         if (0 == src_vb_desc->stride) {
@@ -11783,8 +11783,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         /* NOTE: WebGPU has no support for vertex step rate (because that's
            not supported by Core Vulkan
         */
-        int va_idx = 0;
-        for (int va_loc = 0; va_loc < SG_MAX_VERTEX_ATTRIBUTES; va_loc++) {
+        uint32_t va_idx = 0;
+        for (uint32_t va_loc = 0; va_loc < SG_MAX_VERTEX_ATTRIBUTES; va_loc++) {
             const sg_vertex_attr_desc* src_va_desc = &desc->layout.attrs[va_loc];
             if (SG_VERTEXFORMAT_INVALID == src_va_desc->format) {
                 break;
