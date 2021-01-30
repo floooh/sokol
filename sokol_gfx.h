@@ -2912,6 +2912,7 @@ _SOKOL_PRIVATE void _sg_smpcache_init(_sg_sampler_cache_t* cache, uint32_t capac
     cache->capacity = capacity;
     const uint32_t size = cache->capacity * sizeof(_sg_sampler_cache_item_t);
     cache->items = (_sg_sampler_cache_item_t*) SOKOL_MALLOC(size);
+    SOKOL_ASSERT(cache->items);
     memset(cache->items, 0, size);
 }
 
@@ -6139,7 +6140,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
         SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
         const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
         const sg_vertex_step step_func = l_desc->step_func;
-        const int step_rate = l_desc->step_rate;
+        const uint32_t step_rate = l_desc->step_rate;
         GLint attr_loc = attr_index;
         if (!_sg_strempty(&shd->gl.attrs[attr_index].name)) {
             attr_loc = glGetAttribLocation(pip->shader->gl.prog, _sg_strptr(&shd->gl.attrs[attr_index].name));
@@ -7833,16 +7834,16 @@ _SOKOL_PRIVATE void _sg_d3d11_destroy_buffer(_sg_buffer_t* buf) {
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_data* data) {
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
+    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
     int subres_index = 0;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-            for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
+    for (uint32_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
+            for (uint32_t mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
                 D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
-                const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
-                const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
+                const uint32_t mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
+                const uint32_t mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
                 const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
                 const size_t slice_size = subimg_data->size / num_slices;
                 const size_t slice_offset = slice_size * slice_index;
@@ -8080,7 +8081,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 /* all 0.0f */
                 break;
             case SG_BORDERCOLOR_OPAQUE_WHITE:
-                for (int i = 0; i < 4; i++) {
+                for (uint32_t i = 0; i < 4; i++) {
                     d3d11_smp_desc.BorderColor[i] = 1.0f;
                 }
                 break;
@@ -8193,13 +8194,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     _sg_shader_common_init(&shd->cmn, desc);
 
     /* copy vertex attribute semantic names and indices */
-    for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
+    for (uint32_t i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         _sg_strcpy(&shd->d3d11.attrs[i].sem_name, desc->attrs[i].sem_name);
         shd->d3d11.attrs[i].sem_index = desc->attrs[i].sem_index;
     }
 
     /* shader stage uniform blocks and image slots */
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+    for (uint32_t stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
         for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
@@ -8248,8 +8249,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
 
         /* need to store the vertex shader byte code, this is needed later in sg_create_pipeline */
         if (vs_succeeded && fs_succeeded) {
-            shd->d3d11.vs_blob_length = (int)vs_length;
-            shd->d3d11.vs_blob = SOKOL_MALLOC((int)vs_length);
+            shd->d3d11.vs_blob_length = (uint32_t)vs_length;
+            shd->d3d11.vs_blob = SOKOL_MALLOC(vs_length);
             SOKOL_ASSERT(shd->d3d11.vs_blob);
             memcpy(shd->d3d11.vs_blob, vs_ptr, vs_length);
             result = SG_RESOURCESTATE_VALID;
@@ -8275,7 +8276,7 @@ _SOKOL_PRIVATE void _sg_d3d11_destroy_shader(_sg_shader_t* shd) {
     if (shd->d3d11.vs_blob) {
         SOKOL_FREE(shd->d3d11.vs_blob);
     }
-    for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
+    for (uint32_t stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
         for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
@@ -8304,7 +8305,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     _SOKOL_UNUSED(hr);
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     memset(d3d11_comps, 0, sizeof(d3d11_comps));
-    int attr_index = 0;
+    uint32_t attr_index = 0;
     for (; attr_index < SG_MAX_VERTEX_ATTRIBUTES; attr_index++) {
         const sg_vertex_attr_desc* a_desc = &desc->layout.attrs[attr_index];
         if (a_desc->format == SG_VERTEXFORMAT_INVALID) {
@@ -8313,7 +8314,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         SOKOL_ASSERT((a_desc->buffer_index >= 0) && (a_desc->buffer_index < SG_MAX_SHADERSTAGE_BUFFERS));
         const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[a_desc->buffer_index];
         const sg_vertex_step step_func = l_desc->step_func;
-        const int step_rate = l_desc->step_rate;
+        const uint32_t step_rate = l_desc->step_rate;
         D3D11_INPUT_ELEMENT_DESC* d3d11_comp = &d3d11_comps[attr_index];
         d3d11_comp->SemanticName = _sg_strptr(&shd->d3d11.attrs[attr_index].sem_name);
         d3d11_comp->SemanticIndex = shd->d3d11.attrs[attr_index].sem_index;
@@ -8326,7 +8327,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         }
         pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
     }
-    for (int layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
+    for (uint32_t layout_index = 0; layout_index < SG_MAX_SHADERSTAGE_BUFFERS; layout_index++) {
         if (pip->cmn.vertex_layout_valid[layout_index]) {
             const sg_buffer_layout_desc* l_desc = &desc->layout.buffers[layout_index];
             SOKOL_ASSERT(l_desc->stride > 0);
@@ -8493,7 +8494,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
     SOKOL_ASSERT(0 == pass->d3d11.ds_att.image);
     SOKOL_ASSERT(0 == pass->d3d11.ds_att.dsv);
     if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
-        const int ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
+        const uint32_t ds_img_index = SG_MAX_COLOR_ATTACHMENTS;
         const sg_pass_attachment_desc* att_desc = &desc->depth_stencil_attachment;
         _SOKOL_UNUSED(att_desc);
         _sg_image_t* att_img = att_images[ds_img_index];
@@ -8524,7 +8525,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
 
 _SOKOL_PRIVATE void _sg_d3d11_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+    for (uint32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (pass->d3d11.color_atts[i].rtv) {
             _sg_d3d11_Release(pass->d3d11.color_atts[i].rtv);
         }
@@ -8558,7 +8559,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
         _sg.d3d11.cur_pass = pass;
         _sg.d3d11.cur_pass_id.id = pass->slot.id;
         _sg.d3d11.num_rtvs = 0;
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        for (uint32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg.d3d11.cur_rtvs[i] = pass->d3d11.color_atts[i].rtv;
             if (_sg.d3d11.cur_rtvs[i]) {
                 _sg.d3d11.num_rtvs++;
@@ -8577,7 +8578,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
         else {
             _sg.d3d11.cur_rtvs[0] = (ID3D11RenderTargetView*) _sg.d3d11.rtv_userdata_cb(_sg.d3d11.user_data);
         }
-        for (int i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        for (uint32_t i = 1; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
             _sg.d3d11.cur_rtvs[i] = 0;
         }
         if (_sg.d3d11.dsv_cb) {
@@ -8606,7 +8607,7 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(_sg_pass_t* pass, const sg_pass_action*
     _sg_d3d11_RSSetScissorRects(_sg.d3d11.ctx, 1, &rect);
 
     /* perform clear action */
-    for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
+    for (uint32_t i = 0; i < _sg.d3d11.num_rtvs; i++) {
         if (action->colors[i].action == SG_ACTION_CLEAR) {
             _sg_d3d11_ClearRenderTargetView(_sg.d3d11.ctx, _sg.d3d11.cur_rtvs[i], &action->colors[i].value.r);
         }
@@ -8635,7 +8636,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     /* need to resolve MSAA render target into texture? */
     if (_sg.d3d11.cur_pass) {
         SOKOL_ASSERT(_sg.d3d11.cur_pass->slot.id == _sg.d3d11.cur_pass_id.id);
-        for (int i = 0; i < _sg.d3d11.num_rtvs; i++) {
+        for (uint32_t i = 0; i < _sg.d3d11.num_rtvs; i++) {
             _sg_pass_attachment_t* cmn_att = &_sg.d3d11.cur_pass->cmn.color_atts[i];
             _sg_image_t* att_img = _sg.d3d11.cur_pass->d3d11.color_atts[i].image;
             SOKOL_ASSERT(att_img && (att_img->slot.id == cmn_att->image_id.id));
@@ -8657,7 +8658,7 @@ _SOKOL_PRIVATE void _sg_d3d11_end_pass(void) {
     _sg.d3d11.cur_pass_id.id = SG_INVALID_ID;
     _sg.d3d11.cur_pipeline = 0;
     _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
-    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+    for (uint32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         _sg.d3d11.cur_rtvs[i] = 0;
     }
     _sg.d3d11.cur_dsv = 0;
@@ -8729,7 +8730,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_bindings(
     ID3D11SamplerState* d3d11_vs_smps[SG_MAX_SHADERSTAGE_IMAGES];
     ID3D11ShaderResourceView* d3d11_fs_srvs[SG_MAX_SHADERSTAGE_IMAGES];
     ID3D11SamplerState* d3d11_fs_smps[SG_MAX_SHADERSTAGE_IMAGES];
-    int i;
+    uint32_t i;
     for (i = 0; i < num_vbs; i++) {
         SOKOL_ASSERT(vbs[i]->d3d11.buf);
         d3d11_vbs[i] = vbs[i]->d3d11.buf;
@@ -8846,19 +8847,19 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
         d3d11_res = (ID3D11Resource*) img->d3d11.tex2d;
     }
     SOKOL_ASSERT(d3d11_res);
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
+    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
     int subres_index = 0;
     HRESULT hr;
     _SOKOL_UNUSED(hr);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
-    for (int face_index = 0; face_index < num_faces; face_index++) {
-        for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-            for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
+    for (uint32_t face_index = 0; face_index < num_faces; face_index++) {
+        for (uint32_t slice_index = 0; slice_index < num_slices; slice_index++) {
+            for (uint32_t mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
                 SOKOL_ASSERT(subres_index < (SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS));
-                const int mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
-                const int mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
-                const int src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                const uint32_t mip_width = ((img->cmn.width>>mip_index)>0) ? img->cmn.width>>mip_index : 1;
+                const uint32_t mip_height = ((img->cmn.height>>mip_index)>0) ? img->cmn.height>>mip_index : 1;
+                const uint32_t src_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 const sg_range* subimg_data = &(data->subimage[face_index][mip_index]);
                 const size_t slice_size = subimg_data->size / num_slices;
                 const size_t slice_offset = slice_size * slice_index;
@@ -8870,10 +8871,10 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                     memcpy(d3d11_msr.pData, slice_ptr, slice_size);
                 }
                 else {
-                    SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
+                    SOKOL_ASSERT(src_pitch < d3d11_msr.RowPitch);
                     const uint8_t* src_ptr = slice_ptr;
                     uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
-                    for (int row_index = 0; row_index < mip_height; row_index++) {
+                    for (uint32_t row_index = 0; row_index < mip_height; row_index++) {
                         memcpy(dst_ptr, src_ptr, src_pitch);
                         src_ptr += src_pitch;
                         dst_ptr += d3d11_msr.RowPitch;
@@ -12776,7 +12777,7 @@ static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data)
 
 /*== RESOURCE POOLS ==========================================================*/
 
-_SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, int num) {
+_SOKOL_PRIVATE void _sg_init_pool(_sg_pool_t* pool, uint32_t num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
     pool->size = num + 1;
@@ -13541,6 +13542,7 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             }
             SOKOL_VALIDATE(atts_cont, _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
+            SOKOL_ASSERT(img);
             SOKOL_VALIDATE((0 != img) && (img->slot.state == SG_RESOURCESTATE_VALID), _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->cmn.num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->cmn.type == SG_IMAGETYPE_CUBE) {
@@ -13568,7 +13570,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_VALIDATE((0 != img) && (img->slot.state == SG_RESOURCESTATE_VALID), _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_ASSERT(img);
+            SOKOL_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->cmn.num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                 SOKOL_VALIDATE(att->slice < 6, _SG_VALIDATE_PASSDESC_FACE);
@@ -13826,7 +13829,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
                 SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
                 const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
                 const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+                const size_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                 const size_t expected_size = bytes_per_slice * img->cmn.num_slices;
                 SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= expected_size, _SG_VALIDATE_UPDIMG_SIZE);
             }
