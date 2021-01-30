@@ -3666,7 +3666,7 @@ static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pi
     SOKOL_ASSERT(font_desc->data.ptr);
     SOKOL_ASSERT((font_desc->data.size > 0) && ((font_desc->data.size % 8) == 0));
     SOKOL_ASSERT(font_desc->first_char <= font_desc->last_char);
-    SOKOL_ASSERT((((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->data.size);
+    SOKOL_ASSERT((size_t)(((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->data.size);
     const uint8_t* ptr = (const uint8_t*) font_desc->data.ptr;
     for (int chr = font_desc->first_char; chr <= font_desc->last_char; chr++) {
         for (int line = 0; line < 8; line++) {
@@ -3701,7 +3701,7 @@ static void _sdtx_setup_common(void) {
     shd_desc.attrs[2].sem_name = "TEXCOORD";
     shd_desc.attrs[2].sem_index = 2;
     shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
     shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     #if defined(SOKOL_GLCORE33)
         shd_desc.vs.source = _sdtx_vs_src_glcore33;
@@ -3973,7 +3973,7 @@ SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
 
 SOKOL_API_IMPL void sdtx_font(uint32_t font_index) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-    SOKOL_ASSERT((font_index >= 0) && (font_index < SDTX_MAX_FONTS));
+    SOKOL_ASSERT(font_index < SDTX_MAX_FONTS);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
         ctx->cur_font = font_index;

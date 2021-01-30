@@ -3128,7 +3128,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
     }
     int num_valid_images = 0;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
-        if (_SG_IMAGETYPE_DEFAULT != stage->images[i].type) {
+        if (_SG_IMAGETYPE_DEFAULT != stage->images[i].image_type) {
             num_valid_images++;
         }
         else {
@@ -3159,10 +3159,10 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
         if (igTreeNodeStr("Images")) {
             for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
                 const sg_shader_image_desc* sid = &stage->images[i];
-                if (sid->type != _SG_IMAGETYPE_DEFAULT) {
-                    igText("slot: %d\n  name: %s\n  type: %s\n  sampler_type: %s",
+                if (sid->image_type != _SG_IMAGETYPE_DEFAULT) {
+                    igText("slot: %d\n  name: %s\n  image_type: %s\n  sampler_type: %s",
                         i, sid->name ? sid->name : "NONE",
-                        _sg_imgui_imagetype_string(sid->type),
+                        _sg_imgui_imagetype_string(sid->image_type),
                         _sg_imgui_samplertype_string(sid->sampler_type));
                 }
                 else {

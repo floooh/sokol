@@ -1610,7 +1610,7 @@ static int _sfons_render_create(void* user_ptr, int width, int height) {
         ub->uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
         ub->uniforms[0].array_count = 8;
         shd_desc.fs.images[0].name = "tex";
-        shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+        shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
         shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
         shd_desc.label = "sokol-fontstash-shader";
         #if defined(SOKOL_GLCORE33)
