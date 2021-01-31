@@ -360,7 +360,7 @@
         distribution.
 */
 #define SOKOL_SHAPE_INCLUDED
-#include <stddef.h>
+#include <stddef.h>     // size_t, offsetof
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -551,7 +551,6 @@ SOKOL_SHAPE_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #define SOKOL_SHAPE_IMPL_INCLUDED (1)
 
 #include <string.h> // memcpy
-#include <stddef.h> // offsetof
 #include <math.h>   // sinf, cosf
 
 #ifdef __clang__

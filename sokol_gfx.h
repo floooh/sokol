@@ -579,7 +579,7 @@
         distribution.
 */
 #define SOKOL_GFX_INCLUDED (1)
-#include <stddef.h>
+#include <stddef.h>     // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -2912,6 +2912,7 @@ _SOKOL_PRIVATE void _sg_smpcache_init(_sg_sampler_cache_t* cache, int capacity) 
     cache->capacity = capacity;
     const int size = cache->capacity * sizeof(_sg_sampler_cache_item_t);
     cache->items = (_sg_sampler_cache_item_t*) SOKOL_MALLOC(size);
+    SOKOL_ASSERT(cache->items);
     memset(cache->items, 0, size);
 }
 
@@ -13534,7 +13535,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
             }
             SOKOL_VALIDATE(atts_cont, _SG_VALIDATE_PASSDESC_NO_CONT_COLOR_ATTS);
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_VALIDATE((0 != img) && (img->slot.state == SG_RESOURCESTATE_VALID), _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_ASSERT(img);
+            SOKOL_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->cmn.num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                 SOKOL_VALIDATE(att->slice < 6, _SG_VALIDATE_PASSDESC_FACE);
@@ -13561,7 +13563,8 @@ _SOKOL_PRIVATE bool _sg_validate_pass_desc(const sg_pass_desc* desc) {
         if (desc->depth_stencil_attachment.image.id != SG_INVALID_ID) {
             const sg_pass_attachment_desc* att = &desc->depth_stencil_attachment;
             const _sg_image_t* img = _sg_lookup_image(&_sg.pools, att->image.id);
-            SOKOL_VALIDATE((0 != img) && (img->slot.state == SG_RESOURCESTATE_VALID), _SG_VALIDATE_PASSDESC_IMAGE);
+            SOKOL_ASSERT(img);
+            SOKOL_VALIDATE(img->slot.state == SG_RESOURCESTATE_VALID, _SG_VALIDATE_PASSDESC_IMAGE);
             SOKOL_VALIDATE(att->mip_level < img->cmn.num_mipmaps, _SG_VALIDATE_PASSDESC_MIPLEVEL);
             if (img->cmn.type == SG_IMAGETYPE_CUBE) {
                 SOKOL_VALIDATE(att->slice < 6, _SG_VALIDATE_PASSDESC_FACE);
@@ -13819,7 +13822,7 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
                 SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
                 const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
                 const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+                const size_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                 const size_t expected_size = bytes_per_slice * img->cmn.num_slices;
                 SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= expected_size, _SG_VALIDATE_UPDIMG_SIZE);
             }
