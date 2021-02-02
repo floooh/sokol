@@ -388,7 +388,7 @@ typedef struct {
 typedef struct {
     sg_buffer buffer;
     size_t data_size;
-    uint32_t result;
+    int result;
 } sg_imgui_args_append_buffer_t;
 
 typedef struct {
@@ -422,16 +422,16 @@ typedef struct {
 
 typedef struct {
     sg_shader_stage stage;
-    uint32_t ub_index;
+    int ub_index;
     size_t data_size;
     sg_pipeline pipeline;   /* the pipeline which was active at this call */
     size_t ubuf_pos;        /* start of copied data in capture buffer */
 } sg_imgui_args_apply_uniforms_t;
 
 typedef struct {
-    uint32_t base_element;
-    uint32_t num_elements;
-    uint32_t num_instances;
+    int base_element;
+    int num_elements;
+    int num_instances;
 } sg_imgui_args_draw_t;
 
 typedef struct {
@@ -2126,7 +2126,7 @@ _SOKOL_PRIVATE void _sg_imgui_update_image(sg_image img, const sg_image_data* da
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const sg_range* data, uint32_t result, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_append_buffer(sg_buffer buf, const sg_range* data, int result, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
@@ -2241,7 +2241,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_bindings(const sg_bindings* bindings, void* 
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, uint32_t ub_index, const sg_range* data, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(data);
@@ -2261,7 +2261,7 @@ _SOKOL_PRIVATE void _sg_imgui_apply_uniforms(sg_shader_stage stage, uint32_t ub_
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_draw(uint32_t base_element, uint32_t num_elements, uint32_t num_instances, void* user_data) {
+_SOKOL_PRIVATE void _sg_imgui_draw(int base_element, int num_elements, int num_instances, void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
     sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
