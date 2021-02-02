@@ -5357,6 +5357,7 @@ _SOKOL_PRIVATE void _sapp_wgl_init(void) {
     if (!_sapp.wgl.msg_hwnd) {
         _sapp_fail("Win32: failed to create helper window!\n");
     }
+    SOKOL_ASSERT(_sapp.wgl.msg_hwnd);
     ShowWindow(_sapp.wgl.msg_hwnd, SW_HIDE);
     MSG msg;
     while (PeekMessageW(&msg, _sapp.wgl.msg_hwnd, 0, 0, PM_REMOVE)) {
@@ -5464,6 +5465,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
 
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
     _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    SOKOL_ASSERT(usable_configs);
     int usable_count = 0;
     for (int i = 0; i < native_count; i++) {
         const int n = i + 1;

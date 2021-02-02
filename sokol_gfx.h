@@ -8191,7 +8191,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
-        for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
+        for (int ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
             const _sg_uniform_block_t* ub = &cmn_stage->uniform_blocks[ub_index];
 
             /* create a D3D constant buffer for each uniform block */
@@ -8267,7 +8267,7 @@ _SOKOL_PRIVATE void _sg_d3d11_destroy_shader(_sg_shader_t* shd) {
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         _sg_shader_stage_t* cmn_stage = &shd->cmn.stage[stage_index];
         _sg_d3d11_shader_stage_t* d3d11_stage = &shd->d3d11.stage[stage_index];
-        for (uint32_t ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
+        for (int ub_index = 0; ub_index < cmn_stage->num_uniform_blocks; ub_index++) {
             if (d3d11_stage->cbufs[ub_index]) {
                 _sg_d3d11_Release(d3d11_stage->cbufs[ub_index]);
             }
