@@ -542,7 +542,7 @@ SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
 
 /* switch to a different font */
-SOKOL_DEBUGTEXT_API_DECL void sdtx_font(uint32_t font_index);
+SOKOL_DEBUGTEXT_API_DECL void sdtx_font(int font_index);
 
 /* set a new virtual canvas size in screen pixels */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_canvas(float w, float h);
@@ -570,7 +570,7 @@ SOKOL_DEBUGTEXT_API_DECL void sdtx_color1i(uint32_t rgba);                      
 /* text rendering */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_putc(char c);
 SOKOL_DEBUGTEXT_API_DECL void sdtx_puts(const char* str);             // does NOT append newline!
-SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, uint32_t len);    // 'put range', also stops at zero-char
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, int len);    // 'put range', also stops at zero-char
 SOKOL_DEBUGTEXT_API_DECL int sdtx_printf(const char* fmt, ...) SOKOL_DEBUGTEXT_PRINTF_ATTR;
 SOKOL_DEBUGTEXT_API_DECL int sdtx_vprintf(const char* fmt, va_list args);
 
@@ -3398,7 +3398,7 @@ typedef struct {
     _sdtx_vertex_t* vertices;
     sg_buffer vbuf;
     sg_pipeline pip;
-    uint32_t cur_font;
+    int cur_font;
     _sdtx_float2_t canvas_size;
     _sdtx_float2_t glyph_size;
     _sdtx_float2_t origin;
@@ -3975,9 +3975,9 @@ SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
     return _sdtx.cur_ctx_id;
 }
 
-SOKOL_API_IMPL void sdtx_font(uint32_t font_index) {
+SOKOL_API_IMPL void sdtx_font(int font_index) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
-    SOKOL_ASSERT(font_index < SDTX_MAX_FONTS);
+    SOKOL_ASSERT((font_index >= 0) && (font_index < SDTX_MAX_FONTS));
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
         ctx->cur_font = font_index;
@@ -4136,11 +4136,11 @@ SOKOL_DEBUGTEXT_API_DECL void sdtx_puts(const char* str) {
     }
 }
 
-SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, uint32_t len) {
+SOKOL_DEBUGTEXT_API_DECL void sdtx_putr(const char* str, int len) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     _sdtx_context_t* ctx = _sdtx.cur_ctx;
     if (ctx) {
-        for (uint32_t i = 0; i < len; i++) {
+        for (int i = 0; i < len; i++) {
             char chr = str[i];
             if (0 == chr) {
                 break;
