@@ -488,7 +488,7 @@ typedef struct sdtx_font_desc_t {
     of text.
 */
 typedef struct sdtx_context_desc_t {
-    uint32_t char_buf_size;                 // max number of characters rendered in one frame, default: 4096
+    int char_buf_size;                      // max number of characters rendered in one frame, default: 4096
     float canvas_width;                     // the initial virtual canvas width, default: 640
     float canvas_height;                    // the initial virtual canvas height, default: 400
     int tab_width;                          // tab width in number of characters, default: 4
@@ -514,8 +514,8 @@ typedef struct sdtx_context_desc_t {
         sdtx_font_oric()
 */
 typedef struct sdtx_desc_t {
-    uint32_t context_pool_size;             // max number of rendering contexts that can be created, default: 8
-    uint32_t printf_buf_size;               // size of internal buffer for snprintf(), default: 4096
+    int context_pool_size;                  // max number of rendering contexts that can be created, default: 8
+    int printf_buf_size;                    // size of internal buffer for snprintf(), default: 4096
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
 } sdtx_desc_t;
@@ -3580,6 +3580,9 @@ static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t
     res.canvas_height = _sdtx_def(res.canvas_height, _SDTX_DEFAULT_CANVAS_HEIGHT);
     res.tab_width = _sdtx_def(res.tab_width, _SDTX_DEFAULT_TAB_WIDTH);
     /* keep pixel format attrs are passed as is into pipeline creation */
+    SOKOL_ASSERT(res.char_buf_size > 0);
+    SOKOL_ASSERT(res.canvas_width > 0.0f);
+    SOKOL_ASSERT(res.canvas_height > 0.0f);
     return res;
 }
 
@@ -3590,11 +3593,9 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
     ctx->desc = _sdtx_context_desc_defaults(in_desc);
-    SOKOL_ASSERT(ctx->desc.canvas_width > 0.0f);
-    SOKOL_ASSERT(ctx->desc.canvas_height > 0.0f);
 
-    const uint32_t max_vertices = 6 * ctx->desc.char_buf_size;
-    const uint32_t vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
+    const int max_vertices = 6 * ctx->desc.char_buf_size;
+    const size_t vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
     ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
     ctx->cur_vertex_ptr = ctx->vertices;
@@ -3681,7 +3682,7 @@ static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pi
 static void _sdtx_setup_common(void) {
 
     /* common printf formatting buffer */
-    _sdtx.fmt_buf_size = _sdtx.desc.printf_buf_size + 1;
+    _sdtx.fmt_buf_size = (uint32_t) _sdtx.desc.printf_buf_size + 1;
     _sdtx.fmt_buf = (char*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
     SOKOL_ASSERT(_sdtx.fmt_buf);
 
@@ -3872,6 +3873,9 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
         }
     }
     desc.context = _sdtx_context_desc_defaults(&desc.context);
+    SOKOL_ASSERT(desc.context_pool_size > 0);
+    SOKOL_ASSERT(desc.printf_buf_size > 0);
+    SOKOL_ASSERT(desc.context.char_buf_size > 0);
     return desc;
 }
 
