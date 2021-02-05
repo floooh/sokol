@@ -665,8 +665,8 @@ SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     _sargs.max_args = _sargs_def(desc->max_args, _SARGS_MAX_ARGS_DEF);
     _sargs.buf_size = _sargs_def(desc->buf_size, _SARGS_BUF_SIZE_DEF);
     SOKOL_ASSERT(_sargs.buf_size > 8);
-    _sargs.args = (_sargs_kvp_t*) SOKOL_CALLOC(_sargs.max_args, sizeof(_sargs_kvp_t));
-    _sargs.buf = (char*) SOKOL_CALLOC(_sargs.buf_size, sizeof(char));
+    _sargs.args = (_sargs_kvp_t*) SOKOL_CALLOC((size_t)_sargs.max_args, sizeof(_sargs_kvp_t));
+    _sargs.buf = (char*) SOKOL_CALLOC((size_t)_sargs.buf_size, sizeof(char));
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
     _sargs.valid = true;

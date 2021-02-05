@@ -1773,13 +1773,13 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
         sg_image_data data;
         memset(&data, 0, sizeof(data));
         data.subimage[0][0].ptr = ctx->texData;
-        data.subimage[0][0].size = sfons->width * sfons->height;
+        data.subimage[0][0].size = (size_t) (sfons->width * sfons->height);
         sg_update_image(sfons->img, &data);
     }
 }
 
 SOKOL_API_IMPL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    return (r) | (g<<8) | (b<<16) | (a<<24);
+    return ((uint32_t)r) | ((uint32_t)g<<8) | ((uint32_t)b<<16) | ((uint32_t)a<<24);
 }
 
 #endif /* SOKOL_FONTSTASH_IMPL */

@@ -4242,7 +4242,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_dummy_create_pass(_sg_pass_t* pass, _sg_ima
     _sg_pass_common_init(&pass->cmn, desc);
 
     const sg_pass_attachment_desc* att_desc;
-    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
         SOKOL_ASSERT(0 == pass->dmy.color_atts[i].image);
@@ -9698,7 +9698,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
                 [mtl_tex replaceRegion:region
                     mipmapLevel:(NSUInteger)mip_index
                     slice:(NSUInteger)mtl_slice_index
-                    withBytes:(NSUInteger)(data_ptr + slice_offset)
+                    withBytes:data_ptr + slice_offset
                     bytesPerRow:(NSUInteger)bytes_per_row
                     bytesPerImage:(NSUInteger)bytes_per_slice];
             }

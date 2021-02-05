@@ -1672,7 +1672,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     sg_buffer_desc vb_desc;
     memset(&vb_desc, 0, sizeof(vb_desc));
     vb_desc.usage = SG_USAGE_STREAM;
-    vb_desc.size = _simgui.desc.max_vertices * sizeof(ImDrawVert);
+    vb_desc.size = (size_t)_simgui.desc.max_vertices * sizeof(ImDrawVert);
     vb_desc.label = "sokol-imgui-vertices";
     _simgui.vbuf = sg_make_buffer(&vb_desc);
 
@@ -1680,7 +1680,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     memset(&ib_desc, 0, sizeof(ib_desc));
     ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
     ib_desc.usage = SG_USAGE_STREAM;
-    ib_desc.size = _simgui.desc.max_vertices * 3 * sizeof(uint16_t);
+    ib_desc.size = (size_t)_simgui.desc.max_vertices * 3 * sizeof(uint16_t);
     ib_desc.label = "sokol-imgui-indices";
     _simgui.ibuf = sg_make_buffer(&ib_desc);
 
@@ -1704,7 +1704,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         img_desc.min_filter = SG_FILTER_LINEAR;
         img_desc.mag_filter = SG_FILTER_LINEAR;
         img_desc.data.subimage[0][0].ptr = font_pixels;
-        img_desc.data.subimage[0][0].size = font_width * font_height * sizeof(uint32_t);
+        img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
         img_desc.label = "sokol-imgui-font";
         _simgui.img = sg_make_image(&img_desc);
         io->Fonts->TexID = (ImTextureID)(uintptr_t) _simgui.img.id;
@@ -1909,20 +1909,20 @@ SOKOL_API_IMPL void simgui_render(void) {
     bind.index_buffer = _simgui.ibuf;
     ImTextureID tex_id = io->Fonts->TexID;
     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
-    uint32_t vb_offset = 0;
-    uint32_t ib_offset = 0;
+    int vb_offset = 0;
+    int ib_offset = 0;
     for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++) {
         ImDrawList* cl = draw_data->CmdLists[cl_index];
 
         /* append vertices and indices to buffers, record start offsets in draw state */
         #if defined(__cplusplus)
-            const uint32_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
-            const uint32_t idx_size = cl->IdxBuffer.size() * sizeof(ImDrawIdx);
+            const size_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
+            const size_t idx_size = cl->IdxBuffer.size() * sizeof(ImDrawIdx);
             const ImDrawVert* vtx_ptr = &cl->VtxBuffer.front();
             const ImDrawIdx* idx_ptr = &cl->IdxBuffer.front();
         #else
-            const uint32_t vtx_size = cl->VtxBuffer.Size * sizeof(ImDrawVert);
-            const uint32_t idx_size = cl->IdxBuffer.Size * sizeof(ImDrawIdx);
+            const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
+            const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
             const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
             const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
         #endif
@@ -1969,7 +1969,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                     tex_id = pcmd->TextureId;
                     vtx_offset = pcmd->VtxOffset;
                     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
-                    bind.vertex_buffer_offsets[0] = vb_offset + pcmd->VtxOffset * sizeof(ImDrawVert);
+                    bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
                 const int scissor_x = (int) (pcmd->ClipRect.x * dpi_scale);
@@ -1977,7 +1977,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                 const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * dpi_scale);
                 const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * dpi_scale);
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
-                sg_draw(base_element, pcmd->ElemCount, 1);
+                sg_draw(base_element, (int)pcmd->ElemCount, 1);
             }
             base_element += pcmd->ElemCount;
         }

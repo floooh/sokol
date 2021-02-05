@@ -964,7 +964,7 @@ _SOKOL_PRIVATE int _saudio_fifo_read(_saudio_fifo_t* fifo, uint8_t* ptr, int num
 /*=== DUMMY BACKEND IMPLEMENTATION ===========================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
-    _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     return true;
 };
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };

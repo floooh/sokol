@@ -598,7 +598,7 @@ typedef struct {
     size_t ubuf_size;       /* size of uniform capture buffer in bytes */
     size_t ubuf_pos;        /* current uniform buffer pos */
     uint8_t* ubuf;          /* buffer for capturing uniform updates */
-    uint32_t num_items;
+    int num_items;
     sg_imgui_capture_item_t items[SG_IMGUI_MAX_FRAMECAPTURE_ITEMS];
 } sg_imgui_capture_bucket_t;
 
@@ -607,8 +607,8 @@ typedef struct {
 */
 typedef struct {
     bool open;
-    uint32_t bucket_index;      /* which bucket to record to, 0 or 1 */
-    uint32_t sel_item;          /* currently selected capture item by index */
+    int bucket_index;      /* which bucket to record to, 0 or 1 */
+    int sel_item;          /* currently selected capture item by index */
     sg_imgui_capture_bucket_t bucket[2];
 } sg_imgui_capture_t;
 
@@ -852,7 +852,7 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_make_str(const char* str) {
 
 _SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
     SOKOL_ASSERT(src);
-    int len = (int) strlen(src) + 1;
+    size_t len = strlen(src) + 1;
     char* dst = (char*) _sg_imgui_alloc(len);
     memcpy(dst, src, len);
     return (const char*) dst;
@@ -1489,12 +1489,12 @@ _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_next_write_item(sg_img
     }
 }
 
-_SOKOL_PRIVATE uint32_t _sg_imgui_capture_num_read_items(sg_imgui_t* ctx) {
+_SOKOL_PRIVATE int _sg_imgui_capture_num_read_items(sg_imgui_t* ctx) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     return bucket->num_items;
 }
 
-_SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_t* ctx, uint32_t index) {
+_SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_read_item_at(sg_imgui_t* ctx, int index) {
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     SOKOL_ASSERT(index < bucket->num_items);
     return &bucket->items[index];
@@ -2981,9 +2981,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
     igBeginChildStr("capture_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
-    const uint32_t num_items = _sg_imgui_capture_num_read_items(ctx);
+    const int num_items = _sg_imgui_capture_num_read_items(ctx);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
-    for (uint32_t i = 0; i < num_items; i++) {
+    for (int i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
         igPushStyleColorU32(ImGuiCol_Text, item->color);
@@ -3332,7 +3332,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
                 igTreePop();
             }
             igText("Color Count: %d", pip_ui->desc.color_count);
-            for (uint32_t i = 0; i < pip_ui->desc.color_count; i++) {
+            for (int i = 0; i < pip_ui->desc.color_count; i++) {
                 sg_imgui_str_t str;
                 _sg_imgui_snprintf(&str, "Color %d", i);
                 if (igTreeNodeStr(str.buf)) {
@@ -3520,7 +3520,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
                         igText("???");
                         break;
                 }
-                uptrf += _sg_imgui_uniform_size(ud->type, 1) / sizeof(float);
+                uptrf += _sg_imgui_uniform_size(ud->type, 1) / (int)sizeof(float);
             }
         }
     }
@@ -3581,7 +3581,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_passaction_panel(sg_imgui_t* ctx, sg_pass pas
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
-    uint32_t sel_item_index = ctx->capture.sel_item;
+    int sel_item_index = ctx->capture.sel_item;
     if (sel_item_index >= _sg_imgui_capture_num_read_items(ctx)) {
         return;
     }
@@ -3830,27 +3830,27 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     ctx->pipelines.num_slots = desc.pipeline_pool_size;
     ctx->passes.num_slots = desc.pass_pool_size;
 
-    const int buffer_pool_size = ctx->buffers.num_slots * sizeof(sg_imgui_buffer_t);
+    const size_t buffer_pool_size = (size_t)ctx->buffers.num_slots * sizeof(sg_imgui_buffer_t);
     ctx->buffers.slots = (sg_imgui_buffer_t*) _sg_imgui_alloc(buffer_pool_size);
     SOKOL_ASSERT(ctx->buffers.slots);
     memset(ctx->buffers.slots, 0, buffer_pool_size);
 
-    const int image_pool_size = ctx->images.num_slots * sizeof(sg_imgui_image_t);
+    const size_t image_pool_size = (size_t)ctx->images.num_slots * sizeof(sg_imgui_image_t);
     ctx->images.slots = (sg_imgui_image_t*) _sg_imgui_alloc(image_pool_size);
     SOKOL_ASSERT(ctx->images.slots);
     memset(ctx->images.slots, 0, image_pool_size);
 
-    const int shader_pool_size = ctx->shaders.num_slots * sizeof(sg_imgui_shader_t);
+    const size_t shader_pool_size = (size_t)ctx->shaders.num_slots * sizeof(sg_imgui_shader_t);
     ctx->shaders.slots = (sg_imgui_shader_t*) _sg_imgui_alloc(shader_pool_size);
     SOKOL_ASSERT(ctx->shaders.slots);
     memset(ctx->shaders.slots, 0, shader_pool_size);
 
-    const int pipeline_pool_size = ctx->pipelines.num_slots * sizeof(sg_imgui_pipeline_t);
+    const size_t pipeline_pool_size = (size_t)ctx->pipelines.num_slots * sizeof(sg_imgui_pipeline_t);
     ctx->pipelines.slots = (sg_imgui_pipeline_t*) _sg_imgui_alloc(pipeline_pool_size);
     SOKOL_ASSERT(ctx->pipelines.slots);
     memset(ctx->pipelines.slots, 0, pipeline_pool_size);
 
-    const int pass_pool_size = ctx->passes.num_slots * sizeof(sg_imgui_pass_t);
+    const size_t pass_pool_size = (size_t)ctx->passes.num_slots * sizeof(sg_imgui_pass_t);
     ctx->passes.slots = (sg_imgui_pass_t*) _sg_imgui_alloc(pass_pool_size);
     SOKOL_ASSERT(ctx->passes.slots);
     memset(ctx->passes.slots, 0, pass_pool_size);

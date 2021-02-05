@@ -2087,12 +2087,12 @@ static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     pool->size = num + 1;
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
-    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
     pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
     SOKOL_ASSERT(pool->gen_ctrs);
     memset(pool->gen_ctrs, 0, gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
     SOKOL_ASSERT(pool->free_queue);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
@@ -2151,7 +2151,7 @@ static void _sgl_setup_pipeline_pool(const sgl_desc_t* desc) {
     /* note: the pools here will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SGL_MAX_POOL_SIZE));
     _sgl_init_pool(&_sgl.pip_pool.pool, desc->pipeline_pool_size);
-    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * _sgl.pip_pool.pool.size;
+    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
     _sgl.pip_pool.pips = (_sgl_pipeline_t*) SOKOL_MALLOC(pool_byte_size);
     SOKOL_ASSERT(_sgl.pip_pool.pips);
     memset(_sgl.pip_pool.pips, 0, pool_byte_size);
@@ -2656,11 +2656,11 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     _sgl.num_vertices = _sgl.desc.max_vertices;
     _sgl.num_uniforms = _sgl.desc.max_commands;
     _sgl.num_commands = _sgl.num_uniforms;
-    _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC(_sgl.num_vertices * sizeof(_sgl_vertex_t));
+    _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC((size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t));
     SOKOL_ASSERT(_sgl.vertices);
-    _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC(_sgl.num_uniforms * sizeof(_sgl_uniform_t));
+    _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC((size_t)_sgl.num_uniforms * sizeof(_sgl_uniform_t));
     SOKOL_ASSERT(_sgl.uniforms);
-    _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC(_sgl.num_commands * sizeof(_sgl_command_t));
+    _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC((size_t)_sgl.num_commands * sizeof(_sgl_command_t));
     SOKOL_ASSERT(_sgl.commands);
     _sgl_setup_pipeline_pool(&_sgl.desc);
 
@@ -2669,7 +2669,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
 
     sg_buffer_desc vbuf_desc;
     memset(&vbuf_desc, 0, sizeof(vbuf_desc));
-    vbuf_desc.size = _sgl.num_vertices * sizeof(_sgl_vertex_t);
+    vbuf_desc.size = (size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t);
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
     vbuf_desc.label = "sgl-vertex-buffer";
@@ -3244,7 +3244,7 @@ SOKOL_API_IMPL void sgl_draw(void) {
         uint32_t cur_img_id = SG_INVALID_ID;
         int cur_uniform_index = -1;
         sg_push_debug_group("sokol-gl");
-        const sg_range range = { _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t) };
+        const sg_range range = { _sgl.vertices, (size_t)_sgl.cur_vertex * sizeof(_sgl_vertex_t) };
         sg_update_buffer(_sgl.vbuf, &range);
         _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
         for (int i = 0; i < _sgl.cur_command; i++) {

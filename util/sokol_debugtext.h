@@ -3434,12 +3434,12 @@ static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     pool->size = num + 1;
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
-    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
     pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
     SOKOL_ASSERT(pool->gen_ctrs);
     memset(pool->gen_ctrs, 0, gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
     SOKOL_ASSERT(pool->free_queue);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
@@ -3493,7 +3493,7 @@ static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
     /* note: the pool will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SDTX_MAX_POOL_SIZE));
     _sdtx_init_pool(&_sdtx.context_pool.pool, desc->context_pool_size);
-    size_t pool_byte_size = sizeof(_sdtx_context_t) * _sdtx.context_pool.pool.size;
+    size_t pool_byte_size = sizeof(_sdtx_context_t) * (size_t)_sdtx.context_pool.pool.size;
     _sdtx.context_pool.contexts = (_sdtx_context_t*) SOKOL_MALLOC(pool_byte_size);
     SOKOL_ASSERT(_sdtx.context_pool.contexts);
     memset(_sdtx.context_pool.contexts, 0, pool_byte_size);
@@ -3595,7 +3595,7 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     ctx->desc = _sdtx_context_desc_defaults(in_desc);
 
     const int max_vertices = 6 * ctx->desc.char_buf_size;
-    const size_t vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
+    const size_t vbuf_size = (size_t)max_vertices * sizeof(_sdtx_vertex_t);
     ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
     ctx->cur_vertex_ptr = ctx->vertices;
@@ -3854,7 +3854,7 @@ static inline void _sdtx_draw_char(_sdtx_context_t* ctx, uint8_t c) {
 }
 
 static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
-    uint8_t c_u8 = c;
+    uint8_t c_u8 = (uint8_t)c;
     if (c_u8 <= 32) {
         _sdtx_ctrl_char(ctx, c_u8);
     }
@@ -4181,8 +4181,8 @@ SOKOL_API_IMPL void sdtx_draw(void) {
         if (num_verts > 0) {
             SOKOL_ASSERT((num_verts % 6) == 0);
             sg_push_debug_group("sokol-debugtext");
-            const sg_range range = { ctx->vertices, num_verts * sizeof(_sdtx_vertex_t) };
-            uint32_t vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
+            const sg_range range = { ctx->vertices, (size_t)num_verts * sizeof(_sdtx_vertex_t) };
+            int vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
             sg_apply_pipeline(ctx->pip);
             sg_bindings bindings;
             memset(&bindings, 0, sizeof(bindings));
