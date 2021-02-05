@@ -440,7 +440,8 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
-#include <string.h> /* memset, memcpy */
+#include <string.h> // memset, memcpy
+#include <stddef.h> // size_t
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -687,10 +688,10 @@ typedef struct { } _saudio_backend_t;
 
 /* a ringbuffer structure */
 typedef struct {
-    uint32_t head;  /* next slot to write to */
-    uint32_t tail;  /* next slot to read from */
-    uint32_t num;   /* number of slots in queue */
-    uint32_t queue[SAUDIO_RING_MAX_SLOTS];
+    int head;  // next slot to write to
+    int tail;  // next slot to read from
+    int num;   // number of slots in queue
+    int queue[SAUDIO_RING_MAX_SLOTS];
 } _saudio_ring_t;
 
 /* a packet FIFO structure */
@@ -787,11 +788,11 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) { (void)m; }
 #endif
 
 /*=== RING-BUFFER QUEUE IMPLEMENTATION =======================================*/
-_SOKOL_PRIVATE uint16_t _saudio_ring_idx(_saudio_ring_t* ring, uint32_t i) {
-    return (uint16_t) (i % ring->num);
+_SOKOL_PRIVATE int _saudio_ring_idx(_saudio_ring_t* ring, int i) {
+    return (i % ring->num);
 }
 
-_SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, uint32_t num_slots) {
+_SOKOL_PRIVATE void _saudio_ring_init(_saudio_ring_t* ring, int num_slots) {
     SOKOL_ASSERT((num_slots + 1) <= SAUDIO_RING_MAX_SLOTS);
     ring->head = 0;
     ring->tail = 0;
@@ -808,7 +809,7 @@ _SOKOL_PRIVATE bool _saudio_ring_empty(_saudio_ring_t* ring) {
 }
 
 _SOKOL_PRIVATE int _saudio_ring_count(_saudio_ring_t* ring) {
-    uint32_t count;
+    int count;
     if (ring->head >= ring->tail) {
         count = ring->head - ring->tail;
     }
@@ -819,15 +820,15 @@ _SOKOL_PRIVATE int _saudio_ring_count(_saudio_ring_t* ring) {
     return count;
 }
 
-_SOKOL_PRIVATE void _saudio_ring_enqueue(_saudio_ring_t* ring, uint32_t val) {
+_SOKOL_PRIVATE void _saudio_ring_enqueue(_saudio_ring_t* ring, int val) {
     SOKOL_ASSERT(!_saudio_ring_full(ring));
     ring->queue[ring->head] = val;
     ring->head = _saudio_ring_idx(ring, ring->head + 1);
 }
 
-_SOKOL_PRIVATE uint32_t _saudio_ring_dequeue(_saudio_ring_t* ring) {
+_SOKOL_PRIVATE int _saudio_ring_dequeue(_saudio_ring_t* ring) {
     SOKOL_ASSERT(!_saudio_ring_empty(ring));
-    uint32_t val = ring->queue[ring->tail];
+    int val = ring->queue[ring->tail];
     ring->tail = _saudio_ring_idx(ring, ring->tail + 1);
     return val;
 }
@@ -847,7 +848,7 @@ _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo_t* fifo, int packet_size, int
     SOKOL_ASSERT((packet_size > 0) && (num_packets > 0));
     fifo->packet_size = packet_size;
     fifo->num_packets = num_packets;
-    fifo->base_ptr = (uint8_t*) SOKOL_MALLOC(packet_size * num_packets);
+    fifo->base_ptr = (uint8_t*) SOKOL_MALLOC((size_t)(packet_size * num_packets));
     SOKOL_ASSERT(fifo->base_ptr);
     fifo->cur_packet = -1;
     fifo->cur_offset = 0;
@@ -975,7 +976,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
     if (_saudio_has_callback()) {
-        const int num_frames = buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
+        const int num_frames = (int)buffer->mAudioDataByteSize / _saudio.bytes_per_frame;
         const int num_channels = _saudio.num_channels;
         _saudio_stream_callback((float*)buffer->mAudioData, num_frames, num_channels);
     }
@@ -1000,8 +1001,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.mFormatID = kAudioFormatLinearPCM;
     fmt.mFormatFlags = kLinearPCMFormatFlagIsFloat | kAudioFormatFlagIsPacked;
     fmt.mFramesPerPacket = 1;
-    fmt.mChannelsPerFrame = _saudio.num_channels;
-    fmt.mBytesPerFrame = sizeof(float) * _saudio.num_channels;
+    fmt.mChannelsPerFrame = (uint32_t) _saudio.num_channels;
+    fmt.mBytesPerFrame = sizeof(float) * (size_t)_saudio.num_channels;
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
     OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
@@ -1010,7 +1011,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         AudioQueueBufferRef buf = NULL;
-        const uint32_t buf_byte_size = _saudio.buffer_frames * fmt.mBytesPerFrame;
+        const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
         res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
         SOKOL_ASSERT((res == 0) && buf);
         buf->mAudioDataByteSize = buf_byte_size;
@@ -1019,7 +1020,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     }
 
     /* init or modify actual playback parameters */
-    _saudio.bytes_per_frame = fmt.mBytesPerFrame;
+    _saudio.bytes_per_frame = (int)fmt.mBytesPerFrame;
 
     /* ...and start playback */
     res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
