@@ -1191,12 +1191,12 @@ _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     else {
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.thread.src_buffer, _saudio.backend.thread.src_buffer_byte_size)) {
             /* not enough read data available, fill the entire buffer with silence */
-            memset(_saudio.backend.thread.src_buffer, 0, _saudio.backend.thread.src_buffer_byte_size);
+            memset(_saudio.backend.thread.src_buffer, 0, (size_t)_saudio.backend.thread.src_buffer_byte_size);
         }
     }
 }
 
-_SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(UINT32 num_frames) {
+_SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(int num_frames) {
     BYTE* wasapi_buffer = 0;
     if (FAILED(IAudioRenderClient_GetBuffer(_saudio.backend.render_client, num_frames, &wasapi_buffer))) {
         return;
@@ -1206,8 +1206,8 @@ _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(UINT32 num_frames) {
     /* convert float samples to int16_t, refill float buffer if needed */
     const int num_samples = num_frames * _saudio.num_channels;
     int16_t* dst = (int16_t*) wasapi_buffer;
-    uint32_t buffer_pos = _saudio.backend.thread.src_buffer_pos;
-    const uint32_t buffer_float_size = _saudio.backend.thread.src_buffer_byte_size / sizeof(float);
+    int buffer_pos = _saudio.backend.thread.src_buffer_pos;
+    const int buffer_float_size = _saudio.backend.thread.src_buffer_byte_size / (int)sizeof(float);
     float* src = _saudio.backend.thread.src_buffer;
     for (int i = 0; i < num_samples; i++) {
         if (0 == buffer_pos) {
@@ -1235,7 +1235,7 @@ _SOKOL_PRIVATE DWORD WINAPI _saudio_wasapi_thread_fn(LPVOID param) {
             continue;
         }
         SOKOL_ASSERT(_saudio.backend.thread.dst_buffer_frames >= padding);
-        UINT32 num_frames = _saudio.backend.thread.dst_buffer_frames - padding;
+        int num_frames = (int)_saudio.backend.thread.dst_buffer_frames - (int)padding;
         if (num_frames > 0) {
             _saudio_wasapi_submit_buffer(num_frames);
         }
@@ -1360,8 +1360,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 #endif
     WAVEFORMATEX fmt;
     memset(&fmt, 0, sizeof(fmt));
-    fmt.nChannels = (WORD) _saudio.num_channels;
-    fmt.nSamplesPerSec = _saudio.sample_rate;
+    fmt.nChannels = (WORD)_saudio.num_channels;
+    fmt.nSamplesPerSec = (DWORD)_saudio.sample_rate;
     fmt.wFormatTag = WAVE_FORMAT_PCM;
     fmt.wBitsPerSample = 16;
     fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
@@ -1391,13 +1391,13 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
-    _saudio.backend.si16_bytes_per_frame = _saudio.num_channels * sizeof(int16_t);
-    _saudio.bytes_per_frame = _saudio.num_channels * sizeof(float);
+    _saudio.backend.si16_bytes_per_frame = _saudio.num_channels * (int)sizeof(int16_t);
+    _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     _saudio.backend.thread.src_buffer_frames = _saudio.buffer_frames;
     _saudio.backend.thread.src_buffer_byte_size = _saudio.backend.thread.src_buffer_frames * _saudio.bytes_per_frame;
 
     /* allocate an intermediate buffer for sample format conversion */
-    _saudio.backend.thread.src_buffer = (float*) SOKOL_MALLOC(_saudio.backend.thread.src_buffer_byte_size);
+    _saudio.backend.thread.src_buffer = (float*) SOKOL_MALLOC((size_t)_saudio.backend.thread.src_buffer_byte_size);
     SOKOL_ASSERT(_saudio.backend.thread.src_buffer);
 
     /* create streaming thread */

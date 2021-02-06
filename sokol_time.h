@@ -236,7 +236,7 @@ SOKOL_API_IMPL uint64_t stm_now(void) {
     #if defined(_WIN32)
         LARGE_INTEGER qpc_t;
         QueryPerformanceCounter(&qpc_t);
-        now = int64_muldiv(qpc_t.QuadPart - _stm.start.QuadPart, 1000000000, _stm.freq.QuadPart);
+        now = (uint64_t) int64_muldiv(qpc_t.QuadPart - _stm.start.QuadPart, 1000000000, _stm.freq.QuadPart);
     #elif defined(__APPLE__) && defined(__MACH__)
         const uint64_t mach_now = mach_absolute_time() - _stm.start;
         now = (uint64_t) int64_muldiv((int64_t)mach_now, (int64_t)_stm.timebase.numer, (int64_t)_stm.timebase.denom);

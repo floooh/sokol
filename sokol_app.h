@@ -4989,8 +4989,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(_SAPP_WIN32) || defined(_SAPP_UWP)
 _SOKOL_PRIVATE bool _sapp_win32_uwp_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, dst_num_bytes);
-    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
+    memset(dst, 0, (size_t)dst_num_bytes);
+    const int dst_chars = dst_num_bytes / (int)sizeof(wchar_t);
     const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
         MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
@@ -5203,8 +5203,8 @@ static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval
 
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
-    sc_desc->BufferDesc.Width = _sapp.framebuffer_width;
-    sc_desc->BufferDesc.Height = _sapp.framebuffer_height;
+    sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
+    sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
     sc_desc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     sc_desc->BufferDesc.RefreshRate.Numerator = 60;
     sc_desc->BufferDesc.RefreshRate.Denominator = 1;
@@ -5221,7 +5221,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
     sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    int create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    UINT create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     #if defined(SOKOL_DEBUG)
         create_flags |= D3D11_CREATE_DEVICE_DEBUG;
     #endif
@@ -5272,14 +5272,14 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     /* common desc for MSAA and depth-stencil texture */
     D3D11_TEXTURE2D_DESC tex_desc;
     memset(&tex_desc, 0, sizeof(tex_desc));
-    tex_desc.Width = _sapp.framebuffer_width;
-    tex_desc.Height = _sapp.framebuffer_height;
+    tex_desc.Width = (UINT)_sapp.framebuffer_width;
+    tex_desc.Height = (UINT)_sapp.framebuffer_height;
     tex_desc.MipLevels = 1;
     tex_desc.ArraySize = 1;
     tex_desc.Usage = D3D11_USAGE_DEFAULT;
     tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-    tex_desc.SampleDesc.Count = _sapp.sample_count;
-    tex_desc.SampleDesc.Quality = _sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+    tex_desc.SampleDesc.Count = (UINT) _sapp.sample_count;
+    tex_desc.SampleDesc.Quality = (UINT) (_sapp.sample_count > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
 
     /* create MSAA texture and view if antialiasing requested */
     if (_sapp.sample_count > 1) {
@@ -5311,7 +5311,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
-        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, _sapp.framebuffer_width, _sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
         _sapp_d3d11_create_default_render_target();
     }
 }
@@ -5323,7 +5323,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(void) {
         SOKOL_ASSERT(_sapp.d3d11.msaa_rt);
         _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)_sapp.d3d11.rt, 0, (ID3D11Resource*)_sapp.d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, _sapp.swap_interval, 0);
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, 0);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -5578,7 +5578,7 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 
 _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, dst_num_bytes);
+    memset(dst, 0, (size_t)dst_num_bytes);
     const int bytes_needed = WideCharToMultiByte(CP_UTF8, 0, src, -1, NULL, 0, NULL, NULL);
     if (bytes_needed <= dst_num_bytes) {
         WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
@@ -5811,11 +5811,11 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     bool drop_failed = false;
     const int count = (int) DragQueryFileW(hdrop, 0xffffffff, NULL, 0);
     _sapp.drop.num_files = (count > _sapp.drop.max_files) ? _sapp.drop.max_files : count;
-    for (int i = 0;  i < _sapp.drop.num_files;  i++) {
+    for (UINT i = 0;  i < (UINT)_sapp.drop.num_files;  i++) {
         const UINT num_chars = DragQueryFileW(hdrop, i, NULL, 0) + 1;
         WCHAR* buffer = (WCHAR*) SOKOL_CALLOC(num_chars, sizeof(WCHAR));
         DragQueryFileW(hdrop, i, buffer, num_chars);
-        if (!_sapp_win32_wide_to_utf8(buffer, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
+        if (!_sapp_win32_wide_to_utf8(buffer, _sapp_dropped_file_path_ptr((int)i), _sapp.drop.max_path_length)) {
             SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
             drop_failed = true;
         }
@@ -5946,7 +5946,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 if (_sapp.mouse.locked) {
                     HRAWINPUT ri = (HRAWINPUT) lParam;
                     UINT size = sizeof(_sapp.win32.raw_input_data);
-                    if (-1 == GetRawInputData(ri, RID_INPUT, &_sapp.win32.raw_input_data, &size, sizeof(RAWINPUTHEADER))) {
+                    // see: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getrawinputdata
+                    if ((UINT)-1 == GetRawInputData(ri, RID_INPUT, &_sapp.win32.raw_input_data, &size, sizeof(RAWINPUTHEADER))) {
                         SOKOL_LOG("GetRawInputData() failed\n");
                         break;
                     }
@@ -6158,7 +6159,7 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
 
     wchar_t* wchar_buf = 0;
-    const int wchar_buf_size = _sapp.clipboard.buf_size * sizeof(wchar_t);
+    const SIZE_T wchar_buf_size = (SIZE_T)_sapp.clipboard.buf_size * sizeof(wchar_t);
     HANDLE object = GlobalAlloc(GMEM_MOVEABLE, wchar_buf_size);
     if (!object) {
         goto error;
@@ -6275,7 +6276,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         #if defined(SOKOL_D3D11)
             _sapp_d3d11_present();
             if (IsIconic(_sapp.win32.hwnd)) {
-                Sleep(16 * _sapp.swap_interval);
+                Sleep((DWORD)(16 * _sapp.swap_interval));
             }
         #endif
         #if defined(SOKOL_GLCORE33)
@@ -6326,7 +6327,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
                 break;
             }
             argv[i] = args;
-            size -= n;
+            size -= (size_t)n;
             args += n;
         }
         LocalFree(w_argv);
