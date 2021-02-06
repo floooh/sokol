@@ -1447,7 +1447,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
             const int num_bytes = num_frames * _saudio.bytes_per_frame;
             if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio.backend.buffer, num_bytes)) {
                 /* not enough read data available, fill the entire buffer with silence */
-                memset(_saudio.backend.buffer, 0, num_bytes);
+                memset(_saudio.backend.buffer, 0, (size_t)num_bytes);
             }
         }
         int res = (int) _saudio.backend.buffer;
@@ -1552,10 +1552,10 @@ EM_JS(int, saudio_js_buffer_frames, (void), {
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
-        _saudio.bytes_per_frame = sizeof(float) * _saudio.num_channels;
+        _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
         _saudio.sample_rate = saudio_js_sample_rate();
         _saudio.buffer_frames = saudio_js_buffer_frames();
-        const int buf_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
+        const size_t buf_size = (size_t) (_saudio.buffer_frames * _saudio.bytes_per_frame);
         _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
         return true;
     }

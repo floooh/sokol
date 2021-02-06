@@ -2713,7 +2713,7 @@ typedef struct {
 } _sg_buffer_common_t;
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
-    cmn->size = desc->size;
+    cmn->size = (int)desc->size;
     cmn->append_pos = 0;
     cmn->append_overflow = false;
     cmn->type = desc->type;
@@ -5222,7 +5222,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     GLint num_ext = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &num_ext);
     for (int i = 0; i < num_ext; i++) {
-        const char* ext = (const char*) glGetStringi(GL_EXTENSIONS, i);
+        const char* ext = (const char*) glGetStringi(GL_EXTENSIONS, (GLuint)i);
         if (ext) {
             if (strstr(ext, "_texture_compression_s3tc")) {
                 has_s3tc = true;

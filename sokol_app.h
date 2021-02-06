@@ -4311,7 +4311,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             else {
-                _sapp.event.key_code = _sapp_translate_key(emsc_event->keyCode);
+                _sapp.event.key_code = _sapp_translate_key((int)emsc_event->keyCode);
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
                     "sticking", we'll send a keyup event following a keydown
@@ -4450,7 +4450,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
             for (int i = 0; i < _sapp.event.num_touches; i++) {
                 const EmscriptenTouchPoint* src = &emsc_event->touches[i];
                 sapp_touchpoint* dst = &_sapp.event.touches[i];
-                dst->identifier = src->identifier;
+                dst->identifier = (uintptr_t)src->identifier;
                 dst->pos_x = src->targetX * _sapp.dpi_scale;
                 dst->pos_y = src->targetY * _sapp.dpi_scale;
                 dst->changed = src->isChanged;
