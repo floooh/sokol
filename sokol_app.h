@@ -5464,7 +5464,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     const _sapp_gl_fbconfig* closest;
 
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
-    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC((size_t)native_count, sizeof(_sapp_gl_fbconfig));
     SOKOL_ASSERT(usable_configs);
     int usable_count = 0;
     for (int i = 0; i < native_count; i++) {
@@ -5492,7 +5492,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
         if (_sapp.wgl.arb_multisample) {
             u->samples = _sapp_wgl_attrib(n, WGL_SAMPLES_ARB);
         }
-        u->handle = n;
+        u->handle = (uintptr_t)n;
         usable_count++;
     }
     SOKOL_ASSERT(usable_count > 0);
@@ -6168,7 +6168,7 @@ _SOKOL_PRIVATE bool _sapp_win32_set_clipboard_string(const char* str) {
     if (!wchar_buf) {
         goto error;
     }
-    if (!_sapp_win32_uwp_utf8_to_wide(str, wchar_buf, wchar_buf_size)) {
+    if (!_sapp_win32_uwp_utf8_to_wide(str, wchar_buf, (int)wchar_buf_size)) {
         goto error;
     }
     GlobalUnlock(wchar_buf);

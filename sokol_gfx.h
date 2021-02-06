@@ -8198,7 +8198,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             SOKOL_ASSERT(0 == d3d11_stage->cbufs[ub_index]);
             D3D11_BUFFER_DESC cb_desc;
             memset(&cb_desc, 0, sizeof(cb_desc));
-            cb_desc.ByteWidth = (UINT)_sg_roundup(ub->size, 16);
+            cb_desc.ByteWidth = (UINT)_sg_roundup((int)ub->size, 16);
             cb_desc.Usage = D3D11_USAGE_DEFAULT;
             cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
             hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &cb_desc, NULL, &d3d11_stage->cbufs[ub_index]);
