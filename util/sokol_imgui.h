@@ -1979,7 +1979,7 @@ SOKOL_API_IMPL void simgui_render(void) {
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
                 sg_draw(base_element, (int)pcmd->ElemCount, 1);
             }
-            base_element += pcmd->ElemCount;
+            base_element += (int)pcmd->ElemCount;
         }
     }
     sg_apply_viewport(0, 0, fb_width, fb_height, true);

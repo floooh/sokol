@@ -2629,7 +2629,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_clear_drop_buffer(void) {
     if (_sapp.drop.enabled) {
         SOKOL_ASSERT(_sapp.drop.buffer);
-        memset(_sapp.drop.buffer, 0, _sapp.drop.buf_size);
+        memset(_sapp.drop.buffer, 0, (size_t)_sapp.drop.buf_size);
     }
 }
 
@@ -9069,7 +9069,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_fail("GLX: No GLXFBConfigs returned");
     }
 
-    usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC(native_count, sizeof(_sapp_gl_fbconfig));
+    usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC((size_t)native_count, sizeof(_sapp_gl_fbconfig));
     usable_count = 0;
     for (i = 0;  i < native_count;  i++) {
         const GLXFBConfig n = native_configs[i];
@@ -9249,7 +9249,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
     SOKOL_ASSERT(img && (img->width == 16) && (img->height == 16) && img->pixels);
     img->xhot = 0;
     img->yhot = 0;
-    const size_t num_bytes = w * h * sizeof(XcursorPixel);
+    const size_t num_bytes = (size_t)(w * h) * sizeof(XcursorPixel);
     memset(img->pixels, 0, num_bytes);
     _sapp.x11.hidden_cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
     XcursorImageDestroy(img);
@@ -9345,8 +9345,8 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     _sapp.x11.window = XCreateWindow(_sapp.x11.display,
                                      _sapp.x11.root,
                                      0, 0,
-                                     _sapp.window_width,
-                                     _sapp.window_height,
+                                     (uint32_t)_sapp.window_width,
+                                     (uint32_t)_sapp.window_height,
                                      0,     /* border width */
                                      depth, /* color depth */
                                      InputOutput,
@@ -9436,7 +9436,7 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
     } *state = NULL;
 
     if (_sapp_x11_get_window_property(_sapp.x11.window, _sapp.x11.WM_STATE, _sapp.x11.WM_STATE, (unsigned char**)&state) >= 2) {
-        result = state->state;
+        result = (int)state->state;
     }
     if (state) {
         XFree(state);
@@ -9444,7 +9444,7 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
     return result;
 }
 
-_SOKOL_PRIVATE uint32_t _sapp_x11_mod(int x11_mods) {
+_SOKOL_PRIVATE uint32_t _sapp_x11_mod(uint32_t x11_mods) {
     uint32_t mods = 0;
     if (x11_mods & ShiftMask) {
         mods |= SAPP_MODIFIER_SHIFT;
@@ -9814,7 +9814,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case KeyPress:
             {
-                int keycode = event->xkey.keycode;
+                int keycode = (int)event->xkey.keycode;
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
                 _sapp_x11_keycodes[keycode & 0xFF] = true;
@@ -9832,7 +9832,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             break;
         case KeyRelease:
             {
-                int keycode = event->xkey.keycode;
+                int keycode = (int)event->xkey.keycode;
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 _sapp_x11_keycodes[keycode & 0xFF] = false;
                 if (key != SAPP_KEYCODE_INVALID) {
@@ -9924,14 +9924,14 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 return;
             }
             if (event->xclient.message_type == _sapp.x11.WM_PROTOCOLS) {
-                const Atom protocol = event->xclient.data.l[0];
+                const Atom protocol = (Atom)event->xclient.data.l[0];
                 if (protocol == _sapp.x11.WM_DELETE_WINDOW) {
                     _sapp.quit_requested = true;
                 }
             }
             else if (event->xclient.message_type == _sapp.x11.xdnd.XdndEnter) {
                 const bool is_list = 0 != (event->xclient.data.l[1] & 1);
-                _sapp.x11.xdnd.source  = event->xclient.data.l[0];
+                _sapp.x11.xdnd.source  = (Window)event->xclient.data.l[0];
                 _sapp.x11.xdnd.version = event->xclient.data.l[1] >> 24;
                 _sapp.x11.xdnd.format  = None;
                 if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
@@ -9963,7 +9963,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 Time time = CurrentTime;
                 if (_sapp.x11.xdnd.format) {
                     if (_sapp.x11.xdnd.version >= 1) {
-                        time = event->xclient.data.l[2];
+                        time = (Time)event->xclient.data.l[2];
                     }
                     XConvertSelection(_sapp.x11.display,
                                       _sapp.x11.xdnd.XdndSelection,
@@ -9979,7 +9979,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     reply.xclient.window = _sapp.x11.window;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
                     reply.xclient.format = 32;
-                    reply.xclient.data.l[0] = _sapp.x11.window;
+                    reply.xclient.data.l[0] = (long)_sapp.x11.window;
                     reply.xclient.data.l[1] = 0;    // drag was rejected
                     reply.xclient.data.l[2] = None;
                     XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
@@ -10000,12 +10000,12 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 reply.xclient.window = _sapp.x11.xdnd.source;
                 reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
                 reply.xclient.format = 32;
-                reply.xclient.data.l[0] = _sapp.x11.window;
+                reply.xclient.data.l[0] = (long)_sapp.x11.window;
                 if (_sapp.x11.xdnd.format) {
                     /* reply that we are ready to copy the dragged data */
                     reply.xclient.data.l[1] = 1;    // accept with no rectangle
                     if (_sapp.x11.xdnd.version >= 2) {
-                        reply.xclient.data.l[4] = _sapp.x11.xdnd.XdndActionCopy;
+                        reply.xclient.data.l[4] = (long)_sapp.x11.xdnd.XdndActionCopy;
                     }
                 }
                 XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
@@ -10034,9 +10034,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     reply.xclient.window = _sapp.x11.window;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
                     reply.xclient.format = 32;
-                    reply.xclient.data.l[0] = _sapp.x11.window;
+                    reply.xclient.data.l[0] = (long)_sapp.x11.window;
                     reply.xclient.data.l[1] = result;
-                    reply.xclient.data.l[2] = _sapp.x11.xdnd.XdndActionCopy;
+                    reply.xclient.data.l[2] = (long)_sapp.x11.xdnd.XdndActionCopy;
                     XSendEvent(_sapp.x11.display, _sapp.x11.xdnd.source, False, NoEventMask, &reply);
                     XFlush(_sapp.x11.display);
                 }
