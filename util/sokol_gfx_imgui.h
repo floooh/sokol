@@ -1436,7 +1436,7 @@ _SOKOL_PRIVATE void _sg_imgui_pass_destroyed(sg_imgui_t* ctx, int slot_index) {
 
 /*--- COMMAND CAPTURING ------------------------------------------------------*/
 _SOKOL_PRIVATE void _sg_imgui_capture_init(sg_imgui_t* ctx) {
-    const int ubuf_initial_size = 256 * 1024;
+    const size_t ubuf_initial_size = 256 * 1024;
     for (int i = 0; i < 2; i++) {
         sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[i];
         bucket->ubuf_size = ubuf_initial_size;
