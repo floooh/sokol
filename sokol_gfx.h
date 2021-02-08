@@ -9120,7 +9120,7 @@ _SOKOL_PRIVATE MTLIndexType _sg_mtl_index_type(sg_index_type t) {
     }
 }
 
-_SOKOL_PRIVATE NSUInteger _sg_mtl_index_size(sg_index_type t) {
+_SOKOL_PRIVATE int _sg_mtl_index_size(sg_index_type t) {
     switch (t) {
         case SG_INDEXTYPE_NONE:     return 0;
         case SG_INDEXTYPE_UINT16:   return 2;
