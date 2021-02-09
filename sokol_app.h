@@ -1455,16 +1455,16 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma comment (linker, "/subsystem:windows")
     #endif
 
-    #pragma comment (lib, "kernel32.lib")
-    #pragma comment (lib, "user32.lib")
-    #pragma comment (lib, "shell32.lib")    /* CommandLineToArgvW, DragQueryFileW, DragFinished */
+    #pragma comment (lib, "kernel32")
+    #pragma comment (lib, "user32")
+    #pragma comment (lib, "shell32")    /* CommandLineToArgvW, DragQueryFileW, DragFinished */
     #if defined(SOKOL_D3D11)
-        #pragma comment (lib, "dxgi.lib")
-        #pragma comment (lib, "d3d11.lib")
-        #pragma comment (lib, "dxguid.lib")
+        #pragma comment (lib, "dxgi")
+        #pragma comment (lib, "d3d11")
+        #pragma comment (lib, "dxguid")
     #endif
     #if defined(SOKOL_GLCORE33)
-        #pragma comment (lib, "gdi32.lib")
+        #pragma comment (lib, "gdi32")
     #endif
 
     #if defined(SOKOL_D3D11)
@@ -1508,8 +1508,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <d3d11_3.h>
     #include <DirectXMath.h>
 
-    #pragma comment (lib, "WindowsApp.lib")
-    #pragma comment (lib, "dxguid.lib")
+    #pragma comment (lib, "WindowsApp")
+    #pragma comment (lib, "dxguid")
 #elif defined(_SAPP_ANDROID)
     #include <pthread.h>
     #include <unistd.h>
