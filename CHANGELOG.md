@@ -2,6 +2,8 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **07-Feb-2021**: A PSA about upcoming breaking changes in (mainly) sokol_gfx.h: https://floooh.github.io/2021/02/07/sokol-api-overhaul.html
+
 - **20-Dec-2020**: A couple of minor breaking changes in the sokol_gfx.h and
 sokol_app.h APIs as preparation for the upcoming automatic language binding
 generation:

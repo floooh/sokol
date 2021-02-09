@@ -2627,13 +2627,13 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #include <d3dcompiler.h>
     #ifdef _MSC_VER
     #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #pragma comment (lib, "WindowsApp.lib")
+        #pragma comment (lib, "WindowsApp")
     #else
-        #pragma comment (lib, "kernel32.lib")
-        #pragma comment (lib, "user32.lib")
-        #pragma comment (lib, "dxgi.lib")
-        #pragma comment (lib, "d3d11.lib")
-        #pragma comment (lib, "dxguid.lib")
+        #pragma comment (lib, "kernel32")
+        #pragma comment (lib, "user32")
+        #pragma comment (lib, "dxgi")
+        #pragma comment (lib, "d3d11")
+        #pragma comment (lib, "dxguid")
     #endif
     #endif
 #elif defined(SOKOL_METAL)
