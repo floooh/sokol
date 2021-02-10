@@ -2502,7 +2502,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #pragma warning(disable:4115)   /* named type definition in parentheses */
 #pragma warning(disable:4505)   /* unreferenced local function has been removed */
 #pragma warning(disable:4201)   /* nonstandard extension used: nameless struct/union (needed by d3d11.h) */
-#pragma warning(disable:4054)   /* 'type cast': from function pointer 'FARPROC' to data pointer 'void *' */
+#pragma warning(disable:4055)   /* 'type cast': from function pointer 'FARPROC' to data pointer 'void *' */
 #endif
 
 #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
