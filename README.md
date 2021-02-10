@@ -86,7 +86,7 @@ int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow* w = glfwCreateWindow(640, 480, "Sokol Triangle GLFW", 0, 0);
     glfwMakeContextCurrent(w);
@@ -104,8 +104,7 @@ int main() {
         -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f
     };
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(vertices),
-        .content = vertices,
+        .data = SG_RANGE(vertices)
     });
 
     /* a shader */
@@ -140,7 +139,7 @@ int main() {
     });
 
     /* resource bindings */
-    sg_bindings binds = {
+    sg_bindings bind = {
         .vertex_buffers[0] = vbuf
     };
 
@@ -153,7 +152,7 @@ int main() {
         glfwGetFramebufferSize(w, &cur_width, &cur_height);
         sg_begin_default_pass(&pass_action, cur_width, cur_height);
         sg_apply_pipeline(pip);
-        sg_apply_bindings(&binds);
+        sg_apply_bindings(&bind);
         sg_draw(0, 3, 1);
         sg_end_pass();
         sg_commit();
@@ -183,9 +182,9 @@ A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
 separate sokol.c/.m implementation file which is necessary
 to split the Objective-C code from the C code of the sample):
 
-```cpp
-#include "sokol_app.h"
+```c
 #include "sokol_gfx.h"
+#include "sokol_app.h"
 #include "sokol_glue.h"
 
 sg_pass_action pass_action;
@@ -195,13 +194,13 @@ void init(void) {
         .context = sapp_sgcontext()
     });
     pass_action = (sg_pass_action) {
-        .colors[0] = { .action=SG_ACTION_CLEAR, .val={1.0f, 0.0f, 0.0f, 1.0f} }
+        .colors[0] = { .action=SG_ACTION_CLEAR, .value={1.0f, 0.0f, 0.0f, 1.0f} }
     };
 }
 
 void frame(void) {
-    float g = pass_action.colors[0].val[1] + 0.01f;
-    pass_action.colors[0].val[1] = (g > 1.0f) ? 0.0f : g;
+    float g = pass_action.colors[0].value.g + 0.01f;
+    pass_action.colors[0].value.g = (g > 1.0f) ? 0.0f : g;
     sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
     sg_end_pass();
     sg_commit();
@@ -218,7 +217,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .cleanup_cb = cleanup,
         .width = 400,
         .height = 300,
-        .window_title = "Clear (sokol app)",
+        .window_title = "Clear Sample",
     };
 }
 ```
@@ -240,7 +239,7 @@ A minimal audio-streaming API:
 
 A simple mono square-wave generator using the callback model:
 
-```cpp
+```c
 // the sample callback, running in audio thread
 static void stream_cb(float* buffer, int num_frames, int num_channels) {
     assert(1 == num_channels);
@@ -266,7 +265,7 @@ int main() {
 
 The same code using the push-model
 
-```cpp
+```c
 #define BUF_SIZE (32)
 int main() {
     // init sokol-audio with default params, no callback
