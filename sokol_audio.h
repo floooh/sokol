@@ -985,7 +985,7 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef qu
         int num_bytes = (int) buffer->mAudioDataByteSize;
         if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
             /* not enough read data available, fill the entire buffer with silence */
-            memset(ptr, 0, num_bytes);
+            memset(ptr, 0, (size_t)num_bytes);
         }
     }
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
