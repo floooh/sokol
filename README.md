@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**07-Feb-2021**: new blog post about upcoming breaking API changes in sokol_gfx.h)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**10-Feb-2021**: big API-breaking update, see the changelog for details)
 
 ## Examples and Related Projects
 
