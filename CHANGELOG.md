@@ -2,6 +2,14 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **10-Feb-2021**: The breaking API-update has been merged (mainly sokol_gfx.h).
+Please see [this blogpost](https://floooh.github.io/2021/02/07/sokol-api-overhaul.html)
+and the updates [sokol samples](https://floooh.github.io/sokol-html5/) for details.
+I also created a git tag named 'pre-feb2021-api-changes' which captures the previous
+state in all related projects. Please also update the [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin) if you're using the sokol-shdc shader compiler.
+
+- **07-Feb-2021**: A PSA about upcoming breaking changes in (mainly) sokol_gfx.h: https://floooh.github.io/2021/02/07/sokol-api-overhaul.html
+
 - **20-Dec-2020**: A couple of minor breaking changes in the sokol_gfx.h and
 sokol_app.h APIs as preparation for the upcoming automatic language binding
 generation:

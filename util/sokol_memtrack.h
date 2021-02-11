@@ -74,7 +74,6 @@
         distribution.
 */
 #define SOKOL_MEMTRACK_INCLUDED (1)
-#include <stddef.h>
 #include <stdint.h>
 
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_MEMTRACK_API_DECL)
@@ -111,6 +110,7 @@ SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
 #define SOKOL_MEMTRACK_IMPL_INCLUDED (1)
 #include <stdlib.h> /* malloc, free, calloc */
 #include <string.h> /* memset */
+#include <stddef.h> /* size_t */
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL

@@ -1475,7 +1475,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_file_size(_sfetch_file_handle_t h) {
 }
 
 _SOKOL_PRIVATE bool _sfetch_file_read(_sfetch_file_handle_t h, uint32_t offset, uint32_t num_bytes, void* ptr) {
-    fseek(h, offset, SEEK_SET);
+    fseek(h, (long)offset, SEEK_SET);
     return num_bytes == fread(ptr, 1, num_bytes, h);
 }
 
@@ -1615,8 +1615,8 @@ _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _s
 #if _SFETCH_PLATFORM_WINDOWS
 _SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, dst_num_bytes);
-    const int dst_chars = dst_num_bytes / sizeof(wchar_t);
+    memset(dst, 0, (size_t)dst_num_bytes);
+    const int dst_chars = dst_num_bytes / (int)sizeof(wchar_t);
     const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
         MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, dst_chars);
@@ -1935,7 +1935,7 @@ EM_JS(void, sfetch_js_send_head_request, (uint32_t slot_id, const char* path_cst
 });
 
 /* if bytes_to_read != 0, a range-request will be sent, otherwise a normal request */
-EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, int offset, int bytes_to_read, void* buf_ptr, int buf_size), {
+EM_JS(void, sfetch_js_send_get_request, (uint32_t slot_id, const char* path_cstr, uint32_t offset, uint32_t bytes_to_read, void* buf_ptr, uint32_t buf_size), {
     var path_str = UTF8ToString(path_cstr);
     var req = new XMLHttpRequest();
     req.open('GET', path_str);
