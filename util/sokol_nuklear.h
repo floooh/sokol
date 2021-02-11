@@ -1608,6 +1608,7 @@ static const char* _snk_fs_source_dummy = "";
 
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
 static void _snk_clipboard_copy(nk_handle usr, const char *text, int len) {
+    (void)usr;
     if (len == 0) {
         return;
     }
@@ -1670,7 +1671,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     /* Vertex Buffer */
     _snuklear.vbuf = sg_make_buffer(&(sg_buffer_desc){
         .usage = SG_USAGE_STREAM,
-        .size = _snuklear.desc.max_vertices * sizeof(_snk_vertex_t),
+        .size = (size_t)_snuklear.desc.max_vertices * sizeof(_snk_vertex_t),
         .label = "sokol-nuklear-vertices"
     });
 
@@ -1678,7 +1679,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     _snuklear.ibuf = sg_make_buffer(&(sg_buffer_desc){
         .type = SG_BUFFERTYPE_INDEXBUFFER,
         .usage = SG_USAGE_STREAM,
-        .size = _snuklear.desc.max_vertices * 3 * sizeof(uint16_t),
+        .size = (size_t)_snuklear.desc.max_vertices * 3 * sizeof(uint16_t),
         .label = "sokol-nuklear-indices"
     });
 
@@ -1697,11 +1698,11 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
             .min_filter = SG_FILTER_LINEAR,
             .mag_filter = SG_FILTER_LINEAR,
-            .content.subimage[0][0].ptr = pixels,
-            .content.subimage[0][0].size = font_width * font_height * sizeof(uint32_t),
+            .data.subimage[0][0].ptr = pixels,
+            .data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t),
             .label = "sokol-nuklear-font"
         });
-        nk_font_atlas_end(&_snuklear.atlas, nk_handle_id(_snuklear.img.id), 0);
+        nk_font_atlas_end(&_snuklear.atlas, nk_handle_id((int)_snuklear.img.id), 0);
         nk_font_atlas_cleanup(&_snuklear.atlas);
         if(_snuklear.atlas.default_font) {
             nk_style_set_font(&_snuklear.ctx, &_snuklear.atlas.default_font->handle);
@@ -1728,7 +1729,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     ub->uniforms[0].array_count = 1;
 
     shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
     shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     shd_desc.label = "sokol-nuklear-shader";
     shd_desc.vs.entry = "main";
@@ -1744,16 +1745,12 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.byte_code = _snk_vs_bytecode_metal_macos;
-                shd_desc.vs.byte_code_size = sizeof(_snk_vs_bytecode_metal_macos);
-                shd_desc.fs.byte_code = _snk_fs_bytecode_metal_macos;
-                shd_desc.fs.byte_code_size = sizeof(_snk_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.byte_code = _snk_vs_bytecode_metal_ios;
-                shd_desc.vs.byte_code_size = sizeof(_snk_vs_bytecode_metal_ios);
-                shd_desc.fs.byte_code = _snk_fs_bytecode_metal_ios;
-                shd_desc.fs.byte_code_size = sizeof(_snk_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _snk_vs_source_metal_sim;
@@ -1789,13 +1786,17 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         },
         .shader = _snuklear.shd,
         .index_type = SG_INDEXTYPE_UINT16,
-        .blend.enabled = true,
-        .blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
-        .blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        .blend.color_write_mask = SG_COLORMASK_RGB,
-        .blend.color_format = _snuklear.desc.color_format,
-        .blend.depth_format = _snuklear.desc.depth_format,
-        .rasterizer.sample_count = _snuklear.desc.sample_count,
+        .sample_count = _snuklear.desc.sample_count,
+        .depth.pixel_format = _snuklear.desc.depth_format,
+        .colors[0] = {
+            .pixel_format = _snuklear.desc.color_format,
+            .write_mask = SG_COLORMASK_RGB,
+            .blend = {
+                .enabled = true,
+                .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+                .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+            }
+        },
         .label = "sokol-nuklear-pipeline"
     });
 
@@ -1830,11 +1831,11 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
     for (int i = 0; i < NK_BUTTON_MAX; i++) {
         if (_snuklear.btn_down[i]) {
             _snuklear.btn_down[i] = false;
-            nk_input_button(&_snuklear.ctx, i, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1], 1);
+            nk_input_button(&_snuklear.ctx, (enum nk_buttons)i, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1], 1);
         }
         else if (_snuklear.btn_up[i]) {
             _snuklear.btn_up[i] = false;
-            nk_input_button(&_snuklear.ctx, i, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1], 0);
+            nk_input_button(&_snuklear.ctx, (enum nk_buttons)i, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1], 0);
         }
     }
     size_t char_buffer_len = strlen(_snuklear.char_buffer);
@@ -1846,11 +1847,11 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
     }
     for (int i = 0; i < NK_KEY_MAX; i++) {
         if (_snuklear.keys_down[i]) {
-            nk_input_key(&_snuklear.ctx, i, true);
+            nk_input_key(&_snuklear.ctx, (enum nk_keys)i, true);
             _snuklear.keys_down[i] = 0;
         }
         if (_snuklear.keys_up[i]) {
-            nk_input_key(&_snuklear.ctx, i, false);
+            nk_input_key(&_snuklear.ctx, (enum nk_keys)i, false);
             _snuklear.keys_up[i] = 0;
         }
     }
@@ -1897,9 +1898,9 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
     sg_apply_pipeline(_snuklear.pip);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_snuklear.vs_params, sizeof(_snk_vs_params_t));
-    sg_update_buffer(_snuklear.vbuf, nk_buffer_memory_const(&verts), (int)nk_buffer_total(&verts));
-    sg_update_buffer(_snuklear.ibuf, nk_buffer_memory_const(&idx), (int)nk_buffer_total(&idx));
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(_snuklear.vs_params));
+    sg_update_buffer(_snuklear.vbuf, &(sg_range){ nk_buffer_memory_const(&verts), nk_buffer_total(&verts) });
+    sg_update_buffer(_snuklear.ibuf, &(sg_range){ nk_buffer_memory_const(&idx), nk_buffer_total(&idx) });
 
     /* Interate through the command list, rendering each one */
     const struct nk_draw_command* cmd = NULL;
@@ -1918,7 +1919,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
                                   cmd->clip_rect.w * dpi_scale,
                                   cmd->clip_rect.h * dpi_scale,
                                   true);
-            sg_draw(0, cmd->elem_count, 1);
+            sg_draw(0, (int)cmd->elem_count, 1);
             idx_offset += cmd->elem_count * sizeof(uint16_t);
         }
     }
