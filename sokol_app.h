@@ -139,7 +139,7 @@
     high-dpi            | YES     | YES   | YES(3) | YES   | YES     | YES  | YES
     clipboard           | YES     | YES   | YES(3) | ---   | ---     | TODO | YES
     MSAA                | YES     | YES   | YES(4) | YES   | YES     | TODO | YES
-    drag'n'drop         | YES     | YES   | YES(4) | ---   | ---     | TODO | YES
+    drag'n'drop         | YES     | YES   | YES    | ---   | ---     | TODO | YES
     window icon         | YES     | YES(1)| YES(4) | ---   | ---     | TODO | YES
 
     (1) macOS has no regular window icons, instead the dock icon is changed
@@ -2629,6 +2629,9 @@ typedef struct {
     /* output data for scaling/rotating/etc. */
     unsigned char max_outputs;
     struct _sapp_wl_output outputs[_SAPP_WAYLAND_MAX_OUTPUTS];
+
+    /* dnd data */
+    struct wl_data_offer *data_offer;
 } _sapp_wl_t;
 
 #elif /* SOKOL_WAYLAND */
@@ -9538,6 +9541,84 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 /*== LINUX ==================================================================*/
 #if defined(_SAPP_LINUX)
 
+_SOKOL_PRIVATE bool _sapp_linux_parse_dropped_files_list(const char* src) {
+    SOKOL_ASSERT(src);
+    SOKOL_ASSERT(_sapp.drop.buffer);
+
+    _sapp_clear_drop_buffer();
+    _sapp.drop.num_files = 0;
+
+    /*
+        src is (potentially percent-encoded) string made of one or multiple paths
+        separated by \r\n, each path starting with 'file://'
+    */
+    bool err = false;
+    int src_count = 0;
+    char src_chr = 0;
+    char* dst_ptr = _sapp.drop.buffer;
+    const char* dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1); // room for terminating 0
+    while (0 != (src_chr = *src++)) {
+        src_count++;
+        char dst_chr = 0;
+        /* check leading 'file://' */
+        if (src_count <= 7) {
+            if (((src_count == 1) && (src_chr != 'f')) ||
+                ((src_count == 2) && (src_chr != 'i')) ||
+                ((src_count == 3) && (src_chr != 'l')) ||
+                ((src_count == 4) && (src_chr != 'e')) ||
+                ((src_count == 5) && (src_chr != ':')) ||
+                ((src_count == 6) && (src_chr != '/')) ||
+                ((src_count == 7) && (src_chr != '/')))
+            {
+                SAPP_LOG("sokol_app.h: dropped file URI doesn't start with file://");
+                err = true;
+                break;
+            }
+        }
+        else if (src_chr == '\r') {
+            // skip
+        }
+        else if (src_chr == '\n') {
+            src_count = 0;
+            _sapp.drop.num_files++;
+            // too many files is not an error
+            if (_sapp.drop.num_files >= _sapp.drop.max_files) {
+                break;
+            }
+            dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
+            dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
+        }
+        else if ((src_chr == '%') && src[0] && src[1]) {
+            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
+            const char digits[3] = { src[0], src[1], 0 };
+            src += 2;
+            dst_chr = (char) strtol(digits, 0, 16);
+        }
+        else {
+            dst_chr = src_chr;
+        }
+        if (dst_chr) {
+            // dst_end_ptr already has adjustment for terminating zero
+            if (dst_ptr < dst_end_ptr) {
+                *dst_ptr++ = dst_chr;
+            }
+            else {
+                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
+                err = true;
+                break;
+            }
+        }
+    }
+    if (err) {
+        _sapp_clear_drop_buffer();
+        _sapp.drop.num_files = 0;
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
 #if !defined(SOKOL_WAYLAND)
 /* see GLFW's xkb_unicode.c */
 static const struct _sapp_x11_codepair {
@@ -11375,84 +11456,6 @@ _SOKOL_PRIVATE int32_t _sapp_x11_keysym_to_unicode(KeySym keysym) {
     return -1;
 }
 
-_SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
-    SOKOL_ASSERT(src);
-    SOKOL_ASSERT(_sapp.drop.buffer);
-
-    _sapp_clear_drop_buffer();
-    _sapp.drop.num_files = 0;
-
-    /*
-        src is (potentially percent-encoded) string made of one or multiple paths
-        separated by \r\n, each path starting with 'file://'
-    */
-    bool err = false;
-    int src_count = 0;
-    char src_chr = 0;
-    char* dst_ptr = _sapp.drop.buffer;
-    const char* dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1); // room for terminating 0
-    while (0 != (src_chr = *src++)) {
-        src_count++;
-        char dst_chr = 0;
-        /* check leading 'file://' */
-        if (src_count <= 7) {
-            if (((src_count == 1) && (src_chr != 'f')) ||
-                ((src_count == 2) && (src_chr != 'i')) ||
-                ((src_count == 3) && (src_chr != 'l')) ||
-                ((src_count == 4) && (src_chr != 'e')) ||
-                ((src_count == 5) && (src_chr != ':')) ||
-                ((src_count == 6) && (src_chr != '/')) ||
-                ((src_count == 7) && (src_chr != '/')))
-            {
-                SAPP_LOG("sokol_app.h: dropped file URI doesn't start with file://");
-                err = true;
-                break;
-            }
-        }
-        else if (src_chr == '\r') {
-            // skip
-        }
-        else if (src_chr == '\n') {
-            src_count = 0;
-            _sapp.drop.num_files++;
-            // too many files is not an error
-            if (_sapp.drop.num_files >= _sapp.drop.max_files) {
-                break;
-            }
-            dst_ptr = _sapp.drop.buffer + _sapp.drop.num_files * _sapp.drop.max_path_length;
-            dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
-        }
-        else if ((src_chr == '%') && src[0] && src[1]) {
-            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
-            const char digits[3] = { src[0], src[1], 0 };
-            src += 2;
-            dst_chr = (char) strtol(digits, 0, 16);
-        }
-        else {
-            dst_chr = src_chr;
-        }
-        if (dst_chr) {
-            // dst_end_ptr already has adjustment for terminating zero
-            if (dst_ptr < dst_end_ptr) {
-                *dst_ptr++ = dst_chr;
-            }
-            else {
-                SAPP_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)");
-                err = true;
-                break;
-            }
-        }
-    }
-    if (err) {
-        _sapp_clear_drop_buffer();
-        _sapp.drop.num_files = 0;
-        return false;
-    }
-    else {
-        return true;
-    }
-}
-
 // XLib manual says keycodes are in the range [8, 255] inclusive.
 // https://tronche.com/gui/x/xlib/input/keyboard-encoding.html
 static bool _sapp_x11_keycodes[256];
@@ -11716,7 +11719,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                                                 event->xselection.target,
                                                                 (unsigned char**) &data);
                 if (_sapp.drop.enabled && result) {
-                    if (_sapp_x11_parse_dropped_files_list(data)) {
+                    if (_sapp_linux_parse_dropped_files_list(data)) {
                         if (_sapp_events_enabled()) {
                             _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
                             _sapp_call_event(&_sapp.event);
@@ -12442,7 +12445,6 @@ _SOKOL_PRIVATE const struct xdg_wm_base_listener _sapp_wl_wm_base_listener = {
 _SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t key_state) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
 
     _sapp.wl.serial = serial;
@@ -12510,7 +12512,6 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_keymap(void* data, struct wl_keyboard* key
 _SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(surface);
 
     _sapp.wl.serial = serial;
@@ -12519,7 +12520,6 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyb
 _SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
-    _SOKOL_UNUSED(serial);
 
     _sapp.wl.serial = serial;
 
@@ -12573,7 +12573,6 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_axis_stop(void* data, struct wl_pointer* po
 _SOKOL_PRIVATE void _sapp_wl_pointer_button(void* data, struct wl_pointer* pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t button_state) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(pointer);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
 
     _sapp.wl.serial = serial;
@@ -12627,7 +12626,6 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_frame(void* data, struct wl_pointer* pointe
 _SOKOL_PRIVATE void _sapp_wl_pointer_leave(void* data, struct wl_pointer* pointer, uint32_t serial, struct wl_surface* surface) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(pointer);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(surface);
 
     _sapp.wl.serial = serial;
@@ -12696,7 +12694,6 @@ _SOKOL_PRIVATE void _sapp_wl_touch_cancel(void* data, struct wl_touch* touch) {
 _SOKOL_PRIVATE void _sapp_wl_touch_down(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, struct wl_surface* surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(touch);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
     _SOKOL_UNUSED(surface);
 
@@ -12746,7 +12743,6 @@ _SOKOL_PRIVATE void _sapp_wl_touch_shape(void* data, struct wl_touch* touch, int
 _SOKOL_PRIVATE void _sapp_wl_touch_up(void* data, struct wl_touch* touch, uint32_t serial, uint32_t time, int32_t id) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(touch);
-    _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
 
     _sapp.wl.serial = serial;
@@ -12997,7 +12993,10 @@ _SOKOL_PRIVATE void _sapp_wl_data_offer_handle_action(void* data, struct wl_data
 _SOKOL_PRIVATE void _sapp_wl_data_offer_handle_offer(void* data, struct wl_data_offer* data_offer, const char* mime_type) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(data_offer);
-    _SOKOL_UNUSED(mime_type);
+
+    if (0 == strcmp(mime_type, "text/uri-list")) {
+        wl_data_offer_accept(_sapp.wl.data_offer, _sapp.wl.serial, mime_type);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wl_data_offer_handle_source_actions(void* data, struct wl_data_offer* data_offer, uint32_t source_actions) {
@@ -13005,7 +13004,6 @@ _SOKOL_PRIVATE void _sapp_wl_data_offer_handle_source_actions(void* data, struct
     _SOKOL_UNUSED(data_offer);
     _SOKOL_UNUSED(source_actions);
 }
-
 
 _SOKOL_PRIVATE const struct wl_data_offer_listener _sapp_wl_data_offer_listener = {
     .action = _sapp_wl_data_offer_handle_action,
@@ -13016,14 +13014,52 @@ _SOKOL_PRIVATE const struct wl_data_offer_listener _sapp_wl_data_offer_listener 
 _SOKOL_PRIVATE void _sapp_wl_data_device_handle_data_offer(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(data_device);
-    _SOKOL_UNUSED(offer);
 
-    wl_data_offer_add_listener(offer, &_sapp_wl_data_offer_listener, NULL);
+    if (!_sapp.drop.enabled && !_sapp.clipboard.enabled) {
+        return;
+    }
+
+    if (NULL != _sapp.wl.data_offer) {
+        wl_data_offer_destroy(_sapp.wl.data_offer);
+    }
+
+    _sapp.wl.data_offer = offer;
+    wl_data_offer_add_listener(_sapp.wl.data_offer, &_sapp_wl_data_offer_listener, NULL);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_device* data_device) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(data_device);
+
+    if (!_sapp.drop.enabled || NULL == _sapp.wl.data_offer) {
+        return;
+    }
+
+    int fds[2];
+    pipe(fds);
+    wl_data_offer_receive(_sapp.wl.data_offer, "text/uri-list", fds[1]);
+    close(fds[1]);
+
+    wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
+
+    char *buf = _sapp_malloc(_sapp.drop.buf_size);
+    read(fds[0], buf, _sapp.drop.buf_size);
+    close(fds[0]);
+
+    if (_sapp.drop.enabled) {
+        if (_sapp_linux_parse_dropped_files_list(buf)) {
+            if (_sapp_events_enabled()) {
+                _sapp_init_event(SAPP_EVENTTYPE_FILES_DROPPED);
+                _sapp_call_event(&_sapp.event);
+            }
+        }
+    }
+
+    wl_data_offer_finish(_sapp.wl.data_offer);
+    wl_data_offer_destroy(_sapp.wl.data_offer);
+    _sapp.wl.data_offer = NULL;
+
+    _sapp_free(buf);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_data_device_handle_enter(void* data, struct wl_data_device* data_device, uint32_t serial, struct wl_surface* surface, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer* offer) {
@@ -13034,6 +13070,8 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_enter(void* data, struct wl_data
     _SOKOL_UNUSED(x);
     _SOKOL_UNUSED(y);
     _SOKOL_UNUSED(offer);
+
+    wl_data_offer_set_actions(_sapp.wl.data_offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY | WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_data_device_handle_leave(void* data, struct wl_data_device* data_device) {
@@ -13054,7 +13092,7 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_
     _SOKOL_UNUSED(data_device);
     _SOKOL_UNUSED(offer);
 
-    if (NULL == offer) {
+    if (!_sapp.clipboard.enabled || NULL == offer) {
         return;
     }
 
@@ -13070,6 +13108,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_
     close(fds[0]);
 
     wl_data_offer_destroy(offer);
+    if (NULL != _sapp.wl.data_offer) {
+        _sapp.wl.data_offer = NULL;
+    }
 }
 
 _SOKOL_PRIVATE const struct wl_data_device_listener _sapp_wl_data_device_listener = {
@@ -13137,7 +13178,7 @@ _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
 
     _sapp.wl.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
-    if (NULL != _sapp.wl.seat && NULL != _sapp.wl.data_device_manager && _sapp.clipboard.enabled) {
+    if (NULL != _sapp.wl.seat && NULL != _sapp.wl.data_device_manager) {
         _sapp.wl.data_device = wl_data_device_manager_get_data_device(_sapp.wl.data_device_manager, _sapp.wl.seat);
         wl_data_device_add_listener(_sapp.wl.data_device, &_sapp_wl_data_device_listener, NULL);
     }
