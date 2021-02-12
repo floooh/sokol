@@ -1659,7 +1659,8 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     */
 
     /* initialize Nuklear */
-    SOKOL_ASSERT(nk_init_default(&_snuklear.ctx, NULL) == 1);
+    nk_bool init_res = nk_init_default(&_snuklear.ctx, 0);
+    SOKOL_ASSERT(1 == init_res); (void)init_res;    // silence unused warning in release mode
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     _snuklear.ctx.clip.copy = _snk_clipboard_copy;
     _snuklear.ctx.clip.paste = _snk_clipboard_paste;
@@ -2118,8 +2119,7 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
     }
 }
 
-SOKOL_API_IMPL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags,
-                                             char *memory, int *len, int max, nk_plugin_filter filter) {
+SOKOL_API_IMPL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags, char *memory, int *len, int max, nk_plugin_filter filter) {
     nk_flags event = nk_edit_string(ctx, flags, memory, len, max, filter);
     if ((event & NK_EDIT_ACTIVATED) && !sapp_keyboard_shown()) {
         sapp_show_keyboard(true);
@@ -2129,9 +2129,6 @@ SOKOL_API_IMPL nk_flags snk_edit_string(struct nk_context *ctx, nk_flags flags,
     }
     return event;
 }
+#endif // SOKOL_NUKLEAR_NO_SOKOL_APP
 
-#endif
-
-
-
-#endif /* SOKOL_IMPL */
+#endif // SOKOL_IMPL
