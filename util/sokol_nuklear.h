@@ -1760,16 +1760,12 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         }
     #elif defined(SOKOL_D3D11)
         shd_desc.vs.d3d11_target = "vs_4_0";
-        shd_desc.vs.byte_code = _snk_vs_bytecode_hlsl4;
-        shd_desc.vs.byte_code_size = sizeof(_snk_vs_bytecode_hlsl4);
+        shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_hlsl4);
         shd_desc.fs.d3d11_target = "ps_4_0";
-        shd_desc.fs.byte_code = _snk_fs_bytecode_hlsl4;
-        shd_desc.fs.byte_code_size = sizeof(_snk_fs_bytecode_hlsl4);
+        shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.byte_code = _snk_vs_bytecode_wgpu;
-        shd_desc.vs.byte_code_size = sizeof(_snk_vs_bytecode_wgpu);
-        shd_desc.fs.byte_code = _snk_fs_bytecode_wgpu;
-        shd_desc.fs.byte_code_size = sizeof(_snk_fs_bytecode_wgpu);
+        shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_wgpu);
     #else
         shd_desc.vs.source = _snk_vs_src_dummy;
         shd_desc.fs.source = _snk_fs_src_dummy;
@@ -1915,11 +1911,11 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
                 .vertex_buffer_offsets[0] = 0,
                 .index_buffer_offset = idx_offset
             });
-            sg_apply_scissor_rect(cmd->clip_rect.x * dpi_scale,
-                                  cmd->clip_rect.y * dpi_scale,
-                                  cmd->clip_rect.w * dpi_scale,
-                                  cmd->clip_rect.h * dpi_scale,
-                                  true);
+            sg_apply_scissor_rectf(cmd->clip_rect.x * dpi_scale,
+                                   cmd->clip_rect.y * dpi_scale,
+                                   cmd->clip_rect.w * dpi_scale,
+                                   cmd->clip_rect.h * dpi_scale,
+                                   true);
             sg_draw(0, (int)cmd->elem_count, 1);
             idx_offset += cmd->elem_count * sizeof(uint16_t);
         }
@@ -2004,8 +2000,8 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
     const float dpi_scale = _snuklear.desc.dpi_scale;
     switch (ev->type) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            _snuklear.mouse_pos[0] = ev->mouse_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->mouse_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->mouse_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->mouse_y / dpi_scale);
             switch(ev->mouse_button) {
                 case SAPP_MOUSEBUTTON_LEFT:
                     _snuklear.btn_down[NK_BUTTON_LEFT] = true;
@@ -2021,8 +2017,8 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
             }
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            _snuklear.mouse_pos[0] = ev->mouse_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->mouse_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->mouse_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->mouse_y / dpi_scale);
             switch(ev->mouse_button) {
                 case SAPP_MOUSEBUTTON_LEFT:
                     _snuklear.btn_up[NK_BUTTON_LEFT] = true;
@@ -2038,8 +2034,8 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
             }
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
-            _snuklear.mouse_pos[0] = ev->mouse_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->mouse_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->mouse_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->mouse_y / dpi_scale);
             _snuklear.mouse_did_move = true;
             break;
         case SAPP_EVENTTYPE_MOUSE_ENTER:
@@ -2056,19 +2052,19 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
             _snuklear.btn_down[NK_BUTTON_LEFT] = true;
-            _snuklear.mouse_pos[0] = ev->touches[0].pos_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->touches[0].pos_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->touches[0].pos_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->touches[0].pos_y / dpi_scale);
             _snuklear.mouse_did_move = true;
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
-            _snuklear.mouse_pos[0] = ev->touches[0].pos_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->touches[0].pos_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->touches[0].pos_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->touches[0].pos_y / dpi_scale);
             _snuklear.mouse_did_move = true;
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
             _snuklear.btn_up[NK_BUTTON_LEFT] = true;
-            _snuklear.mouse_pos[0] = ev->touches[0].pos_x / dpi_scale;
-            _snuklear.mouse_pos[1] = ev->touches[0].pos_y / dpi_scale;
+            _snuklear.mouse_pos[0] = (int) (ev->touches[0].pos_x / dpi_scale);
+            _snuklear.mouse_pos[1] = (int) (ev->touches[0].pos_y / dpi_scale);
             _snuklear.mouse_did_move = true;
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
