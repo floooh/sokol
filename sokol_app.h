@@ -7683,86 +7683,25 @@ _SOKOL_PRIVATE uint32_t _sapp_android_mods(int32_t c) {
     }
     return mods;
 }
+#if !defined(SOKOL_MALLOC) || !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
+    #include <stdlib.h>
+#endif
+#if !defined(SOKOL_MALLOC)
+    #define SOKOL_MALLOC(s) malloc(s)
+#endif
+#if !defined(SOKOL_CALLOC)
+    #define SOKOL_CALLOC(n,s) calloc(n,s)
+#endif
+#if !defined(SOKOL_FREE)
+    #define SOKOL_FREE(p) free(p)
+#endif
+
 #include <jni.h>
 #ifdef __cplusplus
-char *GetChars() {
-#if 0
-    return strdup("lspp");
-    // Attaches the current thread to the JVM.
-    jint lResult;
-    jint lFlags = 0;
-
-    JavaVM* lJavaVM = _sapp.android.activity->vm;
-    JNIEnv* lJNIEnv = _sapp.android.activity->env;
-
-    JavaVMAttachArgs lJavaVMAttachArgs;
-    lJavaVMAttachArgs.version = JNI_VERSION_1_6;
-    lJavaVMAttachArgs.name = "NativeThread";
-    lJavaVMAttachArgs.group = NULL;
-
-    lResult=lJavaVM->AttachCurrentThread(&lJNIEnv, &lJavaVMAttachArgs);
-    if (lResult == JNI_ERR) {
-        return NULL;
-    }
-    //EditText.getText().toString()
-    jclass ClassEditText = lJNIEnv->GetObjectClass(_sapp.android.lEditext);
-    jmethodID MethodGetText = lJNIEnv->GetMethodID(
-        ClassEditText, "getText",
-        "()Landroid.text.Editable;");
-    jobject ltextObj = lJNIEnv->CallObjectMethod(_sapp.android.lEditext, MethodGetText);
-    //Editable.toString()
-    jclass ClassTextObj = lJNIEnv->GetObjectClass(ltextObj);
-    jmethodID MethodToString = lJNIEnv->GetMethodID(
-        ClassTextObj, "toString",
-        "()Ljava/lang/String;");
-    jstring jstr = (jstring)lJNIEnv->CallObjectMethod(ltextObj, MethodToString);
-    char *str = strdup(lJNIEnv->GetStringUTFChars(jstr, NULL));
-    lJavaVM->DetachCurrentThread();
-    return str;
-#endif
-    return strdup("lscpp");
-}
-int GetUnicodeChar(int eventType, int keyCode, int metaState) {
-    JavaVM* javaVM = _sapp.android.activity->vm;
-    JNIEnv* jniEnv = _sapp.android.activity->env;
-
-    JavaVMAttachArgs attachArgs;
-    attachArgs.version = JNI_VERSION_1_6;
-    attachArgs.name = "NativeThread";
-    attachArgs.group = NULL;
-
-    jint result = javaVM->AttachCurrentThread(&jniEnv, &attachArgs);
-    if(result == JNI_ERR) {
-        return 0;
-    }
-
-    jclass class_key_event = jniEnv->FindClass("android/view/KeyEvent");
-    int unicodeKey;
-
-    if(metaState == 0) {
-        jmethodID method_get_unicode_char = jniEnv->GetMethodID(class_key_event, "getUnicodeChar", "()I");
-        jmethodID eventConstructor = jniEnv->GetMethodID(class_key_event, "<init>", "(II)V");
-        jobject eventObj = jniEnv->NewObject(class_key_event, eventConstructor, eventType, keyCode);
-
-        unicodeKey = jniEnv->CallIntMethod(eventObj, method_get_unicode_char);
-    }
-
-    else {
-        jmethodID method_get_unicode_char = jniEnv->GetMethodID(class_key_event, "getUnicodeChar", "(I)I");
-        jmethodID eventConstructor = jniEnv->GetMethodID(class_key_event, "<init>", "(II)V");
-        jobject eventObj = jniEnv->NewObject(class_key_event, eventConstructor, eventType, keyCode);
-
-        unicodeKey = jniEnv->CallIntMethod(eventObj, method_get_unicode_char, metaState);
-    }
-
-    javaVM->DetachCurrentThread();
-
-    //LOGI("Unicode key is: %d", unicodeKey);
-    return unicodeKey;
-}
 //This is the working version to show/hide soft keyboard, must call java
-//Luke Zhou 2021/02/05
+//2021/02/05
 char *_sapp_android_aui_getText() {
+    return NULL;
 }
 void _sapp_android_aui_setText(const char *string) {
 }
@@ -7773,179 +7712,8 @@ void _sapp_android_aui_getSelection() {
 void _sapp_android_aui_createEditText() {
 }
 void _sapp_android_aui_displayKeyboard(bool pShow) {
-    return;
-    // Attaches the current thread to the JVM.
-    jint lResult;
-    jint lFlags = 0;
-
-    JavaVM* lJavaVM = _sapp.android.activity->vm;
-    JNIEnv* lJNIEnv = _sapp.android.activity->env;
-
-    JavaVMAttachArgs lJavaVMAttachArgs;
-    lJavaVMAttachArgs.version = JNI_VERSION_1_6;
-    lJavaVMAttachArgs.name = "NativeThread";
-    lJavaVMAttachArgs.group = NULL;
-
-    lResult=lJavaVM->AttachCurrentThread(&lJNIEnv, &lJavaVMAttachArgs);
-    if (lResult == JNI_ERR) {
-        return;
-    }
-
-    // Retrieves NativeActivity.
-    jobject lNativeActivity = _sapp.android.activity->clazz;
-    jclass ClassNativeActivity = lJNIEnv->GetObjectClass(lNativeActivity);
-
-    // Retrieves Context.INPUT_METHOD_SERVICE.
-    jclass ClassContext = lJNIEnv->FindClass("android/content/Context");
-    jfieldID FieldINPUT_METHOD_SERVICE =
-        lJNIEnv->GetStaticFieldID(ClassContext,
-            "INPUT_METHOD_SERVICE", "Ljava/lang/String;");
-    jobject INPUT_METHOD_SERVICE =
-        lJNIEnv->GetStaticObjectField(ClassContext,
-            FieldINPUT_METHOD_SERVICE);
-    //jniCheck(INPUT_METHOD_SERVICE);
-
-    // Runs getSystemService(Context.INPUT_METHOD_SERVICE).
-    jclass ClassInputMethodManager = lJNIEnv->FindClass(
-        "android/view/inputmethod/InputMethodManager");
-    jmethodID MethodGetSystemService = lJNIEnv->GetMethodID(
-        ClassNativeActivity, "getSystemService",
-        "(Ljava/lang/String;)Ljava/lang/Object;");
-    jobject lInputMethodManager = lJNIEnv->CallObjectMethod(
-        lNativeActivity, MethodGetSystemService,
-        INPUT_METHOD_SERVICE);
-
-    // Runs getWindow().getDecorView().
-    jmethodID MethodGetWindow = lJNIEnv->GetMethodID(
-        ClassNativeActivity, "getWindow",
-        "()Landroid/view/Window;");
-    jobject lWindow = lJNIEnv->CallObjectMethod(lNativeActivity,
-        MethodGetWindow);
-    jclass ClassWindow = lJNIEnv->FindClass(
-        "android/view/Window");
-    jmethodID MethodGetDecorView = lJNIEnv->GetMethodID(
-        ClassWindow, "getDecorView", "()Landroid/view/View;");
-    jobject lDecorView = lJNIEnv->CallObjectMethod(lWindow,
-        MethodGetDecorView);
-
-    if (pShow) {
-        // Runs lInputMethodManager.showSoftInput(...).
-        jmethodID MethodShowSoftInput = lJNIEnv->GetMethodID(
-            ClassInputMethodManager, "showSoftInput",
-            "(Landroid/view/View;I)Z");
-        //EditText.requestFocus();
-        jclass ClassEditText = lJNIEnv->GetObjectClass(_sapp.android.aui.lEditext);
-        jmethodID MethodRequestFocus = lJNIEnv->GetMethodID(
-            ClassEditText, "requestFocus",
-            "()V");
-        lJNIEnv->CallVoidMethod(_sapp.android.aui.lEditext, MethodRequestFocus);
-
-
-        jboolean lResult = lJNIEnv->CallBooleanMethod(
-            lInputMethodManager, MethodShowSoftInput,
-            _sapp.android.aui.lEditext, lFlags);
-            //lDecorView, lFlags);
-    } else {
-        // Runs lWindow.getViewToken()
-        jclass ClassView = lJNIEnv->FindClass(
-            "android/view/View");
-        jmethodID MethodGetWindowToken = lJNIEnv->GetMethodID(
-            ClassView, "getWindowToken", "()Landroid/os/IBinder;");
-        jobject lBinder = lJNIEnv->CallObjectMethod(lDecorView,
-            MethodGetWindowToken);
-
-        // lInputMethodManager.hideSoftInput(...).
-        jmethodID MethodHideSoftInput = lJNIEnv->GetMethodID(
-            ClassInputMethodManager, "hideSoftInputFromWindow",
-            "(Landroid/os/IBinder;I)Z");
-        jboolean lRes = lJNIEnv->CallBooleanMethod(
-            lInputMethodManager, MethodHideSoftInput,
-            lBinder, lFlags);
-    }
-
-    // Finished with the JVM.
-    lJavaVM->DetachCurrentThread();
 }
 #else //c
-char *GetChars() {
-    //return strdup("lsc");
-    // Attaches the current thread to the JVM.
-    jint lResult;
-    jint lFlags = 0;
-
-    JavaVM* lJavaVM = _sapp.android.activity->vm;
-    JNIEnv* lJNIEnv = _sapp.android.activity->env;
-
-    JavaVMAttachArgs lJavaVMAttachArgs;
-    lJavaVMAttachArgs.version = JNI_VERSION_1_6;
-    lJavaVMAttachArgs.name = "NativeThread";
-    lJavaVMAttachArgs.group = NULL;
-
-    lResult=(*lJavaVM)->AttachCurrentThread(lJavaVM, &lJNIEnv, &lJavaVMAttachArgs);
-    if (lResult == JNI_ERR) {
-        return NULL;
-    }
-    //EditText.getText().toString()
-    jclass ClassEditText = (*lJNIEnv)->GetObjectClass(lJNIEnv, _sapp.android.aui.lEditext);
-    jmethodID MethodGetText = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassEditText, "getText",
-        "()Landroid/text/Editable;");
-    jobject ltextObj = (*lJNIEnv)->CallObjectMethod(lJNIEnv, _sapp.android.aui.lEditext, MethodGetText);
-    //Editable.toString()
-    jclass ClassTextObj = (*lJNIEnv)->GetObjectClass(lJNIEnv, ltextObj);
-    jmethodID MethodToString = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassTextObj, "toString",
-        "()Ljava/lang/String;");
-
-
-    jstring jstr = (jstring)(*lJNIEnv)->CallObjectMethod(lJNIEnv, ltextObj, MethodToString);
-    char *str = strdup((*lJNIEnv)->GetStringUTFChars(lJNIEnv, jstr, NULL));
-
-    __android_log_print(ANDROID_LOG_ERROR, "imgui GetChars", "[%s]%p %p %p %p %p\n",
-    str, ClassEditText, MethodGetText, ltextObj, ClassTextObj, MethodToString);
-
-
-    (*lJavaVM)->DetachCurrentThread(lJavaVM);
-    return str;
-}
-int GetUnicodeChar(int eventType, int keyCode, int metaState) {
-    JavaVM* javaVM = _sapp.android.activity->vm;
-    JNIEnv* jniEnv = _sapp.android.activity->env;
-
-    JavaVMAttachArgs attachArgs;
-    attachArgs.version = JNI_VERSION_1_6;
-    attachArgs.name = "NativeThread";
-    attachArgs.group = NULL;
-
-    jint result = (*javaVM)->AttachCurrentThread(javaVM, &jniEnv, &attachArgs);
-    if(result == JNI_ERR) {
-        return 0;
-    }
-
-    jclass class_key_event = (*jniEnv)->FindClass(jniEnv, "android/view/KeyEvent");
-    int unicodeKey;
-
-    if(metaState == 0) {
-        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "getUnicodeChar", "()I");
-        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "<init>", "(II)V");
-        jobject eventObj = (*jniEnv)->NewObject(jniEnv, class_key_event, eventConstructor, eventType, keyCode);
-
-        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv, eventObj, method_get_unicode_char);
-    }
-
-    else {
-        jmethodID method_get_unicode_char = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "getUnicodeChar", "(I)I");
-        jmethodID eventConstructor = (*jniEnv)->GetMethodID(jniEnv, class_key_event, "<init>", "(II)V");
-        jobject eventObj = (*jniEnv)->NewObject(jniEnv, class_key_event, eventConstructor, eventType, keyCode);
-
-        unicodeKey = (*jniEnv)->CallIntMethod(jniEnv, eventObj, method_get_unicode_char, metaState);
-    }
-
-    (*javaVM)->DetachCurrentThread(javaVM);
-
-    //SOKOL_LOG("Unicode key is: %d", unicodeKey);
-    return unicodeKey;
-}
 char *_sapp_android_aui_getText() {
     JavaVM* lJavaVM = _sapp.android.activity->vm;
     JNIEnv* lJNIEnv = _sapp.android.activity->env;
@@ -7962,8 +7730,11 @@ char *_sapp_android_aui_getText() {
         ClassTextObj, "toString", "()Ljava/lang/String;");
 
     jstring jstr = (jstring)(*lJNIEnv)->CallObjectMethod(lJNIEnv, ltextObj, MethodToString);
-    char *str = strdup((*lJNIEnv)->GetStringUTFChars(lJNIEnv, jstr, NULL));
-
+    const char *cstr = (*lJNIEnv)->GetStringUTFChars(lJNIEnv, jstr, NULL);
+    char *str = SOKOL_MALLOC(strlen(cstr)+1);
+    strcpy(str, cstr);
+    (*lJNIEnv)->ReleaseStringUTFChars(lJNIEnv, jstr, cstr);
+    
     jmethodID MethodLength = (*lJNIEnv)->GetMethodID(lJNIEnv, 
         (*lJNIEnv)->GetObjectClass(lJNIEnv, jstr), "length", "()I");
     jint jstr_len = (*lJNIEnv)->CallIntMethod(lJNIEnv,
@@ -8285,10 +8056,11 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui displayKeyboard show", "true\n");
     //(*lJavaVM)->DetachCurrentThread(lJavaVM);
 }
 #endif
+//Unicode16 <--> utf8 convert, these code copied from IMGUI
 // Convert UTF-8 to 32-bit character, process single character input.
 // A nearly-branchless UTF-8 decoder, based on work of Christopher Wellons (https://github.com/skeeto/branchless-utf8).
 // We handle UTF-8 decoding error by skipping forward.
-int UnicodeCharFromUtf8(unsigned int* out_char, const char* in_text, const char* in_text_end)
+static inline int _sapp_android_UnicodeCharFromUtf8(unsigned int* out_char, const char* in_text, const char* in_text_end)
 {
     static const char lengths[32] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0 };
     static const int masks[]  = { 0x00, 0x7f, 0x1f, 0x0f, 0x07 };
@@ -8342,14 +8114,14 @@ int UnicodeCharFromUtf8(unsigned int* out_char, const char* in_text, const char*
     return wanted;
 }
 
-int UnicodeStrFromUtf8(unsigned short * buf, int buf_size, const char* in_text, const char* in_text_end, const char** in_text_remaining)
+int _sapp_android_UnicodeStrFromUtf8(unsigned short * buf, int buf_size, const char* in_text, const char* in_text_end, const char** in_text_remaining)
 {
     unsigned short* buf_out = buf;
     unsigned short* buf_end = buf + buf_size;
     while (buf_out < buf_end - 1 && (!in_text_end || in_text < in_text_end) && *in_text)
     {
         unsigned int c;
-        in_text += UnicodeCharFromUtf8(&c, in_text, in_text_end);
+        in_text += _sapp_android_UnicodeCharFromUtf8(&c, in_text, in_text_end);
         if (c == 0)
             break;
         *buf_out++ = (unsigned short)c;
@@ -8359,13 +8131,13 @@ int UnicodeStrFromUtf8(unsigned short * buf, int buf_size, const char* in_text, 
         *in_text_remaining = in_text;
     return (int)(buf_out - buf);
 }
-int UnicodeCountCharsFromUtf8(const char* in_text, const char* in_text_end)
+int _sapp_android_UnicodeCountCharsFromUtf8(const char* in_text, const char* in_text_end)
 {
     int char_count = 0;
     while ((!in_text_end || in_text < in_text_end) && *in_text)
     {
         unsigned int c;
-        in_text += UnicodeCharFromUtf8(&c, in_text, in_text_end);
+        in_text += _sapp_android_UnicodeCharFromUtf8(&c, in_text, in_text_end);
         if (c == 0)
             break;
         char_count++;
@@ -8374,7 +8146,7 @@ int UnicodeCountCharsFromUtf8(const char* in_text, const char* in_text_end)
 }
 
 // Based on stb_to_utf8() from github.com/nothings/stb/
-static inline int UnicodeCharToUtf8(char* buf, int buf_size, unsigned int c)
+static inline int _sapp_android_UnicodeCharToUtf8(char* buf, int buf_size, unsigned int c)
 {
     if (c < 0x80)
     {
@@ -8409,7 +8181,7 @@ static inline int UnicodeCharToUtf8(char* buf, int buf_size, unsigned int c)
     return 0;
 }
 
-int UnicodeStrToUtf8(char* buf, int buf_size, const unsigned short* in_text, const unsigned short* in_text_end)
+int _sapp_android_UnicodeStrToUtf8(char* buf, int buf_size, const unsigned short* in_text, const unsigned short* in_text_end)
 {
     char* buf_out = buf;
     const char* buf_end = buf + buf_size;
@@ -8419,7 +8191,7 @@ int UnicodeStrToUtf8(char* buf, int buf_size, const unsigned short* in_text, con
         if (c < 0x80)
             *buf_out++ = (char)c;
         else
-            buf_out += UnicodeCharToUtf8(buf_out, (int)(buf_end - buf_out - 1), c);
+            buf_out += _sapp_android_UnicodeCharToUtf8(buf_out, (int)(buf_end - buf_out - 1), c);
     }
     *buf_out = 0;
     return (int)(buf_out - buf);
@@ -8436,46 +8208,6 @@ _SOKOL_PRIVATE void _sapp_android_aui_msg(_sapp_android_msg_t msg) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_android_char_event(const AInputEvent* e) {
-    int32_t c = AKeyEvent_getKeyCode(e);
-    if (_sapp_events_enabled() && (c >= 0)) {
-        switch (AKeyEvent_getAction(e)) {
-            case AKEY_EVENT_ACTION_DOWN:
-            case AKEY_EVENT_ACTION_MULTIPLE: {
-            #if 0
-                int key = AKeyEvent_getKeyCode(e);
-                int metaState = AKeyEvent_getMetaState(e);
-                int uniValue;
-                if(metaState != 0)
-                  uniValue = GetUnicodeChar(AKEY_EVENT_ACTION_DOWN, key, metaState);
-                else
-                  uniValue = GetUnicodeChar(AKEY_EVENT_ACTION_DOWN, key, 0);
-                _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-                //_sapp.event.modifiers = _sapp_android_mods(c);
-
-                _sapp.event.char_code = uniValue;
-                _sapp.event.key_repeat = false;
-                _sapp_call_event(&_sapp.event);
-                break;
-            #endif
-            /*char *str = GetChars();
-    __android_log_print(ANDROID_LOG_ERROR, "imgui char_event", "%s\n", str);
-            if(str == NULL)
-                break;
-            for(int i=0;i<strlen(str);++i) {
-                _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-                //_sapp.event.modifiers = _sapp_android_mods(c);
-
-                _sapp.event.char_code = str[i];
-                _sapp.event.key_repeat = false;
-                _sapp_call_event(&_sapp.event);
-            }
-            free(str);*/
-                break;
-            }
-        }
-    }
-}
 _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
@@ -8488,8 +8220,6 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         _sapp_android_shutdown();
         return true;
     }
-    else
-        _sapp_android_char_event(e); //Luke Zhou 2021/02/05
     return false;
 }
 
@@ -8667,27 +8397,29 @@ _SOKOL_PRIVATE void _sapp_android_debug_print_text(char *atext) {
     //sizeof(ucs16)*3, no utf8mb4. +1 for 0 terminator 
     int utf8_size = _sapp.android.aui.cursor*3+1;
     if(utf8_size > 1) {
-        if((utf8=(char*)malloc(utf8_size))==NULL)
+        if((utf8=(char*)SOKOL_MALLOC((size_t)utf8_size))==NULL)
             return;
-        UnicodeStrToUtf8(utf8, utf8_size, _sapp.android.aui.vtext, _sapp.android.aui.vtext+_sapp.android.aui.cursor);
+        _sapp_android_UnicodeStrToUtf8(utf8, utf8_size, _sapp.android.aui.vtext, _sapp.android.aui.vtext+_sapp.android.aui.cursor);
     }
     else
-        utf8 = strdup(""); //just copy a "" 2021/02/10
-    __android_log_print(ANDROID_LOG_ERROR, "imgui debug_print:", 
+        utf8 = (char*)SOKOL_CALLOC(1, 1); //just copy a "" will free it at exit of function2021/02/10
+__android_log_print(ANDROID_LOG_ERROR, "imgui debug_print:", 
       "atext,prev=[%s][%s] vtext=[%s] cursor=%d\n", atext, 
       _sapp.android.aui.atext_prev, utf8, _sapp.android.aui.cursor);
-    free(utf8);
+    SOKOL_FREE(utf8);
 }
 _SOKOL_PRIVATE int _sapp_android_aui_input_atext(char *atext) {
     unsigned short *ucs, *ucs_prev;
     //strlen(utf8)+1 is enough for utf8->ucs16, +1 for 0 terminator 2021/02/09
-    int ucs_size = strlen(atext)+1, ucs_prev_size = strlen(_sapp.android.aui.atext_prev)+1;
-    if((ucs=(unsigned short*)malloc(ucs_size*sizeof(short)))==NULL)
+    int ucs_size = (int)strlen(atext)+1, ucs_prev_size = (int)strlen(_sapp.android.aui.atext_prev)+1;
+    if((ucs=(unsigned short*)SOKOL_MALLOC((size_t)ucs_size*sizeof(short)))==NULL)
         return -1;
-    if((ucs_prev=(unsigned short*)malloc(ucs_prev_size*sizeof(short)))==NULL)
+    if((ucs_prev=(unsigned short*)SOKOL_MALLOC((size_t)ucs_prev_size*sizeof(short)))==NULL) {
+        SOKOL_FREE(ucs);
         return -1;
-    ucs_size = UnicodeStrFromUtf8(ucs, ucs_size, atext, atext+strlen(atext), NULL);
-    ucs_prev_size = UnicodeStrFromUtf8(
+    }
+    ucs_size = _sapp_android_UnicodeStrFromUtf8(ucs, ucs_size, atext, atext+strlen(atext), NULL);
+    ucs_prev_size = _sapp_android_UnicodeStrFromUtf8(
         ucs_prev, ucs_prev_size, _sapp.android.aui.atext_prev, 
         _sapp.android.aui.atext_prev+strlen(_sapp.android.aui.atext_prev), NULL);
     /* prev="abcde", ucs="abCDEF"
@@ -8730,8 +8462,8 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_atext(char *atext) {
             }
         }
     }
-    free(ucs); free(ucs_prev);
-    free(_sapp.android.aui.atext_prev);
+    SOKOL_FREE(ucs); SOKOL_FREE(ucs_prev);
+    SOKOL_FREE(_sapp.android.aui.atext_prev);
     _sapp.android.aui.atext_prev = atext;
     return 0;
 }
@@ -8740,7 +8472,7 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_vtext(char *atext, bool vchanged, boo
     || _sapp.android.aui.win_id_prev != _sapp.android.aui.win_id) {
         _sapp_android_aui_displayKeyboard(true);
         //count utf8 in ucs16 2021/02/09
-        int atext_wsize = UnicodeCountCharsFromUtf8(atext, atext+strlen(atext));
+        int atext_wsize = _sapp_android_UnicodeCountCharsFromUtf8(atext, atext+strlen(atext));
 /* Only setText() when _sapp.android.aui.cursor > length_of_atext. when we type in
    or backspace, aui.cursor is alway <= length_of_atext, we avoid setText() in this
    situation for performance optimization. There is an exception 
@@ -8767,19 +8499,17 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_vtext(char *atext, bool vchanged, boo
             //sizeof(ucs16)*3, no utf8mb4. +1 for 0 terminator 
             int utf8_buf_size = _sapp.android.aui.cursor*3+1;
             if(utf8_buf_size > 1) {
-                if((utf8=(char*)malloc(utf8_buf_size))==NULL)
+                if((utf8=(char*)SOKOL_MALLOC((size_t)utf8_buf_size))==NULL)
                     return -1;
-                UnicodeStrToUtf8(utf8, utf8_buf_size, _sapp.android.aui.vtext, _sapp.android.aui.vtext+_sapp.android.aui.cursor);
+                _sapp_android_UnicodeStrToUtf8(utf8, utf8_buf_size, _sapp.android.aui.vtext, _sapp.android.aui.vtext+_sapp.android.aui.cursor);
             }
             else
-                utf8 = strdup(""); //just copy a "" 2021/02/10
+                utf8 = (char*)SOKOL_CALLOC(1, 1); //just copy a "" utf8 must asigned with a alloced buffer because we will free it later 2021/02/10
 
             _sapp_android_aui_setText(utf8);
             //if we set EditText we must sync atext_prev to atext
-            free(_sapp.android.aui.atext_prev);
+            SOKOL_FREE(_sapp.android.aui.atext_prev);
             _sapp.android.aui.atext_prev = utf8;
-            //if(utf8_size > 0)
-            //    free(utf8);
 __android_log_print(ANDROID_LOG_ERROR, "imgui aui_input_vtext", 
 "vchanged==[%s] cursor=%d atext(old)=%d [%s]\n", utf8, _sapp.android.aui.cursor, atext_wsize, atext);
         }
@@ -8791,7 +8521,7 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui aui_input_vtext",
 _sapp_android_debug_print_text(atext);
     return 0;
 }
-_SOKOL_PRIVATE int _sapp_android_aui_input(int fd) {
+_SOKOL_PRIVATE int _sapp_android_aui_input_text(int fd) {
     char *atext = _sapp_android_aui_getText();
     _sapp_android_debug_print_text(atext);
     bool vchanged = false, achanged = false;
@@ -8800,22 +8530,19 @@ _SOKOL_PRIVATE int _sapp_android_aui_input(int fd) {
         _sapp.android.aui.vtext_prev_cursor = 0;
     }
     if(_sapp.android.aui.atext_prev == NULL)
-        _sapp.android.aui.atext_prev = strdup("");
+        _sapp.android.aui.atext_prev = (char*)SOKOL_CALLOC(1, 1);//atext_prev alway assigned with alloced buffer
 
     if(_sapp.android.aui.vtext_prev != _sapp.android.aui.vtext
     || _sapp.android.aui.vtext_prev_cursor != _sapp.android.aui.cursor
-    || memcmp(_sapp.android.aui.vtext_prev, _sapp.android.aui.vtext, _sapp.android.aui.cursor*sizeof(unsigned short)) != 0
+    || memcmp(_sapp.android.aui.vtext_prev, _sapp.android.aui.vtext, (size_t)_sapp.android.aui.cursor*sizeof(unsigned short)) != 0
     || _sapp.android.aui.win_id_prev != _sapp.android.aui.win_id)
         vchanged = true;
     if(strcmp(atext, _sapp.android.aui.atext_prev) != 0)
         achanged = true;
-    if(vchanged==false && achanged==false) {
-        //_sapp_android_aui_getSelection();
+    if(vchanged==false && achanged==false)
         return 0;
-    }
-    if(vchanged==true) {
+    if(vchanged==true)
         return _sapp_android_aui_input_vtext(atext, vchanged, achanged);
-    }
     if(achanged==true)
         return _sapp_android_aui_input_atext(atext);
     return 0;
@@ -8846,9 +8573,11 @@ _SOKOL_PRIVATE int _sapp_android_aui_cb(int fd, int events, void* data) {
             _sapp.android.aui.win_id_prev = 0xffffffff;
             break;
         case _SOKOL_ANDROID_MSG_AUI_GETTEXT: {
-            _sapp_android_aui_input(fd);
+            _sapp_android_aui_input_text(fd);
             break;
         }
+        default:
+            break;
     }
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
     return 1;
@@ -8859,10 +8588,6 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     return is_in_front && has_surface;
 }
 
-#ifdef __cplusplus
-
-#else //c
-#endif
 _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
     /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
@@ -8876,27 +8601,14 @@ _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
 	    _sapp_android_aui_msg(_SOKOL_ANDROID_MSG_AUI_HIDE_IME);
     }
 }
-//Luke Zhou 2021/02/08
-_SOKOL_PRIVATE void _sapp_android_input_text(
- unsigned int win_id, unsigned short *ucs, int size, int cursor, int sel_start, int sel_stop) {
-    if(_sapp.android.aui.vtext_size == size
-    && _sapp.android.aui.cursor == cursor
-    && _sapp.android.aui.sel_start == sel_start
-    && _sapp.android.aui.sel_stop == sel_stop
-    && _sapp.android.aui.vtext == ucs
-    && _sapp.android.aui.win_id == win_id) {
-    //&& memcmp(_sapp.android.aui.buf_edit, ucs, size*2)==0;
-        //_sapp.android.aui.buf_changed = false;
-    }
-    else {
-        _sapp.android.aui.win_id = win_id;
-        _sapp.android.aui.vtext = ucs;
-        _sapp.android.aui.vtext_size = size;
-        _sapp.android.aui.cursor = cursor;
-        _sapp.android.aui.sel_start = sel_start;
-        _sapp.android.aui.sel_stop = sel_stop;
-        //_sapp.android.aui.buf_changed = true;
-    }
+//2021/02/08
+_SOKOL_PRIVATE void _sapp_android_input_text(unsigned int win_id, unsigned short *wchar, int wchar_size, int cursor, int sel_start, int sel_stop) {
+    _sapp.android.aui.win_id = win_id;
+    _sapp.android.aui.vtext = wchar;
+    _sapp.android.aui.vtext_size = wchar_size;
+    _sapp.android.aui.cursor = cursor;
+    _sapp.android.aui.sel_start = sel_start;
+    _sapp.android.aui.sel_stop = sel_stop;
 	_sapp_android_aui_msg(_SOKOL_ANDROID_MSG_AUI_GETTEXT);
 }
 _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
@@ -11376,14 +11088,14 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
     _SOKOL_UNUSED(show);
     #endif
 }
-//Luke Zhou 2021/02/08
-SOKOL_API_IMPL void sapp_input_text(unsigned int ID, unsigned short *ucs, int size, int cursor, int sel_start, int sel_stop) {
+//Receive input from IME 2021/02/08
+SOKOL_API_IMPL void sapp_input_text(unsigned int win_id, unsigned short *wchar, int wchar_size, int cursor, int sel_start, int sel_stop) {
     #if defined(_SAPP_IOS)
 
     #elif defined(_SAPP_EMSCRIPTEN)
 
     #elif defined(_SAPP_ANDROID)
-    _sapp_android_input_text(ID, ucs, size, cursor, sel_start, sel_stop);
+    _sapp_android_input_text(win_id, wchar, wchar_size, cursor, sel_start, sel_stop);
     #else
     _SOKOL_UNUSED(ucs);
     _SOKOL_UNUSED(size);
