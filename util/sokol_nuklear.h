@@ -1917,7 +1917,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
                                    cmd->clip_rect.h * dpi_scale,
                                    true);
             sg_draw(0, (int)cmd->elem_count, 1);
-            idx_offset += cmd->elem_count * sizeof(uint16_t);
+            idx_offset += (int)cmd->elem_count * (int)sizeof(uint16_t);
         }
     }
 
