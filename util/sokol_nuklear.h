@@ -1902,48 +1902,47 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
     const bool vertex_buffer_overflow = nk_buffer_total(&verts) > _snuklear.vertex_buffer_size;
     const bool index_buffer_overflow = nk_buffer_total(&idx) > _snuklear.index_buffer_size;
     SOKOL_ASSERT(!vertex_buffer_overflow && !index_buffer_overflow);
-    if (vertex_buffer_overflow || index_buffer_overflow) {
-        return;
-    }
+    if (!vertex_buffer_overflow && !index_buffer_overflow) {
 
-    /* Setup rendering */
-    const float dpi_scale = _snuklear.desc.dpi_scale;
-    const int fb_width = (int)(_snuklear.vs_params.disp_size[0] * dpi_scale);
-    const int fb_height = (int)(_snuklear.vs_params.disp_size[1] * dpi_scale);
-    sg_apply_viewport(0, 0, fb_width, fb_height, true);
-    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
-    sg_apply_pipeline(_snuklear.pip);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(_snuklear.vs_params));
-    sg_update_buffer(_snuklear.vbuf, &(sg_range){ nk_buffer_memory_const(&verts), nk_buffer_total(&verts) });
-    sg_update_buffer(_snuklear.ibuf, &(sg_range){ nk_buffer_memory_const(&idx), nk_buffer_total(&idx) });
+        /* Setup rendering */
+        const float dpi_scale = _snuklear.desc.dpi_scale;
+        const int fb_width = (int)(_snuklear.vs_params.disp_size[0] * dpi_scale);
+        const int fb_height = (int)(_snuklear.vs_params.disp_size[1] * dpi_scale);
+        sg_apply_viewport(0, 0, fb_width, fb_height, true);
+        sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
+        sg_apply_pipeline(_snuklear.pip);
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(_snuklear.vs_params));
+        sg_update_buffer(_snuklear.vbuf, &(sg_range){ nk_buffer_memory_const(&verts), nk_buffer_total(&verts) });
+        sg_update_buffer(_snuklear.ibuf, &(sg_range){ nk_buffer_memory_const(&idx), nk_buffer_total(&idx) });
 
-    /* Iterate through the command list, rendering each one */
-    const struct nk_draw_command* cmd = NULL;
-    int idx_offset = 0;
-    nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
-        if(cmd->elem_count > 0) {
-            sg_apply_bindings(&(sg_bindings){
-                .fs_images[0] = _snuklear.img,
-                .vertex_buffers[0] = _snuklear.vbuf,
-                .index_buffer = _snuklear.ibuf,
-                .vertex_buffer_offsets[0] = 0,
-                .index_buffer_offset = idx_offset
-            });
-            sg_apply_scissor_rectf(cmd->clip_rect.x * dpi_scale,
-                                   cmd->clip_rect.y * dpi_scale,
-                                   cmd->clip_rect.w * dpi_scale,
-                                   cmd->clip_rect.h * dpi_scale,
-                                   true);
-            sg_draw(0, (int)cmd->elem_count, 1);
-            idx_offset += (int)cmd->elem_count * (int)sizeof(uint16_t);
+        /* Iterate through the command list, rendering each one */
+        const struct nk_draw_command* cmd = NULL;
+        int idx_offset = 0;
+        nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
+            if(cmd->elem_count > 0) {
+                sg_apply_bindings(&(sg_bindings){
+                    .fs_images[0] = _snuklear.img,
+                    .vertex_buffers[0] = _snuklear.vbuf,
+                    .index_buffer = _snuklear.ibuf,
+                    .vertex_buffer_offsets[0] = 0,
+                    .index_buffer_offset = idx_offset
+                });
+                sg_apply_scissor_rectf(cmd->clip_rect.x * dpi_scale,
+                                       cmd->clip_rect.y * dpi_scale,
+                                       cmd->clip_rect.w * dpi_scale,
+                                       cmd->clip_rect.h * dpi_scale,
+                                       true);
+                sg_draw(0, (int)cmd->elem_count, 1);
+                idx_offset += (int)cmd->elem_count * (int)sizeof(uint16_t);
+            }
         }
+        sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
     }
 
     /* Cleanup */
     nk_buffer_free(&cmds);
     nk_buffer_free(&verts);
     nk_buffer_free(&idx);
-    sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 }
 
 #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
