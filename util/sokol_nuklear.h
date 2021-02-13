@@ -1938,7 +1938,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         const struct nk_draw_command* cmd = NULL;
         int idx_offset = 0;
         nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
-            if(cmd->elem_count > 0) {
+            if (cmd->elem_count > 0) {
                 sg_apply_bindings(&(sg_bindings){
                     .fs_images[0] = _snuklear.img,
                     .vertex_buffers[0] = _snuklear.vbuf,
@@ -1982,7 +1982,7 @@ _SOKOL_PRIVATE void _snk_append_char(uint32_t char_code) {
 }
 
 _SOKOL_PRIVATE enum nk_keys _snk_event_to_nuklearkey(const sapp_event* ev) {
-    switch(ev->key_code) {
+    switch (ev->key_code) {
         case SAPP_KEYCODE_C:
             if (_snk_is_ctrl(ev->modifiers)) {
                 return NK_KEY_COPY;
@@ -2038,7 +2038,7 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_MOUSE_DOWN:
             _snuklear.mouse_pos[0] = (int) (ev->mouse_x / dpi_scale);
             _snuklear.mouse_pos[1] = (int) (ev->mouse_y / dpi_scale);
-            switch(ev->mouse_button) {
+            switch (ev->mouse_button) {
                 case SAPP_MOUSEBUTTON_LEFT:
                     _snuklear.btn_down[NK_BUTTON_LEFT] = true;
                     break;
@@ -2055,7 +2055,7 @@ SOKOL_API_IMPL void snk_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_MOUSE_UP:
             _snuklear.mouse_pos[0] = (int) (ev->mouse_x / dpi_scale);
             _snuklear.mouse_pos[1] = (int) (ev->mouse_y / dpi_scale);
-            switch(ev->mouse_button) {
+            switch (ev->mouse_button) {
                 case SAPP_MOUSEBUTTON_LEFT:
                     _snuklear.btn_up[NK_BUTTON_LEFT] = true;
                     break;
