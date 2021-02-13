@@ -57,6 +57,10 @@
 
         nuklear.h
 
+    NOTE: Unlike most other sokol-headers, the implementation must be compiled
+    as C, compiling as C++ isn't supported. The interface is callable
+    from C++ of course.
+
 
     FEATURE OVERVIEW:
     =================
