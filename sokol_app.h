@@ -7766,8 +7766,6 @@ void _sapp_android_aui_setText(const char *string) {
     //EditText.setText(charseq, TextView.BufferType.EDITABLE);
     //new charseq
     jstring charseq = (*lJNIEnv)->NewStringUTF(lJNIEnv, string);
-__android_log_print(ANDROID_LOG_ERROR, "imgui SetText string", "[%s]%p\n",
-    string, charseq);
     //new TextView.BufferType.EDITABLE
     jclass BufferTypeClass = (*lJNIEnv)->FindClass(lJNIEnv, "android/widget/TextView$BufferType");
 
@@ -7777,13 +7775,9 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui SetText string", "[%s]%p\n",
     jobject EDITABLE = (*lJNIEnv)->GetStaticObjectField(lJNIEnv, 
         BufferTypeClass, EDITABLEField);
 
-//__android_log_print(ANDROID_LOG_ERROR, "imgui SetText TextView.BufferType", "[%s]%p %p %p\n",
-//    string, BufferTypeClass, EDITABLEField, EDITABLE);
-
     jclass ClassEditText = (*lJNIEnv)->GetObjectClass(lJNIEnv, _sapp.android.aui.lEditext);
     /*jmethodID MethodSetText = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassEditText,
-        "setText",
+        ClassEditText, "setText",
         "(Ljava/lang/CharSequence;Landroid/widget/TextView$BufferType;)V");
     (*lJNIEnv)->CallVoidMethod(lJNIEnv, 
         _sapp.android.aui.lEditext, MethodSetText, charseq, EDITABLE);
@@ -7799,11 +7793,6 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui SetText string", "[%s]%p\n",
     (*lJNIEnv)->CallVoidMethod(lJNIEnv, 
         _sapp.android.aui.lEditext, MethodSetText, charseq);
 
-/*    jmethodID MethodAppend = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassEditText, "append", "(Ljava/lang/CharSequence;)V");
-    (*lJNIEnv)->CallVoidMethod(lJNIEnv,
-        _sapp.android.aui.lEditext, MethodAppend, charseq);
-*/
     //move cursor to end 2021/02/09
     jmethodID MethodLength = (*lJNIEnv)->GetMethodID(lJNIEnv, 
         (*lJNIEnv)->GetObjectClass(lJNIEnv, charseq), "length", "()I");
@@ -7815,8 +7804,6 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui SetText string", "[%s]%p\n",
     (*lJNIEnv)->CallVoidMethod(lJNIEnv, 
         _sapp.android.aui.lEditext, MethodSetSelection, charseq_len);
 
-__android_log_print(ANDROID_LOG_ERROR, "imgui SetText", "[%s]%p %p %p changed pos=%d\n",
-    string, BufferTypeClass, EDITABLEField, EDITABLE, (int)strlen(string));
 }
 void _sapp_android_aui_clearComposingText() {
     JavaVM* lJavaVM = _sapp.android.activity->vm;
@@ -7844,8 +7831,6 @@ void _sapp_android_aui_getSelection() {
     int sel_end = (*lJNIEnv)->CallIntMethod(lJNIEnv, 
         _sapp.android.aui.lEditext, MethodGetSelectionEnd);
 
-__android_log_print(ANDROID_LOG_ERROR, "imgui getSelection", "%d %d changed\n",
-    sel_start, sel_end);
 }
 
 void _sapp_android_aui_createEditText() {
@@ -7855,15 +7840,6 @@ void _sapp_android_aui_createEditText() {
 
     JavaVM* lJavaVM = _sapp.android.activity->vm;
     JNIEnv* lJNIEnv = _sapp.android.activity->env;
-    JavaVMAttachArgs lJavaVMAttachArgs;
-    lJavaVMAttachArgs.version = JNI_VERSION_1_6;
-    lJavaVMAttachArgs.name = "NativeThread";
-    lJavaVMAttachArgs.group = NULL;
-
-    /*lResult=(*lJavaVM)->AttachCurrentThread(lJavaVM, &lJNIEnv, &lJavaVMAttachArgs);
-    if (lResult == JNI_ERR) {
-        return;
-    }*/
     // Retrieves NativeActivity.
     jobject lNativeActivity = _sapp.android.activity->clazz;
     jclass ClassNativeActivity = (*lJNIEnv)->GetObjectClass(lJNIEnv, lNativeActivity);
@@ -7876,7 +7852,6 @@ void _sapp_android_aui_createEditText() {
     (*lJNIEnv)->NewGlobalRef(lJNIEnv, ClassEditText), txt_con_id, lNativeActivity);
     _sapp.android.aui.lEditext = (*lJNIEnv)->NewGlobalRef(lJNIEnv, lEditText);
 
-#if 1
     // Runs getWindow().getDecorView().
     jmethodID MethodGetWindow = (*lJNIEnv)->GetMethodID(lJNIEnv, 
         ClassNativeActivity, "getWindow",
@@ -7889,27 +7864,6 @@ void _sapp_android_aui_createEditText() {
         ClassWindow, "getDecorView", "()Landroid/view/View;");
     jobject lDecorView = (*lJNIEnv)->CallObjectMethod(lJNIEnv, lWindow,
         MethodGetDecorView);
-    __android_log_print(ANDROID_LOG_ERROR, "imgui EditText", "GetDecorView %p\n",
-    MethodGetDecorView);
-
-    /*jclass ClassDecorView = (*lJNIEnv)->GetObjectClass(lJNIEnv, lDecorView);
-    jmethodID MethodGetRootView = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassDecorView, "getRootView",
-        "()Landroid/view/View;");
-    __android_log_print(ANDROID_LOG_ERROR, "EditText", "getRootView %p\n",
-    MethodGetRootView);
-
-    //DecorView.getRootView().addView(lEditText)
-    jobject lRootView = (*lJNIEnv)->CallObjectMethod(lJNIEnv, lDecorView, MethodGetRootView);
-    jclass ClassRootView = (*lJNIEnv)->GetObjectClass(lJNIEnv, lRootView);
-    jmethodID MethodAddView = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassRootView, "addView",
-        "(Landroid/view/View;)V");
-    (*lJNIEnv)->CallVoidMethod(lJNIEnv, ClassRootView, MethodAddView, lEditText);
-
-    __android_log_print(ANDROID_LOG_ERROR, "EditText", "addView %p\n",
-    MethodAddView);*/
-
 
     
     //Run DecorView.addView(EditText);     getRootView
@@ -7917,41 +7871,12 @@ void _sapp_android_aui_createEditText() {
     jmethodID MethodAddView = (*lJNIEnv)->GetMethodID(lJNIEnv, 
         ClassDecorView, "addView",
         "(Landroid/view/View;)V");
-    __android_log_print(ANDROID_LOG_ERROR, "imgui EditText", "addView %p\n",
-    MethodAddView);
     (*lJNIEnv)->CallVoidMethod(lJNIEnv, lDecorView, MethodAddView, _sapp.android.aui.lEditext);
 
     //jclass ClassEditText = (*lJNIEnv)->GetObjectClass(lJNIEnv, _sapp.android.aui.lEditext);
     jmethodID MethodClearFocus = (*lJNIEnv)->GetMethodID(lJNIEnv, 
         ClassEditText, "clearFocus", "()V");
     (*lJNIEnv)->CallVoidMethod(lJNIEnv, _sapp.android.aui.lEditext, MethodClearFocus);
-
-#endif
-#if 0
-    // Runs addContentView(lEditText, new ViewGroup.LayoutParams(-2, -2));
-    // -2 = WRAP_CONTENT; -1 = FILL_PARENT and MATCH_PARENT.
-    /*jmethodID MethodAddContentView = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassNativeActivity, "addContentView",
-        "(Landroid/view/View;Landroid/view/ViewGroup/LayoutParams;)V");
-    //obj = new ViewGroup.LayoutParams(-2, -2);
-    jclass cls_vglp = (*lJNIEnv)->FindClass(lJNIEnv, "android/view/ViewGroup/LayoutParams");
-    jmethodID init_vglp = (*lJNIEnv)->GetMethodID(lJNIEnv, cls_vglp,"<init>", "(II)V");
-    jobject lvglp = (*lJNIEnv)->NewObject(lJNIEnv, cls_vglp, init_vglp, -2, -2);
-
-    //(*lJNIEnv)->CallObjectMethod(lJNIEnv, lNativeActivity,
-    //    MethodAddContentView, lEditText, lvglp);
-        */
-    jmethodID MethodSetContentView = (*lJNIEnv)->GetMethodID(lJNIEnv, 
-        ClassNativeActivity, "setContentView",
-        "(Landroid/view/View;)V");
-    __android_log_print(ANDROID_LOG_ERROR, "imgui EditText", "setContentView %p\n",
-    MethodSetContentView);
-
-    (*lJNIEnv)->CallVoidMethod(lJNIEnv, lNativeActivity,
-        MethodSetContentView, _sapp.android.lEditext);
-#endif    
-    // Finished with the JVM.
-    //(*lJavaVM)->DetachCurrentThread(lJavaVM);
 }
 void _sapp_android_aui_displayKeyboard(bool pShow) { //Luke Zhou 2021/02/05
     // Attaches the current thread to the JVM.
@@ -7960,16 +7885,6 @@ void _sapp_android_aui_displayKeyboard(bool pShow) { //Luke Zhou 2021/02/05
 
     JavaVM* lJavaVM = _sapp.android.activity->vm;
     JNIEnv* lJNIEnv = _sapp.android.activity->env;
-
-    /*JavaVMAttachArgs lJavaVMAttachArgs;
-    lJavaVMAttachArgs.version = JNI_VERSION_1_6;
-    lJavaVMAttachArgs.name = "NativeThread";
-    lJavaVMAttachArgs.group = NULL;
-
-    lResult=(*lJavaVM)->AttachCurrentThread(lJavaVM, &lJNIEnv, &lJavaVMAttachArgs);
-    if (lResult == JNI_ERR) {
-        return;
-    }*/
 
     // Retrieves NativeActivity.
     jobject lNativeActivity = _sapp.android.activity->clazz;
@@ -7983,7 +7898,6 @@ void _sapp_android_aui_displayKeyboard(bool pShow) { //Luke Zhou 2021/02/05
     jobject INPUT_METHOD_SERVICE =
         (*lJNIEnv)->GetStaticObjectField(lJNIEnv, ClassContext,
             FieldINPUT_METHOD_SERVICE);
-    //jniCheck(INPUT_METHOD_SERVICE);
 
     // Runs getSystemService(Context.INPUT_METHOD_SERVICE).
     jclass ClassInputMethodManager = (*lJNIEnv)->FindClass(lJNIEnv, 
@@ -8029,7 +7943,6 @@ void _sapp_android_aui_displayKeyboard(bool pShow) { //Luke Zhou 2021/02/05
             lInputMethodManager, MethodShowSoftInput,
             _sapp.android.aui.lEditext, lFlags);
             //lDecorView, lFlags);
-__android_log_print(ANDROID_LOG_ERROR, "imgui displayKeyboard show", "true\n");
     } else {
         //EditText.setInputType(TYPE_NULL=0)
         //We must force EditText hide keyboard, otherwise, the keyboard will shown
@@ -8340,7 +8253,6 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
             _sapp.event.char_code = wchar;
             _sapp.event.key_repeat = false;
             _sapp_call_event(&_sapp.event);
-__android_log_print(ANDROID_LOG_ERROR, "imgui AUI_SETCHAR","achanged==%x\n", wchar);
             break;
         }
         case _SOKOL_ANDROID_MSG_AUI_SETCHARS: {
@@ -8356,8 +8268,6 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui AUI_SETCHAR","achanged==%x\n", wch
                 _sapp.event.key_repeat = false;
                 _sapp_call_event(&_sapp.event);
             }
-__android_log_print(ANDROID_LOG_ERROR, "imgui AUI_SETCHARS",
-    "achanged n=%d last=%x\n", num, wchar);
             break;
         }
         case _SOKOL_ANDROID_MSG_AUI_KEY_DOWN: {
@@ -8380,8 +8290,6 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui AUI_SETCHARS",
             _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
             _sapp.event.key_code = (sapp_keycode)key_code;
             _sapp_call_event(&_sapp.event);
-__android_log_print(ANDROID_LOG_ERROR, "imgui _SOKOL_ANDROID_MSG_AUI_KEY_UP", 
-"achanged key==%d\n", key_code);
             break;
         }
         default:
@@ -8392,6 +8300,7 @@ __android_log_print(ANDROID_LOG_ERROR, "imgui _SOKOL_ANDROID_MSG_AUI_KEY_UP",
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
     return 1;
 }
+/* This is a debug print */
 _SOKOL_PRIVATE void _sapp_android_debug_print_text(char *atext) {
     char *utf8;
     //sizeof(ucs16)*3, no utf8mb4. +1 for 0 terminator 
@@ -8448,8 +8357,6 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_atext(char *atext) {
             }
         }
     }
-//__android_log_print(ANDROID_LOG_ERROR, "imgui ", "achanged==[%s]=[%s] %d %d i=%d\n",
-//atext, _sapp.android.aui.atext_prev, ucs_size, ucs_prev_size, i);
     if(i < ucs_size) {
         uint32_t num = (uint32_t)(ucs_size - i);
         _sapp_android_msg(_SOKOL_ANDROID_MSG_AUI_SETCHARS);
@@ -8510,8 +8417,6 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_vtext(char *atext, bool vchanged, boo
             //if we set EditText we must sync atext_prev to atext
             SOKOL_FREE(_sapp.android.aui.atext_prev);
             _sapp.android.aui.atext_prev = utf8;
-__android_log_print(ANDROID_LOG_ERROR, "imgui aui_input_vtext", 
-"vchanged==[%s] cursor=%d atext(old)=%d [%s]\n", utf8, _sapp.android.aui.cursor, atext_wsize, atext);
         }
     }
     _sapp.android.aui.win_id_prev = _sapp.android.aui.win_id;
