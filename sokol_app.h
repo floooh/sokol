@@ -6339,6 +6339,12 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
+    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+        freopen("CON", "r", stdin);
+        freopen("CON", "w", stdout);
+        freopen("CON", "w", stderr);
+    }
+    SetConsoleOutputCP(CP_UTF8);
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_win32_run(&desc);
     return 0;
