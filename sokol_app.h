@@ -1182,7 +1182,7 @@ SOKOL_APP_API_DECL float sapp_dpi_scale(void);
 /* show or hide the mobile device onscreen keyboard */
 SOKOL_APP_API_DECL void sapp_show_keyboard(bool show);
 
-//Luke Zhou
+//Currently, only handle android 2021/02/13
 SOKOL_APP_API_DECL void sapp_input_text(unsigned int win_id, unsigned short *ucs, int size, int cursor, int sel_start, int sel_stop);
 
 /* return true if the mobile device onscreen keyboard is currently shown */
@@ -1801,13 +1801,13 @@ typedef enum {
     _SOKOL_ANDROID_MSG_SET_NATIVE_WINDOW,
     _SOKOL_ANDROID_MSG_SET_INPUT_QUEUE,
     _SOKOL_ANDROID_MSG_DESTROY,
-    //MSG from native thread to Activity UI thread looper Luke Zhou 2021/02/07
+    //MSG from native thread to Activity UI thread looper 2021/02/07
     _SOKOL_ANDROID_MSG_AUI_SHOW_IME,
     _SOKOL_ANDROID_MSG_AUI_HIDE_IME,
     _SOKOL_ANDROID_MSG_AUI_GETTEXT,
     _SOKOL_ANDROID_MSG_AUI_SETTEXT,
     _SOKOL_ANDROID_MSG_AUI_SETSELECTION,
-    //MSG from Activity UI thread looper to native thread Luke Zhou 2021/02/07
+    //MSG from Activity UI thread looper to native thread 2021/02/07
     _SOKOL_ANDROID_MSG_AUI_SETCHAR,
     _SOKOL_ANDROID_MSG_AUI_SETCHARS,
     _SOKOL_ANDROID_MSG_AUI_KEY_DOWN,
@@ -1822,7 +1822,7 @@ typedef struct {
     int write_from_main_fd;
 } _sapp_android_pt_t;
 
-//_sapp_android_aui_t Android Activity UI(aui). Add by Luke Zhou 2021/02/07
+//_sapp_android_aui_t Android Activity UI(aui). Add on 2021/02/07
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
@@ -1846,7 +1846,7 @@ typedef struct {
 
 typedef struct {
     ANativeActivity* activity;
-    _sapp_android_aui_t aui; //Luke Zhou 2021/02/06
+    _sapp_android_aui_t aui; //2021/02/06
     _sapp_android_pt_t pt;
     _sapp_android_resources_t pending;
     _sapp_android_resources_t current;
@@ -7666,23 +7666,6 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
     return true;
 }
 
-//Luke Zhou 2021/02/05
-_SOKOL_PRIVATE uint32_t _sapp_android_mods(int32_t c) {
-    uint32_t mods = 0;
-    if (0) {
-        mods |= SAPP_MODIFIER_SHIFT;
-    }
-    if (0) {
-        mods |= SAPP_MODIFIER_CTRL;
-    }
-    if (0) {
-        mods |= SAPP_MODIFIER_ALT;
-    }
-    if (0) {
-        mods |= SAPP_MODIFIER_SUPER;
-    }
-    return mods;
-}
 #if !defined(SOKOL_MALLOC) || !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
     #include <stdlib.h>
 #endif
@@ -8249,7 +8232,6 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
                 break;
             }
             _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-            //_sapp.event.modifiers = _sapp_android_mods(c);
             _sapp.event.char_code = wchar;
             _sapp.event.key_repeat = false;
             _sapp_call_event(&_sapp.event);
@@ -8299,23 +8281,6 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
     pthread_cond_broadcast(&_sapp.android.pt.cond); /* signal "received" */
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
     return 1;
-}
-/* This is a debug print */
-_SOKOL_PRIVATE void _sapp_android_debug_print_text(char *atext) {
-    char *utf8;
-    //sizeof(ucs16)*3, no utf8mb4. +1 for 0 terminator 
-    int utf8_size = _sapp.android.aui.cursor*3+1;
-    if(utf8_size > 1) {
-        if((utf8=(char*)SOKOL_MALLOC((size_t)utf8_size))==NULL)
-            return;
-        _sapp_android_UnicodeStrToUtf8(utf8, utf8_size, _sapp.android.aui.vtext, _sapp.android.aui.vtext+_sapp.android.aui.cursor);
-    }
-    else
-        utf8 = (char*)SOKOL_CALLOC(1, 1); //just copy a "" will free it at exit of function2021/02/10
-__android_log_print(ANDROID_LOG_ERROR, "imgui debug_print:", 
-      "atext,prev=[%s][%s] vtext=[%s] cursor=%d\n", atext, 
-      _sapp.android.aui.atext_prev, utf8, _sapp.android.aui.cursor);
-    SOKOL_FREE(utf8);
 }
 _SOKOL_PRIVATE int _sapp_android_aui_input_atext(char *atext) {
     unsigned short *ucs, *ucs_prev;
@@ -8390,11 +8355,6 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_vtext(char *atext, bool vchanged, boo
      cursor of EditText is at 0, thus we can't backspace! So we must call setText()
      to reset the cursor.
    2021/02/10
-   2021/02/11 Use _sapp.android.aui.cursor != length_of_atext "ne" now for accurate match
-   atext and vtext, _sapp.android.aui.cursor > length_of_atext "gt" also works, but 
-   atext may not sync with vtext, for example: if we use gt, jiuh=就好, after input
-   atext=jiu, vtext=就好, because len(jiu) > len(就好). But if we use !=, both
-   atext and vtext will be 就好.
    _sapp.android.aui.cursor != length_of_atext has a bug, 
    MSNBC| -> MS|NBC -> input one d -> MSdd|NBC, 1d->2d, I think it's 
    a confusion of IME when we setText a smaller EditText. 
@@ -8423,12 +8383,10 @@ _SOKOL_PRIVATE int _sapp_android_aui_input_vtext(char *atext, bool vchanged, boo
     _sapp.android.aui.vtext_prev = _sapp.android.aui.vtext;
     _sapp.android.aui.vtext_prev_cursor = _sapp.android.aui.cursor;
 
-_sapp_android_debug_print_text(atext);
     return 0;
 }
 _SOKOL_PRIVATE int _sapp_android_aui_input_text(int fd) {
     char *atext = _sapp_android_aui_getText();
-    _sapp_android_debug_print_text(atext);
     bool vchanged = false, achanged = false;
     if(_sapp.android.aui.vtext_prev == NULL) {
         _sapp.android.aui.vtext_prev = _sapp.android.aui.vtext;
