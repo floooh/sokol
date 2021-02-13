@@ -6349,6 +6349,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
+    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+        freopen("CON", "r", stdin);
+        freopen("CON", "w", stdout);
+        freopen("CON", "w", stderr);
+    }
+    SetConsoleOutputCP(CP_UTF8);
     int argc_utf8 = 0;
     char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
     sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
