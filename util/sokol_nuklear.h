@@ -1698,11 +1698,12 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
 
     /* Font Texture */
     if(!_snuklear.desc.no_default_font) {
-        int font_width, font_height;
+        int font_width = 0, font_height = 0;
 
         nk_font_atlas_init_default(&_snuklear.atlas);
         nk_font_atlas_begin(&_snuklear.atlas);
         const void* pixels = nk_font_atlas_bake(&_snuklear.atlas, &font_width, &font_height, NK_FONT_ATLAS_RGBA32);
+        SOKOL_ASSERT((font_width > 0) && (font_height > 0));
         _snuklear.img = sg_make_image(&(sg_image_desc){
             .width = font_width,
             .height = font_height,
