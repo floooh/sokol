@@ -1697,11 +1697,10 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     });
 
     /* Font Texture */
-    if(!_snuklear.desc.no_default_font) {
-        int font_width = 0, font_height = 0;
-
+    if (!_snuklear.desc.no_default_font) {
         nk_font_atlas_init_default(&_snuklear.atlas);
         nk_font_atlas_begin(&_snuklear.atlas);
+        int font_width = 0, font_height = 0;
         const void* pixels = nk_font_atlas_bake(&_snuklear.atlas, &font_width, &font_height, NK_FONT_ATLAS_RGBA32);
         SOKOL_ASSERT((font_width > 0) && (font_height > 0));
         _snuklear.img = sg_make_image(&(sg_image_desc){
@@ -1712,78 +1711,93 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
             .min_filter = SG_FILTER_LINEAR,
             .mag_filter = SG_FILTER_LINEAR,
-            .data.subimage[0][0].ptr = pixels,
-            .data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t),
+            .data.subimage[0][0] = {
+                .ptr = pixels,
+                .size = (size_t)(font_width * font_height) * sizeof(uint32_t)
+            },
             .label = "sokol-nuklear-font"
         });
         nk_font_atlas_end(&_snuklear.atlas, nk_handle_id((int)_snuklear.img.id), 0);
         nk_font_atlas_cleanup(&_snuklear.atlas);
-        if(_snuklear.atlas.default_font) {
+        if (_snuklear.atlas.default_font) {
             nk_style_set_font(&_snuklear.ctx, &_snuklear.atlas.default_font->handle);
         }
     }
 
     /* Shader */
-    sg_shader_desc shd_desc;
-    memset(&shd_desc, 0, sizeof(shd_desc));
-    shd_desc.attrs[0].name = "position";
-    shd_desc.attrs[1].name = "texcoord0";
-    shd_desc.attrs[2].name = "color0";
-    shd_desc.attrs[0].sem_name = "TEXCOORD";
-    shd_desc.attrs[0].sem_index = 0;
-    shd_desc.attrs[1].sem_name = "TEXCOORD";
-    shd_desc.attrs[1].sem_index = 1;
-    shd_desc.attrs[2].sem_name = "TEXCOORD";
-    shd_desc.attrs[2].sem_index = 2;
-
-    sg_shader_uniform_block_desc* ub = &shd_desc.vs.uniform_blocks[0];
-    ub->size = sizeof(_snk_vs_params_t);
-    ub->uniforms[0].name = "vs_params";
-    ub->uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-    ub->uniforms[0].array_count = 1;
-
-    shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
-    shd_desc.label = "sokol-nuklear-shader";
-    shd_desc.vs.entry = "main";
-    shd_desc.fs.entry = "main";
+    #if defined SOKOL_METAL
+        const char* vs_entry = "main0";
+        const char* fs_entry = "main0";
+    #else
+        const char* vs_entry = "main";
+        const char* fs_entry = "main";
+    #endif
+    sg_range vs_bytecode = { .ptr = 0, .size = 0 };
+    sg_range fs_bytecode = { .ptr = 0, .size = 0 };
+    const char* vs_source = 0;
+    const char* fs_source = 0;
     #if defined(SOKOL_GLCORE33)
-        shd_desc.vs.source = _snk_vs_source_glsl330;
-        shd_desc.fs.source = _snk_fs_source_glsl330;
+        vs_source = _snk_vs_source_glsl330;
+        fs_source = _snk_fs_source_glsl330;
     #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-        shd_desc.vs.source = _snk_vs_source_glsl100;
-        shd_desc.fs.source = _snk_fs_source_glsl100;
+        vs_source = _snk_vs_source_glsl100;
+        fs_source = _snk_fs_source_glsl100;
     #elif defined(SOKOL_METAL)
-        shd_desc.vs.entry = "main0";
-        shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_metal_macos);
-                shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_metal_macos);
+                vs_bytecode = SG_RANGE(_snk_vs_bytecode_metal_macos);
+                fs_bytecode = SG_RANGE(_snk_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_metal_ios);
-                shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_metal_ios);
+                vs_bytecode = SG_RANGE(_snk_vs_bytecode_metal_ios);
+                fs_bytecode = SG_RANGE(_snk_fs_bytecode_metal_ios);
                 break;
             default:
-                shd_desc.vs.source = _snk_vs_source_metal_sim;
-                shd_desc.fs.source = _snk_fs_source_metal_sim;
+                vs_source = _snk_vs_source_metal_sim;
+                fs_source = _snk_fs_source_metal_sim;
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.d3d11_target = "vs_4_0";
-        shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_hlsl4);
-        shd_desc.fs.d3d11_target = "ps_4_0";
-        shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_hlsl4);
+        vs_bytecode = SG_RANGE(_snk_vs_bytecode_hlsl4);
+        fs_bytecode = SG_RANGE(_snk_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.bytecode = SG_RANGE(_snk_vs_bytecode_wgpu);
-        shd_desc.fs.bytecode = SG_RANGE(_snk_fs_bytecode_wgpu);
+        vs_bytecode = SG_RANGE(_snk_vs_bytecode_wgpu);
+        fs_bytecode = SG_RANGE(_snk_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _snk_vs_src_dummy;
-        shd_desc.fs.source = _snk_fs_src_dummy;
+        shd_desc.vs.source = _snk_vs_source_dummy;
+        shd_desc.fs.source = _snk_fs_source_dummy;
     #endif
-    _snuklear.shd = sg_make_shader(&shd_desc);
+
+    /* Shader */
+    _snuklear.shd = sg_make_shader(&(sg_shader_desc){
+        .attrs = {
+            [0] = { .name = "position", .sem_name = "TEXCOORD", .sem_index = 0 },
+            [1] = { .name = "texcoord0", .sem_name = "TEXCOORD", .sem_index = 1 },
+            [2] = { .name = "color0", .sem_name = "TEXCOORD", .sem_index = 2 },
+        },
+        .vs = {
+            .source = vs_source,
+            .bytecode = vs_bytecode,
+            .entry = vs_entry,
+            .d3d11_target = "vs_4_0",
+            .uniform_blocks[0] = {
+                .size = sizeof(_snk_vs_params_t),
+                .uniforms[0] = {
+                    .name = "vs_params",
+                    .type = SG_UNIFORMTYPE_FLOAT4,
+                    .array_count = 1,
+                }
+            },
+        },
+        .fs = {
+            .source = fs_source,
+            .bytecode = fs_bytecode,
+            .entry = fs_entry,
+            .d3d11_target = "ps_4_0",
+            .images[0] = { .name = "tex", .image_type = SG_IMAGETYPE_2D, .sampler_type = SG_SAMPLERTYPE_FLOAT },
+        },
+        .label = "sokol-nuklear-shader"
+    });
 
     /* Pipeline */
     _snuklear.pip = sg_make_pipeline(&(sg_pipeline_desc){
@@ -1830,11 +1844,11 @@ SOKOL_API_IMPL void snk_shutdown(void) {
 SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
     #if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP)
     nk_input_begin(&_snuklear.ctx);
-    if(_snuklear.mouse_did_move) {
+    if (_snuklear.mouse_did_move) {
         nk_input_motion(&_snuklear.ctx, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1]);
         _snuklear.mouse_did_move = false;
     }
-    if(_snuklear.mouse_did_scroll) {
+    if (_snuklear.mouse_did_scroll) {
         nk_input_scroll(&_snuklear.ctx, nk_vec2(_snuklear.mouse_scroll[0], _snuklear.mouse_scroll[1]));
         _snuklear.mouse_did_scroll = false;
     }
@@ -1848,9 +1862,9 @@ SOKOL_API_IMPL struct nk_context* snk_new_frame(void) {
             nk_input_button(&_snuklear.ctx, (enum nk_buttons)i, _snuklear.mouse_pos[0], _snuklear.mouse_pos[1], 0);
         }
     }
-    size_t char_buffer_len = strlen(_snuklear.char_buffer);
-    if(char_buffer_len > 0) {
-        for(size_t i = 0; i < char_buffer_len; i++) {
+    const size_t char_buffer_len = strlen(_snuklear.char_buffer);
+    if (char_buffer_len > 0) {
+        for (size_t i = 0; i < char_buffer_len; i++) {
             nk_input_char(&_snuklear.ctx, _snuklear.char_buffer[i]);
         }
         memset(_snuklear.char_buffer, 0, NK_INPUT_MAX);
