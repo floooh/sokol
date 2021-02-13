@@ -246,6 +246,10 @@ inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
 #error "Please ensure that NK_INCLUDE_VERTEX_BUFFER_OUTPUT is #defined before including nuklear.h"
 #endif
 
+#ifdef __cplusplus
+#error "The sokol_nuklear.h implementation must be compiled as C."
+#endif
+
 
 #include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
@@ -293,6 +297,8 @@ typedef struct {
     struct nk_context ctx;
     struct nk_font_atlas atlas;
     _snk_vs_params_t vs_params;
+    size_t vertex_buffer_size;
+    size_t index_buffer_size;
     sg_buffer vbuf;
     sg_buffer ibuf;
     sg_image img;
@@ -1670,17 +1676,19 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     sg_push_debug_group("sokol-nuklear");
 
     /* Vertex Buffer */
+    _snuklear.vertex_buffer_size = (size_t)_snuklear.desc.max_vertices * sizeof(_snk_vertex_t);
     _snuklear.vbuf = sg_make_buffer(&(sg_buffer_desc){
         .usage = SG_USAGE_STREAM,
-        .size = (size_t)_snuklear.desc.max_vertices * sizeof(_snk_vertex_t),
+        .size = _snuklear.vertex_buffer_size,
         .label = "sokol-nuklear-vertices"
     });
 
     /* Index Buffer */
+    _snuklear.index_buffer_size = (size_t)_snuklear.desc.max_vertices * 3 * sizeof(uint16_t);
     _snuklear.ibuf = sg_make_buffer(&(sg_buffer_desc){
         .type = SG_BUFFERTYPE_INDEXBUFFER,
         .usage = SG_USAGE_STREAM,
-        .size = (size_t)_snuklear.desc.max_vertices * 3 * sizeof(uint16_t),
+        .size = _snuklear.index_buffer_size,
         .label = "sokol-nuklear-indices"
     });
 
@@ -1888,6 +1896,16 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
     nk_buffer_init_default(&idx);
     nk_convert(&_snuklear.ctx, &cmds, &verts, &idx, &cfg);
 
+    /* Check for vertex- and index-buffer overflow, assert in debug-mode,
+       otherwise silently skip rendering
+    */
+    const bool vertex_buffer_overflow = nk_buffer_total(&verts) > _snuklear.vertex_buffer_size;
+    const bool index_buffer_overflow = nk_buffer_total(&idx) > _snuklear.index_buffer_size;
+    SOKOL_ASSERT(!vertex_buffer_overflow && !index_buffer_overflow);
+    if (vertex_buffer_overflow || index_buffer_overflow) {
+        return;
+    }
+
     /* Setup rendering */
     const float dpi_scale = _snuklear.desc.dpi_scale;
     const int fb_width = (int)(_snuklear.vs_params.disp_size[0] * dpi_scale);
@@ -1899,7 +1917,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
     sg_update_buffer(_snuklear.vbuf, &(sg_range){ nk_buffer_memory_const(&verts), nk_buffer_total(&verts) });
     sg_update_buffer(_snuklear.ibuf, &(sg_range){ nk_buffer_memory_const(&idx), nk_buffer_total(&idx) });
 
-    /* Interate through the command list, rendering each one */
+    /* Iterate through the command list, rendering each one */
     const struct nk_draw_command* cmd = NULL;
     int idx_offset = 0;
     nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
