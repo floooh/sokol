@@ -2,6 +2,11 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **13-Fev-2021**: A new utility header [sokol_nuklear.h](https://github.com/floooh/sokol/blob/master/util/sokol_nuklear.h)
+has been added which implements a rendering backend for [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)
+on top of sokol_gfx.h. Also see the new sample [nuklear-sapp](https://floooh.github.io/sokol-html5/nuklear-sapp.html).
+Many thanks to **@wmerrifield** for the PR!
+
 - **10-Feb-2021**: The breaking API-update has been merged (mainly sokol_gfx.h).
 Please see [this blogpost](https://floooh.github.io/2021/02/07/sokol-api-overhaul.html)
 and the updates [sokol samples](https://floooh.github.io/sokol-html5/) for details.
