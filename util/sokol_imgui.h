@@ -1913,12 +1913,14 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
     /* copy vertices and indices into an intermediate buffer so that
        they can be updated with a single sg_update_buffer() call each
-       (sg_append_buffer() has performance problems on some GL platforms)
+       (sg_append_buffer() has performance problems on some GL platforms),
+       also keep track of valid number of command lists in case of a
+       buffer overflow
     */
     size_t all_vtx_size = 0;
     size_t all_idx_size = 0;
-    int cl_index = 0;
-    for (; cl_index < draw_data->CmdListsCount; cl_index++) {
+    int cmd_list_count = 0;
+    for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++, cmd_list_count++) {
         ImDrawList* cl = draw_data->CmdLists[cl_index];
         #if defined(__cplusplus)
             const size_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
@@ -1947,10 +1949,6 @@ SOKOL_API_IMPL void simgui_render(void) {
         all_vtx_size += vtx_size;
         all_idx_size += idx_size;
     }
-    /* ...in case there was a buffer overflow, restrict the number of
-       command list items that are actually rendered
-    */
-    const int cmd_list_count = cl_index;
     if (0 == cmd_list_count) {
         return;
     }
@@ -2033,8 +2031,8 @@ SOKOL_API_IMPL void simgui_render(void) {
             const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
             const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
         #endif
-        vb_offset += vtx_size;
-        ib_offset += idx_size;
+        vb_offset += (int)vtx_size;
+        ib_offset += (int)idx_size;
     }
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
