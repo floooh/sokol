@@ -1988,22 +1988,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <wayland-cursor.h>
         #include <wayland-egl.h>
         #include <xkbcommon/xkbcommon.h>
-
-        /* if given, use the xdg-client header file path, which must be
-         * an absolute path or otherwise a relative path to this
-         * sokol_app.h file otherwise fall back to a manually curated
-         * stripped-down version of used xdg-extensions further down in
-         * the LINUX DECLARATIONS section */
-        /* WL-TODO: find a way to correctly include the header file */
-        #if defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
-            #include SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH
-        #endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
-        #if defined(SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH)
-            #include SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH
-        #endif /* SOKOL_WAYLAND_POINTER_CONSTRAINTS_HEADER_PATH */
-        #if defined(SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH)
-            #include SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH
-        #endif /*SOKOL_WAYLAND_RELATIVE_POINTER_HEADER_PATH*/
     #endif /* SOKOL_WAYLAND */
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
@@ -2519,46 +2503,410 @@ typedef struct {
 #include <stdio.h>
 #include <string.h>
 
-#if !defined(SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH)
-/* NOTE: This is a manually curated list of declarations/definitions of
- * used elements belonging to wayland's xdg-client protocol extension,
- * if no specific version is given via
- * SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH.
- *
- * Check your distributions wayland installation for the `xdg-shell`
- * protocol extension file/header for details.
- *
- * Original copyright:
- *
- *  Copyright © 2008-2013 Kristian Høgsberg
- *  Copyright © 2013      Rafael Antognolli
- *  Copyright © 2013      Jasper St. Pierre
- *  Copyright © 2010-2013 Intel Corporation
- *  Copyright © 2015-2017 Samsung Electronics Co., Ltd
- *  Copyright © 2015-2017 Red Hat Inc.
+/* manually curated wayland protocol extension section: start */
+#ifndef __has_attribute
+# define __has_attribute(x) 0  /* Compatibility with non-clang compilers. */
+#endif
 
- *  Permission is hereby granted, free of charge, to any person obtaining a
- *  copy of this software and associated documentation files (the "Software"),
- *  to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense,
- *  and/or sell copies of the Software, and to permit persons to whom the
- *  Software is furnished to do so, subject to the following conditions:
+#if (__has_attribute(visibility) || defined(__GNUC__) && __GNUC__ >= 4)
+#define WL_PRIVATE __attribute__ ((visibility("hidden")))
+#else
+#define WL_PRIVATE
+#endif
 
- *  The above copyright notice and this permission notice (including the next
- *  paragraph) shall be included in all copies or substantial portions of the
- *  Software.
-
- *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- *  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- *  DEALINGS IN THE SOFTWARE.
+/* Wayland protocol extension: xdg shell */
+/**
  *
+ * Copyright © 2008-2013 Kristian Høgsberg
+ * Copyright © 2013      Rafael Antognolli
+ * Copyright © 2013      Jasper St. Pierre
+ * Copyright © 2010-2013 Intel Corporation
+ * Copyright © 2015-2017 Samsung Electronics Co., Ltd
+ * Copyright © 2015-2017 Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
-/* WL-TODO: manually define used xdg-shell extensions */
-#endif /* SOKOL_WAYLAND_XDG_SHELL_HEADER_PATH */
+/* xdg shell: header */
+struct xdg_wm_base;
+
+extern const struct wl_interface xdg_surface_interface;
+extern const struct wl_interface xdg_toplevel_interface;
+
+struct xdg_wm_base_listener {
+    void (*ping)(void* data, struct xdg_wm_base* xdg_wm_base, uint32_t serial);
+};
+
+static inline int
+xdg_wm_base_add_listener(struct xdg_wm_base* xdg_wm_base, const struct xdg_wm_base_listener* listener, void* data)
+{
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_wm_base, (void (**)(void)) listener, data);
+}
+
+#define XDG_WM_BASE_DESTROY 0
+#define XDG_WM_BASE_GET_XDG_SURFACE 2
+#define XDG_WM_BASE_PONG 3
+
+static inline void xdg_wm_base_destroy(struct xdg_wm_base* xdg_wm_base) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_wm_base);
+}
+
+static inline struct xdg_surface* xdg_wm_base_get_xdg_surface(struct xdg_wm_base* xdg_wm_base, struct wl_surface* surface) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_GET_XDG_SURFACE, &xdg_surface_interface, NULL, surface);
+    return (struct xdg_surface *) id;
+}
+
+static inline void xdg_wm_base_pong(struct xdg_wm_base* xdg_wm_base, uint32_t serial) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_wm_base, XDG_WM_BASE_PONG, serial);
+}
+
+struct xdg_surface_listener {
+    void (*configure)(void* data, struct xdg_surface* xdg_surface, uint32_t serial);
+};
+
+static inline int xdg_surface_add_listener(struct xdg_surface* xdg_surface, const struct xdg_surface_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_surface, (void (**)(void)) listener, data);
+}
+
+#define XDG_SURFACE_DESTROY 0
+#define XDG_SURFACE_GET_TOPLEVEL 1
+#define XDG_SURFACE_ACK_CONFIGURE 4
+
+static inline void xdg_surface_destroy(struct xdg_surface* xdg_surface) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_surface, XDG_SURFACE_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_surface);
+}
+
+static inline struct xdg_toplevel* xdg_surface_get_toplevel(struct xdg_surface* xdg_surface) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) xdg_surface, XDG_SURFACE_GET_TOPLEVEL, &xdg_toplevel_interface, NULL);
+    return (struct xdg_toplevel *) id;
+}
+
+static inline void xdg_surface_ack_configure(struct xdg_surface* xdg_surface, uint32_t serial) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_surface, XDG_SURFACE_ACK_CONFIGURE, serial);
+}
+
+#ifndef XDG_TOPLEVEL_STATE_ENUM
+#define XDG_TOPLEVEL_STATE_ENUM
+enum xdg_toplevel_state {
+    XDG_TOPLEVEL_STATE_MAXIMIZED = 1,
+    XDG_TOPLEVEL_STATE_FULLSCREEN = 2,
+    XDG_TOPLEVEL_STATE_RESIZING = 3,
+    XDG_TOPLEVEL_STATE_ACTIVATED = 4,
+    XDG_TOPLEVEL_STATE_TILED_LEFT = 5,
+    XDG_TOPLEVEL_STATE_TILED_RIGHT = 6,
+    XDG_TOPLEVEL_STATE_TILED_TOP = 7,
+    XDG_TOPLEVEL_STATE_TILED_BOTTOM = 8,
+};
+#endif /* XDG_TOPLEVEL_STATE_ENUM */
+
+struct xdg_toplevel_listener {
+    void (*configure)(void* data, struct xdg_toplevel* xdg_toplevel, int32_t width, int32_t height, struct wl_array* states);
+    void (*close)(void* data, struct xdg_toplevel* xdg_toplevel);
+};
+
+static inline int xdg_toplevel_add_listener(struct xdg_toplevel* xdg_toplevel, const struct xdg_toplevel_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) xdg_toplevel, (void (**)(void)) listener, data);
+}
+
+#define XDG_TOPLEVEL_DESTROY 0
+#define XDG_TOPLEVEL_SET_TITLE 2
+#define XDG_TOPLEVEL_SET_FULLSCREEN 11
+#define XDG_TOPLEVEL_UNSET_FULLSCREEN 12
+
+static inline void xdg_toplevel_destroy(struct xdg_toplevel* xdg_toplevel) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) xdg_toplevel);
+}
+
+static inline void xdg_toplevel_set_title(struct xdg_toplevel* xdg_toplevel, const char* title) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_SET_TITLE, title);
+}
+
+static inline void xdg_toplevel_set_fullscreen(struct xdg_toplevel* xdg_toplevel, struct wl_output* output) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_SET_FULLSCREEN, output);
+}
+
+static inline void xdg_toplevel_unset_fullscreen(struct xdg_toplevel* xdg_toplevel) {
+    wl_proxy_marshal((struct wl_proxy *) xdg_toplevel, XDG_TOPLEVEL_UNSET_FULLSCREEN);
+}
+
+/* xdg shell: private code */
+static const struct wl_interface *xdg_shell_types[] = {
+    NULL, NULL, NULL, NULL, NULL, &xdg_surface_interface, &wl_surface_interface, &xdg_toplevel_interface, NULL, &xdg_surface_interface, NULL, &xdg_toplevel_interface, &wl_seat_interface, NULL, NULL, NULL, &wl_seat_interface, NULL, &wl_seat_interface, NULL, NULL, &wl_output_interface, &wl_seat_interface, NULL, NULL, NULL,
+};
+
+static const struct wl_message xdg_wm_base_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "create_positioner", "n", xdg_shell_types + 4 },
+    { "get_xdg_surface", "no", xdg_shell_types + 5 },
+    { "pong", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_wm_base_events[] = {
+    { "ping", "u", xdg_shell_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface xdg_wm_base_interface = {
+    "xdg_wm_base", 3, 4, xdg_wm_base_requests, 1, xdg_wm_base_events,
+};
+
+static const struct wl_message xdg_surface_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "get_toplevel", "n", xdg_shell_types + 7 },
+    { "get_popup", "n?oo", xdg_shell_types + 8 },
+    { "set_window_geometry", "iiii", xdg_shell_types + 0 },
+    { "ack_configure", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_surface_events[] = {
+    { "configure", "u", xdg_shell_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface xdg_surface_interface = {
+    "xdg_surface", 3, 5, xdg_surface_requests, 1, xdg_surface_events,
+};
+
+static const struct wl_message xdg_toplevel_requests[] = {
+    { "destroy", "", xdg_shell_types + 0 },
+    { "set_parent", "?o", xdg_shell_types + 11 },
+    { "set_title", "s", xdg_shell_types + 0 },
+    { "set_app_id", "s", xdg_shell_types + 0 },
+    { "show_window_menu", "ouii", xdg_shell_types + 12 },
+    { "move", "ou", xdg_shell_types + 16 },
+    { "resize", "ouu", xdg_shell_types + 18 },
+    { "set_max_size", "ii", xdg_shell_types + 0 },
+    { "set_min_size", "ii", xdg_shell_types + 0 },
+    { "set_maximized", "", xdg_shell_types + 0 },
+    { "unset_maximized", "", xdg_shell_types + 0 },
+    { "set_fullscreen", "?o", xdg_shell_types + 21 },
+    { "unset_fullscreen", "", xdg_shell_types + 0 },
+    { "set_minimized", "", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_toplevel_events[] = {
+    { "configure", "iia", xdg_shell_types + 0 },
+    { "close", "", xdg_shell_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface xdg_toplevel_interface = {
+    "xdg_toplevel", 3, 14, xdg_toplevel_requests, 2, xdg_toplevel_events,
+};
+
+/* Wayland protocol extension: pointer constraints */
+/**
+ *
+ * Copyright © 2014      Jonas Ådahl
+ * Copyright © 2015      Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
+/* relative-pointer: header */
+struct zwp_pointer_constraints_v1;
+
+extern const struct wl_interface zwp_locked_pointer_v1_interface;
+
+#ifndef ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM
+#define ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM
+enum zwp_pointer_constraints_v1_lifetime {
+    ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT = 1,
+    ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT = 2,
+};
+#endif /* ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ENUM */
+
+#define ZWP_POINTER_CONSTRAINTS_V1_DESTROY 0
+#define ZWP_POINTER_CONSTRAINTS_V1_LOCK_POINTER 1
+
+static inline void zwp_pointer_constraints_v1_destroy(struct zwp_pointer_constraints_v1* zwp_pointer_constraints_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_pointer_constraints_v1, ZWP_POINTER_CONSTRAINTS_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_pointer_constraints_v1);
+}
+
+static inline struct zwp_locked_pointer_v1* zwp_pointer_constraints_v1_lock_pointer(struct zwp_pointer_constraints_v1* zwp_pointer_constraints_v1, struct wl_surface* surface, struct wl_pointer* pointer, struct wl_region* region, uint32_t lifetime) {
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) zwp_pointer_constraints_v1, ZWP_POINTER_CONSTRAINTS_V1_LOCK_POINTER, &zwp_locked_pointer_v1_interface, NULL, surface, pointer, region, lifetime);
+    return (struct zwp_locked_pointer_v1 *) id;
+}
+
+struct zwp_locked_pointer_v1_listener {
+    void (*locked)(void* data, struct zwp_locked_pointer_v1* zwp_locked_pointer_v1);
+    void (*unlocked)(void* data, struct zwp_locked_pointer_v1* zwp_locked_pointer_v1);
+};
+
+static inline int zwp_locked_pointer_v1_add_listener(struct zwp_locked_pointer_v1* zwp_locked_pointer_v1, const struct zwp_locked_pointer_v1_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) zwp_locked_pointer_v1, (void (**)(void)) listener, data);
+}
+
+#define ZWP_LOCKED_POINTER_V1_DESTROY 0
+
+static inline void zwp_locked_pointer_v1_destroy(struct zwp_locked_pointer_v1* zwp_locked_pointer_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_locked_pointer_v1, ZWP_LOCKED_POINTER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_locked_pointer_v1);
+}
+
+/* relative-pointer: private code */
+static const struct wl_interface* pointer_constraints_unstable_v1_types[] = {
+    NULL, NULL, &zwp_locked_pointer_v1_interface, &wl_surface_interface, &wl_pointer_interface, &wl_region_interface, NULL, NULL, &wl_surface_interface, &wl_pointer_interface, &wl_region_interface, NULL, &wl_region_interface, &wl_region_interface,
+};
+
+static const struct wl_message zwp_pointer_constraints_v1_requests[] = {
+    { "destroy", "", pointer_constraints_unstable_v1_types + 0 },
+    { "lock_pointer", "noo?ou", pointer_constraints_unstable_v1_types + 2 },
+};
+
+WL_PRIVATE const struct wl_interface zwp_pointer_constraints_v1_interface = {
+    "zwp_pointer_constraints_v1", 1, 3, zwp_pointer_constraints_v1_requests, 0, NULL,
+};
+
+static const struct wl_message zwp_locked_pointer_v1_requests[] = {
+    { "destroy", "", pointer_constraints_unstable_v1_types + 0 },
+};
+
+static const struct wl_message zwp_locked_pointer_v1_events[] = {
+    { "locked", "", pointer_constraints_unstable_v1_types + 0 },
+    { "unlocked", "", pointer_constraints_unstable_v1_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface zwp_locked_pointer_v1_interface = {
+    "zwp_locked_pointer_v1", 1, 3, zwp_locked_pointer_v1_requests, 2, zwp_locked_pointer_v1_events,
+};
+
+/* Wayland protocol extension: relative pointer */
+/**
+ *
+ * Copyright © 2014      Jonas Ådahl
+ * Copyright © 2015      Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
+/* relative-pointer: header */
+struct zwp_relative_pointer_manager_v1;
+
+extern const struct wl_interface zwp_relative_pointer_v1_interface;
+
+#define ZWP_RELATIVE_POINTER_MANAGER_V1_DESTROY 0
+#define ZWP_RELATIVE_POINTER_MANAGER_V1_GET_RELATIVE_POINTER 1
+
+static inline void zwp_relative_pointer_manager_v1_destroy(struct zwp_relative_pointer_manager_v1* zwp_relative_pointer_manager_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_relative_pointer_manager_v1, ZWP_RELATIVE_POINTER_MANAGER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_relative_pointer_manager_v1);
+}
+
+static inline struct zwp_relative_pointer_v1* zwp_relative_pointer_manager_v1_get_relative_pointer(struct zwp_relative_pointer_manager_v1* zwp_relative_pointer_manager_v1, struct wl_pointer* pointer)
+{
+    struct wl_proxy* id;
+    id = wl_proxy_marshal_constructor((struct wl_proxy *) zwp_relative_pointer_manager_v1, ZWP_RELATIVE_POINTER_MANAGER_V1_GET_RELATIVE_POINTER, &zwp_relative_pointer_v1_interface, NULL, pointer);
+    return (struct zwp_relative_pointer_v1 *) id;
+}
+
+struct zwp_relative_pointer_v1_listener {
+    void (*relative_motion)(void* data, struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel);
+};
+
+static inline int zwp_relative_pointer_v1_add_listener(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, const struct zwp_relative_pointer_v1_listener* listener, void* data) {
+    return wl_proxy_add_listener((struct wl_proxy *) zwp_relative_pointer_v1, (void (**)(void)) listener, data);
+}
+
+#define ZWP_RELATIVE_POINTER_V1_DESTROY 0
+
+static inline void zwp_relative_pointer_v1_set_user_data(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1, void* user_data) {
+    wl_proxy_set_user_data((struct wl_proxy *) zwp_relative_pointer_v1, user_data);
+}
+
+static inline void*  zwp_relative_pointer_v1_get_user_data(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    return wl_proxy_get_user_data((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+static inline uint32_t zwp_relative_pointer_v1_get_version(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    return wl_proxy_get_version((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+static inline void zwp_relative_pointer_v1_destroy(struct zwp_relative_pointer_v1* zwp_relative_pointer_v1) {
+    wl_proxy_marshal((struct wl_proxy *) zwp_relative_pointer_v1, ZWP_RELATIVE_POINTER_V1_DESTROY);
+    wl_proxy_destroy((struct wl_proxy *) zwp_relative_pointer_v1);
+}
+
+/* relative-pointer: private code */
+static const struct wl_interface* relative_pointer_unstable_v1_types[] = {
+    NULL, NULL, NULL, NULL, NULL, NULL, &zwp_relative_pointer_v1_interface, &wl_pointer_interface,
+};
+
+static const struct wl_message zwp_relative_pointer_manager_v1_requests[] = {
+    { "destroy", "", relative_pointer_unstable_v1_types + 0 },
+    { "get_relative_pointer", "no", relative_pointer_unstable_v1_types + 6 },
+};
+
+WL_PRIVATE const struct wl_interface zwp_relative_pointer_manager_v1_interface = {
+    "zwp_relative_pointer_manager_v1", 1, 2, zwp_relative_pointer_manager_v1_requests, 0, NULL,
+};
+
+static const struct wl_message zwp_relative_pointer_v1_requests[] = {
+    { "destroy", "", relative_pointer_unstable_v1_types + 0 },
+};
+
+static const struct wl_message zwp_relative_pointer_v1_events[] = {
+    { "relative_motion", "uuffff", relative_pointer_unstable_v1_types + 0 },
+};
+
+WL_PRIVATE const struct wl_interface zwp_relative_pointer_v1_interface = {
+    "zwp_relative_pointer_v1", 1, 1, zwp_relative_pointer_v1_requests, 1, zwp_relative_pointer_v1_events,
+};
+/* manually curated wayland protocol extension section: end */
 
 #define _SAPP_WAYLAND_DEFAULT_DPI_SCALE 1.0f
 #define _SAPP_WAYLAND_MAX_EPOLL_EVENTS 10
