@@ -3574,7 +3574,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.ios.view.sampleCount = _sapp.sample_count;
+        _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
         if (_sapp.desc.high_dpi) {
             _sapp.ios.view.contentScaleFactor = 2.0;
         }
