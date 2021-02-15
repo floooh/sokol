@@ -1009,23 +1009,20 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 {
     AVAudioSession* session = [AVAudioSession sharedInstance];
     SOKOL_ASSERT(session);
-    OSStatus res;
     NSDictionary* dict = notification.userInfo;
     SOKOL_ASSERT(dict);
     NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
     switch (type) {
-    case AVAudioSessionInterruptionTypeBegan:
-        res = AudioQueuePause(_saudio.backend.ca_audio_queue);
-        SOKOL_ASSERT(res == 0);
-        [session setActive:false error:nil];
-        break;
-    case AVAudioSessionInterruptionTypeEnded:
-        [session setActive:true error:nil];
-        res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
-        SOKOL_ASSERT(res == 0);
-        break;
-    default:
-        break;
+        case AVAudioSessionInterruptionTypeBegan:
+            AudioQueuePause(_saudio.backend.ca_audio_queue);
+            [session setActive:false error:nil];
+            break;
+        case AVAudioSessionInterruptionTypeEnded:
+            [session setActive:true error:nil];
+            AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+            break;
+        default:
+            break;
     }
 }
 @end
