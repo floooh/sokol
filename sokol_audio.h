@@ -312,7 +312,8 @@
     implementation part of Sokol Audio can be included into a C source file.
 
     However on iOS, Sokol Audio must be compiled as Objective-C due to it's
-    reliance on the AVAudioSession object.
+    reliance on the AVAudioSession object. The iOS code path support both
+    being compiled with or without ARC (Automatic Reference Counting).
 
     For thread synchronisation, the CoreAudio backend will use the
     pthread_mutex_* functions.
