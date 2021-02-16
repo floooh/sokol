@@ -42,7 +42,7 @@
     - Windows: WASAPI
     - Linux: ALSA (link with asound)
     - macOS: CoreAudio (link with AudioToolbox)
-    - iOS: CoreAudio+AVAudioSession (link with AudioToolbox and AVFramework)
+    - iOS: CoreAudio+AVAudioSession (link with AudioToolbox and AVFoundation)
     - emscripten: WebAudio with ScriptProcessorNode
     - Android: OpenSLES (link with OpenSLES)
 
