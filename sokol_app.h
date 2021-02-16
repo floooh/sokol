@@ -10960,11 +10960,6 @@ SOKOL_API_IMPL void sapp_input_text(unsigned int win_id, unsigned short *wchar, 
     #elif defined(_SAPP_ANDROID)
     _sapp_android_input_text(win_id, wchar, wchar_size, cursor, sel_start, sel_stop);
     #else
-    _SOKOL_UNUSED(ucs);
-    _SOKOL_UNUSED(size);
-    _SOKOL_UNUSED(cursor);
-    _SOKOL_UNUSED(sel_start);
-    _SOKOL_UNUSED(sel_stop);
     #endif
 }
 
