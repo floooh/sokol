@@ -2,6 +2,12 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **17-Feb-2021**: When compiled for iOS, the sokol_audio.h CoreAudio backend now
+uses the **AVAudioSession** class to activate and deactivate audio output as needed.
+This fixes sokol_audio.h for iPhones (so far, sokol_audio.h accidentally only worked
+for iPads). Please see [this issue](https://github.com/floooh/sokol/issues/431) for details.
+Many thanks to @oviano for providing the PR!
+
 - **14-Feb-2021**: The Dear ImGui rendering backend in [sokol_imgui.h](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h) has been rewritten to only do a single
 buffer-update per frame each for vertex- and index-data. This addresses performance-problems
 with sg_append_buffer() in the GL backend on some platforms (see [this issue](https://github.com/floooh/sokol/issues/399) for details.
