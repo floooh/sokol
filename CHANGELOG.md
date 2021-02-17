@@ -7,7 +7,8 @@ uses the **AVAudioSession** class to activate and deactivate audio output as nee
 This fixes sokol_audio.h for iPhones (so far, sokol_audio.h accidentally only worked
 for iPads). Please see [this issue](https://github.com/floooh/sokol/issues/431) for details.
 A somewhat unfortunate side effect of this fix is that sokol_audio.h must now be compiled
-as Objective-C when targetting iOS. Many thanks to @oviano for providing the PR!
+as Objective-C when targetting iOS, also note that a new framework must be linked: ```AVFoundation```.
+Many thanks to @oviano for providing the PR!
 
 - **14-Feb-2021**: The Dear ImGui rendering backend in [sokol_imgui.h](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h) has been rewritten to only do a single
 buffer-update per frame each for vertex- and index-data. This addresses performance-problems
