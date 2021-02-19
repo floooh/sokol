@@ -3156,7 +3156,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
                             backing:(NSBackingStoreType)backingStoreType
                               defer:(BOOL)flag {
     if (self = [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:flag]) {
-        [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
+            [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #endif
     }
     return self;
 }
@@ -3170,6 +3172,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
         _sapp_clear_drop_buffer();
@@ -3195,6 +3198,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
         return YES;
     }
+    #endif
     return NO;
 }
 @end
