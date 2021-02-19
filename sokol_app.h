@@ -1120,6 +1120,10 @@ typedef struct sapp_desc {
     int max_dropped_files;              /* max number of dropped files to process (default: 1) */
     int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
 
+    /* backend-specific options */
+    bool win32_console_utf8;            /* if true, set the console codepage to UTF-8 */
+    bool win32_console_create;          /* if true, attach stdout/stderr to a new console */
+    bool win32_console_attach;          /* if true, attach stdout/stderr to parent process */
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
@@ -1454,6 +1458,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
         #pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
+        #pragma warning(disable:4996)   /* 'freopen': This function or variable may be unsafe. */
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -1467,6 +1472,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if !defined(SOKOL_WIN32_FORCE_MAIN)
         #pragma comment (linker, "/subsystem:windows")
     #endif
+    #include <stdio.h>  /* freopen() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
@@ -1694,6 +1700,7 @@ typedef struct {
 typedef struct {
     HWND hwnd;
     HDC dc;
+    UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
     bool is_win10_or_greater;
     bool in_create_window;
@@ -6090,6 +6097,32 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
 }
 
+_SOKOL_PRIVATE void _sapp_win32_init_console(void) {
+    if (_sapp.desc.win32_console_create || _sapp.desc.win32_console_attach) {
+        BOOL con_valid = FALSE;
+        if (_sapp.desc.win32_console_create) {
+            con_valid = AllocConsole();
+        }
+        else if (_sapp.desc.win32_console_attach) {
+            con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if (con_valid) {
+            freopen("CON", "w", stdout);
+            freopen("CON", "w", stderr);
+        }
+    }
+    if (_sapp.desc.win32_console_utf8) {
+        _sapp.win32.orig_codepage = GetConsoleOutputCP();
+        SetConsoleOutputCP(CP_UTF8);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_restore_console(void) {
+    if (_sapp.desc.win32_console_utf8) {
+        SetConsoleOutputCP(_sapp.win32.orig_codepage);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 
     typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
@@ -6240,6 +6273,7 @@ _SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp_win32_init_console();
     _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
@@ -6303,6 +6337,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_win32_restore_console();
     _sapp_discard_state();
 }
 
@@ -6339,12 +6374,6 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
 #if !defined(SOKOL_NO_ENTRY)
 #if defined(SOKOL_WIN32_FORCE_MAIN)
 int main(int argc, char* argv[]) {
-    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
-        freopen("CON", "r", stdin);
-        freopen("CON", "w", stdout);
-        freopen("CON", "w", stderr);
-    }
-    SetConsoleOutputCP(CP_UTF8);
     sapp_desc desc = sokol_main(argc, argv);
     _sapp_win32_run(&desc);
     return 0;
@@ -6355,12 +6384,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     _SOKOL_UNUSED(hPrevInstance);
     _SOKOL_UNUSED(lpCmdLine);
     _SOKOL_UNUSED(nCmdShow);
-    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
-        freopen("CON", "r", stdin);
-        freopen("CON", "w", stdout);
-        freopen("CON", "w", stderr);
-    }
-    SetConsoleOutputCP(CP_UTF8);
     int argc_utf8 = 0;
     char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
     sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
