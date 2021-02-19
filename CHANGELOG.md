@@ -2,6 +2,13 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **19-Feb-2021**: sokol_app.h learned some Windows-specific config options
+to redirect stdout/stderr to the parent terminal or a separate console
+window, and allow outputting UTF-8 encoded text. For details, search for
+"WINDOWS CONSOLE OUTPUT" in
+[sokol_app.h](https://github.com/floooh/sokol/blob/master/sokol_app.h). Many
+thanks to @garettbass for the initial PR!
+
 - **17-Feb-2021**: When compiled for iOS, the sokol_audio.h CoreAudio backend now
 uses the **AVAudioSession** class to activate and deactivate audio output as needed.
 This fixes sokol_audio.h for iPhones (so far, sokol_audio.h accidentally only worked

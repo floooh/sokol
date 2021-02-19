@@ -6,8 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**17-Feb-2021**: sokol_audio.h has
-been fixed for iPhones)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**19-Feb-2021**: sokol_app.h learned some Windows-specific stdout/stderr console configuration options)
 
 ## Examples and Related Projects
 
