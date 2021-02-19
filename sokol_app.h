@@ -3102,14 +3102,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-
-        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:_sapp.macos.view
-            selector:@selector(timerFired:)
-            userInfo:nil
-            repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
-        timer_obj = nil;
     #endif
     _sapp.valid = true;
     if (_sapp.fullscreen) {
@@ -3244,6 +3236,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 @implementation _sapp_macos_view
 #if defined(SOKOL_GLCORE33)
+CVDisplayLinkRef displayLink;
+_SOKOL_PRIVATE CVReturn _sapp_displaylink_callback(CVDisplayLinkRef displayLink, const CVTimeStamp* now, const CVTimeStamp* outputTime, CVOptionFlags flagsIn, CVOptionFlags* flagsOut, void* displayLinkContext) {
+    _SOKOL_UNUSED(displayLink);
+    _SOKOL_UNUSED(now);
+    _SOKOL_UNUSED(outputTime);
+    _SOKOL_UNUSED(flagsIn);
+    _SOKOL_UNUSED(flagsOut);
+    [(_sapp_macos_view*)displayLinkContext performSelectorOnMainThread:@selector(timerFired:) withObject:nil waitUntilDone:FALSE];
+    return kCVReturnSuccess;
+}
 /* NOTE: this is a hack/fix when the initial window size has been clipped by
     macOS because it didn't fit on the screen, in that case the
     frame size of the window is reported wrong if low-dpi rendering
@@ -3253,6 +3255,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     Hooking into reshape and getting the frame dimensions seems to report
     the correct dimensions.
 */
+
 - (void)reshape {
     _sapp_macos_update_dimensions();
     [super reshape];
@@ -3266,6 +3269,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     GLint swapInt = 1;
     NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
     [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+
+    CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
+    CVDisplayLinkSetOutputCallback(displayLink, &_sapp_displaylink_callback, self);
+    CGLContextObj cglContext = [[self openGLContext] CGLContextObj];
+    CGLPixelFormatObj cglPixelFormat = [[self pixelFormat] CGLPixelFormatObj];
+    CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(displayLink, cglContext, cglPixelFormat);
+    CVDisplayLinkStart(displayLink);
+
     [ctx makeCurrentContext];
 }
 #endif
@@ -3302,6 +3313,13 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             [NSApp sendEvent:event];
         }
     }
+}
+
+- (void)dealloc {
+    #if defined(SOKOL_GLCORE33)
+        CVDisplayLinkRelease(displayLink);
+    #endif
+    [super dealloc];
 }
 
 - (void)drawRect:(NSRect)rect {
