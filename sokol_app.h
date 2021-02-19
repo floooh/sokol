@@ -828,6 +828,36 @@
 
     NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
 
+    WINDOWS CONSOLE OUTPUT
+    ======================
+    On Windows, regular windowed applications don't show any stdout/stderr text
+    output, which can be a bit of a hassle for printf() debugging or generally
+    logging text to the console. Also, console output by default uses a local
+    codepage setting and thus international UTF-8 encoded text is printed
+    as garbage.
+
+    To help with these issues, sokol_app.h can be configured at startup
+    via the following Windows-specific sapp_desc flags:
+
+        sapp_desc.win32_console_utf8 (default: false)
+            When set to true, the output console codepage will be switched
+            to UTF-8 (and restored to the original codepage on exit)
+
+        sapp_desc.win32_console_attach (default: false)
+            When set to true, stdout and stderr will be attached to the
+            console of the parent process (if the parent process actually
+            has a console). This means that if the application was started
+            in a command line window, stdout and stderr output will be printed
+            to the terminal, just like a regular command line program. But if
+            the application is started via double-click, it will behave like
+            a regular UI application, and stdout/stderr will not be visible.
+
+        sapp_desc.win32_console_create (default: false)
+            When set to true, a new console window will be created and
+            stdout/stderr will be redirected to that console window. It
+            doesn't matter if the application is started from the command
+            line or via double-click.
+
     TEMP NOTE DUMP
     ==============
     - onscreen keyboard support on Android requires Java :(, should we even bother?
@@ -1121,8 +1151,9 @@ typedef struct sapp_desc {
     int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
 
     /* backend-specific options */
-    bool win32_console_utf8;            /* if true, set the console codepage to UTF-8 */
-    bool win32_console_create;          /* if true, attach stdout/stderr to a new console */
+    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
+    bool win32_console_utf8;            /* if true, set the output console codepage to UTF-8 */
+    bool win32_console_create;          /* if true, attach stdout/stderr to a new console window */
     bool win32_console_attach;          /* if true, attach stdout/stderr to parent process */
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
@@ -1130,7 +1161,6 @@ typedef struct sapp_desc {
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
     bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
-    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
