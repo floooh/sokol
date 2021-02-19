@@ -99,17 +99,17 @@
 
     --- start rendering to the default frame buffer with:
 
-            sg_begin_default_pass(const sg_pass_action* actions, int width, int height)
+            sg_begin_default_pass(const sg_pass_action* action, int width, int height)
 
         ...or alternatively with:
 
-            sg_begin_default_passf(const sg_pass_action* actions, float width, float height)
+            sg_begin_default_passf(const sg_pass_action* action, float width, float height)
 
         ...which takes the framebuffer width and height as float values.
 
     --- or start rendering to an offscreen framebuffer with:
 
-            sg_begin_pass(sg_pass pass, const sg_pass_action* actions)
+            sg_begin_pass(sg_pass pass, const sg_pass_action* action)
 
     --- set the pipeline state for the next draw call with:
 
