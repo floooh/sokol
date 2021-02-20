@@ -1499,7 +1499,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <windows.h>
     #include <windowsx.h>
     #include <shellapi.h>
-    #if !defined(SOKOL_WIN32_FORCE_MAIN)
+    #if !defined(SOKOL_NO_ENTRY) && !defined(SOKOL_WIN32_FORCE_MAIN)
         #pragma comment (linker, "/subsystem:windows")
     #endif
     #include <stdio.h>  /* freopen() */
