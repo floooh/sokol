@@ -527,6 +527,8 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     #define ALSA_PCM_NEW_HW_PARAMS_API
     #include <alsa/asoundlib.h>
+#elif defined(__ANDROID__) && defined(SOKOL_AAUDIO)
+    #include "aaudio/AAudio.h"
 #elif defined(__ANDROID__)
     #include "SLES/OpenSLES_Android.h"
 #elif defined(_WIN32)
@@ -626,6 +628,16 @@ typedef struct {
     int buffer_frames;
     pthread_t thread;
     bool thread_stop;
+} _saudio_backend_t;
+
+/*=== AAudio BACKEND DECLARATIONS ==============================================*/
+#elif defined(__ANDROID__) && defined(SOKOL_AAUDIO)
+
+typedef struct {
+	AAudioStreamBuilder* builder;
+    AAudioStream* stream;
+    pthread_t thread;
+    pthread_mutex_t mutex;
 } _saudio_backend_t;
 
 /*=== OpenSLES BACKEND DECLARATIONS ==============================================*/
@@ -1660,7 +1672,113 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     }
 }
 
-/*=== ANDROID BACKEND IMPLEMENTATION ======================================*/
+/*=== AAudio BACKEND IMPLEMENTATION ======================================*/
+#elif defined(__ANDROID__) && defined(SOKOL_AAUDIO)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* NOTE: the buffer data callback is called on a separate thread! */
+_SOKOL_PRIVATE aaudio_data_callback_result_t _saudio_aaudio_data_callback(AAudioStream* stream, void* user_data, void* audio_data, int32_t num_frames) {
+    _SOKOL_UNUSED(user_data);
+    if (_saudio_has_callback()) {
+        _saudio_stream_callback((float*)audio_data, (int)num_frames, _saudio.num_channels);
+    }
+    else {
+        uint8_t* ptr = (uint8_t*)audio_data;
+        int num_bytes = _saudio.bytes_per_frame * num_frames;
+        if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
+            /* not enough read data available, fill the entire buffer with silence */
+            memset(ptr, 0, (size_t)num_bytes);
+        }
+    }
+
+    return AAUDIO_CALLBACK_RESULT_CONTINUE;
+}
+
+_SOKOL_PRIVATE bool _saudio_aaudio_start_stream(void) {
+    if (AAudioStreamBuilder_openStream(_saudio.backend.builder, &_saudio.backend.stream) != AAUDIO_OK) {
+        SOKOL_LOG("sokol_audio aaudio: AAudioStreamBuilder_openStream failed");
+        return false;
+    }
+
+    AAudioStream_requestStart(_saudio.backend.stream);
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _saudio_aaudio_stop_stream(void) {
+    if (_saudio.backend.stream) {
+        AAudioStream_close(_saudio.backend.stream);
+        _saudio.backend.stream = NULL;
+    }
+}
+
+_SOKOL_PRIVATE void* _saudio_aaudio_restart_thread_fn(void* param) {
+    _SOKOL_UNUSED(param);
+    SOKOL_LOG("sokol_audio aaudio: restarting stream after error");
+    pthread_mutex_lock(&_saudio.backend.mutex);
+    _saudio_aaudio_stop_stream();
+    _saudio_aaudio_start_stream();
+    pthread_mutex_unlock(&_saudio.backend.mutex);
+
+    return 0;
+}
+
+_SOKOL_PRIVATE void _saudio_aaudio_error_callback(AAudioStream* stream, void* user_data, aaudio_result_t error) {
+    if (error == AAUDIO_ERROR_DISCONNECTED) {
+        if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_aaudio_restart_thread_fn, 0)) {
+            SOKOL_LOG("sokol_audio aaudio: pthread_create failed");
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    _saudio_aaudio_stop_stream();
+
+    if (_saudio.backend.builder) {
+        AAudioStreamBuilder_delete(_saudio.backend.builder);
+        _saudio.backend.builder = NULL;
+    }
+
+    pthread_mutex_destroy(&_saudio.backend.mutex);
+}
+
+_SOKOL_PRIVATE bool _saudio_backend_init(void) {
+    _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutex_init(&_saudio.backend.mutex, &attr);
+
+    if (AAudio_createStreamBuilder(&_saudio.backend.builder) != AAUDIO_OK) {
+        SOKOL_LOG("sokol_audio aaudio: AAudio_createStreamBuilder failed");
+        _saudio_backend_shutdown();
+        return false;
+    }
+
+    AAudioStreamBuilder_setFormat(_saudio.backend.builder, AAUDIO_FORMAT_PCM_FLOAT);
+    AAudioStreamBuilder_setSampleRate(_saudio.backend.builder, _saudio.sample_rate);
+    AAudioStreamBuilder_setChannelCount(_saudio.backend.builder, _saudio.num_channels);
+    AAudioStreamBuilder_setBufferCapacityInFrames(_saudio.backend.builder, _saudio.buffer_frames * 2);
+    AAudioStreamBuilder_setDataCallback(_saudio.backend.builder, _saudio_aaudio_data_callback, NULL);
+	AAudioStreamBuilder_setFramesPerDataCallback(_saudio.backend.builder, _saudio.buffer_frames);
+    AAudioStreamBuilder_setErrorCallback(_saudio.backend.builder, _saudio_aaudio_error_callback, NULL);
+
+    if (!_saudio_aaudio_start_stream()) {
+        _saudio_backend_shutdown();
+        return false;
+    }
+
+    return true;
+}
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+/*=== OpenSLES BACKEND IMPLEMENTATION ======================================*/
 #elif defined(__ANDROID__)
 
 #ifdef __cplusplus
