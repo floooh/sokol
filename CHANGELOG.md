@@ -1,7 +1,5 @@
 ## Updates
 
-> NOTE: this list will usually only be updated with changes that affect the public APIs
-
 - **22-Feb-2021**: Mouse input latency in sokol_app.h's macOS backend has been
   quite significantly reduced, please see the detailed explanation [in this
   PR](https://github.com/floooh/sokol/pull/483). Many thanks to @randrew for
