@@ -2,6 +2,11 @@
 
 > NOTE: this list will usually only be updated with changes that affect the public APIs
 
+- **22-Feb-2021**: Mouse input latency in sokol_app.h's macOS backend has been
+  quite significantly reduced, please see the detailed explanation [in this
+  PR](https://github.com/floooh/sokol/pull/483). Many thanks to @randrew for
+  the PR!
+
 - **19-Feb-2021**: sokol_app.h learned some Windows-specific config options
 to redirect stdout/stderr to the parent terminal or a separate console
 window, and allow outputting UTF-8 encoded text. For details, search for
