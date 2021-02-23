@@ -24,7 +24,16 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
-        #define SOKOL_WAYLAND
+
+    If you are on Linux you have to decide what display server to use.
+    All are enabled by default, and you need at least one:
+
+        #define SOKOL_DISABLE_X11
+        #define SOKOL_DISABLE_WAYLAND
+
+    X11 is used by default if both are enabled. To explicitly use the
+    wayland display protocol define `USE_WAYLAND` prior to starting the
+    application (e.g.: `USE_WAYLAND=1 ./sokol-app`).
 
     Optionally provide the following defines with your own implementations:
 
@@ -1572,6 +1581,12 @@ typedef enum sapp_mouse_cursor {
     _SAPP_MOUSECURSOR_NUM,
 } sapp_mouse_cursor;
 
+typedef enum sapp_linux_display_protocol {
+    SAPP_LINUX_DISPLAY_PROTOCOL_INVALID = 0,
+    SAPP_LINUX_DISPLAY_PROTOCOL_X11 = 1,
+    SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND = 2,
+} sapp_linux_display_protocol;
+
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
@@ -1698,6 +1713,9 @@ SOKOL_APP_API_DECL const void* sapp_wgpu_get_depth_stencil_view(void);
 /* Android: get native activity handle */
 SOKOL_APP_API_DECL const void* sapp_android_get_native_activity(void);
 
+/* Linux: retrieve what display protocol is used */
+SOKOL_APP_API_DECL sapp_linux_display_protocol sapp_linux_get_display_protocol(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 
@@ -1787,7 +1805,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(__linux__) || defined(__unix__)
     /* Linux */
     #define _SAPP_LINUX (1)
-    #if !defined(SOKOL_WAYLAND)
+    #if defined(SOKOL_DISABLE_X11) && defined(SOKOL_DISABLE_WAYLAND)
+    #error("sokol_app.h: You must not disable both window display protocols X11 and wayland.")
+    #endif
+    #if !defined(SOKOL_DISABLE_X11)
         #if defined(SOKOL_GLCORE33)
             #if !defined(SOKOL_FORCE_EGL)
                 #define _SAPP_GLX (1)
@@ -1795,7 +1816,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #elif !defined(SOKOL_WAYLAND) && !defined(SOKOL_GLES3) && !defined(SOKOL_GLES2)
             #error("sokol_app.h: unknown 3D API selected for Linux (X11), must be SOKOL_GLCORE33, SOKOL_GLES3 or SOKOL_GLES2")
         #endif
-    #endif /* !SOKOL_WAYLAND */
+    #endif /* !SOKOL_DISABLE_X11 */
 #else
 #error "sokol_app.h: Unknown platform"
 #endif
@@ -1964,7 +1985,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <EGL/egl.h>
 #elif defined(_SAPP_LINUX)
     #define GL_GLEXT_PROTOTYPES
-    #if !defined(SOKOL_WAYLAND)
+    #if !defined(SOKOL_DISABLE_X11)
         #include <X11/Xlib.h>
         #include <X11/Xutil.h>
         #include <X11/XKBlib.h>
@@ -1978,7 +1999,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #if !defined(_SAPP_GLX)
             #include <EGL/egl.h>
         #endif
-    #else /* SOKOL_WAYLAND */
+    #endif /* !SOKOL_DISABLE_X11 */
+    #if !defined(SOKOL_DISABLE_WAYLAND)
         #include <EGL/egl.h>
         #include <linux/input-event-codes.h>
         #include <sys/epoll.h>
@@ -1988,7 +2010,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <wayland-cursor.h>
         #include <wayland-egl.h>
         #include <xkbcommon/xkbcommon.h>
-    #endif /* SOKOL_WAYLAND */
+    #endif /* SOKOL_DISABLE_WAYLAND */
     #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
@@ -2498,7 +2520,7 @@ typedef struct {
 /*== LINUX DECLARATIONS ======================================================*/
 #if defined(_SAPP_LINUX)
 
-#if defined(SOKOL_WAYLAND)
+#if !defined(SOKOL_DISABLE_WAYLAND)
 /* used for formatting eglChooseConfig() error in _sapp_wl_egl_setup() */
 #include <stdio.h>
 #include <string.h>
@@ -2982,7 +3004,8 @@ typedef struct {
     struct wl_data_offer *data_offer;
 } _sapp_wl_t;
 
-#elif /* SOKOL_WAYLAND */
+#endif /* !SOKOL_DISABLE_WAYLAND */
+#if !defined(SOKOL_DISABLE_X11)
 
 #define _SAPP_X11_XDND_VERSION (5)
 
@@ -3130,7 +3153,7 @@ typedef struct {
 
 #endif // _SAPP_GLX
 
-#endif /* SOKOL_WAYLAND */
+#endif /* !SOKOL_DISABLE_X11 */
 #endif /* _SAPP_LINUX */
 
 /*== COMMON DECLARATIONS =====================================================*/
@@ -3232,16 +3255,18 @@ typedef struct {
     #elif defined(_SAPP_ANDROID)
         _sapp_android_t android;
     #elif defined(_SAPP_LINUX)
-        #if defined(SOKOL_WAYLAND)
+        sapp_linux_display_protocol linux_display_protocol;
+        #if !defined(SOKOL_DISABLE_WAYLAND)
         _sapp_wl_t wl;
-        #elif /* SOKOL_WAYLAND */
+        #endif /* !SOKOL_DISABLE_WAYLAND */
+        #if !defined(SOKOL_DISABLE_X11)
         _sapp_x11_t x11;
         #if defined(_SAPP_GLX)
             _sapp_glx_t glx;
         #else
             _sapp_egl_t egl;
         #endif /* _SAPP_GLX */
-        #endif /* SOKOL_WAYLAND */
+        #endif /* !SOKOL_DISABLE_X11 */
     #endif
     char html5_canvas_selector[_SAPP_MAX_TITLE_LENGTH];
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
@@ -9967,7 +9992,7 @@ _SOKOL_PRIVATE bool _sapp_linux_parse_dropped_files_list(const char* src) {
     }
 }
 
-#if !defined(SOKOL_WAYLAND)
+#if !defined(SOKOL_DISABLE_X11)
 /* see GLFW's xkb_unicode.c */
 static const struct _sapp_x11_codepair {
   uint16_t keysym;
@@ -12245,6 +12270,8 @@ _SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
     pthread_attr_destroy(&pthread_attr);
 
     _sapp_init_state(desc);
+
+    _sapp.linux_display_protocol = SAPP_LINUX_DISPLAY_PROTOCOL_X11;
     _sapp.x11.window_state = NormalState;
 
     XInitThreads();
@@ -12316,7 +12343,8 @@ _SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
     _sapp_discard_state();
 }
 
-#else /* SOKOL_WAYLAND */
+#endif /* !SOKOL_DISABLE_X11 */
+#if !defined(SOKOL_DISABLE_WAYLAND)
 
 _SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
     switch (sym) {
@@ -13682,6 +13710,9 @@ _SOKOL_PRIVATE void _sapp_wl_sighandler_setup(void) {
 
 _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+
+    _sapp.linux_display_protocol = SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND;
+
     _sapp_wl_setup(&_sapp.desc);
     _sapp_wl_egl_setup(&_sapp.desc);
     _sapp_wl_sighandler_setup();
@@ -13728,7 +13759,7 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
 _SOKOL_PRIVATE void _sapp_wl_update_window_title(void) {
     xdg_toplevel_set_title(_sapp.wl.toplevel, _sapp.window_title);
 }
-#endif /* SOKOL_WAYLAND */
+#endif /* !SOKOL_DISABLE_WAYLAND */
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
@@ -13739,11 +13770,26 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     pthread_attr_init(&pthread_attr);
     pthread_attr_destroy(&pthread_attr);
 
-    #if !defined(SOKOL_WAYLAND)
+    /* if both X11 and wayland are enabled - which is the default -
+     * check the `USE_WAYLAND` environment variable whether to use the
+     * wayland display server
+     * if any specific display server is explicitly disabled use the
+     * other one
+     * if both are explicitly disabled the first check in the
+     * SOKOL_APP_IMPL path errors out
+     */
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    const char* env_wayland_display = getenv("USE_WAYLAND");
+    if (NULL != env_wayland_display) {
+        _sapp_linux_wl_run(desc);
+    } else {
+        _sapp_linux_x11_run(desc);
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
     _sapp_linux_x11_run(desc);
-    #else /* SOKOL_WAYLAND */
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
     _sapp_linux_wl_run(desc);
-    #endif /* SOKOL_WAYLAND */
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
 }
 
 #if !defined(SOKOL_NO_ENTRY)
@@ -13866,7 +13912,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_display(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11) && !defined(_SAPP_GLX)
         return _sapp.egl.display;
     #else
         return 0;
@@ -13877,7 +13923,7 @@ SOKOL_APP_IMPL const void* sapp_egl_get_context(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND) && !defined(_SAPP_GLX)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11) && !defined(_SAPP_GLX)
         return _sapp.egl.context;
     #else
         return 0;
@@ -13916,11 +13962,17 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #elif defined(_SAPP_UWP)
     _sapp_uwp_toggle_fullscreen();
     #elif defined(_SAPP_LINUX)
-    #if !defined(SOKOL_WAYLAND)
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+        _sapp_wl_toggle_fullscreen();
+    } else {
+        _sapp_x11_toggle_fullscreen();
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
     _sapp_x11_toggle_fullscreen();
-    #else /* SOKOL_WAYLAND */
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
     _sapp_wl_toggle_fullscreen();
-    #endif /* SOKOL_WAYLAND */
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #endif
 }
 
@@ -13932,11 +13984,17 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #elif defined(_SAPP_WIN32)
         _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
-        #if !defined(SOKOL_WAYLAND)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_show_mouse(show, _sapp.wl.serial);
+        } else {
+            _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
+        }
+        #elif !defined(SOKOL_DISABLE_X11)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
-        #else /* SOKOL_WAYLAND */
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
         _sapp_wl_show_mouse(show, _sapp.wl.serial);
-        #endif /* SOKOL_WAYLAND */
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_EMSCRIPTEN)
@@ -13958,11 +14016,17 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #elif defined(_SAPP_WIN32)
     _sapp_win32_lock_mouse(lock);
     #elif defined(_SAPP_LINUX)
-    #if !defined(SOKOL_WAYLAND)
+    #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+    if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+        _sapp_wl_lock_mouse(lock);
+    } else {
+        _sapp_x11_lock_mouse(lock);
+    }
+    #elif !defined(SOKOL_DISABLE_X11)
     _sapp_x11_lock_mouse(lock);
-    #else /* SOKOL_WAYLAND */
+    #elif !defined(SOKOL_DISABLE_WAYLAND)
     _sapp_wl_lock_mouse(lock);
-    #endif /* SOKOL_WAYLAND */
+    #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #else
     _sapp.mouse.locked = lock;
     #endif
@@ -14023,9 +14087,11 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
     #elif defined(_SAPP_LINUX)
-    #if defined(SOKOL_WAYLAND)
-        _sapp_wl_set_clipboard_string(str);
-    #endif /* SOKOL_WAYLAND */
+        #if !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_set_clipboard_string(str);
+        }
+        #endif /* SOKOL_DISABLE_WAYLAND */
     #else
         /* not implemented */
     #endif
@@ -14043,9 +14109,12 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
     #elif defined(_SAPP_LINUX)
-    #if defined(SOKOL_WAYLAND)
-        return _sapp.clipboard.buffer;
-    #endif /* SOKOL_WAYLAND */
+        #if !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            return _sapp.clipboard.buffer;
+        }
+        return "";
+        #endif /* SOKOL_DISABLE_WAYLAND */
     #else
         /* not implemented */
         return _sapp.clipboard.buffer;
@@ -14060,11 +14129,17 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #elif defined(_SAPP_WIN32)
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
-        #if !defined(SOKOL_WAYLAND)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+        if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+            _sapp_wl_update_window_title();
+        } else {
+            _sapp_x11_update_window_title();
+        }
+        #elif !defined(SOKOL_DISABLE_X11)
         _sapp_x11_update_window_title();
-        #else /* SOKOL_WAYLAND */
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
         _sapp_wl_update_window_title();
-        #endif /* SOKOL_WAYLAND */
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
     #endif
 }
 
@@ -14089,7 +14164,7 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
         _sapp_macos_set_icon(desc, num_images);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_icon(desc, num_images);
-    #elif defined(_SAPP_LINUX) && !defined(SOKOL_WAYLAND)
+    #elif defined(_SAPP_LINUX) && !defined(SOKOL_DISABLE_X11)
         _sapp_x11_set_icon(desc, num_images);
     #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_set_icon(desc, num_images);
@@ -14347,6 +14422,10 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
 
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
+}
+
+SOKOL_API_IMPL sapp_linux_display_protocol sapp_linux_get_display_protocol(void) {
+    return _sapp.linux_display_protocol;
 }
 
 #endif /* SOKOL_APP_IMPL */
