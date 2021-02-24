@@ -1766,7 +1766,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     AAudioStreamBuilder_setChannelCount(_saudio.backend.builder, _saudio.num_channels);
     AAudioStreamBuilder_setBufferCapacityInFrames(_saudio.backend.builder, _saudio.buffer_frames * 2);
     AAudioStreamBuilder_setDataCallback(_saudio.backend.builder, _saudio_aaudio_data_callback, NULL);
-	AAudioStreamBuilder_setFramesPerDataCallback(_saudio.backend.builder, _saudio.buffer_frames);
+    AAudioStreamBuilder_setFramesPerDataCallback(_saudio.backend.builder, _saudio.buffer_frames);
     AAudioStreamBuilder_setErrorCallback(_saudio.backend.builder, _saudio_aaudio_error_callback, NULL);
 
     if (!_saudio_aaudio_start_stream()) {
