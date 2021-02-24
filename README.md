@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**19-Feb-2021**: sokol_app.h learned some Windows-specific stdout/stderr console configuration options)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**22-Feb-2021** sokol_app.h: mouse latency reduction on macOS)
 
 ## Examples and Related Projects
 

@@ -1499,8 +1499,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <windows.h>
     #include <windowsx.h>
     #include <shellapi.h>
-    #if !defined(SOKOL_WIN32_FORCE_MAIN)
-        #pragma comment (linker, "/subsystem:windows")
+    #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the applications' responsibility to use the right subsystem
+        #if defined(SOKOL_WIN32_FORCE_MAIN)
+            #pragma comment (linker, "/subsystem:console")
+        #else
+            #pragma comment (linker, "/subsystem:windows")
+        #endif
     #endif
     #include <stdio.h>  /* freopen() */
 
@@ -2954,9 +2958,9 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
     [_sapp.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window_title]];
 }
 
-_SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
+_SOKOL_PRIVATE void _sapp_macos_update_mouse(NSEvent* event) {
     if (!_sapp.mouse.locked) {
-        const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+        const NSPoint mouse_pos = event.locationInWindow;
         float new_x = mouse_pos.x * _sapp.dpi_scale;
         float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
         /* don't update dx/dy in the very first update */
@@ -2998,19 +3002,16 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
         stack with calls to sapp_show_mouse()
     */
     if (_sapp.mouse.locked) {
-        [NSEvent setMouseCoalescingEnabled:NO];
         CGAssociateMouseAndMouseCursorPosition(NO);
         CGDisplayHideCursor(kCGDirectMainDisplay);
     }
     else {
         CGDisplayShowCursor(kCGDirectMainDisplay);
         CGAssociateMouseAndMouseCursorPosition(YES);
-        [NSEvent setMouseCoalescingEnabled:YES];
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    _sapp_macos_update_mouse();
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
         [_sapp.macos.window performClose:nil];
@@ -3120,6 +3121,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
+    [NSEvent setMouseCoalescingEnabled:NO];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -3193,7 +3195,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
                             backing:(NSBackingStoreType)backingStoreType
                               defer:(BOOL)flag {
     if (self = [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:flag]) {
-        [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
+            [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #endif
     }
     return self;
 }
@@ -3207,6 +3211,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
         _sapp_clear_drop_buffer();
@@ -3232,6 +3237,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
         return YES;
     }
+    #endif
     return NO;
 }
 @end
@@ -3264,8 +3270,42 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
+_SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
+    const NSEventMask mask = NSEventMaskLeftMouseDown |
+                             NSEventMaskLeftMouseUp|
+                             NSEventMaskRightMouseDown |
+                             NSEventMaskRightMouseUp |
+                             NSEventMaskMouseMoved |
+                             NSEventMaskLeftMouseDragged |
+                             NSEventMaskRightMouseDragged |
+                             NSEventMaskMouseEntered |
+                             NSEventMaskMouseExited |
+                             NSEventMaskKeyDown |
+                             NSEventMaskKeyUp |
+                             NSEventMaskCursorUpdate |
+                             NSEventMaskScrollWheel |
+                             NSEventMaskTabletPoint |
+                             NSEventMaskTabletProximity |
+                             NSEventMaskOtherMouseDown |
+                             NSEventMaskOtherMouseUp |
+                             NSEventMaskOtherMouseDragged |
+                             NSEventMaskPressure |
+                             NSEventMaskDirectTouch;
+    @autoreleasepool {
+        for (;;) {
+            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSDefaultRunLoopMode dequeue:YES];
+            if (event == nil) {
+                break;
+            }
+            [NSApp sendEvent:event];
+        }
+    }
+}
+
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    /* Catch any last-moment input events */
+    _sapp_macos_poll_input_events();
     _sapp_macos_frame();
     #if !defined(SOKOL_METAL)
     [[_sapp.macos.view openGLContext] flushBuffer];
@@ -3297,6 +3337,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [super updateTrackingAreas];
 }
 - (void)mouseEntered:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     /* don't send mouse enter/leave while dragging (so that it behaves the same as
        on Windows while SetCapture is active
     */
@@ -3305,39 +3346,47 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 - (void)mouseExited:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (0 == _sapp.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
         _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
         _sapp.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         if (_sapp.mouse.locked) {
             _sapp.mouse.dx = [event deltaX];
@@ -3347,6 +3396,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3354,6 +3404,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3361,6 +3412,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3368,6 +3420,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp_events_enabled()) {
         float dx = (float) event.scrollingDeltaX;
         float dy = (float) event.scrollingDeltaY;

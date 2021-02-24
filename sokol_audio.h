@@ -1021,7 +1021,9 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
 -(void)dealloc {
     [self remove_handler];
+    #if !__has_feature(objc_arc)
     [super dealloc];
+    #endif
 }
 
 -(void)remove_handler {
