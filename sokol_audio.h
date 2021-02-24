@@ -1710,6 +1710,7 @@ _SOKOL_PRIVATE bool _saudio_aaudio_start_stream(void) {
 
 _SOKOL_PRIVATE void _saudio_aaudio_stop_stream(void) {
     if (_saudio.backend.stream) {
+        AAudioStream_requestStop(_saudio.backend.stream);
         AAudioStream_close(_saudio.backend.stream);
         _saudio.backend.stream = NULL;
     }
