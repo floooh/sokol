@@ -1736,7 +1736,9 @@ _SOKOL_PRIVATE void _saudio_aaudio_error_callback(AAudioStream* stream, void* us
 }
 
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
+    pthread_mutex_lock(&_saudio.backend.mutex);
     _saudio_aaudio_stop_stream();
+    pthread_mutex_unlock(&_saudio.backend.mutex);
 
     if (_saudio.backend.builder) {
         AAudioStreamBuilder_delete(_saudio.backend.builder);
