@@ -3293,7 +3293,9 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
                              NSEventMaskDirectTouch;
     @autoreleasepool {
         for (;;) {
-            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSDefaultRunLoopMode dequeue:YES];
+            // NOTE: using NSDefaultRunLoopMode here causes stuttering in the GL backend,
+            // see: https://github.com/floooh/sokol/issues/486
+            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSEventTrackingRunLoopMode dequeue:YES];
             if (event == nil) {
                 break;
             }
