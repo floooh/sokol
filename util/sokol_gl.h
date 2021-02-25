@@ -206,6 +206,13 @@
             sgl_viewport(int x, int y, int w, int h, bool origin_top_left)
             sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left)
 
+        ...or call these alternatives which take float arguments (this might allow
+        to avoid casting between float and integer in more strongly typed languages
+        when floating point pixel coordinates are used):
+
+            sgl_viewportf(float x, float y, float w, float h, bool origin_top_left)
+            sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left)
+
         ...these calls add a new command to the internal command queue, so
         that the viewport or scissor rect are set at the right time relative
         to other sokol-gl calls.
@@ -509,7 +516,9 @@ SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
 SOKOL_GL_API_DECL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_viewportf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left);
+SOKOL_GL_API_DECL void sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left);
 SOKOL_GL_API_DECL void sgl_enable_texture(void);
 SOKOL_GL_API_DECL void sgl_disable_texture(void);
 SOKOL_GL_API_DECL void sgl_texture(sg_image img);
@@ -2078,12 +2087,12 @@ static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     pool->size = num + 1;
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
-    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
     pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
     SOKOL_ASSERT(pool->gen_ctrs);
     memset(pool->gen_ctrs, 0, gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
     SOKOL_ASSERT(pool->free_queue);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
@@ -2142,7 +2151,7 @@ static void _sgl_setup_pipeline_pool(const sgl_desc_t* desc) {
     /* note: the pools here will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SGL_MAX_POOL_SIZE));
     _sgl_init_pool(&_sgl.pip_pool.pool, desc->pipeline_pool_size);
-    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * _sgl.pip_pool.pool.size;
+    size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
     _sgl.pip_pool.pips = (_sgl_pipeline_t*) SOKOL_MALLOC(pool_byte_size);
     SOKOL_ASSERT(_sgl.pip_pool.pips);
     memset(_sgl.pip_pool.pips, 0, pool_byte_size);
@@ -2245,14 +2254,14 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         desc.shader = _sgl.shd;
     }
     desc.index_type = SG_INDEXTYPE_NONE;
-    desc.blend.color_format = _sgl.desc.color_format;
-    desc.blend.depth_format = _sgl.desc.depth_format;
-    desc.rasterizer.sample_count = _sgl.desc.sample_count;
-    if (desc.rasterizer.face_winding == _SG_FACEWINDING_DEFAULT) {
-        desc.rasterizer.face_winding = _sgl.desc.face_winding;
+    desc.sample_count = _sgl.desc.sample_count;
+    if (desc.face_winding == _SG_FACEWINDING_DEFAULT) {
+        desc.face_winding = _sgl.desc.face_winding;
     }
-    if (desc.blend.color_write_mask == _SG_COLORMASK_DEFAULT) {
-        desc.blend.color_write_mask = SG_COLORMASK_RGB;
+    desc.depth.pixel_format = _sgl.desc.depth_format;
+    desc.colors[0].pixel_format = _sgl.desc.color_format;
+    if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
+        desc.colors[0].write_mask = SG_COLORMASK_RGB;
     }
 
     _sgl_pipeline_t* pip = _sgl_lookup_pipeline(pip_id.id);
@@ -2647,11 +2656,11 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     _sgl.num_vertices = _sgl.desc.max_vertices;
     _sgl.num_uniforms = _sgl.desc.max_commands;
     _sgl.num_commands = _sgl.num_uniforms;
-    _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC(_sgl.num_vertices * sizeof(_sgl_vertex_t));
+    _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC((size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t));
     SOKOL_ASSERT(_sgl.vertices);
-    _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC(_sgl.num_uniforms * sizeof(_sgl_uniform_t));
+    _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC((size_t)_sgl.num_uniforms * sizeof(_sgl_uniform_t));
     SOKOL_ASSERT(_sgl.uniforms);
-    _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC(_sgl.num_commands * sizeof(_sgl_command_t));
+    _sgl.commands = (_sgl_command_t*) SOKOL_MALLOC((size_t)_sgl.num_commands * sizeof(_sgl_command_t));
     SOKOL_ASSERT(_sgl.commands);
     _sgl_setup_pipeline_pool(&_sgl.desc);
 
@@ -2660,7 +2669,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
 
     sg_buffer_desc vbuf_desc;
     memset(&vbuf_desc, 0, sizeof(vbuf_desc));
-    vbuf_desc.size = _sgl.num_vertices * sizeof(_sgl_vertex_t);
+    vbuf_desc.size = (size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t);
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
     vbuf_desc.label = "sgl-vertex-buffer";
@@ -2680,8 +2689,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
     img_desc.min_filter = SG_FILTER_NEAREST;
     img_desc.mag_filter = SG_FILTER_NEAREST;
-    img_desc.content.subimage[0][0].ptr = pixels;
-    img_desc.content.subimage[0][0].size = sizeof(pixels);
+    img_desc.data.subimage[0][0] = SG_RANGE(pixels);
     img_desc.label = "sgl-default-texture";
     _sgl.def_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.def_img.id);
@@ -2704,7 +2712,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     ub->uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     ub->uniforms[0].array_count = 8;
     shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
     shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     shd_desc.label = "sgl-shader";
     #if defined(SOKOL_GLCORE33)
@@ -2718,16 +2726,12 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.byte_code = _sgl_vs_bytecode_metal_macos;
-                shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_metal_macos);
-                shd_desc.fs.byte_code = _sgl_fs_bytecode_metal_macos;
-                shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.byte_code = _sgl_vs_bytecode_metal_ios;
-                shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_metal_ios);
-                shd_desc.fs.byte_code = _sgl_fs_bytecode_metal_ios;
-                shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _sgl_vs_source_metal_sim;
@@ -2735,15 +2739,11 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.byte_code = _sgl_vs_bytecode_hlsl4;
-        shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_hlsl4);
-        shd_desc.fs.byte_code = _sgl_fs_bytecode_hlsl4;
-        shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_hlsl4);
+        shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_hlsl4);
+        shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_hlsl4);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.byte_code = _sgl_vs_bytecode_wgpu;
-        shd_desc.vs.byte_code_size = sizeof(_sgl_vs_bytecode_wgpu);
-        shd_desc.fs.byte_code = _sgl_fs_bytecode_wgpu;
-        shd_desc.fs.byte_code_size = sizeof(_sgl_fs_bytecode_wgpu);
+        shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_wgpu);
     #else
         shd_desc.vs.source = _sgl_vs_src_dummy;
         shd_desc.fs.source = _sgl_fs_src_dummy;
@@ -2754,7 +2754,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     /* create default pipeline object */
     sg_pipeline_desc def_pip_desc;
     memset(&def_pip_desc, 0, sizeof(def_pip_desc));
-    def_pip_desc.depth_stencil.depth_write_enabled = true;
+    def_pip_desc.depth.write_enabled = true;
     _sgl.def_pip = _sgl_make_pipeline(&def_pip_desc);
     sg_pop_debug_group();
 
@@ -2869,6 +2869,10 @@ SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_lef
     }
 }
 
+SOKOL_API_IMPL void sgl_viewportf(float x, float y, float w, float h, bool origin_top_left) {
+    sgl_viewport((int)x, (int)y, (int)w, (int)h, origin_top_left);
+}
+
 SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     SOKOL_ASSERT(!_sgl.in_begin);
@@ -2881,6 +2885,10 @@ SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top
         cmd->args.scissor_rect.h = h;
         cmd->args.scissor_rect.origin_top_left = origin_top_left;
     }
+}
+
+SOKOL_API_IMPL void sgl_scissor_rectf(float x, float y, float w, float h, bool origin_top_left) {
+    sgl_scissor_rect((int)x, (int)y, (int)w, (int)h, origin_top_left);
 }
 
 SOKOL_API_IMPL void sgl_enable_texture(void) {
@@ -3236,7 +3244,8 @@ SOKOL_API_IMPL void sgl_draw(void) {
         uint32_t cur_img_id = SG_INVALID_ID;
         int cur_uniform_index = -1;
         sg_push_debug_group("sokol-gl");
-        sg_update_buffer(_sgl.vbuf, _sgl.vertices, _sgl.cur_vertex * sizeof(_sgl_vertex_t));
+        const sg_range range = { _sgl.vertices, (size_t)_sgl.cur_vertex * sizeof(_sgl_vertex_t) };
+        sg_update_buffer(_sgl.vbuf, &range);
         _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
         for (int i = 0; i < _sgl.cur_command; i++) {
             const _sgl_command_t* cmd = &_sgl.commands[i];
@@ -3269,7 +3278,8 @@ SOKOL_API_IMPL void sgl_draw(void) {
                             cur_img_id = args->img.id;
                         }
                         if (cur_uniform_index != args->uniform_index) {
-                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t));
+                            const sg_range ub_range = { &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
+                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
                             cur_uniform_index = args->uniform_index;
                         }
                         /* FIXME: what if number of vertices doesn't match the primitive type? */

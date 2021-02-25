@@ -12,6 +12,18 @@ def is_api_decl(decl, prefix):
     else:
         return False
 
+def is_dep_decl(decl, dep_prefixes):
+    for prefix in dep_prefixes:
+        if is_api_decl(decl, prefix):
+            return True
+    return False
+
+def dep_prefix(decl, dep_prefixes):
+    for prefix in dep_prefixes:
+        if is_api_decl(decl, prefix):
+            return prefix
+    return None
+
 def filter_types(str):
     return str.replace('_Bool', 'bool')
 
@@ -67,7 +79,8 @@ def parse_func(decl):
     if 'inner' in decl:
         for param in decl['inner']:
             if param['kind'] != 'ParmVarDecl':
-                sys.exit(f"ERROR: func param kind must be 'ParmVarDecl' ({decl['name']})")
+                print(f"warning: ignoring func {decl['name']} (unsupported parameter type)")
+                return None
             outp_param = {}
             outp_param['name'] = param['name']
             outp_param['type'] = filter_types(param['type']['qualType'])
@@ -85,22 +98,25 @@ def parse_decl(decl):
     else:
         return None
 
-def clang(header_path, additional_options):
-    cmd = ['clang', '-Xclang', '-ast-dump=json' ]
-    cmd.extend(additional_options)
-    cmd.append(header_path)
+def clang(csrc_path):
+    cmd = ['clang', '-Xclang', '-ast-dump=json', '-c' ]
+    cmd.append(csrc_path)
     return subprocess.check_output(cmd)
 
-def gen(header_path, module, prefix, clang_options):
-    ast = clang(header_path, clang_options)
+def gen(header_path, source_path, module, main_prefix, dep_prefixes):
+    ast = clang(source_path)
     inp = json.loads(ast)
     outp = {}
     outp['module'] = module
-    outp['prefix'] = prefix
+    outp['prefix'] = main_prefix
+    outp['dep_prefixes'] = dep_prefixes
     outp['decls'] = []
     for decl in inp['inner']:
-        if is_api_decl(decl, prefix):
+        is_dep = is_dep_decl(decl, dep_prefixes)
+        if is_api_decl(decl, main_prefix) or is_dep:
             outp_decl = parse_decl(decl)
             if outp_decl is not None:
+                outp_decl['is_dep'] = is_dep
+                outp_decl['dep_prefix'] = dep_prefix(decl, dep_prefixes)
                 outp['decls'].append(outp_decl)
     return outp

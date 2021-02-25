@@ -1,6 +1,41 @@
 ## Updates
 
-> NOTE: this list will usually only be updated with changes that affect the public APIs
+- **22-Feb-2021**: Mouse input latency in sokol_app.h's macOS backend has been
+  quite significantly reduced, please see the detailed explanation [in this
+  PR](https://github.com/floooh/sokol/pull/483). Many thanks to @randrew for
+  the PR!
+
+- **19-Feb-2021**: sokol_app.h learned some Windows-specific config options
+to redirect stdout/stderr to the parent terminal or a separate console
+window, and allow outputting UTF-8 encoded text. For details, search for
+"WINDOWS CONSOLE OUTPUT" in
+[sokol_app.h](https://github.com/floooh/sokol/blob/master/sokol_app.h). Many
+thanks to @garettbass for the initial PR!
+
+- **17-Feb-2021**: When compiled for iOS, the sokol_audio.h CoreAudio backend now
+uses the **AVAudioSession** class to activate and deactivate audio output as needed.
+This fixes sokol_audio.h for iPhones (so far, sokol_audio.h accidentally only worked
+for iPads). Please see [this issue](https://github.com/floooh/sokol/issues/431) for details.
+A somewhat unfortunate side effect of this fix is that sokol_audio.h must now be compiled
+as Objective-C when targetting iOS, also note that a new framework must be linked: ```AVFoundation```.
+Many thanks to @oviano for providing the PR!
+
+- **14-Feb-2021**: The Dear ImGui rendering backend in [sokol_imgui.h](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h) has been rewritten to only do a single
+buffer-update per frame each for vertex- and index-data. This addresses performance-problems
+with sg_append_buffer() in the GL backend on some platforms (see [this issue](https://github.com/floooh/sokol/issues/399) for details.
+
+- **13-Feb-2021**: A new utility header [sokol_nuklear.h](https://github.com/floooh/sokol/blob/master/util/sokol_nuklear.h)
+has been added which implements a rendering backend for [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)
+on top of sokol_gfx.h. Also see the new sample [nuklear-sapp](https://floooh.github.io/sokol-html5/nuklear-sapp.html).
+Many thanks to **@wmerrifield** for the PR!
+
+- **10-Feb-2021**: The breaking API-update has been merged (mainly sokol_gfx.h).
+Please see [this blogpost](https://floooh.github.io/2021/02/07/sokol-api-overhaul.html)
+and the updates [sokol samples](https://floooh.github.io/sokol-html5/) for details.
+I also created a git tag named 'pre-feb2021-api-changes' which captures the previous
+state in all related projects. Please also update the [sokol-tools-bin](https://github.com/floooh/sokol-tools-bin) if you're using the sokol-shdc shader compiler.
+
+- **07-Feb-2021**: A PSA about upcoming breaking changes in (mainly) sokol_gfx.h: https://floooh.github.io/2021/02/07/sokol-api-overhaul.html
 
 - **20-Dec-2020**: A couple of minor breaking changes in the sokol_gfx.h and
 sokol_app.h APIs as preparation for the upcoming automatic language binding

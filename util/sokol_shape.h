@@ -36,7 +36,7 @@
     ================
     sokol_shape.h creates vertices and indices for simple shapes and
     builds structs which can be plugged into sokol-gfx resource
-    creation descriptor structs.
+    creation functions:
 
     The following shape types are supported:
 
@@ -83,12 +83,10 @@
 
     sshape_buffer_t buf = {
         .vertices = {
-            .buffer_ptr = vertices,
-            .buffer_size = sizeof(vertices)
+            .buffer = SSHAPE_RANGE(vertices),
         },
         .indices = {
-            .buffer_ptr = indices,
-            .buffer_size = sizeof(indices)
+            .buffer = SSHAPE_RANGE(indices),
         }
     };
     ```
@@ -156,7 +154,7 @@
     You can also provide additional creation parameters, like a common vertex
     color, a debug-helper to randomize colors, tell the shape builder function
     to merge the new shape with the previous shape into the same draw-element-range,
-    or a 4x4 transform matrix to move, rotate and scale the generated matrices:
+    or a 4x4 transform matrix to move, rotate and scale the generated vertices:
 
     ```c
     sshape_buffer_t buf = ...;
@@ -181,7 +179,7 @@
     assert(buf.valid);
     ```
 
-    The following helper functions are offered to build a packed
+    The following helper functions can be used to build a packed
     color value or to convert from external matrix types:
 
     ```c
@@ -222,7 +220,7 @@
     ```c
     // create sokol-gfx vertex buffer
     sg_buffer_desc vbuf_desc = sshape_vertex_buffer_desc(&buf);
-    sg_buffer vbuf = sg_make_buffer(&vbuf_desc;
+    sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
 
     // create sokol-gfx index buffer
     sg_buffer_desc ibuf_desc = sshape_index_buffer_desc(&buf);
@@ -267,8 +265,8 @@
     uint16_t indices[16];
 
     sshape_buffer_t buf = {
-        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
-        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+        .vertices.buffer = SSHAPE_RANGE(vertices),
+        .indices.buffer  = SSHAPE_RANGE(indices)
     };
 
     // first cube at pos x=-2.0 (with default size of 1x1x1)
@@ -312,8 +310,8 @@
     sshape_vertex_t vertices[128];
     uint16_t indices[16];
     sshape_buffer_t buf = {
-        .vertices = { .buffer_ptr = vertices, .buffer_size = sizeof(vertices) },
-        .indices  = { .buffer_ptr = indices,  .buffer_size = sizeof(indices) }
+        .vertices.buffer = SSHAPE_RANGE(vertices),
+        .indices.buffer = SSHAPE_RANGE(indices)
     };
 
     // build a red cube...
@@ -362,6 +360,7 @@
         distribution.
 */
 #define SOKOL_SHAPE_INCLUDED
+#include <stddef.h>     // size_t, offsetof
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -386,6 +385,27 @@
 extern "C" {
 #endif
 
+/*
+    sshape_range is a pointer-size-pair struct used to pass memory
+    blobs into sokol-shape. When initialized from a value type
+    (array or struct), use the SSHAPE_RANGE() macro to build
+    an sshape_range struct.
+*/
+typedef struct sshape_range {
+    const void* ptr;
+    size_t size;
+} sshape_range;
+
+// disabling this for every includer isn't great, but the warning is also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#endif
+#if defined(__cplusplus)
+#define SSHAPE_RANGE(x) sshape_range{ &x, sizeof(x) }
+#else
+#define SSHAPE_RANGE(x) (sshape_range){ &x, sizeof(x) }
+#endif
+
 /* a 4x4 matrix wrapper struct */
 typedef struct sshape_mat4_t { float m[4][4]; } sshape_mat4_t;
 
@@ -401,12 +421,18 @@ typedef struct sshape_vertex_t {
 typedef struct sshape_element_range_t {
     int base_element;
     int num_elements;
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[3];
+    #endif
 } sshape_element_range_t;
 
 /* number of elements and byte size of build actions */
 typedef struct sshape_sizes_item_t {
     uint32_t num;       // number of elements
     uint32_t size;      // the same as size in bytes
+    #if defined(SOKOL_ZIG_BINDINGS)
+    uint32_t __pad[3];
+    #endif
 } sshape_sizes_item_t;
 
 typedef struct sshape_sizes_t {
@@ -416,10 +442,9 @@ typedef struct sshape_sizes_t {
 
 /* in/out struct to keep track of mesh-build state */
 typedef struct sshape_buffer_item_t {
-    void* buffer_ptr;       // pointer to start of output buffer
-    uint32_t buffer_size;   // size in bytes of output buffer
-    uint32_t data_size;     // size in bytes of valid data in buffer
-    uint32_t shape_offset;  // data offset of the most recent shape
+    sshape_range buffer;    // pointer/size pair of output buffer
+    size_t data_size;       // size in bytes of valid data in buffer
+    size_t shape_offset;    // data offset of the most recent shape
 } sshape_buffer_item_t;
 
 typedef struct sshape_buffer_t {
@@ -526,7 +551,6 @@ SOKOL_SHAPE_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #define SOKOL_SHAPE_IMPL_INCLUDED (1)
 
 #include <string.h> // memcpy
-#include <stddef.h> // offsetof
 #include <math.h>   // sinf, cosf
 
 #ifdef __clang__
@@ -674,13 +698,13 @@ static uint32_t _sshape_torus_num_indices(uint32_t sides, uint32_t rings) {
 }
 
 static bool _sshape_validate_buffer_item(const sshape_buffer_item_t* item, uint32_t build_size) {
-    if (0 == item->buffer_ptr) {
+    if (0 == item->buffer.ptr) {
         return false;
     }
-    if (0 == item->buffer_size) {
+    if (0 == item->buffer.size) {
         return false;
     }
-    if ((item->data_size + build_size) > item->buffer_size) {
+    if ((item->data_size + build_size) > item->buffer.size) {
         return false;
     }
     if (item->shape_offset > item->data_size) {
@@ -761,10 +785,10 @@ static sshape_torus_t _sshape_torus_defaults(const sshape_torus_t* params) {
 }
 
 static void _sshape_add_vertex(sshape_buffer_t* buf, _sshape_vec4_t pos, _sshape_vec4_t norm, _sshape_vec2_t uv, uint32_t color) {
-    uint32_t offset = buf->vertices.data_size;
-    SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= buf->vertices.buffer_size);
+    size_t offset = buf->vertices.data_size;
+    SOKOL_ASSERT((offset + sizeof(sshape_vertex_t)) <= buf->vertices.buffer.size);
     buf->vertices.data_size += sizeof(sshape_vertex_t);
-    sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)buf->vertices.buffer_ptr + offset);
+    sshape_vertex_t* v_ptr = (sshape_vertex_t*) ((uint8_t*)buf->vertices.buffer.ptr + offset);
     v_ptr->x = pos.x;
     v_ptr->y = pos.y;
     v_ptr->z = pos.z;
@@ -775,10 +799,10 @@ static void _sshape_add_vertex(sshape_buffer_t* buf, _sshape_vec4_t pos, _sshape
 }
 
 static void _sshape_add_triangle(sshape_buffer_t* buf, uint16_t i0, uint16_t i1, uint16_t i2) {
-    uint32_t offset = buf->indices.data_size;
-    SOKOL_ASSERT((offset + 3*sizeof(uint16_t)) <= buf->indices.buffer_size);
+    size_t offset = buf->indices.data_size;
+    SOKOL_ASSERT((offset + 3*sizeof(uint16_t)) <= buf->indices.buffer.size);
     buf->indices.data_size += 3*sizeof(uint16_t);
-    uint16_t* i_ptr = (uint16_t*) ((uint8_t*)buf->indices.buffer_ptr + offset);
+    uint16_t* i_ptr = (uint16_t*) ((uint8_t*)buf->indices.buffer.ptr + offset);
     i_ptr[0] = i0;
     i_ptr[1] = i1;
     i_ptr[2] = i2;
@@ -1338,10 +1362,10 @@ SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_buffer_t* b
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
     if (buf->valid) {
-        desc.size = buf->vertices.data_size;
         desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
         desc.usage = SG_USAGE_IMMUTABLE;
-        desc.content = buf->vertices.buffer_ptr;
+        desc.data.ptr = buf->vertices.buffer.ptr;
+        desc.data.size = buf->vertices.data_size;
     }
     return desc;
 }
@@ -1350,10 +1374,10 @@ SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_buffer_t* bu
     SOKOL_ASSERT(buf && buf->valid);
     sg_buffer_desc desc = { 0 };
     if (buf->valid) {
-        desc.size = buf->indices.data_size;
         desc.type = SG_BUFFERTYPE_INDEXBUFFER;
         desc.usage = SG_USAGE_IMMUTABLE;
-        desc.content = buf->indices.buffer_ptr;
+        desc.data.ptr = buf->indices.buffer.ptr;
+        desc.data.size = buf->indices.data_size;
     }
     return desc;
 }
@@ -1364,9 +1388,9 @@ SOKOL_SHAPE_API_DECL sshape_element_range_t sshape_element_range(const sshape_bu
     SOKOL_ASSERT(0 == (buf->indices.shape_offset & (sizeof(uint16_t) - 1)));
     SOKOL_ASSERT(0 == (buf->indices.data_size & (sizeof(uint16_t) - 1)));
     sshape_element_range_t range = { 0 };
-    range.base_element = buf->indices.shape_offset / sizeof(uint16_t);
+    range.base_element = (int) (buf->indices.shape_offset / sizeof(uint16_t));
     if (buf->valid) {
-        range.num_elements = (buf->indices.data_size - buf->indices.shape_offset) / sizeof(uint16_t);
+        range.num_elements = (int) ((buf->indices.data_size - buf->indices.shape_offset) / sizeof(uint16_t));
     }
     else {
         range.num_elements = 0;

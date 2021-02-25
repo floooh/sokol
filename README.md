@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**20-Dec-2020**: minor but breaking API changes in sokol_gfx.h/sokol_app.h)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**22-Feb-2021** sokol_app.h: mouse latency reduction on macOS)
 
 ## Examples and Related Projects
 
@@ -18,7 +18,7 @@ cross-platform libraries for C and C++, written in C.
 
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 
-- A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), ... an in [Zig](https://github.com/floooh/pacman.zig/)
+- A 'single-file' [Pacman clone in C99](https://github.com/floooh/pacman.c/), also available in [Zig](https://github.com/floooh/pacman.zig/)
 
 - A [Minigolf game](https://mgerdes.github.io/minigolf.html) ([source](https://github.com/mgerdes/minigolf)).
 
@@ -39,6 +39,7 @@ cross-platform libraries for C and C++, written in C.
 ## Utility libraries
 
 - [**sokol\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h): sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
+- [**sokol\_nuklear.h**](https://github.com/floooh/sokol/blob/master/util/sokol_nuklear.h): sokol_gfx.h rendering backend for [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)
 - [**sokol\_gl.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h): OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
 - [**sokol\_fontstash.h**](https://github.com/floooh/sokol/blob/master/util/sokol_fontstash.h): sokol_gl.h rendering backend for [fontstash](https://github.com/memononen/fontstash)
 - [**sokol\_gfx\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gfx_imgui.h): debug-inspection UI for sokol_gfx.h (implemented with Dear ImGui)
@@ -86,7 +87,7 @@ int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow* w = glfwCreateWindow(640, 480, "Sokol Triangle GLFW", 0, 0);
     glfwMakeContextCurrent(w);
@@ -104,8 +105,7 @@ int main() {
         -0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f
     };
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){
-        .size = sizeof(vertices),
-        .content = vertices,
+        .data = SG_RANGE(vertices)
     });
 
     /* a shader */
@@ -140,7 +140,7 @@ int main() {
     });
 
     /* resource bindings */
-    sg_bindings binds = {
+    sg_bindings bind = {
         .vertex_buffers[0] = vbuf
     };
 
@@ -153,7 +153,7 @@ int main() {
         glfwGetFramebufferSize(w, &cur_width, &cur_height);
         sg_begin_default_pass(&pass_action, cur_width, cur_height);
         sg_apply_pipeline(pip);
-        sg_apply_bindings(&binds);
+        sg_apply_bindings(&bind);
         sg_draw(0, 3, 1);
         sg_end_pass();
         sg_commit();
@@ -183,9 +183,9 @@ A simple clear-loop sample using sokol_app.h and sokol_gfx.h (does not include
 separate sokol.c/.m implementation file which is necessary
 to split the Objective-C code from the C code of the sample):
 
-```cpp
-#include "sokol_app.h"
+```c
 #include "sokol_gfx.h"
+#include "sokol_app.h"
 #include "sokol_glue.h"
 
 sg_pass_action pass_action;
@@ -195,13 +195,13 @@ void init(void) {
         .context = sapp_sgcontext()
     });
     pass_action = (sg_pass_action) {
-        .colors[0] = { .action=SG_ACTION_CLEAR, .val={1.0f, 0.0f, 0.0f, 1.0f} }
+        .colors[0] = { .action=SG_ACTION_CLEAR, .value={1.0f, 0.0f, 0.0f, 1.0f} }
     };
 }
 
 void frame(void) {
-    float g = pass_action.colors[0].val[1] + 0.01f;
-    pass_action.colors[0].val[1] = (g > 1.0f) ? 0.0f : g;
+    float g = pass_action.colors[0].value.g + 0.01f;
+    pass_action.colors[0].value.g = (g > 1.0f) ? 0.0f : g;
     sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
     sg_end_pass();
     sg_commit();
@@ -218,7 +218,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .cleanup_cb = cleanup,
         .width = 400,
         .height = 300,
-        .window_title = "Clear (sokol app)",
+        .window_title = "Clear Sample",
     };
 }
 ```
@@ -240,7 +240,7 @@ A minimal audio-streaming API:
 
 A simple mono square-wave generator using the callback model:
 
-```cpp
+```c
 // the sample callback, running in audio thread
 static void stream_cb(float* buffer, int num_frames, int num_channels) {
     assert(1 == num_channels);
@@ -266,7 +266,7 @@ int main() {
 
 The same code using the push-model
 
-```cpp
+```c
 #define BUF_SIZE (32)
 int main() {
     // init sokol-audio with default params, no callback

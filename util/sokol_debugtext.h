@@ -303,8 +303,10 @@
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = {
+                        .ptr = my_font_data,
+                        .size = sizeof(my_font_data)
+                    },
                     .first_char = ...,
                     .last_char = ...
                 }
@@ -330,14 +332,15 @@
     be rendered).
 
     If you provide such a complete font data array, you can drop the .first_char
-    and .last_char initialization parameters since those default to 0 and 255:
+    and .last_char initialization parameters since those default to 0 and 255,
+    note that you can also use the SDTX_RANGE() helper macro to build the
+    .data item:
 
         sdtx_setup(&sdtx_desc_t){
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = SDTX_RANGE(my_font_data)
                 }
             }
         });
@@ -352,8 +355,7 @@
             .fonts = {
                 [0] = sdtx_font_kc853(),
                 [1] = {
-                    .ptr = my_font_data,
-                    .size = sizeof(my_font_data)
+                    .data = SDTX_RANGE(my_font_data),
                     .first_char = 32,       // could also write ' '
                     .last_char = 90         // could also write 'Z'
                 }
@@ -391,6 +393,7 @@
 #define SOKOL_DEBUGTEXT_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t
 #include <stdarg.h> // va_list
 
 #if !defined(SOKOL_GFX_INCLUDED)
@@ -427,6 +430,28 @@ typedef struct sdtx_context { uint32_t id; } sdtx_context;
 static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 
 /*
+    sdtx_range is a pointer-size-pair struct used to pass memory
+    blobs into sokol-debugtext. When initialized from a value type
+    (array or struct), use the SDTX_RANGE() macro to build
+    an sdtx_range struct.
+*/
+typedef struct sdtx_range {
+    const void* ptr;
+    size_t size;
+} sdtx_range;
+
+// disabling this for every includer isn't great, but the warning is also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#endif
+#if defined(__cplusplus)
+#define SDTX_RANGE(x) sdtx_range{ &x, sizeof(x) }
+#else
+#define SDTX_RANGE(x) (sdtx_range){ &x, sizeof(x) }
+#endif
+
+/*
     sdtx_font_desc_t
 
     Describes the pixel data of a font. A font consists of up to
@@ -450,8 +475,7 @@ static const sdtx_context SDTX_DEFAULT_CONTEXT = { 0x00010001 };
 #define SDTX_MAX_FONTS (8)
 
 typedef struct sdtx_font_desc_t {
-    const uint8_t* ptr;     // pointer to font pixel data
-    int16_t size;           // byte size of font pixel data
+    sdtx_range data;        // pointer to and size of font pixel data
     uint8_t first_char;     // first character index in font pixel data
     uint8_t last_char;      // last character index in font pixel data, inclusive (default: 255)
 } sdtx_font_desc_t;
@@ -3411,12 +3435,12 @@ static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     pool->size = num + 1;
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
-    size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
+    size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
     pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
     SOKOL_ASSERT(pool->gen_ctrs);
     memset(pool->gen_ctrs, 0, gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int)*num);
+    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
     SOKOL_ASSERT(pool->free_queue);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
@@ -3470,7 +3494,7 @@ static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
     /* note: the pool will have an additional item, since slot 0 is reserved */
     SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SDTX_MAX_POOL_SIZE));
     _sdtx_init_pool(&_sdtx.context_pool.pool, desc->context_pool_size);
-    size_t pool_byte_size = sizeof(_sdtx_context_t) * _sdtx.context_pool.pool.size;
+    size_t pool_byte_size = sizeof(_sdtx_context_t) * (size_t)_sdtx.context_pool.pool.size;
     _sdtx.context_pool.contexts = (_sdtx_context_t*) SOKOL_MALLOC(pool_byte_size);
     SOKOL_ASSERT(_sdtx.context_pool.contexts);
     memset(_sdtx.context_pool.contexts, 0, pool_byte_size);
@@ -3557,6 +3581,9 @@ static sdtx_context_desc_t _sdtx_context_desc_defaults(const sdtx_context_desc_t
     res.canvas_height = _sdtx_def(res.canvas_height, _SDTX_DEFAULT_CANVAS_HEIGHT);
     res.tab_width = _sdtx_def(res.tab_width, _SDTX_DEFAULT_TAB_WIDTH);
     /* keep pixel format attrs are passed as is into pipeline creation */
+    SOKOL_ASSERT(res.char_buf_size > 0);
+    SOKOL_ASSERT(res.canvas_width > 0.0f);
+    SOKOL_ASSERT(res.canvas_height > 0.0f);
     return res;
 }
 
@@ -3567,11 +3594,9 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     SOKOL_ASSERT(ctx);
     ctx->desc = _sdtx_context_desc_defaults(in_desc);
-    SOKOL_ASSERT(ctx->desc.canvas_width > 0.0f);
-    SOKOL_ASSERT(ctx->desc.canvas_height > 0.0f);
 
-    const uint32_t max_vertices = 6 * ctx->desc.char_buf_size;
-    const int vbuf_size = max_vertices * sizeof(_sdtx_vertex_t);
+    const int max_vertices = 6 * ctx->desc.char_buf_size;
+    const size_t vbuf_size = (size_t)max_vertices * sizeof(_sdtx_vertex_t);
     ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
     ctx->cur_vertex_ptr = ctx->vertices;
@@ -3594,14 +3619,14 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_UBYTE4N;
     pip_desc.shader = _sdtx.shader;
     pip_desc.index_type = SG_INDEXTYPE_NONE;
-    pip_desc.blend.enabled = true;
-    pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pip_desc.blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
-    pip_desc.blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
-    pip_desc.blend.color_format = ctx->desc.color_format;
-    pip_desc.blend.depth_format = ctx->desc.depth_format;
-    pip_desc.rasterizer.sample_count = ctx->desc.sample_count;
+    pip_desc.sample_count = ctx->desc.sample_count;
+    pip_desc.depth.pixel_format = ctx->desc.depth_format;
+    pip_desc.colors[0].pixel_format = ctx->desc.color_format;
+    pip_desc.colors[0].blend.enabled = true;
+    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
+    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
     pip_desc.label = "sdtx-pipeline";
     ctx->pip = sg_make_pipeline(&pip_desc);
     SOKOL_ASSERT(SG_INVALID_ID != ctx->pip.id);
@@ -3640,11 +3665,11 @@ static bool _sdtx_is_default_context(sdtx_context ctx_id) {
 
 /* unpack linear 8x8 bits-per-pixel font data into 2D byte-per-pixel texture data */
 static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pixels) {
-    SOKOL_ASSERT(font_desc->ptr);
-    SOKOL_ASSERT((font_desc->size > 0) && ((font_desc->size % 8) == 0));
+    SOKOL_ASSERT(font_desc->data.ptr);
+    SOKOL_ASSERT((font_desc->data.size > 0) && ((font_desc->data.size % 8) == 0));
     SOKOL_ASSERT(font_desc->first_char <= font_desc->last_char);
-    SOKOL_ASSERT((((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->size);
-    const uint8_t* ptr = font_desc->ptr;
+    SOKOL_ASSERT((size_t)(((font_desc->last_char - font_desc->first_char) + 1) * 8) == font_desc->data.size);
+    const uint8_t* ptr = (const uint8_t*) font_desc->data.ptr;
     for (int chr = font_desc->first_char; chr <= font_desc->last_char; chr++) {
         for (int line = 0; line < 8; line++) {
             uint8_t bits = *ptr++;
@@ -3658,7 +3683,7 @@ static void _sdtx_unpack_font(const sdtx_font_desc_t* font_desc, uint8_t* out_pi
 static void _sdtx_setup_common(void) {
 
     /* common printf formatting buffer */
-    _sdtx.fmt_buf_size = _sdtx.desc.printf_buf_size + 1;
+    _sdtx.fmt_buf_size = (uint32_t) _sdtx.desc.printf_buf_size + 1;
     _sdtx.fmt_buf = (char*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
     SOKOL_ASSERT(_sdtx.fmt_buf);
 
@@ -3678,7 +3703,7 @@ static void _sdtx_setup_common(void) {
     shd_desc.attrs[2].sem_name = "TEXCOORD";
     shd_desc.attrs[2].sem_index = 2;
     shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
     shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     #if defined(SOKOL_GLCORE33)
         shd_desc.vs.source = _sdtx_vs_src_glcore33;
@@ -3691,16 +3716,12 @@ static void _sdtx_setup_common(void) {
         shd_desc.fs.entry = "main0";
         switch (sg_query_backend()) {
             case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.byte_code = _sdtx_vs_bytecode_metal_macos;
-                shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_metal_macos);
-                shd_desc.fs.byte_code = _sdtx_fs_bytecode_metal_macos;
-                shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_metal_macos);
+                shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_metal_macos);
                 break;
             case SG_BACKEND_METAL_IOS:
-                shd_desc.vs.byte_code = _sdtx_vs_bytecode_metal_ios;
-                shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_metal_ios);
-                shd_desc.fs.byte_code = _sdtx_fs_bytecode_metal_ios;
-                shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_metal_ios);
+                shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_metal_ios);
+                shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_metal_ios);
                 break;
             default:
                 shd_desc.vs.source = _sdtx_vs_src_metal_sim;
@@ -3708,10 +3729,8 @@ static void _sdtx_setup_common(void) {
                 break;
         }
     #elif defined(SOKOL_D3D11)
-        shd_desc.vs.byte_code = _sdtx_vs_bytecode_d3d11;
-        shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_d3d11);
-        shd_desc.fs.byte_code = _sdtx_fs_bytecode_d3d11;
-        shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_d3d11);
+        shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_d3d11);
+        shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_d3d11);
     #elif defined(SOKOL_WGPU)
         shd_desc.vs.byte_code = _sdtx_vs_bytecode_wgpu;
         shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_wgpu);
@@ -3728,7 +3747,7 @@ static void _sdtx_setup_common(void) {
     memset(_sdtx.font_pixels, 0xFF, sizeof(_sdtx.font_pixels));
     const int unpacked_font_size = 256 * 8 * 8;
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (_sdtx.desc.fonts[i].ptr) {
+        if (_sdtx.desc.fonts[i].data.ptr) {
             _sdtx_unpack_font(&_sdtx.desc.fonts[i], &_sdtx.font_pixels[i * unpacked_font_size]);
         }
     }
@@ -3743,8 +3762,7 @@ static void _sdtx_setup_common(void) {
     img_desc.mag_filter = SG_FILTER_NEAREST;
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    img_desc.content.subimage[0][0].ptr = _sdtx.font_pixels;
-    img_desc.content.subimage[0][0].size = sizeof(_sdtx.font_pixels);
+    img_desc.data.subimage[0][0] = SG_RANGE(_sdtx.font_pixels);
     _sdtx.font_img = sg_make_image(&img_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sdtx.font_img.id);
 
@@ -3837,7 +3855,7 @@ static inline void _sdtx_draw_char(_sdtx_context_t* ctx, uint8_t c) {
 }
 
 static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
-    uint8_t c_u8 = c;
+    uint8_t c_u8 = (uint8_t)c;
     if (c_u8 <= 32) {
         _sdtx_ctrl_char(ctx, c_u8);
     }
@@ -3851,11 +3869,14 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
     desc.context_pool_size = _sdtx_def(desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
     desc.printf_buf_size = _sdtx_def(desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (desc.fonts[i].ptr) {
+        if (desc.fonts[i].data.ptr) {
             desc.fonts[i].last_char = _sdtx_def(desc.fonts[i].last_char, 255);
         }
     }
     desc.context = _sdtx_context_desc_defaults(&desc.context);
+    SOKOL_ASSERT(desc.context_pool_size > 0);
+    SOKOL_ASSERT(desc.printf_buf_size > 0);
+    SOKOL_ASSERT(desc.context.char_buf_size > 0);
     return desc;
 }
 
@@ -3884,32 +3905,32 @@ SOKOL_API_IMPL void sdtx_shutdown(void) {
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_kc853(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_kc853, sizeof(_sdtx_font_kc853), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_kc853, sizeof(_sdtx_font_kc853) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_kc854(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_kc854, sizeof(_sdtx_font_kc854), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_kc854, sizeof(_sdtx_font_kc854) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_z1013(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_z1013, sizeof(_sdtx_font_z1013), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_z1013, sizeof(_sdtx_font_z1013) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_cpc(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_cpc, sizeof(_sdtx_font_cpc), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_cpc, sizeof(_sdtx_font_cpc) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_c64(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_c64, sizeof(_sdtx_font_c64), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_c64, sizeof(_sdtx_font_c64) }, 0, 255 };
     return desc;
 }
 
 SOKOL_API_IMPL sdtx_font_desc_t sdtx_font_oric(void) {
-    sdtx_font_desc_t desc = { _sdtx_font_oric, sizeof(_sdtx_font_oric), 0, 255 };
+    sdtx_font_desc_t desc = { { _sdtx_font_oric, sizeof(_sdtx_font_oric) }, 0, 255 };
     return desc;
 }
 
@@ -4161,7 +4182,8 @@ SOKOL_API_IMPL void sdtx_draw(void) {
         if (num_verts > 0) {
             SOKOL_ASSERT((num_verts % 6) == 0);
             sg_push_debug_group("sokol-debugtext");
-            int vbuf_offset = sg_append_buffer(ctx->vbuf, ctx->vertices, num_verts * sizeof(_sdtx_vertex_t));
+            const sg_range range = { ctx->vertices, (size_t)num_verts * sizeof(_sdtx_vertex_t) };
+            int vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
             sg_apply_pipeline(ctx->pip);
             sg_bindings bindings;
             memset(&bindings, 0, sizeof(bindings));
