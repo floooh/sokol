@@ -29,20 +29,30 @@ c_source_paths = {
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
 }
 
-func_name_ignores = [
+name_ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
+    'sg_install_trace_hooks',
+    'sg_trace_hooks',
 ]
 
-func_name_overrides = {
-    'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
-    'sgl_deg': 'sgl_as_degrees',
-    'sgl_rad': 'sgl_as_radians'
+name_overrides = {
+    'sgl_error':    'sgl_get_error',   # 'error' is reserved in Zig
+    'sgl_deg':      'sgl_as_degrees',
+    'sgl_rad':      'sgl_as_radians'
 }
 
-struct_field_type_overrides = {
-    'sg_context_desc.color_format': 'int',
-    'sg_context_desc.depth_format': 'int',
+# NOTE: syntax for function results: "func_name.RESULT"
+type_overrides = {
+    'sg_context_desc.color_format':         'int',
+    'sg_context_desc.depth_format':         'int',
+    'sg_apply_uniforms.ub_index':           'uint32_t',
+    'sg_draw.base_element':                 'uint32_t',
+    'sg_draw.num_elements':                 'uint32_t',
+    'sg_draw.num_instances':                'uint32_t',
+    'sshape_element_range_t.base_element':  'uint32_t',
+    'sshape_element_range_t.num_elements':  'uint32_t',
+    'sdtx_font.font_index':                 'uint32_t',
 }
 
 prim_types = {
@@ -125,21 +135,21 @@ def as_zig_enum_type(s, prefix):
             outp += part.capitalize()
     return outp
 
-def check_struct_field_type_override(struct_name, field_name, orig_type):
-    s = f"{struct_name}.{field_name}"
-    if s in struct_field_type_overrides:
-        return struct_field_type_overrides[s]
+def check_type_override(func_or_struct_name, field_or_arg_name, orig_type):
+    s = f"{func_or_struct_name}.{field_or_arg_name}"
+    if s in type_overrides:
+        return type_overrides[s]
     else:
         return orig_type
 
-def check_func_name_ignore(func_name):
-    return func_name in func_name_ignores
-
-def check_func_name_override(func_name):
-    if func_name in func_name_overrides:
-        return func_name_overrides[func_name]
+def check_name_override(name):
+    if name in name_overrides:
+        return name_overrides[name]
     else:
-        return func_name
+        return name
+
+def check_name_ignore(name):
+    return name in name_ignores
 
 # PREFIX_BLA_BLUB to bla_blub
 def as_snake_case(s, prefix):
@@ -312,32 +322,37 @@ def funcptr_res_c(field_type):
 
 def funcdecl_args_c(decl, prefix):
     s = ""
+    func_name = decl['name']
     for param_decl in decl['params']:
         if s != "":
             s += ", "
-        arg_type = param_decl['type']
-        s += as_extern_c_arg_type(arg_type, prefix)
+        param_name = param_decl['name']
+        param_type = check_type_override(func_name, param_name, param_decl['type'])
+        s += as_extern_c_arg_type(param_type, prefix)
     return s
 
 def funcdecl_args_zig(decl, prefix):
     s = ""
+    func_name = decl['name']
     for param_decl in decl['params']:
         if s != "":
             s += ", "
-        arg_name = param_decl['name']
-        arg_type = param_decl['type']
-        s += f"{as_zig_arg_type(f'{arg_name}: ', arg_type, prefix)}"
+        param_name = param_decl['name']
+        param_type = check_type_override(func_name, param_name, param_decl['type'])
+        s += f"{as_zig_arg_type(f'{param_name}: ', param_type, prefix)}"
     return s
 
-def funcdecl_res_c(decl, prefix):
+def funcdecl_result_c(decl, prefix):
+    func_name = decl['name']
     decl_type = decl['type']
-    res_type = decl_type[:decl_type.index('(')].strip()
-    return as_extern_c_arg_type(res_type, prefix)
+    result_type = check_type_override(func_name, 'RESULT', decl_type[:decl_type.index('(')].strip())
+    return as_extern_c_arg_type(result_type, prefix)
 
-def funcdecl_res_zig(decl, prefix):
+def funcdecl_result_zig(decl, prefix):
+    func_name = decl['name']
     decl_type = decl['type']
-    res_type = decl_type[:decl_type.index('(')].strip()
-    zig_res_type = as_zig_arg_type(None, res_type, prefix)
+    result_type = check_type_override(func_name, 'RESULT', decl_type[:decl_type.index('(')].strip())
+    zig_res_type = as_zig_arg_type(None, result_type, prefix)
     if zig_res_type == "":
         zig_res_type = "void"
     return zig_res_type
@@ -349,7 +364,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
     for field in decl['fields']:
         field_name = field['name']
         field_type = field['type']
-        field_type = check_struct_field_type_override(struct_name, field_name, field_type)
+        field_type = check_type_override(struct_name, field_name, field_type)
         if is_prim_type(field_type):
             l(f"    {field_name}: {as_zig_prim_type(field_type)} = {type_default_value(field_type)},")
         elif is_struct_type(field_type):
@@ -427,13 +442,13 @@ def gen_enum(decl, prefix):
     l("};")
 
 def gen_func_c(decl, prefix):
-    l(f"pub extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_res_c(decl, prefix)};")
+    l(f"pub extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
 
 def gen_func_zig(decl, prefix):
     c_func_name = decl['name']
-    zig_func_name = as_camel_case(check_func_name_override(decl['name']))
-    zig_res_type = funcdecl_res_zig(decl, prefix)
-    l(f"pub inline fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {funcdecl_res_zig(decl, prefix)} {{")
+    zig_func_name = as_camel_case(check_name_override(decl['name']))
+    zig_res_type = funcdecl_result_zig(decl, prefix)
+    l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{")
     if zig_res_type != 'void':
         s = f"    return {c_func_name}("
     else:
@@ -528,14 +543,14 @@ def gen_module(inp, dep_prefixes):
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
-            if kind == 'struct':
-                gen_struct(decl, prefix)
-            elif kind == 'consts':
+            if kind == 'consts':
                 gen_consts(decl, prefix)
-            elif kind == 'enum':
-                gen_enum(decl, prefix)
-            elif kind == 'func':
-                if not check_func_name_ignore(decl['name']):
+            elif not check_name_ignore(decl['name']):
+                if kind == 'struct':
+                    gen_struct(decl, prefix)
+                elif kind == 'enum':
+                    gen_enum(decl, prefix)
+                elif kind == 'func':
                     gen_func_c(decl, prefix)
                     gen_func_zig(decl, prefix)
 
