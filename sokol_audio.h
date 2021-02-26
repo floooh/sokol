@@ -41,7 +41,8 @@
 
     - Windows: WASAPI
     - Linux: ALSA (link with asound)
-    - macOS/iOS: CoreAudio (link with AudioToolbox)
+    - macOS: CoreAudio (link with AudioToolbox)
+    - iOS: CoreAudio+AVAudioSession (link with AudioToolbox and AVFoundation)
     - emscripten: WebAudio with ScriptProcessorNode
     - Android: OpenSLES (link with OpenSLES)
 
@@ -307,8 +308,12 @@
     THE COREAUDIO BACKEND
     =====================
     The CoreAudio backend is selected on macOS and iOS (__APPLE__ is defined).
-    Since the CoreAudio API is implemented in C (not Objective-C) the
+    Since the CoreAudio API is implemented in C (not Objective-C) on macOS the
     implementation part of Sokol Audio can be included into a C source file.
+
+    However on iOS, Sokol Audio must be compiled as Objective-C due to it's
+    reliance on the AVAudioSession object. The iOS code path support both
+    being compiled with or without ARC (Automatic Reference Counting).
 
     For thread synchronisation, the CoreAudio backend will use the
     pthread_mutex_* functions.
@@ -509,7 +514,16 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #if defined(SOKOL_DUMMY_BACKEND)
     // No audio API needed for SOKOL_DUMMY_BACKEND
 #elif defined(__APPLE__)
+    #include <TargetConditionals.h>
     #include <AudioToolbox/AudioToolbox.h>
+    #if TARGET_OS_IOS
+        #if !defined(__cplusplus)
+            #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
+                #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
+            #endif
+        #endif
+        #include <AVFoundation/AVFoundation.h>
+    #endif
 #elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
     #define ALSA_PCM_NEW_HW_PARAMS_API
     #include <alsa/asoundlib.h>
@@ -597,6 +611,9 @@ typedef struct {
 
 typedef struct {
     AudioQueueRef ca_audio_queue;
+    #if TARGET_OS_IOS
+    id ca_interruption_handler;
+    #endif
 } _saudio_backend_t;
 
 /*=== ALSA BACKEND DECLARATIONS ==============================================*/
@@ -972,6 +989,57 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 /*=== COREAUDIO BACKEND IMPLEMENTATION =======================================*/
 #elif defined(__APPLE__)
 
+#if TARGET_OS_IOS
+#if __has_feature(objc_arc)
+#define _SAUDIO_OBJC_RELEASE(obj) { obj = nil; }
+#else
+#define _SAUDIO_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
+#endif
+
+@interface _saudio_interruption_handler : NSObject { }
+@end
+
+@implementation _saudio_interruption_handler
+-(id)init {
+    self = [super init];
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handle_interruption:) name:AVAudioSessionInterruptionNotification object:session];
+    return self;
+}
+
+-(void)dealloc {
+    [self remove_handler];
+    #if !__has_feature(objc_arc)
+    [super dealloc];
+    #endif
+}
+
+-(void)remove_handler {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"AVAudioSessionInterruptionNotification" object:nil];
+}
+
+-(void)handle_interruption:(NSNotification*)notification {
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    NSDictionary* dict = notification.userInfo;
+    SOKOL_ASSERT(dict);
+    NSInteger type = [[dict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
+    switch (type) {
+        case AVAudioSessionInterruptionTypeBegan:
+            AudioQueuePause(_saudio.backend.ca_audio_queue);
+            [session setActive:false error:nil];
+            break;
+        case AVAudioSessionInterruptionTypeEnded:
+            [session setActive:true error:nil];
+            AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
+            break;
+        default:
+            break;
+    }
+}
+@end
+#endif
+
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     _SOKOL_UNUSED(user_data);
@@ -993,6 +1061,17 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef qu
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
+
+    #if TARGET_OS_IOS
+    /* activate audio session */
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session != nil);
+    [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
+    [session setActive:true error:nil];
+
+    /* create interruption handler */
+    _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
+    #endif
 
     /* create an audio queue with fp32 samples */
     AudioStreamBasicDescription fmt;
@@ -1033,6 +1112,17 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     AudioQueueStop(_saudio.backend.ca_audio_queue, true);
     AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
     _saudio.backend.ca_audio_queue = NULL;
+    #if TARGET_OS_IOS
+    /* remove interruption handler */
+    if (_saudio.backend.ca_interruption_handler != nil) {
+        [_saudio.backend.ca_interruption_handler remove_handler];
+        _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
+    }
+    /* deactivate audio session */
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    SOKOL_ASSERT(session);
+    [session setActive:false error:nil];;
+    #endif
 }
 
 /*=== ALSA BACKEND IMPLEMENTATION ============================================*/

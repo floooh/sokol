@@ -828,6 +828,36 @@
 
     NOTE: SOKOL_NO_ENTRY is currently not supported on Android.
 
+    WINDOWS CONSOLE OUTPUT
+    ======================
+    On Windows, regular windowed applications don't show any stdout/stderr text
+    output, which can be a bit of a hassle for printf() debugging or generally
+    logging text to the console. Also, console output by default uses a local
+    codepage setting and thus international UTF-8 encoded text is printed
+    as garbage.
+
+    To help with these issues, sokol_app.h can be configured at startup
+    via the following Windows-specific sapp_desc flags:
+
+        sapp_desc.win32_console_utf8 (default: false)
+            When set to true, the output console codepage will be switched
+            to UTF-8 (and restored to the original codepage on exit)
+
+        sapp_desc.win32_console_attach (default: false)
+            When set to true, stdout and stderr will be attached to the
+            console of the parent process (if the parent process actually
+            has a console). This means that if the application was started
+            in a command line window, stdout and stderr output will be printed
+            to the terminal, just like a regular command line program. But if
+            the application is started via double-click, it will behave like
+            a regular UI application, and stdout/stderr will not be visible.
+
+        sapp_desc.win32_console_create (default: false)
+            When set to true, a new console window will be created and
+            stdout/stderr will be redirected to that console window. It
+            doesn't matter if the application is started from the command
+            line or via double-click.
+
     TEMP NOTE DUMP
     ==============
     - onscreen keyboard support on Android requires Java :(, should we even bother?
@@ -1120,13 +1150,17 @@ typedef struct sapp_desc {
     int max_dropped_files;              /* max number of dropped files to process (default: 1) */
     int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
 
+    /* backend-specific options */
+    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
+    bool win32_console_utf8;            /* if true, set the output console codepage to UTF-8 */
+    bool win32_console_create;          /* if true, attach stdout/stderr to a new console window */
+    bool win32_console_attach;          /* if true, attach stdout/stderr to parent process */
     const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
     bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
     bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
     bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
     bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
     bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
-    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
@@ -1454,6 +1488,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
         #pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
+        #pragma warning(disable:4996)   /* 'freopen': This function or variable may be unsafe. */
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -1464,9 +1499,14 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <windows.h>
     #include <windowsx.h>
     #include <shellapi.h>
-    #if !defined(SOKOL_WIN32_FORCE_MAIN)
-        #pragma comment (linker, "/subsystem:windows")
+    #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the applications' responsibility to use the right subsystem
+        #if defined(SOKOL_WIN32_FORCE_MAIN)
+            #pragma comment (linker, "/subsystem:console")
+        #else
+            #pragma comment (linker, "/subsystem:windows")
+        #endif
     #endif
+    #include <stdio.h>  /* freopen() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
@@ -1694,6 +1734,7 @@ typedef struct {
 typedef struct {
     HWND hwnd;
     HDC dc;
+    UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
     bool is_win10_or_greater;
     bool in_create_window;
@@ -2917,9 +2958,9 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
     [_sapp.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window_title]];
 }
 
-_SOKOL_PRIVATE void _sapp_macos_update_mouse(void) {
+_SOKOL_PRIVATE void _sapp_macos_update_mouse(NSEvent* event) {
     if (!_sapp.mouse.locked) {
-        const NSPoint mouse_pos = [_sapp.macos.window mouseLocationOutsideOfEventStream];
+        const NSPoint mouse_pos = event.locationInWindow;
         float new_x = mouse_pos.x * _sapp.dpi_scale;
         float new_y = _sapp.framebuffer_height - (mouse_pos.y * _sapp.dpi_scale) - 1;
         /* don't update dx/dy in the very first update */
@@ -2961,19 +3002,16 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
         stack with calls to sapp_show_mouse()
     */
     if (_sapp.mouse.locked) {
-        [NSEvent setMouseCoalescingEnabled:NO];
         CGAssociateMouseAndMouseCursorPosition(NO);
         CGDisplayHideCursor(kCGDirectMainDisplay);
     }
     else {
         CGDisplayShowCursor(kCGDirectMainDisplay);
         CGAssociateMouseAndMouseCursorPosition(YES);
-        [NSEvent setMouseCoalescingEnabled:YES];
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    _sapp_macos_update_mouse();
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
         [_sapp.macos.window performClose:nil];
@@ -3083,6 +3121,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
+    [NSEvent setMouseCoalescingEnabled:NO];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -3156,7 +3195,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
                             backing:(NSBackingStoreType)backingStoreType
                               defer:(BOOL)flag {
     if (self = [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:flag]) {
-        [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
+            [self registerForDraggedTypes:[NSArray arrayWithObject:NSPasteboardTypeFileURL]];
+        #endif
     }
     return self;
 }
@@ -3170,6 +3211,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+    #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
         _sapp_clear_drop_buffer();
@@ -3195,6 +3237,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
         return YES;
     }
+    #endif
     return NO;
 }
 @end
@@ -3227,8 +3270,44 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 }
 #endif
 
+_SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
+    const NSEventMask mask = NSEventMaskLeftMouseDown |
+                             NSEventMaskLeftMouseUp|
+                             NSEventMaskRightMouseDown |
+                             NSEventMaskRightMouseUp |
+                             NSEventMaskMouseMoved |
+                             NSEventMaskLeftMouseDragged |
+                             NSEventMaskRightMouseDragged |
+                             NSEventMaskMouseEntered |
+                             NSEventMaskMouseExited |
+                             NSEventMaskKeyDown |
+                             NSEventMaskKeyUp |
+                             NSEventMaskCursorUpdate |
+                             NSEventMaskScrollWheel |
+                             NSEventMaskTabletPoint |
+                             NSEventMaskTabletProximity |
+                             NSEventMaskOtherMouseDown |
+                             NSEventMaskOtherMouseUp |
+                             NSEventMaskOtherMouseDragged |
+                             NSEventMaskPressure |
+                             NSEventMaskDirectTouch;
+    @autoreleasepool {
+        for (;;) {
+            // NOTE: using NSDefaultRunLoopMode here causes stuttering in the GL backend,
+            // see: https://github.com/floooh/sokol/issues/486
+            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSEventTrackingRunLoopMode dequeue:YES];
+            if (event == nil) {
+                break;
+            }
+            [NSApp sendEvent:event];
+        }
+    }
+}
+
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    /* Catch any last-moment input events */
+    _sapp_macos_poll_input_events();
     _sapp_macos_frame();
     #if !defined(SOKOL_METAL)
     [[_sapp.macos.view openGLContext] flushBuffer];
@@ -3260,6 +3339,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     [super updateTrackingAreas];
 }
 - (void)mouseEntered:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     /* don't send mouse enter/leave while dragging (so that it behaves the same as
        on Windows while SetCapture is active
     */
@@ -3268,39 +3348,47 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 - (void)mouseExited:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (0 == _sapp.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
         _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
         _sapp.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         if (_sapp.mouse.locked) {
             _sapp.mouse.dx = [event deltaX];
@@ -3310,6 +3398,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3317,6 +3406,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)mouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3324,6 +3414,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
@@ -3331,6 +3422,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
 }
 - (void)scrollWheel:(NSEvent*)event {
+    _sapp_macos_update_mouse(event);
     if (_sapp_events_enabled()) {
         float dx = (float) event.scrollingDeltaX;
         float dy = (float) event.scrollingDeltaY;
@@ -3574,7 +3666,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.ios.view.sampleCount = _sapp.sample_count;
+        _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
         if (_sapp.desc.high_dpi) {
             _sapp.ios.view.contentScaleFactor = 2.0;
         }
@@ -6090,6 +6182,32 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
 }
 
+_SOKOL_PRIVATE void _sapp_win32_init_console(void) {
+    if (_sapp.desc.win32_console_create || _sapp.desc.win32_console_attach) {
+        BOOL con_valid = FALSE;
+        if (_sapp.desc.win32_console_create) {
+            con_valid = AllocConsole();
+        }
+        else if (_sapp.desc.win32_console_attach) {
+            con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if (con_valid) {
+            freopen("CON", "w", stdout);
+            freopen("CON", "w", stderr);
+        }
+    }
+    if (_sapp.desc.win32_console_utf8) {
+        _sapp.win32.orig_codepage = GetConsoleOutputCP();
+        SetConsoleOutputCP(CP_UTF8);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_restore_console(void) {
+    if (_sapp.desc.win32_console_utf8) {
+        SetConsoleOutputCP(_sapp.win32.orig_codepage);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 
     typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
@@ -6240,6 +6358,7 @@ _SOKOL_PRIVATE bool _sapp_win32_is_win10_or_greater(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    _sapp_win32_init_console();
     _sapp.win32.is_win10_or_greater = _sapp_win32_is_win10_or_greater();
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
@@ -6303,6 +6422,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_win32_restore_console();
     _sapp_discard_state();
 }
 

@@ -36,7 +36,7 @@
     ================
     sokol_shape.h creates vertices and indices for simple shapes and
     builds structs which can be plugged into sokol-gfx resource
-    creation descriptor structs.
+    creation functions:
 
     The following shape types are supported:
 
@@ -154,7 +154,7 @@
     You can also provide additional creation parameters, like a common vertex
     color, a debug-helper to randomize colors, tell the shape builder function
     to merge the new shape with the previous shape into the same draw-element-range,
-    or a 4x4 transform matrix to move, rotate and scale the generated matrices:
+    or a 4x4 transform matrix to move, rotate and scale the generated vertices:
 
     ```c
     sshape_buffer_t buf = ...;
@@ -179,7 +179,7 @@
     assert(buf.valid);
     ```
 
-    The following helper functions are offered to build a packed
+    The following helper functions can be used to build a packed
     color value or to convert from external matrix types:
 
     ```c
