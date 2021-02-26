@@ -12496,8 +12496,8 @@ _SOKOL_PRIVATE uint32_t _sapp_wl_get_modifiers(void) {
 }
 
 _SOKOL_PRIVATE struct _sapp_wl_touchpoint* _sapp_wl_get_touchpoint(int32_t id) {
-    char point_id = -1;
-    for (char i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+    int point_id = -1;
+    for (int i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
         if (id == _sapp.wl.touchpoints[i].id) {
             _sapp.wl.touchpoints[i].changed = true;
             _sapp.wl.touchpoints[i].valid = true;
@@ -12521,7 +12521,7 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.egl_window) wl_egl_window_destroy(_sapp.wl.egl_window);
     if (NULL != _sapp.wl.egl_context) eglDestroyContext(_sapp.wl.egl_display, _sapp.wl.egl_context);
 
-    for (unsigned char i = 0; i < _sapp.wl.max_outputs; i++) {
+    for (unsigned int i = 0; i < _sapp.wl.max_outputs; i++) {
         if (NULL != _sapp.wl.outputs[i].output) wl_output_destroy(_sapp.wl.outputs[i].output);
     }
     _sapp.wl.max_outputs = 0;
@@ -12635,7 +12635,7 @@ _SOKOL_PRIVATE void _sapp_wl_resize_window(int width, int height) {
     int32_t max_dpi_scale = 1;
     if (_sapp.desc.high_dpi) {
         /* scale to highest dpi factor of active outputs */
-        for (unsigned char i = 0; i < _sapp.wl.max_outputs; i++) {
+        for (unsigned int i = 0; i < _sapp.wl.max_outputs; i++) {
             if (_sapp.wl.outputs[i].active && _sapp.wl.outputs[i].factor > max_dpi_scale) {
                 max_dpi_scale = _sapp.wl.outputs[i].factor;
             }
@@ -12712,8 +12712,8 @@ _SOKOL_PRIVATE void _sapp_wl_scroll_event(bool is_vertical_axis, double value, u
 _SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint32_t modifiers) {
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        char max_touchpoints = 0;
-        for (char i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
+        int max_touchpoints = 0;
+        for (int i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
             if (_sapp.wl.touchpoints[i].valid) {
                 sapp_touchpoint* point = &_sapp.event.touches[max_touchpoints++];
                 point->identifier = _sapp.wl.touchpoints[i].id;
@@ -12766,6 +12766,7 @@ _SOKOL_PRIVATE void _sapp_wl_data_source_handle_dnd_finished(void* data, struct 
 
 _SOKOL_PRIVATE void _sapp_wl_data_source_handle_send(void* data, struct wl_data_source* data_source, const char* mime_type, int32_t fd) {
     _SOKOL_UNUSED(data);
+    _SOKOL_UNUSED(data_source);
 
     if (0 == strcmp(mime_type, "text/plain")) {
         write(fd, _sapp.clipboard.buffer, strlen(_sapp.clipboard.buffer));
@@ -12797,6 +12798,8 @@ _SOKOL_PRIVATE const struct wl_data_source_listener _sapp_wl_data_source_listene
 };
 
 _SOKOL_PRIVATE void _sapp_wl_set_clipboard_string(const char* str) {
+    _SOKOL_UNUSED(str);
+
     if (NULL == _sapp.wl.data_device_manager || NULL == _sapp.wl.data_device) {
         return;
     }
@@ -12987,6 +12990,8 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_enter(void* data, struct wl_pointer* pointe
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(pointer);
     _SOKOL_UNUSED(surface);
+    _SOKOL_UNUSED(surface_x);
+    _SOKOL_UNUSED(surface_y);
 
     _sapp.wl.serial = serial;
 
@@ -13317,6 +13322,8 @@ _SOKOL_PRIVATE const struct wl_surface_listener _sapp_wl_surface_listener = {
 };
 
 _SOKOL_PRIVATE void _sapp_wl_shell_handle_configure(void* data, struct xdg_surface* shell, uint32_t serial) {
+    _SOKOL_UNUSED(data);
+
     xdg_surface_ack_configure(shell, serial);
     if (NULL != _sapp.wl.egl_display && NULL != _sapp.wl.egl_surface) {
         _sapp_frame();
@@ -13507,8 +13514,8 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplev
 }
 
 _SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
-  .configure = _sapp_wl_toplevel_handle_configure,
-  .close = _sapp_wl_toplevel_handle_close,
+    .configure = _sapp_wl_toplevel_handle_configure,
+    .close = _sapp_wl_toplevel_handle_close,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_setup(const sapp_desc* desc) {
@@ -14425,6 +14432,7 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
 }
 
 SOKOL_API_IMPL sapp_linux_display_protocol sapp_linux_get_display_protocol(void) {
+    SOKOL_ASSERT(_sapp.valid);
     return _sapp.linux_display_protocol;
 }
 
