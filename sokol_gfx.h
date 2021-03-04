@@ -644,7 +644,7 @@ typedef struct sg_range {
 // disabling this for every includer isn't great, but the warnings are also quite pointless
 #if defined(_MSC_VER)
 #pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
-#pragma warning(disable:4202)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
 #endif
 #if defined(__cplusplus)
 #define SG_RANGE(x) sg_range{ &x, sizeof(x) }
