@@ -1442,26 +1442,15 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #define GL_SILENCE_DEPRECATION
             #endif
             #include <Cocoa/Cocoa.h>
-            #include <OpenGL/gl3.h>
         #endif
     #elif defined(_SAPP_IOS)
         #import <UIKit/UIKit.h>
         #if !defined(SOKOL_METAL)
             #import <GLKit/GLKit.h>
-            #include <OpenGLES/ES3/gl.h>
-            #include <OpenGLES/ES3/glext.h>
         #endif
     #endif
 #elif defined(_SAPP_EMSCRIPTEN)
-    #if defined(SOKOL_GLES3)
-        #include <GLES3/gl3.h>
-    #elif defined(SOKOL_GLES2)
-        #ifndef GL_EXT_PROTOTYPES
-        #define GL_GLEXT_PROTOTYPES
-        #endif
-        #include <GLES2/gl2.h>
-        #include <GLES2/gl2ext.h>
-    #elif defined(SOKOL_WGPU)
+    #if defined(SOKOL_WGPU)
         #include <webgpu/webgpu.h>
     #endif
     #include <emscripten/emscripten.h>
@@ -1555,15 +1544,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <android/native_activity.h>
     #include <android/looper.h>
     #include <EGL/egl.h>
-    #if defined(SOKOL_GLES3)
-        #include <GLES3/gl3.h>
-    #else
-        #ifndef GL_EXT_PROTOTYPES
-            #define GL_GLEXT_PROTOTYPES
-        #endif
-        #include <GLES2/gl2.h>
-        #include <GLES2/gl2ext.h>
-    #endif
 #elif defined(_SAPP_LINUX)
     #define GL_GLEXT_PROTOTYPES
     #include <X11/Xlib.h>
