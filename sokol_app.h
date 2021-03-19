@@ -1555,7 +1555,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/extensions/XInput2.h>
     #include <X11/Xcursor/Xcursor.h>
     #include <X11/Xmd.h> /* CARD32 */
-    #include <GL/gl.h>
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
@@ -1879,7 +1878,7 @@ typedef Bool (*PFNGLXMAKECURRENTPROC)(Display*,GLXDrawable,GLXContext);
 typedef void (*PFNGLXSWAPBUFFERSPROC)(Display*,GLXDrawable);
 typedef const char* (*PFNGLXQUERYEXTENSIONSSTRINGPROC)(Display*,int);
 typedef GLXFBConfig* (*PFNGLXGETFBCONFIGSPROC)(Display*,int,int*);
-typedef __GLXextproc (* PFNGLXGETPROCADDRESSPROC)(const GLubyte *procName);
+typedef __GLXextproc (* PFNGLXGETPROCADDRESSPROC)(const char *procName);
 typedef void (*PFNGLXSWAPINTERVALEXTPROC)(Display*,GLXDrawable,int);
 typedef XVisualInfo* (*PFNGLXGETVISUALFROMFBCONFIGPROC)(Display*,GLXFBConfig);
 typedef GLXWindow (*PFNGLXCREATEWINDOWPROC)(Display*,GLXFBConfig,Window,const int*);
@@ -8684,10 +8683,10 @@ _SOKOL_PRIVATE bool _sapp_glx_extsupported(const char* ext, const char* extensio
 _SOKOL_PRIVATE void* _sapp_glx_getprocaddr(const char* procname)
 {
     if (_sapp.glx.GetProcAddress) {
-        return (void*) _sapp.glx.GetProcAddress((const GLubyte*) procname);
+        return (void*) _sapp.glx.GetProcAddress(procname);
     }
     else if (_sapp.glx.GetProcAddressARB) {
-        return (void*) _sapp.glx.GetProcAddressARB((const GLubyte*) procname);
+        return (void*) _sapp.glx.GetProcAddressARB(procname);
     }
     else {
         return dlsym(_sapp.glx.libgl, procname);
