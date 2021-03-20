@@ -39,15 +39,18 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_GFX_API_DECL  - public function declaration prefix (default: extern)
-    SOKOL_API_DECL      - same as SOKOL_GFX_API_DECL
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
+    SOKOL_MALLOC(s)             - your own malloc function (default: malloc(s))
+    SOKOL_FREE(p)               - your own free function (default: free(p))
+    SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
+    SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
+    SOKOL_GFX_API_DECL          - public function declaration prefix (default: extern)
+    SOKOL_API_DECL              - same as SOKOL_GFX_API_DECL
+    SOKOL_API_IMPL              - public function implementation prefix (default: -)
+    SOKOL_TRACE_HOOKS           - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_EXTERNAL_GL_LOADER    - indicates that you're using your own GL loader, in this case
+                                  sokol_gfx.h will not include any platform GL headers and disable
+                                  the integrated Win32 GL loader
 
     If sokol_gfx.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -66,11 +69,6 @@
     even in release mode:
 
     SOKOL_DEBUG         - by default this is defined if _DEBUG is defined
-
-    On Windows, a minimal 'GL header' and function loader is integrated which
-    contains just enough of GL for sokol_gfx.h. If you want to use your own
-    GL header-generator/loader instead, define SOKOL_WIN32_NO_GL_LOADER
-    before including the implementation part of sokol_gfx.h.
 
     sokol_gfx DOES NOT:
     ===================
@@ -2542,7 +2540,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #endif
     #endif
     #include <TargetConditionals.h>
-    #import <Metal/Metal.h>
     #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
         #define _SG_TARGET_MACOS (1)
     #else
@@ -2551,6 +2548,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SG_TARGET_IOS_SIMULATOR (1)
         #endif
     #endif
+    #import <Metal/Metal.h>
 #elif defined(SOKOL_WGPU)
     #if defined(__EMSCRIPTEN__)
         #include <webgpu/webgpu.h>
@@ -2560,46 +2558,49 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
-    // platform specific GL headers (or on Win32: use a GL loader)
-    #if defined(_WIN32)
-        #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-        #endif
-        #ifndef NOMINMAX
-        #define NOMINMAX
-        #endif
-        #include <windows.h>
-        #if defined(SOKOL_GLCORE33) && !defined(SOKOL_WIN32_NO_GL_LOADER)
-            #define _SOKOL_USE_GL_LOADER (1)
-        #endif
-    #elif defined(__APPLE__)
-        #include <TargetConditionals.h>
-        #ifndef GL_SILENCE_DEPRECATION
-            #define GL_SILENCE_DEPRECATION
-        #endif
-        #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-            #include <OpenGL/gl3.h>
-        #else
-            #include <OpenGLES/ES3/gl.h>
-            #include <OpenGLES/ES3/glext.h>
-        #endif
-    #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
-        #if defined(SOKOL_GLES3)
-            #include <GLES3/gl3.h>
-        #elif defined(SOKOL_GLES2)
-            #ifndef GL_EXT_PROTOTYPES
-            #define GL_GLEXT_PROTOTYPES
+    // include platform specific GL headers (or on Win32: use an embedded GL loader)
+    #if !defined(SOKOL_EXTERNAL_GL_LOADER)
+        #if defined(_WIN32)
+            #if defined(SOKOL_GLCORE33) && !defined(SOKOL_EXTERNAL_GL_LOADER)
+                #ifndef WIN32_LEAN_AND_MEAN
+                #define WIN32_LEAN_AND_MEAN
+                #endif
+                #ifndef NOMINMAX
+                #define NOMINMAX
+                #endif
+                #include <windows.h>
+                #define _SOKOL_USE_WIN32_GL_LOADER (1)
+                #pragma comment (lib, "kernel32")   // GetProcAddress()
             #endif
-            #include <GLES2/gl2.h>
-            #include <GLES2/gl2ext.h>
+        #elif defined(__APPLE__)
+            #include <TargetConditionals.h>
+            #ifndef GL_SILENCE_DEPRECATION
+                #define GL_SILENCE_DEPRECATION
+            #endif
+            #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+                #include <OpenGL/gl3.h>
+            #else
+                #include <OpenGLES/ES3/gl.h>
+                #include <OpenGLES/ES3/glext.h>
+            #endif
+        #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+            #if defined(SOKOL_GLES3)
+                #include <GLES3/gl3.h>
+            #elif defined(SOKOL_GLES2)
+                #ifndef GL_EXT_PROTOTYPES
+                #define GL_GLEXT_PROTOTYPES
+                #endif
+                #include <GLES2/gl2.h>
+                #include <GLES2/gl2ext.h>
+            #endif
+        #elif defined(__linux__) || defined(__unix__)
+            #define GL_GLEXT_PROTOTYPES
+            #include <GL/gl.h>
         #endif
-    #elif defined(__linux__) || defined(__unix__)
-        #define GL_GLEXT_PROTOTYPES
-        #include <GL/gl.h>
     #endif
 
     // optional GL loader definitions (only on Win32)
-    #if defined(_SOKOL_USE_GL_LOADER)
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
         #define __gl_h_ 1
         #define __gl32_h_ 1
         #define __gl31_h_ 1
@@ -2918,24 +2919,24 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 
     #ifdef SOKOL_GLES2
-    #   ifdef GL_ANGLE_instanced_arrays
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
-    #   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-    #   else
-    #       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
-    #       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #   endif
+        #ifdef GL_ANGLE_instanced_arrays
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
+        #elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+        #else
+            #define _SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
+            #define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+        #endif
     #else
-    #   define SOKOL_INSTANCING_ENABLED
+        #define _SOKOL_GL_INSTANCING_ENABLED
     #endif
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
 #endif
@@ -3473,7 +3474,7 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
-    #if _SOKOL_USE_GL_LOADER
+    #if _SOKOL_USE_WIN32_GL_LOADER
     HINSTANCE opengl32_dll;
     #endif
 } _sg_gl_backend_t;
@@ -4660,7 +4661,7 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
 #elif defined(_SOKOL_ANY_GL)
 
 /*=== OPTIONAL GL LOADER FOR WIN32 ===========================================*/
-#if defined(_SOKOL_USE_GL_LOADER)
+#if defined(_SOKOL_USE_WIN32_GL_LOADER)
 
 // X Macro list of GL function names and signatures
 #define _SG_GL_FUNCS \
@@ -4799,7 +4800,7 @@ _SOKOL_PRIVATE void _sg_gl_unload_opengl(void) {
     FreeLibrary(_sg.gl.opengl32_dll);
     _sg.gl.opengl32_dll = 0;
 }
-#endif // GL loader
+#endif // _SOKOL_USE_WIN32_GL_LOADER
 
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
@@ -5756,7 +5757,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     }
 
     _sg.features.origin_top_left = false;
-    #if defined(SOKOL_INSTANCING_ENABLED)
+    #if defined(_SOKOL_GL_INSTANCING_ENABLED)
         _sg.features.instancing = has_instancing;
     #endif
     _sg.features.multiple_render_targets = false;
@@ -6066,7 +6067,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _sg.gl.gles2 = false;
     #endif
 
-    #if defined(_SOKOL_USE_GL_LOADER)
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
     _sg_gl_load_opengl();
     #endif
 
@@ -6091,7 +6092,7 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
     _sg.gl.valid = false;
-    #if defined(_SOKOL_USE_GL_LOADER)
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
     _sg_gl_unload_opengl();
     #endif
 }
@@ -7264,7 +7265,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
-                #ifdef SOKOL_INSTANCING_ENABLED
+                #if defined(_SOKOL_GL_INSTANCING_ENABLED)
                     if (_sg.features.instancing) {
                         glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                     }
