@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**22-Feb-2021** sokol_app.h: mouse latency reduction on macOS)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**20-Mar-2021** sokol_gfx.h no longer depends on an external GL loader)
 
 ## Examples and Related Projects
 
@@ -71,15 +71,14 @@ A blog post with more background info: [A Tour of sokol_gfx.h](http://floooh.git
 - does *not* provide shader dialect cross-translation (**BUT** there's now an 'official' shader-cross-compiler solution which
 seamlessly integrates with sokol_gfx.h and IDEs: [see here for details](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md)
 
-A triangle in C99 with GLFW and FlextGL:
+A triangle in C99 with GLFW:
 
 ```c
-#define GLFW_INCLUDE_NONE
-#include "GLFW/glfw3.h"
-#include "flextgl/flextGL.h"
 #define SOKOL_IMPL
 #define SOKOL_GLCORE33
 #include "sokol_gfx.h"
+#define GLFW_INCLUDE_NONE
+#include "GLFW/glfw3.h"
 
 int main() {
 
@@ -92,7 +91,6 @@ int main() {
     GLFWwindow* w = glfwCreateWindow(640, 480, "Sokol Triangle GLFW", 0, 0);
     glfwMakeContextCurrent(w);
     glfwSwapInterval(1);
-    flextInit();
 
     /* setup sokol_gfx */
     sg_setup(&(sg_desc){0});

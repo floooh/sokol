@@ -1,5 +1,24 @@
 ## Updates
 
+- **20-Mar-2021**: The Windows-specific OpenGL loader, and the platform-specific
+GL header includes have been moved from sokol_app.h to sokol_gfx.h. This means:
+  - In general, the sokol_gfx.h implementation can now simply be included
+    without having to include other headers which provide the GL implementation
+    first (e.g. when sokol_gfx.h is used without sokol_app.h, you don't need to
+    use a GL loader, or include the system-specific GL headers yourself).
+  - When sokol_gfx.h is used together with sokol_app.h, the include order
+    for the implementations doesn't matter anymore (until now, the sokol_app.h
+    implementation had to be included before the sokol_gfx.h implementation).
+  - The only "downside" (not really a downside) is that sokol_gfx.h now has
+    platform detection ifdefs to include the correct GL headers for a given
+    platform. Until now this problem was "delegated" to the library user.
+  - The old macro **SOKOL_WIN32_NO_GL_LOADER** has been removed, and replaced
+    with a more general **SOKOL_EXTERNAL_GL_LOADER**. Define this before
+    including the sokol_gfx.h implementation if you are using your own GL
+    loader or provide the GL API declarations in any other way. In this case,
+    sokol_gfx.h will not include any platform GL headers, and the embedded
+    Win32 GL loader will be disabled.
+
 - **22-Feb-2021**: Mouse input latency in sokol_app.h's macOS backend has been
   quite significantly reduced, please see the detailed explanation [in this
   PR](https://github.com/floooh/sokol/pull/483). Many thanks to @randrew for
