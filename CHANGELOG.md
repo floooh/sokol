@@ -3,7 +3,7 @@
 - **20-Mar-2021**: The Windows-specific OpenGL loader, and the platform-specific
 GL header includes have been moved from sokol_app.h to sokol_gfx.h. This means:
   - In general, the sokol_gfx.h implementation can now simply be included
-    without having to include other headers which provide the GL implementation
+    without having to include other headers which provide the GL API declarations
     first (e.g. when sokol_gfx.h is used without sokol_app.h, you don't need to
     use a GL loader, or include the system-specific GL headers yourself).
   - When sokol_gfx.h is used together with sokol_app.h, the include order
