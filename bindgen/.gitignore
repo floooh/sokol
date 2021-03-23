@@ -1,4 +1,6 @@
 *.json
+*.nim
 *.zig
 __pycache__/
+sokol-nim/
 sokol-zig/

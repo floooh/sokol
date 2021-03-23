@@ -7,6 +7,7 @@ To update the Zig bindings:
 ```
 > cd sokol/bindgen
 > git clone https://github.com/floooh/sokol-zig
+> git clone https://github.com/floooh/sokol-nim
 > python3 gen_all.py
 ```
 

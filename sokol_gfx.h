@@ -39,15 +39,18 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_GFX_API_DECL  - public function declaration prefix (default: extern)
-    SOKOL_API_DECL      - same as SOKOL_GFX_API_DECL
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
+    SOKOL_MALLOC(s)             - your own malloc function (default: malloc(s))
+    SOKOL_FREE(p)               - your own free function (default: free(p))
+    SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
+    SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
+    SOKOL_GFX_API_DECL          - public function declaration prefix (default: extern)
+    SOKOL_API_DECL              - same as SOKOL_GFX_API_DECL
+    SOKOL_API_IMPL              - public function implementation prefix (default: -)
+    SOKOL_TRACE_HOOKS           - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_EXTERNAL_GL_LOADER    - indicates that you're using your own GL loader, in this case
+                                  sokol_gfx.h will not include any platform GL headers and disable
+                                  the integrated Win32 GL loader
 
     If sokol_gfx.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -644,7 +647,7 @@ typedef struct sg_range {
 // disabling this for every includer isn't great, but the warnings are also quite pointless
 #if defined(_MSC_VER)
 #pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
-#pragma warning(disable:4202)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
 #endif
 #if defined(__cplusplus)
 #define SG_RANGE(x) sg_range{ &x, sizeof(x) }
@@ -2506,8 +2509,329 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #pragma warning(disable:4055)   /* 'type cast': from data pointer */
 #endif
 
-#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#if defined(SOKOL_D3D11)
+    #ifndef D3D11_NO_HELPERS
+    #define D3D11_NO_HELPERS
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
+    #include <d3d11.h>
+    #include <d3dcompiler.h>
+    #ifdef _MSC_VER
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+        #pragma comment (lib, "WindowsApp")
+    #else
+        #pragma comment (lib, "kernel32")
+        #pragma comment (lib, "user32")
+        #pragma comment (lib, "dxgi")
+        #pragma comment (lib, "d3d11")
+        #pragma comment (lib, "dxguid")
+    #endif
+    #endif
+#elif defined(SOKOL_METAL)
+    // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
+    #if !defined(__cplusplus)
+        #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
+            #error "sokol_gfx.h requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
+        #endif
+    #endif
+    #include <TargetConditionals.h>
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #define _SG_TARGET_MACOS (1)
+    #else
+        #define _SG_TARGET_IOS (1)
+        #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
+            #define _SG_TARGET_IOS_SIMULATOR (1)
+        #endif
+    #endif
+    #import <Metal/Metal.h>
+#elif defined(SOKOL_WGPU)
+    #if defined(__EMSCRIPTEN__)
+        #include <webgpu/webgpu.h>
+    #else
+        #include <dawn/webgpu.h>
+    #endif
+#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
+
+    // include platform specific GL headers (or on Win32: use an embedded GL loader)
+    #if !defined(SOKOL_EXTERNAL_GL_LOADER)
+        #if defined(_WIN32)
+            #if defined(SOKOL_GLCORE33) && !defined(SOKOL_EXTERNAL_GL_LOADER)
+                #ifndef WIN32_LEAN_AND_MEAN
+                #define WIN32_LEAN_AND_MEAN
+                #endif
+                #ifndef NOMINMAX
+                #define NOMINMAX
+                #endif
+                #include <windows.h>
+                #define _SOKOL_USE_WIN32_GL_LOADER (1)
+                #pragma comment (lib, "kernel32")   // GetProcAddress()
+            #endif
+        #elif defined(__APPLE__)
+            #include <TargetConditionals.h>
+            #ifndef GL_SILENCE_DEPRECATION
+                #define GL_SILENCE_DEPRECATION
+            #endif
+            #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+                #include <OpenGL/gl3.h>
+            #else
+                #include <OpenGLES/ES3/gl.h>
+                #include <OpenGLES/ES3/glext.h>
+            #endif
+        #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+            #if defined(SOKOL_GLES3)
+                #include <GLES3/gl3.h>
+            #elif defined(SOKOL_GLES2)
+                #ifndef GL_EXT_PROTOTYPES
+                #define GL_GLEXT_PROTOTYPES
+                #endif
+                #include <GLES2/gl2.h>
+                #include <GLES2/gl2ext.h>
+            #endif
+        #elif defined(__linux__) || defined(__unix__)
+            #define GL_GLEXT_PROTOTYPES
+            #include <GL/gl.h>
+        #endif
+    #endif
+
+    // optional GL loader definitions (only on Win32)
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+        #define __gl_h_ 1
+        #define __gl32_h_ 1
+        #define __gl31_h_ 1
+        #define __GL_H__ 1
+        #define __glext_h_ 1
+        #define __GLEXT_H_ 1
+        #define __gltypes_h_ 1
+        #define __glcorearb_h_ 1
+        #define __gl_glcorearb_h_ 1
+        #define GL_APIENTRY APIENTRY
+
+        typedef unsigned int  GLenum;
+        typedef unsigned int  GLuint;
+        typedef int  GLsizei;
+        typedef char  GLchar;
+        typedef ptrdiff_t  GLintptr;
+        typedef ptrdiff_t  GLsizeiptr;
+        typedef double  GLclampd;
+        typedef unsigned short  GLushort;
+        typedef unsigned char  GLubyte;
+        typedef unsigned char  GLboolean;
+        typedef uint64_t  GLuint64;
+        typedef double  GLdouble;
+        typedef unsigned short  GLhalf;
+        typedef float  GLclampf;
+        typedef unsigned int  GLbitfield;
+        typedef signed char  GLbyte;
+        typedef short  GLshort;
+        typedef void  GLvoid;
+        typedef int64_t  GLint64;
+        typedef float  GLfloat;
+        typedef struct __GLsync * GLsync;
+        typedef int  GLint;
+        #define GL_INT_2_10_10_10_REV 0x8D9F
+        #define GL_R32F 0x822E
+        #define GL_PROGRAM_POINT_SIZE 0x8642
+        #define GL_STENCIL_ATTACHMENT 0x8D20
+        #define GL_DEPTH_ATTACHMENT 0x8D00
+        #define GL_COLOR_ATTACHMENT2 0x8CE2
+        #define GL_COLOR_ATTACHMENT0 0x8CE0
+        #define GL_R16F 0x822D
+        #define GL_COLOR_ATTACHMENT22 0x8CF6
+        #define GL_DRAW_FRAMEBUFFER 0x8CA9
+        #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+        #define GL_NUM_EXTENSIONS 0x821D
+        #define GL_INFO_LOG_LENGTH 0x8B84
+        #define GL_VERTEX_SHADER 0x8B31
+        #define GL_INCR 0x1E02
+        #define GL_DYNAMIC_DRAW 0x88E8
+        #define GL_STATIC_DRAW 0x88E4
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_Z 0x8519
+        #define GL_TEXTURE_CUBE_MAP 0x8513
+        #define GL_FUNC_SUBTRACT 0x800A
+        #define GL_FUNC_REVERSE_SUBTRACT 0x800B
+        #define GL_CONSTANT_COLOR 0x8001
+        #define GL_DECR_WRAP 0x8508
+        #define GL_R8 0x8229
+        #define GL_LINEAR_MIPMAP_LINEAR 0x2703
+        #define GL_ELEMENT_ARRAY_BUFFER 0x8893
+        #define GL_SHORT 0x1402
+        #define GL_DEPTH_TEST 0x0B71
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Y 0x8518
+        #define GL_LINK_STATUS 0x8B82
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_Y 0x8517
+        #define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
+        #define GL_RGBA16F 0x881A
+        #define GL_CONSTANT_ALPHA 0x8003
+        #define GL_READ_FRAMEBUFFER 0x8CA8
+        #define GL_TEXTURE0 0x84C0
+        #define GL_TEXTURE_MIN_LOD 0x813A
+        #define GL_CLAMP_TO_EDGE 0x812F
+        #define GL_UNSIGNED_SHORT_5_6_5 0x8363
+        #define GL_TEXTURE_WRAP_R 0x8072
+        #define GL_UNSIGNED_SHORT_5_5_5_1 0x8034
+        #define GL_NEAREST_MIPMAP_NEAREST 0x2700
+        #define GL_UNSIGNED_SHORT_4_4_4_4 0x8033
+        #define GL_SRC_ALPHA_SATURATE 0x0308
+        #define GL_STREAM_DRAW 0x88E0
+        #define GL_ONE 1
+        #define GL_NEAREST_MIPMAP_LINEAR 0x2702
+        #define GL_RGB10_A2 0x8059
+        #define GL_RGBA8 0x8058
+        #define GL_COLOR_ATTACHMENT1 0x8CE1
+        #define GL_RGBA4 0x8056
+        #define GL_RGB8 0x8051
+        #define GL_ARRAY_BUFFER 0x8892
+        #define GL_STENCIL 0x1802
+        #define GL_TEXTURE_2D 0x0DE1
+        #define GL_DEPTH 0x1801
+        #define GL_FRONT 0x0404
+        #define GL_STENCIL_BUFFER_BIT 0x00000400
+        #define GL_REPEAT 0x2901
+        #define GL_RGBA 0x1908
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+        #define GL_DECR 0x1E03
+        #define GL_FRAGMENT_SHADER 0x8B30
+        #define GL_FLOAT 0x1406
+        #define GL_TEXTURE_MAX_LOD 0x813B
+        #define GL_DEPTH_COMPONENT 0x1902
+        #define GL_ONE_MINUS_DST_ALPHA 0x0305
+        #define GL_COLOR 0x1800
+        #define GL_TEXTURE_2D_ARRAY 0x8C1A
+        #define GL_TRIANGLES 0x0004
+        #define GL_UNSIGNED_BYTE 0x1401
+        #define GL_TEXTURE_MAG_FILTER 0x2800
+        #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
+        #define GL_NONE 0
+        #define GL_SRC_COLOR 0x0300
+        #define GL_BYTE 0x1400
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z 0x851A
+        #define GL_LINE_STRIP 0x0003
+        #define GL_TEXTURE_3D 0x806F
+        #define GL_CW 0x0900
+        #define GL_LINEAR 0x2601
+        #define GL_RENDERBUFFER 0x8D41
+        #define GL_GEQUAL 0x0206
+        #define GL_COLOR_BUFFER_BIT 0x00004000
+        #define GL_RGBA32F 0x8814
+        #define GL_BLEND 0x0BE2
+        #define GL_ONE_MINUS_SRC_ALPHA 0x0303
+        #define GL_ONE_MINUS_CONSTANT_COLOR 0x8002
+        #define GL_TEXTURE_WRAP_T 0x2803
+        #define GL_TEXTURE_WRAP_S 0x2802
+        #define GL_TEXTURE_MIN_FILTER 0x2801
+        #define GL_LINEAR_MIPMAP_NEAREST 0x2701
+        #define GL_EXTENSIONS 0x1F03
+        #define GL_NO_ERROR 0
+        #define GL_REPLACE 0x1E01
+        #define GL_KEEP 0x1E00
+        #define GL_CCW 0x0901
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_X 0x8516
+        #define GL_RGB 0x1907
+        #define GL_TRIANGLE_STRIP 0x0005
+        #define GL_FALSE 0
+        #define GL_ZERO 0
+        #define GL_CULL_FACE 0x0B44
+        #define GL_INVERT 0x150A
+        #define GL_INT 0x1404
+        #define GL_UNSIGNED_INT 0x1405
+        #define GL_UNSIGNED_SHORT 0x1403
+        #define GL_NEAREST 0x2600
+        #define GL_SCISSOR_TEST 0x0C11
+        #define GL_LEQUAL 0x0203
+        #define GL_STENCIL_TEST 0x0B90
+        #define GL_DITHER 0x0BD0
+        #define GL_DEPTH_COMPONENT16 0x81A5
+        #define GL_EQUAL 0x0202
+        #define GL_FRAMEBUFFER 0x8D40
+        #define GL_RGB5 0x8050
+        #define GL_LINES 0x0001
+        #define GL_DEPTH_BUFFER_BIT 0x00000100
+        #define GL_SRC_ALPHA 0x0302
+        #define GL_INCR_WRAP 0x8507
+        #define GL_LESS 0x0201
+        #define GL_MULTISAMPLE 0x809D
+        #define GL_FRAMEBUFFER_BINDING 0x8CA6
+        #define GL_BACK 0x0405
+        #define GL_ALWAYS 0x0207
+        #define GL_FUNC_ADD 0x8006
+        #define GL_ONE_MINUS_DST_COLOR 0x0307
+        #define GL_NOTEQUAL 0x0205
+        #define GL_DST_COLOR 0x0306
+        #define GL_COMPILE_STATUS 0x8B81
+        #define GL_RED 0x1903
+        #define GL_COLOR_ATTACHMENT3 0x8CE3
+        #define GL_DST_ALPHA 0x0304
+        #define GL_RGB5_A1 0x8057
+        #define GL_GREATER 0x0204
+        #define GL_POLYGON_OFFSET_FILL 0x8037
+        #define GL_TRUE 1
+        #define GL_NEVER 0x0200
+        #define GL_POINTS 0x0000
+        #define GL_ONE_MINUS_SRC_COLOR 0x0301
+        #define GL_MIRRORED_REPEAT 0x8370
+        #define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+        #define GL_R11F_G11F_B10F 0x8C3A
+        #define GL_UNSIGNED_INT_10F_11F_11F_REV 0x8C3B
+        #define GL_RGBA32UI 0x8D70
+        #define GL_RGB32UI 0x8D71
+        #define GL_RGBA16UI 0x8D76
+        #define GL_RGB16UI 0x8D77
+        #define GL_RGBA8UI 0x8D7C
+        #define GL_RGB8UI 0x8D7D
+        #define GL_RGBA32I 0x8D82
+        #define GL_RGB32I 0x8D83
+        #define GL_RGBA16I 0x8D88
+        #define GL_RGB16I 0x8D89
+        #define GL_RGBA8I 0x8D8E
+        #define GL_RGB8I 0x8D8F
+        #define GL_RED_INTEGER 0x8D94
+        #define GL_RG 0x8227
+        #define GL_RG_INTEGER 0x8228
+        #define GL_R8 0x8229
+        #define GL_R16 0x822A
+        #define GL_RG8 0x822B
+        #define GL_RG16 0x822C
+        #define GL_R16F 0x822D
+        #define GL_R32F 0x822E
+        #define GL_RG16F 0x822F
+        #define GL_RG32F 0x8230
+        #define GL_R8I 0x8231
+        #define GL_R8UI 0x8232
+        #define GL_R16I 0x8233
+        #define GL_R16UI 0x8234
+        #define GL_R32I 0x8235
+        #define GL_R32UI 0x8236
+        #define GL_RG8I 0x8237
+        #define GL_RG8UI 0x8238
+        #define GL_RG16I 0x8239
+        #define GL_RG16UI 0x823A
+        #define GL_RG32I 0x823B
+        #define GL_RG32UI 0x823C
+        #define GL_RGBA_INTEGER 0x8D99
+        #define GL_R8_SNORM 0x8F94
+        #define GL_RG8_SNORM 0x8F95
+        #define GL_RGB8_SNORM 0x8F96
+        #define GL_RGBA8_SNORM 0x8F97
+        #define GL_R16_SNORM 0x8F98
+        #define GL_RG16_SNORM 0x8F99
+        #define GL_RGB16_SNORM 0x8F9A
+        #define GL_RGBA16_SNORM 0x8F9B
+        #define GL_RGBA16 0x805B
+        #define GL_MAX_TEXTURE_SIZE 0x0D33
+        #define GL_MAX_CUBE_MAP_TEXTURE_SIZE 0x851C
+        #define GL_MAX_3D_TEXTURE_SIZE 0x8073
+        #define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+        #define GL_MAX_VERTEX_ATTRIBS 0x8869
+        #define GL_CLAMP_TO_BORDER 0x812D
+        #define GL_TEXTURE_BORDER_COLOR 0x1004
+        #define GL_CURRENT_PROGRAM 0x8B8D
+    #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
     #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
@@ -2595,73 +2919,26 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 
     #ifdef SOKOL_GLES2
-    #   ifdef GL_ANGLE_instanced_arrays
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
-    #   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-    #   else
-    #       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
-    #       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #   endif
+        #ifdef GL_ANGLE_instanced_arrays
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
+        #elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+        #else
+            #define _SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
+            #define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+        #endif
     #else
-    #   define SOKOL_INSTANCING_ENABLED
+        #define _SOKOL_GL_INSTANCING_ENABLED
     #endif
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
-
-#elif defined(SOKOL_D3D11)
-    #ifndef D3D11_NO_HELPERS
-    #define D3D11_NO_HELPERS
-    #endif
-    #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-    #endif
-    #ifndef NOMINMAX
-    #define NOMINMAX
-    #endif
-    #include <d3d11.h>
-    #include <d3dcompiler.h>
-    #ifdef _MSC_VER
-    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #pragma comment (lib, "WindowsApp")
-    #else
-        #pragma comment (lib, "kernel32")
-        #pragma comment (lib, "user32")
-        #pragma comment (lib, "dxgi")
-        #pragma comment (lib, "d3d11")
-        #pragma comment (lib, "dxguid")
-    #endif
-    #endif
-#elif defined(SOKOL_METAL)
-    // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
-    #if !defined(__cplusplus)
-        #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
-            #error "sokol_app.h requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
-        #endif
-    #endif
-    #include <TargetConditionals.h>
-    #import <Metal/Metal.h>
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        #define _SG_TARGET_MACOS (1)
-    #else
-        #define _SG_TARGET_IOS (1)
-        #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
-            #define _SG_TARGET_IOS_SIMULATOR (1)
-        #endif
-    #endif
-#elif defined(SOKOL_WGPU)
-    #if defined(__EMSCRIPTEN__)
-        #include <webgpu/webgpu.h>
-    #else
-        #include <dawn/webgpu.h>
-    #endif
 #endif
 
 /*=== COMMON BACKEND STUFF ===================================================*/
@@ -3197,6 +3474,9 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
+    #if _SOKOL_USE_WIN32_GL_LOADER
+    HINSTANCE opengl32_dll;
+    #endif
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -4380,6 +4660,148 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
 /*== GL BACKEND ==============================================================*/
 #elif defined(_SOKOL_ANY_GL)
 
+/*=== OPTIONAL GL LOADER FOR WIN32 ===========================================*/
+#if defined(_SOKOL_USE_WIN32_GL_LOADER)
+
+// X Macro list of GL function names and signatures
+#define _SG_GL_FUNCS \
+    _SG_XMACRO(glBindVertexArray,                 void, (GLuint array)) \
+    _SG_XMACRO(glFramebufferTextureLayer,         void, (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
+    _SG_XMACRO(glGenFramebuffers,                 void, (GLsizei n, GLuint * framebuffers)) \
+    _SG_XMACRO(glBindFramebuffer,                 void, (GLenum target, GLuint framebuffer)) \
+    _SG_XMACRO(glBindRenderbuffer,                void, (GLenum target, GLuint renderbuffer)) \
+    _SG_XMACRO(glGetStringi,                      const GLubyte *, (GLenum name, GLuint index)) \
+    _SG_XMACRO(glClearBufferfi,                   void, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
+    _SG_XMACRO(glClearBufferfv,                   void, (GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
+    _SG_XMACRO(glClearBufferuiv,                  void, (GLenum buffer, GLint drawbuffer, const GLuint * value)) \
+    _SG_XMACRO(glClearBufferiv,                   void, (GLenum buffer, GLint drawbuffer, const GLint * value)) \
+    _SG_XMACRO(glDeleteRenderbuffers,             void, (GLsizei n, const GLuint * renderbuffers)) \
+    _SG_XMACRO(glUniform4fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUniform2fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUseProgram,                      void, (GLuint program)) \
+    _SG_XMACRO(glShaderSource,                    void, (GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length)) \
+    _SG_XMACRO(glLinkProgram,                     void, (GLuint program)) \
+    _SG_XMACRO(glGetUniformLocation,              GLint, (GLuint program, const GLchar * name)) \
+    _SG_XMACRO(glGetShaderiv,                     void, (GLuint shader, GLenum pname, GLint * params)) \
+    _SG_XMACRO(glGetProgramInfoLog,               void, (GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SG_XMACRO(glGetAttribLocation,               GLint, (GLuint program, const GLchar * name)) \
+    _SG_XMACRO(glDisableVertexAttribArray,        void, (GLuint index)) \
+    _SG_XMACRO(glDeleteShader,                    void, (GLuint shader)) \
+    _SG_XMACRO(glDeleteProgram,                   void, (GLuint program)) \
+    _SG_XMACRO(glCompileShader,                   void, (GLuint shader)) \
+    _SG_XMACRO(glStencilFuncSeparate,             void, (GLenum face, GLenum func, GLint ref, GLuint mask)) \
+    _SG_XMACRO(glStencilOpSeparate,               void, (GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
+    _SG_XMACRO(glRenderbufferStorageMultisample,  void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glDrawBuffers,                     void, (GLsizei n, const GLenum * bufs)) \
+    _SG_XMACRO(glVertexAttribDivisor,             void, (GLuint index, GLuint divisor)) \
+    _SG_XMACRO(glBufferSubData,                   void, (GLenum target, GLintptr offset, GLsizeiptr size, const void * data)) \
+    _SG_XMACRO(glGenBuffers,                      void, (GLsizei n, GLuint * buffers)) \
+    _SG_XMACRO(glCheckFramebufferStatus,          GLenum, (GLenum target)) \
+    _SG_XMACRO(glFramebufferRenderbuffer,         void, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
+    _SG_XMACRO(glCompressedTexImage2D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data)) \
+    _SG_XMACRO(glCompressedTexImage3D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data)) \
+    _SG_XMACRO(glActiveTexture,                   void, (GLenum texture)) \
+    _SG_XMACRO(glTexSubImage3D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glUniformMatrix4fv,                void, (GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)) \
+    _SG_XMACRO(glRenderbufferStorage,             void, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glGenTextures,                     void, (GLsizei n, GLuint * textures)) \
+    _SG_XMACRO(glPolygonOffset,                   void, (GLfloat factor, GLfloat units)) \
+    _SG_XMACRO(glDrawElements,                    void, (GLenum mode, GLsizei count, GLenum type, const void * indices)) \
+    _SG_XMACRO(glDeleteFramebuffers,              void, (GLsizei n, const GLuint * framebuffers)) \
+    _SG_XMACRO(glBlendEquationSeparate,           void, (GLenum modeRGB, GLenum modeAlpha)) \
+    _SG_XMACRO(glDeleteTextures,                  void, (GLsizei n, const GLuint * textures)) \
+    _SG_XMACRO(glGetProgramiv,                    void, (GLuint program, GLenum pname, GLint * params)) \
+    _SG_XMACRO(glBindTexture,                     void, (GLenum target, GLuint texture)) \
+    _SG_XMACRO(glTexImage3D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glCreateShader,                    GLuint, (GLenum type)) \
+    _SG_XMACRO(glTexSubImage2D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glClearDepth,                      void, (GLdouble depth)) \
+    _SG_XMACRO(glFramebufferTexture2D,            void, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
+    _SG_XMACRO(glCreateProgram,                   GLuint, (void)) \
+    _SG_XMACRO(glViewport,                        void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glDeleteBuffers,                   void, (GLsizei n, const GLuint * buffers)) \
+    _SG_XMACRO(glDrawArrays,                      void, (GLenum mode, GLint first, GLsizei count)) \
+    _SG_XMACRO(glDrawElementsInstanced,           void, (GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
+    _SG_XMACRO(glVertexAttribPointer,             void, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
+    _SG_XMACRO(glUniform1i,                       void, (GLint location, GLint v0)) \
+    _SG_XMACRO(glDisable,                         void, (GLenum cap)) \
+    _SG_XMACRO(glColorMask,                       void, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SG_XMACRO(glColorMaski,                      void, (GLuint buf, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SG_XMACRO(glBindBuffer,                      void, (GLenum target, GLuint buffer)) \
+    _SG_XMACRO(glDeleteVertexArrays,              void, (GLsizei n, const GLuint * arrays)) \
+    _SG_XMACRO(glDepthMask,                       void, (GLboolean flag)) \
+    _SG_XMACRO(glDrawArraysInstanced,             void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
+    _SG_XMACRO(glClearStencil,                    void, (GLint s)) \
+    _SG_XMACRO(glScissor,                         void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glUniform3fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glGenRenderbuffers,                void, (GLsizei n, GLuint * renderbuffers)) \
+    _SG_XMACRO(glBufferData,                      void, (GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
+    _SG_XMACRO(glBlendFuncSeparate,               void, (GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)) \
+    _SG_XMACRO(glTexParameteri,                   void, (GLenum target, GLenum pname, GLint param)) \
+    _SG_XMACRO(glGetIntegerv,                     void, (GLenum pname, GLint * data)) \
+    _SG_XMACRO(glEnable,                          void, (GLenum cap)) \
+    _SG_XMACRO(glBlitFramebuffer,                 void, (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
+    _SG_XMACRO(glStencilMask,                     void, (GLuint mask)) \
+    _SG_XMACRO(glAttachShader,                    void, (GLuint program, GLuint shader)) \
+    _SG_XMACRO(glGetError,                        GLenum, (void)) \
+    _SG_XMACRO(glClearColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SG_XMACRO(glBlendColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SG_XMACRO(glTexParameterf,                   void, (GLenum target, GLenum pname, GLfloat param)) \
+    _SG_XMACRO(glTexParameterfv,                  void, (GLenum target, GLenum pname, GLfloat* params)) \
+    _SG_XMACRO(glGetShaderInfoLog,                void, (GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SG_XMACRO(glDepthFunc,                       void, (GLenum func)) \
+    _SG_XMACRO(glStencilOp ,                      void, (GLenum fail, GLenum zfail, GLenum zpass)) \
+    _SG_XMACRO(glStencilFunc,                     void, (GLenum func, GLint ref, GLuint mask)) \
+    _SG_XMACRO(glEnableVertexAttribArray,         void, (GLuint index)) \
+    _SG_XMACRO(glBlendFunc,                       void, (GLenum sfactor, GLenum dfactor)) \
+    _SG_XMACRO(glUniform1fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glReadBuffer,                      void, (GLenum src)) \
+    _SG_XMACRO(glClear,                           void, (GLbitfield mask)) \
+    _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
+    _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
+    _SG_XMACRO(glCullFace,                        void, (GLenum mode))
+
+// generate GL function pointer typedefs
+#define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
+_SG_GL_FUNCS
+#undef _SG_XMACRO
+
+// generate GL function pointers
+#define _SG_XMACRO(name, ret, args) static PFN_ ## name name;
+_SG_GL_FUNCS
+#undef _SG_XMACRO
+
+// helper function to lookup GL functions in GL DLL
+typedef PROC (WINAPI * _sg_wglGetProcAddress)(LPCSTR);
+_SOKOL_PRIVATE void* _sg_gl_getprocaddr(const char* name, _sg_wglGetProcAddress wgl_getprocaddress) {
+    void* proc_addr = (void*) wgl_getprocaddress(name);
+    if (0 == proc_addr) {
+        proc_addr = (void*) GetProcAddress(_sg.gl.opengl32_dll, name);
+    }
+    SOKOL_ASSERT(proc_addr);
+    return proc_addr;
+}
+
+// populate GL function pointers
+_SOKOL_PRIVATE  void _sg_gl_load_opengl(void) {
+    SOKOL_ASSERT(0 == _sg.gl.opengl32_dll);
+    _sg.gl.opengl32_dll = LoadLibraryA("opengl32.dll");
+    SOKOL_ASSERT(_sg.gl.opengl32_dll);
+    _sg_wglGetProcAddress wgl_getprocaddress = (_sg_wglGetProcAddress) GetProcAddress(_sg.gl.opengl32_dll, "wglGetProcAddress");
+    SOKOL_ASSERT(wgl_getprocaddress);
+    #define _SG_XMACRO(name, ret, args) name = (PFN_ ## name) _sg_gl_getprocaddr(#name, wgl_getprocaddress);
+    _SG_GL_FUNCS
+    #undef _SG_XMACRO
+}
+
+_SOKOL_PRIVATE void _sg_gl_unload_opengl(void) {
+    SOKOL_ASSERT(_sg.gl.opengl32_dll);
+    FreeLibrary(_sg.gl.opengl32_dll);
+    _sg.gl.opengl32_dll = 0;
+}
+#endif // _SOKOL_USE_WIN32_GL_LOADER
+
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
     switch (t) {
@@ -5335,7 +5757,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     }
 
     _sg.features.origin_top_left = false;
-    #if defined(SOKOL_INSTANCING_ENABLED)
+    #if defined(_SOKOL_GL_INSTANCING_ENABLED)
         _sg.features.instancing = has_instancing;
     #endif
     _sg.features.multiple_render_targets = false;
@@ -5645,6 +6067,10 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _sg.gl.gles2 = false;
     #endif
 
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+    _sg_gl_load_opengl();
+    #endif
+
     /* clear initial GL error state */
     #if defined(SOKOL_DEBUG)
         while (glGetError() != GL_NO_ERROR);
@@ -5666,6 +6092,9 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
     _sg.gl.valid = false;
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+    _sg_gl_unload_opengl();
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
@@ -6836,7 +7265,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
-                #ifdef SOKOL_INSTANCING_ENABLED
+                #if defined(_SOKOL_GL_INSTANCING_ENABLED)
                     if (_sg.features.instancing) {
                         glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                     }
