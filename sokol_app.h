@@ -2873,6 +2873,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
+    /*
+
+    NOTE: late event polling temporarily out-commented to check if this
+    causes infrequent and almost impossible to reproduce probelms with the
+    window close events, see:
+    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
+
+
     const NSEventMask mask = NSEventMaskLeftMouseDown |
                              NSEventMaskLeftMouseUp|
                              NSEventMaskRightMouseDown |
@@ -2904,6 +2912,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             [NSApp sendEvent:event];
         }
     }
+    */
 }
 
 - (void)drawRect:(NSRect)rect {
