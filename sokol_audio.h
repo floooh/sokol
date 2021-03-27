@@ -486,11 +486,37 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SOKOL_UNUSED(x) (void)(x)
 #endif
 
+// platform detection defines
 #if defined(SOKOL_DUMMY_BACKEND)
-    // No threads needed for SOKOL_DUMMY_BACKEND
-#elif (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
-    #include <pthread.h>
+    // nothing
+#elif defined(__APPLE__)
+    #define _SAUDIO_APPLE (1)
+    #include <TargetConditionals.h>
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #define _SAUDIO_MACOS (1)
+    #else
+        #define _SAUDIO_IOS (1)
+    #endif
+#elif defined(__EMSCRIPTEN__)
+    #define _SAUDIO_EMSCRIPTEN
 #elif defined(_WIN32)
+    #define _SAUDIO_WINDOWS (1)
+    #include <winapifamily.h>
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+        #define _SAUDIO_UWP (1)
+    #else
+        #define _SAUDIO_WIN32 (1)
+    #endif
+#elif defined(__ANDROID__)
+    #define _SAUDIO_ANDROID (1)
+#elif defined(__linux__) || defined(__unix__)
+    #define _SAUDIO_LINUX (1)
+#else
+#error "sokol_audio.h: Unknown platform"
+#endif
+
+// platform-specific headers and definitions
+#if defined(_SAUDIO_WINDOWS)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
@@ -499,37 +525,12 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #endif
     #include <windows.h>
     #include <synchapi.h>
-    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #define SOKOL_WIN32_NO_MMDEVICE
+    #if defined(_SAUDIO_UWP)
         #pragma comment (lib, "WindowsApp")
     #else
         #pragma comment (lib, "kernel32")
         #pragma comment (lib, "ole32")
-        #if defined(SOKOL_WIN32_NO_MMDEVICE)
-            #pragma comment (lib, "mmdevapi")
-        #endif
     #endif
-#endif
-
-#if defined(SOKOL_DUMMY_BACKEND)
-    // No audio API needed for SOKOL_DUMMY_BACKEND
-#elif defined(__APPLE__)
-    #include <TargetConditionals.h>
-    #include <AudioToolbox/AudioToolbox.h>
-    #if TARGET_OS_IOS
-        #if !defined(__cplusplus)
-            #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
-                #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
-            #endif
-        #endif
-        #include <AVFoundation/AVFoundation.h>
-    #endif
-#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-    #define ALSA_PCM_NEW_HW_PARAMS_API
-    #include <alsa/asoundlib.h>
-#elif defined(__ANDROID__)
-    #include "SLES/OpenSLES_Android.h"
-#elif defined(_WIN32)
     #ifndef CINTERFACE
     #define CINTERFACE
     #endif
@@ -559,13 +560,33 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #ifndef AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
     #define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
     #endif
+    #ifdef _MSC_VER
+        #pragma warning(push)
+        #pragma warning(disable:4505)   /* unreferenced local function has been removed */
+    #endif
+#elif defined(_SAUDIO_APPLE)
+    #define _SAUDIO_PTHREADS (1)
+    #include <pthread.h>
+    #include <AudioToolbox/AudioToolbox.h>
+    #if defined(_SAUDIO_IOS)
+        #if !defined(__cplusplus)
+            #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
+                #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
+            #endif
+        #endif
+        #include <AVFoundation/AVFoundation.h>
+    #endif
+#elif defined(_SAUDIO_ANDROID)
+    #define _SAUDIO_PTHREADS (1)
+    #include <pthread.h>
+    #include "SLES/OpenSLES_Android.h"
+#elif defined(_SAUDIO_LINUX)
+    #define _SAUDIO_PTHREADS (1)
+    #include <pthread.h>
+    #define ALSA_PCM_NEW_HW_PARAMS_API
+    #include <alsa/asoundlib.h>
 #elif defined(__EMSCRIPTEN__)
     #include <emscripten/emscripten.h>
-#endif
-
-#ifdef _MSC_VER
-    #pragma warning(push)
-    #pragma warning(disable:4505)   /* unreferenced local function has been removed */
 #endif
 
 #define _saudio_def(val, def) (((val) == 0) ? (def) : (val))
@@ -581,43 +602,45 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 
 /*=== MUTEX WRAPPER DECLARATIONS =============================================*/
-#if defined(SOKOL_DUMMY_BACKEND)
-
-typedef struct { int dummy_mutex; } _saudio_mutex_t;
-
-#elif (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+#if defined(_SAUDIO_PTHREADS)
 
 typedef struct {
     pthread_mutex_t mutex;
 } _saudio_mutex_t;
 
-#elif defined(_WIN32)
+#elif defined(_SAUDIO_WINDOWS)
 
 typedef struct {
     CRITICAL_SECTION critsec;
 } _saudio_mutex_t;
 
 #else
-typedef struct { int dummy_mutex; } _saudio_mutex_t;
+
+typedef struct {
+    int dummy_mutex;
+} _saudio_mutex_t;
+
 #endif
 
 /*=== DUMMY BACKEND DECLARATIONS =============================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
+
 typedef struct {
     int dummy_backend;
 } _saudio_backend_t;
+
 /*=== COREAUDIO BACKEND DECLARATIONS =========================================*/
-#elif defined(__APPLE__)
+#elif defined(_SAUDIO_APPLE)
 
 typedef struct {
     AudioQueueRef ca_audio_queue;
-    #if TARGET_OS_IOS
+    #if defined(_SAUDIO_IOS)
     id ca_interruption_handler;
     #endif
 } _saudio_backend_t;
 
 /*=== ALSA BACKEND DECLARATIONS ==============================================*/
-#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#elif defined(_SAUDIO_LINUX)
 
 typedef struct {
     snd_pcm_t* device;
@@ -629,7 +652,7 @@ typedef struct {
 } _saudio_backend_t;
 
 /*=== OpenSLES BACKEND DECLARATIONS ==============================================*/
-#elif defined(__ANDROID__)
+#elif defined(_SAUDIO_ANDROID)
 
 #define SAUDIO_NUM_BUFFERS 2
 
@@ -661,7 +684,7 @@ typedef struct {
 } _saudio_backend_t;
 
 /*=== WASAPI BACKEND DECLARATIONS ============================================*/
-#elif defined(_WIN32)
+#elif defined(_SAUDIO_WINDOWS)
 
 typedef struct {
     HANDLE thread_handle;
@@ -675,15 +698,15 @@ typedef struct {
 } _saudio_wasapi_thread_data_t;
 
 typedef struct {
-#if defined(SOKOL_WIN32_NO_MMDEVICE)
-    LPOLESTR interface_activation_audio_interface_uid_string;
-    IActivateAudioInterfaceAsyncOperation* interface_activation_operation;
-    BOOL interface_activation_success;
-    HANDLE interface_activation_mutex;
-#else
-    IMMDeviceEnumerator* device_enumerator;
-    IMMDevice* device;
-#endif
+    #if defined(_SAUDIO_UWP)
+        LPOLESTR interface_activation_audio_interface_uid_string;
+        IActivateAudioInterfaceAsyncOperation* interface_activation_operation;
+        BOOL interface_activation_success;
+        HANDLE interface_activation_mutex;
+    #else
+        IMMDeviceEnumerator* device_enumerator;
+        IMMDevice* device;
+    #endif
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
     int si16_bytes_per_frame;
@@ -691,16 +714,14 @@ typedef struct {
 } _saudio_backend_t;
 
 /*=== WEBAUDIO BACKEND DECLARATIONS ==========================================*/
-#elif defined(__EMSCRIPTEN__)
+#elif defined(_SAUDIO_EMSCRIPTEN)
 
 typedef struct {
     uint8_t* buffer;
 } _saudio_backend_t;
 
-/*=== DUMMY BACKEND DECLARATIONS =============================================*/
-#else
-typedef struct { } _saudio_backend_t;
 #endif
+
 /*=== GENERAL DECLARATIONS ===================================================*/
 
 /* a ringbuffer structure */
@@ -758,11 +779,14 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
 
 /*=== MUTEX IMPLEMENTATION ===================================================*/
 #if defined(SOKOL_DUMMY_BACKEND)
+
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _saudio_mutex_destroy(_saudio_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) { (void)m; }
-#elif (defined(__APPLE__) || defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__)
+
+#elif defined(_SAUDIO_PTHREADS)
+
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -781,7 +805,8 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     pthread_mutex_unlock(&m->mutex);
 }
 
-#elif defined(_WIN32)
+#elif defined(_SAUDIO_WINDOWS)
+
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
     InitializeCriticalSection(&m->critsec);
 }
@@ -798,10 +823,7 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     LeaveCriticalSection(&m->critsec);
 }
 #else
-_SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _saudio_mutex_destroy(_saudio_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _saudio_mutex_lock(_saudio_mutex_t* m) { (void)m; }
-_SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) { (void)m; }
+#error "unknown platform!"
 #endif
 
 /*=== RING-BUFFER QUEUE IMPLEMENTATION =======================================*/
@@ -987,9 +1009,9 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
 
 /*=== COREAUDIO BACKEND IMPLEMENTATION =======================================*/
-#elif defined(__APPLE__)
+#elif defined(_SAUDIO_APPLE)
 
-#if TARGET_OS_IOS
+#if defined(_SAUDIO_IOS)
 #if __has_feature(objc_arc)
 #define _SAUDIO_OBJC_RELEASE(obj) { obj = nil; }
 #else
@@ -1038,7 +1060,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
     }
 }
 @end
-#endif
+#endif // _SAUDIO_IOS
 
 /* NOTE: the buffer data callback is called on a separate thread! */
 _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef queue, AudioQueueBufferRef buffer) {
@@ -1062,16 +1084,16 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, AudioQueueRef qu
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     SOKOL_ASSERT(0 == _saudio.backend.ca_audio_queue);
 
-    #if TARGET_OS_IOS
-    /* activate audio session */
-    AVAudioSession* session = [AVAudioSession sharedInstance];
-    SOKOL_ASSERT(session != nil);
-    [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
-    [session setActive:true error:nil];
+    #if defined(_SAUDIO_IOS)
+        /* activate audio session */
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        SOKOL_ASSERT(session != nil);
+        [session setCategory: AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker error:nil];
+        [session setActive:true error:nil];
 
-    /* create interruption handler */
-    _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
-    #endif
+        /* create interruption handler */
+        _saudio.backend.ca_interruption_handler = [[_saudio_interruption_handler alloc] init];
+    #endif // _SAUDIO_IOS
 
     /* create an audio queue with fp32 samples */
     AudioStreamBasicDescription fmt;
@@ -1112,21 +1134,21 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     AudioQueueStop(_saudio.backend.ca_audio_queue, true);
     AudioQueueDispose(_saudio.backend.ca_audio_queue, false);
     _saudio.backend.ca_audio_queue = NULL;
-    #if TARGET_OS_IOS
-    /* remove interruption handler */
-    if (_saudio.backend.ca_interruption_handler != nil) {
-        [_saudio.backend.ca_interruption_handler remove_handler];
-        _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
-    }
-    /* deactivate audio session */
-    AVAudioSession* session = [AVAudioSession sharedInstance];
-    SOKOL_ASSERT(session);
-    [session setActive:false error:nil];;
-    #endif
+    #if defined(_SAUDIO_IOS)
+        /* remove interruption handler */
+        if (_saudio.backend.ca_interruption_handler != nil) {
+            [_saudio.backend.ca_interruption_handler remove_handler];
+            _SAUDIO_OBJC_RELEASE(_saudio.backend.ca_interruption_handler);
+        }
+        /* deactivate audio session */
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        SOKOL_ASSERT(session);
+        [session setActive:false error:nil];;
+    #endif // _SAUDIO_IOS
 }
 
 /*=== ALSA BACKEND IMPLEMENTATION ============================================*/
-#elif (defined(__linux__) || defined(__unix__)) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#elif defined(_SAUDIO_LINUX)
 
 /* the streaming callback runs in a separate thread */
 _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
@@ -1229,9 +1251,9 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 };
 
 /*=== WASAPI BACKEND IMPLEMENTATION ==========================================*/
-#elif defined(_WIN32)
+#elif defined(_SAUDIO_WINDOWS)
 
-#if defined(SOKOL_WIN32_NO_MMDEVICE)
+#if defined(_SAUDIO_UWP)
 /* Minimal implementation of an IActivateAudioInterfaceCompletionHandler COM object in plain C.
    Meant to be a static singleton (always one reference when add/remove reference)
    and implements IUnknown and IActivateAudioInterfaceCompletionHandler when queryinterface'd
@@ -1271,7 +1293,7 @@ _SOKOL_PRIVATE HRESULT STDMETHODCALLTYPE _saudio_backend_activate_audio_interfac
     ReleaseMutex(_saudio.backend.interface_activation_mutex);
     return S_OK;
 }
-#endif
+#endif // _SAUDIO_UWP
 
 /* fill intermediate buffer with new data and reset buffer_pos */
 _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
@@ -1346,25 +1368,25 @@ _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
         IAudioClient_Release(_saudio.backend.audio_client);
         _saudio.backend.audio_client = 0;
     }
-#if defined(SOKOL_WIN32_NO_MMDEVICE)
-    if (_saudio.backend.interface_activation_audio_interface_uid_string) {
-        CoTaskMemFree(_saudio.backend.interface_activation_audio_interface_uid_string);
-        _saudio.backend.interface_activation_audio_interface_uid_string = 0;
-    }
-    if (_saudio.backend.interface_activation_operation) {
-        IActivateAudioInterfaceAsyncOperation_Release(_saudio.backend.interface_activation_operation);
-        _saudio.backend.interface_activation_operation = 0;
-    }
-#else
-    if (_saudio.backend.device) {
-        IMMDevice_Release(_saudio.backend.device);
-        _saudio.backend.device = 0;
-    }
-    if (_saudio.backend.device_enumerator) {
-        IMMDeviceEnumerator_Release(_saudio.backend.device_enumerator);
-        _saudio.backend.device_enumerator = 0;
-    }
-#endif
+    #if defined(_SAUDIO_UWP)
+        if (_saudio.backend.interface_activation_audio_interface_uid_string) {
+            CoTaskMemFree(_saudio.backend.interface_activation_audio_interface_uid_string);
+            _saudio.backend.interface_activation_audio_interface_uid_string = 0;
+        }
+        if (_saudio.backend.interface_activation_operation) {
+            IActivateAudioInterfaceAsyncOperation_Release(_saudio.backend.interface_activation_operation);
+            _saudio.backend.interface_activation_operation = 0;
+        }
+    #else
+        if (_saudio.backend.device) {
+            IMMDevice_Release(_saudio.backend.device);
+            _saudio.backend.device = 0;
+        }
+        if (_saudio.backend.device_enumerator) {
+            IMMDeviceEnumerator_Release(_saudio.backend.device_enumerator);
+            _saudio.backend.device_enumerator = 0;
+        }
+    #endif
     if (0 != _saudio.backend.thread.buffer_end_event) {
         CloseHandle(_saudio.backend.thread.buffer_end_event);
         _saudio.backend.thread.buffer_end_event = 0;
@@ -1375,79 +1397,79 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     REFERENCE_TIME dur;
     /* UWP Threads are CoInitialized by default with a different threading model, and this call fails
     See https://github.com/Microsoft/cppwinrt/issues/6#issuecomment-253930637 */
-#if (defined(WINAPI_FAMILY_PARTITION) && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-    /* CoInitializeEx could have been called elsewhere already, in which
-        case the function returns with S_FALSE (thus it doesn't make much
-        sense to check the result)
-    */
-    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    _SOKOL_UNUSED(hr);
-#endif
+    #if defined(_SAUDIO_WIN32)
+        /* CoInitializeEx could have been called elsewhere already, in which
+            case the function returns with S_FALSE (thus it does not make much
+            sense to check the result)
+        */
+        HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+        _SOKOL_UNUSED(hr);
+    #endif
     _saudio.backend.thread.buffer_end_event = CreateEvent(0, FALSE, FALSE, 0);
     if (0 == _saudio.backend.thread.buffer_end_event) {
         SOKOL_LOG("sokol_audio wasapi: failed to create buffer_end_event");
         goto error;
     }
-#if defined(SOKOL_WIN32_NO_MMDEVICE)
-    _saudio.backend.interface_activation_mutex = CreateMutexA(NULL, FALSE, "interface_activation_mutex");
-    if (_saudio.backend.interface_activation_mutex == NULL) {
-        SOKOL_LOG("sokol_audio wasapi: failed to create interface activation mutex");
-        goto error;
-    }
-    if (FAILED(StringFromIID(_SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_Devinterface_Audio_Render), &_saudio.backend.interface_activation_audio_interface_uid_string))) {
-        SOKOL_LOG("sokol_audio wasapi: failed to get default audio device ID string");
-        goto error;
-    }
-
-    /* static instance of the fake COM object */
-    static IActivateAudioInterfaceCompletionHandlerVtbl completion_handler_interface_vtable = {
-        _saudio_interface_completion_handler_queryinterface,
-        _saudio_interface_completion_handler_addref_release,
-        _saudio_interface_completion_handler_addref_release,
-        _saudio_backend_activate_audio_interface_cb
-    };
-    static IActivateAudioInterfaceCompletionHandler completion_handler_interface = { &completion_handler_interface_vtable };
-
-    if (FAILED(ActivateAudioInterfaceAsync(_saudio.backend.interface_activation_audio_interface_uid_string, _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient), NULL, &completion_handler_interface, &_saudio.backend.interface_activation_operation))) {
-        SOKOL_LOG("sokol_audio wasapi: failed to get default audio device ID string");
-        goto error;
-    }
-    while (!(_saudio.backend.audio_client)) {
-        if (WaitForSingleObject(_saudio.backend.interface_activation_mutex, 10) != WAIT_TIMEOUT) {
-            ReleaseMutex(_saudio.backend.interface_activation_mutex);
+    #if defined(_SAUDIO_UWP)
+        _saudio.backend.interface_activation_mutex = CreateMutexA(NULL, FALSE, "interface_activation_mutex");
+        if (_saudio.backend.interface_activation_mutex == NULL) {
+            SOKOL_LOG("sokol_audio wasapi: failed to create interface activation mutex");
+            goto error;
         }
-    }
+        if (FAILED(StringFromIID(_SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_Devinterface_Audio_Render), &_saudio.backend.interface_activation_audio_interface_uid_string))) {
+            SOKOL_LOG("sokol_audio wasapi: failed to get default audio device ID string");
+            goto error;
+        }
 
-    if (!(_saudio.backend.interface_activation_success)) {
-        SOKOL_LOG("sokol_audio wasapi: interface activation failed. Unable to get audio client");
-        goto error;
-    }
+        /* static instance of the fake COM object */
+        static IActivateAudioInterfaceCompletionHandlerVtbl completion_handler_interface_vtable = {
+            _saudio_interface_completion_handler_queryinterface,
+            _saudio_interface_completion_handler_addref_release,
+            _saudio_interface_completion_handler_addref_release,
+            _saudio_backend_activate_audio_interface_cb
+        };
+        static IActivateAudioInterfaceCompletionHandler completion_handler_interface = { &completion_handler_interface_vtable };
 
-#else
-    if (FAILED(CoCreateInstance(_SOKOL_AUDIO_WIN32COM_ID(_saudio_CLSID_IMMDeviceEnumerator),
-        0, CLSCTX_ALL,
-        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IMMDeviceEnumerator),
-        (void**)&_saudio.backend.device_enumerator)))
-    {
-        SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
-        goto error;
-    }
-    if (FAILED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(_saudio.backend.device_enumerator,
-        eRender, eConsole,
-        &_saudio.backend.device)))
-    {
-        SOKOL_LOG("sokol_audio wasapi: GetDefaultAudioEndPoint failed");
-        goto error;
-    }
-    if (FAILED(IMMDevice_Activate(_saudio.backend.device,
-        _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient),
-        CLSCTX_ALL, 0,
-        (void**)&_saudio.backend.audio_client)))
-    {
-        SOKOL_LOG("sokol_audio wasapi: device activate failed");
-        goto error;
-    }
-#endif
+        if (FAILED(ActivateAudioInterfaceAsync(_saudio.backend.interface_activation_audio_interface_uid_string, _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient), NULL, &completion_handler_interface, &_saudio.backend.interface_activation_operation))) {
+            SOKOL_LOG("sokol_audio wasapi: failed to get default audio device ID string");
+            goto error;
+        }
+        while (!(_saudio.backend.audio_client)) {
+            if (WaitForSingleObject(_saudio.backend.interface_activation_mutex, 10) != WAIT_TIMEOUT) {
+                ReleaseMutex(_saudio.backend.interface_activation_mutex);
+            }
+        }
+
+        if (!(_saudio.backend.interface_activation_success)) {
+            SOKOL_LOG("sokol_audio wasapi: interface activation failed. Unable to get audio client");
+            goto error;
+        }
+
+    #else
+        if (FAILED(CoCreateInstance(_SOKOL_AUDIO_WIN32COM_ID(_saudio_CLSID_IMMDeviceEnumerator),
+            0, CLSCTX_ALL,
+            _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IMMDeviceEnumerator),
+            (void**)&_saudio.backend.device_enumerator)))
+        {
+            SOKOL_LOG("sokol_audio wasapi: failed to create device enumerator");
+            goto error;
+        }
+        if (FAILED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(_saudio.backend.device_enumerator,
+            eRender, eConsole,
+            &_saudio.backend.device)))
+        {
+            SOKOL_LOG("sokol_audio wasapi: GetDefaultAudioEndPoint failed");
+            goto error;
+        }
+        if (FAILED(IMMDevice_Activate(_saudio.backend.device,
+            _SOKOL_AUDIO_WIN32COM_ID(_saudio_IID_IAudioClient),
+            CLSCTX_ALL, 0,
+            (void**)&_saudio.backend.audio_client)))
+        {
+            SOKOL_LOG("sokol_audio wasapi: device activate failed");
+            goto error;
+        }
+    #endif
     WAVEFORMATEX fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.nChannels = (WORD)_saudio.num_channels;
@@ -1515,13 +1537,13 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     }
     _saudio_wasapi_release();
 
-#if (defined(WINAPI_FAMILY_PARTITION) && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-    CoUninitialize();
-#endif
+    #if defined(_SAUDIO_WIN32)
+        CoUninitialize();
+    #endif
 }
 
 /*=== EMSCRIPTEN BACKEND IMPLEMENTATION ======================================*/
-#elif defined(__EMSCRIPTEN__)
+#elif defined(_SAUDIO_EMSCRIPTEN)
 
 #ifdef __cplusplus
 extern "C" {
@@ -1663,7 +1685,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
 }
 
 /*=== ANDROID BACKEND IMPLEMENTATION ======================================*/
-#elif defined(__ANDROID__)
+#elif defined(_SAUDIO_ANDROID)
 
 #ifdef __cplusplus
 extern "C" {
@@ -1910,9 +1932,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 } /* extern "C" */
 #endif
 
-#else /* dummy backend */
-_SOKOL_PRIVATE bool _saudio_backend_init(void) { return false; };
-_SOKOL_PRIVATE void _saudio_backend_shutdown(void) { };
+#else
+#error "unsupported platform"
 #endif
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
@@ -2003,8 +2024,10 @@ SOKOL_API_IMPL int saudio_push(const float* frames, int num_frames) {
 #undef _saudio_def
 #undef _saudio_def_flt
 
+#if defined(_SAUDIO_WINDOWS)
 #ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 #endif
 
 #endif /* SOKOL_AUDIO_IMPL */
