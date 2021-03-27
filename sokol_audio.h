@@ -516,7 +516,10 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #endif
 
 // platform-specific headers and definitions
-#if defined(_SAUDIO_WINDOWS)
+#if defined(SOKOL_DUMMY_BACKEND)
+    #define _SAUDIO_NOTHREADS (1)
+#elif defined(_SAUDIO_WINDOWS)
+    #define _SAUDIO_WINTHREADS (1)
     #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
     #endif
@@ -586,6 +589,7 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define ALSA_PCM_NEW_HW_PARAMS_API
     #include <alsa/asoundlib.h>
 #elif defined(__EMSCRIPTEN__)
+    #define _SAUDIO_NOTHREADS (1)
     #include <emscripten/emscripten.h>
 #endif
 
@@ -608,13 +612,13 @@ typedef struct {
     pthread_mutex_t mutex;
 } _saudio_mutex_t;
 
-#elif defined(_SAUDIO_WINDOWS)
+#elif defined(_SAUDIO_WINTHREADS)
 
 typedef struct {
     CRITICAL_SECTION critsec;
 } _saudio_mutex_t;
 
-#else
+#elif defined(_SAUDIO_NOTHREADS)
 
 typedef struct {
     int dummy_mutex;
@@ -720,6 +724,8 @@ typedef struct {
     uint8_t* buffer;
 } _saudio_backend_t;
 
+#else
+#error "unknown platform"
 #endif
 
 /*=== GENERAL DECLARATIONS ===================================================*/
@@ -778,7 +784,7 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
 }
 
 /*=== MUTEX IMPLEMENTATION ===================================================*/
-#if defined(SOKOL_DUMMY_BACKEND)
+#if defined(_SAUDIO_NOTHREADS)
 
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) { (void)m; }
 _SOKOL_PRIVATE void _saudio_mutex_destroy(_saudio_mutex_t* m) { (void)m; }
@@ -805,7 +811,7 @@ _SOKOL_PRIVATE void _saudio_mutex_unlock(_saudio_mutex_t* m) {
     pthread_mutex_unlock(&m->mutex);
 }
 
-#elif defined(_SAUDIO_WINDOWS)
+#elif defined(_SAUDIO_WINTHREADS)
 
 _SOKOL_PRIVATE void _saudio_mutex_init(_saudio_mutex_t* m) {
     InitializeCriticalSection(&m->critsec);
