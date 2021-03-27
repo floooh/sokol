@@ -19,13 +19,13 @@ module_names = {
 }
 
 c_source_paths = {
-    'sg_':      'sokol-zig/src/sokol/c/sokol_app_gfx.c',
-    'sapp_':    'sokol-zig/src/sokol/c/sokol_app_gfx.c',
-    'stm_':     'sokol-zig/src/sokol/c/sokol_time.c',
-    'saudio_':  'sokol-zig/src/sokol/c/sokol_audio.c',
-    'sgl_':     'sokol-zig/src/sokol/c/sokol_gl.c',
-    'sdtx_':    'sokol-zig/src/sokol/c/sokol_debugtext.c',
-    'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
+    'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
+    'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
+    'stm_':     'sokol-nim/src/sokol/c/sokol_time.c',
+    'saudio_':  'sokol-nim/src/sokol/c/sokol_audio.c',
+    'sgl_':     'sokol-nim/src/sokol/c/sokol_gl.c',
+    'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
+    'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
 }
 
 func_name_ignores = [
