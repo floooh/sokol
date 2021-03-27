@@ -34,17 +34,26 @@
     On Windows, SOKOL_DLL will define SOKOL_AUDIO_API_DECL as __declspec(dllexport)
     or __declspec(dllimport) as needed.
 
+    Link with the following libraries:
+
+    - on macOS: AudioToolbox
+    - on iOS: AudioToolbox, AVFoundation
+    - on Linux: asound
+    - on Android: link with OpenSLES
+    - on Windows with MSVC or Clang toolchain: no action needed, libs are defined in-source via pragma-comment-lib
+    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' and link with -lole32
+
     FEATURE OVERVIEW
     ================
     You provide a mono- or stereo-stream of 32-bit float samples, which
     Sokol Audio feeds into platform-specific audio backends:
 
     - Windows: WASAPI
-    - Linux: ALSA (link with asound)
-    - macOS: CoreAudio (link with AudioToolbox)
-    - iOS: CoreAudio+AVAudioSession (link with AudioToolbox and AVFoundation)
+    - Linux: ALSA
+    - macOS: CoreAudio
+    - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
-    - Android: OpenSLES (link with OpenSLES)
+    - Android: OpenSLES
 
     Sokol Audio will not do any buffer mixing or volume control, if you have
     multiple independent input streams of sample data you need to perform the
