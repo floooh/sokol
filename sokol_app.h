@@ -1468,7 +1468,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
         #pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
-        #pragma warning(disable:4996)   /* 'freopen': This function or variable may be unsafe. */
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -1486,7 +1485,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #pragma comment (linker, "/subsystem:windows")
         #endif
     #endif
-    #include <stdio.h>  /* freopen() */
+    #include <stdio.h>  /* freopen_s() */
     #include <wchar.h>  /* wcslen() */
 
     #pragma comment (lib, "kernel32")
@@ -5808,8 +5807,11 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
         }
         if (con_valid) {
-            freopen("CON", "w", stdout);
-            freopen("CON", "w", stderr);
+            FILE* res_fp = 0;
+            errno_t err;
+            err = freopen_s(&res_fp, "CON", "w", stdout);
+            err = freopen_s(&res_fp, "CON", "w", stderr);
+            (void)err;
         }
     }
     if (_sapp.desc.win32_console_utf8) {
