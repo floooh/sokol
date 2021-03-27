@@ -67,7 +67,11 @@
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux: X11, Xi, Xcursor, GL, dl, pthread, m(?)
     - on Android: GLESv3, EGL, log, android
-    - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
+    - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
+    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
+        - link with the following libs: -lkernel32 -luser32 -lshell3'
+        - additionally with the GL backend: -lgdi32
+        - additionally with the D3D11 backend: -ld3d11 -ldxgi -dxguid
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
@@ -1483,6 +1487,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #endif
     #endif
     #include <stdio.h>  /* freopen() */
+    #include <wchar.h>  /* wcslen() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
