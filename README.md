@@ -27,6 +27,9 @@ cross-platform libraries for C and C++, written in C.
 
 - [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
 
+- [How to build without a build system](https://github.com/floooh/sokol-samples#how-to-build-without-a-build-system):
+useful details for integrating the Sokol headers into your own project with your favourite C/C++ build system
+
 ## Core libraries
 
 - [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL + Metal + D3D11)
