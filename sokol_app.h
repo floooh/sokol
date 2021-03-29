@@ -69,7 +69,7 @@
     - on Android: GLESv3, EGL, log, android
     - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
-        - link with the following libs: -lkernel32 -luser32 -lshell3'
+        - link with the following libs: -lkernel32 -luser32 -lshell32
         - additionally with the GL backend: -lgdi32
         - additionally with the D3D11 backend: -ld3d11 -ldxgi -dxguid
 
