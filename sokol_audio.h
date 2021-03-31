@@ -24,7 +24,9 @@
     SOKOL_API_DECL      - same as SOKOL_AUDIO_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
-    SAUDIO_RING_MAX_SLOTS   - max number of slots in the push-audio ring buffer (default 1024)
+    SAUDIO_RING_MAX_SLOTS           - max number of slots in the push-audio ring buffer (default 1024)
+    SAUDIO_OSX_USE_SYSTEM_HEADERS   - define this to force inclusion of system headers on
+                                      macOS instead of using embedded CoreAudio declarations
 
     If sokol_audio.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -501,10 +503,10 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #elif defined(__APPLE__)
     #define _SAUDIO_APPLE (1)
     #include <TargetConditionals.h>
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        #define _SAUDIO_MACOS (1)
-    #else
+    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
         #define _SAUDIO_IOS (1)
+    #else
+        #define _SAUDIO_MACOS (1)
     #endif
 #elif defined(__EMSCRIPTEN__)
     #define _SAUDIO_EMSCRIPTEN
@@ -580,6 +582,10 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #define _SAUDIO_PTHREADS (1)
     #include <pthread.h>
     #if defined(_SAUDIO_IOS)
+        // always use system headers on iOS (for now at least)
+        #if !defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
+            #define SAUDIO_OSX_USE_SYSTEM_HEADERS (1)
+        #endif
         #if !defined(__cplusplus)
             #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
                 #error "sokol_audio.h on iOS requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
@@ -588,8 +594,8 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
         #include <AudioToolbox/AudioToolbox.h>
         #include <AVFoundation/AVFoundation.h>
     #else
-        #if defined(SOKOL_AUDIO_MACOS_USE_SYSTEM_HEADERS)
-        #include <AudioToolbox/AudioToolbox.h>
+        #if defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
+            #include <AudioToolbox/AudioToolbox.h>
         #endif
     #endif
 #elif defined(_SAUDIO_ANDROID)
@@ -649,8 +655,17 @@ typedef struct {
 /*=== COREAUDIO BACKEND DECLARATIONS =========================================*/
 #elif defined(_SAUDIO_APPLE)
 
-#if defined(SOKOL_AUDIO_MACOS_USE_SYSTEM_HEADERS)
-// FIXME
+#if defined(SAUDIO_OSX_USE_SYSTEM_HEADERS)
+
+typedef AudioQueueRef _saudio_AudioQueueRef;
+typedef AudioQueueBufferRef _saudio_AudioQueueBufferRef;
+typedef AudioStreamBasicDescription _saudio_AudioStreamBasicDescription;
+typedef OSStatus _saudio_OSStatus;
+
+#define _saudio_kAudioFormatLinearPCM (kAudioFormatLinearPCM)
+#define _saudio_kLinearPCMFormatFlagIsFloat (kLinearPCMFormatFlagIsFloat)
+#define _saudio_kAudioFormatFlagIsPacked (kAudioFormatFlagIsPacked)
+
 #else
 
 // embedded AudioToolbox declarations
@@ -727,7 +742,7 @@ extern _saudio_OSStatus AudioQueueAllocateBuffer(_saudio_AudioQueueRef inAQ, uin
 extern _saudio_OSStatus AudioQueueEnqueueBuffer(_saudio_AudioQueueRef inAQ, _saudio_AudioQueueBufferRef inBuffer, uint32_t inNumPacketDescs, const _saudio_AudioStreamPacketDescription* inPacketDescs);
 extern _saudio_OSStatus AudioQueueStart(_saudio_AudioQueueRef inAQ, const _saudio_AudioTimeStamp * inStartTime);
 extern _saudio_OSStatus AudioQueueStop(_saudio_AudioQueueRef inAQ, bool inImmediate);
-#endif // SOKOL_AUDIO_MACOS_USE_SYSTEM_HEADERS
+#endif // SAUDIO_OSX_USE_SYSTEM_HEADERS
 
 typedef struct {
     _saudio_AudioQueueRef ca_audio_queue;
