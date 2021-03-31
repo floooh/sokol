@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**20-Mar-2021** sokol_gfx.h no longer depends on an external GL loader)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**31-Mar-2021** sokol_audio.h on macOS no longer includes system framework headers by default)
 
 ## Examples and Related Projects
 

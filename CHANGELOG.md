@@ -1,5 +1,18 @@
 ## Updates
 
+- **31-Mar-2021**: sokol_audio.h on macOS no longer includes system framework
+  headers (AudioToolbox/AudioToolbox.h), instead the necessary declarations
+  are embedded directly in sokol_audio.h (to get the old behaviour and
+  force inclusion of AudioToolbox/AudioToolbox.h, define
+  ```SAUDIO_OSX_USE_SYSTEM_HEADERS``` before including the sokol_audio.h
+  implementation). This "fix" is both an experiment and an immediate workaround
+  for a current issue in Zig's HEAD version (what will eventually become
+  zig 0.8.0). See this issue for details: https://github.com/ziglang/zig/issues/8360).
+  The experiment is basically to see whether this approach generally makes sense
+  (replacing system headers with embedded declarations, so that the sokol headers
+  only depend on C standard library headers). This approach might
+  simplify cross-compilation and integration with other languages than C and C++.
+
 - **20-Mar-2021**: The Windows-specific OpenGL loader, and the platform-specific
 GL header includes have been moved from sokol_app.h to sokol_gfx.h. This means:
   - In general, the sokol_gfx.h implementation can now simply be included
