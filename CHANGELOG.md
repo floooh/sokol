@@ -1,5 +1,15 @@
 ## Updates
 
+- **01-Apr-2021**: some fixes in sokol_app.h's iOS backend:
+    - In the iOS Metal backend, high-dpi vs low-dpi works again. Some time
+    ago (around iOS 12.x) MTKView started to ignore the contentScaleFactor
+    property, which lead to sokol_app.h always setting up a HighDPI
+    framebuffer even when sapp_desc.high_dpi wasn't set. The fix is to set
+    the MTKView's drawableSize explicitely now.
+    - The iOS GL backend didn't support MSAA multisampling so far, this has
+    been fixed now, but only one MSAA mode (4x) is available, which will be
+    selected when sapp_desc.sample_count is greater than 1.
+
 - **31-Mar-2021**: sokol_audio.h on macOS no longer includes system framework
   headers (AudioToolbox/AudioToolbox.h), instead the necessary declarations
   are embedded directly in sokol_audio.h (to get the old behaviour and
