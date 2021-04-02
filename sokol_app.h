@@ -6073,6 +6073,10 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
+_SOKOL_PRIVATE void _sapp_win32_update_window_icon(const sapp_icon* icon) {
+    // FIXME
+}
+
 /* don't laugh, but this seems to be the easiest and most robust
    way to check if we're running on Win10
 
@@ -9180,6 +9184,10 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     XFlush(_sapp.x11.display);
 }
 
+_SOKOL_PRIVATE void _sapp_x11_update_window_icon(const sapp_icon* icon) {
+    // FIXME
+}
+
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     _sapp.x11.colormap = XCreateColormap(_sapp.x11.display, _sapp.x11.root, visual, AllocNone);
     XSetWindowAttributes wa;
@@ -10211,6 +10219,16 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
         _sapp_x11_update_window_title();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_set_window_icon(const sapp_icon* icon) {
+    SOKOL_ASSERT(icon);
+    // FIXME: can the HTML5 favicon be created dynamically from pixel data???
+    #if defined(_SAPP_WIN32)
+        _sapp_win32_update_window_icon(icon);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_update_window_icon(icon);
     #endif
 }
 
