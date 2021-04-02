@@ -103,8 +103,8 @@
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---  | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---   | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | YES     | YES  | TODO  | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | YES     | YES  | TODO  | YES
     CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | TODO  | YES
     MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
@@ -121,7 +121,7 @@
     RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | YES     | ---  | TODO  | YES
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
@@ -7121,6 +7121,115 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 /*== Android ================================================================*/
 #if defined(_SAPP_ANDROID)
 
+_SOKOL_PRIVATE void _sapp_android_init_keytable(void) {
+    _sapp.keycodes[AKEYCODE_UNKNOWN]            = SAPP_KEYCODE_INVALID;
+    _sapp.keycodes[AKEYCODE_SPACE]              = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[AKEYCODE_APOSTROPHE]         = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[AKEYCODE_COMMA]              = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[AKEYCODE_MINUS]              = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[AKEYCODE_PERIOD]             = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[AKEYCODE_SLASH]              = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[AKEYCODE_0]                  = SAPP_KEYCODE_0;
+    _sapp.keycodes[AKEYCODE_1]                  = SAPP_KEYCODE_1;
+    _sapp.keycodes[AKEYCODE_2]                  = SAPP_KEYCODE_2;
+    _sapp.keycodes[AKEYCODE_3]                  = SAPP_KEYCODE_3;
+    _sapp.keycodes[AKEYCODE_4]                  = SAPP_KEYCODE_4;
+    _sapp.keycodes[AKEYCODE_5]                  = SAPP_KEYCODE_5;
+    _sapp.keycodes[AKEYCODE_6]                  = SAPP_KEYCODE_6;
+    _sapp.keycodes[AKEYCODE_7]                  = SAPP_KEYCODE_7;
+    _sapp.keycodes[AKEYCODE_8]                  = SAPP_KEYCODE_8;
+    _sapp.keycodes[AKEYCODE_9]                  = SAPP_KEYCODE_9;
+    _sapp.keycodes[AKEYCODE_SEMICOLON]          = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[AKEYCODE_EQUALS]             = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[AKEYCODE_A]                  = SAPP_KEYCODE_A;
+    _sapp.keycodes[AKEYCODE_B]                  = SAPP_KEYCODE_B;
+    _sapp.keycodes[AKEYCODE_C]                  = SAPP_KEYCODE_C;
+    _sapp.keycodes[AKEYCODE_D]                  = SAPP_KEYCODE_D;
+    _sapp.keycodes[AKEYCODE_E]                  = SAPP_KEYCODE_E;
+    _sapp.keycodes[AKEYCODE_F]                  = SAPP_KEYCODE_F;
+    _sapp.keycodes[AKEYCODE_G]                  = SAPP_KEYCODE_G;
+    _sapp.keycodes[AKEYCODE_H]                  = SAPP_KEYCODE_H;
+    _sapp.keycodes[AKEYCODE_I]                  = SAPP_KEYCODE_I;
+    _sapp.keycodes[AKEYCODE_J]                  = SAPP_KEYCODE_J;
+    _sapp.keycodes[AKEYCODE_K]                  = SAPP_KEYCODE_K;
+    _sapp.keycodes[AKEYCODE_L]                  = SAPP_KEYCODE_L;
+    _sapp.keycodes[AKEYCODE_M]                  = SAPP_KEYCODE_M;
+    _sapp.keycodes[AKEYCODE_N]                  = SAPP_KEYCODE_N;
+    _sapp.keycodes[AKEYCODE_O]                  = SAPP_KEYCODE_O;
+    _sapp.keycodes[AKEYCODE_P]                  = SAPP_KEYCODE_P;
+    _sapp.keycodes[AKEYCODE_Q]                  = SAPP_KEYCODE_Q;
+    _sapp.keycodes[AKEYCODE_R]                  = SAPP_KEYCODE_R;
+    _sapp.keycodes[AKEYCODE_S]                  = SAPP_KEYCODE_S;
+    _sapp.keycodes[AKEYCODE_T]                  = SAPP_KEYCODE_T;
+    _sapp.keycodes[AKEYCODE_U]                  = SAPP_KEYCODE_U;
+    _sapp.keycodes[AKEYCODE_V]                  = SAPP_KEYCODE_V;
+    _sapp.keycodes[AKEYCODE_W]                  = SAPP_KEYCODE_W;
+    _sapp.keycodes[AKEYCODE_X]                  = SAPP_KEYCODE_X;
+    _sapp.keycodes[AKEYCODE_Y]                  = SAPP_KEYCODE_Y;
+    _sapp.keycodes[AKEYCODE_Z]                  = SAPP_KEYCODE_Z;
+    _sapp.keycodes[AKEYCODE_LEFT_BRACKET]       = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[AKEYCODE_BACKSLASH]          = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[AKEYCODE_RIGHT_BRACKET]      = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[AKEYCODE_GRAVE]              = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[AKEYCODE_ESCAPE]             = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[AKEYCODE_ENTER]              = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[AKEYCODE_TAB]                = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[AKEYCODE_DEL]                = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[AKEYCODE_INSERT]             = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[AKEYCODE_FORWARD_DEL]        = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[AKEYCODE_DPAD_RIGHT]         = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[AKEYCODE_DPAD_LEFT]          = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[AKEYCODE_DPAD_DOWN]          = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[AKEYCODE_DPAD_UP]            = SAPP_KEYCODE_UP;
+    _sapp.keycodes[AKEYCODE_PAGE_UP]            = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[AKEYCODE_PAGE_DOWN]          = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[AKEYCODE_MOVE_HOME]          = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[AKEYCODE_MOVE_END]           = SAPP_KEYCODE_END;
+    _sapp.keycodes[AKEYCODE_CAPS_LOCK]          = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[AKEYCODE_SCROLL_LOCK]        = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[AKEYCODE_NUM_LOCK]           = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[AKEYCODE_SYSRQ]              = SAPP_KEYCODE_PRINT_SCREEN;
+    _sapp.keycodes[AKEYCODE_BREAK]              = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[AKEYCODE_F1]                 = SAPP_KEYCODE_F1;
+    _sapp.keycodes[AKEYCODE_F2]                 = SAPP_KEYCODE_F2;
+    _sapp.keycodes[AKEYCODE_F3]                 = SAPP_KEYCODE_F3;
+    _sapp.keycodes[AKEYCODE_F4]                 = SAPP_KEYCODE_F4;
+    _sapp.keycodes[AKEYCODE_F5]                 = SAPP_KEYCODE_F5;
+    _sapp.keycodes[AKEYCODE_F6]                 = SAPP_KEYCODE_F6;
+    _sapp.keycodes[AKEYCODE_F7]                 = SAPP_KEYCODE_F7;
+    _sapp.keycodes[AKEYCODE_F8]                 = SAPP_KEYCODE_F8;
+    _sapp.keycodes[AKEYCODE_F9]                 = SAPP_KEYCODE_F9;
+    _sapp.keycodes[AKEYCODE_F10]                = SAPP_KEYCODE_F10;
+    _sapp.keycodes[AKEYCODE_F11]                = SAPP_KEYCODE_F11;
+    _sapp.keycodes[AKEYCODE_F12]                = SAPP_KEYCODE_F12;
+    _sapp.keycodes[AKEYCODE_NUMPAD_0]           = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[AKEYCODE_NUMPAD_1]           = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[AKEYCODE_NUMPAD_2]           = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[AKEYCODE_NUMPAD_3]           = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[AKEYCODE_NUMPAD_4]           = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[AKEYCODE_NUMPAD_5]           = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[AKEYCODE_NUMPAD_6]           = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[AKEYCODE_NUMPAD_7]           = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[AKEYCODE_NUMPAD_8]           = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[AKEYCODE_NUMPAD_9]           = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[AKEYCODE_NUMPAD_DOT]         = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[AKEYCODE_NUMPAD_DIVIDE]      = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[AKEYCODE_NUMPAD_MULTIPLY]    = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[AKEYCODE_NUMPAD_SUBTRACT]    = SAPP_KEYCODE_KP_SUBTRACT;
+    _sapp.keycodes[AKEYCODE_NUMPAD_ADD]         = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[AKEYCODE_NUMPAD_ENTER]       = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[AKEYCODE_NUMPAD_EQUALS]      = SAPP_KEYCODE_KP_EQUAL;
+    _sapp.keycodes[AKEYCODE_SHIFT_LEFT]         = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[AKEYCODE_CTRL_LEFT]          = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[AKEYCODE_ALT_LEFT]           = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[AKEYCODE_META_LEFT]          = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[AKEYCODE_SHIFT_RIGHT]        = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[AKEYCODE_CTRL_RIGHT]         = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[AKEYCODE_ALT_RIGHT]          = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[AKEYCODE_META_RIGHT]         = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[AKEYCODE_MENU]               = SAPP_KEYCODE_MENU;
+}
+
 /* android loop thread */
 _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     SOKOL_ASSERT(_sapp.android.display == EGL_NO_DISPLAY);
@@ -7389,15 +7498,96 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
     }
-    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* FIXME: this should be hooked into a "really quit?" mechanism
-           so the app can ask the user for confirmation, this is currently
-           generally missing in sokol_app.h
-        */
-        _sapp_android_shutdown();
+
+    int32_t key_code = AKeyEvent_getKeyCode(e);
+    int32_t action = AKeyEvent_getAction(e);
+    if (key_code == AKEYCODE_BACK && action == AKEY_EVENT_ACTION_UP) {
+        /* if user presses back key, give user code a chance to intervene via sapp_cancel_quit() */
+        _sapp.quit_requested = true;
+        _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        _sapp_call_event(&_sapp.event);
+
+        /* if user code hasn't intervened, quit the app */
+        if (_sapp.quit_requested) {
+            _sapp_android_shutdown();
+        }
+
         return true;
     }
-    return false;
+
+    sapp_event_type event_type = SAPP_EVENTTYPE_INVALID;
+    switch (action) {
+        case AKEY_EVENT_ACTION_DOWN:
+            SOKOL_LOG("Key: down");
+            event_type = SAPP_EVENTTYPE_KEY_DOWN;
+            break;
+        case AKEY_EVENT_ACTION_UP:
+            SOKOL_LOG("Key: up");
+            event_type = SAPP_EVENTTYPE_KEY_UP;
+            break;
+        case AKEY_EVENT_ACTION_MULTIPLE:
+            SOKOL_LOG("Key: multiple");
+            break;
+        default:
+            return false;
+    }
+
+    int32_t meta = AKeyEvent_getMetaState(e);
+    uint32_t modifiers = 0;
+
+    if ((meta & AMETA_SHIFT_ON)) {
+        modifiers |= SAPP_MODIFIER_SHIFT;
+    }
+
+    if ((meta & AMETA_CTRL_ON)) {
+        modifiers |= SAPP_MODIFIER_CTRL;
+    }
+
+    if ((meta & AMETA_ALT_ON)) {
+        modifiers |= SAPP_MODIFIER_ALT;
+    }
+
+    if ((meta & AMETA_META_ON)) {
+        modifiers |= SAPP_MODIFIER_SUPER;
+    }
+
+    sapp_keycode translated_key_code = _sapp_translate_key(key_code);
+
+    if(action != AKEY_EVENT_ACTION_MULTIPLE) {
+        _sapp_init_event(event_type);
+        _sapp.event.modifiers = modifiers;
+        _sapp.event.key_code = translated_key_code;
+        _sapp.event.key_repeat = AKeyEvent_getRepeatCount(e) != 0;
+        _sapp_call_event(&_sapp.event);
+    }
+    else {
+        /* AKEY_EVENT_ACTION_MULTIPLE means that multiple down/up pairs have occured in this key event */
+        for(int key_repeat = 0; key_repeat < AKeyEvent_getRepeatCount(e); ++key_repeat) {
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+            _sapp.event.modifiers = modifiers;
+            _sapp.event.key_code = translated_key_code;
+            _sapp.event.key_repeat = key_repeat != 0;
+            _sapp_call_event(&_sapp.event);
+
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+            _sapp.event.modifiers = modifiers;
+            _sapp.event.key_code = translated_key_code;
+            _sapp.event.key_repeat = key_repeat != 0;
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+
+    /* check if a CLIPBOARD_PASTED event must be sent too */
+    if (_sapp.clipboard.enabled &&
+        (event_type == SAPP_EVENTTYPE_KEY_DOWN) &&
+        (modifiers == SAPP_MODIFIER_CTRL) &&
+        (translated_key_code == SAPP_KEYCODE_V))
+    {
+        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+        _sapp_call_event(&_sapp.event);
+    }
+
+    return true;
 }
 
 _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
@@ -7931,6 +8121,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc);
+    _sapp_android_init_keytable();
 
     /* start loop thread */
     _sapp.android.activity = activity;
