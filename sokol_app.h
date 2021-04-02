@@ -7736,7 +7736,7 @@ _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
 
     JNIEnv *env;
     bool need_detach = _sapp_android_get_jni_env(&env);
-    if(env == NULL) {
+    if (env == NULL) {
         return;
     }
 
@@ -7746,7 +7746,7 @@ _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
         );
     jclass view_class = (*env)->FindClass(env, "android/view/View");
 
-    if(shown) {
+    if (shown) {
         // decor_view.requestFocus();
         jmethodID request_focus = (*env)->GetMethodID(
             env,
@@ -7774,8 +7774,7 @@ _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
             0
             );
     }
-    else
-    {
+    else {
         // token = decor_view.getWindowToken();
         jmethodID get_window_token = (*env)->GetMethodID(
             env,
@@ -7820,7 +7819,7 @@ _SOKOL_PRIVATE bool _sapp_android_keyboard_shown() {
 
     JNIEnv *env;
     bool need_detach = _sapp_android_get_jni_env(&env);
-    if(env == NULL) {
+    if (env == NULL) {
         return false;
     }
 
@@ -8337,26 +8336,26 @@ _SOKOL_PRIVATE void _sapp_android_mutf8_to_utf8(const char* src, char *dst, int 
     for(;;) {
         int bytes_count = 0;
 
-        if(src[src_offset] == (char)0xED) {
+        if (src[src_offset] == (char)0xED) {
             bytes_count = 4;
         }
-        else if((src[src_offset] & 0xF0) == 0xE0) {
+        else if ((src[src_offset] & 0xF0) == 0xE0) {
             bytes_count = 3;
         }
-        else if((src[src_offset] & 0xE0) == 0xC0) {
+        else if ((src[src_offset] & 0xE0) == 0xC0) {
             bytes_count = 2;
         }
-        else if((src[src_offset] & 0x80) == 0) {
+        else if ((src[src_offset] & 0x80) == 0) {
             bytes_count = 1;
         }
 
-        if((src[src_offset] == (char)0xC0 && src[src_offset + 1] == (char)0x80) 
+        if ((src[src_offset] == (char)0xC0 && src[src_offset + 1] == (char)0x80)
             || bytes_count == 0 || dst_offset + bytes_count >= max_len) {
             dst[dst_offset++] = 0;
             break;
         }
 
-        if(src[src_offset] == (char)0xED) {
+        if (src[src_offset] == (char)0xED) {
             ++src_offset;
             uint32_t c = 0;
             c |= (src[src_offset++] & 0x0F) << 16;
@@ -8372,7 +8371,7 @@ _SOKOL_PRIVATE void _sapp_android_mutf8_to_utf8(const char* src, char *dst, int 
             dst[dst_offset++] = 0x80 | (c & 0x3F);
         }
         else {
-            for(int n = 0; n < bytes_count; ++n) {
+            for (int n = 0; n < bytes_count; ++n) {
                 dst[dst_offset++] = src[src_offset++];
             }
         }
@@ -8388,7 +8387,7 @@ _SOKOL_PRIVATE void _sapp_android_set_clipboard_string(const char* str) {
     // Get JNI environment
     JNIEnv *env;
     bool need_detach = _sapp_android_get_jni_env(&env);
-    if(env == NULL) {
+    if (env == NULL) {
         return;
     }
 
@@ -8447,7 +8446,7 @@ _SOKOL_PRIVATE const char* _sapp_android_get_clipboard_string(void) {
 
     JNIEnv *env;
     bool need_detach = _sapp_android_get_jni_env(&env);
-    if(env == NULL) {
+    if (env == NULL) {
         return _sapp.clipboard.buffer;
     }
 
@@ -8482,8 +8481,7 @@ _SOKOL_PRIVATE const char* _sapp_android_get_clipboard_string(void) {
         );
 
     // TODO : merge all items in one text ?
-    if(item_count != 0)
-    {
+    if (item_count != 0) {
         // item = clipdata.getItemAt(0);
         jmethodID get_item_at = (*env)->GetMethodID(
             env,
