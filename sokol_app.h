@@ -1840,6 +1840,8 @@ typedef struct {
     EGLSurface surface;
 
     jobject clipboard_manager;
+    jobject ime_manager;
+    jobject decor_view;
 } _sapp_android_t;
 
 #endif // _SAPP_ANDROID
@@ -7541,14 +7543,206 @@ _SOKOL_PRIVATE bool _sapp_android_get_jni_env(JNIEnv **env) {
 
 _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
-    /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
-    if (shown) {
-        SOKOL_LOG("Showing keyboard");
-        ANativeActivity_showSoftInput(_sapp.android.activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
-    } else {
-        SOKOL_LOG("Hiding keyboard");
-        ANativeActivity_hideSoftInput(_sapp.android.activity, ANATIVEACTIVITY_HIDE_SOFT_INPUT_NOT_ALWAYS);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if(env == NULL) {
+        return;
     }
+
+    jclass input_method_manager_class = (*env)->FindClass(
+        env,
+        "android/view/inputmethod/InputMethodManager"
+        );
+    jclass view_class = (*env)->FindClass(env, "android/view/View");
+
+    if(shown) {
+        // decor_view.requestFocus();
+        jmethodID request_focus = (*env)->GetMethodID(
+            env,
+            view_class,
+            "requestFocus",
+            "()Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.decor_view,
+            request_focus
+            );
+        // ime_manager.showSoftInput(decor_view, 0);
+        jmethodID show_soft_input = (*env)->GetMethodID(
+            env,
+            input_method_manager_class,
+            "showSoftInput",
+            "(Landroid/view/View;I)Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.ime_manager,
+            show_soft_input,
+            _sapp.android.decor_view,
+            0
+            );
+    }
+    else
+    {
+        // token = decor_view.getWindowToken();
+        jmethodID get_window_token = (*env)->GetMethodID(
+            env,
+            view_class,
+            "getWindowToken",
+            "()Landroid/os/IBinder;"
+            );
+        jobject token = (*env)->CallObjectMethod(
+            env,
+            _sapp.android.decor_view,
+            get_window_token
+            );
+
+        // ime_manager.hideSoftInputFromWindow(token, 0);
+        jmethodID hide_soft_input = (*env)->GetMethodID(
+            env,
+            input_method_manager_class,
+            "hideSoftInputFromWindow",
+            "(Landroid/os/IBinder;I)Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.ime_manager,
+            hide_soft_input,
+            token,
+            0
+            );
+
+        (*env)->DeleteLocalRef(env, token);
+    }
+
+    (*env)->DeleteLocalRef(env, view_class);
+    (*env)->DeleteLocalRef(env, input_method_manager_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_android_keyboard_shown() {
+    SOKOL_ASSERT(_sapp.valid);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if(env == NULL) {
+        return false;
+    }
+
+    // We can't have the current status of the keyboard
+    // So instead, we get the size of the view after removing decorations (status and navigation bar)
+    // and we compare it to the view visible display frame
+    // If they are not equal, then the keyboard may be visible
+
+    jclass view_class = (*env)->FindClass(env, "android/view/View");
+
+    // view_height = decor_view.getHeight();
+    jmethodID get_display = (*env)->GetMethodID(
+        env,
+        view_class,
+        "getDisplay",
+        "()Landroid/view/Display;"
+        );
+    jobject display = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.decor_view,
+        get_display
+        );
+
+    // display_dimension = new Point();
+    jclass point_class = (*env)->FindClass(env, "android/graphics/Point");
+    jmethodID point_ctor = (*env)->GetMethodID(
+        env,
+        point_class,
+        "<init>",
+        "()V"
+        );
+    jobject display_dimension = (*env)->NewObject(env, point_class, point_ctor);
+
+    // display.getSize(display_dimension);
+    jclass display_class = (*env)->FindClass(env, "android/view/Display");
+    jmethodID get_size = (*env)->GetMethodID(
+        env,
+        display_class,
+        "getSize",
+        "(Landroid/graphics/Point;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        display,
+        get_size,
+        display_dimension
+        );
+
+    // display_height = display_dimension.y;
+    jfieldID point_y = (*env)->GetFieldID(
+        env,
+        point_class,
+        "y",
+        "I"
+        );
+    int display_height = (*env)->GetIntField(env, display_dimension, point_y);
+
+    // view_visible_rect = new Rect();
+    jclass rect_class = (*env)->FindClass(env, "android/graphics/Rect");
+    jmethodID rect_ctor = (*env)->GetMethodID(
+        env,
+        rect_class,
+        "<init>",
+        "()V"
+        );
+    jobject view_visible_rect = (*env)->NewObject(env, rect_class, rect_ctor);
+
+    // decor_view.getWindowVisibleDisplayFrame(view_visible_rect);
+    jmethodID get_window_visible_display_frame = (*env)->GetMethodID(
+        env,
+        view_class,
+        "getWindowVisibleDisplayFrame",
+        "(Landroid/graphics/Rect;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        _sapp.android.decor_view,
+        get_window_visible_display_frame,
+        view_visible_rect
+        );
+
+    // status_bar_height = view_visible_rect.top;
+    jfieldID rect_top = (*env)->GetFieldID(
+        env,
+        rect_class,
+        "top",
+        "I"
+        );
+    int status_bar_height = (*env)->GetIntField(env, view_visible_rect, rect_top);
+
+    // view_visible_height = view_visible_rect.height();
+    jmethodID rect_height = (*env)->GetMethodID(
+        env,
+        rect_class,
+        "height",
+        "()I"
+        );
+    int view_visible_height = (*env)->CallIntMethod(
+        env,
+        view_visible_rect,
+        rect_height
+        );
+
+    (*env)->DeleteLocalRef(env, view_visible_rect);
+    (*env)->DeleteLocalRef(env, rect_class);
+    (*env)->DeleteLocalRef(env, view_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+
+    return display_height - status_bar_height != view_visible_height;
 }
 
 _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
@@ -7718,10 +7912,13 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     close(_sapp.android.pt.write_from_main_fd);
 
     JNIEnv *env = _sapp.android.activity->env;
+    (*env)->DeleteGlobalRef(env, _sapp.android.ime_manager);
+    (*env)->DeleteGlobalRef(env, _sapp.android.decor_view);
 
     if (_sapp.android.clipboard_manager != NULL) {
         (*env)->DeleteGlobalRef(env, _sapp.android.clipboard_manager);
     }
+
     SOKOL_LOG("NativeActivity done");
 
     /* this is a bit naughty, but causes a clean restart of the app (static globals are reset) */
@@ -7758,6 +7955,31 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
         "(Ljava/lang/String;)Ljava/lang/Object;"
         );
 
+    // Get input method manager
+    // this.getSystemService(Context.INPUT_METHOD_SERVICE);
+    jfieldID input_method_service_id = (*env)->GetStaticFieldID(
+        env,
+        context_class,
+        "INPUT_METHOD_SERVICE",
+        "Ljava/lang/String;"
+        );
+    jstring input_method_service_str = (*env)->GetStaticObjectField(
+        env,
+        context_class,
+        input_method_service_id
+        );
+    jobject ime_manager = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.activity->clazz,
+        get_system_service,
+        input_method_service_str
+        );
+
+    _sapp.android.ime_manager = (*env)->NewGlobalRef(env, ime_manager);
+
+    (*env)->DeleteLocalRef(env, ime_manager);
+    (*env)->DeleteLocalRef(env, input_method_service_str);
+
     // Get clipboard manager
     if (_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0)) {
         // this.getSystemService(Context.CLIPBOARD_SERVICE);
@@ -7783,6 +8005,39 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
         (*env)->DeleteLocalRef(env, clipboard_manager);
         (*env)->DeleteLocalRef(env, clipboard_service_str);
     }
+
+    // window = this.getWindow();
+    jmethodID get_window = (*env)->GetMethodID(
+        env,
+        native_activity_class,
+        "getWindow",
+        "()Landroid/view/Window;"
+        );
+    jobject window = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.activity->clazz,
+        get_window
+        );
+
+    // decor_view = window.getDecorView();
+    jclass window_class = (*env)->FindClass(env, "android/view/Window");
+    jmethodID get_decor_view = (*env)->GetMethodID(
+        env,
+        window_class,
+        "getDecorView",
+        "()Landroid/view/View;"
+        );
+    jobject decor_view = (*env)->CallObjectMethod(
+        env,
+        window,
+        get_decor_view
+        );
+
+    _sapp.android.decor_view = (*env)->NewGlobalRef(env, decor_view);
+
+    (*env)->DeleteLocalRef(env, decor_view);
+    (*env)->DeleteLocalRef(env, window_class);
+    (*env)->DeleteLocalRef(env, window);
     (*env)->DeleteLocalRef(env, context_class);
     (*env)->DeleteLocalRef(env, native_activity_class);
 
@@ -10336,7 +10591,11 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
 }
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
-    return _sapp.onscreen_keyboard_shown;
+    #if defined(_SAPP_ANDROID)
+        return _sapp_android_keyboard_shown();
+    #else
+        return _sapp.onscreen_keyboard_shown;
+    #endif
 }
 
 SOKOL_APP_API_DECL bool sapp_is_fullscreen(void) {
