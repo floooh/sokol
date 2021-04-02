@@ -132,7 +132,7 @@
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
+    clipboard           | YES     | YES   | TODO  | ---   | YES     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
     drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
 
@@ -1838,6 +1838,8 @@ typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
+
+    jobject clipboard_manager;
 } _sapp_android_t;
 
 #endif // _SAPP_ANDROID
@@ -7515,6 +7517,28 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     return is_in_front && has_surface;
 }
 
+_SOKOL_PRIVATE bool _sapp_android_get_jni_env(JNIEnv **env) {
+    // Get current thread JNI environment
+    JavaVM *vm = _sapp.android.activity->vm;
+    *env = NULL;
+
+    if ((*vm)->GetEnv(vm, (void**)env, JNI_VERSION_1_6) == JNI_OK) {
+        return false;
+    }
+
+    JavaVMAttachArgs args = {
+        .version  = JNI_VERSION_1_6,
+        .name = "NativeThread",
+        .group = NULL
+    };
+
+    if ((*vm)->AttachCurrentThread(vm, env, &args) != JNI_OK) {
+        return false;
+    }
+
+    return true;
+}
+
 _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
     /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
@@ -7693,6 +7717,11 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     close(_sapp.android.pt.read_from_main_fd);
     close(_sapp.android.pt.write_from_main_fd);
 
+    JNIEnv *env = _sapp.android.activity->env;
+
+    if (_sapp.android.clipboard_manager != NULL) {
+        (*env)->DeleteGlobalRef(env, _sapp.android.clipboard_manager);
+    }
     SOKOL_LOG("NativeActivity done");
 
     /* this is a bit naughty, but causes a clean restart of the app (static globals are reset) */
@@ -7716,6 +7745,46 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     }
     _sapp.android.pt.read_from_main_fd = pipe_fd[0];
     _sapp.android.pt.write_from_main_fd = pipe_fd[1];
+
+    JNIEnv *env = activity->env;
+
+    // getSystemService() can only be called from the UI thread, so get everything we need here
+    jclass native_activity_class = (*env)->FindClass(env, "android/app/NativeActivity");
+    jclass context_class = (*env)->FindClass(env, "android/content/Context");
+    jmethodID get_system_service = (*env)->GetMethodID(
+        env,
+        native_activity_class,
+        "getSystemService",
+        "(Ljava/lang/String;)Ljava/lang/Object;"
+        );
+
+    // Get clipboard manager
+    if (_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0)) {
+        // this.getSystemService(Context.CLIPBOARD_SERVICE);
+        jfieldID clipboard_service_id = (*env)->GetStaticFieldID(
+            env,
+            context_class,
+            "CLIPBOARD_SERVICE",
+            "Ljava/lang/String;"
+            );
+        jstring clipboard_service_str = (*env)->GetStaticObjectField(
+            env,
+            context_class,
+            clipboard_service_id
+            );
+        jobject clipboard_manager = (*env)->CallObjectMethod(
+            env,
+            _sapp.android.activity->clazz,
+            get_system_service,
+            clipboard_service_str
+            );
+        _sapp.android.clipboard_manager = (*env)->NewGlobalRef(env, clipboard_manager);
+
+        (*env)->DeleteLocalRef(env, clipboard_manager);
+        (*env)->DeleteLocalRef(env, clipboard_service_str);
+    }
+    (*env)->DeleteLocalRef(env, context_class);
+    (*env)->DeleteLocalRef(env, native_activity_class);
 
     pthread_mutex_init(&_sapp.android.pt.mutex, NULL);
     pthread_cond_init(&_sapp.android.pt.cond, NULL);
@@ -7762,6 +7831,281 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     SOKOL_LOG("NativeActivity successfully created");
 
     /* NOT A BUG: do NOT call sapp_discard_state() */
+}
+
+_SOKOL_PRIVATE void _sapp_android_utf8_to_mutf8(const char* src, char *dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len >= 3));
+    int dst_offset = 0;
+    int src_offset = 0;
+    for (;;) {
+        int bytes_count = 0;
+
+        if ((src[src_offset] & 0x80) == 0) {
+            bytes_count = 1;
+        }
+        else if ((src[src_offset] & 0xE0) == 0xC0) {
+            bytes_count = 2;
+        }
+        else if ((src[src_offset] & 0xF0) == 0xE0) {
+            bytes_count = 3;
+        }
+        else if ((src[src_offset] & 0xF8) == 0xF0) {
+            bytes_count = 6;
+        }
+
+        if (bytes_count == 0 || src[src_offset] == 0 || dst_offset + bytes_count > max_len - 3) {
+            dst[dst_offset++] = 0xC0;
+            dst[dst_offset++] = 0x80;
+            dst[dst_offset++] = 0;
+            break;
+        }
+
+        if (bytes_count <= 3) {
+            for (int n = 0; n < bytes_count; ++n) {
+                dst[dst_offset++] = src[src_offset++];
+            }
+        }
+        else {
+            uint32_t c = 0;
+            c |= (src[src_offset++] & 0x07) << 18;
+            c |= (src[src_offset++] & 0x3F) << 12;
+            c |= (src[src_offset++] & 0x3F) << 6;
+            c |= (src[src_offset++] & 0x3F);
+
+            dst[dst_offset++] = 0xED;
+            dst[dst_offset++] = 0xA0 | ((c >> 16) & 0x0F);
+            dst[dst_offset++] = 0x80 | ((c >> 10) & 0x3F);
+            dst[dst_offset++] = 0xED;
+            dst[dst_offset++] = 0xA0 | ((c >> 6) & 0x0F);
+            dst[dst_offset++] = 0x80 | (c & 0x3F);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_mutf8_to_utf8(const char* src, char *dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len > 0));
+
+    int dst_offset = 0;
+    int src_offset = 0;
+
+    for(;;) {
+        int bytes_count = 0;
+
+        if(src[src_offset] == (char)0xED) {
+            bytes_count = 4;
+        }
+        else if((src[src_offset] & 0xF0) == 0xE0) {
+            bytes_count = 3;
+        }
+        else if((src[src_offset] & 0xE0) == 0xC0) {
+            bytes_count = 2;
+        }
+        else if((src[src_offset] & 0x80) == 0) {
+            bytes_count = 1;
+        }
+
+        if((src[src_offset] == (char)0xC0 && src[src_offset + 1] == (char)0x80) 
+            || bytes_count == 0 || dst_offset + bytes_count >= max_len) {
+            dst[dst_offset++] = 0;
+            break;
+        }
+
+        if(src[src_offset] == (char)0xED) {
+            ++src_offset;
+            uint32_t c = 0;
+            c |= (src[src_offset++] & 0x0F) << 16;
+            c |= (src[src_offset++] & 0x3F) << 10;
+            SOKOL_ASSERT(src[src_offset] == (char)0xED);
+            ++src_offset;
+            c |= (src[src_offset++] & 0x0F) << 6;
+            c |= (src[src_offset++] & 0x3F);
+
+            dst[dst_offset++] = 0xF0 | ((c >> 18) & 0x07);
+            dst[dst_offset++] = 0x80 | ((c >> 12) & 0x3F);
+            dst[dst_offset++] = 0x80 | ((c >> 6) & 0x3F);
+            dst[dst_offset++] = 0x80 | (c & 0x3F);
+        }
+        else {
+            for(int n = 0; n < bytes_count; ++n) {
+                dst[dst_offset++] = src[src_offset++];
+            }
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(str);
+    SOKOL_ASSERT(_sapp.android.activity);
+    SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
+    SOKOL_ASSERT(_sapp.android.clipboard_manager);
+
+    // Get JNI environment
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if(env == NULL) {
+        return;
+    }
+
+    // Create jstring
+    jstring label = (*env)->NewStringUTF(env, "");
+    _sapp_android_utf8_to_mutf8(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    jstring text = (*env)->NewStringUTF(env, _sapp.clipboard.buffer);
+
+    // Create clip data
+    // clipdata_instance = ClipData.newPlainText(label, text);
+    jclass clipdata_class = (*env)->FindClass(env, "android/content/ClipData");
+    jmethodID clipdata_new_plain_text = (*env)->GetStaticMethodID(
+        env,
+        clipdata_class,
+        "newPlainText",
+        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;"
+        );
+    jobject clipdata_instance = (*env)->CallStaticObjectMethod(
+        env,
+        clipdata_class,
+        clipdata_new_plain_text,
+        label,
+        text
+        );
+
+    // Set clipboard content
+    // clipboard_manager.setPrimaryClip(clipdata_instance);
+    jclass clipboard_manager_class = (*env)->FindClass(env, "android/content/ClipboardManager");
+    jmethodID set_primary_clip = (*env)->GetMethodID(
+        env,
+        clipboard_manager_class,
+        "setPrimaryClip",
+        "(Landroid/content/ClipData;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        _sapp.android.clipboard_manager,
+        set_primary_clip,
+        clipdata_instance
+        );
+
+    (*env)->DeleteLocalRef(env, clipboard_manager_class);
+    (*env)->DeleteLocalRef(env, clipdata_instance);
+    (*env)->DeleteLocalRef(env, clipdata_class);
+    (*env)->DeleteLocalRef(env, text);
+    (*env)->DeleteLocalRef(env, label);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+}
+
+_SOKOL_PRIVATE const char* _sapp_android_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
+    SOKOL_ASSERT(_sapp.android.activity);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if(env == NULL) {
+        return _sapp.clipboard.buffer;
+    }
+
+    // Get clipboard content
+    // clipdata = clipboard_manager.getPrimaryClip();
+    jclass clipboard_manager_class = (*env)->FindClass(env, "android/content/ClipboardManager");
+    jmethodID get_primary_clip = (*env)->GetMethodID(
+        env,
+        clipboard_manager_class,
+        "getPrimaryClip",
+        "()Landroid/content/ClipData;"
+        );
+    jobject clipdata = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.clipboard_manager,
+        get_primary_clip
+        );
+
+    // Get clipdata item
+    // item_count = clipdata.getItemCount();
+    jclass clipdata_class = (*env)->FindClass(env, "android/content/ClipData");
+    jmethodID get_item_count = (*env)->GetMethodID(
+        env,
+        clipdata_class,
+        "getItemCount",
+        "()I"
+        );
+    int item_count = (*env)->CallIntMethod(
+        env,
+        clipdata,
+        get_item_count
+        );
+
+    // TODO : merge all items in one text ?
+    if(item_count != 0)
+    {
+        // item = clipdata.getItemAt(0);
+        jmethodID get_item_at = (*env)->GetMethodID(
+            env,
+            clipdata_class,
+            "getItemAt",
+            "(I)Landroid/content/ClipData$Item;"
+            );
+        jobject item = (*env)->CallObjectMethod(
+            env,
+            clipdata,
+            get_item_at,
+            0
+            );
+
+        // Retrieve text
+        // item_sequence = item.coerceToText();
+        jclass clipdata_item_class = (*env)->FindClass(env, "android/content/ClipData$Item");
+        jmethodID coerce_to_text = (*env)->GetMethodID(
+            env,
+            clipdata_item_class,
+            "coerceToText",
+            "(Landroid/content/Context;)Ljava/lang/CharSequence;"
+            );
+
+        jobject item_sequence  = (*env)->CallObjectMethod(
+            env,
+            item,
+            coerce_to_text,
+            _sapp.android.activity->clazz
+            );
+
+        // item_text = item_sequence.toString();
+        jclass charsequence_class = (*env)->FindClass(env, "java/lang/CharSequence");
+        jmethodID to_string = (*env)->GetMethodID(
+            env,
+            charsequence_class,
+            "toString",
+            "()Ljava/lang/String;"
+            );
+
+        jstring item_text = (*env)->CallObjectMethod(
+            env,
+            item_sequence,
+            to_string
+            );
+
+        // Update buffer
+        const char *text = (*env)->GetStringUTFChars(env, item_text, NULL);
+        _sapp_android_mutf8_to_utf8(text, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+
+        // Cleanup
+        (*env)->ReleaseStringUTFChars(env, item_text, text);
+        (*env)->DeleteLocalRef(env, item_text);
+        (*env)->DeleteLocalRef(env, charsequence_class);
+        (*env)->DeleteLocalRef(env, item_sequence);
+        (*env)->DeleteLocalRef(env, clipdata_item_class);
+        (*env)->DeleteLocalRef(env, item);
+    }
+
+    (*env)->DeleteLocalRef(env, clipdata_class);
+    (*env)->DeleteLocalRef(env, clipdata);
+    (*env)->DeleteLocalRef(env, clipboard_manager_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+
+    return _sapp.clipboard.buffer;
 }
 
 #endif /* _SAPP_ANDROID */
@@ -10078,6 +10422,8 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_set_clipboard_string(str);
     #else
         /* not implemented */
     #endif
@@ -10095,6 +10441,8 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
+    #elif defined(_SAPP_ANDROID)
+        return _sapp_android_get_clipboard_string();
     #else
         /* not implemented */
         return _sapp.clipboard.buffer;
