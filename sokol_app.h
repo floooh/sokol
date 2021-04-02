@@ -1176,7 +1176,7 @@ typedef struct sapp_range {
 #if defined(__cplusplus)
 #define SAPP_RANGE(x) sapp_range{ &x, sizeof(x) }
 #else
-#define SAPP_RANGE(x) (sg_range){ &x, sizeof(x) }
+#define SAPP_RANGE(x) (sapp_range){ &x, sizeof(x) }
 #endif
 
 /*
@@ -1804,6 +1804,8 @@ typedef struct {
 typedef struct {
     HWND hwnd;
     HDC dc;
+    HICON big_icon;
+    HICON small_icon;
     UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
     bool is_win10_or_greater;
@@ -2388,6 +2390,56 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
     }
     _sapp_call_frame();
     _sapp.frame_count++;
+}
+
+_SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image* img) {
+    SOKOL_ASSERT(img->width > 0);
+    SOKOL_ASSERT(img->height > 0);
+    SOKOL_ASSERT(img->pixels.ptr != 0);
+    SOKOL_ASSERT(img->pixels.size > 0);
+    const size_t wh_size = (size_t)(img->width * img->height) * sizeof(uint32_t);
+    if (wh_size != img->pixels.size) {
+        _sapp_fail("Image data size mismatch (must be width*height*4 bytes)\n");
+        return false;
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE int _sapp_icon_choose_image(const sapp_icon* icon, int num_images, int width, int height) {
+    int least_diff = 0x7FFFFFFF;
+    int least_index = 0;
+    for (int i = 0; i < num_images; i++) {
+        int diff = (icon->images[i].width * icon->images[i].height) - (width * height);
+        if (diff < 0) {
+            diff = -diff;
+        }
+        if (diff < least_diff) {
+            least_diff = diff;
+            least_index = i;
+        }
+    }
+    return least_index;
+}
+
+_SOKOL_PRIVATE int _sapp_icon_num_images(const sapp_icon* icon) {
+    int index = 0;
+    for (; index < SAPP_MAX_ICONIMAGES; index++) {
+        if (0 == icon->images[index].pixels.ptr) {
+            break;
+        }
+    }
+    return index;
+}
+
+_SOKOL_PRIVATE bool _sapp_validate_icon(const sapp_icon* icon, int num_images) {
+    SOKOL_ASSERT(num_images <= SAPP_MAX_ICONIMAGES);
+    for (int i = 0; i < num_images; i++) {
+        const sapp_image* img = &icon->images[i];
+        if (!_sapp_image_validate(img)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /*== MacOS/iOS ===============================================================*/
@@ -5911,6 +5963,17 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
 }
 
+_SOKOL_PRIVATE void _sapp_win32_destroy_icons(void) {
+    if (_sapp.win32.big_icon) {
+        DestroyIcon(_sapp.win32.big_icon);
+        _sapp.win32.big_icon = 0;
+    }
+    if (_sapp.win32.small_icon) {
+        DestroyIcon(_sapp.win32.small_icon);
+        _sapp.win32.small_icon = 0;
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
     if (_sapp.desc.win32_console_create || _sapp.desc.win32_console_attach) {
         BOOL con_valid = FALSE;
@@ -6073,8 +6136,79 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
-_SOKOL_PRIVATE void _sapp_win32_update_window_icon(const sapp_icon* icon) {
-    // FIXME
+_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image* img) {
+    BITMAPV5HEADER bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.bV5Size = sizeof(bi);
+    bi.bV5Width = img->width;
+    bi.bV5Height = img->height;
+    bi.bV5Planes = 1;
+    bi.bV5BitCount = 32;
+    bi.bV5Compression = BI_BITFIELDS;
+    bi.bV5RedMask = 0x00FF0000;
+    bi.bV5GreenMask = 0x0000FF00;
+    bi.bV5BlueMask = 0x000000FF;
+    bi.bV5AlphaMask = 0xFF000000;
+
+    uint8_t* target = 0;
+    const uint8_t* source = (const uint8_t*)img->pixels.ptr;
+
+    HDC dc = GetDC(NULL);
+    HBITMAP color = CreateDIBSection(dc, (BITMAPINFO*)&bi, DIB_RGB_COLORS, (void**)&target, NULL, (DWORD)0);
+    ReleaseDC(NULL, dc);
+    if (0 == color) {
+        return NULL;
+    }
+    SOKOL_ASSERT(target);
+
+    HBITMAP mask = CreateBitmap(img->width, img->height, 1, 1, NULL);
+    if (0 == mask) {
+        DeleteObject(color);
+        return NULL;
+    }
+
+    for (int i = 0; i < (img->width*img->height); i++) {
+        target[0] = source[2];
+        target[1] = source[1];
+        target[2] = source[0];
+        target[3] = source[3];
+        target += 4;
+        source += 4;
+    }
+
+    ICONINFO icon_info;
+    memset(&icon_info, 0, sizeof(icon_info));
+    icon_info.fIcon = true;
+    icon_info.xHotspot = 0;
+    icon_info.yHotspot = 0;
+    icon_info.hbmMask = mask;
+    icon_info.hbmColor = color;
+    HICON icon_handle = CreateIconIndirect(&icon_info);
+    DeleteObject(color);
+    DeleteObject(mask);
+
+    return icon_handle;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_update_window_icon(const sapp_icon* icon, int num_images) {
+    int big_img_index = _sapp_icon_choose_image(icon, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+    int sml_img_index = _sapp_icon_choose_image(icon, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+    HICON big_icon = _sapp_win32_create_icon_from_image(&icon->images[big_img_index]);
+    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon->images[sml_img_index]);
+    if (0 != big_icon) {
+        SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_BIG, (LPARAM) big_icon);
+        if (0 != _sapp.win32.big_icon) {
+            DestroyIcon(_sapp.win32.big_icon);
+        }
+        _sapp.win32.big_icon = big_icon;
+    }
+    if (0 != sml_icon) {
+        SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_SMALL, (LPARAM) sml_icon);
+        if (0 != _sapp.win32.small_icon) {
+            DestroyIcon(_sapp.win32.small_icon);
+        }
+        _sapp.win32.small_icon = sml_icon;
+    }
 }
 
 /* don't laugh, but this seems to be the easiest and most robust
@@ -6155,6 +6289,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_win32_destroy_icons();
     _sapp_win32_restore_console();
     _sapp_discard_state();
 }
@@ -10224,11 +10359,15 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
 
 SOKOL_API_IMPL void sapp_set_window_icon(const sapp_icon* icon) {
     SOKOL_ASSERT(icon);
+    const int num_images = _sapp_icon_num_images(icon);
+    if (!_sapp_validate_icon(icon, num_images)) {
+        return;
+    }
     // FIXME: can the HTML5 favicon be created dynamically from pixel data???
     #if defined(_SAPP_WIN32)
-        _sapp_win32_update_window_icon(icon);
+        _sapp_win32_update_window_icon(icon, num_images);
     #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_window_icon(icon);
+        _sapp_x11_update_window_icon(icon, num_images);
     #endif
 }
 
