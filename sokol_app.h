@@ -54,8 +54,8 @@
 
     For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
 
-    Portions of the Windows and Linux GL initialization and event code have been
-    taken from GLFW (http://www.glfw.org/)
+    Portions of the Windows and Linux GL initialization, event-, icon- etc... code
+    have been taken from GLFW (http://www.glfw.org/)
 
     iOS onscreen keyboard support 'inspired' by libgdx.
 
@@ -890,6 +890,7 @@
         distribution.
 */
 #define SOKOL_APP_INCLUDED (1)
+#include <stddef.h> // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -910,12 +911,22 @@
 extern "C" {
 #endif
 
+/* misc constants */
 enum {
     SAPP_MAX_TOUCHPOINTS = 8,
     SAPP_MAX_MOUSEBUTTONS = 3,
     SAPP_MAX_KEYCODES = 512,
+    SAPP_MAX_ICONIMAGES = 8,
 };
 
+/*
+    sapp_event_type
+
+    The type of event that's passed to the event handler callback
+    in the sapp_event.type field. These are not just "traditional"
+    input events, but also notify the application about state changes
+    or other user-invoked actions.
+*/
 typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
     SAPP_EVENTTYPE_KEY_DOWN,
@@ -944,7 +955,14 @@ typedef enum sapp_event_type {
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
 
-/* key codes are the same names and values as GLFW */
+/*
+    sapp_keycode
+
+    The 'virtual keycode' of a KEY_DOWN or KEY_UP event in the
+    struct field sapp_event.key_code.
+
+    Note that the keycode values are identical with GLFW.
+*/
 typedef enum sapp_keycode {
     SAPP_KEYCODE_INVALID          = 0,
     SAPP_KEYCODE_SPACE            = 32,
@@ -1069,6 +1087,15 @@ typedef enum sapp_keycode {
     SAPP_KEYCODE_MENU             = 348,
 } sapp_keycode;
 
+/*
+    sapp_touchpoint
+
+    Describes a single touchpoint in a multitouch event (TOUCHES_BEGAN,
+    TOUCHES_MOVED, TOUCHES_ENDED).
+
+    Touch points are stored in the nested array sapp_event.touches[],
+    and the number of touches is stored in sapp_event.num_touches.
+*/
 typedef struct sapp_touchpoint {
     uintptr_t identifier;
     float pos_x;
@@ -1076,6 +1103,12 @@ typedef struct sapp_touchpoint {
     bool changed;
 } sapp_touchpoint;
 
+/*
+    sapp_mousebutton
+
+    The currently pressed mouse button in the events MOUSE_DOWN
+    and MOUSE_UP, stored in the struct field sapp_event.mouse_button.
+*/
 typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_LEFT = 0x0,
     SAPP_MOUSEBUTTON_RIGHT = 0x1,
@@ -1083,6 +1116,10 @@ typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_INVALID = 0x100,
 } sapp_mousebutton;
 
+/*
+    These are currently pressed modifier keys which are passed in the
+    struct field sapp_event.modifiers.
+*/
 enum {
     SAPP_MODIFIER_SHIFT = 0x1,
     SAPP_MODIFIER_CTRL = 0x2,
@@ -1090,68 +1127,130 @@ enum {
     SAPP_MODIFIER_SUPER = 0x8
 };
 
+/*
+    sapp_event
+
+    This is an all-in-one event struct passed to the event handler
+    user callback function. Note that it depends on the event
+    type what struct fields actually contain useful values, so you
+    should first check the event type before reading other struct
+    fields.
+*/
 typedef struct sapp_event {
-    uint64_t frame_count;
-    sapp_event_type type;
-    sapp_keycode key_code;
-    uint32_t char_code;
-    bool key_repeat;
-    uint32_t modifiers;
-    sapp_mousebutton mouse_button;
-    float mouse_x;
-    float mouse_y;
-    float mouse_dx;
-    float mouse_dy;
-    float scroll_x;
-    float scroll_y;
-    int num_touches;
-    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];
-    int window_width;
+    uint64_t frame_count;               // current frame counter, always valid, useful for checking if two events were issued in the same frame
+    sapp_event_type type;               // the event type, always valid
+    sapp_keycode key_code;              // the virtual key code, only valid in KEY_UP, KEY_DOWN
+    uint32_t char_code;                 // the UTF-32 character code, only valid in CHAR events
+    bool key_repeat;                    // true if this is a key-repeat event, valid in KEY_UP, KEY_DOWN and CHAR
+    uint32_t modifiers;                 // current modifier keys, valid in all key-, char- and mouse-events
+    sapp_mousebutton mouse_button;      // mouse button that was pressed or released, valid in MOUSE_DOWN, MOUSE_UP
+    float mouse_x;                      // current horizontal mouse position in pixels, always valid except during mouse lock
+    float mouse_y;                      // current vertical mouse position in pixels, always valid except during mouse lock
+    float mouse_dx;                     // relative horizontal mouse movement since last frame, always valid
+    float mouse_dy;                     // relative vertical mouse movement since last frame, always valid
+    float scroll_x;                     // horizontal mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    float scroll_y;                     // vertical mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    int num_touches;                    // number of valid items in the touches[] array
+    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];  // current touch points, valid in TOUCHES_BEGIN, TOUCHES_MOVED, TOUCHES_ENDED
+    int window_width;                   // current window- and framebuffer sizes in pixels, always valid
     int window_height;
-    int framebuffer_width;
-    int framebuffer_height;
+    int framebuffer_width;              // = window_width * dpi_scale
+    int framebuffer_height;             // = window_height * dpi_scale
 } sapp_event;
 
+/*
+    sg_range
+
+    A general range struct and constructor macros for passing binary blobs
+    into sokol_app.h.
+*/
+typedef struct sapp_range {
+    const void* ptr;
+    size_t size;
+} sapp_range;
+// disabling this for every includer isn't great, but the warnings are also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#endif
+#if defined(__cplusplus)
+#define SAPP_RANGE(x) sapp_range{ &x, sizeof(x) }
+#else
+#define SAPP_RANGE(x) (sg_range){ &x, sizeof(x) }
+#endif
+
+/*
+    sapp_image
+
+    This is used to pass image data into sokol_app.h (at first, window
+    icons, later maybe cursor images).
+
+    Note that the actual image pixel format depends on the use case:
+
+    - window icon pixels are RGBA8
+    - cursor images are ??? (FIXME)
+*/
+typedef struct sapp_image {
+    int width;
+    int height;
+    sapp_range pixels;
+} sapp_image;
+
+/*
+    sapp_icon
+
+    Instead of providing a single one-size-fits-all icon, applications
+    can pass a number of differently sized candidate images to sokol_app.h,
+    and the underlying window system specific code will pick the best match
+    from the provided candidate images.
+*/
+typedef struct sapp_icon {
+    sapp_image images[SAPP_MAX_ICONIMAGES];
+} sapp_icon;
+
+
 typedef struct sapp_desc {
-    void (*init_cb)(void);                  /* these are the user-provided callbacks without user data */
+    void (*init_cb)(void);                  // these are the user-provided callbacks without user data
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
 
-    void* user_data;                        /* these are the user-provided callbacks with user data */
+    void* user_data;                        // these are the user-provided callbacks with user data
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
     void (*cleanup_userdata_cb)(void*);
     void (*event_userdata_cb)(const sapp_event*, void*);
     void (*fail_userdata_cb)(const char*, void*);
 
-    int width;                          /* the preferred width of the window / canvas */
-    int height;                         /* the preferred height of the window / canvas */
-    int sample_count;                   /* MSAA sample count */
-    int swap_interval;                  /* the preferred swap interval (ignored on some platforms) */
-    bool high_dpi;                      /* whether the rendering canvas is full-resolution on HighDPI displays */
-    bool fullscreen;                    /* whether the window should be created in fullscreen mode */
-    bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
-    const char* window_title;           /* the window title as UTF-8 encoded string */
-    bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
-    bool enable_clipboard;              /* enable clipboard access, default is false */
-    int clipboard_size;                 /* max size of clipboard content in bytes */
-    bool enable_dragndrop;              /* enable file dropping (drag'n'drop), default is false */
-    int max_dropped_files;              /* max number of dropped files to process (default: 1) */
-    int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
+    int width;                          // the preferred width of the window / canvas
+    int height;                         // the preferred height of the window / canvas
+    int sample_count;                   // MSAA sample count
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
+    bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
+    bool fullscreen;                    // whether the window should be created in fullscreen mode
+    bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
+    const char* window_title;           // the window title as UTF-8 encoded string
+    bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+    bool enable_clipboard;              // enable clipboard access, default is false
+    int clipboard_size;                 // max size of clipboard content in bytes
+    bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
+    int max_dropped_files;              // max number of dropped files to process (default: 1)
+    int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
+
+    sapp_icon icon;                     // optional window icon image candidates
 
     /* backend-specific options */
-    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
-    bool win32_console_utf8;            /* if true, set the output console codepage to UTF-8 */
-    bool win32_console_create;          /* if true, attach stdout/stderr to a new console window */
-    bool win32_console_attach;          /* if true, attach stdout/stderr to parent process */
-    const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
-    bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
-    bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
-    bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
-    bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
-    bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
+    bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
+    bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
+    bool win32_console_create;          // if true, attach stdout/stderr to a new console window
+    bool win32_console_attach;          // if true, attach stdout/stderr to parent process
+    const char* html5_canvas_name;      // the name (id) of the HTML5 canvas element, default is "canvas"
+    bool html5_canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
+    bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
+    bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
+    bool html5_ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
+    bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
@@ -1240,6 +1339,8 @@ SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
 /* set the window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
+/* set the window icon (only on Windows and Linux) */
+SOKOL_APP_API_DECL void sapp_set_window_icon(const sapp_icon* icon);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
 SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 /* gets the dropped file paths */
