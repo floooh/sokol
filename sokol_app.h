@@ -6199,26 +6199,44 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
 }
 
 _SOKOL_PRIVATE void _sapp_win32_update_window_icon(const sapp_icon_desc* icon_desc, int num_images) {
-    if (0 == num_images) {
-        return;
+    HICON big_icon = NULL;
+    HICON sml_icon = NULL;
+    bool icons_owned = false;
+
+    // platform_default flag overrides images
+    if (icon_desc->platform_default) {
+        // lookup the window's default icon
+        big_icon = (HICON) GetClassLongPtrW(_sapp.win32.hwnd, GCLP_HICON);
+        sml_icon = (HICON) GetClassLongPtrW(_sapp.win32.hwnd, GCLP_HICONSM);
     }
-    int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
-    int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
-    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
+    else if (num_images > 0) {
+        icons_owned = true;
+        int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+        int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+        big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
+        sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
+    }
+
+    // if icon creation or lookup has failed for some reason, leave the currently set icon untouched
     if (0 != big_icon) {
         SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_BIG, (LPARAM) big_icon);
         if (0 != _sapp.win32.big_icon) {
             DestroyIcon(_sapp.win32.big_icon);
+            _sapp.win32.big_icon = 0;
         }
-        _sapp.win32.big_icon = big_icon;
+        if (icons_owned) {
+            _sapp.win32.big_icon = big_icon;
+        }
     }
     if (0 != sml_icon) {
         SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_SMALL, (LPARAM) sml_icon);
         if (0 != _sapp.win32.small_icon) {
             DestroyIcon(_sapp.win32.small_icon);
+            _sapp.win32.small_icon = 0;
         }
-        _sapp.win32.small_icon = sml_icon;
+        if (icons_owned) {
+            _sapp.win32.small_icon = sml_icon;
+        }
     }
 }
 
