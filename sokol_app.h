@@ -3977,6 +3977,31 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     }
 }
 
+/* JS helper function to update browser tab favicon */
+EM_JS(void, sapp_js_set_favicon, (int w, int h, void* pixels), {
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    // FIXME: blit pixels
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(0, 0, w, h);
+    var new_link = document.createElement('link');
+    new_link.id = 'sokol-app-favicon';
+    new_link.rel = 'shortcut icon';
+    new_link.href = canvas.toDataURL();
+    var old_link = document.getElementById('sokol-app-favicon');
+    if (old_link) {
+        document.head.removeChild(old_link);
+    }
+    document.head.appendChild(new_link);
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    // FIXME
+    sapp_js_set_favicon(16, 16, 0);
+}
+
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
@@ -10444,6 +10469,8 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
         _sapp_win32_set_icon(desc, num_images);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_set_icon(desc, num_images);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_set_icon(desc, num_images);
     #endif
 }
 
