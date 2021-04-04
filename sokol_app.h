@@ -6150,7 +6150,7 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
     memset(&bi, 0, sizeof(bi));
     bi.bV5Size = sizeof(bi);
     bi.bV5Width = desc->width;
-    bi.bV5Height = desc->height;
+    bi.bV5Height = -desc->height;   // NOTE the '-' here to indicate that origin is top-left
     bi.bV5Planes = 1;
     bi.bV5BitCount = 32;
     bi.bV5Compression = BI_BITFIELDS;
@@ -9366,7 +9366,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
     else if (num_images > 0) {
         int long_count = 0;
         for (int i = 0; i < num_images; i++) {
-            const sapp_image_desc* img_desc = &icon_desc->images[i]; 
+            const sapp_image_desc* img_desc = &icon_desc->images[i];
             long_count += 2 + (img_desc->width * img_desc->height);
         }
         long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
@@ -9374,7 +9374,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
         long* dst = icon_data;
 
         for (int img_index = 0; img_index < num_images; img_index++) {
-            const sapp_image_desc* img_desc = &icon_desc->images[img_index]; 
+            const sapp_image_desc* img_desc = &icon_desc->images[img_index];
             const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
             *dst++ = img_desc->width;
             *dst++ = img_desc->height;
