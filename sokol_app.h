@@ -1348,7 +1348,7 @@ SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
 /* set the window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
 /* set the window icon (only on Windows and Linux) */
-SOKOL_APP_API_DECL void sapp_set_window_icon(const sapp_icon_desc* icon_desc);
+SOKOL_APP_API_DECL void sapp_set_icon(const sapp_icon_desc* icon_desc);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
 SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 /* gets the dropped file paths */
@@ -2044,6 +2044,7 @@ typedef struct {
     Atom WM_STATE;
     Atom NET_WM_NAME;
     Atom NET_WM_ICON_NAME;
+    Atom NET_WM_ICON;
     Atom NET_WM_STATE;
     Atom NET_WM_STATE_FULLSCREEN;
     _sapp_xi_t xi;
@@ -6198,7 +6199,7 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
     return icon_handle;
 }
 
-_SOKOL_PRIVATE void _sapp_win32_update_window_icon(const sapp_icon_desc* icon_desc, int num_images) {
+_SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
     HICON big_icon = NULL;
     HICON sml_icon = NULL;
     bool icons_owned = false;
@@ -8896,6 +8897,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.WM_STATE                = XInternAtom(_sapp.x11.display, "WM_STATE", False);
     _sapp.x11.NET_WM_NAME             = XInternAtom(_sapp.x11.display, "_NET_WM_NAME", False);
     _sapp.x11.NET_WM_ICON_NAME        = XInternAtom(_sapp.x11.display, "_NET_WM_ICON_NAME", False);
+    _sapp.x11.NET_WM_ICON             = XInternAtom(_sapp.x11.display, "_NET_WM_ICON", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
     if (_sapp.drop.enabled) {
@@ -9348,8 +9350,53 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     XFlush(_sapp.x11.display);
 }
 
-_SOKOL_PRIVATE void _sapp_x11_update_window_icon(const sapp_icon* icon) {
-    // FIXME
+_SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    SOKOL_ASSERT(num_images <= SAPP_MAX_ICONIMAGES);
+    if (icon_desc->platform_default || (num_images == 0)) {
+        // deleting the icon property doesn't actually change the displayed
+        // icon, so what we'll do instead is set an 'empty' 4x4 icon instead
+        long empty_icon[18] = { 4, 4, 0 };
+        XChangeProperty(_sapp.x11.display, _sapp.x11.window,
+            _sapp.x11.NET_WM_ICON,
+            XA_CARDINAL, 32,
+            PropModeReplace,
+            (unsigned char*)empty_icon,
+            18);
+    }
+    else if (num_images > 0) {
+        int long_count = 0;
+        for (int i = 0; i < num_images; i++) {
+            const sapp_image_desc* img_desc = &icon_desc->images[i]; 
+            long_count += 2 + (img_desc->width * img_desc->height);
+        }
+        long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
+        SOKOL_ASSERT(icon_data);
+        long* dst = icon_data;
+
+        for (int img_index = 0; img_index < num_images; img_index++) {
+            const sapp_image_desc* img_desc = &icon_desc->images[img_index]; 
+            const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
+            *dst++ = img_desc->width;
+            *dst++ = img_desc->height;
+            const int num_pixels = img_desc->width * img_desc->height;
+            for (int pixel_index = 0; pixel_index < num_pixels; pixel_index++) {
+                *dst++ = (src[pixel_index * 4 + 0] << 16) |
+                         (src[pixel_index * 4 + 1] << 8) |
+                         (src[pixel_index * 4 + 2] << 0) |
+                         (src[pixel_index * 4 + 3] << 24);
+            }
+        }
+
+        XChangeProperty(_sapp.x11.display, _sapp.x11.window,
+            _sapp.x11.NET_WM_ICON,
+            XA_CARDINAL, 32,
+            PropModeReplace,
+            (unsigned char*)icon_data,
+            long_count);
+
+        SOKOL_FREE(icon_data);
+    }
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
@@ -10386,7 +10433,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_set_window_icon(const sapp_icon_desc* desc) {
+SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
     SOKOL_ASSERT(desc);
     const int num_images = _sapp_icon_num_images(desc);
     if (!_sapp_validate_icon_desc(desc, num_images)) {
@@ -10394,9 +10441,9 @@ SOKOL_API_IMPL void sapp_set_window_icon(const sapp_icon_desc* desc) {
     }
     // FIXME: can the HTML5 favicon be created dynamically from pixel data???
     #if defined(_SAPP_WIN32)
-        _sapp_win32_update_window_icon(desc, num_images);
+        _sapp_win32_set_icon(desc, num_images);
     #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_window_icon(desc, num_images);
+        _sapp_x11_set_icon(desc, num_images);
     #endif
 }
 
