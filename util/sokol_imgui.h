@@ -1781,8 +1781,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_wgpu);
         shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _simgui_vs_src_dummy;
-        shd_desc.fs.source = _simgui_fs_src_dummy;
+        shd_desc.vs.source = _simgui_vs_source_dummy;
+        shd_desc.fs.source = _simgui_fs_source_dummy;
     #endif
     _simgui.shd = sg_make_shader(&shd_desc);
 
