@@ -3977,29 +3977,46 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     }
 }
 
-/* JS helper function to update browser tab favicon */
-EM_JS(void, sapp_js_set_favicon, (int w, int h, void* pixels), {
+/* JS helper functions to update browser tab favicon */
+EM_JS(void, sapp_js_clear_favicon, (void), {
+    var link = document.getElementById('sokol-app-favicon');
+    if (link) {
+        document.head.removeChild(link);
+    }
+});
+
+EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
     var canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     var ctx = canvas.getContext('2d');
-    // FIXME: blit pixels
-    ctx.fillStyle = '#f00';
-    ctx.fillRect(0, 0, w, h);
+    var img_data = ctx.createImageData(w, h);
+    img_data.data.set(HEAPU8.subarray(pixels, pixels + w*h*4));
+    ctx.putImageData(img_data, 0, 0);
     var new_link = document.createElement('link');
     new_link.id = 'sokol-app-favicon';
     new_link.rel = 'shortcut icon';
     new_link.href = canvas.toDataURL();
-    var old_link = document.getElementById('sokol-app-favicon');
-    if (old_link) {
-        document.head.removeChild(old_link);
-    }
     document.head.appendChild(new_link);
 });
 
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
-    // FIXME
-    sapp_js_set_favicon(16, 16, 0);
+    sapp_js_clear_favicon();
+
+    /* unfortunately, just clearing the favicon link element doesn't change
+        the actual favicon shown in the tab, so just use an 'empty' favicon
+        as 'platform default' (same like we do on X11)
+    */
+    if (icon_desc->platform_default || (num_images == 0)) {
+        uint32_t empty[16] = { 0 };
+        sapp_js_set_favicon(4, 4, (const uint8_t*) empty);
+    }
+    else if (num_images > 0) {
+        // find the best matching image candidate for 16x16 pixels
+        int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, 16, 16);
+        const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+        sapp_js_set_favicon(img_desc->width, img_desc->height, (const uint8_t*) img_desc->pixels.ptr);
+    }
 }
 
 #if defined(SOKOL_WGPU)
@@ -9387,6 +9404,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
             PropModeReplace,
             (unsigned char*)empty_icon,
             18);
+        XFlush(_sapp.x11.display);
     }
     else if (num_images > 0) {
         int long_count = 0;
@@ -9397,7 +9415,6 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
         long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
         SOKOL_ASSERT(icon_data);
         long* dst = icon_data;
-
         for (int img_index = 0; img_index < num_images; img_index++) {
             const sapp_image_desc* img_desc = &icon_desc->images[img_index];
             const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
@@ -9411,17 +9428,15 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
                          (src[pixel_index * 4 + 3] << 24);
             }
         }
-
         XChangeProperty(_sapp.x11.display, _sapp.x11.window,
             _sapp.x11.NET_WM_ICON,
             XA_CARDINAL, 32,
             PropModeReplace,
             (unsigned char*)icon_data,
             long_count);
-
         SOKOL_FREE(icon_data);
+        XFlush(_sapp.x11.display);
     }
-    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
