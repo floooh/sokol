@@ -2745,8 +2745,8 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
         shd_desc.vs.bytecode = SG_RANGE(_sgl_vs_bytecode_wgpu);
         shd_desc.fs.bytecode = SG_RANGE(_sgl_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _sgl_vs_src_dummy;
-        shd_desc.fs.source = _sgl_fs_src_dummy;
+        shd_desc.vs.source = _sgl_vs_source_dummy;
+        shd_desc.fs.source = _sgl_fs_source_dummy;
     #endif
     _sgl.shd = sg_make_shader(&shd_desc);
     SOKOL_ASSERT(SG_INVALID_ID != _sgl.shd.id);

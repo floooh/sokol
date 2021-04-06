@@ -1764,8 +1764,8 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         vs_bytecode = SG_RANGE(_snk_vs_bytecode_wgpu);
         fs_bytecode = SG_RANGE(_snk_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _snk_vs_source_dummy;
-        shd_desc.fs.source = _snk_fs_source_dummy;
+        vs_source = _snk_vs_source_dummy;
+        fs_source = _snk_fs_source_dummy;
     #endif
 
     /* Shader */
