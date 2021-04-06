@@ -272,7 +272,7 @@ inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc)
 #include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
-#if !defined(SOKOL_IMGUI_NO_SOKOL_APP) && defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 #include <emscripten.h>
 #endif
 
@@ -1594,7 +1594,7 @@ static const char* _simgui_get_clipboard(void* user_data) {
 }
 #endif
 
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 EM_JS(int, simgui_js_is_osx, (void), {
     if (navigator.userAgent.includes('Macintosh')) {
         return 1;
@@ -1606,12 +1606,14 @@ EM_JS(int, simgui_js_is_osx, (void), {
 #endif
 
 static bool _simgui_is_osx(void) {
-    #if defined(__EMSCRIPTEN__)
-    return simgui_js_is_osx();
+    #if defined(SOKOL_DUMMY_BACKEND)
+        return false;
+    #elif defined(__EMSCRIPTEN__)
+        return simgui_js_is_osx();
     #elif defined(__APPLE__)
-    return true;
+        return true;
     #else
-    return false;
+        return false;
     #endif
 }
 
