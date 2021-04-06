@@ -1632,7 +1632,6 @@ static void _snk_clipboard_paste(nk_handle usr, struct nk_text_edit *edit) {
     }
     (void)usr;
 }
-#endif
 
 #if defined(__EMSCRIPTEN__)
 EM_JS(int, snk_js_is_osx, (void), {
@@ -1654,6 +1653,7 @@ static bool _snk_is_osx(void) {
     return false;
     #endif
 }
+#endif // !SOKOL_NUKLEAR_NO_SOKOL_APP
 
 SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     SOKOL_ASSERT(desc);
