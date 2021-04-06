@@ -2163,6 +2163,8 @@ typedef struct {
     _sapp_mouse_t mouse;
     _sapp_clipboard_t clipboard;
     _sapp_drop_t drop;
+    sapp_icon_desc default_icon_desc;
+    uint32_t* default_icon_pixels;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2353,6 +2355,9 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
         SOKOL_ASSERT(_sapp.drop.buffer);
         SOKOL_FREE((void*)_sapp.drop.buffer);
     }
+    if (_sapp.default_icon_pixels) {
+        SOKOL_FREE((void*)_sapp.default_icon_pixels);
+    }
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
 
@@ -2449,6 +2454,78 @@ _SOKOL_PRIVATE bool _sapp_validate_icon_desc(const sapp_icon_desc* desc, int num
         }
     }
     return true;
+}
+
+_SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
+    SOKOL_ASSERT(0 == _sapp.default_icon_pixels);
+
+    const int num_icons = 3;
+    const int icon_sizes[3] = { 16, 32, 64 };   // must be multiple of 8!
+
+    // allocate a pixel buffer for all icon pixels
+    int all_num_pixels = 0;
+    for (int i = 0; i < num_icons; i++) {
+        all_num_pixels += icon_sizes[i] * icon_sizes[i];
+    }
+    _sapp.default_icon_pixels = (uint32_t*) SOKOL_CALLOC((size_t)all_num_pixels, sizeof(uint32_t));
+
+    // initialize default_icon_desc struct
+    uint32_t* dst = _sapp.default_icon_pixels;
+    const uint32_t* dst_end = dst + all_num_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = (int) icon_sizes[i];
+        const int num_pixels = dim * dim;
+        sapp_image_desc* img_desc = &_sapp.default_icon_desc.images[i];
+        img_desc->width = dim;
+        img_desc->height = dim;
+        img_desc->pixels.ptr = dst;
+        img_desc->pixels.size = num_pixels * sizeof(uint32_t);
+        dst += num_pixels;
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // Amstrad CPC font 'S'
+    const uint8_t tile[8] = {
+        0x3C,
+        0x66,
+        0x60,
+        0x3C,
+        0x06,
+        0x66,
+        0x3C,
+        0x00,
+    };
+    // rainbow colors
+    const uint32_t colors[8] = {
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+        0xFF0088FF,
+    };
+    dst = _sapp.default_icon_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        SOKOL_ASSERT((dim % 8) == 0);
+        const int scale = dim / 8;
+        for (int ty = 0; ty < 8; ty++) {
+            const uint32_t color = colors[ty];
+            for (int sy = 0; sy < scale; sy++) {
+                uint8_t bits = tile[ty];
+                for (int tx = 0; tx < 8; tx++, bits<<=1) {
+                    uint32_t pixel = (0 == (bits & 0x80)) ? (color & 0x00FFFFFF) : color;
+                    for (int sx = 0; sx < scale; sx++) {
+                        SOKOL_ASSERT(dst < dst_end);
+                        *dst++ = pixel;
+                    }
+                }
+            }
+        }
+    }
+    SOKOL_ASSERT(dst == dst_end);
 }
 
 /*== MacOS/iOS ===============================================================*/
@@ -10475,11 +10552,17 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
 
 SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
     SOKOL_ASSERT(desc);
+    if (desc->sokol_default) {
+        if (0 == _sapp.default_icon_pixels) {
+            _sapp_setup_default_icon();
+        }
+        SOKOL_ASSERT(0 != _sapp.default_icon_pixels);
+        desc = &_sapp.default_icon_desc;
+    }
     const int num_images = _sapp_icon_num_images(desc);
     if (!_sapp_validate_icon_desc(desc, num_images)) {
         return;
     }
-    // FIXME: can the HTML5 favicon be created dynamically from pixel data???
     #if defined(_SAPP_WIN32)
         _sapp_win32_set_icon(desc, num_images);
     #elif defined(_SAPP_LINUX)
