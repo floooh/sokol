@@ -2477,7 +2477,7 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
         img_desc->width = dim;
         img_desc->height = dim;
         img_desc->pixels.ptr = dst;
-        img_desc->pixels.size = num_pixels * sizeof(uint32_t);
+        img_desc->pixels.size = (size_t)num_pixels * sizeof(uint32_t);
         dst += num_pixels;
     }
     SOKOL_ASSERT(dst == dst_end);
