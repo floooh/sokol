@@ -2497,33 +2497,73 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     };
     // rainbow colors
     const uint32_t colors[8] = {
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
-        0xFF0088FF,
+        0xFF4370FF,
+        0xFF26A7FF,
+        0xFF58EEFF,
+        0xFF57E1D4,
+        0xFF65CC9C,
+        0xFF6ABB66,
+        0xFFF5A542,
+        0xFFC2577E,
     };
     dst = _sapp.default_icon_pixels;
+    const uint32_t blank = 0x00FFFFFF;
+    const uint32_t shadow = 0xFF000000;
     for (int i = 0; i < num_icons; i++) {
         const int dim = icon_sizes[i];
         SOKOL_ASSERT((dim % 8) == 0);
         const int scale = dim / 8;
-        for (int ty = 0; ty < 8; ty++) {
+        for (int ty = 0, y = 0; ty < 8; ty++) {
             const uint32_t color = colors[ty];
-            for (int sy = 0; sy < scale; sy++) {
+            for (int sy = 0; sy < scale; sy++, y++) {
                 uint8_t bits = tile[ty];
-                for (int tx = 0; tx < 8; tx++, bits<<=1) {
-                    uint32_t pixel = (0 == (bits & 0x80)) ? (color & 0x00FFFFFF) : color;
-                    for (int sx = 0; sx < scale; sx++) {
+                for (int tx = 0, x = 0; tx < 8; tx++, bits<<=1) {
+                    uint32_t pixel = (0 == (bits & 0x80)) ? blank : color;
+                    for (int sx = 0; sx < scale; sx++, x++) {
                         SOKOL_ASSERT(dst < dst_end);
                         *dst++ = pixel;
                     }
                 }
             }
         }
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // right shadow
+    dst = _sapp.default_icon_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        for (int y = 0; y < dim; y++) {
+            uint32_t prev_color = blank;
+            for (int x = 0; x < dim; x++) {
+                const int dst_index = y * dim + x;
+                const uint32_t cur_color = dst[dst_index];
+                if ((cur_color == blank) && (prev_color != blank)) {
+                    dst[dst_index] = shadow;
+                }
+                prev_color = cur_color;
+            }
+        }
+        dst += dim * dim;
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // bottom shadow
+    dst = _sapp.default_icon_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        for (int x = 0; x < dim; x++) {
+            uint32_t prev_color = blank;
+            for (int y = 0; y < dim; y++) {
+                const int dst_index = y * dim + x;
+                const uint32_t cur_color = dst[dst_index];
+                if ((cur_color == blank) && (prev_color != blank)) {
+                    dst[dst_index] = shadow;
+                }
+                prev_color = cur_color;
+            }
+        }
+        dst += dim * dim;
     }
     SOKOL_ASSERT(dst == dst_end);
 }
