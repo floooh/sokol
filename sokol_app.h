@@ -135,6 +135,7 @@
     clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
     drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    window icon         | YES     | ---   | YES   | ---   | ---     | TODO | TODO  | YES
 
     TODO
     ====
@@ -1207,13 +1208,10 @@ typedef struct sapp_image_desc {
 
     To set sokol-app's default icon instead, set .sokol_default to true.
 
-    To set the platform's default icon for applications, set .platform_default to true.
-
     Otherwise, provide one or more custom images in the .images[] array.
 */
 typedef struct sapp_icon_desc {
     bool sokol_default;
-    bool platform_default;
     sapp_image_desc images[SAPP_MAX_ICONIMAGES];
 } sapp_icon_desc;
 
@@ -1246,7 +1244,7 @@ typedef struct sapp_desc {
     bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
     int max_dropped_files;              // max number of dropped files to process (default: 1)
     int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
-    sapp_icon_desc window_icon;         // the initial window icon to set
+    sapp_icon_desc icon;                // the initial window icon to set
 
     /* backend-specific options */
     bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
@@ -4118,22 +4116,12 @@ EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
 });
 
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
     sapp_js_clear_favicon();
-
-    /* unfortunately, just clearing the favicon link element doesn't change
-        the actual favicon shown in the tab, so just use an 'empty' favicon
-        as 'platform default' (same like we do on X11)
-    */
-    if (icon_desc->platform_default || (num_images == 0)) {
-        uint32_t empty[16] = { 0 };
-        sapp_js_set_favicon(4, 4, (const uint8_t*) empty);
-    }
-    else if (num_images > 0) {
-        // find the best matching image candidate for 16x16 pixels
-        int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, 16, 16);
-        const sapp_image_desc* img_desc = &icon_desc->images[img_index];
-        sapp_js_set_favicon(img_desc->width, img_desc->height, (const uint8_t*) img_desc->pixels.ptr);
-    }
+    // find the best matching image candidate for 16x16 pixels
+    int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, 16, 16);
+    const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+    sapp_js_set_favicon(img_desc->width, img_desc->height, (const uint8_t*) img_desc->pixels.ptr);
 }
 
 #if defined(SOKOL_WGPU)
@@ -4899,6 +4887,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     #endif
     _sapp.valid = true;
     _sapp_emsc_register_eventhandlers();
+    sapp_set_icon(&desc->icon);
 
     /* start the frame loop */
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
@@ -6359,44 +6348,27 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
 }
 
 _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
-    HICON big_icon = NULL;
-    HICON sml_icon = NULL;
-    bool icons_owned = false;
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
 
-    // platform_default flag overrides images
-    if (icon_desc->platform_default) {
-        // lookup the window's default icon
-        big_icon = (HICON) GetClassLongPtrW(_sapp.win32.hwnd, GCLP_HICON);
-        sml_icon = (HICON) GetClassLongPtrW(_sapp.win32.hwnd, GCLP_HICONSM);
-    }
-    else if (num_images > 0) {
-        icons_owned = true;
-        int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
-        int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-        big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
-        sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
-    }
+    int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+    int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
+    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
 
     // if icon creation or lookup has failed for some reason, leave the currently set icon untouched
     if (0 != big_icon) {
         SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_BIG, (LPARAM) big_icon);
         if (0 != _sapp.win32.big_icon) {
             DestroyIcon(_sapp.win32.big_icon);
-            _sapp.win32.big_icon = 0;
         }
-        if (icons_owned) {
-            _sapp.win32.big_icon = big_icon;
-        }
+        _sapp.win32.big_icon = big_icon;
     }
     if (0 != sml_icon) {
         SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_SMALL, (LPARAM) sml_icon);
         if (0 != _sapp.win32.small_icon) {
             DestroyIcon(_sapp.win32.small_icon);
-            _sapp.win32.small_icon = 0;
         }
-        if (icons_owned) {
-            _sapp.win32.small_icon = sml_icon;
-        }
+        _sapp.win32.small_icon = sml_icon;
     }
 }
 
@@ -6423,6 +6395,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
     _sapp_win32_create_window();
+    sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
@@ -9510,50 +9483,36 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
-    SOKOL_ASSERT(num_images <= SAPP_MAX_ICONIMAGES);
-    if (icon_desc->platform_default || (num_images == 0)) {
-        // deleting the icon property doesn't actually change the displayed
-        // icon, so what we'll do instead is set an 'empty' 4x4 icon instead
-        long empty_icon[18] = { 4, 4, 0 };
-        XChangeProperty(_sapp.x11.display, _sapp.x11.window,
-            _sapp.x11.NET_WM_ICON,
-            XA_CARDINAL, 32,
-            PropModeReplace,
-            (unsigned char*)empty_icon,
-            18);
-        XFlush(_sapp.x11.display);
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
+    int long_count = 0;
+    for (int i = 0; i < num_images; i++) {
+        const sapp_image_desc* img_desc = &icon_desc->images[i];
+        long_count += 2 + (img_desc->width * img_desc->height);
     }
-    else if (num_images > 0) {
-        int long_count = 0;
-        for (int i = 0; i < num_images; i++) {
-            const sapp_image_desc* img_desc = &icon_desc->images[i];
-            long_count += 2 + (img_desc->width * img_desc->height);
+    long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
+    SOKOL_ASSERT(icon_data);
+    long* dst = icon_data;
+    for (int img_index = 0; img_index < num_images; img_index++) {
+        const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+        const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
+        *dst++ = img_desc->width;
+        *dst++ = img_desc->height;
+        const int num_pixels = img_desc->width * img_desc->height;
+        for (int pixel_index = 0; pixel_index < num_pixels; pixel_index++) {
+            *dst++ = (src[pixel_index * 4 + 0] << 16) |
+                        (src[pixel_index * 4 + 1] << 8) |
+                        (src[pixel_index * 4 + 2] << 0) |
+                        (src[pixel_index * 4 + 3] << 24);
         }
-        long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
-        SOKOL_ASSERT(icon_data);
-        long* dst = icon_data;
-        for (int img_index = 0; img_index < num_images; img_index++) {
-            const sapp_image_desc* img_desc = &icon_desc->images[img_index];
-            const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
-            *dst++ = img_desc->width;
-            *dst++ = img_desc->height;
-            const int num_pixels = img_desc->width * img_desc->height;
-            for (int pixel_index = 0; pixel_index < num_pixels; pixel_index++) {
-                *dst++ = (src[pixel_index * 4 + 0] << 16) |
-                         (src[pixel_index * 4 + 1] << 8) |
-                         (src[pixel_index * 4 + 2] << 0) |
-                         (src[pixel_index * 4 + 3] << 24);
-            }
-        }
-        XChangeProperty(_sapp.x11.display, _sapp.x11.window,
-            _sapp.x11.NET_WM_ICON,
-            XA_CARDINAL, 32,
-            PropModeReplace,
-            (unsigned char*)icon_data,
-            long_count);
-        SOKOL_FREE(icon_data);
-        XFlush(_sapp.x11.display);
     }
+    XChangeProperty(_sapp.x11.display, _sapp.x11.window,
+        _sapp.x11.NET_WM_ICON,
+        XA_CARDINAL, 32,
+        PropModeReplace,
+        (unsigned char*)icon_data,
+        long_count);
+    SOKOL_FREE(icon_data);
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
@@ -10304,6 +10263,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_glx_choose_visual(&visual, &depth);
     _sapp_x11_create_window(visual, depth);
     _sapp_glx_create_context();
+    sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
     if (_sapp.fullscreen) {
@@ -10600,6 +10560,10 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
         desc = &_sapp.default_icon_desc;
     }
     const int num_images = _sapp_icon_num_images(desc);
+    if (num_images == 0) {
+        return;
+    }
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
     if (!_sapp_validate_icon_desc(desc, num_images)) {
         return;
     }
