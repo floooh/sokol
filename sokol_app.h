@@ -9489,7 +9489,7 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
         const sapp_image_desc* img_desc = &icon_desc->images[i];
         long_count += 2 + (img_desc->width * img_desc->height);
     }
-    long* icon_data = SOKOL_CALLOC((size_t)long_count, sizeof(long));
+    long* icon_data = (long*) SOKOL_CALLOC((size_t)long_count, sizeof(long));
     SOKOL_ASSERT(icon_data);
     long* dst = icon_data;
     for (int img_index = 0; img_index < num_images; img_index++) {
