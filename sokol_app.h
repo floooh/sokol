@@ -2470,6 +2470,7 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     // initialize default_icon_desc struct
     uint32_t* dst = _sapp.default_icon_pixels;
     const uint32_t* dst_end = dst + all_num_pixels;
+    (void)dst_end; // silence unused warning in release mode
     for (int i = 0; i < num_icons; i++) {
         const int dim = (int) icon_sizes[i];
         const int num_pixels = dim * dim;
