@@ -20,8 +20,8 @@ module_names = {
 }
 
 c_source_paths = {
-    'sg_':      'sokol-beef/src/sokol/c/sokol_app_gfx.c',
-    'sapp_':    'sokol-beef/src/sokol/c/sokol_app_gfx.c',
+    'sg_':      'sokol-beef/src/sokol/c/sokol_gfx.c',
+    'sapp_':    'sokol-beef/src/sokol/c/sokol_app.c',
     'stm_':     'sokol-beef/src/sokol/c/sokol_time.c',
     'saudio_':  'sokol-beef/src/sokol/c/sokol_audio.c',
     'sgl_':     'sokol-beef/src/sokol/c/sokol_gl.c',
@@ -32,6 +32,8 @@ c_source_paths = {
 func_name_ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
+    'sg_install_trace_hooks',
+    'sg_trace_hooks',
 ]
 
 func_name_overrides = {
