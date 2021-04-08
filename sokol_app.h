@@ -842,7 +842,8 @@
             .images = {
                 { .width = 16, .height = 16, .pixels = SAPP_RANGE(small) },
                 { .width = 32, .height = 32, .pixels = SAPP_RANGE(medium) },
-                { .width = 64, .height = 64, .pixels = SAPP_RANGE(big) }
+                // ...or without the SAPP_RANGE helper macro:
+                { .width = 64, .height = 64, .pixels = { .ptr=big, .size=sizeof(big) } }
             }
         };
 
@@ -1260,7 +1261,7 @@ typedef struct sapp_event {
 /*
     sg_range
 
-    A general range struct and constructor macros for passing binary blobs
+    A general pointer/size-pair struct and constructor macros for passing binary blobs
     into sokol_app.h.
 */
 typedef struct sapp_range {
@@ -1281,7 +1282,7 @@ typedef struct sapp_range {
 /*
     sapp_image_desc
 
-    This is used to describe  image data to sokol_app.h (at first, window
+    This is used to describe image data to sokol_app.h (at first, window
     icons, later maybe cursor images).
 
     Note that the actual image pixel format depends on the use case:
@@ -1298,15 +1299,20 @@ typedef struct sapp_image_desc {
 /*
     sapp_icon_desc
 
-    Describes the window icon image to set via the function sapp_set_window_icon().
+    An icon description structure for use in sapp_desc.icon and
+    sapp_set_icon().
 
     When setting a custom image, the application can provide a number of
-    candidates differing in size, and sokol_app.h will pick the best match
-    (the image that's closest to the size expected by the platform's window system).
+    candidates differing in size, and sokol_app.h will pick the image(s)
+    closest to the size expected by the platform's window system.
 
-    To set sokol-app's default icon instead, set .sokol_default to true.
+    To set sokol-app's default icon, set .sokol_default to true.
 
-    Otherwise, provide one or more custom images in the .images[] array.
+    Otherwise provide candidate images of different sizes in the
+    images[] array.
+
+    If both the sokol_default flag is set to true, any image candidates
+    will be ignored and the sokol_app.h default icon will be set.
 */
 typedef struct sapp_icon_desc {
     bool sokol_default;
