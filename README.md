@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**20-Mar-2021** sokol_gfx.h no longer depends on an external GL loader)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**01-Apr-2021** some bugfixes in sokol_app.h's iOS backend (HighDPI and MSAA related)
 
 ## Examples and Related Projects
 
@@ -26,6 +26,9 @@ cross-platform libraries for C and C++, written in C.
 [source](https://github.com/bqqbarbhg/spear))
 
 - [Command line tools](https://github.com/floooh/sokol-tools) (shader compiler)
+
+- [How to build without a build system](https://github.com/floooh/sokol-samples#how-to-build-without-a-build-system):
+useful details for integrating the Sokol headers into your own project with your favourite C/C++ build system
 
 ## Core libraries
 

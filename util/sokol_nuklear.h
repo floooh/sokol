@@ -258,7 +258,7 @@ inline void snk_setup(const snk_desc_t& desc) { return snk_setup(&desc); }
 #include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
-#if !defined(SOKOL_NUKLEAR_NO_SOKOL_APP) && defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_NUKLEAR_NO_SOKOL_APP) && !defined(SOKOL_DUMMY_BACKEND)
 #include <emscripten.h>
 #endif
 
@@ -1632,9 +1632,8 @@ static void _snk_clipboard_paste(nk_handle usr, struct nk_text_edit *edit) {
     }
     (void)usr;
 }
-#endif
 
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 EM_JS(int, snk_js_is_osx, (void), {
     if (navigator.userAgent.includes('Macintosh')) {
         return 1;
@@ -1646,14 +1645,17 @@ EM_JS(int, snk_js_is_osx, (void), {
 #endif
 
 static bool _snk_is_osx(void) {
-    #if defined(__EMSCRIPTEN__)
-    return snk_js_is_osx();
+    #if defined(SOKOL_DUMMY_BACKEND)
+        return false;
+    #elif defined(__EMSCRIPTEN__)
+        return snk_js_is_osx();
     #elif defined(__APPLE__)
-    return true;
+        return true;
     #else
-    return false;
+        return false;
     #endif
 }
+#endif // !SOKOL_NUKLEAR_NO_SOKOL_APP
 
 SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -1764,8 +1766,8 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         vs_bytecode = SG_RANGE(_snk_vs_bytecode_wgpu);
         fs_bytecode = SG_RANGE(_snk_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _snk_vs_source_dummy;
-        shd_desc.fs.source = _snk_fs_source_dummy;
+        vs_source = _snk_vs_source_dummy;
+        fs_source = _snk_fs_source_dummy;
     #endif
 
     /* Shader */

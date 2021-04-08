@@ -67,7 +67,11 @@
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux: X11, Xi, Xcursor, GL, dl, pthread, m(?)
     - on Android: GLESv3, EGL, log, android
-    - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
+    - on Windows with the MSVC or Clang toolchains: no action needed, libs are defined in-source via pragma-comment-lib
+    - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
+        - link with the following libs: -lkernel32 -luser32 -lshell32
+        - additionally with the GL backend: -lgdi32
+        - additionally with the D3D11 backend: -ld3d11 -ldxgi -dxguid
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
@@ -1464,7 +1468,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #pragma warning(disable:4055)   /* 'type cast': from data pointer */
         #pragma warning(disable:4505)   /* unreferenced local function has been removed */
         #pragma warning(disable:4115)   /* /W4: 'ID3D11ModuleInstance': named type definition in parentheses (in d3d11.h) */
-        #pragma warning(disable:4996)   /* 'freopen': This function or variable may be unsafe. */
     #endif
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -1482,7 +1485,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #pragma comment (linker, "/subsystem:windows")
         #endif
     #endif
-    #include <stdio.h>  /* freopen() */
+    #include <stdio.h>  /* freopen_s() */
+    #include <wchar.h>  /* wcslen() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
@@ -2488,6 +2492,10 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
+/* NOTE: unlike the iOS version of this function, the macOS version
+    can dynamically update the DPI scaling factor when a window is moved
+    between HighDPI / LowDPI screens.
+*/
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
         const NSRect fb_rect = [_sapp.macos.view bounds];
@@ -2515,7 +2523,11 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     }
     _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
 
-    /* also make sure the MTKView drawable size is uptodate */
+    /* NOTE: _sapp_macos_update_dimensions() isn't called each frame, but only
+        when the window size actually changes, so resizing the MTKView's
+        in each call is fine even when MTKView doesn't ignore setting an
+        identical drawableSize.
+    */
     #if defined(SOKOL_METAL)
     CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
     _sapp.macos.view.drawableSize = drawable_size;
@@ -2873,6 +2885,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
+    /*
+
+    NOTE: late event polling temporarily out-commented to check if this
+    causes infrequent and almost impossible to reproduce probelms with the
+    window close events, see:
+    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
+
+
     const NSEventMask mask = NSEventMaskLeftMouseDown |
                              NSEventMaskLeftMouseUp|
                              NSEventMaskRightMouseDown |
@@ -2904,6 +2924,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             [NSApp sendEvent:event];
         }
     }
+    */
 }
 
 - (void)drawRect:(NSRect)rect {
@@ -3184,8 +3205,10 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.window_width = (int) screen_rect.size.width;
-    _sapp.window_height = (int) screen_rect.size.height;
+    _sapp.framebuffer_width = (int)(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)(screen_rect.size.height * _sapp.dpi_scale);
+    _sapp.window_width = (int)screen_rect.size.width;
+    _sapp.window_height = (int)screen_rect.size.height;
     int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
         const CGSize fb_size = _sapp.ios.view.drawableSize;
@@ -3195,15 +3218,18 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
         cur_fb_width = (int) _sapp.ios.view.drawableWidth;
         cur_fb_height = (int) _sapp.ios.view.drawableHeight;
     #endif
-    const bool dim_changed =
-        (_sapp.framebuffer_width != cur_fb_width) ||
-        (_sapp.framebuffer_height != cur_fb_height);
-    _sapp.framebuffer_width = cur_fb_width;
-    _sapp.framebuffer_height = cur_fb_height;
-    SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
-    if (dim_changed && !_sapp.first_frame) {
-        _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
+    const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
+                             (_sapp.framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        #if defined(SOKOL_METAL)
+            const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+            _sapp.ios.view.drawableSize = drawable_size;
+        #else
+            // nothing to do here, GLKView correctly respects the view's contentScaleFactor
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_ios_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
     }
 }
 
@@ -3253,14 +3279,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     _sapp.window_width = screen_rect.size.width;
     _sapp.window_height = screen_rect.size.height;
     if (_sapp.desc.high_dpi) {
-        _sapp.framebuffer_width = 2 * _sapp.window_width;
-        _sapp.framebuffer_height = 2 * _sapp.window_height;
+        _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
     }
     else {
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
+        _sapp.dpi_scale = 1.0f;
     }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
+    _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
+    _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
@@ -3269,12 +3294,11 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
-        if (_sapp.desc.high_dpi) {
-            _sapp.ios.view.contentScaleFactor = 2.0;
-        }
-        else {
-            _sapp.ios.view.contentScaleFactor = 1.0;
-        }
+        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
+            and automatically renders at Retina resolution. We'll disable
+            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
+        */
+        _sapp.ios.view.autoResizeDrawable = false;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
         _sapp.ios.view_ctrl = [[UIViewController alloc] init];
@@ -3297,11 +3321,13 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
         _sapp.ios.view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
         _sapp.ios.view.drawableStencilFormat = GLKViewDrawableStencilFormatNone;
-        _sapp.ios.view.drawableMultisample = GLKViewDrawableMultisampleNone; /* FIXME */
+        GLKViewDrawableMultisample msaa = _sapp.sample_count > 1 ? GLKViewDrawableMultisample4X : GLKViewDrawableMultisampleNone;
+        _sapp.ios.view.drawableMultisample = msaa;
         _sapp.ios.view.context = _sapp.ios.eagl_ctx;
         _sapp.ios.view.enableSetNeedsDisplay = NO;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
+        // on GLKView, contentScaleFactor appears to work just fine!
         if (_sapp.desc.high_dpi) {
             _sapp.ios.view.contentScaleFactor = 2.0;
         }
@@ -5794,8 +5820,11 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             con_valid = AttachConsole(ATTACH_PARENT_PROCESS);
         }
         if (con_valid) {
-            freopen("CON", "w", stdout);
-            freopen("CON", "w", stderr);
+            FILE* res_fp = 0;
+            errno_t err;
+            err = freopen_s(&res_fp, "CON", "w", stdout);
+            err = freopen_s(&res_fp, "CON", "w", stderr);
+            (void)err;
         }
     }
     if (_sapp.desc.win32_console_utf8) {

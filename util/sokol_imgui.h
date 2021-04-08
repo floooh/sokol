@@ -272,7 +272,7 @@ inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc)
 #include <stddef.h> /* offsetof */
 #include <string.h> /* memset */
 
-#if !defined(SOKOL_IMGUI_NO_SOKOL_APP) && defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 #include <emscripten.h>
 #endif
 
@@ -1594,7 +1594,7 @@ static const char* _simgui_get_clipboard(void* user_data) {
 }
 #endif
 
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 EM_JS(int, simgui_js_is_osx, (void), {
     if (navigator.userAgent.includes('Macintosh')) {
         return 1;
@@ -1606,12 +1606,14 @@ EM_JS(int, simgui_js_is_osx, (void), {
 #endif
 
 static bool _simgui_is_osx(void) {
-    #if defined(__EMSCRIPTEN__)
-    return simgui_js_is_osx();
+    #if defined(SOKOL_DUMMY_BACKEND)
+        return false;
+    #elif defined(__EMSCRIPTEN__)
+        return simgui_js_is_osx();
     #elif defined(__APPLE__)
-    return true;
+        return true;
     #else
-    return false;
+        return false;
     #endif
 }
 
@@ -1781,8 +1783,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         shd_desc.vs.bytecode = SG_RANGE(_simgui_vs_bytecode_wgpu);
         shd_desc.fs.bytecode = SG_RANGE(_simgui_fs_bytecode_wgpu);
     #else
-        shd_desc.vs.source = _simgui_vs_src_dummy;
-        shd_desc.fs.source = _simgui_fs_src_dummy;
+        shd_desc.vs.source = _simgui_vs_source_dummy;
+        shd_desc.fs.source = _simgui_fs_source_dummy;
     #endif
     _simgui.shd = sg_make_shader(&shd_desc);
 
