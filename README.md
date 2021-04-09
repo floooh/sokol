@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**01-Apr-2021** some bugfixes in sokol_app.h's iOS backend (HighDPI and MSAA related)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**09-Apr-2021** window icon support in sokol_app.h)
 
 ## Examples and Related Projects
 

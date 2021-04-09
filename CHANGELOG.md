@@ -1,5 +1,10 @@
 ## Updates
 
+- **09-Apr-2021**: sokol_app.h now allows to programmatically set the window
+  icon in the Win32, X11 and HTML5 backends. Search for "WINDOW ICON SUPPORT"
+  in sokol_app.h for documentation, and see the new
+  [icon sample](https://floooh.github.io/sokol-html5/icon-sapp.html) for example code.
+
 - **01-Apr-2021**: some fixes in sokol_app.h's iOS backend:
     - In the iOS Metal backend, high-dpi vs low-dpi works again. Some time
     ago (around iOS 12.x) MTKView started to ignore the contentScaleFactor
