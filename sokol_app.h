@@ -2515,7 +2515,7 @@ _SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image_desc* desc) {
     SOKOL_ASSERT(desc->pixels.size > 0);
     const size_t wh_size = (size_t)(desc->width * desc->height) * sizeof(uint32_t);
     if (wh_size != desc->pixels.size) {
-        _sapp_fail("Image data size mismatch (must be width*height*4 bytes)\n");
+        SOKOL_LOG("Image data size mismatch (must be width*height*4 bytes)\n");
         return false;
     }
     return true;
