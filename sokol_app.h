@@ -826,14 +826,14 @@
 
         - the width in pixels
         - the height in pixels
-        - and the actual pixel data in BGRA8 pixel format (e.g. 0xFFCC8844
-          means: alpha=0xFF, red=0xCC, green=0x88, blue=0x44)
+        - and the actual pixel data in RGBA8 pixel format (e.g. 0xFFCC8844
+          on a little-endian CPU means: alpha=0xFF, blue=0xCC, green=0x88, red=0x44)
 
     For instance, if you have 3 candidate images (small, medium, big) of
     sizes 16x16, 32x32 and 64x64 the corresponding sapp_icon_desc struct is setup
     like this:
 
-        // the actual pixel data (BGRA8, origin top-left)
+        // the actual pixel data (RGBA8, origin top-left)
         const uint32_t small[16][16]  = { ... };
         const uint32_t medium[32][32] = { ... };
         const uint32_t big[64][64]    = { ... };
