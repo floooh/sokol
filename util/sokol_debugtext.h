@@ -3881,6 +3881,7 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
 }
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
+
 SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_sdtx, 0, sizeof(_sdtx));
