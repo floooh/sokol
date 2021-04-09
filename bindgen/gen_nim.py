@@ -454,8 +454,11 @@ def gen_enum(decl, prefix):
     hasForceU32 = False
     hasExplicitValues = False
     for item in decl['items']:
-        if item['name'].endswith("_FORCE_U32"):
+        itemName = item['name']
+        if itemName.endswith("_FORCE_U32"):
             hasForceU32 = True
+        elif itemName.endswith("_NUM"):
+            continue
         else:
             if 'value' in item:
                 hasExplicitValues = True
@@ -553,13 +556,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
 
     ## include extensions in generated code
     l("# Nim-specific API extensions")
-    l(f"include ext/{ir['module']}")
-
-    ## copy extensions into generated code
-    # ext_path = f"sokol-nim/src/sokol/ext/{ir['module']}.nim"
-    # if os.path.isfile(ext_path):
-    #     with open(ext_path, 'r') as f_ext:
-    #         out_lines += f_ext.read()
+    l(f"include nim/{ir['module']}")
 
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
