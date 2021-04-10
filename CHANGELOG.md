@@ -1,5 +1,11 @@
 ## Updates
 
+- **10-Apr-2021**: followup fixes from yesterday: custom icon support on macOS
+  has been added (since macOS has no regular window icons, the dock icon is
+  updated instead), and a bugfix in the internal helper which select the
+  best matching candidate image (this actually always selected the first
+  candidate image)
+
 - **09-Apr-2021**: sokol_app.h now allows to programmatically set the window
   icon in the Win32, X11 and HTML5 backends. Search for "WINDOW ICON SUPPORT"
   in sokol_app.h for documentation, and see the new
