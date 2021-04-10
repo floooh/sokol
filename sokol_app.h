@@ -2521,11 +2521,11 @@ _SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image_desc* desc) {
     return true;
 }
 
-_SOKOL_PRIVATE int _sapp_image_bestmatch(const sapp_image_desc* desc, int num_images, int width, int height) {
+_SOKOL_PRIVATE int _sapp_image_bestmatch(const sapp_image_desc image_descs[], int num_images, int width, int height) {
     int least_diff = 0x7FFFFFFF;
     int least_index = 0;
     for (int i = 0; i < num_images; i++) {
-        int diff = (desc->width * desc->height) - (width * height);
+        int diff = (image_descs[i].width * image_descs[i].height) - (width * height);
         if (diff < 0) {
             diff = -diff;
         }
@@ -2813,10 +2813,13 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
+    sapp_set_icon(&_sapp.desc.icon);
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
     [NSApp activateIgnoringOtherApps:YES];
+    // set the application dock icon as early as possible, otherwise
+    // the dummy icon will be visible for a short time
     [NSApp run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
@@ -3005,6 +3008,39 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
         CGDisplayShowCursor(kCGDirectMainDisplay);
         CGAssociateMouseAndMouseCursorPosition(YES);
     }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    NSDockTile* dock_tile = NSApp.dockTile;
+    const int wanted_width = (int) dock_tile.size.width;
+    const int wanted_height = (int) dock_tile.size.height;
+    const int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, wanted_width, wanted_height);
+    const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+
+    CGColorSpaceRef cg_color_space = CGColorSpaceCreateDeviceRGB();
+    CFDataRef cf_data = CFDataCreate(kCFAllocatorDefault, (const UInt8*)img_desc->pixels.ptr, (CFIndex)img_desc->pixels.size);
+    CGDataProviderRef cg_data_provider = CGDataProviderCreateWithCFData(cf_data);
+    CGImageRef cg_img = CGImageCreate(
+        (size_t)img_desc->width,    // width
+        (size_t)img_desc->height,   // height
+        8,                          // bitsPerComponent
+        32,                         // bitsPerPixel
+        (size_t)img_desc->width * 4,// bytesPerRow
+        cg_color_space,             // space
+        kCGImageAlphaLast | kCGImageByteOrderDefault,  // bitmapInfo
+        cg_data_provider,           // provider
+        NULL,                       // decode
+        false,                      // shouldInterpolate
+        kCGRenderingIntentDefault);
+    CFRelease(cf_data);
+    CGDataProviderRelease(cg_data_provider);
+    CGColorSpaceRelease(cg_color_space);
+
+    NSImage* ns_image = [[NSImage alloc] initWithCGImage:cg_img size:dock_tile.size];
+    dock_tile.contentView = [NSImageView imageViewWithImage:ns_image];
+    [dock_tile display];
+    _SAPP_OBJC_RELEASE(ns_image);
+    CGImageRelease(cg_img);
 }
 
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
@@ -10672,7 +10708,9 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
     if (!_sapp_validate_icon_desc(desc, num_images)) {
         return;
     }
-    #if defined(_SAPP_WIN32)
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_icon(desc, num_images);
+    #elif defined(_SAPP_WIN32)
         _sapp_win32_set_icon(desc, num_images);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_set_icon(desc, num_images);
