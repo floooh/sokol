@@ -1219,14 +1219,17 @@ typedef enum sapp_mousebutton {
 } sapp_mousebutton;
 
 /*
-    These are currently pressed modifier keys which are passed in the
-    struct field sapp_event.modifiers.
+    These are currently pressed modifier keys (and mouse buttons) which are
+    passed in the event struct field sapp_event.modifiers.
 */
 enum {
-    SAPP_MODIFIER_SHIFT = 0x1,
-    SAPP_MODIFIER_CTRL = 0x2,
-    SAPP_MODIFIER_ALT = 0x4,
-    SAPP_MODIFIER_SUPER = 0x8
+    SAPP_MODIFIER_SHIFT = 0x1,      // left or right shift key
+    SAPP_MODIFIER_CTRL  = 0x2,      // left or right control key
+    SAPP_MODIFIER_ALT   = 0x4,      // left or right alt key
+    SAPP_MODIFIER_SUPER = 0x8,      // left or right 'super' key
+    SAPP_MODIFIER_LMB   = 0x100,    // left mouse button
+    SAPP_MODIFIER_RMB   = 0x200,    // right mouse button
+    SAPP_MODIFIER_MMB   = 0x400,    // middle mouse button
 };
 
 /*
@@ -2836,7 +2839,9 @@ int main(int argc, char* argv[]) {
 }
 #endif /* SOKOL_NO_ENTRY */
 
-_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
+_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEvent* ev) {
+    const NSEventModifierFlags f = ev.modifierFlags;
+    const NSUInteger b = NSEvent.pressedMouseButtons;
     uint32_t m = 0;
     if (f & NSEventModifierFlagShift) {
         m |= SAPP_MODIFIER_SHIFT;
@@ -2849,6 +2854,15 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
     }
     if (f & NSEventModifierFlagCommand) {
         m |= SAPP_MODIFIER_SUPER;
+    }
+    if (0 != (b & (1<<0))) {
+        m |= SAPP_MODIFIER_LMB;
+    }
+    if (0 != (b & (1<<1))) {
+        m |= SAPP_MODIFIER_RMB;
+    }
+    if (0 != (b & (1<<2))) {
+        m |= SAPP_MODIFIER_MMB;
     }
     return m;
 }
@@ -3387,46 +3401,46 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
        on Windows while SetCapture is active
     */
     if (0 == _sapp.macos.mouse_buttons) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event));
     }
 }
 - (void)mouseExited:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (0 == _sapp.macos.mouse_buttons) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event));
         _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event));
         _sapp.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
@@ -3437,7 +3451,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             _sapp.mouse.dx = [event deltaX];
             _sapp.mouse.dy = [event deltaY];
         }
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event));
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
@@ -3446,7 +3460,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event));
 }
 - (void)mouseDragged:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3454,7 +3468,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3462,7 +3476,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event));
 }
 - (void)scrollWheel:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3475,7 +3489,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         }
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-            _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
+            _sapp.event.modifiers = _sapp_macos_mod(event);
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
@@ -3484,7 +3498,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 }
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
-        const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
+        const uint32_t mods = _sapp_macos_mod(event);
         /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
             as a workaround, to prevent key presses from sticking we'll send
             a keyup event following right after the keydown if SUPER is also pressed
@@ -3520,7 +3534,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
         _sapp_translate_key(event.keyCode),
         event.isARepeat,
-        _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mod(event));
 }
 - (void)flagsChanged:(NSEvent*)event {
     const uint32_t old_f = _sapp.macos.flags_changed_store;
@@ -3548,7 +3562,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp_macos_key_event(down ? SAPP_EVENTTYPE_KEY_DOWN : SAPP_EVENTTYPE_KEY_UP,
             key_code,
             false,
-            _sapp_macos_mod(event.modifierFlags));
+            _sapp_macos_mod(event));
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
