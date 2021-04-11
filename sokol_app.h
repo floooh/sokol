@@ -1869,6 +1869,7 @@ typedef struct {
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     bool mouse_lock_requested;
+    uint16_t mouse_buttons;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -4286,6 +4287,44 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
 #endif
 
+_SOKOL_PRIVATE uint32_t _sapp_emsc_mouse_button_mods(uint16_t buttons) {
+    uint32_t m = 0;
+    if (0 != (buttons & (1<<0))) { m |= SAPP_MODIFIER_LMB; }
+    if (0 != (buttons & (1<<1))) { m |= SAPP_MODIFIER_RMB; } // not a bug
+    if (0 != (buttons & (1<<2))) { m |= SAPP_MODIFIER_MMB; } // not a bug
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_mouse_event_mods(const EmscriptenMouseEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_key_event_mods(const EmscriptenKeyboardEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_touch_event_mods(const EmscriptenTouchEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     _SOKOL_UNUSED(event_type);
     _SOKOL_UNUSED(user_data);
@@ -4344,6 +4383,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
+    _sapp.emsc.mouse_buttons = emsc_event->buttons;
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
         _sapp.mouse.dy = (float) emsc_event->movementY;
@@ -4386,18 +4426,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_mouse_event_mods(emsc_event);
             if (is_button_event) {
                 switch (emsc_event->button) {
                     case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
@@ -4423,20 +4452,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
+    _sapp.emsc.mouse_buttons = emsc_event->mouse.buttons;
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-        if (emsc_event->mouse.ctrlKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-        }
-        if (emsc_event->mouse.shiftKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-        }
-        if (emsc_event->mouse.altKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-        }
-        if (emsc_event->mouse.metaKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-        }
+        _sapp.event.modifiers = _sapp_emsc_mouse_event_mods(&emsc_event->mouse);
         /* see https://github.com/floooh/sokol/issues/339 */
         float scale;
         switch (emsc_event->deltaMode) {
@@ -4477,18 +4496,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             bool send_keyup_followup = false;
             _sapp_init_event(type);
             _sapp.event.key_repeat = emsc_event->repeat;
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
                 _sapp.event.char_code = emsc_event->charCode;
                 /* workaround to make Cmd+V work on Safari */
@@ -4617,18 +4625,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_touch_event_mods(emsc_event);
             _sapp.event.num_touches = emsc_event->numTouches;
             if (_sapp.event.num_touches > SAPP_MAX_TOUCHPOINTS) {
                 _sapp.event.num_touches = SAPP_MAX_TOUCHPOINTS;
