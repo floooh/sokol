@@ -1,5 +1,13 @@
 ## Updates
 
+- **12-Apr-2021**: Minor new feature in sokol_app.h: mouse buttons are now
+  also reported as modifier flags in most input events (similar to the
+  Ctrl-, Alt-, Shift- and Super-key modifiers). This lets you quickly check
+  what mouse buttons are currently pressed in any input event without having
+  to keep track of pressed mouse buttons yourself. This is implemented in the following
+  sokol_app.h backends: Win32, UWP, Emscripten, X11 and macOS. Example
+  code is in the [events-sapp.cc](https://floooh.github.io/sokol-html5/events-sapp.html) sample
+
 - **10-Apr-2021**: followup fixes from yesterday: custom icon support on macOS
   has been added (since macOS has no regular window icons, the dock icon is
   updated instead), and a bugfix in the internal helper which select the
