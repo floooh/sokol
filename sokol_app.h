@@ -5936,6 +5936,16 @@ _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<15)) {
         mods |= SAPP_MODIFIER_SUPER;
     }
+    const bool swapped = (TRUE == GetSystemMetrics(SM_SWAPBUTTON));
+    if (GetAsyncKeyState(VK_LBUTTON)) {
+        mods |= swapped ? SAPP_MODIFIER_RMB : SAPP_MODIFIER_LMB;
+    }
+    if (GetAsyncKeyState(VK_RBUTTON)) {
+        mods |= swapped ? SAPP_MODIFIER_LMB : SAPP_MODIFIER_RMB;
+    }
+    if (GetAsyncKeyState(VK_MBUTTON)) {
+        mods |= SAPP_MODIFIER_MMB;
+    }
     return mods;
 }
 
