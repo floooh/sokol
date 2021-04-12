@@ -1221,6 +1221,12 @@ typedef enum sapp_mousebutton {
 /*
     These are currently pressed modifier keys (and mouse buttons) which are
     passed in the event struct field sapp_event.modifiers.
+
+    NOTE: do not depend on the presence or absence of a modifier flag in 
+    "their own" KEY_UP/DOWN and MOUSE_UP/DOWN events! For instance in the
+    X11 backend, SAPP_MODIFIER_CTRL will not be set in the KEY_DOWN event
+    of the Ctrl key, instead the KEY_UP event of the Ctrl-key will have
+    the SAPP_MODIFIER_CTRL bit set. Same for mouse buttons.
 */
 enum {
     SAPP_MODIFIER_SHIFT = 0x1,      // left or right shift key
