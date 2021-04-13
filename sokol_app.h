@@ -1221,12 +1221,6 @@ typedef enum sapp_mousebutton {
 /*
     These are currently pressed modifier keys (and mouse buttons) which are
     passed in the event struct field sapp_event.modifiers.
-
-    NOTE: do not depend on the presence or absence of a modifier flag in 
-    "their own" KEY_UP/DOWN and MOUSE_UP/DOWN events! For instance in the
-    X11 backend, SAPP_MODIFIER_CTRL will not be set in the KEY_DOWN event
-    of the Ctrl key, instead the KEY_UP event of the Ctrl-key will have
-    the SAPP_MODIFIER_CTRL bit set. Same for mouse buttons.
 */
 enum {
     SAPP_MODIFIER_SHIFT = 0x1,      // left or right shift key
@@ -9808,6 +9802,34 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
     return result;
 }
 
+_SOKOL_PRIVATE uint32_t _sapp_x11_key_modifier_bit(sapp_keycode key) {
+    switch (key) {
+        case SAPP_KEYCODE_LEFT_SHIFT:
+        case SAPP_KEYCODE_RIGHT_SHIFT:
+            return SAPP_MODIFIER_SHIFT;
+        case SAPP_KEYCODE_LEFT_CONTROL:
+        case SAPP_KEYCODE_RIGHT_CONTROL:
+            return SAPP_MODIFIER_CTRL;
+        case SAPP_KEYCODE_LEFT_ALT:
+        case SAPP_KEYCODE_RIGHT_ALT:
+            return SAPP_MODIFIER_ALT;
+        case SAPP_KEYCODE_LEFT_SUPER:
+        case SAPP_KEYCODE_RIGHT_SUPER:
+            return SAPP_MODIFIER_SUPER;
+        default:
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_x11_button_modifier_bit(sapp_mousebutton btn) {
+    switch (btn) {
+        case SAPP_MOUSEBUTTON_LEFT:     return SAPP_MODIFIER_LMB;
+        case SAPP_MOUSEBUTTON_RIGHT:    return SAPP_MODIFIER_RMB;
+        case SAPP_MOUSEBUTTON_MIDDLE:   return SAPP_MODIFIER_MMB;
+        default: return 0;
+    }
+}
+
 _SOKOL_PRIVATE uint32_t _sapp_x11_mods(uint32_t x11_mods) {
     uint32_t mods = 0;
     if (x11_mods & ShiftMask) {
@@ -10191,7 +10213,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
                 _sapp_x11_keycodes[keycode & 0xFF] = true;
-                const uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                // X11 doesn't set modifier bit on key down, so emulate that
+                mods |= _sapp_x11_key_modifier_bit(key);
                 if (key != SAPP_KEYCODE_INVALID) {
                     _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
                 }
@@ -10209,7 +10233,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 _sapp_x11_keycodes[keycode & 0xFF] = false;
                 if (key != SAPP_KEYCODE_INVALID) {
-                    const uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                    uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                    // X11 doesn't clear modifier bit on key up, so emulate that
+                    mods &= ~_sapp_x11_key_modifier_bit(key);
                     _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
                 }
             }
@@ -10217,7 +10243,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case ButtonPress:
             {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
-                const uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                // X11 doesn't set modifier bit on button down, so emulate that
+                mods |= _sapp_x11_button_modifier_bit(btn);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
                     _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
                     _sapp.x11.mouse_buttons |= (1 << btn);
@@ -10237,7 +10265,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
-                    const uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                    uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                    // X11 doesn't clear modifier bit on button up, so emulate that
+                    mods &= ~_sapp_x11_button_modifier_bit(btn);
                     _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, mods);
                     _sapp.x11.mouse_buttons &= ~(1 << btn);
                 }
