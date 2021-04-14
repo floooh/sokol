@@ -10578,6 +10578,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+            // NOTE: this code is called on a different thread!
+            _SOKOL_UNUSED(cmd_buffer);
+            dispatch_semaphore_signal(_sg.mtl.sem);
+        }];
     }
 
     /* if this is first pass in frame, get uniform buffer base pointer */
@@ -10724,11 +10729,9 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     else {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
-    [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
-    [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
-        _SOKOL_UNUSED(cmd_buffer);
-        dispatch_semaphore_signal(_sg.mtl.sem);
-    }];
+    if (nil != cur_drawable) {
+        [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
+    }
     [_sg.mtl.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
