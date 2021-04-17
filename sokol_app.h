@@ -1015,6 +1015,7 @@ extern "C" {
 
 /* misc constants */
 enum {
+    SAPP_INVALID_ID = 0,
     SAPP_MAX_TOUCHPOINTS = 8,
     SAPP_MAX_MOUSEBUTTONS = 3,
     SAPP_MAX_KEYCODES = 512,
@@ -1382,6 +1383,7 @@ typedef struct sapp_ios_desc {
 } sapp_ios_desc;
 
 typedef struct sapp_desc {
+    int window_pool_size;
     sapp_window_desc window;
     sapp_icon_desc icon;                // FIXME: per-window icons?
     sapp_gl_desc gl;
@@ -2245,6 +2247,14 @@ typedef struct {
 #define _SAPP_PIXELFORMAT_DEPTH (41)
 #define _SAPP_PIXELFORMAT_DEPTH_STENCIL (42)
 
+/* this MUST be 0 */
+#define _SAPP_INVALID_SLOT_INDEX (0)
+
+#define _SAPP_SLOT_SHIFT (16)
+#define _SAPP_SLOT_MASK ((1<<_SAPP_SLOT_SHIFT)-1)
+#define _SAPP_MAX_POOL_SIZE (1<<_SAPP_SLOT_SHIFT)
+#define _SAPP_DEFAULT_POOL_SIZE (128)
+
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
@@ -2255,6 +2265,17 @@ typedef struct {
 #else
     #define _SAPP_CLEAR(type, item) { memset(&item, 0, sizeof(item)); }
 #endif
+
+typedef struct {
+    int size;
+    int queue_top;
+    uint32_t* gen_ctrs;
+    int* free_queue;
+} _sapp_pool_t;
+
+typedef struct {
+    uint32_t id;
+} _sapp_slot_t;
 
 typedef struct {
     bool enabled;
@@ -2278,10 +2299,6 @@ typedef struct {
     bool locked;
     bool pos_valid;
 } _sapp_mouse_t;
-
-typedef struct {
-    uint32_t id;
-} _sapp_slot_t;
 
 typedef struct {
     _sapp_slot_t slot;
@@ -2327,7 +2344,13 @@ typedef struct {
 } _sapp_window_t;
 
 typedef struct {
+    _sapp_pool_t pool;
+    _sapp_window_t* windows;
+} _sapp_window_pool_t;
+
+typedef struct {
     sapp_desc desc;
+    _sapp_window_pool_t window_pool;
     _sapp_window_t window;
     bool valid;
     bool gles2_fallback;
@@ -2366,7 +2389,210 @@ typedef struct {
 } _sapp_t;
 static _sapp_t _sapp;
 
-/*=== PRIVATE HELPER FUNCTIONS ===============================================*/
+// forward-declared platform-specific functions
+#if defined(_SAPP_MACOS)
+_SOKOL_PRIVATE void _sapp_macos_init_backend(void);
+_SOKOL_PRIVATE void _sapp_macos_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_IOS)
+_SOKOL_PRIVATE void _sapp_ios_init_backend(void);
+_SOKOL_PRIVATE void _sapp_ios_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_ios_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_EMSCRIPTEN)
+_SOKOL_PRIVATE void _sapp_emsc_init_backend(void);
+_SOKOL_PRIVATE void _sapp_emsc_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_emsc_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_WIN32)
+_SOKOL_PRIVATE void _sapp_win32_init_backend(void);
+_SOKOL_PRIVATE void _sapp_win32_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_UWP)
+_SOKOL_PRIVATE void _sapp_uwp_init_backend(void);
+_SOKOL_PRIVATE void _sapp_uwp_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_uwp_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_ANDROID)
+_SOKOL_PRIVATE void _sapp_android_init_backend(void);
+_SOKOL_PRIVATE void _sapp_android_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_android_destroy_window(_sapp_window_t* win);
+#elif defined(_SAPP_LINUX)
+_SOKOL_PRIVATE void _sapp_x11_init_backend(void);
+_SOKOL_PRIVATE void _sapp_x11_discard_backend(void);
+_SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
+#endif
+
+/*=== POOL IMPLEMENTATION ====================================================*/
+_SOKOL_PRIVATE void _sapp_init_pool(_sapp_pool_t* pool, int num) {
+    SOKOL_ASSERT(pool && (num >= 1));
+    /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
+    pool->size = num + 1;
+    pool->queue_top = 0;
+    /* generation counters indexable by pool slot index, slot 0 is reserved */
+    pool->gen_ctrs = (uint32_t*) SOKOL_CALLOC((size_t)pool->size, sizeof(uint32_t));
+    SOKOL_ASSERT(pool->gen_ctrs);
+    /* it's not a bug to only reserve 'num' here */
+    pool->free_queue = (int*) SOKOL_CALLOC((size_t)num, sizeof(int));
+    SOKOL_ASSERT(pool->free_queue);
+    /* never allocate the zero-th pool item since the invalid id is 0 */
+    for (int i = pool->size-1; i >= 1; i--) {
+        pool->free_queue[pool->queue_top++] = i;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_discard_pool(_sapp_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_FREE(pool->free_queue);
+    pool->free_queue = 0;
+    SOKOL_ASSERT(pool->gen_ctrs);
+    SOKOL_FREE(pool->gen_ctrs);
+    pool->gen_ctrs = 0;
+    pool->size = 0;
+    pool->queue_top = 0;
+}
+
+_SOKOL_PRIVATE int _sapp_pool_alloc_index(_sapp_pool_t* pool) {
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    if (pool->queue_top > 0) {
+        int slot_index = pool->free_queue[--pool->queue_top];
+        SOKOL_ASSERT((slot_index > 0) && (slot_index < pool->size));
+        return slot_index;
+    }
+    else {
+        /* pool exhausted */
+        return _SAPP_INVALID_SLOT_INDEX;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_pool_free_index(_sapp_pool_t* pool, int slot_index) {
+    SOKOL_ASSERT((slot_index > _SAPP_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(pool);
+    SOKOL_ASSERT(pool->free_queue);
+    SOKOL_ASSERT(pool->queue_top < pool->size);
+    #ifdef SOKOL_DEBUG
+    /* debug check against double-free */
+    for (int i = 0; i < pool->queue_top; i++) {
+        SOKOL_ASSERT(pool->free_queue[i] != slot_index);
+    }
+    #endif
+    pool->free_queue[pool->queue_top++] = slot_index;
+    SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
+}
+
+_SOKOL_PRIVATE void _sapp_reset_slot(_sapp_slot_t* slot) {
+    SOKOL_ASSERT(slot);
+    memset(slot, 0, sizeof(_sapp_slot_t));
+}
+
+/* allocate the slot at slot_index:
+    - bump the slot's generation counter
+    - create a resource id from the generation counter and slot index
+    - set the slot's id to this id
+    - set the slot's state to ALLOC
+    - return the resource id
+*/
+_SOKOL_PRIVATE uint32_t _sapp_slot_alloc(_sapp_pool_t* pool, _sapp_slot_t* slot, int slot_index) {
+    SOKOL_ASSERT(pool && pool->gen_ctrs);
+    SOKOL_ASSERT((slot_index > _SAPP_INVALID_SLOT_INDEX) && (slot_index < pool->size));
+    SOKOL_ASSERT(slot->id == SAPP_INVALID_ID);
+    uint32_t ctr = ++pool->gen_ctrs[slot_index];
+    slot->id = (ctr<<_SAPP_SLOT_SHIFT)|(slot_index & _SAPP_SLOT_MASK);
+    return slot->id;
+}
+
+_SOKOL_PRIVATE int _sapp_slot_index(uint32_t id) {
+    int slot_index = (int) (id & _SAPP_SLOT_MASK);
+    SOKOL_ASSERT(_SAPP_INVALID_SLOT_INDEX != slot_index);
+    return slot_index;
+}
+
+_SOKOL_PRIVATE void _sapp_setup_window_pool(_sapp_window_pool_t* window_pool, const sapp_desc* desc) {
+    SOKOL_ASSERT(window_pool);
+    SOKOL_ASSERT((desc->window_pool_size > 0) && (desc->window_pool_size < _SAPP_MAX_POOL_SIZE));
+    _sapp_init_pool(&window_pool->pool, desc->window_pool_size);
+    window_pool->windows = (_sapp_window_t*) SOKOL_CALLOC((size_t)window_pool->pool.size, sizeof(_sapp_window_t));
+    SOKOL_ASSERT(window_pool->windows);
+}
+
+_SOKOL_PRIVATE void _sapp_discard_window_pool(_sapp_window_pool_t* window_pool) {
+    SOKOL_ASSERT(window_pool);
+    SOKOL_ASSERT(window_pool->windows);
+    SOKOL_FREE(window_pool->windows); window_pool->windows = 0;
+    _sapp_discard_pool(&window_pool->pool);
+}
+
+/* returns pointer to window by id without matching id check */
+_SOKOL_PRIVATE _sapp_window_t* _sapp_window_at(const _sapp_window_pool_t* win_pool, uint32_t win_id) {
+    SOKOL_ASSERT(win_pool && (SAPP_INVALID_ID != win_id));
+    int slot_index = _sapp_slot_index(win_id);
+    SOKOL_ASSERT((slot_index > _SAPP_INVALID_SLOT_INDEX) && (slot_index < win_pool->pool.size));
+    return &win_pool->windows[slot_index];
+}
+
+/* returns pointer to window with matching id check, may return 0 */
+_SOKOL_PRIVATE _sapp_window_t* _sapp_lookup_window(const _sapp_window_pool_t* win_pool, uint32_t win_id) {
+    if (SAPP_INVALID_ID != win_id) {
+        _sapp_window_t* win = _sapp_window_at(win_pool, win_id);
+        if (win->slot.id == win_id) {
+            return win;
+        }
+    }
+    return 0;
+}
+
+_SOKOL_PRIVATE bool _sapp_create_window(_sapp_window_t* win, const sapp_window_desc* desc) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_create_window(win, desc);
+    #elif defined(_SAPP_IOS)
+        return _sapp_ios_create_window(win, desc);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        return _sapp_emsc_create_window(win, desc);
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_create_window(win, desc);
+    #elif defined(_SAPP_UWP)
+        return _sapp_uwp_create_window(win, desc);
+    #elif defined(_SAPP_ANDROID)
+        return _sapp_android_create_window(win, desc);
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_create_window(win, desc);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_destroy_window(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_destroy_window(win);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_destroy_window(win);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_destroy_window(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_destroy_window(win);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_destroy_window(win);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_destroy_window(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_destroy_window(win);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_destroy_all_windows(_sapp_window_pool_t* win_pool) {
+    SOKOL_ASSERT(win_pool);
+    for (int i = 0; i < win_pool->pool.size; i++) {
+        uint32_t win_id = win_pool->windows[i].slot.id;
+        if (SAPP_INVALID_ID != win_id) {
+            _sapp_destroy_window(&win_pool->windows[i]);
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
     if (_sapp.desc.fail_cb) {
         _sapp.desc.fail_cb(msg);
@@ -2482,8 +2708,45 @@ _SOKOL_PRIVATE sapp_window_desc _sapp_window_defaults(const sapp_window_desc* in
     return desc;
 }
 
+_SOKOL_PRIVATE void _sapp_init_backend(void) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_init_backend();
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_init_backend();
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_init_backend();
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_init_backend();
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_init_backend();
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_init_backend();
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_init_backend();
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_discard_backend(void) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_discard_backend();
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_discard_backend();
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_discard_backend();
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_discard_backend();
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_discard_backend();
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_discard_backend();
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_discard_backend();
+    #endif
+}
+
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     sapp_desc desc = *in_desc;
+    desc.window_pool_size = _sapp_def(desc.window_pool_size, _SAPP_DEFAULT_POOL_SIZE);
     desc.window = _sapp_window_defaults(&desc.window);
     desc.html5.canvas_name = _sapp_def(desc.html5.canvas_name, "canvas");
     return desc;
@@ -2515,9 +2778,13 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.window.dpi_scale = 1.0f;
     _sapp.window.fullscreen = _sapp.desc.window.fullscreen;
     _sapp.window.mouse.shown = true;
+    _sapp_setup_window_pool(&_sapp.window_pool, desc);
+    _sapp_init_backend();
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
+    _sapp_destroy_all_windows(&_sapp.window_pool);
+    _sapp_discard_window_pool(&_sapp.window_pool);
     if (_sapp.window.clipboard.enabled) {
         SOKOL_ASSERT(_sapp.window.clipboard.buffer);
         SOKOL_FREE((void*)_sapp.window.clipboard.buffer);
@@ -2529,6 +2796,7 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.default_icon_pixels) {
         SOKOL_FREE((void*)_sapp.default_icon_pixels);
     }
+    _sapp_discard_backend();
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
 
@@ -2866,7 +3134,21 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
     _sapp.keycodes[0x4E] = SAPP_KEYCODE_KP_SUBTRACT;
 }
 
-_SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
+/* called from _sapp_init_state() */
+_SOKOL_PRIVATE void _sapp_macos_init_backend(void) {
+    _sapp_macos_init_keytable();
+    [NSApplication sharedApplication];
+    // set the application dock icon as early as possible, otherwise
+    // the dummy icon will be visible for a short time
+    sapp_set_icon(&_sapp.desc.icon);
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    _sapp.macos.app_delegate = [[_sapp_macos_app_delegate alloc] init];
+    NSApp.delegate = _sapp.macos.app_delegate;
+    [NSApp activateIgnoringOtherApps:YES];
+}
+
+/* called from _sapp_discard_state() */
+_SOKOL_PRIVATE void _sapp_macos_discard_backend(void) {
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.macos.win.tracking_area);
     _SAPP_OBJC_RELEASE(_sapp.macos.win.delegate);
@@ -2880,18 +3162,17 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    _sapp_macos_init_keytable();
-    [NSApplication sharedApplication];
-    // set the application dock icon as early as possible, otherwise
-    // the dummy icon will be visible for a short time
-    sapp_set_icon(&_sapp.desc.icon);
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
-    _sapp.macos.app_delegate = [[_sapp_macos_app_delegate alloc] init];
-    NSApp.delegate = _sapp.macos.app_delegate;
-    [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
-    // NOTE: [NSApp run] never returns, instead cleanup code
-    // must be put into applicationWillTerminate
+    // NOTE: [NSApp run] never returns, cleanup code is in applicationWillTerminate instead
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win, const sapp_window_desc* desc) {
+    // FIXME
+    return false;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
+    // FIXME
 }
 
 /* MacOS entry function */
@@ -3251,7 +3532,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)applicationWillTerminate:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_call_cleanup();
-    _sapp_macos_discard_state();
     _sapp_discard_state();
 }
 @end
