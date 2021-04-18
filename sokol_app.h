@@ -1830,7 +1830,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif // SOKOL_GLCORE33
 
 typedef struct {
-    NSWindow* ns_window;
+    NSWindow* window;
     NSTrackingArea* tracking_area;
     _sapp_macos_window_delegate* delegate;
     _sapp_macos_view* view;
@@ -1839,7 +1839,6 @@ typedef struct {
 } _sapp_macos_window_t;
 
 typedef struct {
-    _sapp_macos_window_t win;
     _sapp_macos_app_delegate* app_delegate;
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
@@ -2261,12 +2260,15 @@ typedef struct {
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SAPP_CLEAR(type, item) { item = (type) { }; }
+        #define _SAPP_CLEAR_ITEM(type, item) { item = (type) { }; }
+        #define _SAPP_CLEAR_PTR(type, ptr) { *ptr = (type) { }; }
     #else
-        #define _SAPP_CLEAR(type, item) { item = (type) { 0 }; }
+        #define _SAPP_CLEAR_ITEM(type, item) { item = (type) { 0 }; }
+        #define _SAPP_CLEAR_PTR(type, ptr) { *ptr = (type) { 0 }; }
     #endif
 #else
-    #define _SAPP_CLEAR(type, item) { memset(&item, 0, sizeof(item)); }
+    #define _SAPP_CLEAR_ITEM(type, item) { memset(&item, 0, sizeof(item)); }
+    #define _SAPP_CLEAR_PTR(type, ptr) { memset(ptr, 0, sizeof(type)); }
 #endif
 
 typedef struct {
@@ -2306,6 +2308,8 @@ typedef struct {
 typedef struct {
     _sapp_slot_t slot;
     sapp_window_desc desc;
+    int pos_x;
+    int pos_y;
     int window_width;
     int window_height;
     int framebuffer_width;
@@ -2354,6 +2358,8 @@ typedef struct {
 typedef struct {
     sapp_desc desc;
     _sapp_window_pool_t window_pool;
+    uint32_t main_window_id;
+    uint32_t cur_window_id;
     _sapp_window_t window;
     bool valid;
     bool gles2_fallback;
@@ -2389,6 +2395,7 @@ typedef struct {
         _sapp_glx_t glx;
     #endif
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
+    char desc_window_title[_SAPP_MAX_TITLE_LENGTH];
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -2396,37 +2403,37 @@ static _sapp_t _sapp;
 #if defined(_SAPP_MACOS)
 _SOKOL_PRIVATE void _sapp_macos_init_state(void);
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_IOS)
 _SOKOL_PRIVATE void _sapp_ios_init_state(void);
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_ios_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_EMSCRIPTEN)
 _SOKOL_PRIVATE void _sapp_emsc_init_state(void);
 _SOKOL_PRIVATE void _sapp_emsc_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_emsc_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_WIN32)
 _SOKOL_PRIVATE void _sapp_win32_init_state(void);
 _SOKOL_PRIVATE void _sapp_win32_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_UWP)
 _SOKOL_PRIVATE void _sapp_uwp_init_state(void);
 _SOKOL_PRIVATE void _sapp_uwp_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_uwp_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_ANDROID)
 _SOKOL_PRIVATE void _sapp_android_init_state(void);
 _SOKOL_PRIVATE void _sapp_android_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_android_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_LINUX)
 _SOKOL_PRIVATE void _sapp_x11_init_state(void);
 _SOKOL_PRIVATE void _sapp_x11_discard_state(void);
-_SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
+_SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
 #endif
 
@@ -2489,11 +2496,6 @@ _SOKOL_PRIVATE void _sapp_pool_free_index(_sapp_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-_SOKOL_PRIVATE void _sapp_reset_slot(_sapp_slot_t* slot) {
-    SOKOL_ASSERT(slot);
-    memset(slot, 0, sizeof(_sapp_slot_t));
-}
-
 /* allocate the slot at slot_index:
     - bump the slot's generation counter
     - create a resource id from the generation counter and slot index
@@ -2516,38 +2518,32 @@ _SOKOL_PRIVATE int _sapp_slot_index(uint32_t id) {
     return slot_index;
 }
 
-_SOKOL_PRIVATE void _sapp_setup_window_pool(_sapp_window_pool_t* window_pool, const sapp_desc* desc) {
-    SOKOL_ASSERT(window_pool);
+_SOKOL_PRIVATE void _sapp_setup_window_pool(const sapp_desc* desc) {
     SOKOL_ASSERT((desc->window_pool_size > 0) && (desc->window_pool_size < _SAPP_MAX_POOL_SIZE));
-    _sapp_init_pool(&window_pool->pool, desc->window_pool_size);
-    window_pool->windows = (_sapp_window_t*) SOKOL_CALLOC((size_t)window_pool->pool.size, sizeof(_sapp_window_t));
-    SOKOL_ASSERT(window_pool->windows);
+    _sapp_init_pool(&_sapp.window_pool.pool, desc->window_pool_size);
+    _sapp.window_pool.windows = (_sapp_window_t*) SOKOL_CALLOC((size_t)_sapp.window_pool.pool.size, sizeof(_sapp_window_t));
+    SOKOL_ASSERT(_sapp.window_pool.windows);
 }
 
-_SOKOL_PRIVATE void _sapp_discard_window_pool(_sapp_window_pool_t* window_pool) {
-    SOKOL_ASSERT(window_pool);
-    SOKOL_ASSERT(window_pool->windows);
-    SOKOL_FREE(window_pool->windows); window_pool->windows = 0;
-    _sapp_discard_pool(&window_pool->pool);
-}
-
-_SOKOL_PRIVATE sapp_window _sapp_make_window_id(uint32_t win_id) {
-    sapp_window res = { win_id };
-    return res;
+_SOKOL_PRIVATE void _sapp_discard_window_pool(void) {
+    SOKOL_ASSERT(_sapp.window_pool.windows);
+    SOKOL_FREE(_sapp.window_pool.windows); _sapp.window_pool.windows = 0;
+    _sapp_discard_pool(&_sapp.window_pool.pool);
 }
 
 /* returns pointer to window by id without matching id check */
-_SOKOL_PRIVATE _sapp_window_t* _sapp_window_at(const _sapp_window_pool_t* win_pool, uint32_t win_id) {
-    SOKOL_ASSERT(win_pool && (SAPP_INVALID_ID != win_id));
+_SOKOL_PRIVATE _sapp_window_t* _sapp_window_at(uint32_t win_id) {
+    SOKOL_ASSERT(SAPP_INVALID_ID != win_id);
     int slot_index = _sapp_slot_index(win_id);
-    SOKOL_ASSERT((slot_index > _SAPP_INVALID_SLOT_INDEX) && (slot_index < win_pool->pool.size));
-    return &win_pool->windows[slot_index];
+    SOKOL_ASSERT((slot_index > _SAPP_INVALID_SLOT_INDEX) && (slot_index < _sapp.window_pool.pool.size));
+    SOKOL_ASSERT(_sapp.window_pool.windows);
+    return &_sapp.window_pool.windows[slot_index];
 }
 
 /* returns pointer to window with matching id check, may return 0 */
-_SOKOL_PRIVATE _sapp_window_t* _sapp_lookup_window(const _sapp_window_pool_t* win_pool, uint32_t win_id) {
+_SOKOL_PRIVATE _sapp_window_t* _sapp_lookup_window(uint32_t win_id) {
     if (SAPP_INVALID_ID != win_id) {
-        _sapp_window_t* win = _sapp_window_at(win_pool, win_id);
+        _sapp_window_t* win = _sapp_window_at(win_id);
         if (win->slot.id == win_id) {
             return win;
         }
@@ -2555,25 +2551,46 @@ _SOKOL_PRIVATE _sapp_window_t* _sapp_lookup_window(const _sapp_window_pool_t* wi
     return 0;
 }
 
-_SOKOL_PRIVATE bool _sapp_create_window(_sapp_window_t* win, const sapp_window_desc* desc) {
+_SOKOL_PRIVATE sapp_window _sapp_make_window_id(uint32_t win_id) {
+    sapp_window res = { win_id };
+    return res;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_alloc_window_id(void) {
+    int slot_index = _sapp_pool_alloc_index(&_sapp.window_pool.pool);
+    if (_SAPP_INVALID_SLOT_INDEX != slot_index) {
+        return _sapp_slot_alloc(&_sapp.window_pool.pool, &_sapp.window_pool.windows[slot_index].slot, slot_index);
+    }
+    else {
+        /* pool is exhausted */
+        return SAPP_INVALID_ID;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_free_window_id(uint32_t win_id) {
+    SOKOL_ASSERT(SAPP_INVALID_ID != win_id);
+    _sapp_pool_free_index(&_sapp.window_pool.pool, _sapp_slot_index(win_id));
+}
+
+_SOKOL_PRIVATE bool _sapp_platform_create_window(_sapp_window_t* win) {
     #if defined(_SAPP_MACOS)
-        return _sapp_macos_create_window(win, desc);
+        return _sapp_macos_create_window(win);
     #elif defined(_SAPP_IOS)
-        return _sapp_ios_create_window(win, desc);
+        return _sapp_ios_create_window(win);
     #elif defined(_SAPP_EMSCRIPTEN)
-        return _sapp_emsc_create_window(win, desc);
+        return _sapp_emsc_create_window(win);
     #elif defined(_SAPP_WIN32)
-        return _sapp_win32_create_window(win, desc);
+        return _sapp_win32_create_window(win);
     #elif defined(_SAPP_UWP)
-        return _sapp_uwp_create_window(win, desc);
+        return _sapp_uwp_create_window(win);
     #elif defined(_SAPP_ANDROID)
-        return _sapp_android_create_window(win, desc);
+        return _sapp_android_create_window(win);
     #elif defined(_SAPP_LINUX)
-        return _sapp_x11_create_window(win, desc);
+        return _sapp_x11_create_window(win);
     #endif
 }
 
-_SOKOL_PRIVATE void _sapp_destroy_window(_sapp_window_t* win) {
+_SOKOL_PRIVATE void _sapp_platform_destroy_window(_sapp_window_t* win) {
     #if defined(_SAPP_MACOS)
         _sapp_macos_destroy_window(win);
     #elif defined(_SAPP_IOS)
@@ -2589,16 +2606,6 @@ _SOKOL_PRIVATE void _sapp_destroy_window(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         _sapp_x11_destroy_window(win);
     #endif
-}
-
-_SOKOL_PRIVATE void _sapp_destroy_all_windows(_sapp_window_pool_t* win_pool) {
-    SOKOL_ASSERT(win_pool);
-    for (int i = 0; i < win_pool->pool.size; i++) {
-        uint32_t win_id = win_pool->windows[i].slot.id;
-        if (SAPP_INVALID_ID != win_id) {
-            _sapp_destroy_window(&win_pool->windows[i]);
-        }
-    }
 }
 
 _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
@@ -2752,14 +2759,118 @@ _SOKOL_PRIVATE void _sapp_platform_discard_state(void) {
     #endif
 }
 
-_SOKOL_PRIVATE sapp_window _sapp_open_window(const sapp_window_desc* desc) {
-    SOKOL_ASSERT(desc);
-    // FIXME
-    return _sapp_make_window_id(SAPP_INVALID_ID);
+_SOKOL_PRIVATE bool _sapp_init_clipboard(_sapp_clipboard_t* clipboard, const sapp_window_desc* desc) {
+    SOKOL_ASSERT(clipboard && desc);
+    SOKOL_ASSERT(0 == clipboard->buffer);
+    clipboard->enabled = desc->enable_clipboard;
+    if (clipboard->enabled) {
+        clipboard->buf_size = desc->clipboard_size;
+        clipboard->buffer = (char*) SOKOL_CALLOC(1, (size_t)clipboard->buf_size);
+        if (0 == clipboard->buffer) {
+            SOKOL_LOG("failed to allocate clipboard buffer!");
+            return false;
+        }
+    }
+    return true;
 }
 
-_SOKOL_PRIVATE void _sapp_close_window(sapp_window win_id) {
-    // FIXME
+_SOKOL_PRIVATE void _sapp_discard_clipboard(_sapp_clipboard_t* clipboard) {
+    SOKOL_ASSERT(clipboard);
+    if (0 != clipboard->buffer) {
+        SOKOL_FREE(clipboard->buffer);
+    }
+    _SAPP_CLEAR_PTR(_sapp_clipboard_t, clipboard);
+}
+
+_SOKOL_PRIVATE bool _sapp_init_drop(_sapp_drop_t* drop, const sapp_window_desc* desc) {
+    SOKOL_ASSERT(drop && desc);
+    SOKOL_ASSERT(0 == drop->buffer);
+    drop->enabled = desc->enable_dragndrop;
+    if (drop->enabled) {
+        drop->max_files = desc->max_dropped_files;
+        drop->max_path_length = desc->max_dropped_file_path_length;
+        drop->buf_size = drop->max_files * drop->max_path_length;
+        drop->buffer = (char*) SOKOL_CALLOC(1, (size_t)drop->buf_size);
+        if (0 == drop->buffer) {
+            SOKOL_LOG("failed to allocate drag'n'drop buffer!");
+            return false;
+        }
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_discard_drop(_sapp_drop_t* drop) {
+    SOKOL_ASSERT(drop);
+    if (0 != drop->buffer) {
+        SOKOL_FREE(drop->buffer);
+    }
+    _SAPP_CLEAR_PTR(_sapp_drop_t, drop);
+}
+
+_SOKOL_PRIVATE void _sapp_destroy_window(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (0 == win) {
+        return;
+    }
+    _sapp_discard_drop(&win->drop);
+    _sapp_discard_clipboard(&win->clipboard);
+    _sapp_platform_destroy_window(win);
+    _sapp_free_window_id(win_id);
+    _SAPP_CLEAR_PTR(_sapp_window_t, win);
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_create_window(const sapp_window_desc* desc) {
+    SOKOL_ASSERT(desc);
+
+    const uint32_t win_id = _sapp_alloc_window_id();
+    if (SAPP_INVALID_ID == win_id) {
+        SOKOL_LOG("window pool exhausted")
+        return SAPP_INVALID_ID;
+    }
+
+    // platform-agnostic initialization
+    _sapp_window_t* win = _sapp_window_at(win_id);
+    SOKOL_ASSERT(win);
+    win->desc = *desc;
+    win->pos_x = desc->x;
+    win->pos_y = desc->y;
+    win->window_width = desc->width;
+    win->window_height = desc->height;
+    win->framebuffer_width = desc->width;
+    win->framebuffer_height = desc->height;
+    win->dpi_scale = 1.0f;
+    win->fullscreen = desc->fullscreen;
+    win->first_frame = true;
+    win->mouse.shown = true;
+    if (!_sapp_init_clipboard(&win->clipboard, &win->desc)) {
+        SOKOL_LOG("clipboard initialization failed!");
+        return SAPP_INVALID_ID;
+    }
+    if (!_sapp_init_drop(&win->drop, &win->desc)) {
+        SOKOL_LOG("drag'n'drop initialization failed!");
+        _sapp_discard_clipboard(&win->clipboard);
+        return SAPP_INVALID_ID;
+    }
+    _sapp_strcpy(desc->title, &win->title[0], sizeof(win->title));
+    win->desc.title = &win->title[0];   // redirect transient pointer to persistent copy
+
+    // platform-specific window creation and initialization
+    if (!_sapp_platform_create_window(win)) {
+        _sapp_discard_drop(&win->drop);
+        _sapp_discard_clipboard(&win->clipboard);
+        return SAPP_INVALID_ID;
+    }
+    return win_id;
+}
+
+_SOKOL_PRIVATE void _sapp_destroy_all_windows(void) {
+    SOKOL_ASSERT(_sapp.window_pool.windows);
+    for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
+        uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
+        if (SAPP_INVALID_ID != win_id) {
+            _sapp_destroy_window(win_id);
+        }
+    }
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
@@ -2771,51 +2882,26 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
 }
 
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
-    _SAPP_CLEAR(_sapp_t, _sapp);
+    _SAPP_CLEAR_ITEM(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
-    _sapp.window.desc = _sapp.desc.window;
-    _sapp.window.first_frame = true;
-    _sapp.window.window_width = _sapp.desc.window.width;
-    _sapp.window.window_height = _sapp.desc.window.height;
-    _sapp.window.framebuffer_width = _sapp.window.window_width;
-    _sapp.window.framebuffer_height = _sapp.window.window_height;
-    _sapp.window.clipboard.enabled = _sapp.desc.window.enable_clipboard;
-    if (_sapp.window.clipboard.enabled) {
-        _sapp.window.clipboard.buf_size = _sapp.desc.window.clipboard_size;
-        _sapp.window.clipboard.buffer = (char*) SOKOL_CALLOC(1, (size_t)_sapp.window.clipboard.buf_size);
-    }
-    _sapp.window.drop.enabled = _sapp.desc.window.enable_dragndrop;
-    if (_sapp.window.drop.enabled) {
-        _sapp.window.drop.max_files = _sapp.desc.window.max_dropped_files;
-        _sapp.window.drop.max_path_length = _sapp.desc.window.max_dropped_file_path_length;
-        _sapp.window.drop.buf_size = _sapp.window.drop.max_files * _sapp.window.drop.max_path_length;
-        _sapp.window.drop.buffer = (char*) SOKOL_CALLOC(1, (size_t)_sapp.window.drop.buf_size);
-    }
-    _sapp_strcpy(_sapp.desc.window.title, _sapp.window.title, sizeof(_sapp.window.title));
-    _sapp.desc.window.title = _sapp.window.title;
-    _sapp.window.dpi_scale = 1.0f;
-    _sapp.window.fullscreen = _sapp.desc.window.fullscreen;
-    _sapp.window.mouse.shown = true;
-    _sapp_setup_window_pool(&_sapp.window_pool, &_sapp.desc);
+    _sapp_setup_window_pool(&_sapp.desc);
     _sapp_platform_init_state();
+
+    // copy title string in desc to backing store and patch transient pointer
+    _sapp_strcpy(desc->window.title, &_sapp.desc_window_title[0], sizeof(_sapp.desc_window_title));
+    _sapp.desc.window.title = &_sapp.desc_window_title[0];
+    // FIXME: what about the icon image pointers?
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
-    _sapp_destroy_all_windows(&_sapp.window_pool);
-    _sapp_discard_window_pool(&_sapp.window_pool);
-    if (_sapp.window.clipboard.enabled) {
-        SOKOL_ASSERT(_sapp.window.clipboard.buffer);
-        SOKOL_FREE((void*)_sapp.window.clipboard.buffer);
-    }
-    if (_sapp.window.drop.enabled) {
-        SOKOL_ASSERT(_sapp.window.drop.buffer);
-        SOKOL_FREE((void*)_sapp.window.drop.buffer);
-    }
+    _sapp_destroy_all_windows();
+    _sapp_discard_window_pool();
+    _sapp_platform_discard_state();
     if (_sapp.default_icon_pixels) {
         SOKOL_FREE((void*)_sapp.default_icon_pixels);
+        _sapp.default_icon_pixels = 0;
     }
-    _sapp_platform_discard_state();
-    _SAPP_CLEAR(_sapp_t, _sapp);
+    _SAPP_CLEAR_ITEM(_sapp_t, _sapp);
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -3155,24 +3241,6 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
 /* called from _sapp_init_state() */
 _SOKOL_PRIVATE void _sapp_macos_init_state(void) {
     _sapp_macos_init_keytable();
-}
-
-/* called from _sapp_discard_state() */
-_SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
-    // NOTE: it's safe to call [release] on a nil object
-    _SAPP_OBJC_RELEASE(_sapp.macos.win.tracking_area);
-    _SAPP_OBJC_RELEASE(_sapp.macos.win.delegate);
-    _SAPP_OBJC_RELEASE(_sapp.macos.win.view);
-    _SAPP_OBJC_RELEASE(_sapp.macos.app_delegate);
-    #if defined(SOKOL_METAL)
-        _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
-    #endif
-    _SAPP_OBJC_RELEASE(_sapp.macos.win.ns_window);
-}
-
-_SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
-    _sapp_init_state(desc);
-    [NSApplication sharedApplication];
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
     sapp_set_icon(&_sapp.desc.icon);
@@ -3180,17 +3248,137 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp.macos.app_delegate = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_delegate;
     [NSApp activateIgnoringOtherApps:YES];
+    #if defined(SOKOL_METAL)
+        _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
+    #endif
+}
+
+/* called from _sapp_discard_state() */
+_SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
+    // NOTE: it's safe to call [release] on a nil object
+    _SAPP_OBJC_RELEASE(_sapp.macos.app_delegate);
+    #if defined(SOKOL_METAL)
+        _SAPP_OBJC_RELEASE(_sapp.macos.mtl_device);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
+    [NSApplication sharedApplication];
+    _sapp_init_state(desc);
     [NSApp run];
     // NOTE: [NSApp run] never returns, cleanup code is in applicationWillTerminate instead
 }
 
-_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win, const sapp_window_desc* desc) {
-    // FIXME
-    return false;
+_SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
+    SOKOL_ASSERT(win);
+    if (win->fullscreen) {
+        NSRect screen_rect = NSScreen.mainScreen.frame;
+        win->window_width = screen_rect.size.width;
+        win->window_height = screen_rect.size.height;
+    }
+    if (win->desc.high_dpi) {
+        // FIXME: is there something like iOS 'nativeScale' on macOS?
+        win->framebuffer_width = 2 * win->window_width;
+        win->framebuffer_height = 2 * win->window_height;
+    }
+    else {
+        win->framebuffer_width = win->window_width;
+        win->framebuffer_height = win->window_height;
+    }
+    win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
+    const NSUInteger style =
+        NSWindowStyleMaskTitled |
+        NSWindowStyleMaskClosable |
+        NSWindowStyleMaskMiniaturizable |
+        NSWindowStyleMaskResizable;
+    NSRect window_rect = NSMakeRect(win->pos_x, win->pos_y, win->window_width, win->window_height);
+    win->macos.window = [[_sapp_macos_window alloc]
+        initWithContentRect:window_rect
+        styleMask:style
+        backing:NSBackingStoreBuffered
+        defer:NO];
+    win->macos.window.releasedWhenClosed = NO; // this is necessary for proper cleanup in applicationWillTerminate
+    win->macos.window.title = [NSString stringWithUTF8String:win->title];
+    win->macos.window.acceptsMouseMovedEvents = YES;
+    win->macos.window.restorable = YES;
+
+    win->macos.delegate = [[_sapp_macos_window_delegate alloc] init];
+    win->macos.window.delegate = win->macos.delegate;
+    #if defined(SOKOL_METAL)
+        win->macos.view = [[_sapp_macos_view alloc] init];
+        [win->macos.view updateTrackingAreas];
+        win->macos.view.preferredFramesPerSecond = 60 / win->desc.swap_interval;
+        win->macos.view.device = _sapp.macos.mtl_device;
+        win->macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        win->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        win->macos.view.sampleCount = (NSUInteger) win->desc.sample_count;
+        win->macos.view.autoResizeDrawable = false;
+        win->macos.window.contentView = win->macos.view;
+        [win->macos.window makeFirstResponder:win->macos.view];
+        win->macos.view.layer.magnificationFilter = kCAFilterNearest;
+    #elif defined(SOKOL_GLCORE33)
+        NSOpenGLPixelFormatAttribute attrs[32];
+        int i = 0;
+        attrs[i++] = NSOpenGLPFAAccelerated;
+        attrs[i++] = NSOpenGLPFADoubleBuffer;
+        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
+        attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
+        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
+        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
+        if (_sapp.sample_count > 1) {
+            attrs[i++] = NSOpenGLPFAMultisample;
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
+        }
+        else {
+            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
+        }
+        attrs[i++] = 0;
+        NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        SOKOL_ASSERT(glpixelformat_obj != nil);
+
+        _sapp.macos.view = [[_sapp_macos_view alloc]
+            initWithFrame:window_rect
+            pixelFormat:glpixelformat_obj];
+        _SAPP_OBJC_RELEASE(glpixelformat_obj);
+        [_sapp.macos.view updateTrackingAreas];
+        if (_sapp.desc.high_dpi) {
+            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:YES];
+        }
+        else {
+            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:NO];
+        }
+
+        _sapp.macos.window.contentView = _sapp.macos.view;
+        [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
+
+        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
+            target:_sapp.macos.view
+            selector:@selector(timerFired:)
+            userInfo:nil
+            repeats:YES];
+        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
+        timer_obj = nil;
+    #endif
+    if (win->fullscreen) {
+        /* on GL, this already toggles a rendered frame, so set the valid flag before */
+        [win->macos.window toggleFullScreen:NSApp];
+    }
+    else {
+        [win->macos.window center];
+    }
+    [win->macos.window makeKeyAndOrderFront:nil];
+    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
-    // FIXME
+    SOKOL_ASSERT(win);
+    // NOTE: it's safe to call [release] on a nil object
+    _SAPP_OBJC_RELEASE(win->macos.tracking_area);
+    _SAPP_OBJC_RELEASE(win->macos.delegate);
+    _SAPP_OBJC_RELEASE(win->macos.view);
+    _SAPP_OBJC_RELEASE(win->macos.window);
 }
 
 /* MacOS entry function */
@@ -3262,7 +3450,7 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
 */
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     #if defined(SOKOL_METAL)
-        const NSRect fb_rect = [_sapp.macos.win.view bounds];
+        const NSRect fb_rect = [_sapp.window.macos.view bounds];
         _sapp.window.framebuffer_width = fb_rect.size.width * _sapp.window.dpi_scale;
         _sapp.window.framebuffer_height = fb_rect.size.height * _sapp.window.dpi_scale;
     #elif defined(SOKOL_GLCORE33)
@@ -3270,7 +3458,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.framebuffer_width = fb_rect.size.width;
         _sapp.framebuffer_height = fb_rect.size.height;
     #endif
-    const NSRect bounds = [_sapp.macos.win.view bounds];
+    const NSRect bounds = [_sapp.window.macos.view bounds];
     _sapp.window.window_width = bounds.size.width;
     _sapp.window.window_height = bounds.size.height;
     if (_sapp.window.framebuffer_width == 0) {
@@ -3294,7 +3482,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     */
     #if defined(SOKOL_METAL)
     CGSize drawable_size = { (CGFloat) _sapp.window.framebuffer_width, (CGFloat) _sapp.window.framebuffer_height };
-    _sapp.macos.win.view.drawableSize = drawable_size;
+    _sapp.window.macos.view.drawableSize = drawable_size;
     #endif
 }
 
@@ -3304,7 +3492,7 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
        event handlers
     */
     _sapp.window.fullscreen = !_sapp.window.fullscreen;
-    [_sapp.macos.win.ns_window toggleFullScreen:nil];
+    [_sapp.window.macos.window toggleFullScreen:nil];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_clipboard_string(const char* str) {
@@ -3333,7 +3521,7 @@ _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_window_title(void) {
-    [_sapp.macos.win.ns_window setTitle: [NSString stringWithUTF8String:_sapp.window.title]];
+    [_sapp.window.macos.window setTitle: [NSString stringWithUTF8String:_sapp.window.title]];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(NSEvent* event) {
@@ -3432,114 +3620,20 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.win.ns_window performClose:nil];
+        [_sapp.window.macos.window performClose:nil];
     }
 }
 
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    if (_sapp.window.fullscreen) {
-        NSRect screen_rect = NSScreen.mainScreen.frame;
-        _sapp.window.window_width = screen_rect.size.width;
-        _sapp.window.window_height = screen_rect.size.height;
-    }
-    if (_sapp.desc.window.high_dpi) {
-        _sapp.window.framebuffer_width = 2 * _sapp.window.window_width;
-        _sapp.window.framebuffer_height = 2 * _sapp.window.window_height;
-    }
-    else {
-        _sapp.window.framebuffer_width = _sapp.window.window_width;
-        _sapp.window.framebuffer_height = _sapp.window.window_height;
-    }
-    _sapp.window.dpi_scale = (float)_sapp.window.framebuffer_width / (float) _sapp.window.window_width;
-    const NSUInteger style =
-        NSWindowStyleMaskTitled |
-        NSWindowStyleMaskClosable |
-        NSWindowStyleMaskMiniaturizable |
-        NSWindowStyleMaskResizable;
-    NSRect window_rect = NSMakeRect(0, 0, _sapp.window.window_width, _sapp.window.window_height);
-    _sapp.macos.win.ns_window = [[_sapp_macos_window alloc]
-        initWithContentRect:window_rect
-        styleMask:style
-        backing:NSBackingStoreBuffered
-        defer:NO];
-    _sapp.macos.win.ns_window.releasedWhenClosed = NO; // this is necessary for proper cleanup in applicationWillTerminate
-    _sapp.macos.win.ns_window.title = [NSString stringWithUTF8String:_sapp.window.title];
-    _sapp.macos.win.ns_window.acceptsMouseMovedEvents = YES;
-    _sapp.macos.win.ns_window.restorable = YES;
 
-    _sapp.macos.win.delegate = [[_sapp_macos_window_delegate alloc] init];
-    _sapp.macos.win.ns_window.delegate = _sapp.macos.win.delegate;
-    #if defined(SOKOL_METAL)
-        _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
-        _sapp.macos.win.view = [[_sapp_macos_view alloc] init];
-        [_sapp.macos.win.view updateTrackingAreas];
-        _sapp.macos.win.view.preferredFramesPerSecond = 60 / _sapp.window.desc.swap_interval;
-        _sapp.macos.win.view.device = _sapp.macos.mtl_device;
-        _sapp.macos.win.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-        _sapp.macos.win.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        _sapp.macos.win.view.sampleCount = (NSUInteger) _sapp.window.desc.sample_count;
-        _sapp.macos.win.view.autoResizeDrawable = false;
-        _sapp.macos.win.ns_window.contentView = _sapp.macos.win.view;
-        [_sapp.macos.win.ns_window makeFirstResponder:_sapp.macos.win.view];
-        _sapp.macos.win.view.layer.magnificationFilter = kCAFilterNearest;
-    #elif defined(SOKOL_GLCORE33)
-        NSOpenGLPixelFormatAttribute attrs[32];
-        int i = 0;
-        attrs[i++] = NSOpenGLPFAAccelerated;
-        attrs[i++] = NSOpenGLPFADoubleBuffer;
-        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
-        attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
-        attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
-        attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
-        attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-        if (_sapp.sample_count > 1) {
-            attrs[i++] = NSOpenGLPFAMultisample;
-            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
-        }
-        else {
-            attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
-        }
-        attrs[i++] = 0;
-        NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        SOKOL_ASSERT(glpixelformat_obj != nil);
+    _sapp.main_window_id = _sapp_create_window(&_sapp.desc.window);
+    _sapp.cur_window_id = _sapp.main_window_id;
 
-        _sapp.macos.view = [[_sapp_macos_view alloc]
-            initWithFrame:window_rect
-            pixelFormat:glpixelformat_obj];
-        _SAPP_OBJC_RELEASE(glpixelformat_obj);
-        [_sapp.macos.view updateTrackingAreas];
-        if (_sapp.desc.high_dpi) {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:YES];
-        }
-        else {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:NO];
-        }
-
-        _sapp.macos.window.contentView = _sapp.macos.view;
-        [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-
-        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:_sapp.macos.view
-            selector:@selector(timerFired:)
-            userInfo:nil
-            repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
-        timer_obj = nil;
-    #endif
-    _sapp.valid = true;
-    if (_sapp.window.fullscreen) {
-        /* on GL, this already toggles a rendered frame, so set the valid flag before */
-        [_sapp.macos.win.ns_window toggleFullScreen:self];
-    }
-    else {
-        [_sapp.macos.win.ns_window center];
-    }
-    [_sapp.macos.win.ns_window makeKeyAndOrderFront:nil];
-    _sapp_macos_update_dimensions();
     [NSEvent setMouseCoalescingEnabled:NO];
+    _sapp_macos_update_dimensions();
+    _sapp.valid = true;
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
@@ -3750,9 +3844,9 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     return YES;
 }
 - (void)updateTrackingAreas {
-    if (_sapp.macos.win.tracking_area != nil) {
-        [self removeTrackingArea:_sapp.macos.win.tracking_area];
-        _SAPP_OBJC_RELEASE(_sapp.macos.win.tracking_area);
+    if (_sapp.window.macos.tracking_area != nil) {
+        [self removeTrackingArea:_sapp.window.macos.tracking_area];
+        _SAPP_OBJC_RELEASE(_sapp.window.macos.tracking_area);
     }
     const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
                                           NSTrackingActiveInKeyWindow |
@@ -3760,8 +3854,8 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
                                           NSTrackingCursorUpdate |
                                           NSTrackingInVisibleRect |
                                           NSTrackingAssumeInside;
-    _sapp.macos.win.tracking_area = [[NSTrackingArea alloc] initWithRect:[self bounds] options:options owner:self userInfo:nil];
-    [self addTrackingArea:_sapp.macos.win.tracking_area];
+    _sapp.window.macos.tracking_area = [[NSTrackingArea alloc] initWithRect:[self bounds] options:options owner:self userInfo:nil];
+    [self addTrackingArea:_sapp.window.macos.tracking_area];
     [super updateTrackingAreas];
 }
 - (void)mouseEntered:(NSEvent*)event {
@@ -3769,48 +3863,48 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     /* don't send mouse enter/leave while dragging (so that it behaves the same as
        on Windows while SetCapture is active
     */
-    if (0 == _sapp.macos.win.mouse_buttons) {
+    if (0 == _sapp.window.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseExited:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    if (0 == _sapp.macos.win.mouse_buttons) {
+    if (0 == _sapp.window.macos.mouse_buttons) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
-    _sapp.macos.win.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
+    _sapp.window.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
-    _sapp.macos.win.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
+    _sapp.window.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
-    _sapp.macos.win.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
+    _sapp.window.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
-    _sapp.macos.win.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
+    _sapp.window.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
-        _sapp.macos.win.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
+        _sapp.window.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
         _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
-        _sapp.macos.win.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
+        _sapp.window.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseDragged:(NSEvent*)event {
@@ -3894,9 +3988,9 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp_macos_mods(event));
 }
 - (void)flagsChanged:(NSEvent*)event {
-    const uint32_t old_f = _sapp.macos.win.flags_changed_store;
+    const uint32_t old_f = _sapp.window.macos.flags_changed_store;
     const uint32_t new_f = event.modifierFlags;
-    _sapp.macos.win.flags_changed_store = new_f;
+    _sapp.window.macos.flags_changed_store = new_f;
     sapp_keycode key_code = SAPP_KEYCODE_INVALID;
     bool down = false;
     if ((new_f ^ old_f) & NSEventModifierFlagShift) {
@@ -11245,9 +11339,9 @@ SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.win.view currentRenderPassDescriptor];
+            const void* obj = (__bridge const void*) [_sapp.window.macos.view currentRenderPassDescriptor];
         #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view currentRenderPassDescriptor];
+            const void* obj = (__bridge const void*) [_sapp.window.ios.view currentRenderPassDescriptor];
         #endif
         SOKOL_ASSERT(obj);
         return obj;
@@ -11260,9 +11354,9 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [_sapp.macos.win.view currentDrawable];
+            const void* obj = (__bridge const void*) [_sapp.window.macos.view currentDrawable];
         #else
-            const void* obj = (__bridge const void*) [_sapp.ios.view currentDrawable];
+            const void* obj = (__bridge const void*) [_sapp.window.ios.view currentDrawable];
         #endif
         SOKOL_ASSERT(obj);
         return obj;
@@ -11273,7 +11367,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
 
 SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
     #if defined(_SAPP_MACOS)
-        const void* obj = (__bridge const void*) _sapp.macos.win.ns_window;
+        const void* obj = (__bridge const void*) _sapp.window.macos.window;
         SOKOL_ASSERT(obj);
         return obj;
     #else
