@@ -1022,6 +1022,9 @@ enum {
     SAPP_MAX_ICONIMAGES = 8,
 };
 
+/* a window handle */
+typedef struct sapp_window { uint32_t id; } sapp_window;
+
 /*
     sapp_event_type
 
@@ -2391,38 +2394,38 @@ static _sapp_t _sapp;
 
 // forward-declared platform-specific functions
 #if defined(_SAPP_MACOS)
-_SOKOL_PRIVATE void _sapp_macos_init_backend(void);
-_SOKOL_PRIVATE void _sapp_macos_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_macos_init_state(void);
+_SOKOL_PRIVATE void _sapp_macos_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_IOS)
-_SOKOL_PRIVATE void _sapp_ios_init_backend(void);
-_SOKOL_PRIVATE void _sapp_ios_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_ios_init_state(void);
+_SOKOL_PRIVATE void _sapp_ios_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_ios_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_EMSCRIPTEN)
-_SOKOL_PRIVATE void _sapp_emsc_init_backend(void);
-_SOKOL_PRIVATE void _sapp_emsc_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_emsc_init_state(void);
+_SOKOL_PRIVATE void _sapp_emsc_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_emsc_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_WIN32)
-_SOKOL_PRIVATE void _sapp_win32_init_backend(void);
-_SOKOL_PRIVATE void _sapp_win32_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_win32_init_state(void);
+_SOKOL_PRIVATE void _sapp_win32_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_UWP)
-_SOKOL_PRIVATE void _sapp_uwp_init_backend(void);
-_SOKOL_PRIVATE void _sapp_uwp_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_uwp_init_state(void);
+_SOKOL_PRIVATE void _sapp_uwp_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_uwp_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_ANDROID)
-_SOKOL_PRIVATE void _sapp_android_init_backend(void);
-_SOKOL_PRIVATE void _sapp_android_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_android_init_state(void);
+_SOKOL_PRIVATE void _sapp_android_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_android_destroy_window(_sapp_window_t* win);
 #elif defined(_SAPP_LINUX)
-_SOKOL_PRIVATE void _sapp_x11_init_backend(void);
-_SOKOL_PRIVATE void _sapp_x11_discard_backend(void);
+_SOKOL_PRIVATE void _sapp_x11_init_state(void);
+_SOKOL_PRIVATE void _sapp_x11_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win, const sapp_window_desc* desc);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
 #endif
@@ -2526,6 +2529,11 @@ _SOKOL_PRIVATE void _sapp_discard_window_pool(_sapp_window_pool_t* window_pool) 
     SOKOL_ASSERT(window_pool->windows);
     SOKOL_FREE(window_pool->windows); window_pool->windows = 0;
     _sapp_discard_pool(&window_pool->pool);
+}
+
+_SOKOL_PRIVATE sapp_window _sapp_make_window_id(uint32_t win_id) {
+    sapp_window res = { win_id };
+    return res;
 }
 
 /* returns pointer to window by id without matching id check */
@@ -2708,40 +2716,50 @@ _SOKOL_PRIVATE sapp_window_desc _sapp_window_defaults(const sapp_window_desc* in
     return desc;
 }
 
-_SOKOL_PRIVATE void _sapp_init_backend(void) {
+_SOKOL_PRIVATE void _sapp_platform_init_state(void) {
     #if defined(_SAPP_MACOS)
-        _sapp_macos_init_backend();
+        _sapp_macos_init_state();
     #elif defined(_SAPP_IOS)
-        _sapp_ios_init_backend();
+        _sapp_ios_init_state();
     #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_init_backend();
+        _sapp_emsc_init_state();
     #elif defined(_SAPP_WIN32)
-        _sapp_win32_init_backend();
+        _sapp_win32_init_state();
     #elif defined(_SAPP_UWP)
-        _sapp_uwp_init_backend();
+        _sapp_uwp_init_state();
     #elif defined(_SAPP_ANDROID)
-        _sapp_android_init_backend();
+        _sapp_android_init_state();
     #elif defined(_SAPP_LINUX)
-        _sapp_x11_init_backend();
+        _sapp_x11_init_state();
     #endif
 }
 
-_SOKOL_PRIVATE void _sapp_discard_backend(void) {
+_SOKOL_PRIVATE void _sapp_platform_discard_state(void) {
     #if defined(_SAPP_MACOS)
-        _sapp_macos_discard_backend();
+        _sapp_macos_discard_state();
     #elif defined(_SAPP_IOS)
-        _sapp_ios_discard_backend();
+        _sapp_ios_discard_state();
     #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_discard_backend();
+        _sapp_emsc_discard_state();
     #elif defined(_SAPP_WIN32)
-        _sapp_win32_discard_backend();
+        _sapp_win32_discard_state();
     #elif defined(_SAPP_UWP)
-        _sapp_uwp_discard_backend();
+        _sapp_uwp_discard_state();
     #elif defined(_SAPP_ANDROID)
-        _sapp_android_discard_backend();
+        _sapp_android_discard_state();
     #elif defined(_SAPP_LINUX)
-        _sapp_x11_discard_backend();
+        _sapp_x11_discard_state();
     #endif
+}
+
+_SOKOL_PRIVATE sapp_window _sapp_open_window(const sapp_window_desc* desc) {
+    SOKOL_ASSERT(desc);
+    // FIXME
+    return _sapp_make_window_id(SAPP_INVALID_ID);
+}
+
+_SOKOL_PRIVATE void _sapp_close_window(sapp_window win_id) {
+    // FIXME
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
@@ -2778,8 +2796,8 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.window.dpi_scale = 1.0f;
     _sapp.window.fullscreen = _sapp.desc.window.fullscreen;
     _sapp.window.mouse.shown = true;
-    _sapp_setup_window_pool(&_sapp.window_pool, desc);
-    _sapp_init_backend();
+    _sapp_setup_window_pool(&_sapp.window_pool, &_sapp.desc);
+    _sapp_platform_init_state();
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -2796,7 +2814,7 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.default_icon_pixels) {
         SOKOL_FREE((void*)_sapp.default_icon_pixels);
     }
-    _sapp_discard_backend();
+    _sapp_platform_discard_state();
     _SAPP_CLEAR(_sapp_t, _sapp);
 }
 
@@ -3135,20 +3153,12 @@ _SOKOL_PRIVATE void _sapp_macos_init_keytable(void) {
 }
 
 /* called from _sapp_init_state() */
-_SOKOL_PRIVATE void _sapp_macos_init_backend(void) {
+_SOKOL_PRIVATE void _sapp_macos_init_state(void) {
     _sapp_macos_init_keytable();
-    [NSApplication sharedApplication];
-    // set the application dock icon as early as possible, otherwise
-    // the dummy icon will be visible for a short time
-    sapp_set_icon(&_sapp.desc.icon);
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
-    _sapp.macos.app_delegate = [[_sapp_macos_app_delegate alloc] init];
-    NSApp.delegate = _sapp.macos.app_delegate;
-    [NSApp activateIgnoringOtherApps:YES];
 }
 
 /* called from _sapp_discard_state() */
-_SOKOL_PRIVATE void _sapp_macos_discard_backend(void) {
+_SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.macos.win.tracking_area);
     _SAPP_OBJC_RELEASE(_sapp.macos.win.delegate);
@@ -3162,6 +3172,14 @@ _SOKOL_PRIVATE void _sapp_macos_discard_backend(void) {
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
+    [NSApplication sharedApplication];
+    // set the application dock icon as early as possible, otherwise
+    // the dummy icon will be visible for a short time
+    sapp_set_icon(&_sapp.desc.icon);
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    _sapp.macos.app_delegate = [[_sapp_macos_app_delegate alloc] init];
+    NSApp.delegate = _sapp.macos.app_delegate;
+    [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     // NOTE: [NSApp run] never returns, cleanup code is in applicationWillTerminate instead
 }
