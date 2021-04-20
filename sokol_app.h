@@ -1432,6 +1432,10 @@ extern sapp_desc sokol_main(int argc, char* argv[]);
 
 /* returns true after sokol-app has been initialized */
 SOKOL_APP_API_DECL bool sapp_isvalid(void);
+/* open a new window */
+SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
+/* close a window */
+SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
 /* returns the current framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_width(void);
 /* same as sapp_width(), but returns float */
@@ -1466,8 +1470,6 @@ SOKOL_APP_API_DECL bool sapp_mouse_shown();
 SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
 SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
-/* return the userdata pointer optionally provided in sapp_desc */
-SOKOL_APP_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
 SOKOL_APP_API_DECL sapp_desc sapp_query_desc(void);
 /* initiate a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
@@ -2716,7 +2718,7 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE sapp_window_desc _sapp_window_defaults(const sapp_window_desc* in_desc) {
+_SOKOL_PRIVATE sapp_window_desc _sapp_window_desc_defaults(const sapp_window_desc* in_desc) {
     sapp_window_desc desc = *in_desc;
     desc.title = _sapp_def(desc.title, "sokol_app");
     desc.width = _sapp_def(desc.width, 640);
@@ -2897,7 +2899,7 @@ _SOKOL_PRIVATE void _sapp_destroy_all_windows(void) {
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     sapp_desc desc = *in_desc;
     desc.window_pool_size = _sapp_def(desc.window_pool_size, _SAPP_DEFAULT_POOL_SIZE);
-    desc.window = _sapp_window_defaults(&desc.window);
+    desc.window = _sapp_window_desc_defaults(&desc.window);
     desc.html5.canvas_name = _sapp_def(desc.html5.canvas_name, "canvas");
     return desc;
 }
@@ -2963,16 +2965,13 @@ _SOKOL_PRIVATE void _sapp_clear_drop_buffer(_sapp_window_t* win) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_frame(void) {
-    // FIXME: loop over all windows
-    _sapp_window_t* win = _sapp_push_window(_sapp.main_window_id);
+_SOKOL_PRIVATE void _sapp_frame(_sapp_window_t* win) {
     if (win->first_frame) {
         win->first_frame = false;
         _sapp_call_init(win);
     }
     _sapp_call_frame(win);
     _sapp.frame_count++;
-    _sapp_pop_window();
 }
 
 _SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image_desc* desc) {
@@ -3649,13 +3648,11 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
-_SOKOL_PRIVATE void _sapp_macos_frame(void) {
-    _sapp_frame();
+_SOKOL_PRIVATE void _sapp_macos_frame(_sapp_window_t* win) {
+    _sapp_frame(win);
     // FIXME FIXME FIXME
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        _sapp_window_t* win = _sapp_push_window(_sapp.main_window_id);
         [win->macos.window performClose:nil];
-        _sapp_pop_window();
     }
 }
 
@@ -3843,10 +3840,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
-    _sapp_macos_frame();
+    _sapp_window_t* win = _sapp_push_window(self.win_id);
+    _sapp_macos_frame(win);
     #if !defined(SOKOL_METAL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
+    _sapp_pop_window();
 }
 
 - (BOOL)isOpaque {
@@ -11074,8 +11073,14 @@ SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
 }
 
-SOKOL_API_IMPL void* sapp_userdata(void) {
-    return _sapp.desc.window.user_data;
+SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
+    SOKOL_ASSERT(in_desc);
+    const sapp_window_desc desc = _sapp_window_desc_defaults(in_desc);
+    return _sapp_make_window_id(_sapp_create_window(&desc));
+}
+
+SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
+    // FIXME
 }
 
 SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
