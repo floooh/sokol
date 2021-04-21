@@ -2824,10 +2824,8 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
     sapp_set_icon(&_sapp.desc.icon);
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
-    [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
@@ -3170,6 +3168,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     else {
         [_sapp.macos.window center];
     }
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    [NSApp activateIgnoringOtherApps:YES];
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
     [NSEvent setMouseCoalescingEnabled:NO];
