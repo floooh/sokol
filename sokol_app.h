@@ -1523,6 +1523,8 @@ SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
 /* D3D11: get pointer to ID3D11DeviceContext object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device_context(void);
+/* D3D11: get pointer to IDXGISwapChain object */
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_swap_chain(void);
 /* D3D11: get pointer to ID3D11RenderTargetView object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 /* D3D11: get pointer to ID3D11DepthStencilView */
@@ -3662,6 +3664,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(_sapp_window_t* win) {
     _SOKOL_UNUSED(aNotification);
 
     _sapp.main_window_id = _sapp_create_window(&_sapp.desc.window);
+
+    // FIXME: maybe the activation stuff here needs to be moved before
+    // the makeKeyAndOrderFront call, see here:
+    // https://github.com/floooh/sokol/pull/515#issuecomment-824221751
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    [NSApp activateIgnoringOtherApps:YES];
+
     [NSEvent setMouseCoalescingEnabled:NO];
     _sapp_window_t* win = _sapp_push_window(_sapp.main_window_id);
     _sapp_macos_update_dimensions(win);
@@ -11480,6 +11489,15 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_device_context(void) {
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
+    SOKOL_ASSERT(_sapp.valid);
+#if defined(SOKOL_D3D11)
+    return _sapp.d3d11.swap_chain;
+#else
+    return 0;
+#endif
 }
 
 SOKOL_API_IMPL const void* sapp_d3d11_get_render_target_view(void) {
