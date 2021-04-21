@@ -2890,12 +2890,14 @@ _SOKOL_PRIVATE uint32_t _sapp_create_window(const sapp_window_desc* desc) {
 
 _SOKOL_PRIVATE void _sapp_destroy_all_windows(void) {
     SOKOL_ASSERT(_sapp.window_pool.windows);
+    // make sure to destroy the main window last
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
-        if (SAPP_INVALID_ID != win_id) {
+        if ((SAPP_INVALID_ID != win_id) && (_sapp.main_window_id != win_id)) {
             _sapp_destroy_window(win_id);
         }
     }
+    _sapp_destroy_window(_sapp.main_window_id);
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
