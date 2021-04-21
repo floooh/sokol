@@ -3702,6 +3702,9 @@ typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 
 typedef struct {
     _sg_slot_t slot;
+    struct {
+        dispatch_semaphore_t sem;
+    } mtl;
 } _sg_mtl_context_t;
 typedef _sg_mtl_context_t _sg_context_t;
 
@@ -3740,7 +3743,6 @@ typedef struct {
     _sg_mtl_state_cache_t state_cache;
     _sg_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
-    dispatch_semaphore_t sem;
     id<MTLDevice> device;
     id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
@@ -4037,6 +4039,7 @@ typedef struct {
     bool valid;
     sg_desc desc;       /* original desc with default values patched in */
     uint32_t frame_index;
+    sg_context main_context;
     sg_context active_context;
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
@@ -9978,7 +9981,6 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.user_data = desc->context.metal.user_data;
     _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
-    _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
@@ -9996,20 +9998,11 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
 
 _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     SOKOL_ASSERT(_sg.mtl.valid);
-    /* wait for the last frame to finish */
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
-    }
-    /* semaphore must be "relinquished" before destruction */
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        dispatch_semaphore_signal(_sg.mtl.sem);
-    }
     _sg_mtl_destroy_sampler_cache(_sg.mtl.frame_index);
     _sg_mtl_garbage_collect(_sg.mtl.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg.mtl.valid = false;
 
-    _SG_OBJC_RELEASE(_sg.mtl.sem);
     _SG_OBJC_RELEASE(_sg.mtl.device);
     _SG_OBJC_RELEASE(_sg.mtl.cmd_queue);
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -10047,14 +10040,21 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
-    _SOKOL_UNUSED(ctx);
+    ctx->mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
-    _SOKOL_UNUSED(ctx);
-    /* empty */
+    /* wait for the last frame to finish */
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        dispatch_semaphore_wait(ctx->mtl.sem, DISPATCH_TIME_FOREVER);
+    }
+    /* semaphore must be "relinquished" before destruction */
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        dispatch_semaphore_signal(ctx->mtl.sem);
+    }
+    _SG_OBJC_RELEASE(ctx->mtl.sem);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
@@ -10562,8 +10562,9 @@ _SOKOL_PRIVATE _sg_image_t* _sg_mtl_pass_ds_image(const _sg_pass_t* pass) {
     return pass->mtl.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     SOKOL_ASSERT(action);
+    SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
@@ -10576,12 +10577,13 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     /* if this is the first pass in the frame, create a command buffer */
     if (nil == _sg.mtl.cmd_buffer) {
         /* block until the oldest frame in flight has finished */
-        dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
+        dispatch_semaphore_wait(ctx->mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        __block dispatch_semaphore_t block_sem = ctx->mtl.sem;
         [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
             // NOTE: this code is called on a different thread!
             _SOKOL_UNUSED(cmd_buffer);
-            dispatch_semaphore_signal(_sg.mtl.sem);
+            dispatch_semaphore_signal(block_sem);
         }];
     }
 
@@ -10699,8 +10701,9 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
     _sg_mtl_bind_uniform_buffers();
 }
 
-_SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
+_SOKOL_PRIVATE void _sg_mtl_end_pass(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
+    _SOKOL_UNUSED(ctx);
     _sg.mtl.in_pass = false;
     _sg.mtl.pass_valid = false;
     if (nil != _sg.mtl.cmd_encoder) {
@@ -10710,12 +10713,13 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_commit(void) {
+_SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
     SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    _SOKOL_UNUSED(ctx);
 
     #if defined(_SG_TARGET_MACOS)
     [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
@@ -12990,33 +12994,33 @@ static inline _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
     #endif
 }
 
-static inline void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+static inline void _sg_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_begin_pass(pass, action, w, h);
+    _sg_gl_begin_pass(ctx, pass, action, w, h);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_begin_pass(pass, action, w, h);
+    _sg_mtl_begin_pass(ctx, pass, action, w, h);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_begin_pass(pass, action, w, h);
+    _sg_d3d11_begin_pass(ctx, pass, action, w, h);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_begin_pass(pass, action, w, h);
+    _sg_wgpu_begin_pass(ctx, pass, action, w, h);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_begin_pass(pass, action, w, h);
+    _sg_dummy_begin_pass(ctx, pass, action, w, h);
     #else
     #error("INVALID BACKEND");
     #endif
 }
 
-static inline void _sg_end_pass(void) {
+static inline void _sg_end_pass(_sg_context_t* ctx) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_end_pass();
+    _sg_gl_end_pass(ctx);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_end_pass();
+    _sg_mtl_end_pass(ctx);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_end_pass();
+    _sg_d3d11_end_pass(ctx);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_end_pass();
+    _sg_wgpu_end_pass(ctx);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_end_pass();
+    _sg_dummy_end_pass(ctx);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13124,17 +13128,17 @@ static inline void _sg_draw(int base_element, int num_elements, int num_instance
     #endif
 }
 
-static inline void _sg_commit(void) {
+static inline void _sg_commit(_sg_context_t* ctx) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_commit();
+    _sg_gl_commit(ctx);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_commit();
+    _sg_mtl_commit(ctx);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_commit();
+    _sg_d3d11_commit(ctx);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_commit();
+    _sg_wgpu_commit(ctx);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_commit();
+    _sg_dummy_commit(ctx);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13500,6 +13504,18 @@ _SOKOL_PRIVATE _sg_context_t* _sg_lookup_context(const _sg_pools_t* p, uint32_t 
         }
     }
     return 0;
+}
+
+_SOKOL_PRIVATE _sg_context_t* _sg_active_context(void) {
+    _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
+    SOKOL_ASSERT(ctx);
+    return ctx;
+}
+
+_SOKOL_PRIVATE _sg_context_t* _sg_main_context(void) {
+    _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.main_context.id);
+    SOKOL_ASSERT(ctx);
+    return ctx;
 }
 
 _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
@@ -14749,20 +14765,16 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg_setup_backend(&_sg.desc);
     _sg.valid = true;
     sg_setup_context();
+    _sg.main_context = _sg.active_context;
 }
 
 SOKOL_API_IMPL void sg_shutdown(void) {
-    /* can only delete resources for the currently set context here, if multiple
+    /* can only delete resources for the main context here, if multiple
     contexts are used, the app code must take care of properly releasing them
     (since only the app code can switch between 3D-API contexts)
     */
-    if (_sg.active_context.id != SG_INVALID_ID) {
-        _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.active_context.id);
-        if (ctx) {
-            _sg_destroy_all_resources(&_sg.pools, _sg.active_context.id);
-            _sg_destroy_context(ctx);
-        }
-    }
+    _sg_destroy_all_resources(&_sg.pools, _sg.main_context.id);
+    _sg_destroy_context(_sg_main_context());
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
     _sg.valid = false;
@@ -14821,6 +14833,12 @@ SOKOL_API_IMPL sg_context sg_setup_context(void) {
 SOKOL_API_IMPL void sg_discard_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
+    if (ctx_id.id == _sg.active_context.id) {
+        _sg.active_context.id = SG_INVALID_ID;
+    }
+    if (ctx_id.id == _sg.main_context.id) {
+        _sg.main_context.id = SG_INVALID_ID;
+    }
     _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
     if (ctx) {
         _sg_destroy_context(ctx);
@@ -14828,14 +14846,13 @@ SOKOL_API_IMPL void sg_discard_context(sg_context ctx_id) {
         _sg_reset_slot(&ctx->slot);
         _sg_pool_free_index(&_sg.pools.context_pool, _sg_slot_index(ctx_id.id));
     }
-    _sg.active_context.id = SG_INVALID_ID;
     _sg_activate_context(0);
 }
 
 SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg.active_context = ctx_id;
-    _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
+    _sg_context_t* ctx = _sg_active_context();
     /* NOTE: ctx can be 0 here if the context is no longer valid */
     _sg_activate_context(ctx);
 }
@@ -15206,7 +15223,7 @@ SOKOL_API_IMPL void sg_begin_default_pass(const sg_pass_action* pass_action, int
     _sg_resolve_default_pass_action(pass_action, &pa);
     _sg.cur_pass.id = SG_INVALID_ID;
     _sg.pass_valid = true;
-    _sg_begin_pass(0, &pa, width, height);
+    _sg_begin_pass(_sg_active_context(), 0, &pa, width, height);
     _SG_TRACE_ARGS(begin_default_pass, pass_action, width, height);
 }
 
@@ -15228,7 +15245,7 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         SOKOL_ASSERT(img);
         const int w = img->cmn.width;
         const int h = img->cmn.height;
-        _sg_begin_pass(pass, &pa, w, h);
+        _sg_begin_pass(_sg_active_context(), pass, &pa, w, h);
         _SG_TRACE_ARGS(begin_pass, pass_id, pass_action);
     }
     else {
@@ -15418,7 +15435,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
         _SG_TRACE_NOARGS(err_pass_invalid);
         return;
     }
-    _sg_end_pass();
+    _sg_end_pass(_sg_active_context());
     _sg.cur_pass.id = SG_INVALID_ID;
     _sg.cur_pipeline.id = SG_INVALID_ID;
     _sg.pass_valid = false;
@@ -15427,7 +15444,7 @@ SOKOL_API_IMPL void sg_end_pass(void) {
 
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_commit();
+    _sg_commit(_sg_active_context());
     _SG_TRACE_NOARGS(commit);
     _sg.frame_index++;
 }
