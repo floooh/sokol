@@ -3704,6 +3704,8 @@ typedef struct {
     _sg_slot_t slot;
     struct {
         dispatch_semaphore_t sem;
+        uint32_t cur_ub_index;
+        id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
     } mtl;
 } _sg_mtl_context_t;
 typedef _sg_mtl_context_t _sg_context_t;
@@ -3731,8 +3733,6 @@ typedef struct {
     const void*(*drawable_cb)(void);
     const void*(*drawable_userdata_cb)(void*);
     void* user_data;
-    uint32_t frame_index;
-    uint32_t cur_frame_rotate_index;
     int ub_size;
     int cur_ub_offset;
     uint8_t* cur_ub_base_ptr;
@@ -3747,7 +3747,6 @@ typedef struct {
     id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
-    id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
 
 /*=== WGPU BACKEND DECLARATIONS ==============================================*/
@@ -9979,82 +9978,82 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
     _sg.mtl.drawable_userdata_cb = desc->context.metal.drawable_userdata_cb;
     _sg.mtl.user_data = desc->context.metal.user_data;
-    _sg.mtl.frame_index = 1;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
-    MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if defined(_SG_TARGET_MACOS)
-    res_opts |= MTLResourceStorageModeManaged;
-    #endif
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        _sg.mtl.uniform_buffers[i] = [_sg.mtl.device
-            newBufferWithLength:(NSUInteger)_sg.mtl.ub_size
-            options:res_opts
-        ];
-    }
     _sg_mtl_init_caps();
 }
 
 _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     SOKOL_ASSERT(_sg.mtl.valid);
-    _sg_mtl_destroy_sampler_cache(_sg.mtl.frame_index);
-    _sg_mtl_garbage_collect(_sg.mtl.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
+    _sg_mtl_destroy_sampler_cache(_sg.frame_index);
+    _sg_mtl_garbage_collect(_sg.frame_index + SG_NUM_INFLIGHT_FRAMES + 2);
     _sg_mtl_destroy_pool();
     _sg.mtl.valid = false;
 
     _SG_OBJC_RELEASE(_sg.mtl.device);
     _SG_OBJC_RELEASE(_sg.mtl.cmd_queue);
-    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
-        _SG_OBJC_RELEASE(_sg.mtl.uniform_buffers[i]);
-    }
     /* NOTE: MTLCommandBuffer and MTLRenderCommandEncoder are auto-released */
     _sg.mtl.cmd_buffer = nil;
     _sg.mtl.cmd_encoder = nil;
 }
 
-_SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(void) {
+_SOKOL_PRIVATE void _sg_mtl_bind_uniform_buffers(_sg_context_t* ctx) {
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
     for (int slot = 0; slot < SG_MAX_SHADERSTAGE_UBS; slot++) {
         [_sg.mtl.cmd_encoder
-            setVertexBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            setVertexBuffer:ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index]
             offset:0
             atIndex:(NSUInteger)slot];
         [_sg.mtl.cmd_encoder
-            setFragmentBuffer:_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index]
+            setFragmentBuffer:ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index]
             offset:0
             atIndex:(NSUInteger)slot];
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
+_SOKOL_PRIVATE void _sg_mtl_reset_state_cache(_sg_context_t* ctx) {
     _sg_mtl_clear_state_cache();
 
     /* need to restore the uniform buffer binding (normally happens in
        _sg_mtl_begin_pass()
     */
     if (nil != _sg.mtl.cmd_encoder) {
-        _sg_mtl_bind_uniform_buffers();
+        _sg_mtl_bind_uniform_buffers(ctx);
     }
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     ctx->mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
+    MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
+    #if defined(_SG_TARGET_MACOS)
+    res_opts |= MTLResourceStorageModeManaged;
+    #endif
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        ctx->mtl.uniform_buffers[i] = [_sg.mtl.device
+            newBufferWithLength:(NSUInteger)_sg.mtl.ub_size
+            options:res_opts
+        ];
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
-    /* wait for the last frame to finish */
+    // wait for the last frame to finish
+    // FIXME: does this loop actually make any sense???
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_wait(ctx->mtl.sem, DISPATCH_TIME_FOREVER);
     }
-    /* semaphore must be "relinquished" before destruction */
+    // semaphore must be "relinquished" before destruction
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         dispatch_semaphore_signal(ctx->mtl.sem);
     }
     _SG_OBJC_RELEASE(ctx->mtl.sem);
+    for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
+        _SG_OBJC_RELEASE(ctx->mtl.uniform_buffers[i]);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
@@ -10091,7 +10090,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         /* it's valid to call release resource with '0' */
-        _sg_mtl_release_resource(_sg.mtl.frame_index, buf->mtl.buf[slot]);
+        _sg_mtl_release_resource(_sg.frame_index, buf->mtl.buf[slot]);
     }
 }
 
@@ -10303,10 +10302,10 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     /* it's valid to call release resource with a 'null resource' */
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-        _sg_mtl_release_resource(_sg.mtl.frame_index, img->mtl.tex[slot]);
+        _sg_mtl_release_resource(_sg.frame_index, img->mtl.tex[slot]);
     }
-    _sg_mtl_release_resource(_sg.mtl.frame_index, img->mtl.depth_tex);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, img->mtl.msaa_tex);
+    _sg_mtl_release_resource(_sg.frame_index, img->mtl.depth_tex);
+    _sg_mtl_release_resource(_sg.frame_index, img->mtl.msaa_tex);
     /* NOTE: sampler state objects are shared and not released until shutdown */
 }
 
@@ -10388,10 +10387,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
 _SOKOL_PRIVATE void _sg_mtl_destroy_shader(_sg_shader_t* shd) {
     SOKOL_ASSERT(shd);
     /* it is valid to call _sg_mtl_release_resource with a 'null resource' */
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func);
+    _sg_mtl_release_resource(_sg.frame_index, shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
@@ -10512,8 +10511,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
 _SOKOL_PRIVATE void _sg_mtl_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
     /* it's valid to call release resource with a 'null resource' */
-    _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.rps);
-    _sg_mtl_release_resource(_sg.mtl.frame_index, pip->mtl.dss);
+    _sg_mtl_release_resource(_sg.frame_index, pip->mtl.rps);
+    _sg_mtl_release_resource(_sg.frame_index, pip->mtl.dss);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
@@ -10589,7 +10588,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
 
     /* if this is first pass in frame, get uniform buffer base pointer */
     if (0 == _sg.mtl.cur_ub_base_ptr) {
-        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] contents];
+        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] contents];
     }
 
     /* initialize a render pass descriptor */
@@ -10698,7 +10697,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     }
 
     /* bind the global uniform buffer, this only happens once per pass */
-    _sg_mtl_bind_uniform_buffers();
+    _sg_mtl_bind_uniform_buffers(ctx);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_end_pass(_sg_context_t* ctx) {
@@ -10722,7 +10721,7 @@ _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     _SOKOL_UNUSED(ctx);
 
     #if defined(_SG_TARGET_MACOS)
-    [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
+    [ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
     #endif
 
     /* present, commit and signal semaphore when done */
@@ -10739,13 +10738,12 @@ _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     [_sg.mtl.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
-    _sg_mtl_garbage_collect(_sg.mtl.frame_index);
+    _sg_mtl_garbage_collect(_sg.frame_index);
 
     /* rotate uniform buffer slot */
-    if (++_sg.mtl.cur_frame_rotate_index >= SG_NUM_INFLIGHT_FRAMES) {
-        _sg.mtl.cur_frame_rotate_index = 0;
+    if (++ctx->mtl.cur_ub_index >= SG_NUM_INFLIGHT_FRAMES) {
+        ctx->mtl.cur_ub_index = 0;
     }
-    _sg.mtl.frame_index++;
     _sg.mtl.cur_ub_offset = 0;
     _sg.mtl.cur_ub_base_ptr = 0;
     /* NOTE: MTLCommandBuffer is autoreleased */
@@ -12738,11 +12736,11 @@ static inline void _sg_discard_backend(void) {
     #endif
 }
 
-static inline void _sg_reset_state_cache(void) {
+static inline void _sg_reset_state_cache(_sg_context_t* ctx) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_reset_state_cache();
     #elif defined(SOKOL_METAL)
-    _sg_mtl_reset_state_cache();
+    _sg_mtl_reset_state_cache(ctx);
     #elif defined(SOKOL_D3D11)
     _sg_d3d11_reset_state_cache();
     #elif defined(SOKOL_WGPU)
@@ -15451,7 +15449,7 @@ SOKOL_API_IMPL void sg_commit(void) {
 
 SOKOL_API_IMPL void sg_reset_state_cache(void) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_reset_state_cache();
+    _sg_reset_state_cache(_sg_active_context());
     _SG_TRACE_NOARGS(reset_state_cache);
 }
 
