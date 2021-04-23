@@ -3852,10 +3852,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(_sapp_window_t* win) {
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
     _sapp_window_t* win = _sapp_push_window(self.win_id);
-    _sapp_macos_frame(win);
-    #if !defined(SOKOL_METAL)
-    [[_sapp.macos.view openGLContext] flushBuffer];
-    #endif
+    @autoreleasepool {
+        _sapp_macos_frame(win);
+        #if !defined(SOKOL_METAL)
+        [[_sapp.macos.view openGLContext] flushBuffer];
+        #endif
+    }
     _sapp_pop_window();
 }
 
@@ -4394,7 +4396,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
-    _sapp_ios_frame();
+    @autoreleasepool
+        _sapp_ios_frame();
+    }
 }
 - (BOOL)isOpaque {
     return YES;
