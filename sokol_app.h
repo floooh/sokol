@@ -3368,7 +3368,9 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _SOKOL_UNUSED(rect);
     /* Catch any last-moment input events */
     _sapp_macos_poll_input_events();
-    _sapp_macos_frame();
+    @autoreleasepool {
+        _sapp_macos_frame();
+    }
     #if !defined(SOKOL_METAL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
@@ -3885,7 +3887,9 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
-    _sapp_ios_frame();
+    @autoreleasepool {
+        _sapp_ios_frame();
+    }
 }
 - (BOOL)isOpaque {
     return YES;
