@@ -2975,6 +2975,7 @@ _SOKOL_PRIVATE void _sapp_frame(_sapp_window_t* win) {
         _sapp_call_init(win);
     }
     _sapp_call_frame(win);
+    // FIXME: this needs to be per window
     _sapp.frame_count++;
 }
 
@@ -3291,11 +3292,47 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     #endif
 }
 
+
+// FIXME: this is for a GLFW-style "explicit" render loop
+/*
+_SOKOL_PRIVATE void _sapp_macos_process_events(void){
+    NSEvent* event;
+    do {
+        event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                 untilDate: nil
+                 inMode: NSDefaultRunLoopMode
+                 dequeue: YES];
+
+        if (event != NULL) {
+            [NSApp sendEvent:event];
+        }
+    }
+    while (event != NULL);
+}
+*/
+
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     [NSApplication sharedApplication];
     _sapp_init_state(desc);
     [NSApp run];
-    // NOTE: [NSApp run] never returns, cleanup code is in applicationWillTerminate instead
+
+// FIXME: this is for a GLFW-style "explicit" render loop
+/*
+    while (!_sapp.quit_ordered) {
+        _sapp_macos_process_events();
+        for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
+            const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
+            _sapp_window_t* win = _sapp_lookup_window(win_id);
+            if (win) {
+                #if defined(SOKOL_METAL)
+                [win->macos.view draw];
+                #else
+                #error "FIXME: GL"
+                #endif
+            }
+        }
+    }
+*/
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
@@ -3340,6 +3377,9 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->macos.view.win_id = win->slot.id;
         [win->macos.view updateTrackingAreas];
         win->macos.view.preferredFramesPerSecond = 60 / win->desc.swap_interval;
+// FIXME: this is for a GLFW-style "explicit" render loop
+//        win->macos.view.paused = true;
+//        win->macos.view.enableSetNeedsDisplay = false;
         win->macos.view.device = _sapp.macos.mtl_device;
         win->macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         win->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3678,6 +3718,9 @@ _SOKOL_PRIVATE void _sapp_macos_frame(_sapp_window_t* win) {
     _sapp_macos_update_dimensions(win);
     _sapp_pop_window();
     _sapp.valid = true;
+
+// FIXME: this is for a GLFW-style "explicit" render loop
+//    [NSApp stop:nil];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
