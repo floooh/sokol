@@ -3706,6 +3706,7 @@ typedef struct {
     _sg_slot_t slot;
     struct {
         dispatch_semaphore_t sem;
+        id<MTLCommandQueue> cmd_queue;
         uint32_t cur_ub_index;
         id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
     } mtl;
@@ -3746,7 +3747,6 @@ typedef struct {
     _sg_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
     id<MTLDevice> device;
-    id<MTLCommandQueue> cmd_queue;
     id<MTLCommandBuffer> cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
 } _sg_mtl_backend_t;
@@ -9984,7 +9984,6 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.user_data = desc->context.metal.user_data;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
-    _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
     _sg_mtl_init_caps();
 }
 
@@ -9996,7 +9995,6 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     _sg.mtl.valid = false;
 
     _SG_OBJC_RELEASE(_sg.mtl.device);
-    _SG_OBJC_RELEASE(_sg.mtl.cmd_queue);
     /* NOTE: MTLCommandBuffer and MTLRenderCommandEncoder are auto-released */
     _sg.mtl.cmd_buffer = nil;
     _sg.mtl.cmd_encoder = nil;
@@ -10030,6 +10028,7 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(_sg_context_t* ctx) {
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
     ctx->mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
+    ctx->mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
     #if defined(_SG_TARGET_MACOS)
     res_opts |= MTLResourceStorageModeManaged;
@@ -10058,6 +10057,7 @@ _SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _SG_OBJC_RELEASE(ctx->mtl.uniform_buffers[i]);
     }
+    _SG_OBJC_RELEASE(ctx->mtl.cmd_queue);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_activate_context(_sg_context_t* ctx) {
@@ -10569,7 +10569,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(!_sg.mtl.in_pass);
-    SOKOL_ASSERT(_sg.mtl.cmd_queue);
+    SOKOL_ASSERT(ctx->mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(_sg.mtl.renderpass_descriptor_cb || _sg.mtl.renderpass_descriptor_userdata_cb);
     _sg.mtl.in_pass = true;
@@ -10581,7 +10581,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     if (nil == _sg.mtl.cmd_buffer) {
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(ctx->mtl.sem, DISPATCH_TIME_FOREVER);
-        _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        _sg.mtl.cmd_buffer = [ctx->mtl.cmd_queue commandBufferWithUnretainedReferences];
         __block dispatch_semaphore_t block_sem = ctx->mtl.sem;
         [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
             // NOTE: this code is called on a different thread!
@@ -15475,13 +15475,17 @@ SOKOL_API_IMPL void sg_commit(void) {
         had been rendered to in the last frame.
     */
     const uint64_t ctx_mask = _sg_context_bitmask(_sg.active_context.id);
-    SOKOL_ASSERT(0 == (_sg.commit_mask & ctx_mask));
+
+// FIXME: with the "automatic" MTKView timing in sokol_app.h, the draw
+// callbacks are not strictly called round-robin, which would cause
+// the following assert to trigger
+//    SOKOL_ASSERT(0 == (_sg.commit_mask & ctx_mask));
     SOKOL_ASSERT(ctx_mask == (_sg.context_mask & ctx_mask));
     _sg.commit_mask |= ctx_mask;
     _sg_commit(_sg_active_context());
     _SG_TRACE_NOARGS(commit);
+    // once all context's have been rendered, it's "safe" to advance the frame
     if (_sg.commit_mask == _sg.context_mask) {
-        // check for end of frame
         _sg.frame_index++;
         _sg.commit_mask = 0;
     }
