@@ -667,9 +667,10 @@ enum {
     SG_MAX_SHADERSTAGE_IMAGES = 12,
     SG_MAX_SHADERSTAGE_UBS = 4,
     SG_MAX_UB_MEMBERS = 16,
-    SG_MAX_VERTEX_ATTRIBUTES = 16,      /* NOTE: actual max vertex attrs can be less on GLES2, see sg_limits! */
+    SG_MAX_VERTEX_ATTRIBUTES = 16,      // NOTE: actual max vertex attrs can be less on GLES2, see sg_limits!
     SG_MAX_MIPMAPS = 16,
-    SG_MAX_TEXTUREARRAY_LAYERS = 128
+    SG_MAX_TEXTUREARRAY_LAYERS = 128,
+    SG_MAX_CONTEXTS = 64,               // must be number of bits in an uint64_t!
 };
 
 /*
@@ -2357,9 +2358,11 @@ SOKOL_GFX_API_DECL void sg_fail_pipeline(sg_pipeline pip_id);
 SOKOL_GFX_API_DECL void sg_fail_pass(sg_pass pass_id);
 
 /* rendering contexts (optional) */
-SOKOL_GFX_API_DECL sg_context sg_setup_context(void);
+SOKOL_GFX_API_DECL sg_context sg_make_context(const sg_context_desc* desc);
+SOKOL_GFX_API_DECL void sg_destroy_context(sg_context ctx_id);
+SOKOL_GFX_API_DECL sg_context sg_default_context(void);
+SOKOL_GFX_API_DECL sg_context sg_active_context(void);
 SOKOL_GFX_API_DECL void sg_activate_context(sg_context ctx_id);
-SOKOL_GFX_API_DECL void sg_discard_context(sg_context ctx_id);
 
 /* Backend-specific helper functions, these may come in handy for mixing
    sokol-gfx rendering with 'native backend' rendering functions.
@@ -3467,7 +3470,6 @@ typedef struct {
     bool in_pass;
     int cur_pass_width;
     int cur_pass_height;
-    _sg_context_t* cur_context;
     _sg_pass_t* cur_pass;
     sg_pass cur_pass_id;
     _sg_gl_state_cache_t cache;
@@ -4036,9 +4038,11 @@ typedef enum {
 
 typedef struct {
     bool valid;
-    sg_desc desc;       /* original desc with default values patched in */
-    uint32_t frame_index;
-    sg_context main_context;
+    sg_desc desc;           // original desc with default values patched in
+    uint64_t context_mask;  // one bit for each existing context
+    uint64_t commit_mask;   // each sg_commit() per context sets a bit here
+    uint32_t frame_index;   // bumped at "end of frame" when (context_mask == commit_mask)
+    sg_context default_context;
     sg_context active_context;
     sg_pass cur_pass;
     sg_pipeline cur_pipeline;
@@ -13510,10 +13514,16 @@ _SOKOL_PRIVATE _sg_context_t* _sg_active_context(void) {
     return ctx;
 }
 
-_SOKOL_PRIVATE _sg_context_t* _sg_main_context(void) {
-    _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.main_context.id);
+_SOKOL_PRIVATE _sg_context_t* _sg_default_context(void) {
+    _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.default_context.id);
     SOKOL_ASSERT(ctx);
     return ctx;
+}
+
+_SOKOL_PRIVATE uint64_t _sg_context_bitmask(uint32_t ctx_id) {
+    int index = _sg_slot_index(ctx_id) - 1;
+    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_CONTEXTS));
+    return (1ULL << index);
 }
 
 _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
@@ -14757,13 +14767,14 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.desc.uniform_buffer_size = _sg_def(_sg.desc.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     _sg.desc.staging_buffer_size = _sg_def(_sg.desc.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
     _sg.desc.sampler_cache_size = _sg_def(_sg.desc.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    SOKOL_ASSERT(_sg.desc.context_pool_size <= SG_MAX_CONTEXTS);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
     _sg_setup_backend(&_sg.desc);
     _sg.valid = true;
-    sg_setup_context();
-    _sg.main_context = _sg.active_context;
+    _sg.default_context = sg_make_context(&_sg.desc.context);
+    sg_activate_context(_sg.default_context);
 }
 
 SOKOL_API_IMPL void sg_shutdown(void) {
@@ -14771,8 +14782,8 @@ SOKOL_API_IMPL void sg_shutdown(void) {
     contexts are used, the app code must take care of properly releasing them
     (since only the app code can switch between 3D-API contexts)
     */
-    _sg_destroy_all_resources(&_sg.pools, _sg.main_context.id);
-    _sg_destroy_context(_sg_main_context());
+    _sg_destroy_all_resources(&_sg.pools, _sg.default_context.id);
+    _sg_destroy_context(_sg_default_context());
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
     _sg.valid = false;
@@ -14809,8 +14820,9 @@ SOKOL_API_IMPL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt) {
     return _sg.formats[fmt_index];
 }
 
-SOKOL_API_IMPL sg_context sg_setup_context(void) {
+SOKOL_API_IMPL sg_context sg_make_context(const sg_context_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
+    // FIXME: actually make use of desc
     sg_context res;
     int slot_index = _sg_pool_alloc_index(&_sg.pools.context_pool);
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
@@ -14818,24 +14830,28 @@ SOKOL_API_IMPL sg_context sg_setup_context(void) {
         _sg_context_t* ctx = _sg_context_at(&_sg.pools, res.id);
         ctx->slot.state = _sg_create_context(ctx);
         SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
-        _sg_activate_context(ctx);
+        const uint64_t ctx_mask = _sg_context_bitmask(res.id);
+        SOKOL_ASSERT(0 == (_sg.context_mask & ctx_mask));
+        _sg.context_mask |= ctx_mask;
     }
     else {
         /* pool is exhausted */
         res.id = SG_INVALID_ID;
     }
-    _sg.active_context = res;
     return res;
 }
 
-SOKOL_API_IMPL void sg_discard_context(sg_context ctx_id) {
+SOKOL_API_IMPL void sg_destroy_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
+    const uint64_t ctx_mask = _sg_context_bitmask(ctx_id.id);
+    SOKOL_ASSERT(ctx_mask == (_sg.context_mask & ctx_mask));
+    _sg.context_mask &= ~ctx_mask;
     _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
     if (ctx_id.id == _sg.active_context.id) {
         _sg.active_context.id = SG_INVALID_ID;
     }
-    if (ctx_id.id == _sg.main_context.id) {
-        _sg.main_context.id = SG_INVALID_ID;
+    if (ctx_id.id == _sg.default_context.id) {
+        _sg.default_context.id = SG_INVALID_ID;
     }
     _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
     if (ctx) {
@@ -14853,6 +14869,17 @@ SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
     _sg_context_t* ctx = _sg_active_context();
     /* NOTE: ctx can be 0 here if the context is no longer valid */
     _sg_activate_context(ctx);
+}
+
+SOKOL_API_IMPL sg_context sg_default_context(void) {
+    SOKOL_ASSERT(_sg.valid);
+    return _sg.default_context;
+}
+
+SOKOL_API_IMPL sg_context sg_active_context(void) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(SG_INVALID_ID != _sg.active_context.id);
+    return _sg.active_context;
 }
 
 SOKOL_API_IMPL sg_trace_hooks sg_install_trace_hooks(const sg_trace_hooks* trace_hooks) {
@@ -15442,9 +15469,22 @@ SOKOL_API_IMPL void sg_end_pass(void) {
 
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
+    /* FIXME: add a proper error log message here, if the context bit
+        is already set, this either means that sg_commit() was called twice
+        in the same frame and same context, or that not all contexts
+        had been rendered to in the last frame.
+    */
+    const uint64_t ctx_mask = _sg_context_bitmask(_sg.active_context.id);
+    SOKOL_ASSERT(0 == (_sg.commit_mask & ctx_mask));
+    SOKOL_ASSERT(ctx_mask == (_sg.context_mask & ctx_mask));
+    _sg.commit_mask |= ctx_mask;
     _sg_commit(_sg_active_context());
     _SG_TRACE_NOARGS(commit);
-    _sg.frame_index++;
+    if (_sg.commit_mask == _sg.context_mask) {
+        // check for end of frame
+        _sg.frame_index++;
+        _sg.commit_mask = 0;
+    }
 }
 
 SOKOL_API_IMPL void sg_reset_state_cache(void) {
