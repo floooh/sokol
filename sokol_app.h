@@ -1821,6 +1821,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
+- (void)drawFrame;
 @end
 @interface _sapp_macos_window : NSWindow
 @property uint32_t win_id;
@@ -1853,6 +1854,8 @@ typedef struct {
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
+    dispatch_source_t display_source;
+    CVDisplayLinkRef display_link;
 } _sapp_macos_t;
 
 #endif // _SAPP_MACOS
@@ -3267,6 +3270,9 @@ _SOKOL_PRIVATE void _sapp_macos_init_state(void) {
 
 /* called from _sapp_discard_state() */
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
+    CVDisplayLinkStop(_sapp.macos.display_link);
+    CVDisplayLinkRelease(_sapp.macos.display_link);
+    _sapp.macos.display_link = nil;
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.macos.app_delegate);
     #if defined(SOKOL_METAL)
@@ -3276,6 +3282,7 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 
 
 // FIXME: this is for a GLFW-style "explicit" render loop
+/*
 _SOKOL_PRIVATE void _sapp_macos_process_events(void){
     NSEvent* event;
     do {
@@ -3283,13 +3290,13 @@ _SOKOL_PRIVATE void _sapp_macos_process_events(void){
                  untilDate: nil
                  inMode: NSDefaultRunLoopMode
                  dequeue: YES];
-
         if (event != NULL) {
             [NSApp sendEvent:event];
         }
     }
     while (event != NULL);
 }
+*/
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     [NSApplication sharedApplication];
@@ -3297,6 +3304,7 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     [NSApp run];
 
 // FIXME: this is for a GLFW-style "explicit" render loop
+/*
     while (!_sapp.quit_ordered) {
         _sapp_macos_process_events();
         _sapp_frame();
@@ -3316,6 +3324,7 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
         //        [win->macos.window performClose:nil];
         //    }
     }
+*/
 }
 
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
@@ -3360,9 +3369,8 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->macos.view.win_id = win->slot.id;
         [win->macos.view updateTrackingAreas];
         win->macos.view.preferredFramesPerSecond = 60 / win->desc.swap_interval;
-// FIXME: this is for a GLFW-style "explicit" render loop
-//        win->macos.view.paused = true;
-//        win->macos.view.enableSetNeedsDisplay = false;
+        win->macos.view.paused = YES;
+        win->macos.view.enableSetNeedsDisplay = NO;
         win->macos.view.device = _sapp.macos.mtl_device;
         win->macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         win->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3675,7 +3683,44 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     CGImageRelease(cg_img);
 }
 
+_SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
+    CVDisplayLinkRef displayLink,
+    const CVTimeStamp* now,
+    const CVTimeStamp* outputTime,
+    CVOptionFlags flagsIn,
+    CVOptionFlags* flagsOut,
+    void* displayLinkContext)
+{
+    _SOKOL_UNUSED(displayLink);
+    _SOKOL_UNUSED(now);
+    _SOKOL_UNUSED(outputTime);
+    _SOKOL_UNUSED(flagsIn);
+    _SOKOL_UNUSED(flagsOut);
+    dispatch_source_t source = (__bridge dispatch_source_t) displayLinkContext;
+    dispatch_source_merge_data(source, 1);
+    return kCVReturnSuccess;
+}
+
 @implementation _sapp_macos_app_delegate
+
+- (void)drawFrame {
+    _sapp_frame();
+    for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
+        const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
+        _sapp_window_t* win = _sapp_lookup_window(win_id);
+        if (win) {
+            #if defined(SOKOL_METAL)
+            [win->macos.view draw];
+            #else
+            #error "FIXME: GL"
+            #endif
+        }
+    }
+    // FIXME FIXME FIXME
+    //    if (_sapp.quit_requested || _sapp.quit_ordered) {
+    //        [win->macos.window performClose:nil];
+    //    }
+}
 
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
@@ -3690,12 +3735,29 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
     [NSApp activateIgnoringOtherApps:YES];
 
     [NSEvent setMouseCoalescingEnabled:NO];
+
     _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     _sapp_macos_update_dimensions(win);
     _sapp.valid = true;
 
-    [NSApp stop:nil];
+    // setup display link
+    // see: https://developer.apple.com/documentation/metal/drawable_objects/creating_a_custom_metal_view?language=objc
+    _sapp.macos.display_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_DATA_ADD, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_event_handler(_sapp.macos.display_source, ^(){
+        @autoreleasepool {
+            [_sapp.macos.app_delegate drawFrame];
+        }
+    });
+    dispatch_resume(_sapp.macos.display_source);
+
+    CVDisplayLinkCreateWithActiveCGDisplays(&_sapp.macos.display_link);
+    CVDisplayLinkSetOutputCallback(_sapp.macos.display_link, &_sapp_macos_displaylink_callback, (__bridge void*)_sapp.macos.display_source);
+    CGDirectDisplayID disp_id = (CGDirectDisplayID) [NSScreen.mainScreen.deviceDescription[@"NSScreenNumber"] unsignedIntegerValue];
+    CVDisplayLinkSetCurrentCGDisplay(_sapp.macos.display_link, disp_id);
+    CVDisplayLinkStart(_sapp.macos.display_link);
+
+//    [NSApp stop:nil];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
