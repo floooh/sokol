@@ -3705,9 +3705,17 @@ typedef _sg_pass_attachment_common_t _sg_pass_attachment_t;
 typedef struct {
     _sg_slot_t slot;
     struct {
+        const void*(*renderpass_descriptor_cb)(void);
+        const void*(*renderpass_descriptor_userdata_cb)(void*);
+        const void*(*drawable_cb)(void);
+        const void*(*drawable_userdata_cb)(void*);
+        void* user_data;
         dispatch_semaphore_t sem;
         id<MTLCommandQueue> cmd_queue;
+        id<MTLCommandBuffer> cmd_buffer;
         uint32_t cur_ub_index;
+        int cur_ub_offset;
+        uint8_t* cur_ub_base_ptr;
         id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
     } mtl;
 } _sg_mtl_context_t;
@@ -3731,14 +3739,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
-    const void*(*renderpass_descriptor_cb)(void);
-    const void*(*renderpass_descriptor_userdata_cb)(void*);
-    const void*(*drawable_cb)(void);
-    const void*(*drawable_userdata_cb)(void*);
-    void* user_data;
     int ub_size;
-    int cur_ub_offset;
-    uint8_t* cur_ub_base_ptr;
     bool in_pass;
     bool pass_valid;
     int cur_width;
@@ -3747,7 +3748,6 @@ typedef struct {
     _sg_sampler_cache_t sampler_cache;
     _sg_mtl_idpool_t idpool;
     id<MTLDevice> device;
-    id<MTLCommandBuffer> cmd_buffer;
     id<MTLRenderCommandEncoder> cmd_encoder;
 } _sg_mtl_backend_t;
 
@@ -4039,9 +4039,7 @@ typedef enum {
 typedef struct {
     bool valid;
     sg_desc desc;           // original desc with default values patched in
-    uint64_t context_mask;  // one bit for each existing context
-    uint64_t commit_mask;   // each sg_commit() per context sets a bit here
-    uint32_t frame_index;   // bumped at "end of frame" when (context_mask == commit_mask)
+    uint32_t frame_index;
     sg_context default_context;
     sg_context active_context;
     sg_pass cur_pass;
@@ -9977,11 +9975,6 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg_mtl_init_sampler_cache(desc);
     _sg_mtl_clear_state_cache();
     _sg.mtl.valid = true;
-    _sg.mtl.renderpass_descriptor_cb = desc->context.metal.renderpass_descriptor_cb;
-    _sg.mtl.renderpass_descriptor_userdata_cb = desc->context.metal.renderpass_descriptor_userdata_cb;
-    _sg.mtl.drawable_cb = desc->context.metal.drawable_cb;
-    _sg.mtl.drawable_userdata_cb = desc->context.metal.drawable_userdata_cb;
-    _sg.mtl.user_data = desc->context.metal.user_data;
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg_mtl_init_caps();
@@ -9996,7 +9989,6 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
 
     _SG_OBJC_RELEASE(_sg.mtl.device);
     /* NOTE: MTLCommandBuffer and MTLRenderCommandEncoder are auto-released */
-    _sg.mtl.cmd_buffer = nil;
     _sg.mtl.cmd_encoder = nil;
 }
 
@@ -10025,10 +10017,15 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(_sg_context_t* ctx) {
     }
 }
 
-_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     SOKOL_ASSERT(ctx);
     ctx->mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     ctx->mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
+    ctx->mtl.renderpass_descriptor_cb = desc->metal.renderpass_descriptor_cb;
+    ctx->mtl.renderpass_descriptor_userdata_cb = desc->metal.renderpass_descriptor_userdata_cb;
+    ctx->mtl.drawable_cb = desc->metal.drawable_cb;
+    ctx->mtl.drawable_userdata_cb = desc->metal.drawable_userdata_cb;
+    ctx->mtl.user_data = desc->metal.user_data;
     MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
     #if defined(_SG_TARGET_MACOS)
     res_opts |= MTLResourceStorageModeManaged;
@@ -10044,6 +10041,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_context(_sg_context_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(ctx);
+    SOKOL_ASSERT(ctx->mtl.cmd_buffer == nil);
     // wait for the last frame to finish
     // FIXME: does this loop actually make any sense???
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -10571,19 +10569,19 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(ctx->mtl.cmd_queue);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(_sg.mtl.renderpass_descriptor_cb || _sg.mtl.renderpass_descriptor_userdata_cb);
+    SOKOL_ASSERT(ctx->mtl.renderpass_descriptor_cb || ctx->mtl.renderpass_descriptor_userdata_cb);
     _sg.mtl.in_pass = true;
     _sg.mtl.cur_width = w;
     _sg.mtl.cur_height = h;
     _sg_mtl_clear_state_cache();
 
     /* if this is the first pass in the frame, create a command buffer */
-    if (nil == _sg.mtl.cmd_buffer) {
+    if (nil == ctx->mtl.cmd_buffer) {
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(ctx->mtl.sem, DISPATCH_TIME_FOREVER);
-        _sg.mtl.cmd_buffer = [ctx->mtl.cmd_queue commandBufferWithUnretainedReferences];
+        ctx->mtl.cmd_buffer = [ctx->mtl.cmd_queue commandBufferWithUnretainedReferences];
         __block dispatch_semaphore_t block_sem = ctx->mtl.sem;
-        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+        [ctx->mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
             // NOTE: this code is called on a different thread!
             _SOKOL_UNUSED(cmd_buffer);
             dispatch_semaphore_signal(block_sem);
@@ -10591,8 +10589,8 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     }
 
     /* if this is first pass in frame, get uniform buffer base pointer */
-    if (0 == _sg.mtl.cur_ub_base_ptr) {
-        _sg.mtl.cur_ub_base_ptr = (uint8_t*)[ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] contents];
+    if (0 == ctx->mtl.cur_ub_base_ptr) {
+        ctx->mtl.cur_ub_base_ptr = (uint8_t*)[ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] contents];
     }
 
     /* initialize a render pass descriptor */
@@ -10603,11 +10601,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     }
     else {
         /* default render pass, call user-provided callback to provide render pass descriptor */
-        if (_sg.mtl.renderpass_descriptor_cb) {
-            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_cb();
+        if (ctx->mtl.renderpass_descriptor_cb) {
+            pass_desc = (__bridge MTLRenderPassDescriptor*) ctx->mtl.renderpass_descriptor_cb();
         }
         else {
-            pass_desc = (__bridge MTLRenderPassDescriptor*) _sg.mtl.renderpass_descriptor_userdata_cb(_sg.mtl.user_data);
+            pass_desc = (__bridge MTLRenderPassDescriptor*) ctx->mtl.renderpass_descriptor_userdata_cb(ctx->mtl.user_data);
         }
 
     }
@@ -10694,7 +10692,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, con
     }
 
     /* create a render command encoder, this might return nil if window is minimized */
-    _sg.mtl.cmd_encoder = [_sg.mtl.cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
+    _sg.mtl.cmd_encoder = [ctx->mtl.cmd_buffer renderCommandEncoderWithDescriptor:pass_desc];
     if (nil == _sg.mtl.cmd_encoder) {
         _sg.mtl.pass_valid = false;
         return;
@@ -10719,27 +10717,27 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(_sg_context_t* ctx) {
 _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     SOKOL_ASSERT(!_sg.mtl.in_pass);
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
-    SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
+    SOKOL_ASSERT(ctx->mtl.drawable_cb || ctx->mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    SOKOL_ASSERT(nil != ctx->mtl.cmd_buffer);
     _SOKOL_UNUSED(ctx);
 
     #if defined(_SG_TARGET_MACOS)
-    [ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
+    [ctx->mtl.uniform_buffers[ctx->mtl.cur_ub_index] didModifyRange:NSMakeRange(0, (NSUInteger)ctx->mtl.cur_ub_offset)];
     #endif
 
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = nil;
-    if (_sg.mtl.drawable_cb) {
-        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_cb();
+    if (ctx->mtl.drawable_cb) {
+        cur_drawable = (__bridge id<MTLDrawable>) ctx->mtl.drawable_cb();
     }
     else {
-        cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
+        cur_drawable = (__bridge id<MTLDrawable>) ctx->mtl.drawable_userdata_cb(ctx->mtl.user_data);
     }
     if (nil != cur_drawable) {
-        [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
+        [ctx->mtl.cmd_buffer presentDrawable:cur_drawable];
     }
-    [_sg.mtl.cmd_buffer commit];
+    [ctx->mtl.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
     _sg_mtl_garbage_collect(_sg.frame_index);
@@ -10748,10 +10746,10 @@ _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     if (++ctx->mtl.cur_ub_index >= SG_NUM_INFLIGHT_FRAMES) {
         ctx->mtl.cur_ub_index = 0;
     }
-    _sg.mtl.cur_ub_offset = 0;
-    _sg.mtl.cur_ub_base_ptr = 0;
+    ctx->mtl.cur_ub_offset = 0;
+    ctx->mtl.cur_ub_base_ptr = 0;
     /* NOTE: MTLCommandBuffer is autoreleased */
-    _sg.mtl.cmd_buffer = nil;
+    ctx->mtl.cmd_buffer = nil;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
@@ -10893,14 +10891,14 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_mtl_apply_uniforms(_sg_context_t* ctx, sg_shader_stage stage_index, int ub_index, const sg_range* data) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
         return;
     }
     SOKOL_ASSERT(nil != _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(((size_t)_sg.mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
-    SOKOL_ASSERT((_sg.mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
+    SOKOL_ASSERT(((size_t)ctx->mtl.cur_ub_offset + data->size) <= (size_t)_sg.mtl.ub_size);
+    SOKOL_ASSERT((ctx->mtl.cur_ub_offset & (_SG_MTL_UB_ALIGN-1)) == 0);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline && _sg.mtl.state_cache.cur_pipeline->shader);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline->slot.id == _sg.mtl.state_cache.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.mtl.state_cache.cur_pipeline->shader->slot.id == _sg.mtl.state_cache.cur_pipeline->cmn.shader_id.id);
@@ -10908,15 +10906,15 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(sg_shader_stage stage_index, int ub_i
     SOKOL_ASSERT(data->size <= _sg.mtl.state_cache.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
 
     /* copy to global uniform buffer, record offset into cmd encoder, and advance offset */
-    uint8_t* dst = &_sg.mtl.cur_ub_base_ptr[_sg.mtl.cur_ub_offset];
+    uint8_t* dst = &ctx->mtl.cur_ub_base_ptr[ctx->mtl.cur_ub_offset];
     memcpy(dst, data->ptr, data->size);
     if (stage_index == SG_SHADERSTAGE_VS) {
-        [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
+        [_sg.mtl.cmd_encoder setVertexBufferOffset:(NSUInteger)ctx->mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
     }
     else {
-        [_sg.mtl.cmd_encoder setFragmentBufferOffset:(NSUInteger)_sg.mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
+        [_sg.mtl.cmd_encoder setFragmentBufferOffset:(NSUInteger)ctx->mtl.cur_ub_offset atIndex:(NSUInteger)ub_index];
     }
-    _sg.mtl.cur_ub_offset = _sg_roundup(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
+    ctx->mtl.cur_ub_offset = _sg_roundup(ctx->mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances) {
@@ -12772,17 +12770,17 @@ static inline void _sg_activate_context(_sg_context_t* ctx) {
     #endif
 }
 
-static inline sg_resource_state _sg_create_context(_sg_context_t* ctx) {
+static inline sg_resource_state _sg_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_context(ctx);
+    return _sg_gl_create_context(ctx, desc);
     #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_context(ctx);
+    return _sg_mtl_create_context(ctx, desc);
     #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_context(ctx);
+    return _sg_d3d11_create_context(ctx, desc);
     #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_context(ctx);
+    return _sg_wgpu_create_context(ctx, desc);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_context(ctx);
+    return _sg_dummy_create_context(ctx, desc);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13098,17 +13096,17 @@ static inline void _sg_apply_bindings(
     #endif
 }
 
-static inline void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
+static inline void _sg_apply_uniforms(_sg_context_t* ctx, sg_shader_stage stage_index, int ub_index, const sg_range* data) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_uniforms(stage_index, ub_index, data);
+    _sg_gl_apply_uniforms(ctx, stage_index, ub_index, data);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_uniforms(stage_index, ub_index, data);
+    _sg_mtl_apply_uniforms(ctx, stage_index, ub_index, data);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_uniforms(stage_index, ub_index, data);
+    _sg_d3d11_apply_uniforms(ctx, stage_index, ub_index, data);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_uniforms(stage_index, ub_index, data);
+    _sg_wgpu_apply_uniforms(ctx, stage_index, ub_index, data);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_uniforms(stage_index, ub_index, data);
+    _sg_dummy_apply_uniforms(ctx, stage_index, ub_index, data);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -13518,12 +13516,6 @@ _SOKOL_PRIVATE _sg_context_t* _sg_default_context(void) {
     _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, _sg.default_context.id);
     SOKOL_ASSERT(ctx);
     return ctx;
-}
-
-_SOKOL_PRIVATE uint64_t _sg_context_bitmask(uint32_t ctx_id) {
-    int index = _sg_slot_index(ctx_id) - 1;
-    SOKOL_ASSERT((index >= 0) && (index < SG_MAX_CONTEXTS));
-    return (1ULL << index);
 }
 
 _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
@@ -14828,11 +14820,8 @@ SOKOL_API_IMPL sg_context sg_make_context(const sg_context_desc* desc) {
     if (_SG_INVALID_SLOT_INDEX != slot_index) {
         res.id = _sg_slot_alloc(&_sg.pools.context_pool, &_sg.pools.contexts[slot_index].slot, slot_index);
         _sg_context_t* ctx = _sg_context_at(&_sg.pools, res.id);
-        ctx->slot.state = _sg_create_context(ctx);
+        ctx->slot.state = _sg_create_context(ctx, desc);
         SOKOL_ASSERT(ctx->slot.state == SG_RESOURCESTATE_VALID);
-        const uint64_t ctx_mask = _sg_context_bitmask(res.id);
-        SOKOL_ASSERT(0 == (_sg.context_mask & ctx_mask));
-        _sg.context_mask |= ctx_mask;
     }
     else {
         /* pool is exhausted */
@@ -14843,9 +14832,6 @@ SOKOL_API_IMPL sg_context sg_make_context(const sg_context_desc* desc) {
 
 SOKOL_API_IMPL void sg_destroy_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
-    const uint64_t ctx_mask = _sg_context_bitmask(ctx_id.id);
-    SOKOL_ASSERT(ctx_mask == (_sg.context_mask & ctx_mask));
-    _sg.context_mask &= ~ctx_mask;
     _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
     if (ctx_id.id == _sg.active_context.id) {
         _sg.active_context.id = SG_INVALID_ID;
@@ -15417,7 +15403,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     if (!_sg.next_draw_valid) {
         _SG_TRACE_NOARGS(err_draw_invalid);
     }
-    _sg_apply_uniforms(stage, ub_index, data);
+    _sg_apply_uniforms(_sg_active_context(), stage, ub_index, data);
     _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data);
 }
 
@@ -15469,26 +15455,18 @@ SOKOL_API_IMPL void sg_end_pass(void) {
 
 SOKOL_API_IMPL void sg_commit(void) {
     SOKOL_ASSERT(_sg.valid);
-    /* FIXME: add a proper error log message here, if the context bit
-        is already set, this either means that sg_commit() was called twice
-        in the same frame and same context, or that not all contexts
-        had been rendered to in the last frame.
-    */
-    const uint64_t ctx_mask = _sg_context_bitmask(_sg.active_context.id);
 
-// FIXME: with the "automatic" MTKView timing in sokol_app.h, the draw
-// callbacks are not strictly called round-robin, which would cause
-// the following assert to trigger
-//    SOKOL_ASSERT(0 == (_sg.commit_mask & ctx_mask));
-    SOKOL_ASSERT(ctx_mask == (_sg.context_mask & ctx_mask));
-    _sg.commit_mask |= ctx_mask;
-    _sg_commit(_sg_active_context());
-    _SG_TRACE_NOARGS(commit);
-    // once all context's have been rendered, it's "safe" to advance the frame
-    if (_sg.commit_mask == _sg.context_mask) {
-        _sg.frame_index++;
-        _sg.commit_mask = 0;
+    // do per-context commit actions and bump frame index
+    for (int i = 1; i < _sg.pools.context_pool.size; i++) {
+        if (_sg.pools.contexts[i].slot.id != SG_INVALID_ID) {
+            const sg_resource_state state = _sg.pools.contexts[i].slot.state;
+            if (state == SG_RESOURCESTATE_VALID) {
+                _sg_commit(&_sg.pools.contexts[i]);
+            }
+        }
     }
+    _sg.frame_index++;
+    _SG_TRACE_NOARGS(commit);
 }
 
 SOKOL_API_IMPL void sg_reset_state_cache(void) {
