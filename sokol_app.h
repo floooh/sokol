@@ -1436,8 +1436,10 @@ SOKOL_APP_API_DECL bool sapp_isvalid(void);
 SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
 /* close a window */
 SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
-/* FIXME set the current 'window context' */
+/* set the current 'window context' */
 SOKOL_APP_API_DECL void sapp_use_window(sapp_window window);
+/* get the main window */
+SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
 /* returns the current framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_width(void);
 /* same as sapp_width(), but returns float */
@@ -1512,10 +1514,14 @@ SOKOL_APP_API_DECL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_req
 
 /* Metal: get bridged pointer to Metal device object */
 SOKOL_APP_API_DECL const void* sapp_metal_get_device(void);
-/* Metal: get bridged pointer to this frame's renderpass descriptor */
+/* Metal: get bridged pointer to the main window's renderpass descriptor for this frame */
 SOKOL_APP_API_DECL const void* sapp_metal_get_renderpass_descriptor(void);
-/* Metal: get bridged pointer to current drawable */
+/* Metal: get bridged pointer to a window's renderpass descriptor for this frame */
+SOKOL_APP_API_DECL const void* sapp_metal_get_window_renderpass_descriptor(sapp_window window);
+/* Metal: get bridged pointer to the main window's current drawable */
 SOKOL_APP_API_DECL const void* sapp_metal_get_drawable(void);
+/* Metal: get bridged pointer to a window's current drawable */
+SOKOL_APP_API_DECL const void* sapp_metal_get_window_drawable(sapp_window window);
 /* macOS: get bridged pointer to macOS NSWindow */
 SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
 /* iOS: get bridged pointer to iOS UIWindow */
@@ -11199,6 +11205,10 @@ SOKOL_API_IMPL void sapp_use_window(sapp_window window) {
     _sapp.cur_window_id = window.id;
 }
 
+SOKOL_API_IMPL sapp_window sapp_main_window(void) {
+    return _sapp_make_window_id(_sapp.main_window_id);
+}
+
 SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
     return _sapp.desc;
 }
@@ -11542,38 +11552,54 @@ SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
+SOKOL_API_IMPL const void* sapp_metal_get_window_renderpass_descriptor(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
     #if defined(SOKOL_METAL)
-        #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [win->macos.view currentRenderPassDescriptor];
-        #else
-            const void* obj = (__bridge const void*) [_sapp.window.ios.view currentRenderPassDescriptor];
-        #endif
-        SOKOL_ASSERT(obj);
-        return obj;
+        const _sapp_window_t* win = _sapp_lookup_window(window.id);
+        if (win) {
+            #if defined(_SAPP_MACOS)
+                const void* obj = (__bridge const void*) [win->macos.view currentRenderPassDescriptor];
+            #else
+                const void* obj = (__bridge const void*) [_sapp.window.ios.view currentRenderPassDescriptor];
+            #endif
+            SOKOL_ASSERT(obj);
+            return obj;
+        }
+        else {
+            return 0;
+        }
+    #else
+        return 0;
+    #endif
+}
+
+SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
+    return sapp_metal_get_window_renderpass_descriptor(sapp_main_window());
+}
+
+SOKOL_API_IMPL const void* sapp_metal_get_window_drawable(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    #if defined(SOKOL_METAL)
+        const _sapp_window_t* win = _sapp_lookup_window(window.id);
+        if (win) {
+            #if defined(_SAPP_MACOS)
+                const void* obj = (__bridge const void*) [win->macos.view currentDrawable];
+            #else
+                const void* obj = (__bridge const void*) [_sapp.window.ios.view currentDrawable];
+            #endif
+            SOKOL_ASSERT(obj);
+            return obj;
+        }
+        else {
+            return 0;
+        }
     #else
         return 0;
     #endif
 }
 
 SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    #if defined(SOKOL_METAL)
-        #if defined(_SAPP_MACOS)
-            const void* obj = (__bridge const void*) [win->macos.view currentDrawable];
-        #else
-            const void* obj = (__bridge const void*) [_sapp.window.ios.view currentDrawable];
-        #endif
-        SOKOL_ASSERT(obj);
-        return obj;
-    #else
-        return 0;
-    #endif
+    return sapp_metal_get_window_drawable(sapp_main_window());
 }
 
 SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
