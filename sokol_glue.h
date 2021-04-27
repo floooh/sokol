@@ -95,6 +95,7 @@ extern "C" {
 
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
+SOKOL_GLUE_API_DECL sg_context_desc sapp_window_sgcontext(sapp_window win);
 #endif
 
 #ifdef __cplusplus
@@ -111,6 +112,16 @@ SOKOL_GLUE_API_DECL sg_context_desc sapp_sgcontext(void);
     #define SOKOL_API_IMPL
 #endif
 
+static const void* _sglue_metal_get_renderpass_descriptor(void* user_data) {
+    sapp_window win = { (uint32_t) user_data };
+    return sapp_metal_get_window_renderpass_descriptor(win);
+}
+
+static const void* _sglue_metal_get_drawable(void* user_data) {
+    sapp_window win = { (uint32_t) user_data };
+    return sapp_metal_get_window_drawable(win);
+}
+
 #if defined(SOKOL_GFX_INCLUDED) && defined(SOKOL_APP_INCLUDED)
 SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
     sg_context_desc desc;
@@ -122,6 +133,28 @@ SOKOL_API_IMPL sg_context_desc sapp_sgcontext(void) {
     desc.metal.device = sapp_metal_get_device();
     desc.metal.renderpass_descriptor_cb = sapp_metal_get_renderpass_descriptor;
     desc.metal.drawable_cb = sapp_metal_get_drawable;
+    desc.d3d11.device = sapp_d3d11_get_device();
+    desc.d3d11.device_context = sapp_d3d11_get_device_context();
+    desc.d3d11.render_target_view_cb = sapp_d3d11_get_render_target_view;
+    desc.d3d11.depth_stencil_view_cb = sapp_d3d11_get_depth_stencil_view;
+    desc.wgpu.device = sapp_wgpu_get_device();
+    desc.wgpu.render_view_cb = sapp_wgpu_get_render_view;
+    desc.wgpu.resolve_view_cb = sapp_wgpu_get_resolve_view;
+    desc.wgpu.depth_stencil_view_cb = sapp_wgpu_get_depth_stencil_view;
+    return desc;
+}
+
+SOKOL_API_IMPL sg_context_desc sapp_window_sgcontext(sapp_window window) {
+    sg_context_desc desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.color_format = (sg_pixel_format) sapp_color_format();
+    desc.depth_format = (sg_pixel_format) sapp_depth_format();
+    desc.sample_count = sapp_sample_count();
+    desc.gl.force_gles2 = sapp_gles2();
+    desc.metal.device = sapp_metal_get_device();
+    desc.metal.renderpass_descriptor_userdata_cb = _sglue_metal_get_renderpass_descriptor;
+    desc.metal.drawable_userdata_cb = _sglue_metal_get_drawable;
+    desc.metal.user_data = (void*)(uintptr_t)window.id;
     desc.d3d11.device = sapp_d3d11_get_device();
     desc.d3d11.device_context = sapp_d3d11_get_device_context();
     desc.d3d11.render_target_view_cb = sapp_d3d11_get_render_target_view;
