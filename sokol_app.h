@@ -1430,52 +1430,18 @@ typedef struct sapp_html5_fetch_request {
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
+/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
+SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 /* returns true after sokol-app has been initialized */
 SOKOL_APP_API_DECL bool sapp_isvalid(void);
-/* open a new window */
-SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
-/* close a window */
-SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
-/* set the current 'window context' */
-SOKOL_APP_API_DECL void sapp_use_window(sapp_window window);
-/* get the main window */
-SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
-/* returns the current framebuffer width in pixels */
-SOKOL_APP_API_DECL int sapp_width(void);
-/* same as sapp_width(), but returns float */
-SOKOL_APP_API_DECL float sapp_widthf(void);
-/* returns the current framebuffer height in pixels */
-SOKOL_APP_API_DECL int sapp_height(void);
-/* same as sapp_height(), but returns float */
-SOKOL_APP_API_DECL float sapp_heightf(void);
-/* get default framebuffer color pixel format */
-SOKOL_APP_API_DECL int sapp_color_format(void);
-/* get default framebuffer depth pixel format */
-SOKOL_APP_API_DECL int sapp_depth_format(void);
-/* get default framebuffer sample count */
-SOKOL_APP_API_DECL int sapp_sample_count(void);
-/* returns true when high_dpi was requested and actually running in a high-dpi scenario */
-SOKOL_APP_API_DECL bool sapp_high_dpi(void);
-/* returns the dpi scaling factor (window pixels to framebuffer pixels) */
-SOKOL_APP_API_DECL float sapp_dpi_scale(void);
-/* show or hide the mobile device onscreen keyboard */
-SOKOL_APP_API_DECL void sapp_show_keyboard(bool show);
-/* return true if the mobile device onscreen keyboard is currently shown */
-SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
-/* query fullscreen mode */
-SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
-/* toggle fullscreen mode */
-SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
-/* show or hide the mouse cursor */
-SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
-/* show or hide the mouse cursor */
-SOKOL_APP_API_DECL bool sapp_mouse_shown();
-/* enable/disable mouse-pointer-lock mode */
-SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
-/* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
-SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
 /* return a copy of the sapp_desc structure */
 SOKOL_APP_API_DECL sapp_desc sapp_query_desc(void);
+/* get the current frame counter (for comparison with sapp_event.frame_count) */
+SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
+/* get main window's color pixel format */
+SOKOL_APP_API_DECL int sapp_color_format(void);
+/* get main window's depth pixel format */
+SOKOL_APP_API_DECL int sapp_depth_format(void);
 /* initiate a "soft quit" (sends SAPP_EVENTTYPE_QUIT_REQUESTED) */
 SOKOL_APP_API_DECL void sapp_request_quit(void);
 /* cancel a pending quit (when SAPP_EVENTTYPE_QUIT_REQUESTED has been received) */
@@ -1484,23 +1450,91 @@ SOKOL_APP_API_DECL void sapp_cancel_quit(void);
 SOKOL_APP_API_DECL void sapp_quit(void);
 /* call from inside event callback to consume the current event (don't forward to platform) */
 SOKOL_APP_API_DECL void sapp_consume_event(void);
-/* get the current frame counter (for comparison with sapp_event.frame_count) */
-SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
+/* show or hide the mobile device onscreen keyboard */
+SOKOL_APP_API_DECL void sapp_show_keyboard(bool show);
+/* return true if the mobile device onscreen keyboard is currently shown */
+SOKOL_APP_API_DECL bool sapp_keyboard_shown(void);
+/* show or hide the mouse cursor */
+SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
+/* show or hide the mouse cursor */
+SOKOL_APP_API_DECL bool sapp_mouse_shown();
+/* enable/disable mouse-pointer-lock mode */
+SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
+/* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
+SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
+/* set application/window icon (only on desktop platforms) */
+SOKOL_APP_API_DECL void sapp_set_icon(const sapp_icon_desc* icon_desc);
+
+/*=== single-window functions (return properties of the main window) =========*/
+
+/* get framebuffer width in pixels */
+SOKOL_APP_API_DECL int sapp_width(void);
+/* same as sapp_width(), but returns float */
+SOKOL_APP_API_DECL float sapp_widthf(void);
+/* get framebuffer height in pixels */
+SOKOL_APP_API_DECL int sapp_height(void);
+/* same as sapp_height(), but returns float */
+SOKOL_APP_API_DECL float sapp_heightf(void);
+/* get main window's sample count */
+SOKOL_APP_API_DECL int sapp_sample_count(void);
+/* returns true when high_dpi was requested and actually running in a high-dpi scenario */
+SOKOL_APP_API_DECL bool sapp_high_dpi(void);
+/* returns the dpi scaling factor (window pixels to framebuffer pixels) */
+SOKOL_APP_API_DECL float sapp_dpi_scale(void);
+/* query fullscreen mode */
+SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
+/* toggle fullscreen mode */
+SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
+/* set the main window title (only on desktop platforms) */
+SOKOL_APP_API_DECL void sapp_set_title(const char* str);
+
+/*=== multi-window functions =================================================*/
+
+/* open a new window and return window handle */
+SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
+/* close a window */
+SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
+/* get the main window handle */
+SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
+/* start iterating over open windows */
+SOKOL_APP_API_DECL sapp_window sapp_first_window(void);
+/* continue iterating over open windows, returns invalid handle when finished */
+SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
+/* test if a window handle is valid */
+SOKOL_APP_API_DECL bool sapp_valid_window(sapp_window window);
+/* get window handle's slot index (>= 0 and < sapp_desc.window_pool_size, useful for associating data with windows) */
+SOKOL_APP_API_DECL int sapp_window_index(sapp_window window);
+/* get window's framebuffer width in pixels */
+SOKOL_APP_API_DECL int sapp_window_width(sapp_window window);
+/* same as sapp_window_width(), but returns float */
+SOKOL_APP_API_DECL float sapp_window_widthf(sapp_window window);
+/* get window's framebuffer height in pixels */
+SOKOL_APP_API_DECL int sapp_window_height(sapp_window window);
+/* same as sapp_window_height(), but returns float */
+SOKOL_APP_API_DECL float sapp_window_heightf(sapp_window window);
+/* get a window's sample count */
+SOKOL_APP_API_DECL int sapp_window_sample_count(sapp_window window);
+/* returns true when high_dpi was requested for a window, and actually running in a high-dpi scenario */
+SOKOL_APP_API_DECL bool sapp_window_high_dpi(sapp_window window);
+/* returns a window's dpi scaling factor (window pixels to framebuffer pixels) */
+SOKOL_APP_API_DECL float sapp_window_dpi_scale(sapp_window window);
+/* query if a window is currently in fullscreen mode */
+SOKOL_APP_API_DECL bool sapp_window_is_fullscreen(sapp_window window);
+/* toggle a window to and from fullscreen mode */
+SOKOL_APP_API_DECL void sapp_window_toggle_fullscreen(sapp_window window);
+/* set window's title (only on desktop platforms) */
+SOKOL_APP_API_DECL void sapp_window_set_title(sapp_window window, const char* str);
+
+// FIXME FIXME FIXME: are these per window or better global?
+
 /* write string into clipboard */
 SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
-/* set the window title (only on desktop platforms) */
-SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
-/* set the window icon (only on Windows and Linux) */
-SOKOL_APP_API_DECL void sapp_set_icon(const sapp_icon_desc* icon_desc);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
 SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 /* gets the dropped file paths */
 SOKOL_APP_API_DECL const char* sapp_get_dropped_file_path(int index);
-
-/* special run-function for SOKOL_NO_ENTRY (in standard mode this is an empty stub) */
-SOKOL_APP_API_DECL void sapp_run(const sapp_desc* desc);
 
 /* GL: return true when GLES2 fallback is active (to detect fallback from GLES3) */
 SOKOL_APP_API_DECL bool sapp_gles2(void);
@@ -1523,9 +1557,9 @@ SOKOL_APP_API_DECL const void* sapp_metal_get_drawable(void);
 /* Metal: get bridged pointer to a window's current drawable */
 SOKOL_APP_API_DECL const void* sapp_metal_get_window_drawable(sapp_window window);
 /* macOS: get bridged pointer to macOS NSWindow */
-SOKOL_APP_API_DECL const void* sapp_macos_get_window(void);
+SOKOL_APP_API_DECL const void* sapp_macos_get_nswindow(sapp_window window);
 /* iOS: get bridged pointer to iOS UIWindow */
-SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
+SOKOL_APP_API_DECL const void* sapp_ios_get_uiwindow(void);
 
 /* D3D11: get pointer to ID3D11Device object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
@@ -2374,7 +2408,6 @@ typedef struct {
     sapp_desc desc;
     _sapp_window_pool_t window_pool;
     uint32_t main_window_id;
-    uint32_t cur_window_id;
     bool valid;
     bool first_frame;
     bool init_called;
@@ -3732,7 +3765,6 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     _SOKOL_UNUSED(aNotification);
 
     _sapp.main_window_id = _sapp_create_window(&_sapp.desc.window);
-    _sapp.cur_window_id = _sapp.main_window_id;
 
     // FIXME: maybe the activation stuff here needs to be moved before
     // the makeKeyAndOrderFront call, see here:
@@ -11149,6 +11181,93 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_LINUX */
 
+/*== single- vs multi-window helper functions ================================*/
+
+_SOKOL_PRIVATE int _sapp_window_sample_count(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    return win ? win->desc.sample_count : 1;
+}
+
+_SOKOL_PRIVATE int _sapp_window_width(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win && (win->framebuffer_width > 0)) {
+        return win->framebuffer_width;
+    }
+    else {
+        return 1;
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_window_height(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win && (win->framebuffer_height > 0)) {
+        return win->framebuffer_height;
+    }
+    else {
+        return 1;
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_window_high_dpi(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->desc.high_dpi && (win->dpi_scale >= 1.5f);
+    }
+    else {
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE float _sapp_window_dpi_scale(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->dpi_scale;
+    }
+    else {
+        return 1.0f;
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_window_is_fullscreen(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->fullscreen;
+    }
+    else {
+        return false;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_window_toggle_fullscreen(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        #if defined(_SAPP_MACOS)
+        _sapp_macos_toggle_fullscreen(win);
+        #elif defined(_SAPP_WIN32)
+        _sapp_win32_toggle_fullscreen();
+        #elif defined(_SAPP_UWP)
+        _sapp_uwp_toggle_fullscreen();
+        #elif defined(_SAPP_LINUX)
+        _sapp_x11_toggle_fullscreen();
+        #endif
+    }
+}
+
+SOKOL_API_IMPL void _sapp_window_set_title(uint32_t win_id, const char* title) {
+    SOKOL_ASSERT(title);
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        _sapp_strcpy(title, win->title, sizeof(win->title));
+        #if defined(_SAPP_MACOS)
+            _sapp_macos_update_window_title(win);
+        #elif defined(_SAPP_WIN32)
+            _sapp_win32_update_window_title();
+        #elif defined(_SAPP_LINUX)
+            _sapp_x11_update_window_title();
+        #endif
+    }
+}
+
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
@@ -11190,51 +11309,12 @@ SOKOL_API_IMPL bool sapp_isvalid(void) {
     return _sapp.valid;
 }
 
-SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
-    SOKOL_ASSERT(in_desc);
-    const sapp_window_desc desc = _sapp_window_desc_defaults(in_desc);
-    return _sapp_make_window_id(_sapp_create_window(&desc));
-}
-
-SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
-    // FIXME
-}
-
-SOKOL_API_IMPL void sapp_use_window(sapp_window window) {
-    SOKOL_ASSERT(SAPP_INVALID_ID != window.id);
-    _sapp.cur_window_id = window.id;
-}
-
-SOKOL_API_IMPL sapp_window sapp_main_window(void) {
-    return _sapp_make_window_id(_sapp.main_window_id);
-}
-
 SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
     return _sapp.desc;
 }
 
 SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
     return _sapp.frame_count;
-}
-
-SOKOL_API_IMPL int sapp_width(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return (win->framebuffer_width > 0) ? win->framebuffer_width : 1;
-}
-
-SOKOL_API_IMPL float sapp_widthf(void) {
-    return (float)sapp_width();
-}
-
-SOKOL_API_IMPL int sapp_height(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return (win->framebuffer_height > 0) ? win->framebuffer_height : 1;
-}
-
-SOKOL_API_IMPL float sapp_heightf(void) {
-    return (float)sapp_height();
 }
 
 SOKOL_API_IMPL int sapp_color_format(void) {
@@ -11259,26 +11339,20 @@ SOKOL_API_IMPL int sapp_depth_format(void) {
     return _SAPP_PIXELFORMAT_DEPTH_STENCIL;
 }
 
-SOKOL_API_IMPL int sapp_sample_count(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return win->desc.sample_count;
+SOKOL_API_IMPL void sapp_request_quit(void) {
+    _sapp.quit_requested = true;
 }
 
-SOKOL_API_IMPL bool sapp_high_dpi(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return win->desc.high_dpi && (win->dpi_scale >= 1.5f);
+SOKOL_API_IMPL void sapp_cancel_quit(void) {
+    _sapp.quit_requested = false;
 }
 
-SOKOL_API_IMPL float sapp_dpi_scale(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return win->dpi_scale;
+SOKOL_API_IMPL void sapp_quit(void) {
+    _sapp.quit_ordered = true;
 }
 
-SOKOL_API_IMPL bool sapp_gles2(void) {
-    return _sapp.gles2_fallback;
+SOKOL_API_IMPL void sapp_consume_event(void) {
+    _sapp.event_consumed = true;
 }
 
 SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
@@ -11297,29 +11371,10 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-SOKOL_APP_API_DECL bool sapp_is_fullscreen(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    return win->fullscreen;
-}
-
-SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void) {
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    #if defined(_SAPP_MACOS)
-    _sapp_macos_toggle_fullscreen(win);
-    #elif defined(_SAPP_WIN32)
-    _sapp_win32_toggle_fullscreen();
-    #elif defined(_SAPP_UWP)
-    _sapp_uwp_toggle_fullscreen();
-    #elif defined(_SAPP_LINUX)
-    _sapp_x11_toggle_fullscreen();
-    #endif
-}
-
 /* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
 SOKOL_API_IMPL void sapp_show_mouse(bool show) {
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    // FIXME: is this actually a per-window function??
+    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     if (win->mouse.shown != show) {
         #if defined(_SAPP_MACOS)
@@ -11336,13 +11391,15 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    // FIXME: is this actually a per-window function??
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     return win->mouse.shown;
 }
 
 SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    // FIXME: is this actually a per-window function??
+    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     #if defined(_SAPP_MACOS)
     _sapp_macos_lock_mouse(win, lock);
@@ -11358,79 +11415,10 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
 }
 
 SOKOL_API_IMPL bool sapp_mouse_locked(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    // FIXME: is this actually a per-window function??
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     return win->mouse.locked;
-}
-
-SOKOL_API_IMPL void sapp_request_quit(void) {
-    _sapp.quit_requested = true;
-}
-
-SOKOL_API_IMPL void sapp_cancel_quit(void) {
-    _sapp.quit_requested = false;
-}
-
-SOKOL_API_IMPL void sapp_quit(void) {
-    _sapp.quit_ordered = true;
-}
-
-SOKOL_API_IMPL void sapp_consume_event(void) {
-    _sapp.event_consumed = true;
-}
-
-/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
-SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->clipboard.enabled);
-    if (!win->clipboard.enabled) {
-        return;
-    }
-    SOKOL_ASSERT(str);
-    #if defined(_SAPP_MACOS)
-        _sapp_macos_set_clipboard_string(str);
-    #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_set_clipboard_string(str);
-    #elif defined(_SAPP_WIN32)
-        _sapp_win32_set_clipboard_string(str);
-    #else
-        /* not implemented */
-    #endif
-    _sapp_strcpy(str, win->clipboard.buffer, win->clipboard.buf_size);
-}
-
-SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->clipboard.enabled);
-    if (!win->clipboard.enabled) {
-        return "";
-    }
-    #if defined(_SAPP_MACOS)
-        return _sapp_macos_get_clipboard_string(win);
-    #elif defined(_SAPP_EMSCRIPTEN)
-        return _sapp.clipboard.buffer;
-    #elif defined(_SAPP_WIN32)
-        return _sapp_win32_get_clipboard_string();
-    #else
-        /* not implemented */
-        return _sapp.cur_window->clipboard.buffer;
-    #endif
-}
-
-SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
-    SOKOL_ASSERT(title);
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
-    _sapp_strcpy(title, win->title, sizeof(win->title));
-    #if defined(_SAPP_MACOS)
-        _sapp_macos_update_window_title(win);
-    #elif defined(_SAPP_WIN32)
-        _sapp_win32_update_window_title();
-    #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_window_title();
-    #endif
 }
 
 SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
@@ -11461,15 +11449,172 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
     #endif
 }
 
+SOKOL_API_IMPL int sapp_width(void) {
+    return _sapp_window_width(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_widthf(void) {
+    return (float)_sapp_window_width(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL int sapp_height(void) {
+    return _sapp_window_height(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_heightf(void) {
+    return (float)_sapp_window_height(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL int sapp_sample_count(void) {
+    return _sapp_window_sample_count(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL bool sapp_high_dpi(void) {
+    return _sapp_window_high_dpi(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_dpi_scale(void) {
+    return _sapp_window_dpi_scale(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
+    return _sapp_window_is_fullscreen(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
+    _sapp_window_toggle_fullscreen(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL void sapp_set_title(const char* title) {
+    _sapp_window_set_title(_sapp.main_window_id, title);
+}
+
+SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
+    SOKOL_ASSERT(in_desc);
+    const sapp_window_desc desc = _sapp_window_desc_defaults(in_desc);
+    return _sapp_make_window_id(_sapp_create_window(&desc));
+}
+
+SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
+    // FIXME FIXME FIXME
+}
+
+SOKOL_API_IMPL sapp_window sapp_main_window(void) {
+    return _sapp_make_window_id(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL sapp_window sapp_first_window(void) {
+    SOKOL_ASSERT(false && "FIXME FIXME FIXME");
+    return _sapp_make_window_id(SAPP_INVALID_ID);
+}
+
+SOKOL_API_IMPL sapp_window sapp_next_window(sapp_window window) {
+    SOKOL_ASSERT(false && "FIXME FIXME FIXME");
+    return _sapp_make_window_id(SAPP_INVALID_ID);
+}
+
+SOKOL_API_IMPL bool sapp_valid_window(sapp_window window) {
+    return 0 != _sapp_lookup_window(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_index(sapp_window window) {
+    SOKOL_ASSERT(SAPP_INVALID_ID != window.id);
+    int slot_index = _sapp_slot_index(window.id);
+    SOKOL_ASSERT(slot_index > 0);
+    slot_index -= 1;
+    SOKOL_ASSERT(slot_index < _sapp.desc.window_pool_size);
+    return slot_index;
+}
+
+SOKOL_API_IMPL int sapp_window_width(sapp_window window) {
+    return _sapp_window_width(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_widthf(sapp_window window) {
+    return (float)_sapp_window_width(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_height(sapp_window window) {
+    return _sapp_window_height(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_heightf(sapp_window window) {
+    return (float)_sapp_window_height(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_sample_count(sapp_window window) {
+    return _sapp_window_sample_count(window.id);
+}
+
+SOKOL_API_IMPL bool sapp_window_high_dpi(sapp_window window) {
+    return _sapp_window_high_dpi(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_dpi_scale(sapp_window window) {
+    return _sapp_window_dpi_scale(window.id);
+}
+
+SOKOL_API_IMPL bool sapp_window_is_fullscreen(sapp_window window) {
+    return _sapp_window_is_fullscreen(window.id);
+}
+
+SOKOL_API_IMPL void sapp_window_toggle_fullscreen(sapp_window window) {
+    _sapp_window_toggle_fullscreen(window.id);
+}
+
+SOKOL_API_IMPL void sapp_window_set_title(sapp_window window, const char* title) {
+    _sapp_window_set_title(window.id, title);
+}
+
+/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
+SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
+    SOKOL_ASSERT(win);
+    SOKOL_ASSERT(win->clipboard.enabled);
+    if (!win->clipboard.enabled) {
+        return;
+    }
+    SOKOL_ASSERT(str);
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_clipboard_string(str);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_set_clipboard_string(str);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_set_clipboard_string(str);
+    #else
+        /* not implemented */
+    #endif
+    _sapp_strcpy(str, win->clipboard.buffer, win->clipboard.buf_size);
+}
+
+SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
+    SOKOL_ASSERT(win);
+    SOKOL_ASSERT(win->clipboard.enabled);
+    if (!win->clipboard.enabled) {
+        return "";
+    }
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_get_clipboard_string(win);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        return _sapp.clipboard.buffer;
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_get_clipboard_string();
+    #else
+        /* not implemented */
+        return _sapp.cur_window->clipboard.buffer;
+    #endif
+}
+
 SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     SOKOL_ASSERT(win->drop.enabled);
     return win->drop.num_files;
 }
 
 SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     SOKOL_ASSERT((index >= 0) && (index < win->drop.num_files));
     SOKOL_ASSERT(win->drop.buffer);
@@ -11482,8 +11627,12 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     return (const char*) _sapp_dropped_file_path_ptr(win, index);
 }
 
+SOKOL_API_IMPL bool sapp_gles2(void) {
+    return _sapp.gles2_fallback;
+}
+
 SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     SOKOL_ASSERT(win->drop.enabled);
     SOKOL_ASSERT((index >= 0) && (index < win->drop.num_files));
@@ -11499,7 +11648,7 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
 }
 
 SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
+    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
     SOKOL_ASSERT(win->drop.enabled);
     SOKOL_ASSERT(request);
@@ -11602,14 +11751,18 @@ SOKOL_API_IMPL const void* sapp_metal_get_drawable(void) {
     return sapp_metal_get_window_drawable(sapp_main_window());
 }
 
-SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
+SOKOL_API_IMPL const void* sapp_macos_get_nswindow(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.cur_window_id);
-    SOKOL_ASSERT(win);
     #if defined(_SAPP_MACOS)
-        const void* obj = (__bridge const void*) win->macos.window;
-        SOKOL_ASSERT(obj);
-        return obj;
+        const _sapp_window_t* win = _sapp_lookup_window(window.id);
+        if (win) {
+            const void* obj = (__bridge const void*) win->macos.window;
+            SOKOL_ASSERT(obj);
+            return obj;
+        }
+        else {
+            return 0;
+        }
     #else
         return 0;
     #endif
