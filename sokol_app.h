@@ -10657,11 +10657,11 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-SOKOL_APP_API_DECL bool sapp_is_fullscreen(void) {
+SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
     return _sapp.fullscreen;
 }
 
-SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void) {
+SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_toggle_fullscreen();
     #elif defined(_SAPP_WIN32)
