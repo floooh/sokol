@@ -1870,7 +1870,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 @property uint32_t win_id;
 @end
 #if defined(SOKOL_METAL)
-    @interface _sapp_macos_view : MTKView
+    @interface _sapp_macos_metal_view : NSView<CALayerDelegate>
+    @property (nonatomic, readonly) CAMetalLayer *metal_layer;
+    @end
+    @interface _sapp_macos_view : _sapp_macos_metal_view
     @property uint32_t win_id;
     @end
 #elif defined(SOKOL_GLCORE33)
@@ -1887,6 +1890,10 @@ typedef struct {
     NSTrackingArea* tracking_area;
     uint32_t flags_changed_store;
     uint8_t mouse_buttons;
+    #if defined(SOKOL_METAL)
+        MTLRenderPassDescriptor* renderpass_desc;
+        id<CAMetalDrawable> current_drawable;
+    #endif
 } _sapp_macos_window_t;
 
 typedef struct {
@@ -1894,7 +1901,7 @@ typedef struct {
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
-    dispatch_source_t display_source;
+    dispatch_source_t dispatch_source;
     CVDisplayLinkRef display_link;
 } _sapp_macos_t;
 
@@ -3311,6 +3318,7 @@ _SOKOL_PRIVATE void _sapp_macos_init_state(void) {
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     CVDisplayLinkStop(_sapp.macos.display_link);
     CVDisplayLinkRelease(_sapp.macos.display_link);
+    dispatch_source_cancel(_sapp.macos.dispatch_source);
     _sapp.macos.display_link = nil;
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(_sapp.macos.app_delegate);
@@ -3404,9 +3412,13 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
     win->macos.delegate.win_id = win->slot.id;
     win->macos.window.delegate = win->macos.delegate;
     #if defined(SOKOL_METAL)
-        win->macos.view = [[_sapp_macos_view alloc] init];
+        win->macos.view = [[_sapp_macos_view alloc] initWithFrame:window_rect];
         win->macos.view.win_id = win->slot.id;
+        win->macos.view.metal_layer.device = _sapp.macos.mtl_device;
+        win->macos.view.metal_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+        win->macos.view.metal_layer.maximumDrawableCount = 2;
         [win->macos.view updateTrackingAreas];
+        /*
         win->macos.view.preferredFramesPerSecond = 60 / win->desc.swap_interval;
         win->macos.view.paused = YES;
         win->macos.view.enableSetNeedsDisplay = NO;
@@ -3415,9 +3427,13 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         win->macos.view.sampleCount = (NSUInteger) win->desc.sample_count;
         win->macos.view.autoResizeDrawable = false;
+        */
         win->macos.window.contentView = win->macos.view;
         [win->macos.window makeFirstResponder:win->macos.view];
-        win->macos.view.layer.magnificationFilter = kCAFilterNearest;
+        //win->macos.view.layer.magnificationFilter = kCAFilterNearest;
+
+        win->macos.renderpass_desc = [MTLRenderPassDescriptor new];
+        win->macos.renderpass_desc.colorAttachments[0].storeAction = MTLStoreActionStore;
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
@@ -3477,6 +3493,7 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
     SOKOL_ASSERT(win);
     // NOTE: it's safe to call [release] on a nil object
+    _SAPP_OBJC_RELEASE(win->macos.renderpass_desc);
     _SAPP_OBJC_RELEASE(win->macos.tracking_area);
     _SAPP_OBJC_RELEASE(win->macos.delegate);
     _SAPP_OBJC_RELEASE(win->macos.view);
@@ -3587,7 +3604,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
     */
     #if defined(SOKOL_METAL)
     CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
-    win->macos.view.drawableSize = drawable_size;
+//    win->macos.view.drawableSize = drawable_size;
     #endif
 }
 
@@ -3740,6 +3757,26 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     return kCVReturnSuccess;
 }
 
+_SOKOL_PRIVATE const void* _sapp_macos_metal_renderpass_descriptor(_sapp_window_t* win) {
+    SOKOL_ASSERT(win);
+    SOKOL_ASSERT(nil == win->macos.current_drawable);
+static uint32_t frame_count = 0;
+__builtin_printf("%d: before nextDrawable %p\n", frame_count, win);
+    win->macos.current_drawable = [win->macos.view.metal_layer nextDrawable];
+__builtin_printf("%d: after nextDrawable %p\n", frame_count++, win);
+    win->macos.renderpass_desc.colorAttachments[0].texture = win->macos.current_drawable.texture;
+    return (__bridge const void*) win->macos.renderpass_desc;
+}
+
+_SOKOL_PRIVATE const void* _sapp_macos_metal_drawable(_sapp_window_t* win) {
+    SOKOL_ASSERT(win);
+    SOKOL_ASSERT(nil != win->macos.current_drawable);
+    const void* drawable = (__bridge const void*) win->macos.current_drawable;
+    // current_drawable is autoreleased at end of frame
+    win->macos.current_drawable = nil;
+    return drawable;
+}
+
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
@@ -3749,7 +3786,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
         _sapp_window_t* win = _sapp_lookup_window(win_id);
         if (win) {
             #if defined(SOKOL_METAL)
-            [win->macos.view draw];
+            //[win->macos.view draw];
             #else
             #error "FIXME: GL"
             #endif
@@ -3781,16 +3818,16 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 
     // setup display link
     // see: https://developer.apple.com/documentation/metal/drawable_objects/creating_a_custom_metal_view?language=objc
-    _sapp.macos.display_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_DATA_ADD, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_event_handler(_sapp.macos.display_source, ^(){
+    _sapp.macos.dispatch_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_DATA_ADD, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_event_handler(_sapp.macos.dispatch_source, ^(){
         @autoreleasepool {
             [_sapp.macos.app_delegate drawFrame];
         }
     });
-    dispatch_resume(_sapp.macos.display_source);
+    dispatch_resume(_sapp.macos.dispatch_source);
 
     CVDisplayLinkCreateWithActiveCGDisplays(&_sapp.macos.display_link);
-    CVDisplayLinkSetOutputCallback(_sapp.macos.display_link, &_sapp_macos_displaylink_callback, (__bridge void*)_sapp.macos.display_source);
+    CVDisplayLinkSetOutputCallback(_sapp.macos.display_link, &_sapp_macos_displaylink_callback, (__bridge void*)_sapp.macos.dispatch_source);
     CGDirectDisplayID disp_id = (CGDirectDisplayID) [NSScreen.mainScreen.deviceDescription[@"NSScreenNumber"] unsignedIntegerValue];
     CVDisplayLinkSetCurrentCGDisplay(_sapp.macos.display_link, disp_id);
     CVDisplayLinkStart(_sapp.macos.display_link);
@@ -3810,7 +3847,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @end
 
 @implementation _sapp_macos_window_delegate
-@synthesize win_id;
+//@synthesize win_id;
 
 - (BOOL)windowShouldClose:(id)sender {
     _SOKOL_UNUSED(sender);
@@ -3881,7 +3918,6 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @end
 
 @implementation _sapp_macos_window
-@synthesize win_id;
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
                           styleMask:(NSWindowStyleMask)style
@@ -3938,8 +3974,44 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 }
 @end
 
+@implementation _sapp_macos_metal_view
+
+- (instancetype) initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.wantsLayer = YES;
+        self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
+        _metal_layer = (CAMetalLayer*) self.layer;
+        self.layer.delegate = self;
+    }
+    return self;
+}
+
+- (CALayer*)makeBackingLayer {
+    return [CAMetalLayer layer];
+}
+
+- (void)viewDidMoveToWindow {
+    // fixme: resize drawable
+}
+
+- (void)viewDidChangeBackingProperties {
+    [super viewDidChangeBackingProperties];
+//    [self resizeDrawable:self.window.screen.backingScaleFactor];
+}
+
+- (void)setFrameSize:(NSSize)size {
+    [super setFrameSize:size];
+//    [self resizeDrawable:self.window.screen.backingScaleFactor];
+}
+
+- (void)setBoundsSize:(NSSize)size {
+    [super setBoundsSize:size];
+//    [self resizeDrawable:self.window.screen.backingScaleFactor];
+}
+@end
+
 @implementation _sapp_macos_view
-@synthesize win_id;
 
 #if defined(SOKOL_GLCORE33)
 /* NOTE: this is a hack/fix when the initial window size has been clipped by
@@ -11704,15 +11776,13 @@ SOKOL_API_IMPL const void* sapp_metal_get_device(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_window_renderpass_descriptor(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const _sapp_window_t* win = _sapp_lookup_window(window.id);
+        _sapp_window_t* win = _sapp_lookup_window(window.id);
         if (win) {
             #if defined(_SAPP_MACOS)
-                const void* obj = (__bridge const void*) [win->macos.view currentRenderPassDescriptor];
+                return _sapp_macos_metal_renderpass_descriptor(win);
             #else
                 const void* obj = (__bridge const void*) [_sapp.window.ios.view currentRenderPassDescriptor];
             #endif
-            SOKOL_ASSERT(obj);
-            return obj;
         }
         else {
             return 0;
@@ -11729,15 +11799,13 @@ SOKOL_API_IMPL const void* sapp_metal_get_renderpass_descriptor(void) {
 SOKOL_API_IMPL const void* sapp_metal_get_window_drawable(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     #if defined(SOKOL_METAL)
-        const _sapp_window_t* win = _sapp_lookup_window(window.id);
+        _sapp_window_t* win = _sapp_lookup_window(window.id);
         if (win) {
             #if defined(_SAPP_MACOS)
-                const void* obj = (__bridge const void*) [win->macos.view currentDrawable];
+                return _sapp_macos_metal_drawable(win);
             #else
                 const void* obj = (__bridge const void*) [_sapp.window.ios.view currentDrawable];
             #endif
-            SOKOL_ASSERT(obj);
-            return obj;
         }
         else {
             return 0;
