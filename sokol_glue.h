@@ -113,12 +113,12 @@ SOKOL_GLUE_API_DECL sg_context_desc sapp_window_sgcontext(sapp_window win);
 #endif
 
 static const void* _sglue_metal_get_renderpass_descriptor(void* user_data) {
-    sapp_window win = { (uint32_t) user_data };
+    sapp_window win = { (uint32_t)(uintptr_t)user_data };
     return sapp_metal_get_window_renderpass_descriptor(win);
 }
 
 static const void* _sglue_metal_get_drawable(void* user_data) {
-    sapp_window win = { (uint32_t) user_data };
+    sapp_window win = { (uint32_t)(uintptr_t)user_data };
     return sapp_metal_get_window_drawable(win);
 }
 
