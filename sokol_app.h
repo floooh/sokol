@@ -1335,9 +1335,9 @@ typedef struct sapp_icon_desc {
 */
 typedef struct sapp_window_desc {
     const char* title;                  // the window title as UTF-8 encoded string
-    int x;
+    int x;                              // window position (if 0,0 a good default might be chosen)
     int y;
-    int width;
+    int width;                          // window size
     int height;
     int sample_count;                   // MSAA sample count
     int swap_interval;                  // the preferred swap interval (ignored on some platforms)
@@ -1345,11 +1345,6 @@ typedef struct sapp_window_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
-    bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
-    int max_dropped_files;              // max number of dropped files to process (default: 1)
-    int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
-    bool enable_clipboard;
-    int clipboard_size;
 } sapp_window_desc;
 
 typedef struct sapp_gl_desc {
@@ -1387,8 +1382,25 @@ typedef struct sapp_desc {
     void (*event_userdata_cb)(const sapp_event*, void*);
 
     int window_pool_size;
-    sapp_window_desc window;
-    sapp_icon_desc icon;                // FIXME: per-window icons?
+    const char* window_title;           // the window title as UTF-8 encoded string
+    int x;
+    int y;
+    int width;
+    int height;
+    int sample_count;                   // MSAA sample count
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
+    bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
+    bool fullscreen;                    // whether the window should be created in fullscreen mode
+    bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
+    bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+
+    bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
+    int max_dropped_files;              // max number of dropped files to process (default: 1)
+    int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
+    bool enable_clipboard;
+    int clipboard_size;
+    sapp_icon_desc icon;
+
     sapp_gl_desc gl;
     sapp_win32_desc win32;
     sapp_html5_desc html5;
@@ -2372,8 +2384,6 @@ typedef struct {
     float dpi_scale;
     bool fullscreen;
     _sapp_mouse_t mouse;
-    _sapp_clipboard_t clipboard;
-    _sapp_drop_t drop;
     char title[_SAPP_MAX_TITLE_LENGTH];
     #if defined(_SAPP_MACOS)
         _sapp_macos_window_t macos;
@@ -2423,6 +2433,8 @@ typedef struct {
     sapp_event event;
     sapp_icon_desc default_icon_desc;
     uint32_t* default_icon_pixels;
+    _sapp_clipboard_t clipboard;
+    _sapp_drop_t drop;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2742,12 +2754,12 @@ _SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     }
 }
 
-_SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(const _sapp_window_t* win, int index) {
-    SOKOL_ASSERT(win->drop.buffer);
-    SOKOL_ASSERT((index >= 0) && (index <= win->drop.max_files));
-    int offset = index * win->drop.max_path_length;
-    SOKOL_ASSERT(offset < win->drop.buf_size);
-    return &win->drop.buffer[offset];
+_SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(int index) {
+    SOKOL_ASSERT(_sapp.drop.buffer);
+    SOKOL_ASSERT((index >= 0) && (index <= _sapp.drop.max_files));
+    int offset = index * _sapp.drop.max_path_length;
+    SOKOL_ASSERT(offset < _sapp.drop.buf_size);
+    return &_sapp.drop.buffer[offset];
 }
 
 /* Copy a string into a fixed size buffer with guaranteed zero-
@@ -2780,17 +2792,46 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE sapp_window_desc _sapp_window_desc_defaults(const sapp_window_desc* in_desc) {
-    sapp_window_desc desc = *in_desc;
-    desc.title = _sapp_def(desc.title, "sokol_app");
+_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
+    sapp_desc desc = *in_desc;
+    desc.window_pool_size = _sapp_def(desc.window_pool_size, _SAPP_DEFAULT_POOL_SIZE);
+    desc.window_title = _sapp_def(desc.window_title, "sokol-app");
     desc.width = _sapp_def(desc.width, 640);
     desc.height = _sapp_def(desc.height, 480);
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
+    desc.html5.canvas_name = _sapp_def(desc.html5.canvas_name, "canvas");
     desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
     desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
     desc.clipboard_size = _sapp_def(desc.clipboard_size, 8192);
     return desc;
+}
+
+_SOKOL_PRIVATE sapp_window_desc _sapp_window_desc_defaults(const sapp_window_desc* in_desc) {
+    sapp_window_desc desc = *in_desc;
+    desc.title = _sapp_def(desc.title, "sokol-app");
+    desc.width = _sapp_def(desc.width, 640);
+    desc.height = _sapp_def(desc.height, 480);
+    desc.sample_count = _sapp_def(desc.sample_count, 1);
+    desc.swap_interval = _sapp_def(desc.swap_interval, 1);
+    return desc;
+}
+
+_SOKOL_PRIVATE sapp_window_desc _sapp_desc_to_window_desc(const sapp_desc* desc) {
+    sapp_window_desc wdesc;
+    memset(&wdesc, 0, sizeof(wdesc));
+    wdesc.title = desc->window_title;
+    wdesc.x = desc->x;
+    wdesc.y = desc->y;
+    wdesc.width = desc->width;
+    wdesc.height = desc->height;
+    wdesc.sample_count = desc->sample_count;
+    wdesc.swap_interval = desc->swap_interval;
+    wdesc.high_dpi = desc->high_dpi;
+    wdesc.fullscreen = desc->fullscreen;
+    wdesc.alpha = desc->alpha;
+    wdesc.user_cursor = desc->user_cursor;
+    return wdesc;
 }
 
 _SOKOL_PRIVATE void _sapp_platform_init_state(void) {
@@ -2829,7 +2870,7 @@ _SOKOL_PRIVATE void _sapp_platform_discard_state(void) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sapp_init_clipboard(_sapp_clipboard_t* clipboard, const sapp_window_desc* desc) {
+_SOKOL_PRIVATE void _sapp_init_clipboard(_sapp_clipboard_t* clipboard, const sapp_desc* desc) {
     SOKOL_ASSERT(clipboard && desc);
     SOKOL_ASSERT(0 == clipboard->buffer);
     clipboard->enabled = desc->enable_clipboard;
@@ -2838,10 +2879,9 @@ _SOKOL_PRIVATE bool _sapp_init_clipboard(_sapp_clipboard_t* clipboard, const sap
         clipboard->buffer = (char*) SOKOL_CALLOC(1, (size_t)clipboard->buf_size);
         if (0 == clipboard->buffer) {
             SOKOL_LOG("failed to allocate clipboard buffer!");
-            return false;
+            clipboard->enabled = false;
         }
     }
-    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_clipboard(_sapp_clipboard_t* clipboard) {
@@ -2852,7 +2892,7 @@ _SOKOL_PRIVATE void _sapp_discard_clipboard(_sapp_clipboard_t* clipboard) {
     _SAPP_CLEAR_PTR(_sapp_clipboard_t, clipboard);
 }
 
-_SOKOL_PRIVATE bool _sapp_init_drop(_sapp_drop_t* drop, const sapp_window_desc* desc) {
+_SOKOL_PRIVATE void _sapp_init_drop(_sapp_drop_t* drop, const sapp_desc* desc) {
     SOKOL_ASSERT(drop && desc);
     SOKOL_ASSERT(0 == drop->buffer);
     drop->enabled = desc->enable_dragndrop;
@@ -2863,10 +2903,9 @@ _SOKOL_PRIVATE bool _sapp_init_drop(_sapp_drop_t* drop, const sapp_window_desc* 
         drop->buffer = (char*) SOKOL_CALLOC(1, (size_t)drop->buf_size);
         if (0 == drop->buffer) {
             SOKOL_LOG("failed to allocate drag'n'drop buffer!");
-            return false;
+            drop->enabled = false;
         }
     }
-    return true;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_drop(_sapp_drop_t* drop) {
@@ -2877,11 +2916,16 @@ _SOKOL_PRIVATE void _sapp_discard_drop(_sapp_drop_t* drop) {
     _SAPP_CLEAR_PTR(_sapp_drop_t, drop);
 }
 
+_SOKOL_PRIVATE void _sapp_clear_drop_buffer(_sapp_drop_t* drop) {
+    if (drop->enabled) {
+        SOKOL_ASSERT(drop->buffer);
+        memset(drop->buffer, 0, (size_t)drop->buf_size);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_destroy_window(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     SOKOL_ASSERT(win);
-    _sapp_discard_drop(&win->drop);
-    _sapp_discard_clipboard(&win->clipboard);
     _sapp_platform_destroy_window(win);
     _sapp_free_window_id(win_id);
     _SAPP_CLEAR_PTR(_sapp_window_t, win);
@@ -2909,22 +2953,11 @@ _SOKOL_PRIVATE uint32_t _sapp_create_window(const sapp_window_desc* desc) {
     win->dpi_scale = 1.0f;
     win->fullscreen = desc->fullscreen;
     win->mouse.shown = true;
-    if (!_sapp_init_clipboard(&win->clipboard, &win->desc)) {
-        SOKOL_LOG("clipboard initialization failed!");
-        return SAPP_INVALID_ID;
-    }
-    if (!_sapp_init_drop(&win->drop, &win->desc)) {
-        SOKOL_LOG("drag'n'drop initialization failed!");
-        _sapp_discard_clipboard(&win->clipboard);
-        return SAPP_INVALID_ID;
-    }
     _sapp_strcpy(desc->title, &win->title[0], sizeof(win->title));
     win->desc.title = &win->title[0];   // redirect transient pointer to persistent copy
 
     // platform-specific window creation and initialization
     if (!_sapp_platform_create_window(win)) {
-        _sapp_discard_drop(&win->drop);
-        _sapp_discard_clipboard(&win->clipboard);
         return SAPP_INVALID_ID;
     }
     return win_id;
@@ -2942,24 +2975,18 @@ _SOKOL_PRIVATE void _sapp_destroy_all_windows(void) {
     _sapp_destroy_window(_sapp.main_window_id);
 }
 
-_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
-    sapp_desc desc = *in_desc;
-    desc.window_pool_size = _sapp_def(desc.window_pool_size, _SAPP_DEFAULT_POOL_SIZE);
-    desc.window = _sapp_window_desc_defaults(&desc.window);
-    desc.html5.canvas_name = _sapp_def(desc.html5.canvas_name, "canvas");
-    return desc;
-}
-
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _SAPP_CLEAR_ITEM(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
     _sapp_setup_window_pool(&_sapp.desc);
+    _sapp_init_clipboard(&_sapp.clipboard, desc);
+    _sapp_init_drop(&_sapp.drop, desc);
     _sapp_platform_init_state();
 
     // copy title string in desc to backing store and patch transient pointer
-    _sapp_strcpy(desc->window.title, &_sapp.desc_window_title[0], sizeof(_sapp.desc_window_title));
-    _sapp.desc.window.title = &_sapp.desc_window_title[0];
+    _sapp_strcpy(desc->window_title, &_sapp.desc_window_title[0], sizeof(_sapp.desc_window_title));
+    _sapp.desc.window_title = &_sapp.desc_window_title[0];
     // FIXME: what about the icon image pointers?
 }
 
@@ -2968,6 +2995,8 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     _sapp_destroy_all_windows();
     _sapp_discard_window_pool();
     _sapp_platform_discard_state();
+    _sapp_discard_drop(&_sapp.drop);
+    _sapp_discard_clipboard(&_sapp.clipboard);
     if (_sapp.default_icon_pixels) {
         SOKOL_FREE((void*)_sapp.default_icon_pixels);
         _sapp.default_icon_pixels = 0;
@@ -3001,14 +3030,6 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
     }
     else {
         return SAPP_KEYCODE_INVALID;
-    }
-}
-
-_SOKOL_PRIVATE void _sapp_clear_drop_buffer(_sapp_window_t* win) {
-    SOKOL_ASSERT(win);
-    if (win->drop.enabled) {
-        SOKOL_ASSERT(win->drop.buffer);
-        memset(win->drop.buffer, 0, (size_t)win->drop.buf_size);
     }
 }
 
@@ -3410,7 +3431,7 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         win->macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         win->macos.view.sampleCount = (NSUInteger) win->desc.sample_count;
-        win->macos.view.autoResizeDrawable = false;
+        win->macos.view.autoResizeDrawable = NO;
         win->macos.window.contentView = win->macos.view;
         [win->macos.window makeFirstResponder:win->macos.view];
         win->macos.view.layer.magnificationFilter = kCAFilterNearest;
@@ -3604,21 +3625,21 @@ _SOKOL_PRIVATE void _sapp_macos_set_clipboard_string(const char* str) {
     }
 }
 
-_SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(_sapp_window_t* win) {
-    SOKOL_ASSERT(win->clipboard.buffer);
+_SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.buffer);
     @autoreleasepool {
-        win->clipboard.buffer[0] = 0;
+        _sapp.clipboard.buffer[0] = 0;
         NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
         if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
-            return win->clipboard.buffer;
+            return _sapp.clipboard.buffer;
         }
         NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
         if (!str) {
-            return win->clipboard.buffer;
+            return _sapp.clipboard.buffer;
         }
-        _sapp_strcpy([str UTF8String], win->clipboard.buffer, win->clipboard.buf_size);
+        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     }
-    return win->clipboard.buffer;
+    return _sapp.clipboard.buffer;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_window_title(_sapp_window_t* win) {
@@ -3739,18 +3760,21 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
-    _sapp_frame();
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
         _sapp_window_t* win = _sapp_lookup_window(win_id);
         if (win) {
             #if defined(SOKOL_METAL)
+            // FIXME: MTKView.draw must be called before currentRenderPassDescriptor
+            // so that it correctly updates its render target sizes...
+            // this may be a good reason to drop MTKView :/
             [win->macos.view draw];
             #else
             #error "FIXME: GL"
             #endif
         }
     }
+    _sapp_frame();
     // FIXME FIXME FIXME
     //    if (_sapp.quit_requested || _sapp.quit_ordered) {
     //        [win->macos.window performClose:nil];
@@ -3760,7 +3784,8 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
 
-    _sapp.main_window_id = _sapp_create_window(&_sapp.desc.window);
+    const sapp_window_desc window_desc = _sapp_desc_to_window_desc(&_sapp.desc);
+    _sapp.main_window_id = _sapp_create_window(&window_desc);
 
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     [NSApp activateIgnoringOtherApps:YES];
@@ -3901,12 +3926,12 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     SOKOL_ASSERT(win);
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([pboard.types containsObject:NSPasteboardTypeFileURL]) {
-        _sapp_clear_drop_buffer(win);
-        win->drop.num_files = ((int)pboard.pasteboardItems.count > win->drop.max_files) ? win->drop.max_files : pboard.pasteboardItems.count;
+        _sapp_clear_drop_buffer(&_sapp.drop);
+        _sapp.drop.num_files = ((int)pboard.pasteboardItems.count > _sapp.drop.max_files) ? _sapp.drop.max_files : pboard.pasteboardItems.count;
         bool drop_failed = false;
-        for (int i = 0; i < win->drop.num_files; i++) {
+        for (int i = 0; i < _sapp.drop.num_files; i++) {
             NSURL *fileUrl = [NSURL fileURLWithPath:[pboard.pasteboardItems[(NSUInteger)i] stringForType:NSPasteboardTypeFileURL]];
-            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(win, i), win->drop.max_path_length)) {
+            if (!_sapp_strcpy(fileUrl.standardizedURL.path.UTF8String, _sapp_dropped_file_path_ptr(i), _sapp.drop.max_path_length)) {
                 SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
                 drop_failed = true;
                 break;
@@ -3919,8 +3944,8 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
             }
         }
         else {
-            _sapp_clear_drop_buffer(win);
-            win->drop.num_files = 0;
+            _sapp_clear_drop_buffer(&_sapp.drop);
+            _sapp.drop.num_files = 0;
         }
         retval = YES;
     }
@@ -4153,7 +4178,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
                 }
             }
             /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
-            if (win->clipboard.enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
+            if (_sapp.clipboard.enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
                 _sapp_init_event(win, SAPP_EVENTTYPE_CLIPBOARD_PASTED);
                 _sapp_call_event(&_sapp.event);
             }
@@ -4371,7 +4396,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
             and automatically renders at Retina resolution. We'll disable
             autoResize and instead do the resizing in _sapp_ios_update_dimensions()
         */
-        _sapp.ios.view.autoResizeDrawable = false;
+        _sapp.ios.view.autoResizeDrawable = NO;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
         _sapp.ios.view_ctrl = [[UIViewController alloc] init];
@@ -11588,10 +11613,7 @@ SOKOL_API_IMPL void sapp_window_set_title(sapp_window window, const char* title)
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     SOKOL_ASSERT(_sapp.valid);
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->clipboard.enabled);
-    if (!win->clipboard.enabled) {
+    if (!_sapp.clipboard.enabled) {
         return;
     }
     SOKOL_ASSERT(str);
@@ -11604,19 +11626,16 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     #else
         /* not implemented */
     #endif
-    _sapp_strcpy(str, win->clipboard.buffer, win->clipboard.buf_size);
+    _sapp_strcpy(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     SOKOL_ASSERT(_sapp.valid);
-    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->clipboard.enabled);
-    if (!win->clipboard.enabled) {
+    if (!_sapp.clipboard.enabled) {
         return "";
     }
     #if defined(_SAPP_MACOS)
-        return _sapp_macos_get_clipboard_string(win);
+        return _sapp_macos_get_clipboard_string();
     #elif defined(_SAPP_EMSCRIPTEN)
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
@@ -11629,25 +11648,19 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
 
 SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->drop.enabled);
-    return win->drop.num_files;
+    return _sapp.drop.num_files;
 }
 
 SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT((index >= 0) && (index < win->drop.num_files));
-    SOKOL_ASSERT(win->drop.buffer);
-    if (!win->drop.enabled) {
+    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
+    if (!_sapp.drop.enabled) {
         return "";
     }
-    if ((index < 0) || (index >= win->drop.max_files)) {
+    if ((index < 0) || (index >= _sapp.drop.max_files)) {
         return "";
     }
-    return (const char*) _sapp_dropped_file_path_ptr(win, index);
+    return (const char*) _sapp_dropped_file_path_ptr(index);
 }
 
 SOKOL_API_IMPL bool sapp_gles2(void) {
@@ -11657,12 +11670,9 @@ SOKOL_API_IMPL bool sapp_gles2(void) {
 
 SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->drop.enabled);
-    SOKOL_ASSERT((index >= 0) && (index < win->drop.num_files));
+    SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
-        if (!win->drop.enabled) {
+        if (!_sapp.drop.enabled) {
             return 0;
         }
         return sapp_js_dropped_file_size(index);
@@ -11674,13 +11684,13 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
 
 SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
     SOKOL_ASSERT(_sapp.valid);
-    const _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->drop.enabled);
     SOKOL_ASSERT(request);
     SOKOL_ASSERT(request->callback);
     SOKOL_ASSERT(request->buffer_ptr);
     SOKOL_ASSERT(request->buffer_size > 0);
+    if (!_sapp.drop.enabled) {
+        return;
+    }
     #if defined(_SAPP_EMSCRIPTEN)
         const int index = request->dropped_file_index;
         sapp_html5_fetch_error error_code = SAPP_HTML5_FETCH_ERROR_NO_ERROR;
