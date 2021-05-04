@@ -10719,7 +10719,6 @@ _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     SOKOL_ASSERT(!_sg.mtl.pass_valid);
     SOKOL_ASSERT(ctx->mtl.drawable_cb || ctx->mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
-    SOKOL_ASSERT(nil != ctx->mtl.cmd_buffer);
     _SOKOL_UNUSED(ctx);
 
     #if defined(_SG_TARGET_MACOS)
@@ -10734,10 +10733,14 @@ _SOKOL_PRIVATE void _sg_mtl_commit(_sg_context_t* ctx) {
     else {
         cur_drawable = (__bridge id<MTLDrawable>) ctx->mtl.drawable_userdata_cb(ctx->mtl.user_data);
     }
-    if (nil != cur_drawable) {
-        [ctx->mtl.cmd_buffer presentDrawable:cur_drawable];
+
+    // cmd_buffer will be nil if nothing was rendered this frame
+    if (nil != ctx->mtl.cmd_buffer) {
+        if (nil != cur_drawable) {
+            [ctx->mtl.cmd_buffer presentDrawable:cur_drawable];
+        }
+        [ctx->mtl.cmd_buffer commit];
     }
-    [ctx->mtl.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
     _sg_mtl_garbage_collect(_sg.frame_index);
