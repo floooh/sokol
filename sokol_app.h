@@ -3775,10 +3775,15 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
         }
     }
     _sapp_frame();
-    // FIXME FIXME FIXME
-    //    if (_sapp.quit_requested || _sapp.quit_ordered) {
-    //        [win->macos.window performClose:nil];
-    //    }
+    if (_sapp.quit_requested && !_sapp.quit_ordered) {
+        _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
+        if (win) {
+            [win->macos.window performClose:nil];
+        }
+    }
+    if (_sapp.quit_ordered) {
+        [NSApp terminate:self];
+    }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
@@ -3814,11 +3819,6 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     _sapp.valid = true;
 }
 
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
-    _SOKOL_UNUSED(sender);
-    return YES;
-}
-
 - (void)applicationWillTerminate:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_discard_state();
@@ -3830,25 +3830,44 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 
 - (BOOL)windowShouldClose:(id)sender {
     _SOKOL_UNUSED(sender);
-    /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
-    if (!_sapp.quit_ordered) {
-        /* if window should be closed and event handling is enabled, give user code
-           a chance to intervene via sapp_cancel_quit()
-        */
-        _sapp.quit_requested = true;
-        _sapp_window_t* win = _sapp_lookup_window(self.win_id);
-        SOKOL_ASSERT(win);
-        _sapp_macos_app_event(win, SAPP_EVENTTYPE_QUIT_REQUESTED);
-        /* user code hasn't intervened, quit the app */
-        if (_sapp.quit_requested) {
-            _sapp.quit_ordered = true;
+    if (self.win_id == _sapp.main_window_id) {
+        /* only give user-code a chance to intervene when sapp_quit() wasn't already called */
+        if (!_sapp.quit_ordered) {
+            /* if window should be closed and event handling is enabled, give user code
+               a chance to intervene via sapp_cancel_quit()
+            */
+            _sapp.quit_requested = true;
+            _sapp_window_t* win = _sapp_lookup_window(self.win_id);
+            SOKOL_ASSERT(win);
+            _sapp_macos_app_event(win, SAPP_EVENTTYPE_QUIT_REQUESTED);
+            /* user code hasn't intervened, quit the app */
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+        if (_sapp.quit_ordered) {
+            return YES;
+        }
+        else {
+            return NO;
         }
     }
-    if (_sapp.quit_ordered) {
+    else {
+        // not the main window
         return YES;
     }
-    else {
-        return NO;
+}
+
+- (void)windowWillClose:(id)sender {
+    _SOKOL_UNUSED(sender);
+    // the main window will be closed when the application closes
+    if (self.win_id != _sapp.main_window_id) {
+        _sapp_window_t* win = _sapp_lookup_window(self.win_id);
+        if (win) {
+            // FIXME: send window close event
+            // destroy state associated with the window
+            _sapp_destroy_window(self.win_id);
+        }
     }
 }
 
