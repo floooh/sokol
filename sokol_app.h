@@ -3597,15 +3597,27 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
     }
     win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
 
-    /* NOTE: _sapp_macos_update_dimensions() isn't called each frame, but only
-        when the window size actually changes, so resizing the MTKView's
-        in each call is fine even when MTKView doesn't ignore setting an
-        identical drawableSize.
-    */
+    int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
-    CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
-    win->macos.view.drawableSize = drawable_size;
+        const CGSize fb_size = win->macos.view.drawableSize;
+        cur_fb_width = (int) fb_size.width;
+        cur_fb_height = (int) fb_size.height;
+    #else
+        #error "FIXME GL!"
     #endif
+    const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
+                             (win->framebuffer_height != cur_fb_height);
+    if (dim_changed) {
+        #if defined(SOKOL_METAL)
+            CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
+            win->macos.view.drawableSize = drawable_size;
+        #else
+            #error "FIXME GL!"
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(_sapp_window_t* win) {
@@ -3760,21 +3772,26 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
+    _sapp_frame();
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
         _sapp_window_t* win = _sapp_lookup_window(win_id);
         if (win) {
+            /* NOTE: the MTKView drawables MUST be resized right before the dummy draw
+                invocation, *NOT* from within the event loop, this is because
+                MTKView lazily resizes some "secondary" surfaces at the start
+                of the draw method before drawRect callback is called. Setting
+                the drawableSize in the event loop causes currentRenderPassDescriptor
+                to return a render pass descriptor with different surfaces sizes
+            */
+            _sapp_macos_update_dimensions(win);
             #if defined(SOKOL_METAL)
-            // FIXME: MTKView.draw must be called before currentRenderPassDescriptor
-            // so that it correctly updates its render target sizes...
-            // this may be a good reason to drop MTKView :/
             [win->macos.view draw];
             #else
             #error "FIXME: GL"
             #endif
         }
     }
-    _sapp_frame();
     if (_sapp.quit_requested && !_sapp.quit_ordered) {
         _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
         if (win) {
@@ -3864,20 +3881,8 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     if (self.win_id != _sapp.main_window_id) {
         _sapp_window_t* win = _sapp_lookup_window(self.win_id);
         if (win) {
-            // FIXME: send window close event
             // destroy state associated with the window
             _sapp_destroy_window(self.win_id);
-        }
-    }
-}
-
-- (void)windowDidResize:(NSNotification*)notification {
-    _SOKOL_UNUSED(notification);
-    _sapp_window_t* win = _sapp_lookup_window(self.win_id);
-    if (win) {
-        _sapp_macos_update_dimensions(win);
-        if (!_sapp.first_frame) {
-            _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
         }
     }
 }
