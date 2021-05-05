@@ -1057,6 +1057,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     SAPP_EVENTTYPE_FILES_DROPPED,
+    SAPP_EVENTTYPE_WINDOW_CLOSED,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
@@ -1247,6 +1248,7 @@ enum {
 */
 typedef struct sapp_event {
     uint64_t frame_count;               // current frame counter, always valid, useful for checking if two events were issued in the same frame
+    sapp_window window;                 // the window this event is associated with
     sapp_event_type type;               // the event type, always valid
     sapp_keycode key_code;              // the virtual key code, only valid in KEY_UP, KEY_DOWN
     uint32_t char_code;                 // the UTF-32 character code, only valid in CHAR events
@@ -2754,6 +2756,27 @@ _SOKOL_PRIVATE bool _sapp_call_event(const sapp_event* e) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_init_event(_sapp_window_t* win, sapp_event_type type) {
+    memset(&_sapp.event, 0, sizeof(_sapp.event));
+    _sapp.event.type = type;
+    _sapp.event.window = _sapp_make_window_id(win->slot.id);
+    _sapp.event.frame_count = _sapp.frame_count;
+    _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
+    _sapp.event.window_width = win->window_width;
+    _sapp.event.window_height = win->window_height;
+    _sapp.event.framebuffer_width = win->framebuffer_width;
+    _sapp.event.framebuffer_height = win->framebuffer_height;
+    _sapp.event.mouse_x = win->mouse.x;
+    _sapp.event.mouse_y = win->mouse.y;
+    _sapp.event.mouse_dx = win->mouse.dx;
+    _sapp.event.mouse_dy = win->mouse.dy;
+}
+
+_SOKOL_PRIVATE bool _sapp_events_enabled(void) {
+    /* only send events when an event callback is set, and the init function was called */
+    return (_sapp.desc.event_cb || _sapp.desc.event_userdata_cb) && _sapp.init_called && !_sapp.cleanup_called;
+}
+
 _SOKOL_PRIVATE char* _sapp_dropped_file_path_ptr(int index) {
     SOKOL_ASSERT(_sapp.drop.buffer);
     SOKOL_ASSERT((index >= 0) && (index <= _sapp.drop.max_files));
@@ -2926,6 +2949,10 @@ _SOKOL_PRIVATE void _sapp_clear_drop_buffer(_sapp_drop_t* drop) {
 _SOKOL_PRIVATE void _sapp_destroy_window(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     SOKOL_ASSERT(win);
+    if (_sapp_events_enabled() && (win_id != _sapp.main_window_id)) {
+        _sapp_init_event(win, SAPP_EVENTTYPE_WINDOW_CLOSED);
+        _sapp_call_event(&_sapp.event);
+    }
     _sapp_platform_destroy_window(win);
     _sapp_free_window_id(win_id);
     _SAPP_CLEAR_PTR(_sapp_window_t, win);
@@ -3002,26 +3029,6 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
         _sapp.default_icon_pixels = 0;
     }
     _SAPP_CLEAR_ITEM(_sapp_t, _sapp);
-}
-
-_SOKOL_PRIVATE void _sapp_init_event(_sapp_window_t* win, sapp_event_type type) {
-    memset(&_sapp.event, 0, sizeof(_sapp.event));
-    _sapp.event.type = type;
-    _sapp.event.frame_count = _sapp.frame_count;
-    _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
-    _sapp.event.window_width = win->window_width;
-    _sapp.event.window_height = win->window_height;
-    _sapp.event.framebuffer_width = win->framebuffer_width;
-    _sapp.event.framebuffer_height = win->framebuffer_height;
-    _sapp.event.mouse_x = win->mouse.x;
-    _sapp.event.mouse_y = win->mouse.y;
-    _sapp.event.mouse_dx = win->mouse.dx;
-    _sapp.event.mouse_dy = win->mouse.dy;
-}
-
-_SOKOL_PRIVATE bool _sapp_events_enabled(void) {
-    /* only send events when an event callback is set, and the init function was called */
-    return (_sapp.desc.event_cb || _sapp.desc.event_userdata_cb) && _sapp.init_called;
 }
 
 _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
