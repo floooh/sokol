@@ -2832,6 +2832,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #define GL_CLAMP_TO_BORDER 0x812D
         #define GL_TEXTURE_BORDER_COLOR 0x1004
         #define GL_CURRENT_PROGRAM 0x8B8D
+        #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
