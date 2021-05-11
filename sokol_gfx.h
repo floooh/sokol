@@ -3336,7 +3336,7 @@ typedef _sg_gl_image_t _sg_image_t;
 typedef struct {
     GLint gl_loc;
     sg_uniform_type type;
-    uint8_t count;
+    uint16_t count;
     uint16_t offset;
 } _sg_gl_uniform_t;
 
@@ -6475,7 +6475,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 }
                 _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
-                u->count = (uint8_t) u_desc->array_count;
+                u->count = (uint16_t) u_desc->array_count;
                 u->offset = (uint16_t) cur_uniform_offset;
                 cur_uniform_offset += _sg_uniform_size(u->type, u->count);
                 if (u_desc->name) {
