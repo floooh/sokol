@@ -11547,7 +11547,8 @@ SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
 
 SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    // FIXME FIXME FIXME
+    // FIXME FIXME FIXME: this just sets a flag, closing windows happens
+    // at end of current frame!
 }
 
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
