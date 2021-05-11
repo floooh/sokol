@@ -112,7 +112,7 @@
             sgl_load_pipeline(...);
             sgl_begin_triangles();
             for each vertex:
-                sg_v2f_t2f_c1i(...);
+                sgl_v2f_t2f_c1i(...);
             sgl_end();
             sgl_pop_pipeline();
             sgl_disable_texture();
