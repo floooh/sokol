@@ -2475,39 +2475,46 @@ _SOKOL_PRIVATE void _sapp_macos_init_state(void);
 _SOKOL_PRIVATE void _sapp_macos_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_IOS)
 _SOKOL_PRIVATE void _sapp_ios_init_state(void);
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_ios_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_ios_close_window(_sapp_window_t* win);
 #elif defined(_SAPP_EMSCRIPTEN)
 _SOKOL_PRIVATE void _sapp_emsc_init_state(void);
 _SOKOL_PRIVATE void _sapp_emsc_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_emsc_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_emsc_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_WIN32)
 _SOKOL_PRIVATE void _sapp_win32_init_state(void);
 _SOKOL_PRIVATE void _sapp_win32_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_UWP)
 _SOKOL_PRIVATE void _sapp_uwp_init_state(void);
 _SOKOL_PRIVATE void _sapp_uwp_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_uwp_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_uwp_close_window(_sapp_window_t* win);
 #elif defined(_SAPP_ANDROID)
 _SOKOL_PRIVATE void _sapp_android_init_state(void);
 _SOKOL_PRIVATE void _sapp_android_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_android_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_android_close_window(_sapp_window_t* win);
 #elif defined(_SAPP_LINUX)
 _SOKOL_PRIVATE void _sapp_x11_init_state(void);
 _SOKOL_PRIVATE void _sapp_x11_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_x11_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* desc, int num_images);
 #endif
 
@@ -2679,6 +2686,24 @@ _SOKOL_PRIVATE void _sapp_platform_destroy_window(_sapp_window_t* win) {
         _sapp_android_destroy_window(win);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_destroy_window(win);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_close_window(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_close_window(win);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_close_window(win);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_close_window(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_close_window(win);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_close_window(win);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_close_window(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_close_window(win);
     #endif
 }
 
@@ -3511,6 +3536,12 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
     _SAPP_OBJC_RELEASE(win->macos.window);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win) {
+    SOKOL_ASSERT(win);
+    SOKOL_ASSERT(win->macos.window);
+    [win->macos.window close];
+}
+
 /* MacOS entry function */
 #if !defined(SOKOL_NO_ENTRY)
 int main(int argc, char* argv[]) {
@@ -3805,9 +3836,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     }
     if (_sapp.quit_requested && !_sapp.quit_ordered) {
         _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
-        if (win) {
-            [win->macos.window performClose:nil];
-        }
+        _sapp_macos_close_window(win);
     }
     if (_sapp.quit_ordered) {
         [NSApp terminate:self];
@@ -11566,8 +11595,10 @@ SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
 
 SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    // FIXME FIXME FIXME: this just sets a flag, closing windows happens
-    // at end of current frame!
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        _sapp_platform_close_window(win);
+    }
 }
 
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
