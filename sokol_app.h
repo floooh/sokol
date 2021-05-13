@@ -1347,6 +1347,7 @@ typedef struct sapp_window_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+    void* user_data;
 } sapp_window_desc;
 
 typedef struct sapp_gl_desc {
@@ -1377,12 +1378,12 @@ typedef struct sapp_desc {
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
 
-    void* user_data;                        // these are the user-provided callbacks with user data
-    void (*init_userdata_cb)(void*);
+    void (*init_userdata_cb)(void*);        // these are the user-provided callbacks with user data
     void (*frame_userdata_cb)(void*);
     void (*cleanup_userdata_cb)(void*);
     void (*event_userdata_cb)(const sapp_event*, void*);
 
+    void* user_data;
     int window_pool_size;
     const char* window_title;           // the window title as UTF-8 encoded string
     int x;
@@ -1501,6 +1502,8 @@ SOKOL_APP_API_DECL bool sapp_is_fullscreen(void);
 SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
 /* set the main window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_set_title(const char* str);
+/* get main window userdata pointer */
+SOKOL_APP_API_DECL void* sapp_userdata(void);
 
 /*=== multi-window functions =================================================*/
 
@@ -1518,8 +1521,6 @@ SOKOL_APP_API_DECL sapp_window sapp_first_window(void);
 SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
 /* test if a window handle is valid */
 SOKOL_APP_API_DECL bool sapp_valid_window(sapp_window window);
-/* get window handle's slot index (>= 0 and < sapp_desc.window_pool_size, useful for associating data with windows) */
-SOKOL_APP_API_DECL int sapp_window_index(sapp_window window);
 /* get window's framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_window_width(sapp_window window);
 /* same as sapp_window_width(), but returns float */
@@ -1538,8 +1539,10 @@ SOKOL_APP_API_DECL float sapp_window_dpi_scale(sapp_window window);
 SOKOL_APP_API_DECL bool sapp_window_is_fullscreen(sapp_window window);
 /* toggle a window to and from fullscreen mode */
 SOKOL_APP_API_DECL void sapp_window_toggle_fullscreen(sapp_window window);
-/* set window's title (only on desktop platforms) */
+/* set window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_window_set_title(sapp_window window, const char* str);
+/* get window userdata pointer */
+SOKOL_APP_API_DECL void* sapp_window_userdata(sapp_window window);
 
 // FIXME FIXME FIXME: are these per window or better global?
 
@@ -2854,6 +2857,7 @@ _SOKOL_PRIVATE sapp_window_desc _sapp_desc_to_window_desc(const sapp_desc* desc)
     wdesc.fullscreen = desc->fullscreen;
     wdesc.alpha = desc->alpha;
     wdesc.user_cursor = desc->user_cursor;
+    wdesc.user_data = desc->user_data;
     return wdesc;
 }
 
@@ -11315,6 +11319,16 @@ _SOKOL_PRIVATE void _sapp_window_set_title(uint32_t win_id, const char* title) {
     }
 }
 
+_SOKOL_PRIVATE void* _sapp_window_userdata(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->desc.user_data;
+    }
+    else {
+        return 0;
+    }
+}
+
 /*== PUBLIC API FUNCTIONS ====================================================*/
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
@@ -11538,6 +11552,11 @@ SOKOL_API_IMPL void sapp_set_title(const char* title) {
     _sapp_window_set_title(_sapp.main_window_id, title);
 }
 
+SOKOL_API_IMPL void* sapp_userdata(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_userdata(_sapp.main_window_id);
+}
+
 SOKOL_API_IMPL sapp_window sapp_open_window(const sapp_window_desc* in_desc) {
     SOKOL_ASSERT(_sapp.valid);
     SOKOL_ASSERT(in_desc);
@@ -11580,16 +11599,6 @@ SOKOL_API_IMPL sapp_window sapp_next_window(sapp_window window) {
 SOKOL_API_IMPL bool sapp_valid_window(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     return 0 != _sapp_lookup_window(window.id);
-}
-
-SOKOL_API_IMPL int sapp_window_index(sapp_window window) {
-    SOKOL_ASSERT(_sapp.valid);
-    SOKOL_ASSERT(SAPP_INVALID_ID != window.id);
-    int slot_index = _sapp_slot_index(window.id);
-    SOKOL_ASSERT(slot_index > 0);
-    slot_index -= 1;
-    SOKOL_ASSERT(slot_index < _sapp.desc.window_pool_size);
-    return slot_index;
 }
 
 SOKOL_API_IMPL int sapp_window_width(sapp_window window) {
@@ -11640,6 +11649,11 @@ SOKOL_API_IMPL void sapp_window_toggle_fullscreen(sapp_window window) {
 SOKOL_API_IMPL void sapp_window_set_title(sapp_window window, const char* title) {
     SOKOL_ASSERT(_sapp.valid);
     _sapp_window_set_title(window.id, title);
+}
+
+SOKOL_API_IMPL void* sapp_window_userdata(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_userdata(window.id);
 }
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
