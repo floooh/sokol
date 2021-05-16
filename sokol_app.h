@@ -1529,6 +1529,14 @@ SOKOL_APP_API_DECL float sapp_window_widthf(sapp_window window);
 SOKOL_APP_API_DECL int sapp_window_height(sapp_window window);
 /* same as sapp_window_height(), but returns float */
 SOKOL_APP_API_DECL float sapp_window_heightf(sapp_window window);
+/* get x window position */
+SOKOL_APP_API_DECL int sapp_window_posx(sapp_window window);
+/* get x window position as float */
+SOKOL_APP_API_DECL float sapp_window_posxf(sapp_window window);
+/* get y window position */
+SOKOL_APP_API_DECL int sapp_window_posy(sapp_window window);
+/* get y window position as float */
+SOKOL_APP_API_DECL float sapp_window_posyf(sapp_window window);
 /* get a window's sample count */
 SOKOL_APP_API_DECL int sapp_window_sample_count(sapp_window window);
 /* returns true when high_dpi was requested for a window, and actually running in a high-dpi scenario */
@@ -3605,11 +3613,22 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(_sapp_window_t* win, sapp_event_type t
     }
 }
 
+_SOKOL_PRIVATE int _sapp_macos_flipy(_sapp_window_t* win, int y) {
+    NSRect screen_rect = win->macos.window.screen.frame;
+    return screen_rect.size.height - y - 1;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_update_window_position(_sapp_window_t* win) {
+    const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
+    win->pos_x = content_rect.origin.x;
+    win->pos_y = _sapp_macos_flipy(win, content_rect.origin.y);
+}
+
 /* NOTE: unlike the iOS version of this function, the macOS version
     can dynamically update the DPI scaling factor when a window is moved
     between HighDPI / LowDPI screens.
 */
-_SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
+_SOKOL_PRIVATE void _sapp_macos_update_framebuffer_dimensions(_sapp_window_t* win) {
     #if defined(SOKOL_METAL)
         /* FIXME: hmm dpi_scale is used here with the old value, but updated
             further down... this looks wrong?
@@ -3814,6 +3833,13 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
+    for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
+        const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
+        _sapp_window_t* win = _sapp_lookup_window(win_id);
+        if (win) {
+            _sapp_macos_update_window_position(win);
+        }
+    }
     _sapp_frame();
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
@@ -3826,7 +3852,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
                 the drawableSize in the event loop causes currentRenderPassDescriptor
                 to return a render pass descriptor with different surfaces sizes
             */
-            _sapp_macos_update_dimensions(win);
+            _sapp_macos_update_framebuffer_dimensions(win);
             #if defined(SOKOL_METAL)
             [win->macos.view draw];
             #else
@@ -3855,7 +3881,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 
     _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
-    _sapp_macos_update_dimensions(win);
+    _sapp_macos_update_framebuffer_dimensions(win);
 
     // setup display link
     // see: https://developer.apple.com/documentation/metal/drawable_objects/creating_a_custom_metal_view?language=objc
@@ -4034,7 +4060,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 - (void)reshape {
     _sapp_window_t* win = _sapp_lookup_window(self.win_id);
     if (win) {
-        _sapp_macos_update_dimensions(win);
+        _sapp_macos_update_framebuffer_dimensions(win);
     }
     [super reshape];
 }
@@ -11288,6 +11314,26 @@ _SOKOL_PRIVATE int _sapp_window_height(uint32_t win_id) {
     }
 }
 
+_SOKOL_PRIVATE int _sapp_window_posx(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->pos_x;
+    }
+    else {
+        return 0;
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_window_posy(uint32_t win_id) {
+    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        return win->pos_y;
+    }
+    else {
+        return 0;
+    }
+}
+
 _SOKOL_PRIVATE bool _sapp_window_high_dpi(uint32_t win_id) {
     const _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
@@ -11650,6 +11696,26 @@ SOKOL_API_IMPL int sapp_window_height(sapp_window window) {
 SOKOL_API_IMPL float sapp_window_heightf(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     return (float)_sapp_window_height(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_posx(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_posx(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_posxf(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_posx(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_posy(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_posy(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_posyf(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_posy(window.id);
 }
 
 SOKOL_API_IMPL int sapp_window_sample_count(sapp_window window) {
