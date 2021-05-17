@@ -1490,6 +1490,33 @@ SOKOL_APP_API_DECL float sapp_widthf(void);
 SOKOL_APP_API_DECL int sapp_height(void);
 /* same as sapp_height(), but returns float */
 SOKOL_APP_API_DECL float sapp_heightf(void);
+
+/* set client rect size in logical 'window system pixels' */
+SOKOL_APP_API_DECL void sapp_set_client_size(int width, int height);
+/* same as sapp_set_client_size(), but with float parameters */
+SOKOL_APP_API_DECL void sapp_set_client_sizef(float width, float height);
+/* get client rect width in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_client_width(void);
+/* same as sapp_client_width() but returns float */
+SOKOL_APP_API_DECL float sapp_client_widthf(void);
+/* get client rect height in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_client_height(void);
+/* same as sapp_client_height() but returns float */
+SOKOL_APP_API_DECL float sapp_client_heightf(void);
+
+/* set client rect position in logical 'window system pixels' */
+SOKOL_APP_API_DECL void sapp_set_client_pos(int x, int y);
+/* same as sapp_set_client_pos(), but with float parameters */
+SOKOL_APP_API_DECL void sapp_set_client_posf(float x, float y);
+/* get client rect horizontal position in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_client_posx(void);
+/* same as sapp_client_posx(), but returns float */
+SOKOL_APP_API_DECL float sapp_client_posxf(void);
+/* get client rect vertical position in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_client_posy(void);
+/* same as sapp_client_posy(), but returns float */
+SOKOL_APP_API_DECL float sapp_client_posyf(void);
+
 /* get main window's sample count */
 SOKOL_APP_API_DECL int sapp_sample_count(void);
 /* returns true when high_dpi was requested and actually running in a high-dpi scenario */
@@ -1521,6 +1548,7 @@ SOKOL_APP_API_DECL sapp_window sapp_first_window(void);
 SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
 /* test if a window handle is valid */
 SOKOL_APP_API_DECL bool sapp_valid_window(sapp_window window);
+
 /* get window's framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_window_width(sapp_window window);
 /* same as sapp_window_width(), but returns float */
@@ -1529,14 +1557,33 @@ SOKOL_APP_API_DECL float sapp_window_widthf(sapp_window window);
 SOKOL_APP_API_DECL int sapp_window_height(sapp_window window);
 /* same as sapp_window_height(), but returns float */
 SOKOL_APP_API_DECL float sapp_window_heightf(sapp_window window);
-/* get x window position */
-SOKOL_APP_API_DECL int sapp_window_posx(sapp_window window);
-/* get x window position as float */
-SOKOL_APP_API_DECL float sapp_window_posxf(sapp_window window);
-/* get y window position */
-SOKOL_APP_API_DECL int sapp_window_posy(sapp_window window);
-/* get y window position as float */
-SOKOL_APP_API_DECL float sapp_window_posyf(sapp_window window);
+
+/* set window's client rect size in logical 'window system pixels' */
+SOKOL_APP_API_DECL void sapp_window_set_client_size(sapp_window window, int width, int height);
+/* same as sapp_window_set_client_size(), but with float parameters */
+SOKOL_APP_API_DECL void sapp_window_set_client_sizef(sapp_window window, float width, float height);
+/* get window's client rect width in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_window_client_width(sapp_window window);
+/* same as sapp_window_client_width() but returns float */
+SOKOL_APP_API_DECL float sapp_window_client_widthf(sapp_window window);
+/* get window's client rect height in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_window_client_height(sapp_window window);
+/* same as sapp_client_height() but returns float */
+SOKOL_APP_API_DECL float sapp_window_client_heightf(sapp_window window);
+
+/* set window's client rect position in logical 'window system pixels' */
+SOKOL_APP_API_DECL void sapp_window_set_client_pos(sapp_window window, int x, int y);
+/* same as sapp_window_set_client_pos(), but with float parameters */
+SOKOL_APP_API_DECL void sapp_window_set_client_posf(sapp_window window, float x, float y);
+/* get window's client rect horizontal position in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_window_client_posx(sapp_window window);
+/* same as sapp_window_client_posx(), but returns float */
+SOKOL_APP_API_DECL float sapp_window_client_posxf(sapp_window window);
+/* get window's client rect vertical position in logical 'window system pixels' */
+SOKOL_APP_API_DECL int sapp_window_client_posy(sapp_window window);
+/* same as sapp_window_client_posy(), but returns float */
+SOKOL_APP_API_DECL float sapp_window_client_posyf(sapp_window window);
+
 /* get a window's sample count */
 SOKOL_APP_API_DECL int sapp_window_sample_count(sapp_window window);
 /* returns true when high_dpi was requested for a window, and actually running in a high-dpi scenario */
@@ -2484,6 +2531,10 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_macos_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_IOS)
 _SOKOL_PRIVATE void _sapp_ios_init_state(void);
@@ -2491,12 +2542,20 @@ _SOKOL_PRIVATE void _sapp_ios_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_ios_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_ios_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_ios_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_ios_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_ios_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_ios_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_ios_get_window_size(_sapp_window_t* win, int* w, int* h);
 #elif defined(_SAPP_EMSCRIPTEN)
 _SOKOL_PRIVATE void _sapp_emsc_init_state(void);
 _SOKOL_PRIVATE void _sapp_emsc_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_emsc_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_emsc_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_emsc_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_emsc_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_emsc_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_emsc_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_emsc_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_WIN32)
 _SOKOL_PRIVATE void _sapp_win32_init_state(void);
@@ -2504,6 +2563,10 @@ _SOKOL_PRIVATE void _sapp_win32_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_win32_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_win32_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_win32_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* desc, int num_images);
 #elif defined(_SAPP_UWP)
 _SOKOL_PRIVATE void _sapp_uwp_init_state(void);
@@ -2511,18 +2574,30 @@ _SOKOL_PRIVATE void _sapp_uwp_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_uwp_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_uwp_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_uwp_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_uwp_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_uwp_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_uwp_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_uwp_get_window_size(_sapp_window_t* win, int* w, int* h);
 #elif defined(_SAPP_ANDROID)
 _SOKOL_PRIVATE void _sapp_android_init_state(void);
 _SOKOL_PRIVATE void _sapp_android_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_android_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_android_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_android_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_android_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_android_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_android_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_android_get_window_size(_sapp_window_t* win, int* w, int* h);
 #elif defined(_SAPP_LINUX)
 _SOKOL_PRIVATE void _sapp_x11_init_state(void);
 _SOKOL_PRIVATE void _sapp_x11_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_x11_set_window_pos(_sapp_window_t* win, int x, int y);
+_SOKOL_PRIVATE void _sapp_x11_get_window_pos(_sapp_window_t* win, int* x, int* y);
+_SOKOL_PRIVATE void _sapp_x11_set_window_size(_sapp_window_t* win, int w, int h);
+_SOKOL_PRIVATE void _sapp_x11_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* desc, int num_images);
 #endif
 
@@ -2712,6 +2787,78 @@ _SOKOL_PRIVATE void _sapp_platform_close_window(_sapp_window_t* win) {
         _sapp_android_close_window(win);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_close_window(win);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_set_window_pos(_sapp_window_t* win, int x, int y) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_window_pos(win, x, y);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_set_window_pos(win, x, y);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_set_window_pos(win, x, y);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_set_window_pos(win, x, y);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_set_window_pos(win, x, y);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_set_window_pos(win, x, y);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_set_window_pos(win, x, y);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_get_window_pos(_sapp_window_t* win, int* x, int* y) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_get_window_pos(win, x, y);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_get_window_pos(win, x, y);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_get_window_pos(win, x, y);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_get_window_pos(win, x, y);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_get_window_pos(win, x, y);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_get_window_pos(win, x, y);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_get_window_pos(win, x, y);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_set_window_size(_sapp_window_t* win, int w, int h) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_window_size(win, w, h);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_set_window_size(win, w, h);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_set_window_size(win, w, h);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_set_window_size(win, w, h);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_set_window_size(win, w, h);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_set_window_size(win, w, h);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_set_window_size(win, w, h);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_get_window_size(_sapp_window_t* win, int* w, int* h) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_get_window_size(win, w, h);
+    #elif defined(_SAPP_IOS)
+        _sapp_ios_get_window_size(win, w, h);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_get_window_size(win, w, h);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_get_window_size(win, w, h);
+    #elif defined(_SAPP_UWP)
+        _sapp_uwp_get_window_size(win, w, h);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_get_window_size(win, w, h);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_get_window_size(win, w, h);
     #endif
 }
 
@@ -3618,6 +3765,26 @@ _SOKOL_PRIVATE int _sapp_macos_flipy(_sapp_window_t* win, int y) {
     return screen_rect.size.height - y - 1;
 }
 
+_SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y) {
+    //FIXME FIXME FIXME
+}
+
+_SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y) {
+    //FIXME FIXME FIXME
+    *x = 0;
+    *y = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h) {
+    //FIXME FIXME FIXME
+}
+
+_SOKOL_PRIVATE void _sapp_macos_get_window_size(_sapp_window_t* win, int* w, int* h) {
+    // FIXME FIXME FIXME
+    *w = 1;
+    *h = 1;
+}
+
 _SOKOL_PRIVATE void _sapp_macos_update_window_position(_sapp_window_t* win) {
     const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
     win->pos_x = content_rect.origin.x;
@@ -3628,7 +3795,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_position(_sapp_window_t* win) {
     can dynamically update the DPI scaling factor when a window is moved
     between HighDPI / LowDPI screens.
 */
-_SOKOL_PRIVATE void _sapp_macos_update_framebuffer_dimensions(_sapp_window_t* win) {
+_SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
     #if defined(SOKOL_METAL)
         /* FIXME: hmm dpi_scale is used here with the old value, but updated
             further down... this looks wrong?
@@ -3833,13 +4000,6 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
-    for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
-        const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
-        _sapp_window_t* win = _sapp_lookup_window(win_id);
-        if (win) {
-            _sapp_macos_update_window_position(win);
-        }
-    }
     _sapp_frame();
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
@@ -3852,7 +4012,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
                 the drawableSize in the event loop causes currentRenderPassDescriptor
                 to return a render pass descriptor with different surfaces sizes
             */
-            _sapp_macos_update_framebuffer_dimensions(win);
+            _sapp_macos_update_dimensions(win);
             #if defined(SOKOL_METAL)
             [win->macos.view draw];
             #else
@@ -3881,7 +4041,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 
     _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
     SOKOL_ASSERT(win);
-    _sapp_macos_update_framebuffer_dimensions(win);
+    _sapp_macos_update_dimensions(win);
 
     // setup display link
     // see: https://developer.apple.com/documentation/metal/drawable_objects/creating_a_custom_metal_view?language=objc
@@ -4060,7 +4220,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 - (void)reshape {
     _sapp_window_t* win = _sapp_lookup_window(self.win_id);
     if (win) {
-        _sapp_macos_update_framebuffer_dimensions(win);
+        _sapp_macos_update_dimensions(win);
     }
     [super reshape];
 }
@@ -11314,20 +11474,62 @@ _SOKOL_PRIVATE int _sapp_window_height(uint32_t win_id) {
     }
 }
 
-_SOKOL_PRIVATE int _sapp_window_posx(uint32_t win_id) {
-    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+_SOKOL_PRIVATE void _sapp_window_set_client_size(uint32_t win_id, int w, int h) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        return win->pos_x;
+        _sapp_platform_set_window_size(win, w, h);
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_window_client_width(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        int w, h;
+        _sapp_platform_get_window_size(win, &w, &h);
+        return w;
+    }
+    else {
+        return 1;
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_window_client_height(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        int w, h;
+        _sapp_platform_get_window_size(win, &w, &h);
+        return h;
+    }
+    else {
+        return 1;
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_window_set_client_pos(uint32_t win_id, int x, int y) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        _sapp_platform_set_window_pos(win, x, y);
+    }
+}
+
+_SOKOL_PRIVATE int _sapp_window_client_posx(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
+    if (win) {
+        int x, y;
+        _sapp_platform_get_window_pos(win, &x, &y);
+        return x;
     }
     else {
         return 0;
     }
 }
 
-_SOKOL_PRIVATE int _sapp_window_posy(uint32_t win_id) {
-    const _sapp_window_t* win = _sapp_lookup_window(win_id);
+_SOKOL_PRIVATE int _sapp_window_client_posy(uint32_t win_id) {
+    _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        return win->pos_y;
+        int x, y;
+        _sapp_platform_get_window_pos(win, &x, &y);
+        return y;
     }
     else {
         return 0;
@@ -11597,6 +11799,66 @@ SOKOL_API_IMPL float sapp_heightf(void) {
     return (float)_sapp_window_height(_sapp.main_window_id);
 }
 
+SOKOL_API_IMPL void sapp_set_client_size(int width, int height) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_size(_sapp.main_window_id, width, height);
+}
+
+SOKOL_API_IMPL void sapp_set_client_sizef(float width, float height) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_size(_sapp.main_window_id, (int)width, (int)height);
+}
+
+SOKOL_API_IMPL int sapp_client_width(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_width(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_client_widthf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_width(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL int sapp_client_height(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_height(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_client_heightf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_height(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL void sapp_set_client_pos(int x, int y) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_pos(_sapp.main_window_id, x, y);
+}
+
+SOKOL_API_IMPL void sapp_set_client_posf(float x, float y) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_pos(_sapp.main_window_id, (int)x, (int)y);
+}
+
+SOKOL_API_IMPL int sapp_client_posx(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_posx(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_client_posxf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_posx(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL int sapp_client_posy(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_posy(_sapp.main_window_id);
+}
+
+SOKOL_API_IMPL float sapp_client_posyf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_posy(_sapp.main_window_id);
+}
+
 SOKOL_API_IMPL int sapp_sample_count(void) {
     SOKOL_ASSERT(_sapp.valid);
     return _sapp_window_sample_count(_sapp.main_window_id);
@@ -11698,24 +11960,64 @@ SOKOL_API_IMPL float sapp_window_heightf(sapp_window window) {
     return (float)_sapp_window_height(window.id);
 }
 
-SOKOL_API_IMPL int sapp_window_posx(sapp_window window) {
+SOKOL_API_IMPL void sapp_window_set_client_size(sapp_window window, int width, int height) {
     SOKOL_ASSERT(_sapp.valid);
-    return _sapp_window_posx(window.id);
+    _sapp_window_set_client_size(window.id, width, height);
 }
 
-SOKOL_API_IMPL float sapp_window_posxf(sapp_window window) {
+SOKOL_API_IMPL void sapp_window_set_client_sizef(sapp_window window, float width, float height) {
     SOKOL_ASSERT(_sapp.valid);
-    return (float)_sapp_window_posx(window.id);
+    _sapp_window_set_client_size(window.id, (int)width, (int)height);
 }
 
-SOKOL_API_IMPL int sapp_window_posy(sapp_window window) {
+SOKOL_API_IMPL int sapp_window_client_width(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    return _sapp_window_posy(window.id);
+    return _sapp_window_client_width(window.id);
 }
 
-SOKOL_API_IMPL float sapp_window_posyf(sapp_window window) {
+SOKOL_API_IMPL float sapp_window_client_widthf(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    return (float)_sapp_window_posy(window.id);
+    return (float)_sapp_window_client_width(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_client_height(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_height(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_client_heightf(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_height(window.id);
+}
+
+SOKOL_API_IMPL void sapp_window_set_client_pos(sapp_window window, int x, int y) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_pos(window.id, x, y);
+}
+
+SOKOL_API_IMPL void sapp_window_set_client_posf(sapp_window window, float x, float y) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_set_client_pos(window.id, (int)x, (int)y);
+}
+
+SOKOL_API_IMPL int sapp_window_client_posx(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_posx(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_client_posxf(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_posx(window.id);
+}
+
+SOKOL_API_IMPL int sapp_window_client_posy(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_window_client_posy(window.id);
+}
+
+SOKOL_API_IMPL float sapp_window_client_posyf(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_window_client_posy(window.id);
 }
 
 SOKOL_API_IMPL int sapp_window_sample_count(sapp_window window) {
