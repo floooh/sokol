@@ -3596,9 +3596,9 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         NSWindowStyleMaskClosable |
         NSWindowStyleMaskMiniaturizable |
         NSWindowStyleMaskResizable;
-    NSRect window_rect = NSMakeRect(win->pos_x, win->pos_y, win->window_width, win->window_height);
+    const NSRect content_rect = NSMakeRect(0, 0, win->window_width, win->window_height);
     win->macos.window = [[_sapp_macos_window alloc]
-        initWithContentRect:window_rect
+        initWithContentRect:content_rect
         styleMask:style
         backing:NSBackingStoreBuffered
         defer:NO];
@@ -3676,7 +3676,12 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         [win->macos.window toggleFullScreen:NSApp];
     }
     else {
-        [win->macos.window center];
+        if ((win->pos_x == 0) && (win->pos_y == 0)) {
+            [win->macos.window center];
+        }
+        else {
+            _sapp_macos_set_window_pos(win, win->pos_x, win->pos_y);
+        }
     }
     [win->macos.window makeKeyAndOrderFront:nil];
     return true;
@@ -3761,28 +3766,51 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(_sapp_window_t* win, sapp_event_type t
 }
 
 _SOKOL_PRIVATE int _sapp_macos_flipy(_sapp_window_t* win, int y) {
+    SOKOL_ASSERT(win && (win->macos.window != nil));
     NSRect screen_rect = win->macos.window.screen.frame;
     return screen_rect.size.height - y - 1;
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y) {
-    //FIXME FIXME FIXME
+    @autoreleasepool {
+        const NSRect content_rect = [win->macos.window frame];
+        const NSRect dummy_rect = NSMakeRect(x, _sapp_macos_flipy(win, y + content_rect.size.height - 1), 0, 0);
+        const NSRect frame_rect = [win->macos.window frameRectForContentRect:dummy_rect];
+        [win->macos.window setFrameOrigin:frame_rect.origin];
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y) {
-    //FIXME FIXME FIXME
-    *x = 0;
-    *y = 0;
+    @autoreleasepool {
+        const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
+        if (x) {
+            *x = content_rect.origin.x;
+        }
+        if (y) {
+            *y = _sapp_macos_flipy(win, content_rect.origin.y + content_rect.size.height - 1);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h) {
-    //FIXME FIXME FIXME
+    @autoreleasepool {
+        NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
+        content_rect.origin.y += content_rect.size.height - h;
+        content_rect.size = NSMakeSize(w, h);
+        [win->macos.window setFrame:[win->macos.window frameRectForContentRect:content_rect] display:YES];
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_get_window_size(_sapp_window_t* win, int* w, int* h) {
-    // FIXME FIXME FIXME
-    *w = 1;
-    *h = 1;
+    @autoreleasepool {
+        const NSRect content_rect = [win->macos.window frame];
+        if (w) {
+            *w = content_rect.size.width;
+        }
+        if (h) {
+            *h = content_rect.size.height;
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_window_position(_sapp_window_t* win) {
@@ -11484,8 +11512,8 @@ _SOKOL_PRIVATE void _sapp_window_set_client_size(uint32_t win_id, int w, int h) 
 _SOKOL_PRIVATE int _sapp_window_client_width(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        int w, h;
-        _sapp_platform_get_window_size(win, &w, &h);
+        int w;
+        _sapp_platform_get_window_size(win, &w, 0);
         return w;
     }
     else {
@@ -11496,8 +11524,8 @@ _SOKOL_PRIVATE int _sapp_window_client_width(uint32_t win_id) {
 _SOKOL_PRIVATE int _sapp_window_client_height(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        int w, h;
-        _sapp_platform_get_window_size(win, &w, &h);
+        int h;
+        _sapp_platform_get_window_size(win, 0, &h);
         return h;
     }
     else {
@@ -11515,8 +11543,8 @@ _SOKOL_PRIVATE void _sapp_window_set_client_pos(uint32_t win_id, int x, int y) {
 _SOKOL_PRIVATE int _sapp_window_client_posx(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        int x, y;
-        _sapp_platform_get_window_pos(win, &x, &y);
+        int x;
+        _sapp_platform_get_window_pos(win, &x, 0);
         return x;
     }
     else {
@@ -11527,8 +11555,8 @@ _SOKOL_PRIVATE int _sapp_window_client_posx(uint32_t win_id) {
 _SOKOL_PRIVATE int _sapp_window_client_posy(uint32_t win_id) {
     _sapp_window_t* win = _sapp_lookup_window(win_id);
     if (win) {
-        int x, y;
-        _sapp_platform_get_window_pos(win, &x, &y);
+        int y;
+        _sapp_platform_get_window_pos(win, 0, &y);
         return y;
     }
     else {
