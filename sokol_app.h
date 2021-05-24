@@ -1347,6 +1347,7 @@ typedef struct sapp_window_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+    bool no_decoration;                 // create main window without window system decorations (title bar etc...)
     void* user_data;
 } sapp_window_desc;
 
@@ -1396,6 +1397,7 @@ typedef struct sapp_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+    bool no_decoration;                 // create main window without window system decorations (title bar etc...)
 
     bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
     int max_dropped_files;              // max number of dropped files to process (default: 1)
@@ -1540,6 +1542,8 @@ SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
 SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
 /* start rendering into a window */
 SOKOL_APP_API_DECL void sapp_activate_window_context(sapp_window window);
+/* return an array index for a window handle (to associate your own data with window handle) */
+SOKOL_APP_API_DECL int sapp_window_slot_index(sapp_window window);
 /* get the main window handle */
 SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
 /* start iterating over windows */
@@ -3037,6 +3041,7 @@ _SOKOL_PRIVATE sapp_window_desc _sapp_desc_to_window_desc(const sapp_desc* desc)
     wdesc.fullscreen = desc->fullscreen;
     wdesc.alpha = desc->alpha;
     wdesc.user_cursor = desc->user_cursor;
+    wdesc.no_decoration = desc->no_decoration;
     wdesc.user_data = desc->user_data;
     return wdesc;
 }
@@ -3591,11 +3596,13 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->framebuffer_height = win->window_height;
     }
     win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
-    const NSUInteger style =
-        NSWindowStyleMaskTitled |
-        NSWindowStyleMaskClosable |
-        NSWindowStyleMaskMiniaturizable |
-        NSWindowStyleMaskResizable;
+    NSUInteger style = NSWindowStyleMaskMiniaturizable;
+    if (win->desc.no_decoration) {
+        style |= NSWindowStyleMaskBorderless;
+    }
+    else {
+        style |= NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
+    }
     const NSRect content_rect = NSMakeRect(0, 0, win->window_width, win->window_height);
     win->macos.window = [[_sapp_macos_window alloc]
         initWithContentRect:content_rect
@@ -11940,6 +11947,14 @@ SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     // FIXME FIXME FIXME
+}
+
+SOKOL_API_IMPL int sapp_window_slot_index(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    SOKOL_ASSERT(0 != _sapp_lookup_window(window.id));
+    int slot_index = _sapp_slot_index(window.id);
+    SOKOL_ASSERT(slot_index >= 1);
+    return slot_index - 1;
 }
 
 SOKOL_API_IMPL sapp_window sapp_main_window(void) {
