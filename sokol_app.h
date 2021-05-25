@@ -1347,7 +1347,8 @@ typedef struct sapp_window_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
-    bool no_decoration;                 // create main window without window system decorations (title bar etc...)
+    bool no_decoration;                 // create window without window system decorations (title bar etc...)
+    bool hidden;                        // create window in hidden state
     void* user_data;
 } sapp_window_desc;
 
@@ -1540,6 +1541,8 @@ SOKOL_APP_API_DECL void* sapp_userdata(void);
 SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
 /* close a window */
 SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
+/* test if a window handle is valid */
+SOKOL_APP_API_DECL bool sapp_window_valid(sapp_window window);
 /* start rendering into a window */
 SOKOL_APP_API_DECL void sapp_activate_window_context(sapp_window window);
 /* return an array index for a window handle (to associate your own data with window handle) */
@@ -1550,8 +1553,12 @@ SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
 SOKOL_APP_API_DECL sapp_window sapp_first_window(void);
 /* continue iterating over windows, returns invalid handle when finished */
 SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
-/* test if a window handle is valid */
-SOKOL_APP_API_DECL bool sapp_valid_window(sapp_window window);
+/* show a hidden window */
+SOKOL_APP_API_DECL void sapp_show_window(sapp_window window);
+/* hide a visible window */
+SOKOL_APP_API_DECL void sapp_hide_window(sapp_window window);
+/* return true if a window is currently hidden */
+SOKOL_APP_API_DECL bool sapp_window_hidden(sapp_window window);
 
 /* get window's framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_window_width(sapp_window window);
@@ -2535,6 +2542,8 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_macos_show_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_macos_hide_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2567,6 +2576,8 @@ _SOKOL_PRIVATE void _sapp_win32_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_win32_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_show_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_hide_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_win32_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_win32_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2598,6 +2609,8 @@ _SOKOL_PRIVATE void _sapp_x11_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_close_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_show_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_hide_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_x11_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_x11_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2791,6 +2804,28 @@ _SOKOL_PRIVATE void _sapp_platform_close_window(_sapp_window_t* win) {
         _sapp_android_close_window(win);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_close_window(win);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_show_window(_sapp_window_t* win) {
+    (void)win;
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_show_window(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_show_window(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_close_window(win);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_hide_window(_sapp_window_t* win) {
+    (void)win;
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_hide_window(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_hide_window(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_hide_window(win);
     #endif
 }
 
@@ -11942,6 +11977,26 @@ SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
     if (win) {
         _sapp_platform_close_window(win);
     }
+}
+
+SOKOL_API_IMPL void sapp_show_wndow(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        _sapp_platform_show_window(win);
+    }
+}
+
+SOKOL_API_IMPL void sapp_hide_window(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        _sapp_platform_hide_window(win);
+    }
+}
+
+SOKOL_API_IMPL bool sapp_window_visible(sapp_window window) {
+    FIXME FIXME FIXME 
 }
 
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
