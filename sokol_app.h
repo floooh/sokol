@@ -1709,13 +1709,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
     #pragma comment (lib, "shell32")    /* CommandLineToArgvW, DragQueryFileW, DragFinished */
+    #pragma comment (lib, "gdi32")
     #if defined(SOKOL_D3D11)
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
         #pragma comment (lib, "dxguid")
-    #endif
-    #if defined(SOKOL_GLCORE33)
-        #pragma comment (lib, "gdi32")
     #endif
 
     #if defined(SOKOL_D3D11)
