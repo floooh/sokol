@@ -1557,8 +1557,14 @@ SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
 SOKOL_APP_API_DECL void sapp_show_window(sapp_window window);
 /* hide a visible window */
 SOKOL_APP_API_DECL void sapp_hide_window(sapp_window window);
-/* return true if a window is currently hidden */
-SOKOL_APP_API_DECL bool sapp_window_hidden(sapp_window window);
+/* return true if a window is currently visible */
+SOKOL_APP_API_DECL bool sapp_window_visible(sapp_window window);
+/* make window focused (bring to front and get keyboard input focus) */
+SOKOL_APP_API_DECL void sapp_focus_window(sapp_window window);
+/* test if window is the focus window */
+SOKOL_APP_API_DECL bool sapp_window_focused(sapp_window window);
+/* test if window is minimized */
+SOKOL_APP_API_DECL bool sapp_window_minimized(sapp_window window);
 
 /* get window's framebuffer width in pixels */
 SOKOL_APP_API_DECL int sapp_window_width(sapp_window window);
@@ -2544,6 +2550,10 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_show_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_hide_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_macos_window_visible(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_macos_focus_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_macos_window_focused(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_macos_window_minimized(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2578,6 +2588,10 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_close_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_show_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_hide_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_win32_window_visible(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_win32_focus_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_win32_window_focused(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_win32_window_minimized(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_win32_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_win32_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_win32_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2609,8 +2623,12 @@ _SOKOL_PRIVATE void _sapp_x11_discard_state(void);
 _SOKOL_PRIVATE bool _sapp_x11_create_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_close_window(_sapp_window_t* win);
-_SOKOL_PRIVATE void _sapp_win32_show_window(_sapp_window_t* win);
-_SOKOL_PRIVATE void _sapp_win32_hide_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_x11_show_window(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_x11_hide_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_x11_window_visible(_sapp_window_t* win);
+_SOKOL_PRIVATE void _sapp_x11_focus_window(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_x11_window_focused(_sapp_window_t* win);
+_SOKOL_PRIVATE bool _sapp_x11_window_minimized(_sapp_window_t* win);
 _SOKOL_PRIVATE void _sapp_x11_set_window_pos(_sapp_window_t* win, int x, int y);
 _SOKOL_PRIVATE void _sapp_x11_get_window_pos(_sapp_window_t* win, int* x, int* y);
 _SOKOL_PRIVATE void _sapp_x11_set_window_size(_sapp_window_t* win, int w, int h);
@@ -2808,24 +2826,77 @@ _SOKOL_PRIVATE void _sapp_platform_close_window(_sapp_window_t* win) {
 }
 
 _SOKOL_PRIVATE void _sapp_platform_show_window(_sapp_window_t* win) {
-    (void)win;
     #if defined(_SAPP_MACOS)
         _sapp_macos_show_window(win);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_show_window(win);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_close_window(win);
+    #else
+        (void)win;
     #endif
 }
 
 _SOKOL_PRIVATE void _sapp_platform_hide_window(_sapp_window_t* win) {
-    (void)win;
     #if defined(_SAPP_MACOS)
         _sapp_macos_hide_window(win);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_hide_window(win);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_hide_window(win);
+    #else
+        (void)win;
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sapp_platform_window_visible(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_window_visible(win);
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_window_visible(win);
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_window_visible(win);
+    #else
+        (void)win;
+        return true;
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_focus_window(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_focus_window(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_focus_window(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_focus_window(win);
+    #else
+        (void)win;
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sapp_platform_window_focused(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_window_focused(win);
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_window_focused(win);
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_window_focused(win);
+    #else
+        (void)win;
+        return true;
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sapp_platform_window_minimized(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        return _sapp_macos_window_minimized(win);
+    #elif defined(_SAPP_WIN32)
+        return _sapp_win32_window_minimized(win);
+    #elif defined(_SAPP_LINUX)
+        return _sapp_x11_window_minimized(win);
+    #else
+        (void)win;
+        return false;
     #endif
 }
 
@@ -3725,7 +3796,9 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
             _sapp_macos_set_window_pos(win, win->pos_x, win->pos_y);
         }
     }
-    [win->macos.window makeKeyAndOrderFront:nil];
+    if (!win->desc.hidden) {
+        [win->macos.window makeKeyAndOrderFront:nil];
+    }
     return true;
 }
 
@@ -3739,9 +3812,39 @@ _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_close_window(_sapp_window_t* win) {
-    SOKOL_ASSERT(win);
-    SOKOL_ASSERT(win->macos.window);
+    SOKOL_ASSERT(win && win->macos.window);
     [win->macos.window close];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_show_window(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    [win->macos.window orderFront:nil];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_hide_window(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    [win->macos.window orderOut:nil];
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_window_visible(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    return [win->macos.window isVisible];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_focus_window(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    // FIXME: see the activateIgnoringOtherApps hack in GLFW, relevant for us?
+    [win->macos.window makeKeyAndOrderFront:nil];
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_window_focused(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    return [win->macos.window isKeyWindow];
+}
+
+_SOKOL_PRIVATE bool _sapp_macos_window_minimized(_sapp_window_t* win) {
+    SOKOL_ASSERT(win && win->macos.window);
+    return [win->macos.window isMiniaturized];
 }
 
 /* MacOS entry function */
@@ -3814,44 +3917,36 @@ _SOKOL_PRIVATE int _sapp_macos_flipy(_sapp_window_t* win, int y) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_window_pos(_sapp_window_t* win, int x, int y) {
-    @autoreleasepool {
-        const NSRect content_rect = [win->macos.window frame];
-        const NSRect dummy_rect = NSMakeRect(x, _sapp_macos_flipy(win, y + content_rect.size.height - 1), 0, 0);
-        const NSRect frame_rect = [win->macos.window frameRectForContentRect:dummy_rect];
-        [win->macos.window setFrameOrigin:frame_rect.origin];
-    }
+    const NSRect content_rect = [win->macos.window frame];
+    const NSRect dummy_rect = NSMakeRect(x, _sapp_macos_flipy(win, y + content_rect.size.height - 1), 0, 0);
+    const NSRect frame_rect = [win->macos.window frameRectForContentRect:dummy_rect];
+    [win->macos.window setFrameOrigin:frame_rect.origin];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int* y) {
-    @autoreleasepool {
-        const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
-        if (x) {
-            *x = content_rect.origin.x;
-        }
-        if (y) {
-            *y = _sapp_macos_flipy(win, content_rect.origin.y + content_rect.size.height - 1);
-        }
+    const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
+    if (x) {
+        *x = content_rect.origin.x;
+    }
+    if (y) {
+        *y = _sapp_macos_flipy(win, content_rect.origin.y + content_rect.size.height - 1);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h) {
-    @autoreleasepool {
-        NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
-        content_rect.origin.y += content_rect.size.height - h;
-        content_rect.size = NSMakeSize(w, h);
-        [win->macos.window setFrame:[win->macos.window frameRectForContentRect:content_rect] display:YES];
-    }
+    NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
+    content_rect.origin.y += content_rect.size.height - h;
+    content_rect.size = NSMakeSize(w, h);
+    [win->macos.window setFrame:[win->macos.window frameRectForContentRect:content_rect] display:YES];
 }
 
 _SOKOL_PRIVATE void _sapp_macos_get_window_size(_sapp_window_t* win, int* w, int* h) {
-    @autoreleasepool {
-        const NSRect content_rect = [win->macos.window frame];
-        if (w) {
-            *w = content_rect.size.width;
-        }
-        if (h) {
-            *h = content_rect.size.height;
-        }
+    const NSRect content_rect = [win->macos.window frame];
+    if (w) {
+        *w = content_rect.size.width;
+    }
+    if (h) {
+        *h = content_rect.size.height;
     }
 }
 
@@ -3928,27 +4023,23 @@ _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(_sapp_window_t* win) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_set_clipboard_string(const char* str) {
-    @autoreleasepool {
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
-        [pasteboard setString:@(str) forType:NSPasteboardTypeString];
-    }
+    NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+    [pasteboard setString:@(str) forType:NSPasteboardTypeString];
 }
 
 _SOKOL_PRIVATE const char* _sapp_macos_get_clipboard_string(void) {
     SOKOL_ASSERT(_sapp.clipboard.buffer);
-    @autoreleasepool {
-        _sapp.clipboard.buffer[0] = 0;
-        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-        if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
-            return _sapp.clipboard.buffer;
-        }
-        NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
-        if (!str) {
-            return _sapp.clipboard.buffer;
-        }
-        _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    _sapp.clipboard.buffer[0] = 0;
+    NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+    if (![[pasteboard types] containsObject:NSPasteboardTypeString]) {
+        return _sapp.clipboard.buffer;
     }
+    NSString* str = [pasteboard stringForType:NSPasteboardTypeString];
+    if (!str) {
+        return _sapp.clipboard.buffer;
+    }
+    _sapp_strcpy([str UTF8String], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
     return _sapp.clipboard.buffer;
 }
 
@@ -11979,7 +12070,7 @@ SOKOL_API_IMPL void sapp_close_window(sapp_window window) {
     }
 }
 
-SOKOL_API_IMPL void sapp_show_wndow(sapp_window window) {
+SOKOL_API_IMPL void sapp_show_window(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     _sapp_window_t* win = _sapp_lookup_window(window.id);
     if (win) {
@@ -11996,7 +12087,44 @@ SOKOL_API_IMPL void sapp_hide_window(sapp_window window) {
 }
 
 SOKOL_API_IMPL bool sapp_window_visible(sapp_window window) {
-    FIXME FIXME FIXME 
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        return _sapp_platform_window_visible(win);
+    }
+    else {
+        return true;
+    }
+}
+
+SOKOL_API_IMPL void sapp_focus_window(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        _sapp_platform_focus_window(win);
+    }
+}
+
+SOKOL_API_IMPL bool sapp_window_focused(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        return _sapp_platform_window_focused(win);
+    }
+    else {
+        return false;
+    }
+}
+
+SOKOL_API_IMPL bool sapp_window_minimized(sapp_window window) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        return _sapp_platform_window_minimized(win);
+    }
+    else {
+        return false;
+    }
 }
 
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
