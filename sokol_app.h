@@ -4227,6 +4227,18 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     _SOKOL_UNUSED(notification);
     _sapp_discard_state();
 }
+
+- (BOOL)applicationShouldHandleReopen:(NSApplication*)sender hasVisibleWindows:(BOOL)flag {
+    _SOKOL_UNUSED(sender);
+    _SOKOL_UNUSED(flag);
+    /* unminimize the main window when clicking the dock icon (which doesn't
+        happen automatically if the application has multiple open windows)
+    */
+    _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
+    SOKOL_ASSERT(win);
+    [win->macos.window makeKeyAndOrderFront:nil];
+    return YES;
+}
 @end
 
 @implementation _sapp_macos_window_delegate
