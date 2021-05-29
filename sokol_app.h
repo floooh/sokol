@@ -1967,7 +1967,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(SOKOL_GLCORE33)
     @interface _sapp_macos_view : NSOpenGLView
     @property uint32_t win_id;
-    - (void)timerFired:(id)sender;
     @end
 #endif // SOKOL_GLCORE33
 
@@ -2559,6 +2558,7 @@ _SOKOL_PRIVATE void _sapp_macos_get_window_pos(_sapp_window_t* win, int* x, int*
 _SOKOL_PRIVATE void _sapp_macos_set_window_size(_sapp_window_t* win, int w, int h);
 _SOKOL_PRIVATE void _sapp_macos_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* desc, int num_images);
+_SOKOL_PRIVATE void _sapp_macos_activate_window_context(_sapp_window_t* win);
 #elif defined(_SAPP_IOS)
 _SOKOL_PRIVATE void _sapp_ios_init_state(void);
 _SOKOL_PRIVATE void _sapp_ios_discard_state(void);
@@ -2597,6 +2597,7 @@ _SOKOL_PRIVATE void _sapp_win32_get_window_pos(_sapp_window_t* win, int* x, int*
 _SOKOL_PRIVATE void _sapp_win32_set_window_size(_sapp_window_t* win, int w, int h);
 _SOKOL_PRIVATE void _sapp_win32_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* desc, int num_images);
+_SOKOL_PRIVATE void _sapp_win32_activate_window_context(_sapp_window_t* win);
 #elif defined(_SAPP_UWP)
 _SOKOL_PRIVATE void _sapp_uwp_init_state(void);
 _SOKOL_PRIVATE void _sapp_uwp_discard_state(void);
@@ -2634,6 +2635,7 @@ _SOKOL_PRIVATE void _sapp_x11_get_window_pos(_sapp_window_t* win, int* x, int* y
 _SOKOL_PRIVATE void _sapp_x11_set_window_size(_sapp_window_t* win, int w, int h);
 _SOKOL_PRIVATE void _sapp_x11_get_window_size(_sapp_window_t* win, int* w, int* h);
 _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* desc, int num_images);
+_SOKOL_PRIVATE void _sapp_x11_activate_window_context(_sapp_window_t* win);
 #endif
 
 /*=== POOL IMPLEMENTATION ====================================================*/
@@ -2969,6 +2971,18 @@ _SOKOL_PRIVATE void _sapp_platform_get_window_size(_sapp_window_t* win, int* w, 
         _sapp_android_get_window_size(win, w, h);
     #elif defined(_SAPP_LINUX)
         _sapp_x11_get_window_size(win, w, h);
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_platform_activate_window_context(_sapp_window_t* win) {
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_activate_window_context(win);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_activate_window_context(win);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_activate_window_context(win);
+    #else
+        _SOKOL_UNUSED(win);
     #endif
 }
 
@@ -3949,6 +3963,15 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_position(_sapp_window_t* win) {
     win->pos_y = _sapp_macos_flipy(win, content_rect.origin.y);
 }
 
+_SOKOL_PRIVATE void _sapp_macos_activate_window_context(_sapp_window_t* win) {
+    #if defined(SOKOL_GLCORE33)
+        NSOpenGLContext* ctx = [win->macos.view openGLContext];
+        [ctx makeCurrentContext];
+    #else
+        _SOKOL_UNUSED(win);
+    #endif
+}
+
 /* NOTE: unlike the iOS version of this function, the macOS version
     can dynamically update the DPI scaling factor when a window is moved
     between HighDPI / LowDPI screens.
@@ -3961,8 +3984,18 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
         const NSRect fb_rect = [win->macos.view bounds];
         win->framebuffer_width = fb_rect.size.width * win->dpi_scale;
         win->framebuffer_height = fb_rect.size.height * win->dpi_scale;
+        const CGSize fb_size = win->macos.view.drawableSize;
+        const int cur_fb_width = (int) fb_size.width;
+        const int cur_fb_height = (int) fb_size.height;
+        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
+                                 (win->framebuffer_height != cur_fb_height);
     #elif defined(SOKOL_GLCORE33)
+        // NOTE: on first call this will always return a Retina resolution framebuffer size
         const NSRect fb_rect = [win->macos.view convertRectToBacking:[win->macos.view frame]];
+        const int cur_fb_width = (int) fb_rect.size.width;
+        const int cur_fb_height = (int) fb_rect.size.height;
+        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
+                                 (win->framebuffer_height != cur_fb_height);
         win->framebuffer_width = fb_rect.size.width;
         win->framebuffer_height = fb_rect.size.height;
     #endif
@@ -3982,24 +4015,12 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
         win->window_height = 1;
     }
     win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
-
-    int cur_fb_width, cur_fb_height;
-    #if defined(SOKOL_METAL)
-        const CGSize fb_size = win->macos.view.drawableSize;
-        cur_fb_width = (int) fb_size.width;
-        cur_fb_height = (int) fb_size.height;
-    #else
-        cur_fb_width = (int) fb_rect.size.width;
-        cur_fb_height = (int) fb_rect.size.height;
-    #endif
-    const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
-                             (win->framebuffer_height != cur_fb_height);
     if (dim_changed) {
         #if defined(SOKOL_METAL)
             CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
             win->macos.view.drawableSize = drawable_size;
         #else
-            // nothing to do here?
+            // FIXME: nothing to do here?
         #endif
         if (!_sapp.first_frame) {
             _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
@@ -4155,6 +4176,10 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 @implementation _sapp_macos_app_delegate
 
 - (void)drawFrame {
+    #if defined(SOKOL_GLCORE33)
+        _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
+        _sapp_macos_activate_window_context(win);
+    #endif
     _sapp_frame();
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
@@ -12140,7 +12165,13 @@ SOKOL_API_IMPL bool sapp_window_minimized(sapp_window window) {
 
 SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
-    // FIXME FIXME FIXME
+    _sapp_window_t* win = _sapp_lookup_window(window.id);
+    if (win) {
+        return _sapp_platform_activate_window_context(win);
+    }
+    else {
+        return false;
+    }
 }
 
 SOKOL_API_IMPL int sapp_window_slot_index(sapp_window window) {
