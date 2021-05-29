@@ -3749,10 +3749,10 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
         attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAStencilSize; attrs[i++] = 8;
-        if (_sapp.sample_count > 1) {
+        if (win->desc.sample_count > 1) {
             attrs[i++] = NSOpenGLPFAMultisample;
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 1;
-            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.sample_count;
+            attrs[i++] = NSOpenGLPFASamples; attrs[i++] = (NSOpenGLPixelFormatAttribute)_sapp.desc.sample_count;
         }
         else {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
@@ -3761,28 +3761,21 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
         SOKOL_ASSERT(glpixelformat_obj != nil);
 
-        _sapp.macos.view = [[_sapp_macos_view alloc]
-            initWithFrame:window_rect
+        win->macos.view = [[_sapp_macos_view alloc]
+            initWithFrame:content_rect
             pixelFormat:glpixelformat_obj];
         _SAPP_OBJC_RELEASE(glpixelformat_obj);
-        [_sapp.macos.view updateTrackingAreas];
-        if (_sapp.desc.high_dpi) {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:YES];
+        win->macos.view.win_id = win->slot.id;
+        [win->macos.view updateTrackingAreas];
+        if (win->desc.high_dpi) {
+            [win->macos.view setWantsBestResolutionOpenGLSurface:YES];
         }
         else {
-            [_sapp.macos.view setWantsBestResolutionOpenGLSurface:NO];
+            [win->macos.view setWantsBestResolutionOpenGLSurface:NO];
         }
 
-        _sapp.macos.window.contentView = _sapp.macos.view;
-        [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
-
-        NSTimer* timer_obj = [NSTimer timerWithTimeInterval:0.001
-            target:_sapp.macos.view
-            selector:@selector(timerFired:)
-            userInfo:nil
-            repeats:YES];
-        [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
-        timer_obj = nil;
+        win->macos.window.contentView = win->macos.view;
+        [win->macos.window makeFirstResponder:win->macos.view];
     #endif
     if (win->fullscreen) {
         /* on GL, this already toggles a rendered frame, so set the valid flag before */
@@ -3996,7 +3989,8 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
         cur_fb_width = (int) fb_size.width;
         cur_fb_height = (int) fb_size.height;
     #else
-        #error "FIXME GL!"
+        cur_fb_width = (int) fb_rect.size.width;
+        cur_fb_height = (int) fb_rect.size.height;
     #endif
     const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
                              (win->framebuffer_height != cur_fb_height);
@@ -4005,7 +3999,7 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
             CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
             win->macos.view.drawableSize = drawable_size;
         #else
-            #error "FIXME GL!"
+            // nothing to do here?
         #endif
         if (!_sapp.first_frame) {
             _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
@@ -4177,7 +4171,7 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
             #if defined(SOKOL_METAL)
             [win->macos.view draw];
             #else
-            #error "FIXME: GL"
+            [[win->macos.view openGLContext] flushBuffer];
             #endif
         }
     }
@@ -4397,24 +4391,29 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     }
     [super reshape];
 }
-- (void)timerFired:(id)sender {
-    _SOKOL_UNUSED(sender);
-    [self setNeedsDisplay:YES];
-}
 - (void)prepareOpenGL {
     [super prepareOpenGL];
     GLint swapInt = 1;
-    NSOpenGLContext* ctx = [_sapp.macos.view openGLContext];
-    [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
-    [ctx makeCurrentContext];
+    _sapp_window_t* win = _sapp_lookup_window(self.win_id);
+    if (win) {
+        NSOpenGLContext* ctx = [win->macos.view openGLContext];
+        [ctx setValues:&swapInt forParameter:NSOpenGLContextParameterSwapInterval];
+        [ctx makeCurrentContext];
+    }
 }
 #endif
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    // FIXME?
+    /*
     #if !defined(SOKOL_METAL)
-    [[_sapp.macos.view openGLContext] flushBuffer];
+    _sapp_window_t* win = _sapp_lookup_window(self.win_id);
+    if (win) {
+        [[win->macos.view openGLContext] flushBuffer];
+    }
     #endif
+    */
 }
 
 - (BOOL)isOpaque {

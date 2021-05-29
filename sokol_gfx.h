@@ -5980,85 +5980,84 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
-    if (_sg.gl.cur_context) {
+_SOKOL_PRIVATE void _sg_gl_reset_state_cache(_sg_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    _SG_GL_CHECK_ERROR();
+    #if !defined(SOKOL_GLES2)
+    if (!_sg.gl.gles2) {
+        glBindVertexArray(ctx->vao);
         _SG_GL_CHECK_ERROR();
-        #if !defined(SOKOL_GLES2)
-        if (!_sg.gl.gles2) {
-            glBindVertexArray(_sg.gl.cur_context->vao);
-            _SG_GL_CHECK_ERROR();
-        }
-        #endif
-        memset(&_sg.gl.cache, 0, sizeof(_sg.gl.cache));
-        _sg_gl_cache_clear_buffer_bindings(true);
-        _SG_GL_CHECK_ERROR();
-        _sg_gl_cache_clear_texture_bindings(true);
-        _SG_GL_CHECK_ERROR();
-        for (int i = 0; i < _sg.limits.max_vertex_attrs; i++) {
-            _sg_gl_attr_t* attr = &_sg.gl.cache.attrs[i].gl_attr;
-            attr->vb_index = -1;
-            attr->divisor = -1;
-            glDisableVertexAttribArray((GLuint)i);
-            _SG_GL_CHECK_ERROR();
-        }
-        _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
-
-        /* shader program */
-        glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&_sg.gl.cache.prog);
-        _SG_GL_CHECK_ERROR();
-
-        /* depth and stencil state */
-        _sg.gl.cache.depth.compare = SG_COMPAREFUNC_ALWAYS;
-        _sg.gl.cache.stencil.front.compare = SG_COMPAREFUNC_ALWAYS;
-        _sg.gl.cache.stencil.front.fail_op = SG_STENCILOP_KEEP;
-        _sg.gl.cache.stencil.front.depth_fail_op = SG_STENCILOP_KEEP;
-        _sg.gl.cache.stencil.front.pass_op = SG_STENCILOP_KEEP;
-        _sg.gl.cache.stencil.back.compare = SG_COMPAREFUNC_ALWAYS;
-        _sg.gl.cache.stencil.back.fail_op = SG_STENCILOP_KEEP;
-        _sg.gl.cache.stencil.back.depth_fail_op = SG_STENCILOP_KEEP;
-        _sg.gl.cache.stencil.back.pass_op = SG_STENCILOP_KEEP;
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_ALWAYS);
-        glDepthMask(GL_FALSE);
-        glDisable(GL_STENCIL_TEST);
-        glStencilFunc(GL_ALWAYS, 0, 0);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-        glStencilMask(0);
-
-        /* blend state */
-        _sg.gl.cache.blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
-        _sg.gl.cache.blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
-        _sg.gl.cache.blend.op_rgb = SG_BLENDOP_ADD;
-        _sg.gl.cache.blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-        _sg.gl.cache.blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
-        _sg.gl.cache.blend.op_alpha = SG_BLENDOP_ADD;
-        glDisable(GL_BLEND);
-        glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
-        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-        glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
-
-        /* standalone state */
-        for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-            _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
-        }
-        _sg.gl.cache.cull_mode = SG_CULLMODE_NONE;
-        _sg.gl.cache.face_winding = SG_FACEWINDING_CW;
-        _sg.gl.cache.sample_count = 1;
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glPolygonOffset(0.0f, 0.0f);
-        glDisable(GL_POLYGON_OFFSET_FILL);
-        glDisable(GL_CULL_FACE);
-        glFrontFace(GL_CW);
-        glCullFace(GL_BACK);
-        glEnable(GL_SCISSOR_TEST);
-        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-        glEnable(GL_DITHER);
-        glDisable(GL_POLYGON_OFFSET_FILL);
-        #if defined(SOKOL_GLCORE33)
-            glEnable(GL_MULTISAMPLE);
-            glEnable(GL_PROGRAM_POINT_SIZE);
-        #endif
     }
+    #endif
+    memset(&_sg.gl.cache, 0, sizeof(_sg.gl.cache));
+    _sg_gl_cache_clear_buffer_bindings(true);
+    _SG_GL_CHECK_ERROR();
+    _sg_gl_cache_clear_texture_bindings(true);
+    _SG_GL_CHECK_ERROR();
+    for (int i = 0; i < _sg.limits.max_vertex_attrs; i++) {
+        _sg_gl_attr_t* attr = &_sg.gl.cache.attrs[i].gl_attr;
+        attr->vb_index = -1;
+        attr->divisor = -1;
+        glDisableVertexAttribArray((GLuint)i);
+        _SG_GL_CHECK_ERROR();
+    }
+    _sg.gl.cache.cur_primitive_type = GL_TRIANGLES;
+
+    /* shader program */
+    glGetIntegerv(GL_CURRENT_PROGRAM, (GLint*)&_sg.gl.cache.prog);
+    _SG_GL_CHECK_ERROR();
+
+    /* depth and stencil state */
+    _sg.gl.cache.depth.compare = SG_COMPAREFUNC_ALWAYS;
+    _sg.gl.cache.stencil.front.compare = SG_COMPAREFUNC_ALWAYS;
+    _sg.gl.cache.stencil.front.fail_op = SG_STENCILOP_KEEP;
+    _sg.gl.cache.stencil.front.depth_fail_op = SG_STENCILOP_KEEP;
+    _sg.gl.cache.stencil.front.pass_op = SG_STENCILOP_KEEP;
+    _sg.gl.cache.stencil.back.compare = SG_COMPAREFUNC_ALWAYS;
+    _sg.gl.cache.stencil.back.fail_op = SG_STENCILOP_KEEP;
+    _sg.gl.cache.stencil.back.depth_fail_op = SG_STENCILOP_KEEP;
+    _sg.gl.cache.stencil.back.pass_op = SG_STENCILOP_KEEP;
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_STENCIL_TEST);
+    glStencilFunc(GL_ALWAYS, 0, 0);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glStencilMask(0);
+
+    /* blend state */
+    _sg.gl.cache.blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
+    _sg.gl.cache.blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+    _sg.gl.cache.blend.op_rgb = SG_BLENDOP_ADD;
+    _sg.gl.cache.blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    _sg.gl.cache.blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+    _sg.gl.cache.blend.op_alpha = SG_BLENDOP_ADD;
+    glDisable(GL_BLEND);
+    glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+    /* standalone state */
+    for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        _sg.gl.cache.color_write_mask[i] = SG_COLORMASK_RGBA;
+    }
+    _sg.gl.cache.cull_mode = SG_CULLMODE_NONE;
+    _sg.gl.cache.face_winding = SG_FACEWINDING_CW;
+    _sg.gl.cache.sample_count = 1;
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glPolygonOffset(0.0f, 0.0f);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_CULL_FACE);
+    glFrontFace(GL_CW);
+    glCullFace(GL_BACK);
+    glEnable(GL_SCISSOR_TEST);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glEnable(GL_DITHER);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    #if defined(SOKOL_GLCORE33)
+        glEnable(GL_MULTISAMPLE);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
@@ -6103,15 +6102,14 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
 
 _SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
     SOKOL_ASSERT(_sg.gl.valid);
-    /* NOTE: ctx can be 0 to unset the current context */
-    _sg.gl.cur_context = ctx;
-    _sg_gl_reset_state_cache();
+    _sg_gl_reset_state_cache(ctx);
 }
 
 /*-- GL backend resource creation and destruction ----------------------------*/
-_SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx) {
+_SOKOL_PRIVATE sg_resource_state _sg_gl_create_context(_sg_context_t* ctx, const sg_context_desc* desc) {
     SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(0 == ctx->default_framebuffer);
+    _SOKOL_UNUSED(desc);
     _SG_GL_CHECK_ERROR();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&ctx->default_framebuffer);
     _SG_GL_CHECK_ERROR();
@@ -6796,9 +6794,10 @@ _SOKOL_PRIVATE _sg_image_t* _sg_gl_pass_ds_image(const _sg_pass_t* pass) {
     return pass->gl.ds_att.image;
 }
 
-_SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
+_SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_context_t* ctx, _sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
     /* FIXME: what if a texture used as render target is still bound, should we
        unbind all currently bound textures in begin pass? */
+    SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(action);
     SOKOL_ASSERT(!_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
@@ -6824,8 +6823,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     }
     else {
         /* default pass */
-        SOKOL_ASSERT(_sg.gl.cur_context);
-        glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, ctx->default_framebuffer);
     }
     glViewport(0, 0, w, h);
     glScissor(0, 0, w, h);
@@ -6937,7 +6935,8 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(_sg_pass_t* pass, const sg_pass_action* ac
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_end_pass(void) {
+_SOKOL_PRIVATE void _sg_gl_end_pass(_sg_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
     SOKOL_ASSERT(_sg.gl.in_pass);
     _SG_GL_CHECK_ERROR();
 
@@ -6975,8 +6974,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     _sg.gl.cur_pass_width = 0;
     _sg.gl.cur_pass_height = 0;
 
-    SOKOL_ASSERT(_sg.gl.cur_context);
-    glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, ctx->default_framebuffer);
     _sg.gl.in_pass = false;
     _SG_GL_CHECK_ERROR();
 }
@@ -7297,7 +7295,8 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
+_SOKOL_PRIVATE void _sg_gl_apply_uniforms(_sg_context_t* ctx, sg_shader_stage stage_index, int ub_index, const sg_range* data) {
+    _SOKOL_UNUSED(ctx);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->slot.id == _sg.gl.cache.cur_pipeline_id.id);
     SOKOL_ASSERT(_sg.gl.cache.cur_pipeline->shader->slot.id == _sg.gl.cache.cur_pipeline->cmn.shader_id.id);
@@ -7367,8 +7366,9 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
     }
 }
 
-_SOKOL_PRIVATE void _sg_gl_commit(void) {
+_SOKOL_PRIVATE void _sg_gl_commit(_sg_context_t* ctx) {
     SOKOL_ASSERT(!_sg.gl.in_pass);
+    _SOKOL_UNUSED(ctx);
     /* "soft" clear bindings (only those that are actually bound) */
     _sg_gl_cache_clear_buffer_bindings(false);
     _sg_gl_cache_clear_texture_bindings(false);
@@ -12743,7 +12743,7 @@ static inline void _sg_discard_backend(void) {
 
 static inline void _sg_reset_state_cache(_sg_context_t* ctx) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_reset_state_cache();
+    _sg_gl_reset_state_cache(ctx);
     #elif defined(SOKOL_METAL)
     _sg_mtl_reset_state_cache(ctx);
     #elif defined(SOKOL_D3D11)
