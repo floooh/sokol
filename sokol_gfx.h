@@ -14836,11 +14836,15 @@ SOKOL_API_IMPL sg_context sg_make_context(const sg_context_desc* desc) {
 SOKOL_API_IMPL void sg_destroy_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
+    bool is_active_context = false;
     if (ctx_id.id == _sg.active_context.id) {
         _sg.active_context.id = SG_INVALID_ID;
+        is_active_context = true;
     }
+    bool is_default_context = false;
     if (ctx_id.id == _sg.default_context.id) {
         _sg.default_context.id = SG_INVALID_ID;
+        is_default_context = true;
     }
     _sg_context_t* ctx = _sg_lookup_context(&_sg.pools, ctx_id.id);
     if (ctx) {
@@ -14849,7 +14853,11 @@ SOKOL_API_IMPL void sg_destroy_context(sg_context ctx_id) {
         _sg_reset_slot(&ctx->slot);
         _sg_pool_free_index(&_sg.pools.context_pool, _sg_slot_index(ctx_id.id));
     }
-    _sg_activate_context(0);
+    if (is_active_context && !is_default_context) {
+        _sg_context_t* default_ctx = _sg_lookup_context(&_sg.pools, _sg.default_context.id);
+        SOKOL_ASSERT(default_ctx);
+        _sg_activate_context(default_ctx);
+    }
 }
 
 SOKOL_API_IMPL void sg_activate_context(sg_context ctx_id) {
