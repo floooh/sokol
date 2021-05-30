@@ -3772,14 +3772,25 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
             attrs[i++] = NSOpenGLPFASampleBuffers; attrs[i++] = 0;
         }
         attrs[i++] = 0;
-        NSOpenGLPixelFormat* glpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-        SOKOL_ASSERT(glpixelformat_obj != nil);
+        NSOpenGLPixelFormat* nsglpixelformat_obj = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+        SOKOL_ASSERT(nsglpixelformat_obj != nil);
+
+        NSOpenGLContext* shared_main_context = nil;
+        if (SAPP_INVALID_ID != _sapp.main_window_id) {
+            _sapp_window_t* main_win = _sapp_lookup_window(_sapp.main_window_id);
+            shared_main_context = main_win->macos.view.openGLContext;
+        }
 
         win->macos.view = [[_sapp_macos_view alloc]
             initWithFrame:content_rect
-            pixelFormat:glpixelformat_obj];
-        _SAPP_OBJC_RELEASE(glpixelformat_obj);
+            pixelFormat:nsglpixelformat_obj];
         win->macos.view.win_id = win->slot.id;
+        if (nil != shared_main_context) {
+            // create a new NSOpenContext which shares resources with the main window's context
+            win->macos.view.openGLContext = [[NSOpenGLContext alloc] initWithFormat:nsglpixelformat_obj shareContext:shared_main_context];
+            SOKOL_ASSERT(nil != win->macos.view.openGLContext);
+        }
+        _SAPP_OBJC_RELEASE(nsglpixelformat_obj);
         [win->macos.view updateTrackingAreas];
         if (win->desc.high_dpi) {
             [win->macos.view setWantsBestResolutionOpenGLSurface:YES];
@@ -3810,6 +3821,9 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
+
+// FIXME FIXME FIXME: the GL backend currently has a ~7MB memory leak on window destruction
+
     SOKOL_ASSERT(win);
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(win->macos.tracking_area);
@@ -12167,10 +12181,7 @@ SOKOL_API_IMPL void sapp_activate_window_context(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     _sapp_window_t* win = _sapp_lookup_window(window.id);
     if (win) {
-        return _sapp_platform_activate_window_context(win);
-    }
-    else {
-        return false;
+        _sapp_platform_activate_window_context(win);
     }
 }
 
