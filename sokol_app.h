@@ -3787,8 +3787,10 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->macos.view.win_id = win->slot.id;
         if (nil != shared_main_context) {
             // create a new NSOpenContext which shares resources with the main window's context
-            win->macos.view.openGLContext = [[NSOpenGLContext alloc] initWithFormat:nsglpixelformat_obj shareContext:shared_main_context];
-            SOKOL_ASSERT(nil != win->macos.view.openGLContext);
+            NSOpenGLContext* nsgl_context = [[NSOpenGLContext alloc] initWithFormat:nsglpixelformat_obj shareContext:shared_main_context];
+            SOKOL_ASSERT(nsgl_context);
+            win->macos.view.openGLContext = nsgl_context;
+            _SAPP_OBJC_RELEASE(nsgl_context);
         }
         _SAPP_OBJC_RELEASE(nsglpixelformat_obj);
         [win->macos.view updateTrackingAreas];
@@ -3821,9 +3823,6 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_destroy_window(_sapp_window_t* win) {
-
-// FIXME FIXME FIXME: the GL backend currently has a ~7MB memory leak on window destruction
-
     SOKOL_ASSERT(win);
     // NOTE: it's safe to call [release] on a nil object
     _SAPP_OBJC_RELEASE(win->macos.tracking_area);
