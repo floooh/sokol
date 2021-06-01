@@ -2031,7 +2031,6 @@ typedef struct sg_trace_hooks {
     void (*err_shader_pool_exhausted)(void* user_data);
     void (*err_pipeline_pool_exhausted)(void* user_data);
     void (*err_pass_pool_exhausted)(void* user_data);
-    void (*err_context_mismatch)(void* user_data);
     void (*err_pass_invalid)(void* user_data);
     void (*err_draw_invalid)(void* user_data);
     void (*err_bindings_invalid)(void* user_data);
@@ -2060,8 +2059,7 @@ typedef struct sg_trace_hooks {
 */
 typedef struct sg_slot_info {
     sg_resource_state state;    /* the current state of this resource slot */
-    uint32_t res_id;        /* type-neutral resource if (e.g. sg_buffer.id) */
-    uint32_t ctx_id;        /* the context this resource belongs to */
+    uint32_t res_id;            /* type-neutral resource if (e.g. sg_buffer.id) */
 } sg_slot_info;
 
 typedef struct sg_buffer_info {
@@ -2949,7 +2947,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 /* resource pool slots */
 typedef struct {
     uint32_t id;
-    uint32_t ctx_id;
     sg_resource_state state;
 } _sg_slot_t;
 
@@ -13521,7 +13518,7 @@ _SOKOL_PRIVATE _sg_context_t* _sg_default_context(void) {
     return ctx;
 }
 
-_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
+_SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p) {
     /*  this is a bit dumb since it loops over all pool slots to
         find the occupied slots, on the other hand it is only ever
         executed at shutdown
@@ -13530,43 +13527,33 @@ _SOKOL_PRIVATE void _sg_destroy_all_resources(_sg_pools_t* p, uint32_t ctx_id) {
               and the resource slots not be cleared!
     */
     for (int i = 1; i < p->buffer_pool.size; i++) {
-        if (p->buffers[i].slot.ctx_id == ctx_id) {
-            sg_resource_state state = p->buffers[i].slot.state;
-            if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-                _sg_destroy_buffer(&p->buffers[i]);
-            }
+        sg_resource_state state = p->buffers[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_destroy_buffer(&p->buffers[i]);
         }
     }
     for (int i = 1; i < p->image_pool.size; i++) {
-        if (p->images[i].slot.ctx_id == ctx_id) {
-            sg_resource_state state = p->images[i].slot.state;
-            if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-                _sg_destroy_image(&p->images[i]);
-            }
+        sg_resource_state state = p->images[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_destroy_image(&p->images[i]);
         }
     }
     for (int i = 1; i < p->shader_pool.size; i++) {
-        if (p->shaders[i].slot.ctx_id == ctx_id) {
-            sg_resource_state state = p->shaders[i].slot.state;
-            if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-                _sg_destroy_shader(&p->shaders[i]);
-            }
+        sg_resource_state state = p->shaders[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_destroy_shader(&p->shaders[i]);
         }
     }
     for (int i = 1; i < p->pipeline_pool.size; i++) {
-        if (p->pipelines[i].slot.ctx_id == ctx_id) {
-            sg_resource_state state = p->pipelines[i].slot.state;
-            if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-                _sg_destroy_pipeline(&p->pipelines[i]);
-            }
+        sg_resource_state state = p->pipelines[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_destroy_pipeline(&p->pipelines[i]);
         }
     }
     for (int i = 1; i < p->pass_pool.size; i++) {
-        if (p->passes[i].slot.ctx_id == ctx_id) {
-            sg_resource_state state = p->passes[i].slot.state;
-            if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
-                _sg_destroy_pass(&p->passes[i]);
-            }
+        sg_resource_state state = p->passes[i].slot.state;
+        if ((state == SG_RESOURCESTATE_VALID) || (state == SG_RESOURCESTATE_FAILED)) {
+            _sg_destroy_pass(&p->passes[i]);
         }
     }
 }
@@ -14548,7 +14535,6 @@ _SOKOL_PRIVATE void _sg_init_buffer(sg_buffer buf_id, const sg_buffer_desc* desc
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID && desc);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    buf->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_buffer_desc(desc)) {
         buf->slot.state = _sg_create_buffer(buf, desc);
     }
@@ -14562,7 +14548,6 @@ _SOKOL_PRIVATE void _sg_init_image(sg_image img_id, const sg_image_desc* desc) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID && desc);
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
-    img->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_image_desc(desc)) {
         img->slot.state = _sg_create_image(img, desc);
     }
@@ -14576,7 +14561,6 @@ _SOKOL_PRIVATE void _sg_init_shader(sg_shader shd_id, const sg_shader_desc* desc
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID && desc);
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    shd->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_shader_desc(desc)) {
         shd->slot.state = _sg_create_shader(shd, desc);
     }
@@ -14590,7 +14574,6 @@ _SOKOL_PRIVATE void _sg_init_pipeline(sg_pipeline pip_id, const sg_pipeline_desc
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID && desc);
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    pip->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_pipeline_desc(desc)) {
         _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, desc->shader.id);
         if (shd && (shd->slot.state == SG_RESOURCESTATE_VALID)) {
@@ -14610,7 +14593,6 @@ _SOKOL_PRIVATE void _sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID && desc);
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    pass->slot.ctx_id = _sg.active_context.id;
     if (_sg_validate_pass_desc(desc)) {
         /* lookup pass attachment image pointers */
         _sg_image_t* att_imgs[SG_MAX_COLOR_ATTACHMENTS + 1];
@@ -14644,81 +14626,61 @@ _SOKOL_PRIVATE void _sg_init_pass(sg_pass pass_id, const sg_pass_desc* desc) {
 _SOKOL_PRIVATE bool _sg_uninit_buffer(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     if (buf) {
-        if (buf->slot.ctx_id == _sg.active_context.id) {
-            _sg_destroy_buffer(buf);
-            _sg_reset_buffer(buf);
-            return true;
-        }
-        else {
-            SOKOL_LOG("_sg_uninit_buffer: active context mismatch (must be same as for creation)");
-            _SG_TRACE_NOARGS(err_context_mismatch);
-        }
+        _sg_destroy_buffer(buf);
+        _sg_reset_buffer(buf);
+        return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_uninit_image(sg_image img_id) {
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     if (img) {
-        if (img->slot.ctx_id == _sg.active_context.id) {
-            _sg_destroy_image(img);
-            _sg_reset_image(img);
-            return true;
-        }
-        else {
-            SOKOL_LOG("_sg_uninit_image: active context mismatch (must be same as for creation)");
-            _SG_TRACE_NOARGS(err_context_mismatch);
-        }
+        _sg_destroy_image(img);
+        _sg_reset_image(img);
+        return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_uninit_shader(sg_shader shd_id) {
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     if (shd) {
-        if (shd->slot.ctx_id == _sg.active_context.id) {
-            _sg_destroy_shader(shd);
-            _sg_reset_shader(shd);
-            return true;
-        }
-        else {
-            SOKOL_LOG("_sg_uninit_shader: active context mismatch (must be same as for creation)");
-            _SG_TRACE_NOARGS(err_context_mismatch);
-        }
+        _sg_destroy_shader(shd);
+        _sg_reset_shader(shd);
+        return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_uninit_pipeline(sg_pipeline pip_id) {
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     if (pip) {
-        if (pip->slot.ctx_id == _sg.active_context.id) {
-            _sg_destroy_pipeline(pip);
-            _sg_reset_pipeline(pip);
-            return true;
-        }
-        else {
-            SOKOL_LOG("_sg_uninit_pipeline: active context mismatch (must be same as for creation)");
-            _SG_TRACE_NOARGS(err_context_mismatch);
-        }
+        _sg_destroy_pipeline(pip);
+        _sg_reset_pipeline(pip);
+        return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_uninit_pass(sg_pass pass_id) {
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     if (pass) {
-        if (pass->slot.ctx_id == _sg.active_context.id) {
-            _sg_destroy_pass(pass);
-            _sg_reset_pass(pass);
-            return true;
-        }
-        else {
-            SOKOL_LOG("_sg_uninit_pass: active context mismatch (must be same as for creation)");
-            _SG_TRACE_NOARGS(err_context_mismatch);
-        }
+        _sg_destroy_pass(pass);
+        _sg_reset_pass(pass);
+        return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 /*== PUBLIC API FUNCTIONS ====================================================*/
@@ -14777,7 +14739,7 @@ SOKOL_API_IMPL void sg_shutdown(void) {
     contexts are used, the app code must take care of properly releasing them
     (since only the app code can switch between 3D-API contexts)
     */
-    _sg_destroy_all_resources(&_sg.pools, _sg.default_context.id);
+    _sg_destroy_all_resources(&_sg.pools);
     _sg_destroy_context(_sg_default_context());
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
@@ -14835,7 +14797,6 @@ SOKOL_API_IMPL sg_context sg_make_context(const sg_context_desc* desc) {
 
 SOKOL_API_IMPL void sg_destroy_context(sg_context ctx_id) {
     SOKOL_ASSERT(_sg.valid);
-    _sg_destroy_all_resources(&_sg.pools, ctx_id.id);
     bool is_active_context = false;
     if (ctx_id.id == _sg.active_context.id) {
         _sg.active_context.id = SG_INVALID_ID;
@@ -15034,7 +14995,6 @@ SOKOL_API_IMPL void sg_fail_buffer(sg_buffer buf_id) {
     SOKOL_ASSERT(buf_id.id != SG_INVALID_ID);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     SOKOL_ASSERT(buf && buf->slot.state == SG_RESOURCESTATE_ALLOC);
-    buf->slot.ctx_id = _sg.active_context.id;
     buf->slot.state = SG_RESOURCESTATE_FAILED;
     _SG_TRACE_ARGS(fail_buffer, buf_id);
 }
@@ -15044,7 +15004,6 @@ SOKOL_API_IMPL void sg_fail_image(sg_image img_id) {
     SOKOL_ASSERT(img_id.id != SG_INVALID_ID);
     _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
     SOKOL_ASSERT(img && img->slot.state == SG_RESOURCESTATE_ALLOC);
-    img->slot.ctx_id = _sg.active_context.id;
     img->slot.state = SG_RESOURCESTATE_FAILED;
     _SG_TRACE_ARGS(fail_image, img_id);
 }
@@ -15054,7 +15013,6 @@ SOKOL_API_IMPL void sg_fail_shader(sg_shader shd_id) {
     SOKOL_ASSERT(shd_id.id != SG_INVALID_ID);
     _sg_shader_t* shd = _sg_lookup_shader(&_sg.pools, shd_id.id);
     SOKOL_ASSERT(shd && shd->slot.state == SG_RESOURCESTATE_ALLOC);
-    shd->slot.ctx_id = _sg.active_context.id;
     shd->slot.state = SG_RESOURCESTATE_FAILED;
     _SG_TRACE_ARGS(fail_shader, shd_id);
 }
@@ -15064,7 +15022,6 @@ SOKOL_API_IMPL void sg_fail_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(pip_id.id != SG_INVALID_ID);
     _sg_pipeline_t* pip = _sg_lookup_pipeline(&_sg.pools, pip_id.id);
     SOKOL_ASSERT(pip && pip->slot.state == SG_RESOURCESTATE_ALLOC);
-    pip->slot.ctx_id = _sg.active_context.id;
     pip->slot.state = SG_RESOURCESTATE_FAILED;
     _SG_TRACE_ARGS(fail_pipeline, pip_id);
 }
@@ -15074,7 +15031,6 @@ SOKOL_API_IMPL void sg_fail_pass(sg_pass pass_id) {
     SOKOL_ASSERT(pass_id.id != SG_INVALID_ID);
     _sg_pass_t* pass = _sg_lookup_pass(&_sg.pools, pass_id.id);
     SOKOL_ASSERT(pass && pass->slot.state == SG_RESOURCESTATE_ALLOC);
-    pass->slot.ctx_id = _sg.active_context.id;
     pass->slot.state = SG_RESOURCESTATE_FAILED;
     _SG_TRACE_ARGS(fail_pass, pass_id);
 }
@@ -15580,7 +15536,6 @@ SOKOL_API_IMPL sg_buffer_info sg_query_buffer_info(sg_buffer buf_id) {
     if (buf) {
         info.slot.state = buf->slot.state;
         info.slot.res_id = buf->slot.id;
-        info.slot.ctx_id = buf->slot.ctx_id;
         info.update_frame_index = buf->cmn.update_frame_index;
         info.append_frame_index = buf->cmn.append_frame_index;
         info.append_pos = buf->cmn.append_pos;
@@ -15604,7 +15559,6 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
     if (img) {
         info.slot.state = img->slot.state;
         info.slot.res_id = img->slot.id;
-        info.slot.ctx_id = img->slot.ctx_id;
         #if defined(SOKOL_D3D11)
         info.num_slots = 1;
         info.active_slot = 0;
@@ -15626,7 +15580,6 @@ SOKOL_API_IMPL sg_shader_info sg_query_shader_info(sg_shader shd_id) {
     if (shd) {
         info.slot.state = shd->slot.state;
         info.slot.res_id = shd->slot.id;
-        info.slot.ctx_id = shd->slot.ctx_id;
     }
     return info;
 }
@@ -15639,7 +15592,6 @@ SOKOL_API_IMPL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip_id) {
     if (pip) {
         info.slot.state = pip->slot.state;
         info.slot.res_id = pip->slot.id;
-        info.slot.ctx_id = pip->slot.ctx_id;
     }
     return info;
 }
@@ -15652,7 +15604,6 @@ SOKOL_API_IMPL sg_pass_info sg_query_pass_info(sg_pass pass_id) {
     if (pass) {
         info.slot.state = pass->slot.state;
         info.slot.res_id = pass->slot.id;
-        info.slot.ctx_id = pass->slot.ctx_id;
     }
     return info;
 }
