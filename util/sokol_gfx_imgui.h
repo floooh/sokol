@@ -887,7 +887,6 @@ _SOKOL_PRIVATE const char* _sg_imgui_resourcestate_string(sg_resource_state s) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_resource_slot(const sg_slot_info* slot) {
     igText("ResId: %08X", slot->res_id);
-    igText("CtxId: %08X", slot->ctx_id);
     igText("State: %s", _sg_imgui_resourcestate_string(slot->state));
 }
 
@@ -2777,19 +2776,6 @@ _SOKOL_PRIVATE void _sg_imgui_err_pass_pool_exhausted(void* user_data) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_imgui_err_context_mismatch(void* user_data) {
-    sg_imgui_t* ctx = (sg_imgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    sg_imgui_capture_item_t* item = _sg_imgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = SG_IMGUI_CMD_ERR_CONTEXT_MISMATCH;
-        item->color = _SG_IMGUI_COLOR_ERR;
-    }
-    if (ctx->hooks.err_context_mismatch) {
-        ctx->hooks.err_context_mismatch(ctx->hooks.user_data);
-    }
-}
-
 _SOKOL_PRIVATE void _sg_imgui_err_pass_invalid(void* user_data) {
     sg_imgui_t* ctx = (sg_imgui_t*) user_data;
     SOKOL_ASSERT(ctx);
@@ -3816,7 +3802,6 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     hooks.err_shader_pool_exhausted = _sg_imgui_err_shader_pool_exhausted;
     hooks.err_pipeline_pool_exhausted = _sg_imgui_err_pipeline_pool_exhausted;
     hooks.err_pass_pool_exhausted = _sg_imgui_err_pass_pool_exhausted;
-    hooks.err_context_mismatch = _sg_imgui_err_context_mismatch;
     hooks.err_pass_invalid = _sg_imgui_err_pass_invalid;
     hooks.err_draw_invalid = _sg_imgui_err_draw_invalid;
     hooks.err_bindings_invalid = _sg_imgui_err_bindings_invalid;
