@@ -183,8 +183,16 @@ for color in colors:
     init_color = "SG_" + color[0].upper().replace(" ", "_") + "_INIT"
     init_color_definition = "#define {name} {{ {r}f, {g}f, {b}f, {a}f }}\n"
     rgba = unpack_rgba(color[1])
+    r = rgba[0] / 255
+    g = rgba[1] / 255
+    b = rgba[2] / 255
+    a = rgba[3] / 255
+    r_text = "{:.1f}".format(r) if r.is_integer() else "{:.9g}".format(r)
+    g_text = "{:.1f}".format(g) if g.is_integer() else "{:.9g}".format(g)
+    b_text = "{:.1f}".format(b) if b.is_integer() else "{:.9g}".format(b)
+    a_text = "{:.1f}".format(a) if a.is_integer() else "{:.9g}".format(a)
     header.write(init_color_definition.format(
-        name = init_color, r = rgba[0] / 255, g = rgba[1] / 255, b = rgba[2] / 255, a = rgba[3] / 255))
+        name = init_color, r = r_text, g = g_text, b = b_text, a = a_text))
 
 header.write("\n")
 
