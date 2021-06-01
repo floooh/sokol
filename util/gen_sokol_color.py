@@ -195,13 +195,13 @@ for color in colors:
     init_color_name = "SG_" + color[0].upper().replace(" ", "_") + "_INIT"
     header.write(init_color_definition.format(name = init_color, init = init_color_name))
 
-header.write("\nenum {\n")
+header.write("\n")
+
 for color in colors:
     add_documentation(color)
     hex_color = "0x{0:08X}".format(color[1])
     packed_color = "SG_" + color[0].upper().replace(" ", "_") + "_RGBA32"
-    packed_color_definition = "{name} = {rgba},\n"
+    packed_color_definition = "#define {name} {rgba}\n"
     header.write(packed_color_definition.format(name = packed_color, rgba = hex_color))
-header.write("};\n")
 
 header.write("\n#endif\n")
