@@ -9,6 +9,12 @@
 #error "Please include sokol_gfx.h before sokol_color.h"
 #endif
 
+#ifdef __cplusplus
+#define SOKOL_COLOR_CONSTEXPR constexpr
+#else
+#define SOKOL_COLOR_CONSTEXPR const
+#endif
+
 /* Alice Blue { R:240, G:248, B:255, A:255 } */
 #define SG_ALICE_BLUE_INIT { 0.941176471f, 0.97254902f, 1.0f, 1.0f }
 /* Antique White { R:250, G:235, B:215, A:255 } */
@@ -307,301 +313,301 @@
 #define SG_YELLOW_GREEN_INIT { 0.603921569f, 0.803921569f, 0.196078431f, 1.0f }
 
 /* Alice Blue { R:240, G:248, B:255, A:255 } */
-static const sg_color sg_alice_blue = SG_ALICE_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_alice_blue = SG_ALICE_BLUE_INIT;
 /* Antique White { R:250, G:235, B:215, A:255 } */
-static const sg_color sg_antique_white = SG_ANTIQUE_WHITE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_antique_white = SG_ANTIQUE_WHITE_INIT;
 /* Aqua { R:0, G:255, B:255, A:255 } */
-static const sg_color sg_aqua = SG_AQUA_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_aqua = SG_AQUA_INIT;
 /* Aquamarine { R:127, G:255, B:212, A:255 } */
-static const sg_color sg_aquamarine = SG_AQUAMARINE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_aquamarine = SG_AQUAMARINE_INIT;
 /* Azure { R:240, G:255, B:255, A:255 } */
-static const sg_color sg_azure = SG_AZURE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_azure = SG_AZURE_INIT;
 /* Beige { R:245, G:245, B:220, A:255 } */
-static const sg_color sg_beige = SG_BEIGE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_beige = SG_BEIGE_INIT;
 /* Bisque { R:255, G:228, B:196, A:255 } */
-static const sg_color sg_bisque = SG_BISQUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_bisque = SG_BISQUE_INIT;
 /* Black { R:0, G:0, B:0, A:255 } */
-static const sg_color sg_black = SG_BLACK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_black = SG_BLACK_INIT;
 /* Blanched Almond { R:255, G:235, B:205, A:255 } */
-static const sg_color sg_blanched_almond = SG_BLANCHED_ALMOND_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_blanched_almond = SG_BLANCHED_ALMOND_INIT;
 /* Blue { R:0, G:0, B:255, A:255 } */
-static const sg_color sg_blue = SG_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_blue = SG_BLUE_INIT;
 /* Blue Violet { R:138, G:43, B:226, A:255 } */
-static const sg_color sg_blue_violet = SG_BLUE_VIOLET_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_blue_violet = SG_BLUE_VIOLET_INIT;
 /* Brown { R:165, G:42, B:42, A:255 } */
-static const sg_color sg_brown = SG_BROWN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_brown = SG_BROWN_INIT;
 /* Burly Wood { R:222, G:184, B:135, A:255 } */
-static const sg_color sg_burly_wood = SG_BURLY_WOOD_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_burly_wood = SG_BURLY_WOOD_INIT;
 /* Cadet Blue { R:95, G:158, B:160, A:255 } */
-static const sg_color sg_cadet_blue = SG_CADET_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_cadet_blue = SG_CADET_BLUE_INIT;
 /* Chartreuse { R:127, G:255, B:0, A:255 } */
-static const sg_color sg_chartreuse = SG_CHARTREUSE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_chartreuse = SG_CHARTREUSE_INIT;
 /* Chocolate { R:210, G:105, B:30, A:255 } */
-static const sg_color sg_chocolate = SG_CHOCOLATE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_chocolate = SG_CHOCOLATE_INIT;
 /* Coral { R:255, G:127, B:80, A:255 } */
-static const sg_color sg_coral = SG_CORAL_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_coral = SG_CORAL_INIT;
 /* Cornflower Blue { R:100, G:149, B:237, A:255 } */
-static const sg_color sg_cornflower_blue = SG_CORNFLOWER_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_cornflower_blue = SG_CORNFLOWER_BLUE_INIT;
 /* Cornsilk { R:255, G:248, B:220, A:255 } */
-static const sg_color sg_cornsilk = SG_CORNSILK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_cornsilk = SG_CORNSILK_INIT;
 /* Crimson { R:220, G:20, B:60, A:255 } */
-static const sg_color sg_crimson = SG_CRIMSON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_crimson = SG_CRIMSON_INIT;
 /* Cyan { R:0, G:255, B:255, A:255 } */
-static const sg_color sg_cyan = SG_CYAN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_cyan = SG_CYAN_INIT;
 /* Dark Blue { R:0, G:0, B:139, A:255 } */
-static const sg_color sg_dark_blue = SG_DARK_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_blue = SG_DARK_BLUE_INIT;
 /* Dark Cyan { R:0, G:139, B:139, A:255 } */
-static const sg_color sg_dark_cyan = SG_DARK_CYAN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_cyan = SG_DARK_CYAN_INIT;
 /* Dark Goldenrod { R:184, G:134, B:11, A:255 } */
-static const sg_color sg_dark_goldenrod = SG_DARK_GOLDENROD_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_goldenrod = SG_DARK_GOLDENROD_INIT;
 /* Dark Gray { R:169, G:169, B:169, A:255 } */
-static const sg_color sg_dark_gray = SG_DARK_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_gray = SG_DARK_GRAY_INIT;
 /* Dark Grey { R:169, G:169, B:169, A:255 } */
-static const sg_color sg_dark_grey = SG_DARK_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_grey = SG_DARK_GREY_INIT;
 /* Dark Green { R:0, G:100, B:0, A:255 } */
-static const sg_color sg_dark_green = SG_DARK_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_green = SG_DARK_GREEN_INIT;
 /* Dark Khaki { R:189, G:183, B:107, A:255 } */
-static const sg_color sg_dark_khaki = SG_DARK_KHAKI_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_khaki = SG_DARK_KHAKI_INIT;
 /* Dark Magenta { R:139, G:0, B:139, A:255 } */
-static const sg_color sg_dark_magenta = SG_DARK_MAGENTA_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_magenta = SG_DARK_MAGENTA_INIT;
 /* Dark Olive Green { R:85, G:107, B:47, A:255 } */
-static const sg_color sg_dark_olive_green = SG_DARK_OLIVE_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_olive_green = SG_DARK_OLIVE_GREEN_INIT;
 /* Dark Orange { R:255, G:140, B:0, A:255 } */
-static const sg_color sg_dark_orange = SG_DARK_ORANGE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_orange = SG_DARK_ORANGE_INIT;
 /* Dark Orchid { R:153, G:50, B:204, A:255 } */
-static const sg_color sg_dark_orchid = SG_DARK_ORCHID_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_orchid = SG_DARK_ORCHID_INIT;
 /* Dark Red { R:139, G:0, B:0, A:255 } */
-static const sg_color sg_dark_red = SG_DARK_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_red = SG_DARK_RED_INIT;
 /* Dark Salmon { R:233, G:150, B:122, A:255 } */
-static const sg_color sg_dark_salmon = SG_DARK_SALMON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_salmon = SG_DARK_SALMON_INIT;
 /* Dark Sea Green { R:143, G:188, B:143, A:255 } */
-static const sg_color sg_dark_sea_green = SG_DARK_SEA_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_sea_green = SG_DARK_SEA_GREEN_INIT;
 /* Dark Slate Blue { R:72, G:61, B:139, A:255 } */
-static const sg_color sg_dark_slate_blue = SG_DARK_SLATE_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_blue = SG_DARK_SLATE_BLUE_INIT;
 /* Dark Slate Gray { R:47, G:79, B:79, A:255 } */
-static const sg_color sg_dark_slate_gray = SG_DARK_SLATE_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_gray = SG_DARK_SLATE_GRAY_INIT;
 /* Dark Slate Grey { R:47, G:79, B:79, A:255 } */
-static const sg_color sg_dark_slate_grey = SG_DARK_SLATE_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_grey = SG_DARK_SLATE_GREY_INIT;
 /* Dark Turquoise { R:0, G:206, B:209, A:255 } */
-static const sg_color sg_dark_turquoise = SG_DARK_TURQUOISE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_turquoise = SG_DARK_TURQUOISE_INIT;
 /* Dark Violet { R:148, G:0, B:211, A:255 } */
-static const sg_color sg_dark_violet = SG_DARK_VIOLET_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_violet = SG_DARK_VIOLET_INIT;
 /* Deep Pink { R:255, G:20, B:147, A:255 } */
-static const sg_color sg_deep_pink = SG_DEEP_PINK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_deep_pink = SG_DEEP_PINK_INIT;
 /* Deep Sky Blue { R:0, G:191, B:255, A:255 } */
-static const sg_color sg_deep_sky_blue = SG_DEEP_SKY_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_deep_sky_blue = SG_DEEP_SKY_BLUE_INIT;
 /* Dim Gray { R:105, G:105, B:105, A:255 } */
-static const sg_color sg_dim_gray = SG_DIM_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dim_gray = SG_DIM_GRAY_INIT;
 /* Dim Grey { R:105, G:105, B:105, A:255 } */
-static const sg_color sg_dim_grey = SG_DIM_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dim_grey = SG_DIM_GREY_INIT;
 /* Dodger Blue { R:30, G:144, B:255, A:255 } */
-static const sg_color sg_dodger_blue = SG_DODGER_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_dodger_blue = SG_DODGER_BLUE_INIT;
 /* Fire Brick { R:178, G:34, B:34, A:255 } */
-static const sg_color sg_fire_brick = SG_FIRE_BRICK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_fire_brick = SG_FIRE_BRICK_INIT;
 /* Floral White { R:255, G:250, B:240, A:255 } */
-static const sg_color sg_floral_white = SG_FLORAL_WHITE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_floral_white = SG_FLORAL_WHITE_INIT;
 /* Forest Green { R:34, G:139, B:34, A:255 } */
-static const sg_color sg_forest_green = SG_FOREST_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_forest_green = SG_FOREST_GREEN_INIT;
 /* Fuchsia { R:255, G:0, B:255, A:255 } */
-static const sg_color sg_fuchsia = SG_FUCHSIA_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_fuchsia = SG_FUCHSIA_INIT;
 /* Gainsboro { R:220, G:220, B:220, A:255 } */
-static const sg_color sg_gainsboro = SG_GAINSBORO_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_gainsboro = SG_GAINSBORO_INIT;
 /* Ghost White { R:248, G:248, B:255, A:255 } */
-static const sg_color sg_ghost_white = SG_GHOST_WHITE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_ghost_white = SG_GHOST_WHITE_INIT;
 /* Gold { R:255, G:215, B:0, A:255 } */
-static const sg_color sg_gold = SG_GOLD_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_gold = SG_GOLD_INIT;
 /* Goldenrod { R:218, G:165, B:32, A:255 } */
-static const sg_color sg_goldenrod = SG_GOLDENROD_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_goldenrod = SG_GOLDENROD_INIT;
 /* Gray { R:128, G:128, B:128, A:255 } */
-static const sg_color sg_gray = SG_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_gray = SG_GRAY_INIT;
 /* Grey { R:128, G:128, B:128, A:255 } */
-static const sg_color sg_grey = SG_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_grey = SG_GREY_INIT;
 /* Green { R:0, G:128, B:0, A:255 } */
-static const sg_color sg_green = SG_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_green = SG_GREEN_INIT;
 /* Green Yellow { R:173, G:255, B:47, A:255 } */
-static const sg_color sg_green_yellow = SG_GREEN_YELLOW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_green_yellow = SG_GREEN_YELLOW_INIT;
 /* Honeydew { R:240, G:255, B:240, A:255 } */
-static const sg_color sg_honeydew = SG_HONEYDEW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_honeydew = SG_HONEYDEW_INIT;
 /* Hot Pink { R:255, G:105, B:180, A:255 } */
-static const sg_color sg_hot_pink = SG_HOT_PINK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_hot_pink = SG_HOT_PINK_INIT;
 /* Indian Red { R:205, G:92, B:92, A:255 } */
-static const sg_color sg_indian_red = SG_INDIAN_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_indian_red = SG_INDIAN_RED_INIT;
 /* Indigo { R:75, G:0, B:130, A:255 } */
-static const sg_color sg_indigo = SG_INDIGO_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_indigo = SG_INDIGO_INIT;
 /* Ivory { R:255, G:255, B:240, A:255 } */
-static const sg_color sg_ivory = SG_IVORY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_ivory = SG_IVORY_INIT;
 /* Khaki { R:240, G:230, B:140, A:255 } */
-static const sg_color sg_khaki = SG_KHAKI_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_khaki = SG_KHAKI_INIT;
 /* Lavender { R:230, G:230, B:250, A:255 } */
-static const sg_color sg_lavender = SG_LAVENDER_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lavender = SG_LAVENDER_INIT;
 /* Lavender Blush { R:255, G:240, B:245, A:255 } */
-static const sg_color sg_lavender_blush = SG_LAVENDER_BLUSH_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lavender_blush = SG_LAVENDER_BLUSH_INIT;
 /* Lawn Green { R:124, G:252, B:0, A:255 } */
-static const sg_color sg_lawn_green = SG_LAWN_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lawn_green = SG_LAWN_GREEN_INIT;
 /* Lemon Chiffon { R:255, G:250, B:205, A:255 } */
-static const sg_color sg_lemon_chiffon = SG_LEMON_CHIFFON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lemon_chiffon = SG_LEMON_CHIFFON_INIT;
 /* Light Blue { R:173, G:216, B:230, A:255 } */
-static const sg_color sg_light_blue = SG_LIGHT_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_blue = SG_LIGHT_BLUE_INIT;
 /* Light Coral { R:240, G:128, B:128, A:255 } */
-static const sg_color sg_light_coral = SG_LIGHT_CORAL_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_coral = SG_LIGHT_CORAL_INIT;
 /* Light Cyan { R:224, G:255, B:255, A:255 } */
-static const sg_color sg_light_cyan = SG_LIGHT_CYAN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_cyan = SG_LIGHT_CYAN_INIT;
 /* Light Goldenrod Yellow { R:250, G:250, B:210, A:255 } */
-static const sg_color sg_light_goldenrod_yellow = SG_LIGHT_GOLDENROD_YELLOW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_goldenrod_yellow = SG_LIGHT_GOLDENROD_YELLOW_INIT;
 /* Light Green { R:211, G:211, B:211, A:255 } */
-static const sg_color sg_light_green = SG_LIGHT_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_green = SG_LIGHT_GREEN_INIT;
 /* Light Gray { R:211, G:211, B:211, A:255 } */
-static const sg_color sg_light_gray = SG_LIGHT_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_gray = SG_LIGHT_GRAY_INIT;
 /* Light Grey { R:211, G:211, B:211, A:255 } */
-static const sg_color sg_light_grey = SG_LIGHT_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_grey = SG_LIGHT_GREY_INIT;
 /* Light Pink { R:255, G:182, B:193, A:255 } */
-static const sg_color sg_light_pink = SG_LIGHT_PINK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_pink = SG_LIGHT_PINK_INIT;
 /* Light Salmon { R:255, G:160, B:122, A:255 } */
-static const sg_color sg_light_salmon = SG_LIGHT_SALMON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_salmon = SG_LIGHT_SALMON_INIT;
 /* Light Sea Green { R:32, G:178, B:170, A:255 } */
-static const sg_color sg_light_sea_green = SG_LIGHT_SEA_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_sea_green = SG_LIGHT_SEA_GREEN_INIT;
 /* Light Sky Blue { R:135, G:206, B:250, A:255 } */
-static const sg_color sg_light_sky_blue = SG_LIGHT_SKY_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_sky_blue = SG_LIGHT_SKY_BLUE_INIT;
 /* Light Slate Gray { R:119, G:136, B:153, A:255 } */
-static const sg_color sg_light_slate_gray = SG_LIGHT_SLATE_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_slate_gray = SG_LIGHT_SLATE_GRAY_INIT;
 /* Light Slate Grey { R:119, G:136, B:153, A:255 } */
-static const sg_color sg_light_slate_grey = SG_LIGHT_SLATE_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_slate_grey = SG_LIGHT_SLATE_GREY_INIT;
 /* Light Steel Blue { R:176, G:196, B:222, A:255 } */
-static const sg_color sg_light_steel_blue = SG_LIGHT_STEEL_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_steel_blue = SG_LIGHT_STEEL_BLUE_INIT;
 /* Light Yellow { R:255, G:255, B:224, A:255 } */
-static const sg_color sg_light_yellow = SG_LIGHT_YELLOW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_yellow = SG_LIGHT_YELLOW_INIT;
 /* Lime { R:0, G:255, B:0, A:255 } */
-static const sg_color sg_lime = SG_LIME_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lime = SG_LIME_INIT;
 /* Lime Green { R:50, G:205, B:50, A:255 } */
-static const sg_color sg_lime_green = SG_LIME_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_lime_green = SG_LIME_GREEN_INIT;
 /* Linen { R:250, G:240, B:230, A:255 } */
-static const sg_color sg_linen = SG_LINEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_linen = SG_LINEN_INIT;
 /* Magenta { R:255, G:0, B:255, A:255 } */
-static const sg_color sg_magenta = SG_MAGENTA_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_magenta = SG_MAGENTA_INIT;
 /* Maroon { R:128, G:0, B:0, A:255 } */
-static const sg_color sg_maroon = SG_MAROON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_maroon = SG_MAROON_INIT;
 /* Medium Aquamarine { R:102, G:205, B:170, A:255 } */
-static const sg_color sg_medium_aquamarine = SG_MEDIUM_AQUAMARINE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_aquamarine = SG_MEDIUM_AQUAMARINE_INIT;
 /* Medium Blue { R:0, G:0, B:205, A:255 } */
-static const sg_color sg_medium_blue = SG_MEDIUM_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_blue = SG_MEDIUM_BLUE_INIT;
 /* Medium Orchid { R:186, G:85, B:211, A:255 } */
-static const sg_color sg_medium_orchid = SG_MEDIUM_ORCHID_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_orchid = SG_MEDIUM_ORCHID_INIT;
 /* Medium Purple { R:147, G:112, B:216, A:255 } */
-static const sg_color sg_medium_purple = SG_MEDIUM_PURPLE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_purple = SG_MEDIUM_PURPLE_INIT;
 /* Medium Sea Green { R:60, G:179, B:113, A:255 } */
-static const sg_color sg_medium_sea_green = SG_MEDIUM_SEA_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_sea_green = SG_MEDIUM_SEA_GREEN_INIT;
 /* Medium Slate Blue { R:123, G:104, B:238, A:255 } */
-static const sg_color sg_medium_slate_blue = SG_MEDIUM_SLATE_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_slate_blue = SG_MEDIUM_SLATE_BLUE_INIT;
 /* Medium Spring Green { R:0, G:250, B:154, A:255 } */
-static const sg_color sg_medium_spring_green = SG_MEDIUM_SPRING_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_spring_green = SG_MEDIUM_SPRING_GREEN_INIT;
 /* Medium Turquoise { R:72, G:209, B:204, A:255 } */
-static const sg_color sg_medium_turquoise = SG_MEDIUM_TURQUOISE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_turquoise = SG_MEDIUM_TURQUOISE_INIT;
 /* Medium Violet Red { R:199, G:21, B:133, A:255 } */
-static const sg_color sg_medium_violet_red = SG_MEDIUM_VIOLET_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_violet_red = SG_MEDIUM_VIOLET_RED_INIT;
 /* Midnight Blue { R:25, G:25, B:112, A:255 } */
-static const sg_color sg_midnight_blue = SG_MIDNIGHT_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_midnight_blue = SG_MIDNIGHT_BLUE_INIT;
 /* Mint Cream { R:245, G:255, B:250, A:255 } */
-static const sg_color sg_mint_cream = SG_MINT_CREAM_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_mint_cream = SG_MINT_CREAM_INIT;
 /* Misty Rose { R:255, G:228, B:225, A:255 } */
-static const sg_color sg_misty_rose = SG_MISTY_ROSE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_misty_rose = SG_MISTY_ROSE_INIT;
 /* Moccasin { R:255, G:228, B:181, A:255 } */
-static const sg_color sg_moccasin = SG_MOCCASIN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_moccasin = SG_MOCCASIN_INIT;
 /* Navajo White { R:255, G:222, B:173, A:255 } */
-static const sg_color sg_navajo_white = SG_NAVAJO_WHITE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_navajo_white = SG_NAVAJO_WHITE_INIT;
 /* Navy { R:0, G:0, B:128, A:255 } */
-static const sg_color sg_navy = SG_NAVY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_navy = SG_NAVY_INIT;
 /* Old Lace { R:253, G:245, B:230, A:255 } */
-static const sg_color sg_old_lace = SG_OLD_LACE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_old_lace = SG_OLD_LACE_INIT;
 /* Olive { R:128, G:128, B:0, A:255 } */
-static const sg_color sg_olive = SG_OLIVE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_olive = SG_OLIVE_INIT;
 /* Olive Drab { R:107, G:142, B:35, A:255 } */
-static const sg_color sg_olive_drab = SG_OLIVE_DRAB_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_olive_drab = SG_OLIVE_DRAB_INIT;
 /* Orange { R:255, G:165, B:0, A:255 } */
-static const sg_color sg_orange = SG_ORANGE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_orange = SG_ORANGE_INIT;
 /* Orange Red { R:255, G:69, B:0, A:255 } */
-static const sg_color sg_orange_red = SG_ORANGE_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_orange_red = SG_ORANGE_RED_INIT;
 /* Orchid { R:218, G:112, B:214, A:255 } */
-static const sg_color sg_orchid = SG_ORCHID_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_orchid = SG_ORCHID_INIT;
 /* Pale Goldenrod { R:238, G:232, B:170, A:255 } */
-static const sg_color sg_pale_goldenrod = SG_PALE_GOLDENROD_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_goldenrod = SG_PALE_GOLDENROD_INIT;
 /* Pale Green { R:152, G:251, B:152, A:255 } */
-static const sg_color sg_pale_green = SG_PALE_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_green = SG_PALE_GREEN_INIT;
 /* Pale Turquoise { R:175, G:238, B:238, A:255 } */
-static const sg_color sg_pale_turquoise = SG_PALE_TURQUOISE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_turquoise = SG_PALE_TURQUOISE_INIT;
 /* Pale Violet Red { R:216, G:112, B:147, A:255 } */
-static const sg_color sg_pale_violet_red = SG_PALE_VIOLET_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_violet_red = SG_PALE_VIOLET_RED_INIT;
 /* Papaya Whip { R:255, G:239, B:213, A:255 } */
-static const sg_color sg_papaya_whip = SG_PAPAYA_WHIP_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_papaya_whip = SG_PAPAYA_WHIP_INIT;
 /* Peach Puff { R:255, G:218, B:185, A:255 } */
-static const sg_color sg_peach_puff = SG_PEACH_PUFF_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_peach_puff = SG_PEACH_PUFF_INIT;
 /* Peru { R:205, G:133, B:63, A:255 } */
-static const sg_color sg_peru = SG_PERU_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_peru = SG_PERU_INIT;
 /* Pink { R:255, G:192, B:203, A:255 } */
-static const sg_color sg_pink = SG_PINK_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_pink = SG_PINK_INIT;
 /* Plum { R:221, G:160, B:221, A:255 } */
-static const sg_color sg_plum = SG_PLUM_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_plum = SG_PLUM_INIT;
 /* Powder Blue { R:176, G:224, B:230, A:255 } */
-static const sg_color sg_powder_blue = SG_POWDER_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_powder_blue = SG_POWDER_BLUE_INIT;
 /* Purple { R:128, G:0, B:128, A:255 } */
-static const sg_color sg_purple = SG_PURPLE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_purple = SG_PURPLE_INIT;
 /* Red { R:255, G:0, B:0, A:255 } */
-static const sg_color sg_red = SG_RED_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_red = SG_RED_INIT;
 /* Rosy Brown { R:188, G:143, B:143, A:255 } */
-static const sg_color sg_rosy_brown = SG_ROSY_BROWN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_rosy_brown = SG_ROSY_BROWN_INIT;
 /* Royal Blue { R:65, G:105, B:225, A:255 } */
-static const sg_color sg_royal_blue = SG_ROYAL_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_royal_blue = SG_ROYAL_BLUE_INIT;
 /* Saddle Brown { R:139, G:69, B:19, A:255 } */
-static const sg_color sg_saddle_brown = SG_SADDLE_BROWN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_saddle_brown = SG_SADDLE_BROWN_INIT;
 /* Salmon { R:250, G:128, B:114, A:255 } */
-static const sg_color sg_salmon = SG_SALMON_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_salmon = SG_SALMON_INIT;
 /* Sandy Brown { R:244, G:164, B:96, A:255 } */
-static const sg_color sg_sandy_brown = SG_SANDY_BROWN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_sandy_brown = SG_SANDY_BROWN_INIT;
 /* Sea Green { R:46, G:139, B:87, A:255 } */
-static const sg_color sg_sea_green = SG_SEA_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_sea_green = SG_SEA_GREEN_INIT;
 /* Seashell { R:255, G:245, B:238, A:255 } */
-static const sg_color sg_seashell = SG_SEASHELL_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_seashell = SG_SEASHELL_INIT;
 /* Sienna { R:160, G:82, B:45, A:255 } */
-static const sg_color sg_sienna = SG_SIENNA_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_sienna = SG_SIENNA_INIT;
 /* Silver { R:192, G:192, B:192, A:255 } */
-static const sg_color sg_silver = SG_SILVER_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_silver = SG_SILVER_INIT;
 /* Sky Blue { R:135, G:206, B:235, A:255 } */
-static const sg_color sg_sky_blue = SG_SKY_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_sky_blue = SG_SKY_BLUE_INIT;
 /* Slate Blue { R:106, G:90, B:205, A:255 } */
-static const sg_color sg_slate_blue = SG_SLATE_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_blue = SG_SLATE_BLUE_INIT;
 /* Slate Gray { R:112, G:128, B:144, A:255 } */
-static const sg_color sg_slate_gray = SG_SLATE_GRAY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_gray = SG_SLATE_GRAY_INIT;
 /* Slate Grey { R:112, G:128, B:144, A:255 } */
-static const sg_color sg_slate_grey = SG_SLATE_GREY_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_grey = SG_SLATE_GREY_INIT;
 /* Snow { R:255, G:250, B:250, A:255 } */
-static const sg_color sg_snow = SG_SNOW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_snow = SG_SNOW_INIT;
 /* Spring Green { R:0, G:255, B:127, A:255 } */
-static const sg_color sg_spring_green = SG_SPRING_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_spring_green = SG_SPRING_GREEN_INIT;
 /* Steel Blue { R:70, G:130, B:180, A:255 } */
-static const sg_color sg_steel_blue = SG_STEEL_BLUE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_steel_blue = SG_STEEL_BLUE_INIT;
 /* Tan { R:210, G:180, B:140, A:255 } */
-static const sg_color sg_tan = SG_TAN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_tan = SG_TAN_INIT;
 /* Teal { R:0, G:128, B:128, A:255 } */
-static const sg_color sg_teal = SG_TEAL_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_teal = SG_TEAL_INIT;
 /* Thistle { R:216, G:191, B:216, A:255 } */
-static const sg_color sg_thistle = SG_THISTLE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_thistle = SG_THISTLE_INIT;
 /* Tomato { R:255, G:99, B:71, A:255 } */
-static const sg_color sg_tomato = SG_TOMATO_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_tomato = SG_TOMATO_INIT;
 /* Transparent { R:0, G:0, B:0, A:0 } */
-static const sg_color sg_transparent = SG_TRANSPARENT_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_transparent = SG_TRANSPARENT_INIT;
 /* Turquoise { R:64, G:224, B:208, A:255 } */
-static const sg_color sg_turquoise = SG_TURQUOISE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_turquoise = SG_TURQUOISE_INIT;
 /* Violet { R:238, G:130, B:238, A:255 } */
-static const sg_color sg_violet = SG_VIOLET_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_violet = SG_VIOLET_INIT;
 /* Wheat { R:245, G:222, B:179, A:255 } */
-static const sg_color sg_wheat = SG_WHEAT_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_wheat = SG_WHEAT_INIT;
 /* White { R:255, G:255, B:255, A:255 } */
-static const sg_color sg_white = SG_WHITE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_white = SG_WHITE_INIT;
 /* White Smoke { R:245, G:245, B:245, A:255 } */
-static const sg_color sg_white_smoke = SG_WHITE_SMOKE_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_white_smoke = SG_WHITE_SMOKE_INIT;
 /* Yellow { R:255, G:255, B:0, A:255 } */
-static const sg_color sg_yellow = SG_YELLOW_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow = SG_YELLOW_INIT;
 /* Yellow Green { R:154, G:205, B:50, A:255 } */
-static const sg_color sg_yellow_green = SG_YELLOW_GREEN_INIT;
+static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN_INIT;
 
 /* Alice Blue { R:240, G:248, B:255, A:255 } */
 #define SG_ALICE_BLUE_RGBA32 0xF0F8FFFF

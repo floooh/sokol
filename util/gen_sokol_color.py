@@ -163,6 +163,12 @@ header.write("""
 #error "Please include sokol_gfx.h before sokol_color.h"
 #endif
 
+#ifdef __cplusplus
+#define SOKOL_COLOR_CONSTEXPR constexpr
+#else
+#define SOKOL_COLOR_CONSTEXPR const
+#endif
+
 """)
 
 def unpack_rgba(color):
@@ -199,7 +205,7 @@ header.write("\n")
 for color in colors:
     add_documentation(color)
     init_color = "sg_" + color[0].lower().replace(" ", "_")
-    init_color_definition = "static const sg_color {name} = {init};\n"
+    init_color_definition = "static SOKOL_COLOR_CONSTEXPR sg_color {name} = {init};\n"
     init_color_name = "SG_" + color[0].upper().replace(" ", "_") + "_INIT"
     header.write(init_color_definition.format(name = init_color, init = init_color_name))
 
