@@ -1541,8 +1541,6 @@ SOKOL_APP_API_DECL void* sapp_userdata(void);
 SOKOL_APP_API_DECL sapp_window sapp_open_window(const sapp_window_desc* desc);
 /* close a window */
 SOKOL_APP_API_DECL void sapp_close_window(sapp_window window);
-/* test if a window handle is valid */
-SOKOL_APP_API_DECL bool sapp_window_valid(sapp_window window);
 /* start rendering into a window */
 SOKOL_APP_API_DECL void sapp_activate_window_context(sapp_window window);
 /* return an array index for a window handle (to associate your own data with window handle) */
@@ -1553,6 +1551,8 @@ SOKOL_APP_API_DECL sapp_window sapp_main_window(void);
 SOKOL_APP_API_DECL sapp_window sapp_first_window(void);
 /* continue iterating over windows, returns invalid handle when finished */
 SOKOL_APP_API_DECL sapp_window sapp_next_window(sapp_window window);
+/* test if a window handle is valid */
+SOKOL_APP_API_DECL bool sapp_window_valid(sapp_window window);
 /* show a hidden window */
 SOKOL_APP_API_DECL void sapp_show_window(sapp_window window);
 /* hide a visible window */
@@ -2835,7 +2835,7 @@ _SOKOL_PRIVATE void _sapp_platform_show_window(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         _sapp_x11_close_window(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
     #endif
 }
 
@@ -2847,7 +2847,7 @@ _SOKOL_PRIVATE void _sapp_platform_hide_window(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         _sapp_x11_hide_window(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
     #endif
 }
 
@@ -2859,7 +2859,7 @@ _SOKOL_PRIVATE bool _sapp_platform_window_visible(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         return _sapp_x11_window_visible(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
         return true;
     #endif
 }
@@ -2872,7 +2872,7 @@ _SOKOL_PRIVATE void _sapp_platform_focus_window(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         _sapp_x11_focus_window(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
     #endif
 }
 
@@ -2884,7 +2884,7 @@ _SOKOL_PRIVATE bool _sapp_platform_window_focused(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         return _sapp_x11_window_focused(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
         return true;
     #endif
 }
@@ -2897,7 +2897,7 @@ _SOKOL_PRIVATE bool _sapp_platform_window_minimized(_sapp_window_t* win) {
     #elif defined(_SAPP_LINUX)
         return _sapp_x11_window_minimized(win);
     #else
-        (void)win;
+        _SOKOL_UNUSED(win);
         return false;
     #endif
 }
@@ -3424,7 +3424,7 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     // initialize default_icon_desc struct
     uint32_t* dst = _sapp.default_icon_pixels;
     const uint32_t* dst_end = dst + all_num_pixels;
-    (void)dst_end; // silence unused warning in release mode
+    _SOKOL_UNUSED(dst_end); // silence unused warning in release mode
     for (int i = 0; i < num_icons; i++) {
         const int dim = (int) icon_sizes[i];
         const int num_pixels = dim * dim;
@@ -7438,7 +7438,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             errno_t err;
             err = freopen_s(&res_fp, "CON", "w", stdout);
             err = freopen_s(&res_fp, "CON", "w", stderr);
-            (void)err;
+            _SOKOL_UNUSED(err);
         }
     }
     if (_sapp.desc.win32_console_utf8) {
@@ -12213,7 +12213,7 @@ SOKOL_API_IMPL sapp_window sapp_next_window(sapp_window window) {
     return _sapp_make_window_id(SAPP_INVALID_ID);
 }
 
-SOKOL_API_IMPL bool sapp_valid_window(sapp_window window) {
+SOKOL_API_IMPL bool sapp_window_valid(sapp_window window) {
     SOKOL_ASSERT(_sapp.valid);
     return 0 != _sapp_lookup_window(window.id);
 }
@@ -12400,7 +12400,7 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
         }
         return sapp_js_dropped_file_size(index);
     #else
-        (void)index;
+        _SOKOL_UNUSED(index);
         return 0;
     #endif
 }
@@ -12441,7 +12441,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
                 request->user_data);
         }
     #else
-        (void)request;
+        _SOKOL_UNUSED(request);
     #endif
 }
 
@@ -12477,6 +12477,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_window_renderpass_descriptor(sapp_wind
             return 0;
         }
     #else
+        _SOKOL_UNUSED(window);
         return 0;
     #endif
 }
@@ -12502,6 +12503,7 @@ SOKOL_API_IMPL const void* sapp_metal_get_window_drawable(sapp_window window) {
             return 0;
         }
     #else
+        _SOKOL_UNUSED(window);
         return 0;
     #endif
 }
@@ -12523,6 +12525,7 @@ SOKOL_API_IMPL const void* sapp_macos_get_nswindow(sapp_window window) {
             return 0;
         }
     #else
+        _SOKOL_UNUSED(win);
         return 0;
     #endif
 }
@@ -12657,7 +12660,7 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     #if defined(_SAPP_EMSCRIPTEN)
     _sapp.emsc.ask_leave_site = ask;
     #else
-    (void)ask;
+    _SOKOL_UNUSED(ask);
     #endif
 }
 
