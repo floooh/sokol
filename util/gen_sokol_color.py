@@ -186,7 +186,7 @@ def add_documentation(color):
 
 for color in colors:
     add_documentation(color)
-    init_color = "SG_" + color[0].upper().replace(" ", "_") + "_INIT"
+    init_color = "SG_" + color[0].upper().replace(" ", "_")
     init_color_definition = "#define {name} {{ {r}f, {g}f, {b}f, {a}f }}\n"
     rgba = unpack_rgba(color[1])
     r = rgba[0] / 255
@@ -206,7 +206,7 @@ for color in colors:
     add_documentation(color)
     init_color = "sg_" + color[0].lower().replace(" ", "_")
     init_color_definition = "static SOKOL_COLOR_CONSTEXPR sg_color {name} = {init};\n"
-    init_color_name = "SG_" + color[0].upper().replace(" ", "_") + "_INIT"
+    init_color_name = "SG_" + color[0].upper().replace(" ", "_")
     header.write(init_color_definition.format(name = init_color, init = init_color_name))
 
 header.write("\n")
