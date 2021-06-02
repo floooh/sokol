@@ -2,6 +2,101 @@
 #ifndef SOKOL_COLOR_INCLUDED
 /*
     sokol_color.h -- sg_color utilities
+
+    Project URL: https://github.com/floooh/sokol
+
+    Include the following headers before including sokol_color.h:
+
+        sokol_gfx.h
+
+    FEATURE OVERVIEW
+    ================
+    sokol_color.h defines preset colors based on the X11 color names.
+
+    https://en.wikipedia.org/wiki/X11_color_names
+
+    This is useful when you want to reference a familiar color, but
+    don't want to write it out by hand. The palette should be familiar to
+    web developers and those familiar with XNA / MonoGame.
+
+    BASIC USAGE
+    =============
+    The palette is defined using static const (or constexpr if you are using a
+    C++ compiler) objects. These objects use lowercase names:
+
+        static SOKOL_COLOR_CONSTEXPR sg_color sg_red = SG_RED;
+        static SOKOL_COLOR_CONSTEXPR sg_color sg_green = SG_GREEN;
+        static SOKOL_COLOR_CONSTEXPR sg_color sg_blue = SG_BLUE;
+
+    An sg_color preset object like sg_red can be used to initialize
+    an sg_pass_action:
+
+        sg_pass_action pass_action = {
+            .colors[0] = { .action=SG_ACTION_CLEAR, .value = sg_red }
+        };
+
+    Initializing an object with static storage duration is more complicated
+    because of C language rules. Technically, a static const is not a
+    compile-time constant in C. To work around this, the palette is also
+    defined as a series of brace-enclosed list macro definitions. These
+    definitions use uppercase names:
+
+        #define SG_RED { 1.0f, 0.0f, 0.0f, 1.0f }
+        #define SG_GREEN { 0.0f, 1.0f, 0.0f, 1.0f }
+        #define SG_BLUE { 0.0f, 0.0f, 1.0f, 1.0f }
+
+    A preset macro like SG_RED can be used to initialize objects with static
+    storage duration:
+
+        static struct {
+            sg_pass_action pass_action;
+        } state = {
+            .pass_action = {
+                .colors[0] = { .action = SG_ACTION_CLEAR, .value = SG_RED }
+            }
+        };
+
+    A second set of macro definitions exists for colors packed as 32 bit integer
+    values. These definitions are also uppercase, but use the _RGBA32 suffix:
+
+        #define SG_RED_RGBA32 0xFF0000FF
+        #define SG_GREEN_RGBA32 0x00FF00FF
+        #define SG_BLUE_RGBA32 0x0000FFFF
+
+    This is useful if your code makes use of packed colors, as sokol_gl.h does for its
+    internal vertex format:
+
+        sgl_begin_triangles();
+        sgl_v2f_c1i( 0.0f,  0.5f, SG_RED_RGBA32);
+        sgl_v2f_c1i( 0.5f, -0.5f, SG_GREEN_RGBA32);
+        sgl_v2f_c1i(-0.5f, -0.5f, SG_BLUE_RGBA32);
+        sgl_end();
+
+    LICENSE
+    =======
+
+    zlib/libpng license
+
+    Copyright (c) 2020 Stuart Adams
+
+    This software is provided 'as-is', without any express or implied warranty.
+    In no event will the authors be held liable for any damages arising from the
+    use of this software.
+
+    Permission is granted to anyone to use this software for any purpose,
+    including commercial applications, and to alter it and redistribute it
+    freely, subject to the following restrictions:
+
+        1. The origin of this software must not be misrepresented; you must not
+        claim that you wrote the original software. If you use this software in a
+        product, an acknowledgment in the product documentation would be
+        appreciated but is not required.
+
+        2. Altered source versions must be plainly marked as such, and must not
+        be misrepresented as being the original software.
+
+        3. This notice may not be removed or altered from any source
+        distribution.
 */
 #define SOKOL_COLOR_INCLUDED (1)
 
@@ -39,8 +134,8 @@
 #define SG_BLUE_VIOLET { 0.541176471f, 0.168627451f, 0.88627451f, 1.0f }
 /* Brown { R:165, G:42, B:42, A:255 } */
 #define SG_BROWN { 0.647058824f, 0.164705882f, 0.164705882f, 1.0f }
-/* Burly Wood { R:222, G:184, B:135, A:255 } */
-#define SG_BURLY_WOOD { 0.870588235f, 0.721568627f, 0.529411765f, 1.0f }
+/* Burlywood { R:222, G:184, B:135, A:255 } */
+#define SG_BURLYWOOD { 0.870588235f, 0.721568627f, 0.529411765f, 1.0f }
 /* Cadet Blue { R:95, G:158, B:160, A:255 } */
 #define SG_CADET_BLUE { 0.37254902f, 0.619607843f, 0.62745098f, 1.0f }
 /* Chartreuse { R:127, G:255, B:0, A:255 } */
@@ -65,8 +160,6 @@
 #define SG_DARK_GOLDENROD { 0.721568627f, 0.525490196f, 0.0431372549f, 1.0f }
 /* Dark Gray { R:169, G:169, B:169, A:255 } */
 #define SG_DARK_GRAY { 0.662745098f, 0.662745098f, 0.662745098f, 1.0f }
-/* Dark Grey { R:169, G:169, B:169, A:255 } */
-#define SG_DARK_GREY { 0.662745098f, 0.662745098f, 0.662745098f, 1.0f }
 /* Dark Green { R:0, G:100, B:0, A:255 } */
 #define SG_DARK_GREEN { 0.0f, 0.392156863f, 0.0f, 1.0f }
 /* Dark Khaki { R:189, G:183, B:107, A:255 } */
@@ -89,8 +182,6 @@
 #define SG_DARK_SLATE_BLUE { 0.282352941f, 0.239215686f, 0.545098039f, 1.0f }
 /* Dark Slate Gray { R:47, G:79, B:79, A:255 } */
 #define SG_DARK_SLATE_GRAY { 0.184313725f, 0.309803922f, 0.309803922f, 1.0f }
-/* Dark Slate Grey { R:47, G:79, B:79, A:255 } */
-#define SG_DARK_SLATE_GREY { 0.184313725f, 0.309803922f, 0.309803922f, 1.0f }
 /* Dark Turquoise { R:0, G:206, B:209, A:255 } */
 #define SG_DARK_TURQUOISE { 0.0f, 0.807843137f, 0.819607843f, 1.0f }
 /* Dark Violet { R:148, G:0, B:211, A:255 } */
@@ -101,12 +192,10 @@
 #define SG_DEEP_SKY_BLUE { 0.0f, 0.749019608f, 1.0f, 1.0f }
 /* Dim Gray { R:105, G:105, B:105, A:255 } */
 #define SG_DIM_GRAY { 0.411764706f, 0.411764706f, 0.411764706f, 1.0f }
-/* Dim Grey { R:105, G:105, B:105, A:255 } */
-#define SG_DIM_GREY { 0.411764706f, 0.411764706f, 0.411764706f, 1.0f }
 /* Dodger Blue { R:30, G:144, B:255, A:255 } */
 #define SG_DODGER_BLUE { 0.117647059f, 0.564705882f, 1.0f, 1.0f }
-/* Fire Brick { R:178, G:34, B:34, A:255 } */
-#define SG_FIRE_BRICK { 0.698039216f, 0.133333333f, 0.133333333f, 1.0f }
+/* Firebrick { R:178, G:34, B:34, A:255 } */
+#define SG_FIREBRICK { 0.698039216f, 0.133333333f, 0.133333333f, 1.0f }
 /* Floral White { R:255, G:250, B:240, A:255 } */
 #define SG_FLORAL_WHITE { 1.0f, 0.980392157f, 0.941176471f, 1.0f }
 /* Forest Green { R:34, G:139, B:34, A:255 } */
@@ -121,12 +210,14 @@
 #define SG_GOLD { 1.0f, 0.843137255f, 0.0f, 1.0f }
 /* Goldenrod { R:218, G:165, B:32, A:255 } */
 #define SG_GOLDENROD { 0.854901961f, 0.647058824f, 0.125490196f, 1.0f }
-/* Gray { R:128, G:128, B:128, A:255 } */
-#define SG_GRAY { 0.501960784f, 0.501960784f, 0.501960784f, 1.0f }
-/* Grey { R:128, G:128, B:128, A:255 } */
-#define SG_GREY { 0.501960784f, 0.501960784f, 0.501960784f, 1.0f }
-/* Green { R:0, G:128, B:0, A:255 } */
-#define SG_GREEN { 0.0f, 0.501960784f, 0.0f, 1.0f }
+/* Gray { R:190, G:190, B:190, A:255 } */
+#define SG_GRAY { 0.745098039f, 0.745098039f, 0.745098039f, 1.0f }
+/* Web Gray { R:128, G:128, B:128, A:255 } */
+#define SG_WEB_GRAY { 0.501960784f, 0.501960784f, 0.501960784f, 1.0f }
+/* Green { R:0, G:255, B:0, A:255 } */
+#define SG_GREEN { 0.0f, 1.0f, 0.0f, 1.0f }
+/* Web Green { R:0, G:128, B:0, A:255 } */
+#define SG_WEB_GREEN { 0.0f, 0.501960784f, 0.0f, 1.0f }
 /* Green Yellow { R:173, G:255, B:47, A:255 } */
 #define SG_GREEN_YELLOW { 0.678431373f, 1.0f, 0.184313725f, 1.0f }
 /* Honeydew { R:240, G:255, B:240, A:255 } */
@@ -155,14 +246,12 @@
 #define SG_LIGHT_CORAL { 0.941176471f, 0.501960784f, 0.501960784f, 1.0f }
 /* Light Cyan { R:224, G:255, B:255, A:255 } */
 #define SG_LIGHT_CYAN { 0.878431373f, 1.0f, 1.0f, 1.0f }
-/* Light Goldenrod Yellow { R:250, G:250, B:210, A:255 } */
-#define SG_LIGHT_GOLDENROD_YELLOW { 0.980392157f, 0.980392157f, 0.823529412f, 1.0f }
-/* Light Green { R:211, G:211, B:211, A:255 } */
-#define SG_LIGHT_GREEN { 0.82745098f, 0.82745098f, 0.82745098f, 1.0f }
+/* Light Goldenrod { R:250, G:250, B:210, A:255 } */
+#define SG_LIGHT_GOLDENROD { 0.980392157f, 0.980392157f, 0.823529412f, 1.0f }
 /* Light Gray { R:211, G:211, B:211, A:255 } */
 #define SG_LIGHT_GRAY { 0.82745098f, 0.82745098f, 0.82745098f, 1.0f }
-/* Light Grey { R:211, G:211, B:211, A:255 } */
-#define SG_LIGHT_GREY { 0.82745098f, 0.82745098f, 0.82745098f, 1.0f }
+/* Light Green { R:144, G:238, B:144, A:255 } */
+#define SG_LIGHT_GREEN { 0.564705882f, 0.933333333f, 0.564705882f, 1.0f }
 /* Light Pink { R:255, G:182, B:193, A:255 } */
 #define SG_LIGHT_PINK { 1.0f, 0.71372549f, 0.756862745f, 1.0f }
 /* Light Salmon { R:255, G:160, B:122, A:255 } */
@@ -173,8 +262,6 @@
 #define SG_LIGHT_SKY_BLUE { 0.529411765f, 0.807843137f, 0.980392157f, 1.0f }
 /* Light Slate Gray { R:119, G:136, B:153, A:255 } */
 #define SG_LIGHT_SLATE_GRAY { 0.466666667f, 0.533333333f, 0.6f, 1.0f }
-/* Light Slate Grey { R:119, G:136, B:153, A:255 } */
-#define SG_LIGHT_SLATE_GREY { 0.466666667f, 0.533333333f, 0.6f, 1.0f }
 /* Light Steel Blue { R:176, G:196, B:222, A:255 } */
 #define SG_LIGHT_STEEL_BLUE { 0.690196078f, 0.768627451f, 0.870588235f, 1.0f }
 /* Light Yellow { R:255, G:255, B:224, A:255 } */
@@ -187,16 +274,18 @@
 #define SG_LINEN { 0.980392157f, 0.941176471f, 0.901960784f, 1.0f }
 /* Magenta { R:255, G:0, B:255, A:255 } */
 #define SG_MAGENTA { 1.0f, 0.0f, 1.0f, 1.0f }
-/* Maroon { R:128, G:0, B:0, A:255 } */
-#define SG_MAROON { 0.501960784f, 0.0f, 0.0f, 1.0f }
+/* Maroon { R:176, G:48, B:96, A:255 } */
+#define SG_MAROON { 0.690196078f, 0.188235294f, 0.376470588f, 1.0f }
+/* Web Maroon { R:128, G:0, B:0, A:255 } */
+#define SG_WEB_MAROON { 0.501960784f, 0.0f, 0.0f, 1.0f }
 /* Medium Aquamarine { R:102, G:205, B:170, A:255 } */
 #define SG_MEDIUM_AQUAMARINE { 0.4f, 0.803921569f, 0.666666667f, 1.0f }
 /* Medium Blue { R:0, G:0, B:205, A:255 } */
 #define SG_MEDIUM_BLUE { 0.0f, 0.0f, 0.803921569f, 1.0f }
 /* Medium Orchid { R:186, G:85, B:211, A:255 } */
 #define SG_MEDIUM_ORCHID { 0.729411765f, 0.333333333f, 0.82745098f, 1.0f }
-/* Medium Purple { R:147, G:112, B:216, A:255 } */
-#define SG_MEDIUM_PURPLE { 0.576470588f, 0.439215686f, 0.847058824f, 1.0f }
+/* Medium Purple { R:147, G:112, B:219, A:255 } */
+#define SG_MEDIUM_PURPLE { 0.576470588f, 0.439215686f, 0.858823529f, 1.0f }
 /* Medium Sea Green { R:60, G:179, B:113, A:255 } */
 #define SG_MEDIUM_SEA_GREEN { 0.235294118f, 0.701960784f, 0.443137255f, 1.0f }
 /* Medium Slate Blue { R:123, G:104, B:238, A:255 } */
@@ -217,8 +306,8 @@
 #define SG_MOCCASIN { 1.0f, 0.894117647f, 0.709803922f, 1.0f }
 /* Navajo White { R:255, G:222, B:173, A:255 } */
 #define SG_NAVAJO_WHITE { 1.0f, 0.870588235f, 0.678431373f, 1.0f }
-/* Navy { R:0, G:0, B:128, A:255 } */
-#define SG_NAVY { 0.0f, 0.0f, 0.501960784f, 1.0f }
+/* Navy Blue { R:0, G:0, B:128, A:255 } */
+#define SG_NAVY_BLUE { 0.0f, 0.0f, 0.501960784f, 1.0f }
 /* Old Lace { R:253, G:245, B:230, A:255 } */
 #define SG_OLD_LACE { 0.992156863f, 0.960784314f, 0.901960784f, 1.0f }
 /* Olive { R:128, G:128, B:0, A:255 } */
@@ -237,8 +326,8 @@
 #define SG_PALE_GREEN { 0.596078431f, 0.984313725f, 0.596078431f, 1.0f }
 /* Pale Turquoise { R:175, G:238, B:238, A:255 } */
 #define SG_PALE_TURQUOISE { 0.68627451f, 0.933333333f, 0.933333333f, 1.0f }
-/* Pale Violet Red { R:216, G:112, B:147, A:255 } */
-#define SG_PALE_VIOLET_RED { 0.847058824f, 0.439215686f, 0.576470588f, 1.0f }
+/* Pale Violet Red { R:219, G:112, B:147, A:255 } */
+#define SG_PALE_VIOLET_RED { 0.858823529f, 0.439215686f, 0.576470588f, 1.0f }
 /* Papaya Whip { R:255, G:239, B:213, A:255 } */
 #define SG_PAPAYA_WHIP { 1.0f, 0.937254902f, 0.835294118f, 1.0f }
 /* Peach Puff { R:255, G:218, B:185, A:255 } */
@@ -251,8 +340,12 @@
 #define SG_PLUM { 0.866666667f, 0.62745098f, 0.866666667f, 1.0f }
 /* Powder Blue { R:176, G:224, B:230, A:255 } */
 #define SG_POWDER_BLUE { 0.690196078f, 0.878431373f, 0.901960784f, 1.0f }
-/* Purple { R:128, G:0, B:128, A:255 } */
-#define SG_PURPLE { 0.501960784f, 0.0f, 0.501960784f, 1.0f }
+/* Purple { R:160, G:32, B:240, A:255 } */
+#define SG_PURPLE { 0.62745098f, 0.125490196f, 0.941176471f, 1.0f }
+/* Web Purple { R:128, G:0, B:128, A:255 } */
+#define SG_WEB_PURPLE { 0.501960784f, 0.0f, 0.501960784f, 1.0f }
+/* Rebecca Purple { R:102, G:51, B:153, A:255 } */
+#define SG_REBECCA_PURPLE { 0.4f, 0.2f, 0.6f, 1.0f }
 /* Red { R:255, G:0, B:0, A:255 } */
 #define SG_RED { 1.0f, 0.0f, 0.0f, 1.0f }
 /* Rosy Brown { R:188, G:143, B:143, A:255 } */
@@ -279,8 +372,6 @@
 #define SG_SLATE_BLUE { 0.415686275f, 0.352941176f, 0.803921569f, 1.0f }
 /* Slate Gray { R:112, G:128, B:144, A:255 } */
 #define SG_SLATE_GRAY { 0.439215686f, 0.501960784f, 0.564705882f, 1.0f }
-/* Slate Grey { R:112, G:128, B:144, A:255 } */
-#define SG_SLATE_GREY { 0.439215686f, 0.501960784f, 0.564705882f, 1.0f }
 /* Snow { R:255, G:250, B:250, A:255 } */
 #define SG_SNOW { 1.0f, 0.980392157f, 0.980392157f, 1.0f }
 /* Spring Green { R:0, G:255, B:127, A:255 } */
@@ -336,8 +427,8 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_blue = SG_BLUE;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_blue_violet = SG_BLUE_VIOLET;
 /* Brown { R:165, G:42, B:42, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_brown = SG_BROWN;
-/* Burly Wood { R:222, G:184, B:135, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_burly_wood = SG_BURLY_WOOD;
+/* Burlywood { R:222, G:184, B:135, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_burlywood = SG_BURLYWOOD;
 /* Cadet Blue { R:95, G:158, B:160, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_cadet_blue = SG_CADET_BLUE;
 /* Chartreuse { R:127, G:255, B:0, A:255 } */
@@ -362,8 +453,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_cyan = SG_DARK_CYAN;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_goldenrod = SG_DARK_GOLDENROD;
 /* Dark Gray { R:169, G:169, B:169, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_gray = SG_DARK_GRAY;
-/* Dark Grey { R:169, G:169, B:169, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_grey = SG_DARK_GREY;
 /* Dark Green { R:0, G:100, B:0, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_green = SG_DARK_GREEN;
 /* Dark Khaki { R:189, G:183, B:107, A:255 } */
@@ -386,8 +475,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_sea_green = SG_DARK_SEA_GREEN;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_blue = SG_DARK_SLATE_BLUE;
 /* Dark Slate Gray { R:47, G:79, B:79, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_gray = SG_DARK_SLATE_GRAY;
-/* Dark Slate Grey { R:47, G:79, B:79, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_slate_grey = SG_DARK_SLATE_GREY;
 /* Dark Turquoise { R:0, G:206, B:209, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dark_turquoise = SG_DARK_TURQUOISE;
 /* Dark Violet { R:148, G:0, B:211, A:255 } */
@@ -398,12 +485,10 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_deep_pink = SG_DEEP_PINK;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_deep_sky_blue = SG_DEEP_SKY_BLUE;
 /* Dim Gray { R:105, G:105, B:105, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dim_gray = SG_DIM_GRAY;
-/* Dim Grey { R:105, G:105, B:105, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_dim_grey = SG_DIM_GREY;
 /* Dodger Blue { R:30, G:144, B:255, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_dodger_blue = SG_DODGER_BLUE;
-/* Fire Brick { R:178, G:34, B:34, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_fire_brick = SG_FIRE_BRICK;
+/* Firebrick { R:178, G:34, B:34, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_firebrick = SG_FIREBRICK;
 /* Floral White { R:255, G:250, B:240, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_floral_white = SG_FLORAL_WHITE;
 /* Forest Green { R:34, G:139, B:34, A:255 } */
@@ -418,12 +503,14 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_ghost_white = SG_GHOST_WHITE;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_gold = SG_GOLD;
 /* Goldenrod { R:218, G:165, B:32, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_goldenrod = SG_GOLDENROD;
-/* Gray { R:128, G:128, B:128, A:255 } */
+/* Gray { R:190, G:190, B:190, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_gray = SG_GRAY;
-/* Grey { R:128, G:128, B:128, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_grey = SG_GREY;
-/* Green { R:0, G:128, B:0, A:255 } */
+/* Web Gray { R:128, G:128, B:128, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_web_gray = SG_WEB_GRAY;
+/* Green { R:0, G:255, B:0, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_green = SG_GREEN;
+/* Web Green { R:0, G:128, B:0, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_web_green = SG_WEB_GREEN;
 /* Green Yellow { R:173, G:255, B:47, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_green_yellow = SG_GREEN_YELLOW;
 /* Honeydew { R:240, G:255, B:240, A:255 } */
@@ -452,14 +539,12 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_light_blue = SG_LIGHT_BLUE;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_coral = SG_LIGHT_CORAL;
 /* Light Cyan { R:224, G:255, B:255, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_cyan = SG_LIGHT_CYAN;
-/* Light Goldenrod Yellow { R:250, G:250, B:210, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_light_goldenrod_yellow = SG_LIGHT_GOLDENROD_YELLOW;
-/* Light Green { R:211, G:211, B:211, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_light_green = SG_LIGHT_GREEN;
+/* Light Goldenrod { R:250, G:250, B:210, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_goldenrod = SG_LIGHT_GOLDENROD;
 /* Light Gray { R:211, G:211, B:211, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_gray = SG_LIGHT_GRAY;
-/* Light Grey { R:211, G:211, B:211, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_light_grey = SG_LIGHT_GREY;
+/* Light Green { R:144, G:238, B:144, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_light_green = SG_LIGHT_GREEN;
 /* Light Pink { R:255, G:182, B:193, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_pink = SG_LIGHT_PINK;
 /* Light Salmon { R:255, G:160, B:122, A:255 } */
@@ -470,8 +555,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_light_sea_green = SG_LIGHT_SEA_GREEN;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_sky_blue = SG_LIGHT_SKY_BLUE;
 /* Light Slate Gray { R:119, G:136, B:153, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_slate_gray = SG_LIGHT_SLATE_GRAY;
-/* Light Slate Grey { R:119, G:136, B:153, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_light_slate_grey = SG_LIGHT_SLATE_GREY;
 /* Light Steel Blue { R:176, G:196, B:222, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_light_steel_blue = SG_LIGHT_STEEL_BLUE;
 /* Light Yellow { R:255, G:255, B:224, A:255 } */
@@ -484,15 +567,17 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_lime_green = SG_LIME_GREEN;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_linen = SG_LINEN;
 /* Magenta { R:255, G:0, B:255, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_magenta = SG_MAGENTA;
-/* Maroon { R:128, G:0, B:0, A:255 } */
+/* Maroon { R:176, G:48, B:96, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_maroon = SG_MAROON;
+/* Web Maroon { R:128, G:0, B:0, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_web_maroon = SG_WEB_MAROON;
 /* Medium Aquamarine { R:102, G:205, B:170, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_aquamarine = SG_MEDIUM_AQUAMARINE;
 /* Medium Blue { R:0, G:0, B:205, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_blue = SG_MEDIUM_BLUE;
 /* Medium Orchid { R:186, G:85, B:211, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_orchid = SG_MEDIUM_ORCHID;
-/* Medium Purple { R:147, G:112, B:216, A:255 } */
+/* Medium Purple { R:147, G:112, B:219, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_purple = SG_MEDIUM_PURPLE;
 /* Medium Sea Green { R:60, G:179, B:113, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_medium_sea_green = SG_MEDIUM_SEA_GREEN;
@@ -514,8 +599,8 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_misty_rose = SG_MISTY_ROSE;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_moccasin = SG_MOCCASIN;
 /* Navajo White { R:255, G:222, B:173, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_navajo_white = SG_NAVAJO_WHITE;
-/* Navy { R:0, G:0, B:128, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_navy = SG_NAVY;
+/* Navy Blue { R:0, G:0, B:128, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_navy_blue = SG_NAVY_BLUE;
 /* Old Lace { R:253, G:245, B:230, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_old_lace = SG_OLD_LACE;
 /* Olive { R:128, G:128, B:0, A:255 } */
@@ -534,7 +619,7 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_goldenrod = SG_PALE_GOLDENROD;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_green = SG_PALE_GREEN;
 /* Pale Turquoise { R:175, G:238, B:238, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_turquoise = SG_PALE_TURQUOISE;
-/* Pale Violet Red { R:216, G:112, B:147, A:255 } */
+/* Pale Violet Red { R:219, G:112, B:147, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_pale_violet_red = SG_PALE_VIOLET_RED;
 /* Papaya Whip { R:255, G:239, B:213, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_papaya_whip = SG_PAPAYA_WHIP;
@@ -548,8 +633,12 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_pink = SG_PINK;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_plum = SG_PLUM;
 /* Powder Blue { R:176, G:224, B:230, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_powder_blue = SG_POWDER_BLUE;
-/* Purple { R:128, G:0, B:128, A:255 } */
+/* Purple { R:160, G:32, B:240, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_purple = SG_PURPLE;
+/* Web Purple { R:128, G:0, B:128, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_web_purple = SG_WEB_PURPLE;
+/* Rebecca Purple { R:102, G:51, B:153, A:255 } */
+static SOKOL_COLOR_CONSTEXPR sg_color sg_rebecca_purple = SG_REBECCA_PURPLE;
 /* Red { R:255, G:0, B:0, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_red = SG_RED;
 /* Rosy Brown { R:188, G:143, B:143, A:255 } */
@@ -576,8 +665,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_sky_blue = SG_SKY_BLUE;
 static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_blue = SG_SLATE_BLUE;
 /* Slate Gray { R:112, G:128, B:144, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_gray = SG_SLATE_GRAY;
-/* Slate Grey { R:112, G:128, B:144, A:255 } */
-static SOKOL_COLOR_CONSTEXPR sg_color sg_slate_grey = SG_SLATE_GREY;
 /* Snow { R:255, G:250, B:250, A:255 } */
 static SOKOL_COLOR_CONSTEXPR sg_color sg_snow = SG_SNOW;
 /* Spring Green { R:0, G:255, B:127, A:255 } */
@@ -633,8 +720,8 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_BLUE_VIOLET_RGBA32 0x8A2BE2FF
 /* Brown { R:165, G:42, B:42, A:255 } */
 #define SG_BROWN_RGBA32 0xA52A2AFF
-/* Burly Wood { R:222, G:184, B:135, A:255 } */
-#define SG_BURLY_WOOD_RGBA32 0xDEB887FF
+/* Burlywood { R:222, G:184, B:135, A:255 } */
+#define SG_BURLYWOOD_RGBA32 0xDEB887FF
 /* Cadet Blue { R:95, G:158, B:160, A:255 } */
 #define SG_CADET_BLUE_RGBA32 0x5F9EA0FF
 /* Chartreuse { R:127, G:255, B:0, A:255 } */
@@ -659,8 +746,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_DARK_GOLDENROD_RGBA32 0xB8860BFF
 /* Dark Gray { R:169, G:169, B:169, A:255 } */
 #define SG_DARK_GRAY_RGBA32 0xA9A9A9FF
-/* Dark Grey { R:169, G:169, B:169, A:255 } */
-#define SG_DARK_GREY_RGBA32 0xA9A9A9FF
 /* Dark Green { R:0, G:100, B:0, A:255 } */
 #define SG_DARK_GREEN_RGBA32 0x006400FF
 /* Dark Khaki { R:189, G:183, B:107, A:255 } */
@@ -683,8 +768,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_DARK_SLATE_BLUE_RGBA32 0x483D8BFF
 /* Dark Slate Gray { R:47, G:79, B:79, A:255 } */
 #define SG_DARK_SLATE_GRAY_RGBA32 0x2F4F4FFF
-/* Dark Slate Grey { R:47, G:79, B:79, A:255 } */
-#define SG_DARK_SLATE_GREY_RGBA32 0x2F4F4FFF
 /* Dark Turquoise { R:0, G:206, B:209, A:255 } */
 #define SG_DARK_TURQUOISE_RGBA32 0x00CED1FF
 /* Dark Violet { R:148, G:0, B:211, A:255 } */
@@ -695,12 +778,10 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_DEEP_SKY_BLUE_RGBA32 0x00BFFFFF
 /* Dim Gray { R:105, G:105, B:105, A:255 } */
 #define SG_DIM_GRAY_RGBA32 0x696969FF
-/* Dim Grey { R:105, G:105, B:105, A:255 } */
-#define SG_DIM_GREY_RGBA32 0x696969FF
 /* Dodger Blue { R:30, G:144, B:255, A:255 } */
 #define SG_DODGER_BLUE_RGBA32 0x1E90FFFF
-/* Fire Brick { R:178, G:34, B:34, A:255 } */
-#define SG_FIRE_BRICK_RGBA32 0xB22222FF
+/* Firebrick { R:178, G:34, B:34, A:255 } */
+#define SG_FIREBRICK_RGBA32 0xB22222FF
 /* Floral White { R:255, G:250, B:240, A:255 } */
 #define SG_FLORAL_WHITE_RGBA32 0xFFFAF0FF
 /* Forest Green { R:34, G:139, B:34, A:255 } */
@@ -715,12 +796,14 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_GOLD_RGBA32 0xFFD700FF
 /* Goldenrod { R:218, G:165, B:32, A:255 } */
 #define SG_GOLDENROD_RGBA32 0xDAA520FF
-/* Gray { R:128, G:128, B:128, A:255 } */
-#define SG_GRAY_RGBA32 0x808080FF
-/* Grey { R:128, G:128, B:128, A:255 } */
-#define SG_GREY_RGBA32 0x808080FF
-/* Green { R:0, G:128, B:0, A:255 } */
-#define SG_GREEN_RGBA32 0x008000FF
+/* Gray { R:190, G:190, B:190, A:255 } */
+#define SG_GRAY_RGBA32 0xBEBEBEFF
+/* Web Gray { R:128, G:128, B:128, A:255 } */
+#define SG_WEB_GRAY_RGBA32 0x808080FF
+/* Green { R:0, G:255, B:0, A:255 } */
+#define SG_GREEN_RGBA32 0x00FF00FF
+/* Web Green { R:0, G:128, B:0, A:255 } */
+#define SG_WEB_GREEN_RGBA32 0x008000FF
 /* Green Yellow { R:173, G:255, B:47, A:255 } */
 #define SG_GREEN_YELLOW_RGBA32 0xADFF2FFF
 /* Honeydew { R:240, G:255, B:240, A:255 } */
@@ -749,14 +832,12 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_LIGHT_CORAL_RGBA32 0xF08080FF
 /* Light Cyan { R:224, G:255, B:255, A:255 } */
 #define SG_LIGHT_CYAN_RGBA32 0xE0FFFFFF
-/* Light Goldenrod Yellow { R:250, G:250, B:210, A:255 } */
-#define SG_LIGHT_GOLDENROD_YELLOW_RGBA32 0xFAFAD2FF
-/* Light Green { R:211, G:211, B:211, A:255 } */
-#define SG_LIGHT_GREEN_RGBA32 0xD3D3D3FF
+/* Light Goldenrod { R:250, G:250, B:210, A:255 } */
+#define SG_LIGHT_GOLDENROD_RGBA32 0xFAFAD2FF
 /* Light Gray { R:211, G:211, B:211, A:255 } */
 #define SG_LIGHT_GRAY_RGBA32 0xD3D3D3FF
-/* Light Grey { R:211, G:211, B:211, A:255 } */
-#define SG_LIGHT_GREY_RGBA32 0xD3D3D3FF
+/* Light Green { R:144, G:238, B:144, A:255 } */
+#define SG_LIGHT_GREEN_RGBA32 0x90EE90FF
 /* Light Pink { R:255, G:182, B:193, A:255 } */
 #define SG_LIGHT_PINK_RGBA32 0xFFB6C1FF
 /* Light Salmon { R:255, G:160, B:122, A:255 } */
@@ -767,8 +848,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_LIGHT_SKY_BLUE_RGBA32 0x87CEFAFF
 /* Light Slate Gray { R:119, G:136, B:153, A:255 } */
 #define SG_LIGHT_SLATE_GRAY_RGBA32 0x778899FF
-/* Light Slate Grey { R:119, G:136, B:153, A:255 } */
-#define SG_LIGHT_SLATE_GREY_RGBA32 0x778899FF
 /* Light Steel Blue { R:176, G:196, B:222, A:255 } */
 #define SG_LIGHT_STEEL_BLUE_RGBA32 0xB0C4DEFF
 /* Light Yellow { R:255, G:255, B:224, A:255 } */
@@ -781,16 +860,18 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_LINEN_RGBA32 0xFAF0E6FF
 /* Magenta { R:255, G:0, B:255, A:255 } */
 #define SG_MAGENTA_RGBA32 0xFF00FFFF
-/* Maroon { R:128, G:0, B:0, A:255 } */
-#define SG_MAROON_RGBA32 0x800000FF
+/* Maroon { R:176, G:48, B:96, A:255 } */
+#define SG_MAROON_RGBA32 0xB03060FF
+/* Web Maroon { R:128, G:0, B:0, A:255 } */
+#define SG_WEB_MAROON_RGBA32 0x800000FF
 /* Medium Aquamarine { R:102, G:205, B:170, A:255 } */
 #define SG_MEDIUM_AQUAMARINE_RGBA32 0x66CDAAFF
 /* Medium Blue { R:0, G:0, B:205, A:255 } */
 #define SG_MEDIUM_BLUE_RGBA32 0x0000CDFF
 /* Medium Orchid { R:186, G:85, B:211, A:255 } */
 #define SG_MEDIUM_ORCHID_RGBA32 0xBA55D3FF
-/* Medium Purple { R:147, G:112, B:216, A:255 } */
-#define SG_MEDIUM_PURPLE_RGBA32 0x9370D8FF
+/* Medium Purple { R:147, G:112, B:219, A:255 } */
+#define SG_MEDIUM_PURPLE_RGBA32 0x9370DBFF
 /* Medium Sea Green { R:60, G:179, B:113, A:255 } */
 #define SG_MEDIUM_SEA_GREEN_RGBA32 0x3CB371FF
 /* Medium Slate Blue { R:123, G:104, B:238, A:255 } */
@@ -811,8 +892,8 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_MOCCASIN_RGBA32 0xFFE4B5FF
 /* Navajo White { R:255, G:222, B:173, A:255 } */
 #define SG_NAVAJO_WHITE_RGBA32 0xFFDEADFF
-/* Navy { R:0, G:0, B:128, A:255 } */
-#define SG_NAVY_RGBA32 0x000080FF
+/* Navy Blue { R:0, G:0, B:128, A:255 } */
+#define SG_NAVY_BLUE_RGBA32 0x000080FF
 /* Old Lace { R:253, G:245, B:230, A:255 } */
 #define SG_OLD_LACE_RGBA32 0xFDF5E6FF
 /* Olive { R:128, G:128, B:0, A:255 } */
@@ -831,8 +912,8 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_PALE_GREEN_RGBA32 0x98FB98FF
 /* Pale Turquoise { R:175, G:238, B:238, A:255 } */
 #define SG_PALE_TURQUOISE_RGBA32 0xAFEEEEFF
-/* Pale Violet Red { R:216, G:112, B:147, A:255 } */
-#define SG_PALE_VIOLET_RED_RGBA32 0xD87093FF
+/* Pale Violet Red { R:219, G:112, B:147, A:255 } */
+#define SG_PALE_VIOLET_RED_RGBA32 0xDB7093FF
 /* Papaya Whip { R:255, G:239, B:213, A:255 } */
 #define SG_PAPAYA_WHIP_RGBA32 0xFFEFD5FF
 /* Peach Puff { R:255, G:218, B:185, A:255 } */
@@ -845,8 +926,12 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_PLUM_RGBA32 0xDDA0DDFF
 /* Powder Blue { R:176, G:224, B:230, A:255 } */
 #define SG_POWDER_BLUE_RGBA32 0xB0E0E6FF
-/* Purple { R:128, G:0, B:128, A:255 } */
-#define SG_PURPLE_RGBA32 0x800080FF
+/* Purple { R:160, G:32, B:240, A:255 } */
+#define SG_PURPLE_RGBA32 0xA020F0FF
+/* Web Purple { R:128, G:0, B:128, A:255 } */
+#define SG_WEB_PURPLE_RGBA32 0x800080FF
+/* Rebecca Purple { R:102, G:51, B:153, A:255 } */
+#define SG_REBECCA_PURPLE_RGBA32 0x663399FF
 /* Red { R:255, G:0, B:0, A:255 } */
 #define SG_RED_RGBA32 0xFF0000FF
 /* Rosy Brown { R:188, G:143, B:143, A:255 } */
@@ -873,8 +958,6 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 #define SG_SLATE_BLUE_RGBA32 0x6A5ACDFF
 /* Slate Gray { R:112, G:128, B:144, A:255 } */
 #define SG_SLATE_GRAY_RGBA32 0x708090FF
-/* Slate Grey { R:112, G:128, B:144, A:255 } */
-#define SG_SLATE_GREY_RGBA32 0x708090FF
 /* Snow { R:255, G:250, B:250, A:255 } */
 #define SG_SNOW_RGBA32 0xFFFAFAFF
 /* Spring Green { R:0, G:255, B:127, A:255 } */
@@ -906,4 +989,4 @@ static SOKOL_COLOR_CONSTEXPR sg_color sg_yellow_green = SG_YELLOW_GREEN;
 /* Yellow Green { R:154, G:205, B:50, A:255 } */
 #define SG_YELLOW_GREEN_RGBA32 0x9ACD32FF
 
-#endif
+#endif /* SOKOL_COLOR_INCLUDED */
