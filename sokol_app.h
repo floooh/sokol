@@ -3699,6 +3699,69 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     [NSApp run];
 }
 
+_SOKOL_PRIVATE void _sapp_macos_app_event(_sapp_window_t* win, sapp_event_type type) {
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(win, type);
+        _sapp_call_event(&_sapp.event);
+    }
+}
+
+/* NOTE: unlike the iOS version of this function, the macOS version
+    can dynamically update the DPI scaling factor when a window is moved
+    between HighDPI / LowDPI screens.
+*/
+_SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
+    CGFloat backing_scale_factor = [win->macos.window screen].backingScaleFactor;
+    if (win->desc.high_dpi) {
+        win->dpi_scale = backing_scale_factor;
+    }
+    else {
+        win->dpi_scale = 1.0f;
+    }
+    const NSRect bounds = [win->macos.view bounds];
+    win->window_width = bounds.size.width;
+    win->window_height = bounds.size.height;
+    #if defined(SOKOL_METAL)
+        win->framebuffer_width = bounds.size.width * win->dpi_scale;
+        win->framebuffer_height = bounds.size.height * win->dpi_scale;
+        const CGSize fb_size = win->macos.view.drawableSize;
+        const int cur_fb_width = (int) fb_size.width;
+        const int cur_fb_height = (int) fb_size.height;
+        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
+                                 (win->framebuffer_height != cur_fb_height);
+    #elif defined(SOKOL_GLCORE33)
+        const int cur_fb_width = (int) bounds.size.width * win->dpi_scale;
+        const int cur_fb_height = (int) bounds.size.height * win->dpi_scale;
+        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
+                                 (win->framebuffer_height != cur_fb_height);
+        win->framebuffer_width = cur_fb_width;
+        win->framebuffer_height = cur_fb_height;
+    #endif
+    if (win->framebuffer_width == 0) {
+        win->framebuffer_width = 1;
+    }
+    if (win->framebuffer_height == 0) {
+        win->framebuffer_height = 1;
+    }
+    if (win->window_width == 0) {
+        win->window_width = 1;
+    }
+    if (win->window_height == 0) {
+        win->window_height = 1;
+    }
+    if (dim_changed) {
+        #if defined(SOKOL_METAL)
+            CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
+            win->macos.view.drawableSize = drawable_size;
+        #else
+            // FIXME: nothing to do here?
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
+        }
+    }
+}
+
 _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
     SOKOL_ASSERT(win);
     if (win->fullscreen) {
@@ -3706,16 +3769,6 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
         win->window_width = screen_rect.size.width;
         win->window_height = screen_rect.size.height;
     }
-    if (win->desc.high_dpi) {
-        // FIXME: is there something like iOS 'nativeScale' on macOS?
-        win->framebuffer_width = 2 * win->window_width;
-        win->framebuffer_height = 2 * win->window_height;
-    }
-    else {
-        win->framebuffer_width = win->window_width;
-        win->framebuffer_height = win->window_height;
-    }
-    win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
     NSUInteger style = NSWindowStyleMaskMiniaturizable;
     if (win->desc.no_decoration) {
         style |= NSWindowStyleMaskBorderless;
@@ -3785,6 +3838,13 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
             initWithFrame:content_rect
             pixelFormat:nsglpixelformat_obj];
         win->macos.view.win_id = win->slot.id;
+        [win->macos.view updateTrackingAreas];
+        if (win->desc.high_dpi) {
+            [win->macos.view setWantsBestResolutionOpenGLSurface:YES];
+        }
+        else {
+            [win->macos.view setWantsBestResolutionOpenGLSurface:NO];
+        }
         if (nil != shared_main_context) {
             // create a new NSOpenContext which shares resources with the main window's context
             NSOpenGLContext* nsgl_context = [[NSOpenGLContext alloc] initWithFormat:nsglpixelformat_obj shareContext:shared_main_context];
@@ -3793,13 +3853,6 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
             _SAPP_OBJC_RELEASE(nsgl_context);
         }
         _SAPP_OBJC_RELEASE(nsglpixelformat_obj);
-        [win->macos.view updateTrackingAreas];
-        if (win->desc.high_dpi) {
-            [win->macos.view setWantsBestResolutionOpenGLSurface:YES];
-        }
-        else {
-            [win->macos.view setWantsBestResolutionOpenGLSurface:NO];
-        }
 
         win->macos.window.contentView = win->macos.view;
         [win->macos.window makeFirstResponder:win->macos.view];
@@ -3816,6 +3869,7 @@ _SOKOL_PRIVATE bool _sapp_macos_create_window(_sapp_window_t* win) {
             _sapp_macos_set_window_pos(win, win->pos_x, win->pos_y);
         }
     }
+    _sapp_macos_update_dimensions(win);
     if (!win->desc.hidden) {
         [win->macos.window makeKeyAndOrderFront:nil];
     }
@@ -3923,13 +3977,6 @@ _SOKOL_PRIVATE void _sapp_macos_key_event(_sapp_window_t* win, sapp_event_type t
     }
 }
 
-_SOKOL_PRIVATE void _sapp_macos_app_event(_sapp_window_t* win, sapp_event_type type) {
-    if (_sapp_events_enabled()) {
-        _sapp_init_event(win, type);
-        _sapp_call_event(&_sapp.event);
-    }
-}
-
 _SOKOL_PRIVATE int _sapp_macos_flipy(_sapp_window_t* win, int y) {
     SOKOL_ASSERT(win && (win->macos.window != nil));
     NSRect screen_rect = win->macos.window.screen.frame;
@@ -3983,62 +4030,6 @@ _SOKOL_PRIVATE void _sapp_macos_activate_window_context(_sapp_window_t* win) {
     #else
         _SOKOL_UNUSED(win);
     #endif
-}
-
-/* NOTE: unlike the iOS version of this function, the macOS version
-    can dynamically update the DPI scaling factor when a window is moved
-    between HighDPI / LowDPI screens.
-*/
-_SOKOL_PRIVATE void _sapp_macos_update_dimensions(_sapp_window_t* win) {
-    #if defined(SOKOL_METAL)
-        /* FIXME: hmm dpi_scale is used here with the old value, but updated
-            further down... this looks wrong?
-        */
-        const NSRect fb_rect = [win->macos.view bounds];
-        win->framebuffer_width = fb_rect.size.width * win->dpi_scale;
-        win->framebuffer_height = fb_rect.size.height * win->dpi_scale;
-        const CGSize fb_size = win->macos.view.drawableSize;
-        const int cur_fb_width = (int) fb_size.width;
-        const int cur_fb_height = (int) fb_size.height;
-        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
-                                 (win->framebuffer_height != cur_fb_height);
-    #elif defined(SOKOL_GLCORE33)
-        // NOTE: on first call this will always return a Retina resolution framebuffer size
-        const NSRect fb_rect = [win->macos.view convertRectToBacking:[win->macos.view frame]];
-        const int cur_fb_width = (int) fb_rect.size.width;
-        const int cur_fb_height = (int) fb_rect.size.height;
-        const bool dim_changed = (win->framebuffer_width != cur_fb_width) ||
-                                 (win->framebuffer_height != cur_fb_height);
-        win->framebuffer_width = fb_rect.size.width;
-        win->framebuffer_height = fb_rect.size.height;
-    #endif
-    const NSRect bounds = [win->macos.view bounds];
-    win->window_width = bounds.size.width;
-    win->window_height = bounds.size.height;
-    if (win->framebuffer_width == 0) {
-        win->framebuffer_width = 1;
-    }
-    if (win->framebuffer_height == 0) {
-        win->framebuffer_height = 1;
-    }
-    if (win->window_width == 0) {
-        win->window_width = 1;
-    }
-    if (win->window_height == 0) {
-        win->window_height = 1;
-    }
-    win->dpi_scale = (float)win->framebuffer_width / (float)win->window_width;
-    if (dim_changed) {
-        #if defined(SOKOL_METAL)
-            CGSize drawable_size = { (CGFloat) win->framebuffer_width, (CGFloat) win->framebuffer_height };
-            win->macos.view.drawableSize = drawable_size;
-        #else
-            // FIXME: nothing to do here?
-        #endif
-        if (!_sapp.first_frame) {
-            _sapp_macos_app_event(win, SAPP_EVENTTYPE_RESIZED);
-        }
-    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(_sapp_window_t* win) {
@@ -4423,11 +4414,11 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
     the correct dimensions.
 */
 - (void)reshape {
+    [super reshape];
     _sapp_window_t* win = _sapp_lookup_window(self.win_id);
     if (win) {
         _sapp_macos_update_dimensions(win);
     }
-    [super reshape];
 }
 - (void)prepareOpenGL {
     [super prepareOpenGL];
