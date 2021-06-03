@@ -4068,9 +4068,10 @@ _SOKOL_PRIVATE void _sapp_macos_update_window_title(_sapp_window_t* win) {
 
 _SOKOL_PRIVATE void _sapp_macos_update_mouse(_sapp_window_t* win, NSEvent* event) {
     if (!win->mouse.locked) {
+        const NSRect content_rect = [win->macos.window contentRectForFrameRect:[win->macos.window frame]];
         const NSPoint mouse_pos = event.locationInWindow;
         float new_x = mouse_pos.x * win->dpi_scale;
-        float new_y = win->framebuffer_height - (mouse_pos.y * win->dpi_scale) - 1;
+        float new_y = content_rect.size.height - (mouse_pos.y * win->dpi_scale) - 1;
         /* don't update dx/dy in the very first update */
         if (win->mouse.pos_valid) {
             win->mouse.dx = new_x - win->mouse.x;
