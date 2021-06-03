@@ -4184,26 +4184,34 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
         _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
         _sapp_macos_activate_window_context(win);
     #endif
-    _sapp_frame();
+    /* NOTE: the MTKView drawables MUST be resized right before the dummy draw
+        invocation, *NOT* from within the event loop, this is because
+        MTKView lazily resizes some "secondary" surfaces at the start
+        of the draw method before drawRect callback is called. Setting
+        the drawableSize in the event loop causes currentRenderPassDescriptor
+        to return a render pass descriptor with different surfaces sizes
+    */
     for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
         const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
         _sapp_window_t* win = _sapp_lookup_window(win_id);
         if (win) {
-            /* NOTE: the MTKView drawables MUST be resized right before the dummy draw
-                invocation, *NOT* from within the event loop, this is because
-                MTKView lazily resizes some "secondary" surfaces at the start
-                of the draw method before drawRect callback is called. Setting
-                the drawableSize in the event loop causes currentRenderPassDescriptor
-                to return a render pass descriptor with different surfaces sizes
-            */
             _sapp_macos_update_dimensions(win);
+            // let MTKView lazily resize its framebuffer textures
             #if defined(SOKOL_METAL)
             [win->macos.view draw];
-            #else
-            [[win->macos.view openGLContext] flushBuffer];
             #endif
         }
     }
+    _sapp_frame();
+    #if defined(SOKOL_GLCORE33)
+    for (int i = 0; i < _sapp.window_pool.pool.size; i++) {
+        const uint32_t win_id = _sapp.window_pool.windows[i].slot.id;
+        _sapp_window_t* win = _sapp_lookup_window(win_id);
+        if (win) {
+            [[win->macos.view openGLContext] flushBuffer];
+        }
+    }
+    #endif
     if (_sapp.quit_requested && !_sapp.quit_ordered) {
         _sapp_window_t* win = _sapp_lookup_window(_sapp.main_window_id);
         _sapp_macos_close_window(win);
@@ -4434,15 +4442,6 @@ _SOKOL_PRIVATE CVReturn _sapp_macos_displaylink_callback(
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
-    // FIXME?
-    /*
-    #if !defined(SOKOL_METAL)
-    _sapp_window_t* win = _sapp_lookup_window(self.win_id);
-    if (win) {
-        [[win->macos.view openGLContext] flushBuffer];
-    }
-    #endif
-    */
 }
 
 - (BOOL)isOpaque {
