@@ -178,7 +178,9 @@ colors = [
 
 header = open("sokol_color.h", "w")
 
-header.write("""
+header.write("""#if defined(SOKOL_IMPL) && !defined(SOKOL_COLOR_IMPL)
+#define SOKOL_COLOR_IMPL
+#endif
 #ifndef SOKOL_COLOR_INCLUDED
 /*
     sokol_color.h -- sg_color utilities
@@ -284,11 +286,31 @@ header.write("""
 #error "Please include sokol_gfx.h before sokol_color.h"
 #endif
 
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_GL_API_DECL)
+#define SOKOL_COLOR_API_DECL SOKOL_API_DECL
+#endif
+#ifndef SOKOL_COLOR_API_DECL
+#if defined(_WIN32) && defined(SOKOL_DLL) && defined(SOKOL_COLOR_IMPL)
+#define SOKOL_COLOR_API_DECL __declspec(dllexport)
+#elif defined(_WIN32) && defined(SOKOL_DLL)
+#define SOKOL_COLOR_API_DECL __declspec(dllimport)
+#else
+#define SOKOL_COLOR_API_DECL extern
+#endif
+#endif
+
 #ifdef __cplusplus
 #define SOKOL_COLOR_CONSTEXPR constexpr
+extern "C" {
 #else
 #define SOKOL_COLOR_CONSTEXPR const
 #endif
+
+SOKOL_COLOR_API_DECL sg_color sg_make_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+SOKOL_COLOR_API_DECL sg_color sg_make_color_1i(uint32_t rgba);
+SOKOL_COLOR_API_DECL sg_color sg_color_lerp(const sg_color* color_a, const sg_color* color_b, float amount);
+SOKOL_COLOR_API_DECL sg_color sg_color_lerp_precise(const sg_color* color_a, const sg_color* color_b, float amount);
+SOKOL_COLOR_API_DECL sg_color sg_color_multiply(const sg_color* color, float scale);
 
 """)
 
@@ -300,7 +322,7 @@ def unpack_rgba(color):
     return (red, green, blue, alpha)
 
 def add_documentation(color):
-    documentation = "/* {name} {{ R:{r}, G:{g}, B:{b}, A:{a} }} */\n"
+    documentation = "/* {name} color {{ R:{r}, G:{g}, B:{b}, A:{a} }} */\n"
     rgba = unpack_rgba(color[1])
     header.write(documentation.format(
         name = color[0], r = rgba[0], g = rgba[1], b = rgba[2], a = rgba[3]))
@@ -339,4 +361,114 @@ for color in colors:
     packed_color_definition = "#define {name} {rgba}\n"
     header.write(packed_color_definition.format(name = packed_color, rgba = hex_color))
 
-header.write("\n#endif /* SOKOL_COLOR_INCLUDED */\n")
+header.write("""
+#ifdef __cplusplus
+} /* extern "C" */
+
+inline sg_color sg_make_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return sg_make_color_4b(r, g, b, a);
+}
+
+inline sg_color sg_make_color(uint32_t rgba) {
+    return sg_make_color_1i(rgba);
+}
+
+inline sg_color sg_color_lerp(const sg_color& color_a, const sg_color& color_b, float amount) {
+    return sg_color_lerp(&color_a, &color_b, amount);
+}
+
+inline sg_color sg_color_lerp_precise(const sg_color& color_a, const sg_color& color_b, float amount) {
+    return sg_color_lerp_precise(&color_a, &color_b, amount);
+}
+
+inline sg_color sg_color_multiply(const sg_color& color, float scale) {
+    return sg_color_multiply(&color, scale);
+}
+
+#endif /* __cplusplus */
+
+#endif /* SOKOL_COLOR_INCLUDED */
+
+/*-- IMPLEMENTATION ----------------------------------------------------------*/
+#ifdef SOKOL_COLOR_IMPL
+#define SOKOL_COLOR_IMPL_INCLUDED (1)
+
+#ifndef SOKOL_API_IMPL
+    #define SOKOL_API_IMPL
+#endif
+#ifndef SOKOL_ASSERT
+    #include <assert.h>
+    #define SOKOL_ASSERT(c) assert(c)
+#endif
+
+static inline float _sg_color_clamp(float v, float low, float high) {
+    if (v < low) {
+        return low;
+    } else if (v > high) {
+        return high; 
+    }
+    return v;
+}
+
+static inline float _sg_color_lerp(float a, float b, float amount) {
+    return a + (b - a) * amount;
+}
+
+static inline float _sg_color_lerp_precise(float a, float b, float amount) {
+    return ((1.0f - amount) * a) + (b * amount);
+}
+
+SOKOL_API_IMPL sg_color sg_make_color_4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    sg_color result;
+    result.r = r / 255.0f;
+    result.g = g / 255.0f;
+    result.b = b / 255.0f;
+    result.a = a / 255.0f;
+    return result;
+}
+
+SOKOL_API_IMPL sg_color sg_make_color_1i(uint32_t rgba) {
+    return sg_make_color_4b(
+        (uint8_t)(rgba >> 24),
+        (uint8_t)(rgba >> 16),
+        (uint8_t)(rgba >> 8),
+        (uint8_t)(rgba >> 0)
+    );
+}
+
+SOKOL_API_IMPL sg_color sg_color_lerp(const sg_color* color_a, const sg_color* color_b, float amount) {
+    SOKOL_ASSERT(color_a);
+    SOKOL_ASSERT(color_b);
+    amount = _sg_color_clamp(amount, 0.0f, 1.0f);
+    sg_color result;
+    result.r = _sg_color_lerp(color_a->r, color_b->r, amount);
+    result.g = _sg_color_lerp(color_a->g, color_b->g, amount);
+    result.b = _sg_color_lerp(color_a->b, color_b->b, amount);
+    result.a = _sg_color_lerp(color_a->a, color_b->a, amount);
+    return result;
+}
+
+SOKOL_API_IMPL sg_color sg_color_lerp_precise(const sg_color* color_a, const sg_color* color_b, float amount) {
+    SOKOL_ASSERT(color_a);
+    SOKOL_ASSERT(color_b);
+    amount = _sg_color_clamp(amount, 0.0f, 1.0f);
+    sg_color result;
+    result.r = _sg_color_lerp_precise(color_a->r, color_b->r, amount);
+    result.g = _sg_color_lerp_precise(color_a->g, color_b->g, amount);
+    result.b = _sg_color_lerp_precise(color_a->b, color_b->b, amount);
+    result.a = _sg_color_lerp_precise(color_a->a, color_b->a, amount);
+    return result;
+}
+
+SOKOL_API_IMPL sg_color sg_color_multiply(const sg_color* color, float scale) {
+    SOKOL_ASSERT(color);
+    sg_color result;
+    result.r = color->r * scale;
+    result.g = color->g * scale;
+    result.b = color->b * scale;
+    result.a = color->a * scale;
+    return result;
+}
+
+#endif /* SOKOL_COLOR_IMPL */
+""")
