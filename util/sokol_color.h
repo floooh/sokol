@@ -106,7 +106,7 @@
 #error "Please include sokol_gfx.h before sokol_color.h"
 #endif
 
-#if defined(SOKOL_API_DECL) && !defined(SOKOL_GL_API_DECL)
+#if defined(SOKOL_API_DECL) && !defined(SOKOL_COLOR_API_DECL)
 #define SOKOL_COLOR_API_DECL SOKOL_API_DECL
 #endif
 #ifndef SOKOL_COLOR_API_DECL
