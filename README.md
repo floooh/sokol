@@ -41,6 +41,7 @@ useful details for integrating the Sokol headers into your own project with your
 
 ## Utility libraries
 
+- [**sokol\_spritebatch.h**](https://github.com/floooh/sokol/blob/master/util/sokol_spritebatch.h): XNA/MonoGame style 2D sprite batcher on top of sokol_gfx.h
 - [**sokol\_imgui.h**](https://github.com/floooh/sokol/blob/master/util/sokol_imgui.h): sokol_gfx.h rendering backend for [Dear ImGui](https://github.com/ocornut/imgui)
 - [**sokol\_nuklear.h**](https://github.com/floooh/sokol/blob/master/util/sokol_nuklear.h): sokol_gfx.h rendering backend for [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)
 - [**sokol\_gl.h**](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h): OpenGL 1.x style immediate-mode rendering API on top of sokol_gfx.h
