@@ -71,7 +71,7 @@
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
         - link with the following libs: -lkernel32 -luser32 -lshell32
         - additionally with the GL backend: -lgdi32
-        - additionally with the D3D11 backend: -ld3d11 -ldxgi -dxguid
+        - additionally with the D3D11 backend: -ld3d11 -ldxgi
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
@@ -1713,7 +1713,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #if defined(SOKOL_D3D11)
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
-        #pragma comment (lib, "dxguid")
     #endif
 
     #if defined(SOKOL_D3D11)
@@ -5333,6 +5332,8 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
 
 #define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
 
+static const IID _sapp_IID_ID3D11Texture2D = { 0x6f15aaf2,0xd208,0x4e89,0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c };
+
 static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
     #if defined(__cplusplus)
         return self->GetBuffer(Buffer, riid, ppSurface);
@@ -5449,9 +5450,9 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
 
     /* view for the swapchain-created framebuffer */
     #ifdef __cplusplus
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
     #else
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, &_sapp_IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
     #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
     hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);

@@ -2530,7 +2530,6 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #pragma comment (lib, "user32")
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
-        #pragma comment (lib, "dxguid")
     #endif
     #endif
 #elif defined(SOKOL_METAL)
