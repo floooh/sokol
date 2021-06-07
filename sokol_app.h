@@ -9677,10 +9677,10 @@ _SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_
         *dst++ = img_desc->height;
         const int num_pixels = img_desc->width * img_desc->height;
         for (int pixel_index = 0; pixel_index < num_pixels; pixel_index++) {
-            *dst++ = (src[pixel_index * 4 + 0] << 16) |
-                        (src[pixel_index * 4 + 1] << 8) |
-                        (src[pixel_index * 4 + 2] << 0) |
-                        (src[pixel_index * 4 + 3] << 24);
+            *dst++ = ((long)(src[pixel_index * 4 + 0]) << 16) |
+                     ((long)(src[pixel_index * 4 + 1]) << 8) |
+                     ((long)(src[pixel_index * 4 + 2]) << 0) |
+                     ((long)(src[pixel_index * 4 + 3]) << 24);
         }
     }
     XChangeProperty(_sapp.x11.display, _sapp.x11.window,
