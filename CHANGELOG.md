@@ -1,5 +1,10 @@
 ## Updates
 
+- **21-Jul-2021**: A new utility header sokol_color.h has been added, which adds
+  sokol_gfx.h-compatible named color constants and a handful initial utility
+  functions. See the [header documentation](https://github.com/floooh/sokol/blob/master/util/sokol_color.h)
+  for details. Many thanks to Stuart Adams (@nyalloc) for contributing the header!
+
 - **12-Apr-2021**: Minor new feature in sokol_app.h: mouse buttons are now
   also reported as modifier flags in most input events (similar to the
   Ctrl-, Alt-, Shift- and Super-key modifiers). This lets you quickly check

@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**12-Apr-2021** mouse button modifiers in sokol_app.h input events)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**21-Jun-2021** new utility header sokol_color.h)
 
 ## Examples and Related Projects
 
