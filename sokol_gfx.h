@@ -3597,14 +3597,6 @@ typedef struct {
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
     pD3DCompile D3DCompile_func;
-    /* the following arrays are used for unbinding resources, they will always contain zeroes */
-    ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
-    ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
-    ID3D11ShaderResourceView* zero_srvs[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11SamplerState* zero_smps[SG_MAX_SHADERSTAGE_IMAGES];
     /* global subresourcedata array for texture updates */
     D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
 } _sg_d3d11_backend_t;
