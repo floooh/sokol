@@ -1,6 +1,6 @@
 ## Updates
 
-- **21-Jul-2021**: A new utility header sokol_color.h has been added, which adds
+- **21-Jun-2021**: A new utility header sokol_color.h has been added, which adds
   sokol_gfx.h-compatible named color constants and a handful initial utility
   functions. See the [header documentation](https://github.com/floooh/sokol/blob/master/util/sokol_color.h)
   for details. Many thanks to Stuart Adams (@nyalloc) for contributing the header!
