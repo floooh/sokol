@@ -118,9 +118,15 @@
             }
         }
 
-    (4) finally, call sfetch_shutdown() at the end of the application:
+    (4) pump the sokol-fetch message queues, and invoke response callbacks
+        by calling:
 
-        sfetch_shutdown()
+        sfetch_dowork(); 
+
+        In an event-driven app this should be called in the event loop. If you
+        use sokol-app this would be in your frame_cb function.
+
+    (5) finally, call sfetch_shutdown() at the end of the application:
 
     There's many other loading-scenarios, for instance one doesn't have to
     provide a buffer upfront, this can also happen in the response callback.
