@@ -431,7 +431,7 @@ def gen_consts(decl, prefix):
         l(f"pub const {as_snake_case(item['name'], prefix)} = {item['value']};")
 
 def gen_enum(decl, prefix):
-    l(f"pub const {as_zig_enum_type(decl['name'], prefix)} = extern enum(i32) {{")
+    l(f"pub const {as_zig_enum_type(decl['name'], prefix)} = enum(i32) {{")
     for item in decl['items']:
         item_name = as_enum_item_name(item['name'])
         if item_name != "FORCE_U32":
@@ -515,11 +515,13 @@ def gen_helpers(inp):
         l('pub const Writer = struct {')
         l('    pub const Error = error { };')
         l('    pub fn writeAll(self: Writer, bytes: []const u8) Error!void {')
+        l('        _ = self;')
         l('        for (bytes) |byte| {')
         l('            putc(byte);')
         l('        }')
         l('    }')
         l('    pub fn writeByteNTimes(self: Writer, byte: u8, n: u64) Error!void {')
+        l('        _ = self;')
         l('        var i: u64 = 0;')
         l('        while (i < n): (i += 1) {')
         l('            putc(byte);')
