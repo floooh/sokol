@@ -46,26 +46,26 @@ extern "C" {
     } sbatch_rect;
 
     typedef struct sbatch_sprite {
-        sg_image      image;
-        sbatch_float2 position;
-        sbatch_rect   source;
-        sg_color      color;
-        float         rotation;
-        sbatch_float2 origin;
-        sbatch_float2 scale;
-        uint32_t      flags;
-        float         depth;
+        sg_image        image;
+        sbatch_float2   position;
+        sbatch_rect     source;
+        const sg_color* color;
+        float           rotation;
+        sbatch_float2   origin;
+        sbatch_float2   scale;
+        uint32_t        flags;
+        float           depth;
     } sbatch_sprite;
 
     typedef struct sbatch_sprite_rect {
-        sg_image      image;
-        sbatch_rect   destination;
-        sbatch_rect   source;
-        sg_color      color;
-        float         rotation;
-        sbatch_float2 origin;
-        uint32_t      flags;
-        float         depth;
+        sg_image        image;
+        sbatch_rect     destination;
+        sbatch_rect     source;
+        const sg_color* color;
+        float           rotation;
+        sbatch_float2   origin;
+        uint32_t        flags;
+        float           depth;
     } sbatch_sprite_rect;
 
     typedef struct sbatch_desc {
@@ -891,8 +891,7 @@ SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
             tex_coord_top_left.x = temp;
         }
 
-        uint32_t packed_color = _sbatch_pack_color(&sprite->color);
-        packed_color = packed_color == 0 ? 0xFFFFFFFF : packed_color;
+        uint32_t packed_color = sprite->color ? _sbatch_pack_color(sprite->color) : 0xFFFFFFFF;
 
         ctx->images[sprite_index] = sprite->image;
 
@@ -991,8 +990,7 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
             tex_coord_top_left.x = temp;
         }
 
-        uint32_t packed_color = _sbatch_pack_color(&sprite->color);
-        packed_color = packed_color == 0 ? 0xFFFFFFFF : packed_color;
+        uint32_t packed_color = sprite->color ? _sbatch_pack_color(sprite->color) : 0xFFFFFFFF;
 
         ctx->images[sprite_index] = sprite->image;
 
