@@ -70,6 +70,7 @@ extern "C" {
 
     typedef struct sbatch_desc {
         int context_pool_size;
+        int pipeline_pool_size;
         sg_pixel_format color_format;
         sg_pixel_format depth_format;
         int sample_count;
@@ -79,23 +80,24 @@ extern "C" {
         uint32_t id;
     } sbatch_context;
 
-    enum
-    {
-        SBATCH_MAX_SPRITES = (1 << 16) / 4,
-        SBATCH_DEFAULT_SPRITES = SBATCH_MAX_SPRITES / 4
-    };
+    typedef struct sbatch_pipeline {
+        uint32_t id;
+    } sbatch_pipeline;
 
     typedef struct sbatch_context_desc {
         int canvas_width;
         int canvas_height;
         int max_sprites;
-        sg_pipeline pipeline;
+        sbatch_pipeline pipeline;
         const char* label;
     } sbatch_context_desc;
 
     SOKOL_SPRITEBATCH_API_DECL void sbatch_setup(const sbatch_desc* desc);
     SOKOL_SPRITEBATCH_API_DECL void sbatch_shutdown(void);
     SOKOL_SPRITEBATCH_API_DECL int sbatch_frame();
+
+    SOKOL_SPRITEBATCH_API_DECL sbatch_pipeline sbatch_make_pipeline(const sg_pipeline_desc* desc);
+    SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_pipeline(sbatch_pipeline context);
 
     SOKOL_SPRITEBATCH_API_DECL sbatch_context sbatch_make_context(const sbatch_context_desc* desc);
     SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_context(sbatch_context context);
@@ -199,7 +201,7 @@ typedef struct {
     _sbatch_vertex* vertices;
     sg_image* images;
     sg_buffer vertex_buffer;
-    sg_pipeline pipeline;
+    sbatch_pipeline pipeline;
     int update_frame_index;
     _sbatch_fs_uniform_state fs_uniform_state;
 } _sbatch_context;
@@ -215,6 +217,18 @@ typedef struct {
     _sbatch_pool pool;
     _sbatch_context* contexts;
 } _sbatch_context_pool;
+
+typedef struct {
+    _sbatch_str label;
+    _sbatch_slot slot;
+    sg_pipeline_desc desc;
+    sg_pipeline pipeline;
+} _sbatch_pipeline;
+
+typedef struct {
+    _sbatch_pool pool;
+    _sbatch_pipeline* pipelines;
+} _sbatch_pipeline_pool;
 
 typedef struct {
     sg_image image;
@@ -234,9 +248,10 @@ typedef struct {
     _sbatch_slot slot;
     sg_bindings bindings;
     sg_shader shader;
-    sg_pipeline pipeline;
+    sbatch_pipeline pipeline;
     sbatch_context ctx_id;
     _sbatch_context_pool context_pool;
+    _sbatch_pipeline_pool pipeline_pool;
     _sbatch_sprite_pool sprite_pool;
     sg_buffer index_buffer;
     int frame_index;
@@ -402,7 +417,6 @@ static _sbatch_str _sbatch_make_str(const char* str) {
     return res;
 }
 
-/*=== CONTEXT POOL ===========================================================*/
 static void _sbatch_init_pool(_sbatch_pool* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
     /* slot 0 is reserved for the 'invalid id', so bump the pool size by 1 */
@@ -461,24 +475,6 @@ static void _sbatch_pool_free_index(_sbatch_pool* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size - 1));
 }
 
-static void _sbatch_setup_context_pool(const sbatch_desc* desc) {
-    SOKOL_ASSERT(desc);
-    /* note: the pool will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SBATCH_MAX_POOL_SIZE));
-    _sbatch_init_pool(&_sbatch.context_pool.pool, desc->context_pool_size);
-    const size_t pool_byte_size = sizeof(_sbatch_context) * (size_t)_sbatch.context_pool.pool.size;
-    _sbatch.context_pool.contexts = (_sbatch_context*)SOKOL_MALLOC(pool_byte_size);
-    SOKOL_ASSERT(_sbatch.context_pool.contexts);
-    memset(_sbatch.context_pool.contexts, 0, pool_byte_size);
-}
-
-static void _sbatch_discard_context_pool(void) {
-    SOKOL_ASSERT(_sbatch.context_pool.contexts);
-    SOKOL_FREE(_sbatch.context_pool.contexts);
-    _sbatch.context_pool.contexts = 0;
-    _sbatch_discard_pool(&_sbatch.context_pool.pool);
-}
-
 /* allocate the slot at slot_index:
     - bump the slot's generation counter
     - create a resource id from the generation counter and slot index
@@ -505,6 +501,24 @@ static int _sbatch_slot_index(uint32_t id) {
     const int slot_index = (int)(id & _SBATCH_SLOT_MASK);
     SOKOL_ASSERT(_SBATCH_INVALID_SLOT_INDEX != slot_index);
     return slot_index;
+}
+
+static void _sbatch_setup_context_pool(const sbatch_desc* desc) {
+    SOKOL_ASSERT(desc);
+    /* note: the pool will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SBATCH_MAX_POOL_SIZE));
+    _sbatch_init_pool(&_sbatch.context_pool.pool, desc->context_pool_size);
+    const size_t pool_byte_size = sizeof(_sbatch_context) * (size_t)_sbatch.context_pool.pool.size;
+    _sbatch.context_pool.contexts = (_sbatch_context*)SOKOL_MALLOC(pool_byte_size);
+    SOKOL_ASSERT(_sbatch.context_pool.contexts);
+    memset(_sbatch.context_pool.contexts, 0, pool_byte_size);
+}
+
+static void _sbatch_discard_context_pool(void) {
+    SOKOL_ASSERT(_sbatch.context_pool.contexts);
+    SOKOL_FREE(_sbatch.context_pool.contexts);
+    _sbatch.context_pool.contexts = 0;
+    _sbatch_discard_pool(&_sbatch.context_pool.pool);
 }
 
 /* get context pointer without id-check */
@@ -544,6 +558,65 @@ static sbatch_context _sbatch_alloc_context(void) {
         ctx_id = _sbatch_make_ctx_id(SG_INVALID_ID);
     }
     return ctx_id;
+}
+
+///////////////////////////////
+
+static void _sbatch_setup_pipeline_pool(const sbatch_desc* desc) {
+    SOKOL_ASSERT(desc);
+    /* note: the pool will have an additional item, since slot 0 is reserved */
+    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SBATCH_MAX_POOL_SIZE));
+    _sbatch_init_pool(&_sbatch.pipeline_pool.pool, desc->pipeline_pool_size);
+    const size_t pool_byte_size = sizeof(_sbatch_pipeline) * (size_t)_sbatch.pipeline_pool.pool.size;
+    _sbatch.pipeline_pool.pipelines = (_sbatch_pipeline*)SOKOL_MALLOC(pool_byte_size);
+    SOKOL_ASSERT(_sbatch.pipeline_pool.pipelines);
+    memset(_sbatch.pipeline_pool.pipelines, 0, pool_byte_size);
+}
+
+static void _sbatch_discard_pipeline_pool(void) {
+    SOKOL_ASSERT(_sbatch.pipeline_pool.pipelines);
+    SOKOL_FREE(_sbatch.pipeline_pool.pipelines);
+    _sbatch.pipeline_pool.pipelines = 0;
+    _sbatch_discard_pool(&_sbatch.pipeline_pool.pool);
+}
+
+/* get pipeline pointer without id-check */
+static _sbatch_pipeline* _sbatch_pipeline_at(uint32_t pip_id) {
+    SOKOL_ASSERT(SG_INVALID_ID != pip_id);
+    const int slot_index = _sbatch_slot_index(pip_id);
+    SOKOL_ASSERT((slot_index > _SBATCH_INVALID_SLOT_INDEX) && (slot_index < _sbatch.pipeline_pool.pool.size));
+    return &_sbatch.pipeline_pool.pipelines[slot_index];
+}
+
+/* get pipeline pointer with id-check, returns 0 if no match */
+static _sbatch_pipeline* _sbatch_lookup_pipeline(uint32_t pip_id) {
+    if (SG_INVALID_ID != pip_id) {
+        _sbatch_pipeline* pip = _sbatch_pipeline_at(pip_id);
+        if (pip->slot.id == pip_id) {
+            return pip;
+        }
+    }
+    return NULL;
+}
+
+/* make pipeline handle from raw uint32_t id */
+static sbatch_pipeline _sbatch_make_pip_id(uint32_t pip_id) {
+    sbatch_pipeline pip;
+    pip.id = pip_id;
+    return pip;
+}
+
+static sbatch_pipeline _sbatch_alloc_pipeline(void) {
+    sbatch_pipeline pip_id;
+    const int slot_index = _sbatch_pool_alloc_index(&_sbatch.pipeline_pool.pool);
+    if (_SBATCH_INVALID_SLOT_INDEX != slot_index) {
+        pip_id = _sbatch_make_pip_id(_sbatch_slot_alloc(&_sbatch.pipeline_pool.pool, &_sbatch.pipeline_pool.pipelines[slot_index].slot, slot_index));
+    }
+    else {
+        /* pool is exhausted */
+        pip_id = _sbatch_make_pip_id(SG_INVALID_ID);
+    }
+    return pip_id;
 }
 
 static sbatch_context_desc _sbatch_context_desc_defaults(const sbatch_context_desc* desc) {
@@ -598,7 +671,6 @@ static void _sbatch_init_context(sbatch_context ctx_id, const sbatch_context_des
 static void _sbatch_destroy_context(sbatch_context ctx_id) {
     _sbatch_context* ctx = _sbatch_lookup_context(ctx_id.id);
     if (ctx) {
-        ctx->sprite_count = 0;
         if (ctx->vertices) {
             SOKOL_FREE(ctx->vertices);
         }
@@ -610,6 +682,59 @@ static void _sbatch_destroy_context(sbatch_context ctx_id) {
         sg_pop_debug_group();
         memset(ctx, 0, sizeof(*ctx));
         _sbatch_pool_free_index(&_sbatch.context_pool.pool, _sbatch_slot_index(ctx_id.id));
+    }
+}
+
+
+static sg_pipeline_desc _sbatch_pipeline_desc_defaults(const sg_pipeline_desc* desc) {
+    sg_pipeline_desc pipeline_desc = *desc;
+
+    pipeline_desc.color_count = _SBATCH_DEFAULT(pipeline_desc.color_count, 1);
+    if (pipeline_desc.color_count == 1) {
+        pipeline_desc.colors[0].blend.enabled = _SBATCH_DEFAULT(desc->colors[0].blend.enabled, true);
+        pipeline_desc.colors[0].blend.src_factor_rgb = _SBATCH_DEFAULT(desc->colors[0].blend.src_factor_rgb, SG_BLENDFACTOR_ONE);
+        pipeline_desc.colors[0].blend.src_factor_alpha = _SBATCH_DEFAULT(desc->colors[0].blend.src_factor_rgb, SG_BLENDFACTOR_ONE);
+        pipeline_desc.colors[0].blend.dst_factor_rgb = _SBATCH_DEFAULT(desc->colors[0].blend.src_factor_rgb, SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA);
+        pipeline_desc.colors[0].blend.dst_factor_alpha = _SBATCH_DEFAULT(desc->colors[0].blend.src_factor_rgb, SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA);
+    }
+
+    pipeline_desc.shader.id = _SBATCH_DEFAULT(desc->shader.id, _sbatch.shader.id);
+    pipeline_desc.index_type = SG_INDEXTYPE_UINT16;
+    pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+    pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_UBYTE4N;
+    pipeline_desc.label = _SBATCH_DEFAULT(desc->label, "sokol-spritebatch-pipline");
+    return pipeline_desc;
+}
+
+static void _sbatch_init_pipeline(sbatch_pipeline pip_id, const sg_pipeline_desc* in_desc) {
+    sg_push_debug_group("sokol-spritebatch");
+
+    SOKOL_ASSERT((pip_id.id != SG_INVALID_ID) && in_desc);
+
+    _sbatch_pipeline* pip = _sbatch_lookup_pipeline(pip_id.id);
+    SOKOL_ASSERT(pip);
+
+    pip->desc = _sbatch_pipeline_desc_defaults(in_desc);
+
+    pip->label = _sbatch_make_str(pip->desc.label);
+
+    pip->desc.label = NULL;
+
+    pip->pipeline = sg_make_pipeline(&pip->desc);
+    SOKOL_ASSERT(pip->pipeline.id != SG_INVALID_ID);
+
+    sg_pop_debug_group();
+}
+
+static void _sbatch_destroy_pipeline(sbatch_pipeline pip_id) {
+    _sbatch_pipeline* pip = _sbatch_lookup_pipeline(pip_id.id);
+    if (pip) {
+        sg_push_debug_group("sokol-spritebatch");
+        sg_destroy_pipeline(pip->pipeline);
+        sg_pop_debug_group();
+        memset(pip, 0, sizeof(*pip));
+        _sbatch_pool_free_index(&_sbatch.pipeline_pool.pool, _sbatch_slot_index(pip_id.id));
     }
 }
 
@@ -774,37 +899,40 @@ SOKOL_API_IMPL void sbatch_setup(const sbatch_desc* desc) {
 
     sbatch_desc batch_desc = *desc;
     batch_desc.context_pool_size = _SBATCH_DEFAULT(batch_desc.context_pool_size, 32);
+    batch_desc.pipeline_pool_size = _SBATCH_DEFAULT(batch_desc.pipeline_pool_size, 32);
     _sbatch_setup_context_pool(&batch_desc);
+    _sbatch_setup_pipeline_pool(&batch_desc);
     _sbatch_setup_sprite_pool();
 
     _sbatch.shader = sg_make_shader(spritebatch_shader_desc(sg_query_backend()));
 
     sg_pipeline_desc pipeline_desc;
     memset(&pipeline_desc, 0, sizeof(sg_pipeline_desc));
-    pipeline_desc.color_count = 1;
-    pipeline_desc.colors[0].blend.enabled = true;
-    pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
-    pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-    pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pipeline_desc.shader = _sbatch.shader;
-    pipeline_desc.index_type = SG_INDEXTYPE_UINT16;
-    pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-    pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-    pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_UBYTE4N;
     pipeline_desc.label = "spritebatch-default-pipeline";
-
-    _sbatch.pipeline = sg_make_pipeline(&pipeline_desc);
+    _sbatch.pipeline = sbatch_make_pipeline(&pipeline_desc);
 
     _sbatch_init_index_buffer();
 }
 
 SOKOL_API_IMPL void sbatch_shutdown(void) {
     sg_destroy_buffer(_sbatch.index_buffer);
-    sg_destroy_pipeline(_sbatch.pipeline);
+    sbatch_destroy_pipeline(_sbatch.pipeline);
     sg_destroy_shader(_sbatch.shader);
     _sbatch_discard_context_pool();
     SOKOL_FREE(_sbatch.sprite_pool.data);
+}
+
+SOKOL_SPRITEBATCH_API_DECL sbatch_pipeline sbatch_make_pipeline(const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(desc);
+    const sbatch_pipeline result = _sbatch_alloc_pipeline();
+    _sbatch_init_pipeline(result, desc);
+    return result;
+}
+
+SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_pipeline(sbatch_pipeline pipeline) {
+    SOKOL_ASSERT(pipeline.id != SG_INVALID_ID);
+    _sbatch_destroy_pipeline(pipeline);
 }
 
 SOKOL_API_IMPL sbatch_context sbatch_make_context(const sbatch_context_desc* desc) {
@@ -1085,7 +1213,8 @@ void sbatch_end(void) {
     int base_element = 0;
     sg_image current_image = ctx->images[0];
 
-    sg_apply_pipeline(ctx->pipeline);
+    const _sbatch_pipeline* pipeline = _sbatch_pipeline_at(ctx->pipeline.id);
+    sg_apply_pipeline(pipeline->pipeline);
 
     _sbatch_mat4x4 matrix =
         _sbatch_orthographic_off_center(0.0f, (float)ctx->desc.canvas_width, (float)ctx->desc.canvas_height, 0.0f, 0.0f, 1000.0f);
