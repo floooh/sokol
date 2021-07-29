@@ -1963,8 +1963,9 @@ SOKOL_API_IMPL void sbatch_shutdown(void) {
     sg_destroy_buffer(_sbatch.index_buffer);
     sbatch_destroy_pipeline(_sbatch.pipeline);
     sg_destroy_shader(_sbatch.shader);
-    _sbatch_discard_context_pool();
     SOKOL_FREE(_sbatch.sprite_pool.data);
+    _sbatch_discard_pipeline_pool();
+    _sbatch_discard_context_pool();
 }
 
 SOKOL_SPRITEBATCH_API_DECL sbatch_pipeline sbatch_make_pipeline(const sg_pipeline_desc* desc) {
