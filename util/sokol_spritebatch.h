@@ -118,6 +118,12 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_end(void);
 
 SOKOL_SPRITEBATCH_API_DECL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_count);
 
+SOKOL_SPRITEBATCH_API_DECL sbatch_matrix sbatch_matrix_identity();
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_multiply(sbatch_matrix* dst, const sbatch_matrix* a, const sbatch_matrix* b);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_rotate(sbatch_matrix* dst, float a, float x, float y, float z);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_scale(sbatch_matrix* dst, float x, float y, float z);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_translate(sbatch_matrix* dst, float x, float y, float z);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -1936,18 +1942,6 @@ static bool _sbatch_matrix_isnull(const sbatch_matrix* m) {
     return true;
 }
 
-static sbatch_matrix _sbatch_matrix_identity(void) {
-    sbatch_matrix m = {
-        {
-            { 1.0f, 0.0f, 0.0f, 0.0f },
-            { 0.0f, 1.0f, 0.0f, 0.0f },
-            { 0.0f, 0.0f, 1.0f, 0.0f },
-            { 0.0f, 0.0f, 0.0f, 1.0f }
-        }
-    };
-    return m;
-}
-
 static sbatch_render_state _sbatch_render_state_defaults(const sbatch_render_state* render_state) {
     sbatch_render_state res;
     if (render_state) {
@@ -1958,7 +1952,7 @@ static sbatch_render_state _sbatch_render_state_defaults(const sbatch_render_sta
     res.pipeline.id = _SBATCH_DEFAULT(res.pipeline.id, _sbatch.pipeline.id);
     res.canvas_height = _SBATCH_DEFAULT(res.canvas_height, _SBATCH_DEFAULT_CANVAS_HEIGHT);
     res.canvas_width = _SBATCH_DEFAULT(res.canvas_width, _SBATCH_DEFAULT_CANVAS_WIDTH);
-    res.transform = _sbatch_matrix_isnull(&res.transform) ? _sbatch_matrix_identity() : res.transform;
+    res.transform = _sbatch_matrix_isnull(&res.transform) ? sbatch_matrix_identity() : res.transform;
     return res;
 }
 
@@ -2355,6 +2349,82 @@ SOKOL_API_IMPL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_co
         pixels[1] = pixels[1] * pixels[3] / 255;
         pixels[2] = pixels[2] * pixels[3] / 255;
         pixels += 4;
+    }
+}
+
+SOKOL_API_IMPL sbatch_matrix sbatch_matrix_identity() {
+    sbatch_matrix m = {{
+        { 1.0f, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 1.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f, 0.0f },
+        { 0.0f, 0.0f, 0.0f, 1.0f }
+    }};
+    return m;
+}
+
+SOKOL_API_IMPL void sbatch_matrix_multiply(sbatch_matrix* dst, const sbatch_matrix* a, const sbatch_matrix* b) {
+    for (int r = 0; r < 4; r++) {
+        float ai0 = a->m[0][r], ai1 = a->m[1][r], ai2 = a->m[2][r], ai3 = a->m[3][r];
+        dst->m[0][r] = ai0 * b->m[0][0] + ai1 * b->m[0][1] + ai2 * b->m[0][2] + ai3 * b->m[0][3];
+        dst->m[1][r] = ai0 * b->m[1][0] + ai1 * b->m[1][1] + ai2 * b->m[1][2] + ai3 * b->m[1][3];
+        dst->m[2][r] = ai0 * b->m[2][0] + ai1 * b->m[2][1] + ai2 * b->m[2][2] + ai3 * b->m[2][3];
+        dst->m[3][r] = ai0 * b->m[3][0] + ai1 * b->m[3][1] + ai2 * b->m[3][2] + ai3 * b->m[3][3];
+    }
+}
+
+SOKOL_API_IMPL void sbatch_matrix_rotate(sbatch_matrix* dst, float a, float x, float y, float z) {
+    float s = sinf(a);
+    float c = cosf(a);
+
+    float mag = sqrtf(x * x + y * y + z * z);
+    if (mag < 1.0e-4F) {
+        return;
+    }
+    x /= mag;
+    y /= mag;
+    z /= mag;
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float yz = y * z;
+    float zx = z * x;
+    float xs = x * s;
+    float ys = y * s;
+    float zs = z * s;
+    float one_c = 1.0f - c;
+
+    sbatch_matrix m;
+    m.m[0][0] = (one_c * xx) + c;
+    m.m[1][0] = (one_c * xy) - zs;
+    m.m[2][0] = (one_c * zx) + ys;
+    m.m[3][0] = 0.0f;
+    m.m[0][1] = (one_c * xy) + zs;
+    m.m[1][1] = (one_c * yy) + c;
+    m.m[2][1] = (one_c * yz) - xs;
+    m.m[3][1] = 0.0f;
+    m.m[0][2] = (one_c * zx) - ys;
+    m.m[1][2] = (one_c * yz) + xs;
+    m.m[2][2] = (one_c * zz) + c;
+    m.m[3][2] = 0.0f;
+    m.m[0][3] = 0.0f;
+    m.m[1][3] = 0.0f;
+    m.m[2][3] = 0.0f;
+    m.m[3][3] = 1.0f;
+    sbatch_matrix_multiply(dst, dst, &m);
+}
+
+SOKOL_API_IMPL void sbatch_matrix_scale(sbatch_matrix* dst, float x, float y, float z) {
+    for (int r = 0; r < 4; r++) {
+        dst->m[0][r] *= x;
+        dst->m[1][r] *= y;
+        dst->m[2][r] *= z;
+    }
+}
+
+SOKOL_API_IMPL void sbatch_matrix_translate(sbatch_matrix* dst, float x, float y, float z) {
+    for (int r = 0; r < 4; r++) {
+        dst->m[3][r] = dst->m[0][r] * x + dst->m[1][r] * y + dst->m[2][r] * z + dst->m[3][r];
     }
 }
 
