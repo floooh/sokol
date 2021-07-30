@@ -85,16 +85,25 @@ typedef struct sbatch_pipeline {
 } sbatch_pipeline;
 
 typedef struct sbatch_context_desc {
-    int canvas_width;
-    int canvas_height;
-    int max_sprites;
-    sbatch_pipeline pipeline;
+    int max_sprites_per_frame;
     const char* label;
 } sbatch_context_desc;
 
+typedef struct sbatch_matrix {
+    float m[4][4];
+} sbatch_matrix;
+
+typedef struct sbatch_render_state {
+    int canvas_width;
+    int canvas_height;
+    sbatch_pipeline pipeline;
+    sbatch_matrix transform;
+    sg_range fs_uniforms;
+} sbatch_render_state;
+
 SOKOL_SPRITEBATCH_API_DECL void sbatch_setup(const sbatch_desc* desc);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_shutdown(void);
-SOKOL_SPRITEBATCH_API_DECL int sbatch_frame();
+SOKOL_SPRITEBATCH_API_DECL int sbatch_frame(void);
 
 SOKOL_SPRITEBATCH_API_DECL sbatch_pipeline sbatch_make_pipeline(const sg_pipeline_desc* desc);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_pipeline(sbatch_pipeline context);
@@ -102,12 +111,10 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_pipeline(sbatch_pipeline context)
 SOKOL_SPRITEBATCH_API_DECL sbatch_context sbatch_make_context(const sbatch_context_desc* desc);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_destroy_context(sbatch_context context);
 
-SOKOL_SPRITEBATCH_API_DECL void sbatch_begin(sbatch_context context);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_begin(sbatch_context context, const sbatch_render_state* render_state);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_push_sprite(const sbatch_sprite* sprite);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_end(void);
-
-SOKOL_SPRITEBATCH_API_DECL void sbatch_apply_fs_uniforms(int ub_index, const sg_range* data);
 
 SOKOL_SPRITEBATCH_API_DECL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_count);
 
@@ -169,6 +176,8 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, 
 #define _SBATCH_MAX_POOL_SIZE (1<<_SBATCH_SLOT_SHIFT)
 #define _SBATCH_SLOT_MASK (_SBATCH_MAX_POOL_SIZE-1)
 #define _SBATCH_STRBUF_LEN (96)
+#define _SBATCH_DEFAULT_CANVAS_WIDTH 480
+#define _SBATCH_DEFAULT_CANVAS_HEIGHT 270
 
 typedef struct {
     float x;
@@ -188,11 +197,6 @@ typedef struct {
     char buf[_SBATCH_STRBUF_LEN];
 } _sbatch_str;
 
-typedef struct _sbatch_fs_uniform_state {
-    int ub_index;
-    const sg_range* data;
-} _sbatch_fs_uniform_state;
-
 typedef struct {
     _sbatch_str label;
     _sbatch_slot slot;
@@ -201,9 +205,7 @@ typedef struct {
     _sbatch_vertex* vertices;
     sg_image* images;
     sg_buffer vertex_buffer;
-    sbatch_pipeline pipeline;
     int update_frame_index;
-    _sbatch_fs_uniform_state fs_uniform_state;
 } _sbatch_context;
 
 typedef struct {
@@ -245,21 +247,18 @@ typedef struct {
 
 typedef struct {
     bool begin_called;
+    sbatch_render_state render_state;
     _sbatch_slot slot;
     sg_bindings bindings;
     sg_shader shader;
     sbatch_pipeline pipeline;
-    sbatch_context ctx_id;
+    sbatch_context context;
     _sbatch_context_pool context_pool;
     _sbatch_pipeline_pool pipeline_pool;
     _sbatch_sprite_pool sprite_pool;
     sg_buffer index_buffer;
     int frame_index;
 } _sbatch_t;
-
-typedef struct {
-    float m[4][4];
-} _sbatch_mat4x4;
 
 static _sbatch_t _sbatch;
 
@@ -1661,9 +1660,7 @@ static sbatch_pipeline _sbatch_alloc_pipeline(void) {
 
 static sbatch_context_desc _sbatch_context_desc_defaults(const sbatch_context_desc* desc) {
     sbatch_context_desc res = *desc;
-    res.max_sprites = _SBATCH_DEFAULT(res.max_sprites, 4096);
-    res.canvas_height = _SBATCH_DEFAULT(res.canvas_height, 480);
-    res.canvas_width = _SBATCH_DEFAULT(res.canvas_width, 640);
+    res.max_sprites_per_frame = _SBATCH_DEFAULT(res.max_sprites_per_frame, 4096);
     return res;
 }
 
@@ -1683,16 +1680,14 @@ static void _sbatch_init_context(sbatch_context ctx_id, const sbatch_context_des
 
     ctx->desc.label = NULL;
 
-    const int max_vertices = 4 * ctx->desc.max_sprites;
+    const int max_vertices = 4 * ctx->desc.max_sprites_per_frame;
     const size_t vbuf_size = (size_t)max_vertices * sizeof(_sbatch_vertex);
 
     ctx->vertices = (_sbatch_vertex*)SOKOL_MALLOC(vbuf_size);
     SOKOL_ASSERT(ctx->vertices);
 
-    ctx->images = (sg_image*)SOKOL_MALLOC((size_t)ctx->desc.max_sprites * sizeof(sg_image));
+    ctx->images = (sg_image*)SOKOL_MALLOC((size_t)ctx->desc.max_sprites_per_frame * sizeof(sg_image));
     SOKOL_ASSERT(ctx->images);
-
-    ctx->pipeline.id = _SBATCH_DEFAULT(in_desc->pipeline.id, _sbatch.pipeline.id);
 
     ctx->sprite_count = 0;
 
@@ -1929,7 +1924,44 @@ static bool _sbatch_rect_is_valid(const sbatch_rect* rect) {
     return false;
 }
 
-SOKOL_SPRITEBATCH_API_DECL int sbatch_frame() {
+static bool _sbatch_matrix_isnull(const sbatch_matrix* m) {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (0.0f != m->m[y][x]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static sbatch_matrix _sbatch_matrix_identity(void) {
+    sbatch_matrix m = {
+        {
+            { 1.0f, 0.0f, 0.0f, 0.0f },
+            { 0.0f, 1.0f, 0.0f, 0.0f },
+            { 0.0f, 0.0f, 1.0f, 0.0f },
+            { 0.0f, 0.0f, 0.0f, 1.0f }
+        }
+    };
+    return m;
+}
+
+static sbatch_render_state _sbatch_render_state_defaults(const sbatch_render_state* render_state) {
+    sbatch_render_state res;
+    if (render_state) {
+        res = *render_state;
+    } else {
+        memset(&res, 0, sizeof res);
+    }
+    res.pipeline.id = _SBATCH_DEFAULT(res.pipeline.id, _sbatch.pipeline.id);
+    res.canvas_height = _SBATCH_DEFAULT(res.canvas_height, _SBATCH_DEFAULT_CANVAS_HEIGHT);
+    res.canvas_width = _SBATCH_DEFAULT(res.canvas_width, _SBATCH_DEFAULT_CANVAS_WIDTH);
+    res.transform = _sbatch_matrix_isnull(&res.transform) ? _sbatch_matrix_identity() : res.transform;
+    return res;
+}
+
+SOKOL_SPRITEBATCH_API_DECL int sbatch_frame(void) {
     return ++_sbatch.frame_index;
 }
 
@@ -1992,30 +2024,29 @@ SOKOL_API_IMPL void sbatch_destroy_context(sbatch_context context) {
     _sbatch_destroy_context(context);
 }
 
-SOKOL_API_IMPL void sbatch_begin(sbatch_context context) {
-    SOKOL_ASSERT(context.id != SG_INVALID_ID);
-    _sbatch.ctx_id = context;
+SOKOL_API_IMPL void sbatch_begin(sbatch_context context, const sbatch_render_state* render_state) {
     SOKOL_ASSERT(!_sbatch.begin_called);
-    _sbatch.begin_called = true;
 
-    _sbatch_context* ctx = _sbatch_context_at(_sbatch.ctx_id.id);
+    _sbatch.begin_called = true;
+    _sbatch.render_state = _sbatch_render_state_defaults(render_state);
+
+    SOKOL_ASSERT(context.id != SG_INVALID_ID);
+    _sbatch.context = context;
+    _sbatch_context* ctx = _sbatch_context_at(_sbatch.context.id);
 
     // a sbatch_context object can only be used in one sbatch_begin call per frame.
     SOKOL_ASSERT(_sbatch.frame_index != ctx->update_frame_index);
     ctx->update_frame_index = _sbatch.frame_index;
-
-    SOKOL_ASSERT(ctx);
-    _sbatch.bindings.vertex_buffers[0] = ctx->vertex_buffer;
 }
 
 SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
     SOKOL_ASSERT(sprite);
     SOKOL_ASSERT(sprite->image.id != SG_INVALID_ID);
 
-    _sbatch_context* ctx = _sbatch_context_at(_sbatch.ctx_id.id);
+    _sbatch_context* ctx = _sbatch_context_at(_sbatch.context.id);
     SOKOL_ASSERT(ctx);
 
-    if (ctx->sprite_count < ctx->desc.max_sprites) {
+    if (ctx->sprite_count < ctx->desc.max_sprites_per_frame) {
 
         const int sprite_index = ctx->sprite_count++;
 
@@ -2110,10 +2141,10 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
     SOKOL_ASSERT(sprite);
     SOKOL_ASSERT(sprite->image.id != SG_INVALID_ID);
 
-    _sbatch_context* ctx = _sbatch_context_at(_sbatch.ctx_id.id);
+    _sbatch_context* ctx = _sbatch_context_at(_sbatch.context.id);
     SOKOL_ASSERT(ctx);
 
-    if (ctx->sprite_count < ctx->desc.max_sprites) {
+    if (ctx->sprite_count < ctx->desc.max_sprites_per_frame) {
 
         const int sprite_index = ctx->sprite_count++;
 
@@ -2202,14 +2233,15 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
     }
 }
 
-static void _sbatch_draw(int base_element, sg_image current_image, int num_elements) {
+static void _sbatch_draw(int base_element, sg_image current_image, sg_buffer vertex_buffer, int num_elements) {
     _sbatch.bindings.fs_images[0] = current_image;
+    _sbatch.bindings.vertex_buffers[0] = vertex_buffer;
     sg_apply_bindings(&_sbatch.bindings);
     sg_draw(base_element, num_elements, 1);
 }
 
-static _sbatch_mat4x4 _sbatch_orthographic_off_center(float left, float right, float bottom, float top, float z_near, float z_far) {
-    _sbatch_mat4x4 result;
+static sbatch_matrix _sbatch_orthographic_off_center(float left, float right, float bottom, float top, float z_near, float z_far) {
+    sbatch_matrix result;
 
     result.m[0][0] = 2.0f / (right - left);
     result.m[0][1] = 0.0f;
@@ -2234,11 +2266,21 @@ static _sbatch_mat4x4 _sbatch_orthographic_off_center(float left, float right, f
     return result;
 }
 
+static void _sbatch_matmul(sbatch_matrix* p, const sbatch_matrix* a, const sbatch_matrix* b) {
+    for (int r = 0; r < 4; r++) {
+        float ai0 = a->m[0][r], ai1 = a->m[1][r], ai2 = a->m[2][r], ai3 = a->m[3][r];
+        p->m[0][r] = ai0 * b->m[0][0] + ai1 * b->m[0][1] + ai2 * b->m[0][2] + ai3 * b->m[0][3];
+        p->m[1][r] = ai0 * b->m[1][0] + ai1 * b->m[1][1] + ai2 * b->m[1][2] + ai3 * b->m[1][3];
+        p->m[2][r] = ai0 * b->m[2][0] + ai1 * b->m[2][1] + ai2 * b->m[2][2] + ai3 * b->m[2][3];
+        p->m[3][r] = ai0 * b->m[3][0] + ai1 * b->m[3][1] + ai2 * b->m[3][2] + ai3 * b->m[3][3];
+    }
+}
+
 void sbatch_end(void) {
     SOKOL_ASSERT(_sbatch.begin_called);
     _sbatch.begin_called = false;
 
-    _sbatch_context* ctx = _sbatch_context_at(_sbatch.ctx_id.id);
+    _sbatch_context* ctx = _sbatch_context_at(_sbatch.context.id);
     SOKOL_ASSERT(ctx);
 
     if (ctx->sprite_count == 0) {
@@ -2250,47 +2292,56 @@ void sbatch_end(void) {
     const sg_range range = { ctx->vertices, vbuf_size };
     sg_update_buffer(ctx->vertex_buffer, &range);
 
-    int batch_size = 0;
-    int base_element = 0;
-    sg_image current_image = ctx->images[0];
+    const _sbatch_pipeline* pipeline =
+        _sbatch_pipeline_at(_sbatch.render_state.pipeline.id);
 
-    const _sbatch_pipeline* pipeline = _sbatch_pipeline_at(ctx->pipeline.id);
     sg_apply_pipeline(pipeline->pipeline);
 
-    sg_apply_viewportf(0.0f, 0.0f, (float)ctx->desc.canvas_width, (float)ctx->desc.canvas_height, true);
+    const float width = (float)_sbatch.render_state.canvas_width;
+    const float height = (float)_sbatch.render_state.canvas_height;
+    sg_apply_viewportf(0.0f, 0.0f, width, height, true);
 
-    _sbatch_mat4x4 matrix =
-        _sbatch_orthographic_off_center(0.0f, (float)ctx->desc.canvas_width, (float)ctx->desc.canvas_height, 0.0f, 0.0f, 1000.0f);
+    sbatch_matrix projection =
+        _sbatch_orthographic_off_center(0.0f, width, height, 0.0f, 0.0f, 1000.0f);
 
-    const sg_range matrix_range = { &matrix, sizeof matrix };
+    sbatch_matrix mvp;
+    _sbatch_matmul(&mvp, &projection, &_sbatch.render_state.transform);
+
+    const sg_range matrix_range = { &mvp, sizeof mvp };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &matrix_range);
 
-    if(ctx->fs_uniform_state.data) {
-        sg_apply_uniforms(SG_SHADERSTAGE_FS, ctx->fs_uniform_state.ub_index, ctx->fs_uniform_state.data);
+    if(_sbatch.render_state.fs_uniforms.ptr && _sbatch.render_state.fs_uniforms.size > 0) {
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &_sbatch.render_state.fs_uniforms);
     }
 
+    int batch_size = 0;
+    int base_element = 0;
+    sg_image previous_image = ctx->images[0];
+
+    // walk over all the sprites
     for (int i = 0; i < ctx->sprite_count; ++i, ++batch_size) {
-        if (ctx->images[i].id != current_image.id) {
+        // if the current sprite's image is not the same as the previous sprite's image,
+        // draw all the sprites in the current batch then start a new batch
+        if (ctx->images[i].id != previous_image.id) {
+            // draw the current batch
             const int num_elements = batch_size * 6;
-            _sbatch_draw(base_element, current_image, num_elements);
+            _sbatch_draw(base_element, previous_image, ctx->vertex_buffer, num_elements);
+
+            // create a new batch starting at the current sprite
             batch_size = 0;
             base_element += num_elements;
-            current_image = ctx->images[i];
+            previous_image = ctx->images[i];
         }
+        // if the current sprite's image is the same as the previous sprite's image,
+        // it becomes part of the current batch.
     }
 
+    // draw the final batch
     const int num_elements = batch_size * 6;
-    _sbatch_draw(base_element, current_image, num_elements);
+    _sbatch_draw(base_element, previous_image, ctx->vertex_buffer, num_elements);
 
+    // context is ready for more sprites to be submitted
     ctx->sprite_count = 0;
-}
-
-SOKOL_API_IMPL void sbatch_apply_fs_uniforms(int ub_index, const sg_range* data) {
-    SOKOL_ASSERT(data);
-    SOKOL_ASSERT(data->ptr);
-    _sbatch_context* ctx = _sbatch_context_at(_sbatch.ctx_id.id);
-    ctx->fs_uniform_state.ub_index = ub_index;
-    ctx->fs_uniform_state.data = data;
 }
 
 SOKOL_API_IMPL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_count) {
