@@ -238,6 +238,7 @@ typedef struct {
     int height;
     float texel_width;
     float texel_height;
+    sg_resource_state state;
 } _sbatch_sprite_data;
 
 typedef struct {
@@ -2039,6 +2040,25 @@ SOKOL_API_IMPL void sbatch_begin(sbatch_context context, const sbatch_render_sta
     ctx->update_frame_index = _sbatch.frame_index;
 }
 
+static _sbatch_sprite_data* _sbatch_get_or_create_sprite_data(sg_image image) {
+    _sbatch_sprite_data* cached_sprite_data = &_sbatch.sprite_pool.data[_sg_image_slot_index(image.id)];
+    // if this is a new image or it has yet to be initialized, cache some important information about it!  
+    if (cached_sprite_data->state != SG_RESOURCESTATE_VALID || cached_sprite_data->image.id != image.id) {
+        const sg_image_info info = sg_query_image_info(image);
+        cached_sprite_data->state = info.slot.state;
+        if (cached_sprite_data->state != SG_RESOURCESTATE_VALID) {
+            // image isn't ready to be used yet, bail out
+            return NULL;
+        }
+        cached_sprite_data->height = info.height;
+        cached_sprite_data->width = info.width;
+        cached_sprite_data->texel_height = 1.0f / (float)info.height;
+        cached_sprite_data->texel_width = 1.0f / (float)info.width;
+        cached_sprite_data->image = image;
+    }
+    return cached_sprite_data;
+}
+
 SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
     SOKOL_ASSERT(sprite);
     SOKOL_ASSERT(sprite->image.id != SG_INVALID_ID);
@@ -2048,17 +2068,9 @@ SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
 
     if (ctx->sprite_count < ctx->desc.max_sprites_per_frame) {
 
-        const int sprite_index = ctx->sprite_count++;
-
-        _sbatch_sprite_data* cached_sprite_data = &_sbatch.sprite_pool.data[_sg_image_slot_index(sprite->image.id)];
-
-        if (cached_sprite_data->image.id != sprite->image.id) {
-            const sg_image_info info = sg_query_image_info(sprite->image);
-            cached_sprite_data->height = info.height;
-            cached_sprite_data->width = info.width;
-            cached_sprite_data->texel_height = 1.0f / (float)info.height;
-            cached_sprite_data->texel_width = 1.0f / (float)info.width;
-            cached_sprite_data->image = sprite->image;
+        _sbatch_sprite_data* cached_sprite_data = _sbatch_get_or_create_sprite_data(sprite->image);
+        if(!cached_sprite_data) {
+            return;
         }
 
         const sbatch_float2 scale = { _SBATCH_DEFAULT(sprite->scale.x, 1.0f),  _SBATCH_DEFAULT(sprite->scale.y, 1.0f) };
@@ -2097,8 +2109,8 @@ SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
 
         uint32_t packed_color = sprite->color ? _sbatch_pack_color(sprite->color) : 0xFFFFFFFF;
 
+        const int sprite_index = ctx->sprite_count++;
         ctx->images[sprite_index] = sprite->image;
-
         const int base_vertex_index = sprite_index * 4;
         _sbatch_vertex* vertices = ctx->vertices + base_vertex_index;
 
@@ -2146,17 +2158,9 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
 
     if (ctx->sprite_count < ctx->desc.max_sprites_per_frame) {
 
-        const int sprite_index = ctx->sprite_count++;
-
-        _sbatch_sprite_data* cached_sprite_data = &_sbatch.sprite_pool.data[_sg_image_slot_index(sprite->image.id)];
-
-        if (cached_sprite_data->image.id != sprite->image.id) {
-            const sg_image_info info = sg_query_image_info(sprite->image);
-            cached_sprite_data->height = info.height;
-            cached_sprite_data->width = info.width;
-            cached_sprite_data->texel_height = 1.0f / (float)info.height;
-            cached_sprite_data->texel_width = 1.0f / (float)info.width;
-            cached_sprite_data->image = sprite->image;
+        _sbatch_sprite_data* cached_sprite_data = _sbatch_get_or_create_sprite_data(sprite->image);
+        if (!cached_sprite_data) {
+            return;
         }
 
         sbatch_float2 scaled_origin;
@@ -2193,8 +2197,8 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
 
         uint32_t packed_color = sprite->color ? _sbatch_pack_color(sprite->color) : 0xFFFFFFFF;
 
+        const int sprite_index = ctx->sprite_count++;
         ctx->images[sprite_index] = sprite->image;
-
         const int base_vertex_index = sprite_index * 4;
         _sbatch_vertex* vertices = ctx->vertices + base_vertex_index;
 
