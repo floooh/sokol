@@ -1,0 +1,9 @@
+#ifndef SOKOL_CONFIG_H
+#define SOKOL_CONFIG_H
+
+/* the configured options and settings for sokol */
+#define SOKOL_VERSION_MAJOR @sokol_VERSION_MAJOR@
+#define SOKOL_VERSION_MINOR @sokol_VERSION_MINOR@
+#define SOKOL_VERSION_PATCH @sokol_VERSION_PATCH@
+
+#endif /* SOKOL_CONFIG_H */
