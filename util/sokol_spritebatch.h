@@ -318,7 +318,6 @@ static _sbatch_t _sbatch;
 
     @program spritebatch_default sprite_vs sprite_fs
 */
-
 #include <stdint.h>
 #include <stdbool.h>
 #if !defined(SOKOL_SHDC_ALIGN)
