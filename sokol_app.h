@@ -5974,30 +5974,30 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
 
 /* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
-    RECT rect;
-    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        const int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        const int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
-        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = fb_width;
-            _sapp.framebuffer_height = fb_height;
-            /* prevent a framebuffer size of 0 when window is minimized */
-            if (_sapp.framebuffer_width == 0) {
-                _sapp.framebuffer_width = 1;
-            }
-            if (_sapp.framebuffer_height == 0) {
-                _sapp.framebuffer_height = 1;
-            }
-            return true;
-        }
-    }
-    else {
-        _sapp.window_width = _sapp.window_height = 1;
-        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
-    }
-    return false;
+   RECT rect;
+   if (GetClientRect(_sapp.win32.hwnd, &rect)) {
+       _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
+       _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
+       int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
+       int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+       /* prevent a framebuffer size of 0 when window is minimized */
+       if (0 == fb_width) {
+           fb_width = 1;
+       }
+       if (0 == fb_height) {
+           fb_height = 1;
+       }
+       if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+           _sapp.framebuffer_width = fb_width;
+           _sapp.framebuffer_height = fb_height;
+           return true;
+       }
+   }
+   else {
+       _sapp.window_width = _sapp.window_height = 1;
+       _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+   }
+   return false; 
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
