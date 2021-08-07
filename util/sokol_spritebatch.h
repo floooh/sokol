@@ -128,7 +128,7 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_inverse(sbatch_matrix* dst, const 
 SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_transpose(sbatch_matrix* dst, const sbatch_matrix* src);
 
 SOKOL_SPRITEBATCH_API_DECL sbatch_float2 sbatch_canvas_to_world(sbatch_float2 canvas_position);
-SOKOL_SPRITEBATCH_API_DECL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 canvas_position);
+SOKOL_SPRITEBATCH_API_DECL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 world_position);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -2816,10 +2816,10 @@ SOKOL_API_IMPL sbatch_float2 sbatch_canvas_to_world(sbatch_float2 canvas_positio
     return result;
 }
 
-SOKOL_API_IMPL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 canvas_position) {
+SOKOL_API_IMPL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 world_position) {
     sbatch_float2 result;
-    result.x = (canvas_position.x * _sbatch.render_state.transform.m[0][0]) + (canvas_position.y * _sbatch.render_state.transform.m[1][0]) + _sbatch.render_state.transform.m[3][0];
-    result.y = (canvas_position.x * _sbatch.render_state.transform.m[0][1]) + (canvas_position.y * _sbatch.render_state.transform.m[1][1]) + _sbatch.render_state.transform.m[3][1];
+    result.x = (world_position.x * _sbatch.render_state.transform.m[0][0]) + (world_position.y * _sbatch.render_state.transform.m[1][0]) + _sbatch.render_state.transform.m[3][0];
+    result.y = (world_position.x * _sbatch.render_state.transform.m[0][1]) + (world_position.y * _sbatch.render_state.transform.m[1][1]) + _sbatch.render_state.transform.m[3][1];
     return result;
 }
 
