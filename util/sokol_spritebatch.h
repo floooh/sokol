@@ -49,23 +49,23 @@ typedef struct sbatch_sprite {
     sg_image image;
     sbatch_float2 position;
     sbatch_rect source;
-    const sg_color* color;
     float rotation;
     sbatch_float2 origin;
     sbatch_float2 scale;
     uint32_t flags;
     float depth;
+    const sg_color* color;
 } sbatch_sprite;
 
 typedef struct sbatch_sprite_rect {
     sg_image image;
     sbatch_rect destination;
     sbatch_rect source;
-    const sg_color* color;
     float rotation;
     sbatch_float2 origin;
     uint32_t flags;
     float depth;
+    const sg_color* color;
 } sbatch_sprite_rect;
 
 typedef struct sbatch_desc {
@@ -119,11 +119,16 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_end(void);
 
 SOKOL_SPRITEBATCH_API_DECL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_count);
 
-SOKOL_SPRITEBATCH_API_DECL sbatch_matrix sbatch_matrix_identity();
+SOKOL_SPRITEBATCH_API_DECL sbatch_matrix sbatch_matrix_identity(void);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_multiply(sbatch_matrix* dst, const sbatch_matrix* a, const sbatch_matrix* b);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_rotate(sbatch_matrix* dst, float a, float x, float y, float z);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_scale(sbatch_matrix* dst, float x, float y, float z);
 SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_translate(sbatch_matrix* dst, float x, float y, float z);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_inverse(sbatch_matrix* dst, const sbatch_matrix* src);
+SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_transpose(sbatch_matrix* dst, const sbatch_matrix* src);
+
+SOKOL_SPRITEBATCH_API_DECL sbatch_float2 sbatch_canvas_to_world(sbatch_float2 canvas_position);
+SOKOL_SPRITEBATCH_API_DECL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 canvas_position);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -137,6 +142,7 @@ SOKOL_SPRITEBATCH_API_DECL void sbatch_matrix_translate(sbatch_matrix* dst, floa
 
 #include <string.h> /* memset */
 #include <math.h>   /* sinf, cosf */
+#include <float.h>  /* FLT_EPSILON */
 
 #ifndef SOKOL_API_IMPL
 #define SOKOL_API_IMPL
@@ -266,6 +272,7 @@ typedef struct {
     _sbatch_sprite_pool sprite_pool;
     sg_buffer index_buffer;
     int frame_index;
+    sbatch_matrix inverse_transform;
 } _sbatch_t;
 
 static _sbatch_t _sbatch;
@@ -1965,6 +1972,11 @@ static sbatch_pipeline _sbatch_alloc_pipeline(void) {
 static sbatch_context_desc _sbatch_context_desc_defaults(const sbatch_context_desc* desc) {
     sbatch_context_desc res = *desc;
     res.max_sprites_per_frame = _SBATCH_DEFAULT(res.max_sprites_per_frame, 4096);
+    if(res.max_sprites_per_frame > _SBATCH_MAX_QUADS)
+    {
+        SOKOL_LOG("sokol_spritebatch.h warning: context created with max_sprites_per_frame larger than what can be indexed using 16 bit indices.");
+        res.max_sprites_per_frame = _SBATCH_MAX_QUADS;
+    }
     return res;
 }
 
@@ -2280,6 +2292,8 @@ SOKOL_API_IMPL void sbatch_setup(const sbatch_desc* desc) {
     pipeline_desc.sample_count = desc->sample_count;
     _sbatch.pipeline = sbatch_make_pipeline(&pipeline_desc);
 
+    _sbatch.render_state.transform = _sbatch.inverse_transform = sbatch_matrix_identity();
+
     _sbatch_init_index_buffer();
 }
 
@@ -2316,6 +2330,32 @@ SOKOL_API_IMPL void sbatch_destroy_context(sbatch_context context) {
     _sbatch_destroy_context(context);
 }
 
+static sbatch_matrix _sbatch_orthographic_off_center(float left, float right, float bottom, float top, float z_near, float z_far) {
+    sbatch_matrix result;
+
+    result.m[0][0] = 2.0f / (right - left);
+    result.m[0][1] = 0.0f;
+    result.m[0][2] = 0.0f;
+    result.m[0][3] = 0.0f;
+
+    result.m[1][0] = 0.0f;
+    result.m[1][1] = 2.0f / (top - bottom);
+    result.m[1][2] = 0.0f;
+    result.m[1][3] = 0.0f;
+
+    result.m[2][0] = 0.0f;
+    result.m[2][1] = 0.0f;
+    result.m[2][2] = 1.0f / (z_near - z_far);
+    result.m[2][3] = 0.0f;
+
+    result.m[3][0] = (left + right) / (left - right);
+    result.m[3][1] = (bottom + top) / (bottom - top);
+    result.m[3][2] = z_near / (z_near - z_far);
+    result.m[3][3] = 1.0f;
+
+    return result;
+}
+
 SOKOL_API_IMPL void sbatch_begin(sbatch_context context, const sbatch_render_state* render_state) {
     SOKOL_ASSERT(!_sbatch.begin_called);
 
@@ -2329,6 +2369,8 @@ SOKOL_API_IMPL void sbatch_begin(sbatch_context context, const sbatch_render_sta
     // a sbatch_context object can only be used in one sbatch_begin call per frame.
     SOKOL_ASSERT(_sbatch.frame_index != ctx->update_frame_index);
     ctx->update_frame_index = _sbatch.frame_index;
+
+    sbatch_matrix_inverse(&_sbatch.inverse_transform, &_sbatch.render_state.transform);
 }
 
 static _sbatch_sprite_data* _sbatch_get_or_create_sprite_data(sg_image image) {
@@ -2432,10 +2474,10 @@ SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
         }
     } else {
         if (ctx->label.buf[0] != '\0') {
-            SOKOL_LOG("sokol_spritebatch.h: dropped sprites, increase max_sprites of sbatch_context:");
+            SOKOL_LOG("sokol_spritebatch.h warning: dropped sprites, increase max_sprites of sbatch_context:");
             SOKOL_LOG(ctx->label.buf);
         } else {
-            SOKOL_LOG("sokol_spritebatch.h: dropped sprites, increase max_sprites");
+            SOKOL_LOG("sokol_spritebatch.h warning: dropped sprites, increase max_sprites");
         }
     }
 }
@@ -2520,10 +2562,10 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
         }
     } else {
         if (ctx->label.buf[0] != '\0') {
-            SOKOL_LOG("sokol_spritebatch.h: dropped sprites, increase max_sprites of sbatch_context:");
+            SOKOL_LOG("sokol_spritebatch.h warning: dropped sprites, increase max_sprites of sbatch_context:");
             SOKOL_LOG(ctx->label.buf);
         } else {
-            SOKOL_LOG("sokol_spritebatch.h: dropped sprites, increase max_sprites");
+            SOKOL_LOG("sokol_spritebatch.h warning: dropped sprites, increase max_sprites");
         }
     }
 }
@@ -2533,32 +2575,6 @@ static void _sbatch_draw(int base_element, sg_image current_image, sg_buffer ver
     _sbatch.bindings.vertex_buffers[0] = vertex_buffer;
     sg_apply_bindings(&_sbatch.bindings);
     sg_draw(base_element, num_elements, 1);
-}
-
-static sbatch_matrix _sbatch_orthographic_off_center(float left, float right, float bottom, float top, float z_near, float z_far) {
-    sbatch_matrix result;
-
-    result.m[0][0] = 2.0f / (right - left);
-    result.m[0][1] = 0.0f;
-    result.m[0][2] = 0.0f;
-    result.m[0][3] = 0.0f;
-
-    result.m[1][0] = 0.0f;
-    result.m[1][1] = 2.0f / (top - bottom);
-    result.m[1][2] = 0.0f;
-    result.m[1][3] = 0.0f;
-
-    result.m[2][0] = 0.0f;
-    result.m[2][1] = 0.0f;
-    result.m[2][2] = 1.0f / (z_near - z_far);
-    result.m[2][3] = 0.0f;
-
-    result.m[3][0] = (left + right) / (left - right);
-    result.m[3][1] = (bottom + top) / (bottom - top);
-    result.m[3][2] = z_near / (z_near - z_far);
-    result.m[3][3] = 1.0f;
-
-    return result;
 }
 
 static void _sbatch_matmul(sbatch_matrix* p, const sbatch_matrix* a, const sbatch_matrix* b) {
@@ -2598,7 +2614,7 @@ void sbatch_end(void) {
 
     sprite_vs_params_t params;
     params.use_pixel_snap = _sbatch.render_state.use_pixel_snap ? 1.0f : 0.0f;
-    params.projection = _sbatch_orthographic_off_center(0.0f, width, height, 0.0f, 0.0f, 1000.0f);
+    params.projection = _sbatch_orthographic_off_center(0.0f, (float)_sbatch.render_state.canvas_width, (float)_sbatch.render_state.canvas_height, 0.0f, 0.0f, 1000.0f);
     params.modelview = _sbatch.render_state.transform;
 
     const sg_range matrix_range = { &params, sizeof params };
@@ -2648,7 +2664,7 @@ SOKOL_API_IMPL void sbatch_premultiply_alpha_rgba8(uint8_t* pixels, int pixel_co
     }
 }
 
-SOKOL_API_IMPL sbatch_matrix sbatch_matrix_identity() {
+SOKOL_API_IMPL sbatch_matrix sbatch_matrix_identity(void) {
     sbatch_matrix m = {{
         { 1.0f, 0.0f, 0.0f, 0.0f },
         { 0.0f, 1.0f, 0.0f, 0.0f },
@@ -2722,6 +2738,89 @@ SOKOL_API_IMPL void sbatch_matrix_translate(sbatch_matrix* dst, float x, float y
     for (int r = 0; r < 4; r++) {
         dst->m[3][r] = dst->m[0][r] * x + dst->m[1][r] * y + dst->m[2][r] * z + dst->m[3][r];
     }
+}
+
+SOKOL_API_IMPL void sbatch_matrix_inverse(sbatch_matrix* dst, const sbatch_matrix* mat) {
+    const float val1 = mat->m[0][0];
+    const float val2 = mat->m[0][1];
+    const float val3 = mat->m[0][2];
+    const float val4 = mat->m[0][3];
+    const float val5 = mat->m[1][0];
+    const float val6 = mat->m[1][1];
+    const float val7 = mat->m[1][2];
+    const float val8 = mat->m[1][3];
+    const float val9 = mat->m[2][0];
+    const float val10 = mat->m[2][1];
+    const float val11 = mat->m[2][2];
+    const float val12 = mat->m[2][3];
+    const float val13 = mat->m[3][0];
+    const float val14 = mat->m[3][1];
+    const float val15 = mat->m[3][2];
+    const float val16 = mat->m[3][3];
+    const float val17 = (val11 * val16 - val12 * val15);
+    const float val18 = (val10 * val16 - val12 * val14);
+    const float val19 = (val10 * val15 - val11 * val14);
+    const float val20 = (val9 * val16 - val12 * val13);
+    const float val21 = (val9 * val15 - val11 * val13);
+    const float val22 = (val9 * val14 - val10 * val13);
+    const float val23 = (val6 * val17 - val7 * val18 + val8 * val19);
+    const float val24 = -(val5 * val17 - val7 * val20 + val8 * val21);
+    const float val25 = (val5 * val18 - val6 * val20 + val8 * val22);
+    const float val26 = -(val5 * val19 - val6 * val21 + val7 * val22);
+    const float val27 = (1.0f / (val1 * val23 + val2 * val24 + val3 * val25 + val4 * val26));
+    dst->m[0][0] = val23 * val27;
+    dst->m[1][0] = val24 * val27;
+    dst->m[2][0] = val25 * val27;
+    dst->m[3][0] = val26 * val27;
+    dst->m[0][1] = -(val2 * val17 - val3 * val18 + val4 * val19) * val27;
+    dst->m[1][1] = (val1 * val17 - val3 * val20 + val4 * val21) * val27;
+    dst->m[2][1] = -(val1 * val18 - val2 * val20 + val4 * val22) * val27;
+    dst->m[3][1] = (val1 * val19 - val2 * val21 + val3 * val22) * val27;
+    const float val28 = (val7 * val16 - val8 * val15);
+    const float val29 = (val6 * val16 - val8 * val14);
+    const float val30 = (val6 * val15 - val7 * val14);
+    const float val31 = (val5 * val16 - val8 * val13);
+    const float val32 = (val5 * val15 - val7 * val13);
+    const float val33 = (val5 * val14 - val6 * val13);
+    dst->m[0][2] = (val2 * val28 - val3 * val29 + val4 * val30) * val27;
+    dst->m[1][2] = -(val1 * val28 - val3 * val31 + val4 * val32) * val27;
+    dst->m[2][2] = (val1 * val29 - val2 * val31 + val4 * val33) * val27;
+    dst->m[3][2] = -(val1 * val30 - val2 * val32 + val3 * val33) * val27;
+    const float val34 = (val7 * val12 - val8 * val11);
+    const float val35 = (val6 * val12 - val8 * val10);
+    const float val36 = (val6 * val11 - val7 * val10);
+    const float val37 = (val5 * val12 - val8 * val9);
+    const float val38 = (val5 * val11 - val7 * val9);
+    const float val39 = (val5 * val10 - val6 * val9);
+    dst->m[0][3] = -(val2 * val34 - val3 * val35 + val4 * val36) * val27;
+    dst->m[1][3] = (val1 * val34 - val3 * val37 + val4 * val38) * val27;
+    dst->m[2][3] = -(val1 * val35 - val2 * val37 + val4 * val39) * val27;
+    dst->m[3][3] = (val1 * val36 - val2 * val38 + val3 * val39) * val27;
+}
+
+SOKOL_API_IMPL void sbatch_matrix_transpose(sbatch_matrix* dst, const sbatch_matrix* src) {
+    dst->m[0][0] = src->m[0][0]; dst->m[1][0] = src->m[0][1];
+    dst->m[0][1] = src->m[1][0]; dst->m[1][1] = src->m[1][1];
+    dst->m[0][2] = src->m[2][0]; dst->m[1][2] = src->m[2][1];
+    dst->m[0][3] = src->m[3][0]; dst->m[1][3] = src->m[3][1];
+    dst->m[2][0] = src->m[0][2]; dst->m[3][0] = src->m[0][3];
+    dst->m[2][1] = src->m[1][2]; dst->m[3][1] = src->m[1][3];
+    dst->m[2][2] = src->m[2][2]; dst->m[3][2] = src->m[2][3];
+    dst->m[2][3] = src->m[3][2]; dst->m[3][3] = src->m[3][3];
+}
+
+SOKOL_API_IMPL sbatch_float2 sbatch_canvas_to_world(sbatch_float2 canvas_position) {
+    sbatch_float2 result;
+    result.x = (canvas_position.x * _sbatch.inverse_transform.m[0][0]) + (canvas_position.y * _sbatch.inverse_transform.m[1][0]) + _sbatch.inverse_transform.m[3][0];
+    result.y = (canvas_position.x * _sbatch.inverse_transform.m[0][1]) + (canvas_position.y * _sbatch.inverse_transform.m[1][1]) + _sbatch.inverse_transform.m[3][1];
+    return result;
+}
+
+SOKOL_API_IMPL sbatch_float2 sbatch_world_to_canvas(sbatch_float2 canvas_position) {
+    sbatch_float2 result;
+    result.x = (canvas_position.x * _sbatch.render_state.transform.m[0][0]) + (canvas_position.y * _sbatch.render_state.transform.m[1][0]) + _sbatch.render_state.transform.m[3][0];
+    result.y = (canvas_position.x * _sbatch.render_state.transform.m[0][1]) + (canvas_position.y * _sbatch.render_state.transform.m[1][1]) + _sbatch.render_state.transform.m[3][1];
+    return result;
 }
 
 #endif /* SOKOL_SPRITEBATCH_IMPL */
