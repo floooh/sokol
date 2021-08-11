@@ -477,6 +477,9 @@ extern "C" {
 /* sokol_gl pipeline handle (created with sgl_make_pipeline()) */
 typedef struct sgl_pipeline { uint32_t id; } sgl_pipeline;
 
+/* a context handle (created with sgl_make_context()) */
+typedef struct sgl_context { uint32_t id; } sgl_context;
+
 /*
     sgl_error_t
 
@@ -492,14 +495,26 @@ typedef enum sgl_error_t {
     SGL_ERROR_STACK_UNDERFLOW,
 } sgl_error_t;
 
-typedef struct sgl_desc_t {
-    int max_vertices;       /* size for vertex buffer */
-    int max_commands;       /* size of uniform- and command-buffers */
-    int pipeline_pool_size; /* size of the internal pipeline pool, default is 64 */
+/*
+    sgl_context_desc_t
+
+    Describes the initialization parameters of a rendering context.
+    Creating additional contexts is useful if you want to render
+    in separate sokol-gfx passes.
+*/
+typedef struct sgl_context_desc_t {
+    int max_vertices;       // default: 64k
+    int max_commands;       // default: 16k
+    int pipeline_pool_size; // size of internal pipeline pool, default: 64
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    sg_face_winding face_winding; /* default front face winding is CCW */
+} sgl_context_desc_t;
+
+typedef struct sgl_desc_t {
+    int context_pool_size;          // max number of contexts (including default context), default: 8
+    sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
+    sgl_context_desc_t context;     // default context initialization attributes
 } sgl_desc_t;
 
 /* setup/shutdown/misc */
@@ -509,6 +524,12 @@ SOKOL_GL_API_DECL sgl_error_t sgl_error(void);
 SOKOL_GL_API_DECL void sgl_defaults(void);
 SOKOL_GL_API_DECL float sgl_rad(float deg);
 SOKOL_GL_API_DECL float sgl_deg(float rad);
+
+/* context functions */
+SOKOL_GL_API_DECL sgl_context sgl_make_context(const sgl_context_desc_t* desc);
+SOKOL_GL_API_DECL void sgl_destroy_context(sgl_context ctx);
+SOKOL_GL_API_DECL void sgl_set_context(sgl_context ctx);
+SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
 
 /* create and destroy pipeline objects */
 SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
@@ -2027,6 +2048,7 @@ typedef struct {
 
 #define _SGL_INVALID_SLOT_INDEX (0)
 #define _SGL_MAX_STACK_DEPTH (64)
+#define _SGL_DEFAULT_CONTEXT_POOL_SIZE (8)
 #define _SGL_DEFAULT_PIPELINE_POOL_SIZE (64)
 #define _SGL_DEFAULT_MAX_VERTICES (1<<16)
 #define _SGL_DEFAULT_MAX_COMMANDS (1<<14)
@@ -2149,8 +2171,8 @@ static void _sgl_reset_pipeline(_sgl_pipeline_t* pip) {
 static void _sgl_setup_pipeline_pool(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
     /* note: the pools here will have an additional item, since slot 0 is reserved */
-    SOKOL_ASSERT((desc->pipeline_pool_size > 0) && (desc->pipeline_pool_size < _SGL_MAX_POOL_SIZE));
-    _sgl_init_pool(&_sgl.pip_pool.pool, desc->pipeline_pool_size);
+    SOKOL_ASSERT((desc->context.pipeline_pool_size > 0) && (desc->context.pipeline_pool_size < _SGL_MAX_POOL_SIZE));
+    _sgl_init_pool(&_sgl.pip_pool.pool, desc->context.pipeline_pool_size);
     size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
     _sgl.pip_pool.pips = (_sgl_pipeline_t*) SOKOL_MALLOC(pool_byte_size);
     SOKOL_ASSERT(_sgl.pip_pool.pips);
@@ -2254,12 +2276,12 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         desc.shader = _sgl.shd;
     }
     desc.index_type = SG_INDEXTYPE_NONE;
-    desc.sample_count = _sgl.desc.sample_count;
+    desc.sample_count = _sgl.desc.context.sample_count;
     if (desc.face_winding == _SG_FACEWINDING_DEFAULT) {
         desc.face_winding = _sgl.desc.face_winding;
     }
-    desc.depth.pixel_format = _sgl.desc.depth_format;
-    desc.colors[0].pixel_format = _sgl.desc.color_format;
+    desc.depth.pixel_format = _sgl.desc.context.depth_format;
+    desc.colors[0].pixel_format = _sgl.desc.context.color_format;
     if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
         desc.colors[0].write_mask = SG_COLORMASK_RGB;
     }
@@ -2641,20 +2663,34 @@ static inline _sgl_matrix_t* _sgl_matrix(void) {
     return &_sgl.matrix_stack[_sgl.cur_matrix_mode][_sgl.matrix_tos[_sgl.cur_matrix_mode]];
 }
 
+// return sgl_context_desc_t with patched defaults
+static sgl_context_desc_t _sgl_context_desc_defaults(const sgl_context_desc_t* desc) {
+    sgl_context_desc_t res = *desc;
+    res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
+    res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);
+    res.pipeline_pool_size = _sgl_def(desc->pipeline_pool_size, _SGL_DEFAULT_PIPELINE_POOL_SIZE);
+    return res;
+}
+
+// return sg_context_desc_t with patched defaults
+static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
+    sgl_desc_t res = *desc;
+    res.context_pool_size = _sgl_def(desc->context_pool_size, _SGL_DEFAULT_CONTEXT_POOL_SIZE);
+    res.face_winding = _sgl_def(desc->face_winding, SG_FACEWINDING_CCW);
+    res.context = _sgl_context_desc_defaults(&desc->context);
+    return res;
+}
+
 /*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
     memset(&_sgl, 0, sizeof(_sgl));
     _sgl.init_cookie = _SGL_INIT_COOKIE;
-    _sgl.desc = *desc;
-    _sgl.desc.pipeline_pool_size = _sgl_def(_sgl.desc.pipeline_pool_size, _SGL_DEFAULT_PIPELINE_POOL_SIZE);
-    _sgl.desc.max_vertices = _sgl_def(_sgl.desc.max_vertices, _SGL_DEFAULT_MAX_VERTICES);
-    _sgl.desc.max_commands = _sgl_def(_sgl.desc.max_commands, _SGL_DEFAULT_MAX_COMMANDS);
-    _sgl.desc.face_winding = _sgl_def(_sgl.desc.face_winding, SG_FACEWINDING_CCW);
+    _sgl.desc = _sgl_desc_defaults(desc);
 
     /* allocate buffers and pools */
-    _sgl.num_vertices = _sgl.desc.max_vertices;
-    _sgl.num_uniforms = _sgl.desc.max_commands;
+    _sgl.num_vertices = _sgl.desc.context.max_vertices;
+    _sgl.num_uniforms = _sgl.desc.context.max_commands;
     _sgl.num_commands = _sgl.num_uniforms;
     _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC((size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t));
     SOKOL_ASSERT(_sgl.vertices);
