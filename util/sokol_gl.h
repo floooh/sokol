@@ -2654,8 +2654,7 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
 
     /* allocate buffers and pools */
     _sgl.num_vertices = _sgl.desc.max_vertices;
-    _sgl.num_uniforms = _sgl.desc.max_commands;
-    _sgl.num_commands = _sgl.num_uniforms;
+    _sgl.num_commands = _sgl.num_uniforms = _sgl.desc.max_commands;
     _sgl.vertices = (_sgl_vertex_t*) SOKOL_MALLOC((size_t)_sgl.num_vertices * sizeof(_sgl_vertex_t));
     SOKOL_ASSERT(_sgl.vertices);
     _sgl.uniforms = (_sgl_uniform_t*) SOKOL_MALLOC((size_t)_sgl.num_uniforms * sizeof(_sgl_uniform_t));
