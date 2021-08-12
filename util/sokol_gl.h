@@ -2293,8 +2293,8 @@ static sgl_pipeline _sgl_alloc_pipeline(void) {
     return res;
 }
 
-static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_desc) {
-    SOKOL_ASSERT((pip_id.id != SG_INVALID_ID) && in_desc);
+static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_desc, const sgl_context_desc_t* ctx_desc) {
+    SOKOL_ASSERT((pip_id.id != SG_INVALID_ID) && in_desc && ctx_desc);
 
     /* create a new desc with 'patched' shader and pixel format state */
     sg_pipeline_desc desc = *in_desc;
@@ -2318,12 +2318,12 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         desc.shader = _sgl.shd;
     }
     desc.index_type = SG_INDEXTYPE_NONE;
-    desc.sample_count = _sgl.desc.context.sample_count;
+    desc.sample_count = ctx_desc->sample_count;
     if (desc.face_winding == _SG_FACEWINDING_DEFAULT) {
         desc.face_winding = _sgl.desc.face_winding;
     }
-    desc.depth.pixel_format = _sgl.desc.context.depth_format;
-    desc.colors[0].pixel_format = _sgl.desc.context.color_format;
+    desc.depth.pixel_format = ctx_desc->depth_format;
+    desc.colors[0].pixel_format = ctx_desc->color_format;
     if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
         desc.colors[0].write_mask = SG_COLORMASK_RGB;
     }
@@ -2364,11 +2364,11 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
     }
 }
 
-static sgl_pipeline _sgl_make_pipeline(const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc);
+static sgl_pipeline _sgl_make_pipeline(const sg_pipeline_desc* desc, const sgl_context_desc_t* ctx_desc) {
+    SOKOL_ASSERT(desc && ctx_desc);
     sgl_pipeline pip_id = _sgl_alloc_pipeline();
     if (pip_id.id != SG_INVALID_ID) {
-        _sgl_init_pipeline(pip_id, desc);
+        _sgl_init_pipeline(pip_id, desc, ctx_desc);
     }
     else {
         SOKOL_LOG("sokol_gl.h: pipeline pool exhausted!");
@@ -2481,7 +2481,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     sg_pipeline_desc def_pip_desc;
     memset(&def_pip_desc, 0, sizeof(def_pip_desc));
     def_pip_desc.depth.write_enabled = true;
-    ctx->def_pip = _sgl_make_pipeline(&def_pip_desc);
+    ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
     sg_pop_debug_group();
 
     // default state
@@ -3022,7 +3022,13 @@ SOKOL_API_IMPL sgl_context sgl_get_context(void) {
 
 SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    return _sgl_make_pipeline(desc);
+    const _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return _sgl_make_pip_id(SG_INVALID_ID);
+    }
+    else {
+        return _sgl_make_pipeline(desc, &ctx->desc);
+    }
 }
 
 SOKOL_API_IMPL void sgl_destroy_pipeline(sgl_pipeline pip_id) {
