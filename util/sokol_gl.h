@@ -537,6 +537,7 @@ SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
 
 /* create and destroy pipeline objects */
 SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline_with_context(sgl_context ctx, const sg_pipeline_desc* desc);
 SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
@@ -3023,11 +3024,22 @@ SOKOL_API_IMPL sgl_context sgl_get_context(void) {
 SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     const _sgl_context_t* ctx = _sgl.cur_ctx;
-    if (!ctx) {
-        return _sgl_make_pip_id(SG_INVALID_ID);
+    if (ctx) {
+        return _sgl_make_pipeline(desc, &ctx->desc);
     }
     else {
+        return _sgl_make_pip_id(SG_INVALID_ID);
+    }
+}
+
+SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline_with_context(sgl_context ctx_id, const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    const _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
+    if (ctx) {
         return _sgl_make_pipeline(desc, &ctx->desc);
+    }
+    else {
+        return _sgl_make_pip_id(SG_INVALID_ID);
     }
 }
 
