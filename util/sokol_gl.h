@@ -515,7 +515,7 @@ typedef struct sgl_context_desc_t {
 } sgl_context_desc_t;
 
 typedef struct sgl_desc_t {
-    int context_pool_size;          // max number of contexts (including default context), default: 8
+    int context_pool_size;          // max number of contexts (including default context), default: 4
     int pipeline_pool_size;         // size of internal pipeline pool, default: 64
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
     sgl_context_desc_t context;     // default context initialization attributes
@@ -2053,7 +2053,7 @@ typedef struct {
 
 #define _SGL_INVALID_SLOT_INDEX (0)
 #define _SGL_MAX_STACK_DEPTH (64)
-#define _SGL_DEFAULT_CONTEXT_POOL_SIZE (8)
+#define _SGL_DEFAULT_CONTEXT_POOL_SIZE (4)
 #define _SGL_DEFAULT_PIPELINE_POOL_SIZE (64)
 #define _SGL_DEFAULT_MAX_VERTICES (1<<16)
 #define _SGL_DEFAULT_MAX_COMMANDS (1<<14)
@@ -2406,7 +2406,7 @@ static sg_pipeline _sgl_get_pipeline(sgl_pipeline pip_id, _sgl_primitive_type_t 
 static _sgl_context_t* _sgl_context_at(uint32_t ctx_id) {
     SOKOL_ASSERT(SG_INVALID_ID != ctx_id);
     int slot_index = _sgl_slot_index(ctx_id);
-    SOKOL_ASSERT((slot_index < _SGL_INVALID_SLOT_INDEX) && (slot_index < _sgl.context_pool.pool.size));
+    SOKOL_ASSERT((slot_index > _SGL_INVALID_SLOT_INDEX) && (slot_index < _sgl.context_pool.pool.size));
     return &_sgl.context_pool.contexts[slot_index];
 }
 
