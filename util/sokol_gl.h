@@ -2607,7 +2607,7 @@ static inline void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, floa
     SOKOL_ASSERT(ctx->in_begin);
     _sgl_vertex_t* vtx;
     /* handle non-native primitive types */
-    if ((ctx->cur_prim_type == SGL_PRIMITIVETYPE_QUADS) && ((_sgl.vtx_count & 3) == 3)) {
+    if ((ctx->cur_prim_type == SGL_PRIMITIVETYPE_QUADS) && ((ctx->vtx_count & 3) == 3)) {
         /* for quads, before writing the last quad vertex, reuse
            the first and third vertex to start the second triangle in the quad
         */
@@ -3003,6 +3003,23 @@ SOKOL_API_IMPL void sgl_destroy_context(sgl_context ctx_id) {
     _sgl.cur_ctx = _sgl_lookup_context(_sgl.cur_ctx_id.id);
 }
 
+SOKOL_API_IMPL void sgl_set_context(sgl_context ctx_id) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    if (_sgl_is_default_context(ctx_id)) {
+        _sgl.cur_ctx_id = _sgl.def_ctx_id;
+    }
+    else {
+        _sgl.cur_ctx_id = ctx_id;
+    }
+    // this will return null if the handle isn't valid
+    _sgl.cur_ctx = _sgl_lookup_context(_sgl.cur_ctx_id.id);
+}
+
+SOKOL_API_IMPL sgl_context sgl_get_context(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    return _sgl.cur_ctx_id;
+}
+
 SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     return _sgl_make_pipeline(desc);
@@ -3016,58 +3033,79 @@ SOKOL_API_IMPL void sgl_destroy_pipeline(sgl_pipeline pip_id) {
 SOKOL_API_IMPL void sgl_load_pipeline(sgl_pipeline pip_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
-    if (ctx) {
-        SOKOL_ASSERT((ctx->pip_tos >= 0) && (ctx->pip_tos < _SGL_MAX_STACK_DEPTH));
-        ctx->pip_stack[ctx->pip_tos] = pip_id;
+    if (!ctx) {
+        return;
     }
+    SOKOL_ASSERT((ctx->pip_tos >= 0) && (ctx->pip_tos < _SGL_MAX_STACK_DEPTH));
+    ctx->pip_stack[ctx->pip_tos] = pip_id;
 }
 
 SOKOL_API_IMPL void sgl_default_pipeline(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((_sgl.pip_tos >= 0) && (_sgl.pip_tos < _SGL_MAX_STACK_DEPTH));
-    _sgl.pip_stack[_sgl_cur_ctx().pip_tos] = _sgl.def_pip;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT((ctx->pip_tos >= 0) && (ctx->pip_tos < _SGL_MAX_STACK_DEPTH));
+    ctx->pip_stack[ctx->pip_tos] = ctx->def_pip;
 }
 
 SOKOL_API_IMPL void sgl_push_pipeline(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    if (_sgl.pip_tos < (_SGL_MAX_STACK_DEPTH - 1)) {
-        _sgl.pip_tos++;
-        _sgl.pip_stack[_sgl.pip_tos] = _sgl.pip_stack[_sgl.pip_tos-1];
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    if (ctx->pip_tos < (_SGL_MAX_STACK_DEPTH - 1)) {
+        ctx->pip_tos++;
+        ctx->pip_stack[ctx->pip_tos] = ctx->pip_stack[ctx->pip_tos-1];
     }
     else {
-        _sgl.error = SGL_ERROR_STACK_OVERFLOW;
+        ctx->error = SGL_ERROR_STACK_OVERFLOW;
     }
 }
 
 SOKOL_API_IMPL void sgl_pop_pipeline(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    if (_sgl.pip_tos > 0) {
-        _sgl.pip_tos--;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    if (ctx->pip_tos > 0) {
+        ctx->pip_tos--;
     }
     else {
-        _sgl.error = SGL_ERROR_STACK_UNDERFLOW;
+        ctx->error = SGL_ERROR_STACK_UNDERFLOW;
     }
 }
 
 SOKOL_API_IMPL void sgl_defaults(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.u = 0.0f; _sgl.v = 0.0f;
-    _sgl.rgba = 0xFFFFFFFF;
-    _sgl.texturing_enabled = false;
-    _sgl.cur_img = _sgl.def_img;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    ctx->u = 0.0f; ctx->v = 0.0f;
+    ctx->rgba = 0xFFFFFFFF;
+    ctx->texturing_enabled = false;
+    ctx->cur_img = _sgl.def_img;
     sgl_default_pipeline();
-    _sgl_identity(_sgl_matrix_texture());
-    _sgl_identity(_sgl_matrix_modelview());
-    _sgl_identity(_sgl_matrix_projection());
-    _sgl.cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
-    _sgl.matrix_dirty = true;
+    _sgl_identity(_sgl_matrix_texture(ctx));
+    _sgl_identity(_sgl_matrix_modelview(ctx));
+    _sgl_identity(_sgl_matrix_projection(ctx));
+    ctx->cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
+    ctx->matrix_dirty = true;
 }
 
 SOKOL_API_IMPL void sgl_viewport(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_command_t* cmd = _sgl_next_command();
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_command_t* cmd = _sgl_next_command(ctx);
     if (cmd) {
         cmd->cmd = SGL_COMMAND_VIEWPORT;
         cmd->args.viewport.x = x;
@@ -3084,8 +3122,12 @@ SOKOL_API_IMPL void sgl_viewportf(float x, float y, float w, float h, bool origi
 
 SOKOL_API_IMPL void sgl_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_command_t* cmd = _sgl_next_command();
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_command_t* cmd = _sgl_next_command(ctx);
     if (cmd) {
         cmd->cmd = SGL_COMMAND_SCISSOR_RECT;
         cmd->args.scissor_rect.x = x;
@@ -3102,86 +3144,126 @@ SOKOL_API_IMPL void sgl_scissor_rectf(float x, float y, float w, float h, bool o
 
 SOKOL_API_IMPL void sgl_enable_texture(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.texturing_enabled = true;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    ctx->texturing_enabled = true;
 }
 
 SOKOL_API_IMPL void sgl_disable_texture(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl.texturing_enabled = false;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    ctx->texturing_enabled = false;
 }
 
 SOKOL_API_IMPL void sgl_texture(sg_image img) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
     if (SG_INVALID_ID != img.id) {
-        _sgl.cur_img = img;
+        ctx->cur_img = img;
     }
     else {
-        _sgl.cur_img = _sgl.def_img;
+        ctx->cur_img = _sgl.def_img;
     }
 }
 
 SOKOL_API_IMPL void sgl_begin_points(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_POINTS);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_POINTS);
 }
 
 SOKOL_API_IMPL void sgl_begin_lines(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_LINES);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_LINES);
 }
 
 SOKOL_API_IMPL void sgl_begin_line_strip(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_LINE_STRIP);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_LINE_STRIP);
 }
 
 SOKOL_API_IMPL void sgl_begin_triangles(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_TRIANGLES);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_TRIANGLES);
 }
 
 SOKOL_API_IMPL void sgl_begin_triangle_strip(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_TRIANGLE_STRIP);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_TRIANGLE_STRIP);
 }
 
 SOKOL_API_IMPL void sgl_begin_quads(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(!_sgl.in_begin);
-    _sgl_begin(SGL_PRIMITIVETYPE_QUADS);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(!ctx->in_begin);
+    _sgl_begin(ctx, SGL_PRIMITIVETYPE_QUADS);
 }
 
 SOKOL_API_IMPL void sgl_end(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT(_sgl.in_begin);
-    SOKOL_ASSERT(_sgl.cur_vertex >= _sgl.base_vertex);
-    _sgl.in_begin = false;
-    bool matrix_dirty = _sgl.matrix_dirty;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT(ctx->in_begin);
+    SOKOL_ASSERT(ctx->cur_vertex >= ctx->base_vertex);
+    ctx->in_begin = false;
+    bool matrix_dirty = ctx->matrix_dirty;
     if (matrix_dirty) {
-        _sgl.matrix_dirty = false;
-        _sgl_uniform_t* uni = _sgl_next_uniform();
+        ctx->matrix_dirty = false;
+        _sgl_uniform_t* uni = _sgl_next_uniform(ctx);
         if (uni) {
-            _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(), _sgl_matrix_modelview());
-            uni->tm = *_sgl_matrix_texture();
+            _sgl_matmul4(&uni->mvp, _sgl_matrix_projection(ctx), _sgl_matrix_modelview(ctx));
+            uni->tm = *_sgl_matrix_texture(ctx);
         }
     }
     /* check if command can be merged with previous command */
-    sg_pipeline pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
-    sg_image img = _sgl.texturing_enabled ? _sgl.cur_img : _sgl.def_img;
-    _sgl_command_t* prev_cmd = _sgl_prev_command();
+    sg_pipeline pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
+    sg_image img = ctx->texturing_enabled ? ctx->cur_img : _sgl.def_img;
+    _sgl_command_t* prev_cmd = _sgl_prev_command(ctx);
     bool merge_cmd = false;
     if (prev_cmd) {
         if ((prev_cmd->cmd == SGL_COMMAND_DRAW) &&
-            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
-            (_sgl.cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
+            (ctx->cur_prim_type != SGL_PRIMITIVETYPE_LINE_STRIP) &&
+            (ctx->cur_prim_type != SGL_PRIMITIVETYPE_TRIANGLE_STRIP) &&
             !matrix_dirty &&
             (prev_cmd->args.draw.img.id == img.id) &&
             (prev_cmd->args.draw.pip.id == pip.id))
@@ -3191,273 +3273,433 @@ SOKOL_API_IMPL void sgl_end(void) {
     }
     if (merge_cmd) {
         /* draw command can be merged with the previous command */
-        prev_cmd->args.draw.num_vertices += _sgl.cur_vertex - _sgl.base_vertex;
+        prev_cmd->args.draw.num_vertices += ctx->cur_vertex - ctx->base_vertex;
     }
     else {
         /* append a new draw command */
-        _sgl_command_t* cmd = _sgl_next_command();
+        _sgl_command_t* cmd = _sgl_next_command(ctx);
         if (cmd) {
-            SOKOL_ASSERT(_sgl.cur_uniform > 0);
+            SOKOL_ASSERT(ctx->cur_uniform > 0);
             cmd->cmd = SGL_COMMAND_DRAW;
             cmd->args.draw.img = img;
-            cmd->args.draw.pip = _sgl_get_pipeline(_sgl.pip_stack[_sgl.pip_tos], _sgl.cur_prim_type);
-            cmd->args.draw.base_vertex = _sgl.base_vertex;
-            cmd->args.draw.num_vertices = _sgl.cur_vertex - _sgl.base_vertex;
-            cmd->args.draw.uniform_index = _sgl.cur_uniform - 1;
+            cmd->args.draw.pip = _sgl_get_pipeline(ctx->pip_stack[ctx->pip_tos], ctx->cur_prim_type);
+            cmd->args.draw.base_vertex = ctx->base_vertex;
+            cmd->args.draw.num_vertices = ctx->cur_vertex - ctx->base_vertex;
+            cmd->args.draw.uniform_index = ctx->cur_uniform - 1;
         }
     }
 }
 
 SOKOL_API_IMPL void sgl_t2f(float u, float v) {
-    _sgl.u = u; _sgl.v = v;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->u = u;
+        ctx->v = v;
+    }
 }
 
 SOKOL_API_IMPL void sgl_c3f(float r, float g, float b) {
-    _sgl.rgba = _sgl_pack_rgbaf(r, g, b, 1.0f);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->rgba = _sgl_pack_rgbaf(r, g, b, 1.0f);
+    }
 }
 
 SOKOL_API_IMPL void sgl_c4f(float r, float g, float b, float a) {
-    _sgl.rgba = _sgl_pack_rgbaf(r, g, b, a);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->rgba = _sgl_pack_rgbaf(r, g, b, a);
+    }
 }
 
 SOKOL_API_IMPL void sgl_c3b(uint8_t r, uint8_t g, uint8_t b) {
-    _sgl.rgba = _sgl_pack_rgbab(r, g, b, 255);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->rgba = _sgl_pack_rgbab(r, g, b, 255);
+    }
 }
 
 SOKOL_API_IMPL void sgl_c4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl.rgba = _sgl_pack_rgbab(r, g, b, a);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->rgba = _sgl_pack_rgbab(r, g, b, a);
+    }
 }
 
 SOKOL_API_IMPL void sgl_c1i(uint32_t rgba) {
-    _sgl.rgba = rgba;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->rgba = rgba;
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f(float x, float y) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl.rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, ctx->rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f(float x, float y, float z) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl.rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, ctx->rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f(float x, float y, float u, float v) {
-    _sgl_vtx(x, y, 0.0f, u, v, _sgl.rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, ctx->rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f(float x, float y, float z, float u, float v) {
-    _sgl_vtx(x, y, z, u, v, _sgl.rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, u, v, ctx->rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_c3f(float x, float y, float r, float g, float b) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_c3b(float x, float y, uint8_t r, uint8_t g, uint8_t b) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbab(r, g, b, 255));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, _sgl_pack_rgbab(r, g, b, 255));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_c4f(float x, float y, float r, float g, float b, float a) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, _sgl_pack_rgbaf(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_c4b(float x, float y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, _sgl_pack_rgbab(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, _sgl_pack_rgbab(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_c1i(float x, float y, uint32_t rgba) {
-    _sgl_vtx(x, y, 0.0f, _sgl.u, _sgl.v, rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, ctx->u, ctx->v, rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_c3f(float x, float y, float z, float r, float g, float b) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_c3b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbab(r, g, b, 255));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, _sgl_pack_rgbab(r, g, b, 255));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_c4f(float x, float y, float z, float r, float g, float b, float a) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbaf(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, _sgl_pack_rgbaf(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_c4b(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, _sgl_pack_rgbab(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, _sgl_pack_rgbab(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_c1i(float x, float y, float z, uint32_t rgba) {
-    _sgl_vtx(x, y, z, _sgl.u, _sgl.v, rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, ctx->u, ctx->v, rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f_c3f(float x, float y, float u, float v, float r, float g, float b) {
-    _sgl_vtx(x, y, 0.0f, u, v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f_c3b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b) {
-    _sgl_vtx(x, y, 0.0f, u, v, _sgl_pack_rgbab(r, g, b, 255));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, _sgl_pack_rgbab(r, g, b, 255));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f_c4f(float x, float y, float u, float v, float r, float g, float b, float a) {
-    _sgl_vtx(x, y, 0.0f, u, v, _sgl_pack_rgbaf(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, _sgl_pack_rgbaf(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f_c4b(float x, float y, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, y, 0.0f, u, v, _sgl_pack_rgbab(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, _sgl_pack_rgbab(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v2f_t2f_c1i(float x, float y, float u, float v, uint32_t rgba) {
-    _sgl_vtx(x, y, 0.0f, u, v, rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, 0.0f, u, v, rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c3f(float x, float y, float z, float u, float v, float r, float g, float b) {
-    _sgl_vtx(x, y, z, u, v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, u, v, _sgl_pack_rgbaf(r, g, b, 1.0f));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c3b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b) {
-    _sgl_vtx(x, y, z, u, v, _sgl_pack_rgbab(r, g, b, 255));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, u, v, _sgl_pack_rgbab(r, g, b, 255));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c4f(float x, float y, float z, float u, float v, float r, float g, float b, float a) {
-    _sgl_vtx(x, y, z, u, v, _sgl_pack_rgbaf(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, u, v, _sgl_pack_rgbaf(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float v, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    _sgl_vtx(x, y, z, u, v, _sgl_pack_rgbab(r, g, b, a));
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx, x, y, z, u, v, _sgl_pack_rgbab(r, g, b, a));
+    }
 }
 
 SOKOL_API_IMPL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba) {
-    _sgl_vtx(x, y, z, u, v, rgba);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_vtx(ctx,x, y, z, u, v, rgba);
+    }
 }
 
 SOKOL_API_IMPL void sgl_matrix_mode_modelview(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->cur_matrix_mode = SGL_MATRIXMODE_MODELVIEW;
+    }
 }
 
 SOKOL_API_IMPL void sgl_matrix_mode_projection(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.cur_matrix_mode = SGL_MATRIXMODE_PROJECTION;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->cur_matrix_mode = SGL_MATRIXMODE_PROJECTION;
+    }
 }
 
 SOKOL_API_IMPL void sgl_matrix_mode_texture(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.cur_matrix_mode = SGL_MATRIXMODE_TEXTURE;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->cur_matrix_mode = SGL_MATRIXMODE_TEXTURE;
+    }
 }
 
 SOKOL_API_IMPL void sgl_load_identity(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_identity(_sgl_matrix());
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_identity(_sgl_matrix(ctx));
 }
 
 SOKOL_API_IMPL void sgl_load_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    memcpy(&_sgl_matrix()->v[0][0], &m[0], 64);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    memcpy(&_sgl_matrix(ctx)->v[0][0], &m[0], 64);
 }
 
 SOKOL_API_IMPL void sgl_load_transpose_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_transpose(_sgl_matrix(), (const _sgl_matrix_t*) &m[0]);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_transpose(_sgl_matrix(ctx), (const _sgl_matrix_t*) &m[0]);
 }
 
 SOKOL_API_IMPL void sgl_mult_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
     const _sgl_matrix_t* m0  = (const _sgl_matrix_t*) &m[0];
-    _sgl_mul(_sgl_matrix(), m0);
+    _sgl_mul(_sgl_matrix(ctx), m0);
 }
 
 SOKOL_API_IMPL void sgl_mult_transpose_matrix(const float m[16]) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
     _sgl_matrix_t m0;
     _sgl_transpose(&m0, (const _sgl_matrix_t*) &m[0]);
-    _sgl_mul(_sgl_matrix(), &m0);
+    _sgl_mul(_sgl_matrix(ctx), &m0);
 }
 
 SOKOL_API_IMPL void sgl_rotate(float angle_rad, float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_rotate(_sgl_matrix(), angle_rad, x, y, z);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_rotate(_sgl_matrix(ctx), angle_rad, x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_scale(float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_scale(_sgl_matrix(), x, y, z);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_scale(_sgl_matrix(ctx), x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_translate(float x, float y, float z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_translate(_sgl_matrix(), x, y, z);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_translate(_sgl_matrix(ctx), x, y, z);
 }
 
 SOKOL_API_IMPL void sgl_frustum(float l, float r, float b, float t, float n, float f) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_frustum(_sgl_matrix(), l, r, b, t, n, f);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_frustum(_sgl_matrix(ctx), l, r, b, t, n, f);
 }
 
 SOKOL_API_IMPL void sgl_ortho(float l, float r, float b, float t, float n, float f) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_ortho(_sgl_matrix(), l, r, b, t, n, f);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_ortho(_sgl_matrix(ctx), l, r, b, t, n, f);
 }
 
 SOKOL_API_IMPL void sgl_perspective(float fov_y, float aspect, float z_near, float z_far) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_perspective(_sgl_matrix(), fov_y, aspect, z_near, z_far);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_perspective(_sgl_matrix(ctx), fov_y, aspect, z_near, z_far);
 }
 
 SOKOL_API_IMPL void sgl_lookat(float eye_x, float eye_y, float eye_z, float center_x, float center_y, float center_z, float up_x, float up_y, float up_z) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    _sgl.matrix_dirty = true;
-    _sgl_lookat(_sgl_matrix(), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    ctx->matrix_dirty = true;
+    _sgl_lookat(_sgl_matrix(ctx), eye_x, eye_y, eye_z, center_x, center_y, center_z, up_x, up_y, up_z);
 }
 
 SOKOL_GL_API_DECL void sgl_push_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
-    _sgl.matrix_dirty = true;
-    if (_sgl.matrix_tos[_sgl.cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
-        const _sgl_matrix_t* src = _sgl_matrix();
-        _sgl.matrix_tos[_sgl.cur_matrix_mode]++;
-        _sgl_matrix_t* dst = _sgl_matrix();
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT((ctx->cur_matrix_mode >= 0) && (ctx->cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    ctx->matrix_dirty = true;
+    if (ctx->matrix_tos[ctx->cur_matrix_mode] < (_SGL_MAX_STACK_DEPTH - 1)) {
+        const _sgl_matrix_t* src = _sgl_matrix(ctx);
+        ctx->matrix_tos[ctx->cur_matrix_mode]++;
+        _sgl_matrix_t* dst = _sgl_matrix(ctx);
         *dst = *src;
     }
     else {
-        _sgl.error = SGL_ERROR_STACK_OVERFLOW;
+        ctx->error = SGL_ERROR_STACK_OVERFLOW;
     }
 }
 
 SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    SOKOL_ASSERT((_sgl.cur_matrix_mode >= 0) && (_sgl.cur_matrix_mode < SGL_NUM_MATRIXMODES));
-    _sgl.matrix_dirty = true;
-    if (_sgl.matrix_tos[_sgl.cur_matrix_mode] > 0) {
-        _sgl.matrix_tos[_sgl.cur_matrix_mode]--;
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    SOKOL_ASSERT((ctx->cur_matrix_mode >= 0) && (ctx->cur_matrix_mode < SGL_NUM_MATRIXMODES));
+    ctx->matrix_dirty = true;
+    if (ctx->matrix_tos[ctx->cur_matrix_mode] > 0) {
+        ctx->matrix_tos[ctx->cur_matrix_mode]--;
     }
     else {
-        _sgl.error = SGL_ERROR_STACK_UNDERFLOW;
+        ctx->error = SGL_ERROR_STACK_UNDERFLOW;
     }
 }
 
 /* this renders the accumulated draw commands via sokol-gfx */
 SOKOL_API_IMPL void sgl_draw(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
-    if ((_sgl.error == SGL_NO_ERROR) && (_sgl.cur_vertex > 0) && (_sgl.cur_command > 0)) {
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (!ctx) {
+        return;
+    }
+    if (ctx && (ctx->error == SGL_NO_ERROR) && (ctx->cur_vertex > 0) && (ctx->cur_command > 0)) {
         uint32_t cur_pip_id = SG_INVALID_ID;
         uint32_t cur_img_id = SG_INVALID_ID;
         int cur_uniform_index = -1;
         sg_push_debug_group("sokol-gl");
-        const sg_range range = { _sgl.vertices, (size_t)_sgl.cur_vertex * sizeof(_sgl_vertex_t) };
-        sg_update_buffer(_sgl.vbuf, &range);
-        _sgl.bind.vertex_buffers[0] = _sgl.vbuf;
-        for (int i = 0; i < _sgl.cur_command; i++) {
-            const _sgl_command_t* cmd = &_sgl.commands[i];
+        const sg_range range = { ctx->vertices, (size_t)ctx->cur_vertex * sizeof(_sgl_vertex_t) };
+        sg_update_buffer(ctx->vbuf, &range);
+        ctx->bind.vertex_buffers[0] = ctx->vbuf;
+        for (int i = 0; i < ctx->cur_command; i++) {
+            const _sgl_command_t* cmd = &ctx->commands[i];
             switch (cmd->cmd) {
                 case SGL_COMMAND_VIEWPORT:
                     {
@@ -3482,12 +3724,12 @@ SOKOL_API_IMPL void sgl_draw(void) {
                             cur_uniform_index = -1;
                         }
                         if (cur_img_id != args->img.id) {
-                            _sgl.bind.fs_images[0] = args->img;
-                            sg_apply_bindings(&_sgl.bind);
+                            ctx->bind.fs_images[0] = args->img;
+                            sg_apply_bindings(&ctx->bind);
                             cur_img_id = args->img.id;
                         }
                         if (cur_uniform_index != args->uniform_index) {
-                            const sg_range ub_range = { &_sgl.uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
+                            const sg_range ub_range = { &ctx->uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
                             sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
                             cur_uniform_index = args->uniform_index;
                         }
@@ -3501,6 +3743,6 @@ SOKOL_API_IMPL void sgl_draw(void) {
         }
         sg_pop_debug_group();
     }
-    _sgl_rewind();
+    _sgl_rewind(ctx);
 }
 #endif /* SOKOL_GL_IMPL */
