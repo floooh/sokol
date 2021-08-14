@@ -617,6 +617,7 @@ SOKOL_GL_API_DECL void sgl_end(void);
 
 /* render everything */
 SOKOL_GL_API_DECL void sgl_draw(void);
+SOKOL_GL_API_DECL void sgl_draw_context(sgl_context ctx);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -2939,6 +2940,64 @@ static bool _sgl_is_default_context(sgl_context ctx_id) {
     return ctx_id.id == SGL_DEFAULT_CONTEXT.id;
 }
 
+static void _sgl_draw(_sgl_context_t* ctx) {
+    SOKOL_ASSERT(ctx);
+    if ((ctx->error == SGL_NO_ERROR) && (ctx->cur_vertex > 0) && (ctx->cur_command > 0)) {
+        uint32_t cur_pip_id = SG_INVALID_ID;
+        uint32_t cur_img_id = SG_INVALID_ID;
+        int cur_uniform_index = -1;
+        sg_push_debug_group("sokol-gl");
+        const sg_range range = { ctx->vertices, (size_t)ctx->cur_vertex * sizeof(_sgl_vertex_t) };
+        sg_update_buffer(ctx->vbuf, &range);
+        ctx->bind.vertex_buffers[0] = ctx->vbuf;
+        for (int i = 0; i < ctx->cur_command; i++) {
+            const _sgl_command_t* cmd = &ctx->commands[i];
+            switch (cmd->cmd) {
+                case SGL_COMMAND_VIEWPORT:
+                    {
+                        const _sgl_viewport_args_t* args = &cmd->args.viewport;
+                        sg_apply_viewport(args->x, args->y, args->w, args->h, args->origin_top_left);
+                    }
+                    break;
+                case SGL_COMMAND_SCISSOR_RECT:
+                    {
+                        const _sgl_scissor_rect_args_t* args = &cmd->args.scissor_rect;
+                        sg_apply_scissor_rect(args->x, args->y, args->w, args->h, args->origin_top_left);
+                    }
+                    break;
+                case SGL_COMMAND_DRAW:
+                    {
+                        const _sgl_draw_args_t* args = &cmd->args.draw;
+                        if (args->pip.id != cur_pip_id) {
+                            sg_apply_pipeline(args->pip);
+                            cur_pip_id = args->pip.id;
+                            /* when pipeline changes, also need to re-apply uniforms and bindings */
+                            cur_img_id = SG_INVALID_ID;
+                            cur_uniform_index = -1;
+                        }
+                        if (cur_img_id != args->img.id) {
+                            ctx->bind.fs_images[0] = args->img;
+                            sg_apply_bindings(&ctx->bind);
+                            cur_img_id = args->img.id;
+                        }
+                        if (cur_uniform_index != args->uniform_index) {
+                            const sg_range ub_range = { &ctx->uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
+                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
+                            cur_uniform_index = args->uniform_index;
+                        }
+                        /* FIXME: what if number of vertices doesn't match the primitive type? */
+                        if (args->num_vertices > 0) {
+                            sg_draw(args->base_vertex, args->num_vertices, 1);
+                        }
+                    }
+                    break;
+            }
+        }
+        sg_pop_debug_group();
+    }
+    _sgl_rewind(ctx);
+}
+
 /*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -3701,66 +3760,21 @@ SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
     }
 }
 
-/* this renders the accumulated draw commands via sokol-gfx */
 SOKOL_API_IMPL void sgl_draw(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
-    if (!ctx) {
-        return;
+    if (ctx) {
+        _sgl_draw(ctx);
     }
-    if (ctx && (ctx->error == SGL_NO_ERROR) && (ctx->cur_vertex > 0) && (ctx->cur_command > 0)) {
-        uint32_t cur_pip_id = SG_INVALID_ID;
-        uint32_t cur_img_id = SG_INVALID_ID;
-        int cur_uniform_index = -1;
-        sg_push_debug_group("sokol-gl");
-        const sg_range range = { ctx->vertices, (size_t)ctx->cur_vertex * sizeof(_sgl_vertex_t) };
-        sg_update_buffer(ctx->vbuf, &range);
-        ctx->bind.vertex_buffers[0] = ctx->vbuf;
-        for (int i = 0; i < ctx->cur_command; i++) {
-            const _sgl_command_t* cmd = &ctx->commands[i];
-            switch (cmd->cmd) {
-                case SGL_COMMAND_VIEWPORT:
-                    {
-                        const _sgl_viewport_args_t* args = &cmd->args.viewport;
-                        sg_apply_viewport(args->x, args->y, args->w, args->h, args->origin_top_left);
-                    }
-                    break;
-                case SGL_COMMAND_SCISSOR_RECT:
-                    {
-                        const _sgl_scissor_rect_args_t* args = &cmd->args.scissor_rect;
-                        sg_apply_scissor_rect(args->x, args->y, args->w, args->h, args->origin_top_left);
-                    }
-                    break;
-                case SGL_COMMAND_DRAW:
-                    {
-                        const _sgl_draw_args_t* args = &cmd->args.draw;
-                        if (args->pip.id != cur_pip_id) {
-                            sg_apply_pipeline(args->pip);
-                            cur_pip_id = args->pip.id;
-                            /* when pipeline changes, also need to re-apply uniforms and bindings */
-                            cur_img_id = SG_INVALID_ID;
-                            cur_uniform_index = -1;
-                        }
-                        if (cur_img_id != args->img.id) {
-                            ctx->bind.fs_images[0] = args->img;
-                            sg_apply_bindings(&ctx->bind);
-                            cur_img_id = args->img.id;
-                        }
-                        if (cur_uniform_index != args->uniform_index) {
-                            const sg_range ub_range = { &ctx->uniforms[args->uniform_index], sizeof(_sgl_uniform_t) };
-                            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
-                            cur_uniform_index = args->uniform_index;
-                        }
-                        /* FIXME: what if number of vertices doesn't match the primitive type? */
-                        if (args->num_vertices > 0) {
-                            sg_draw(args->base_vertex, args->num_vertices, 1);
-                        }
-                    }
-                    break;
-            }
-        }
-        sg_pop_debug_group();
-    }
-    _sgl_rewind(ctx);
+
 }
+
+SOKOL_API_IMPL void sgl_draw_context(sgl_context ctx_id) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sgl_draw(ctx);
+    }
+}
+
 #endif /* SOKOL_GL_IMPL */
