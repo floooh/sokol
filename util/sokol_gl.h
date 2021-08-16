@@ -2325,6 +2325,9 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         desc.face_winding = _sgl.desc.face_winding;
     }
     desc.depth.pixel_format = ctx_desc->depth_format;
+    if (ctx_desc->depth_format == SG_PIXELFORMAT_NONE) {
+        desc.depth.write_enabled = false;
+    }
     desc.colors[0].pixel_format = ctx_desc->color_format;
     if (desc.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
         desc.colors[0].write_mask = SG_COLORMASK_RGB;
