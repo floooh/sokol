@@ -119,11 +119,9 @@
         sgl_setup() call:
 
             sgl_setup(&(sgl_desc_t*){
-                .context = {
-                    .color_format = SG_PIXELFORMAT_...,
-                    .depth_format = SG_PIXELFORMAT_...,
-                    .sample_count = ...,
-                }
+                .color_format = SG_PIXELFORMAT_...,
+                .depth_format = SG_PIXELFORMAT_...,
+                .sample_count = ...,
             });
 
         To reduce memory usage, or if you need to create more then the default number of
@@ -132,10 +130,8 @@
 
             .context_pool_size      (default: 4)
             .pipeline_pool_size     (default: 64)
-            .context = {
-                .max_vertices       (default: 64k)
-                .max_commands       (default: 16k)
-            }
+            .max_vertices       (default: 64k)
+            .max_commands       (default: 16k)
 
         Finally you can change the face winding for front-facing triangles
         and quads:
@@ -148,7 +144,15 @@
     --- Optionally create pipeline-state-objects if you need render state
         that differs from sokol-gl's default state:
 
-            sgl_pipeline pip = sgl_make_pipeline(SGL_DEFAULT_CONTEXT, const sg_pipeline_desc* desc)
+            sgl_pipeline pip = sgl_make_pipeline(const sg_pipeline_desc* desc)
+
+        ...this creates a pipeline object that's compatible with the currently
+        active context, alternatively call:
+
+            sgl_pipeline_pip = sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline_desc* desc)
+
+        ...to create a pipeline object that's compatible with an explicitly
+        provided context.
 
         The similarity with sokol_gfx.h's sg_pipeline type and sg_make_pipeline()
         function is intended. sgl_make_pipeline() also takes a standard
@@ -331,18 +335,28 @@
         state has changed since the last sgl_begin/end pair.
 
     --- inside a sokol-gfx rendering pass, call the sgl_draw() function
-        to render a specific sgl_context:
+        to render the currently active context:
 
-            sgl_draw(SGL_DEFAULT_CONTEXT)
+            sgl_draw()
+
+        ...or alternatively call:
+
+            sgl_context_draw(ctx)
+
+        ...to render an explicitly provided context.
 
         This will render everything that has been recorded in the context since
         the last call to sgl_draw() through sokol-gfx, and will 'rewind' the internal
         vertex-, uniform- and command-buffers.
 
     --- each sokol-gl context tracks an internal error code, to query the
-        current error code for the default context, call:
+        current error code for the currently active context call:
 
-            sgl_error_t sgl_error(SGL_DEFAULT_CONTEXT)
+            sgl_error_t sgl_error()
+
+        ...alternatively with an explicit context argument:
+
+            sgl_error_t sgl_context_error(ctx);
 
         ...which can return the following error codes:
 
@@ -352,7 +366,7 @@
         SGL_ERROR_COMMANDS_FULL     - the internal command buffer is full (checked in sgl_end())
         SGL_ERROR_STACK_OVERFLOW    - matrix- or pipeline-stack overflow
         SGL_ERROR_STACK_UNDERFLOW   - matrix- or pipeline-stack underflow
-        SGL_ERROR_NO_CONTEXT        - the provided context handle wasn't valid
+        SGL_ERROR_NO_CONTEXT        - the active context no longer exists
 
         ...if sokol-gl is in an error-state, sgl_draw() will skip any rendering,
         and reset the error code to SGL_NO_ERROR.
@@ -382,14 +396,14 @@
     The color_format, depth_format and sample_count items must be compatible
     with the render pass this sgl_context is rendered in.
 
-    It's usually a good idea to trim the max_vertices and max_commands items in
-    order to reduce memory usage.
-
     Creating a context does *not* make the context current. To do this, call:
 
         sgl_set_context(ctx);
 
-    To switch back to the default context pass the global constant SGL_DEFAULT_CONTEXT:
+    The currently active context will implicitely be used by most sokol-gl functions
+    which don't take an explicit context handle as argument.
+
+    To switch back to the default context, pass the global constant SGL_DEFAULT_CONTEXT:
 
         sgl_set_context(SGL_DEFAULT_CONTEXT);
 
@@ -397,15 +411,32 @@
 
         sgl_context cur_ctx = sgl_get_context();
 
-    All 'regular' sokol-gl functions which record data for rendering in sgl_draw()
-    use the currently active context set with sgl_set_context().
+    The following functions exist in two variants, one which use the currently
+    active context (set with sgl_set_context()), and another version which
+    takes an explicit context handle instead:
 
-    Functions with an explicit context handle argument do *not* change
-    the currently active context, these are:
+        sgl_make_pipeline() vs sgl_context_make_pipeline()
+        sgl_error() vs sgl_context_error();
+        sgl_draw() vs sgl_context_draw();
 
-        - sgl_make_pipeline()
-        - sgl_draw()
-        - sgl_get_error()
+    Except for using the currently active context versus a provided context
+    handle, the two variants are exactly identical, e.g. the following
+    code sequences do the same thing:
+
+        sgl_set_context(ctx);
+        sgl_pipeline pip = sgl_make_pipeline(...);
+        sgl_error_t err = sgl_error();
+        sgl_draw();
+
+        vs
+
+        sgl_pipeline pip = sgl_context_make_pipeline(ctx, ...);
+        sgl_error_t err = sgl_context_error(ctx);
+        sgl_context_draw(ctx);
+
+    Destroying the currently active context is a 'soft error'. All following
+    calls which require a currently active context will silently fail,
+    and sgl_error() will return SGL_ERROR_NO_CONTEXT.
 
     UNDER THE HOOD:
     ===============
@@ -580,10 +611,14 @@ typedef struct sgl_context_desc_t {
 } sgl_context_desc_t;
 
 typedef struct sgl_desc_t {
+    int max_vertices;               // default: 64k
+    int max_commands;               // default: 16k
     int context_pool_size;          // max number of contexts (including default context), default: 4
     int pipeline_pool_size;         // size of internal pipeline pool, default: 64
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
-    sgl_context_desc_t context;     // default context initialization attributes
 } sgl_desc_t;
 
 /* the default context handle */
@@ -592,9 +627,10 @@ static const sgl_context SGL_DEFAULT_CONTEXT = { 0x00010001 };
 /* setup/shutdown/misc */
 SOKOL_GL_API_DECL void sgl_setup(const sgl_desc_t* desc);
 SOKOL_GL_API_DECL void sgl_shutdown(void);
-SOKOL_GL_API_DECL sgl_error_t sgl_error(sgl_context ctx);
 SOKOL_GL_API_DECL float sgl_rad(float deg);
 SOKOL_GL_API_DECL float sgl_deg(float rad);
+SOKOL_GL_API_DECL sgl_error_t sgl_error(void);
+SOKOL_GL_API_DECL sgl_error_t sgl_context_error(sgl_context ctx);
 
 /* context functions */
 SOKOL_GL_API_DECL sgl_context sgl_make_context(const sgl_context_desc_t* desc);
@@ -603,7 +639,8 @@ SOKOL_GL_API_DECL void sgl_set_context(sgl_context ctx);
 SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
 
 /* create and destroy pipeline objects */
-SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(sgl_context ctx, const sg_pipeline_desc* desc);
+SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
+SOKOL_GL_API_DECL sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline_desc* desc);
 SOKOL_GL_API_DECL void sgl_destroy_pipeline(sgl_pipeline pip);
 
 /* render state functions */
@@ -682,8 +719,9 @@ SOKOL_GL_API_DECL void sgl_v3f_t2f_c4b(float x, float y, float z, float u, float
 SOKOL_GL_API_DECL void sgl_v3f_t2f_c1i(float x, float y, float z, float u, float v, uint32_t rgba);
 SOKOL_GL_API_DECL void sgl_end(void);
 
-/* render everything */
-SOKOL_GL_API_DECL void sgl_draw(sgl_context ctx);
+/* render recorded commands */
+SOKOL_GL_API_DECL void sgl_draw();
+SOKOL_GL_API_DECL void sgl_context_draw(sgl_context ctx);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -691,7 +729,8 @@ SOKOL_GL_API_DECL void sgl_draw(sgl_context ctx);
 /* reference-based equivalents for C++ */
 inline void sgl_setup(const sgl_desc_t& desc) { return sgl_setup(&desc); }
 inline sgl_context sgl_make_context(const sgl_context_desc_t& desc) { return sgl_make_context(&desc); }
-inline sgl_pipeline sgl_make_pipeline(sgl_context ctx, const sg_pipeline_desc& desc) { return sgl_make_pipeline(ctx, &desc); }
+inline sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc& desc) { return sgl_make_pipeline(&desc); }
+inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline_desc& desc) { return sgl_context_make_pipeline(ctx, &desc); }
 #endif
 #endif /* SOKOL_GL_INCLUDED */
 
@@ -2909,10 +2948,11 @@ static inline _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
 // return sg_context_desc_t with patched defaults
 static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
     sgl_desc_t res = *desc;
+    res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
+    res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);
     res.context_pool_size = _sgl_def(desc->context_pool_size, _SGL_DEFAULT_CONTEXT_POOL_SIZE);
     res.pipeline_pool_size = _sgl_def(desc->pipeline_pool_size, _SGL_DEFAULT_PIPELINE_POOL_SIZE);
     res.face_winding = _sgl_def(desc->face_winding, SG_FACEWINDING_CCW);
-    res.context = _sgl_context_desc_defaults(&desc->context);
     return res;
 }
 
@@ -3067,6 +3107,17 @@ static void _sgl_draw(_sgl_context_t* ctx) {
     _sgl_rewind(ctx);
 }
 
+static sgl_context_desc_t _sgl_as_context_desc(const sgl_desc_t* desc) {
+    sgl_context_desc_t ctx_desc;
+    memset(&ctx_desc, 0, sizeof(ctx_desc));
+    ctx_desc.max_vertices = desc->max_vertices;
+    ctx_desc.max_commands = desc->max_commands;
+    ctx_desc.color_format = desc->color_format;
+    ctx_desc.depth_format = desc->depth_format;
+    ctx_desc.sample_count = desc->sample_count;
+    return ctx_desc;
+}
+
 /*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
@@ -3076,7 +3127,8 @@ SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     _sgl_setup_pipeline_pool(_sgl.desc.pipeline_pool_size);
     _sgl_setup_context_pool(_sgl.desc.context_pool_size);
     _sgl_setup_common();
-    _sgl.def_ctx_id = sgl_make_context(&_sgl.desc.context);
+    const sgl_context_desc_t ctx_desc = _sgl_as_context_desc(&_sgl.desc);
+    _sgl.def_ctx_id = sgl_make_context(&ctx_desc);
     SOKOL_ASSERT(SGL_DEFAULT_CONTEXT.id == _sgl.def_ctx_id.id);
     sgl_set_context(_sgl.def_ctx_id);
 }
@@ -3098,7 +3150,17 @@ SOKOL_API_IMPL void sgl_shutdown(void) {
     _sgl.init_cookie = 0;
 }
 
-SOKOL_API_IMPL sgl_error_t sgl_error(sgl_context ctx_id) {
+SOKOL_API_IMPL sgl_error_t sgl_error(void) {
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        return ctx->error;
+    }
+    else {
+        return SGL_ERROR_NO_CONTEXT;
+    }
+}
+
+SOKOL_API_IMPL sgl_error_t sgl_context_error(sgl_context ctx_id) {
     const _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
         return ctx->error;
@@ -3150,7 +3212,18 @@ SOKOL_API_IMPL sgl_context sgl_get_context(void) {
     return _sgl.cur_ctx_id;
 }
 
-SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(sgl_context ctx_id, const sg_pipeline_desc* desc) {
+SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        return _sgl_make_pipeline(desc, &ctx->desc);
+    }
+    else {
+        return _sgl_make_pip_id(SG_INVALID_ID);
+    }
+}
+
+SOKOL_API_IMPL sgl_pipeline sgl_context_make_pipeline(sgl_context ctx_id, const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     const _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
@@ -3819,7 +3892,15 @@ SOKOL_GL_API_DECL void sgl_pop_matrix(void) {
     }
 }
 
-SOKOL_API_IMPL void sgl_draw(sgl_context ctx_id) {
+SOKOL_API_IMPL void sgl_draw(void) {
+    SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        _sgl_draw(ctx);
+    }
+}
+
+SOKOL_API_IMPL void sgl_context_draw(sgl_context ctx_id) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl_lookup_context(ctx_id.id);
     if (ctx) {
