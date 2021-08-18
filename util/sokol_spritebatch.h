@@ -30,7 +30,8 @@ extern "C" {
         SBATCH_FLIP_NONE = 0,
         SBATCH_FLIP_X = 1 << 0,
         SBATCH_FLIP_Y = 1 << 1,
-        SBATCH_FLIP_BOTH = SBATCH_FLIP_Y | SBATCH_FLIP_X
+        SBATCH_FLIP_BOTH = SBATCH_FLIP_Y | SBATCH_FLIP_X,
+        SBATCH_Z_TILT = 1 << 2
     } sbatch_sprite_flags;
 
     typedef struct sbatch_float2 {
@@ -2167,12 +2168,18 @@ static void _sbatch_init_quad_rotated(
 
 static void _sbatch_init_quad(
     _sbatch_vertex* vertices, float x, float y, float w, float h, uint32_t rgba,
-    sbatch_float2 top_left, sbatch_float2 bottom_right, float depth) {
+    sbatch_float2 top_left, sbatch_float2 bottom_right, float depth, uint32_t flags) {
+
+    float zOffset = 0.0f;
+    if ((flags & SBATCH_Z_TILT) > 0)
+    {
+        zOffset = h * tanf(0.785398f);
+    }
 
     _sbatch_vertex* top_left_vertex = vertices;
     top_left_vertex->x = x;
     top_left_vertex->y = y;
-    top_left_vertex->z = depth;
+    top_left_vertex->z = depth + zOffset;
     top_left_vertex->rgba = rgba;
     top_left_vertex->u = top_left.x;
     top_left_vertex->v = top_left.y;
@@ -2180,7 +2187,7 @@ static void _sbatch_init_quad(
     _sbatch_vertex* top_right_vertex = vertices + 1;
     top_right_vertex->x = x + w;
     top_right_vertex->y = y;
-    top_right_vertex->z = depth;
+    top_right_vertex->z = depth + zOffset;
     top_right_vertex->rgba = rgba;
     top_right_vertex->u = bottom_right.x;
     top_right_vertex->v = top_left.y;
@@ -2292,6 +2299,7 @@ SOKOL_API_IMPL void sbatch_setup(const sbatch_desc* desc) {
     pipeline_desc.colors[0].pixel_format = desc->color_format;
     pipeline_desc.depth.pixel_format = desc->depth_format;
     pipeline_desc.sample_count = desc->sample_count;
+
     _sbatch.pipeline = sbatch_make_pipeline(&pipeline_desc);
 
     _sbatch.render_state.transform = _sbatch.inverse_transform = sbatch_matrix_identity();
@@ -2466,7 +2474,8 @@ SOKOL_API_IMPL void sbatch_push_sprite(const sbatch_sprite* sprite) {
                 packed_color,
                 tex_coord_top_left,
                 tex_coord_bottom_right,
-                sprite->depth);
+                sprite->depth,
+                sprite->flags);
         }
         else {
             _sbatch_init_quad_rotated(vertices,
@@ -2558,7 +2567,8 @@ SOKOL_API_IMPL void sbatch_push_sprite_rect(const sbatch_sprite_rect* sprite) {
                 packed_color,
                 tex_coord_top_left,
                 tex_coord_bottom_right,
-                sprite->depth);
+                sprite->depth,
+                sprite->flags);
         }
         else {
             _sbatch_init_quad_rotated(vertices,
