@@ -1900,7 +1900,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         .line_AA = NK_ANTI_ALIASING_ON,
         .vertex_layout = vertex_layout,
         .vertex_size = sizeof(_snk_vertex_t),
-        .vertex_alignment = NK_ALIGNOF(_snk_vertex_t),
+        .vertex_alignment = 4,
         .circle_segment_count = 22,
         .curve_segment_count = 22,
         .arc_segment_count = 22,
