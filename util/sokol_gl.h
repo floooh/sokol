@@ -55,10 +55,6 @@
     when you just want to quickly render a bunch of colored triangles or
     lines without having to mess with buffers and shaders.
 
-    NOTE: if you want to render into more than one sokol-gfx render pass
-    you need to create 'sokol-gl contexts', search for 'WORKING WITH CONTEXTS'
-    below.
-
     The current feature set is mostly useful for debug visualizations
     and simple UI-style 2D rendering:
 
@@ -140,6 +136,15 @@
 
         The default winding for front faces is counter-clock-wise. This is
         the same as OpenGL's default, but different from sokol-gfx.
+
+    --- Optionally create additional context objects if you want to render into
+        multiple sokol-gfx render passes (or generally if you want to
+        use multiple independent sokol-gl "state buckets")
+
+            sgl_context ctx = sgl_make_context(const sgl_context_desc_t* desc)
+
+        For details on rendering with sokol-gl contexts, search below for
+        WORKING WITH CONTEXTS.
 
     --- Optionally create pipeline-state-objects if you need render state
         that differs from sokol-gl's default state:
@@ -383,6 +388,9 @@
     context" (with the notable exception that the currently set context is
     destroyed, more on that later).
 
+    Using multiple contexts can also be useful if you only render in
+    a single pass, but want to maintain multiple independent "state buckets".
+
     To create new context object, call:
 
         sgl_context ctx = sgl_make_context(&(sgl_context_desc){
@@ -394,7 +402,8 @@
         });
 
     The color_format, depth_format and sample_count items must be compatible
-    with the render pass this sgl_context is rendered in.
+    with the render pass the sgl_draw() or sgL_context_draw() function
+    will be called in.
 
     Creating a context does *not* make the context current. To do this, call:
 
@@ -420,7 +429,7 @@
         sgl_draw() vs sgl_context_draw();
 
     Except for using the currently active context versus a provided context
-    handle, the two variants are exactly identical, e.g. the following
+    handle, the two variants are exactlyidentical, e.g. the following
     code sequences do the same thing:
 
         sgl_set_context(ctx);
@@ -458,11 +467,15 @@
     What happens in:
 
         sgl_setup():
-            - 3 memory buffers are allocated, one for vertex data,
-              one for uniform data, and one for commands
-            - sokol-gfx resources are created: a (dynamic) vertex buffer,
-              a shader object (using embedded shader source or byte code),
-              and an 8x8 all-white default texture
+            Unique resources shared by all contexts are created:
+                - a shader object (using embedded shader source or byte code)
+                - an 8x8 white default texture
+            The default context is created, which involves:
+                - 3 memory buffers are created, one for vertex data,
+                  one for uniform data, and one for commands
+                - a dynamic vertex buffer is created
+                - the default sgl_pipeline object is created, which involves
+                  creating 5 sg_pipeline objects
 
             One vertex is 24 bytes:
                 - float3 position
