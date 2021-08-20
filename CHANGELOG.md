@@ -1,5 +1,13 @@
 ## Updates
 
+- **19-Aug-2021**: sokol_gl.h gained rendering context support, this allows
+  sokol-gl to render into different sokol-gfx render passes. No changes are
+  needed for existing sokol-gl code. Check the updated
+  [header documentation](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h)
+  and the new sample
+  [sgl-context-sapp](https://floooh.github.io/sokol-html5/sgl-context-sapp.html)
+  for details!
+
 - **21-Jun-2021**: A new utility header sokol_color.h has been added, which adds
   sokol_gfx.h-compatible named color constants and a handful initial utility
   functions. See the [header documentation](https://github.com/floooh/sokol/blob/master/util/sokol_color.h)
