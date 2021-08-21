@@ -282,6 +282,11 @@
 
         sdtx_set_context(SDTX_DEFAULT_CONTEXT)
 
+    Alternatively, use the function sdtx_default_context() to get the default
+    context handle:
+
+        sdtx_set_context(sdtx_default_context());
+
     To destroy a context, call:
 
         sdtx_destroy_context(ctx)
@@ -538,6 +543,7 @@ SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_make_context(const sdtx_context_desc_
 SOKOL_DEBUGTEXT_API_DECL void sdtx_destroy_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL void sdtx_set_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_default_context(void);
 
 /* draw and rewind the current context */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
@@ -3975,6 +3981,10 @@ SOKOL_API_IMPL void sdtx_set_context(sdtx_context ctx_id) {
 SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     return _sdtx.cur_ctx_id;
+}
+
+SOKOL_API_IMPL sdtx_context sdtx_default_context(void) {
+    return SDTX_DEFAULT_CONTEXT;
 }
 
 SOKOL_API_IMPL void sdtx_font(int font_index) {

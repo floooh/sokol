@@ -210,7 +210,7 @@
 
             ...load the default pipeline state on the top of the pipeline stack:
 
-                sgl_default_pipeline()
+                sgl_load_default_pipeline()
 
             ...load a specific pipeline on the top of the pipeline stack:
 
@@ -415,6 +415,11 @@
     To switch back to the default context, pass the global constant SGL_DEFAULT_CONTEXT:
 
         sgl_set_context(SGL_DEFAULT_CONTEXT);
+
+    ...or alternatively use the function sgl_default_context() instead of the
+    global constant:
+
+        sgl_set_context(sgl_default_context());
 
     To get the currently active context, call:
 
@@ -650,6 +655,7 @@ SOKOL_GL_API_DECL sgl_context sgl_make_context(const sgl_context_desc_t* desc);
 SOKOL_GL_API_DECL void sgl_destroy_context(sgl_context ctx);
 SOKOL_GL_API_DECL void sgl_set_context(sgl_context ctx);
 SOKOL_GL_API_DECL sgl_context sgl_get_context(void);
+SOKOL_GL_API_DECL sgl_context sgl_default_context(void);
 
 /* create and destroy pipeline objects */
 SOKOL_GL_API_DECL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc);
@@ -667,7 +673,7 @@ SOKOL_GL_API_DECL void sgl_disable_texture(void);
 SOKOL_GL_API_DECL void sgl_texture(sg_image img);
 
 /* pipeline stack functions */
-SOKOL_GL_API_DECL void sgl_default_pipeline(void);
+SOKOL_GL_API_DECL void sgl_load_default_pipeline(void);
 SOKOL_GL_API_DECL void sgl_load_pipeline(sgl_pipeline pip);
 SOKOL_GL_API_DECL void sgl_push_pipeline(void);
 SOKOL_GL_API_DECL void sgl_pop_pipeline(void);
@@ -3225,6 +3231,10 @@ SOKOL_API_IMPL sgl_context sgl_get_context(void) {
     return _sgl.cur_ctx_id;
 }
 
+SOKOL_API_IMPL sgl_context sgl_default_context(void) {
+    return SGL_DEFAULT_CONTEXT;
+}
+
 SOKOL_API_IMPL sgl_pipeline sgl_make_pipeline(const sg_pipeline_desc* desc) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
@@ -3262,7 +3272,7 @@ SOKOL_API_IMPL void sgl_load_pipeline(sgl_pipeline pip_id) {
     ctx->pip_stack[ctx->pip_tos] = pip_id;
 }
 
-SOKOL_API_IMPL void sgl_default_pipeline(void) {
+SOKOL_API_IMPL void sgl_load_default_pipeline(void) {
     SOKOL_ASSERT(_SGL_INIT_COOKIE == _sgl.init_cookie);
     _sgl_context_t* ctx = _sgl.cur_ctx;
     if (!ctx) {
@@ -3312,7 +3322,7 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     ctx->rgba = 0xFFFFFFFF;
     ctx->texturing_enabled = false;
     ctx->cur_img = _sgl.def_img;
-    sgl_default_pipeline();
+    sgl_load_default_pipeline();
     _sgl_identity(_sgl_matrix_texture(ctx));
     _sgl_identity(_sgl_matrix_modelview(ctx));
     _sgl_identity(_sgl_matrix_projection(ctx));

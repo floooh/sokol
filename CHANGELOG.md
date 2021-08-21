@@ -1,5 +1,18 @@
 ## Updates
 
+- **21-Aug-2021**: some minor API tweaks in sokol_gl.h and sokol_debugtext.h,
+  one of them breaking (still minor though):
+    - sokol_gl.h has a new function ```sgl_default_context()``` which returns the
+      default context handle, it's the same as the global constant SGL_DEFAULT_CONTEXT,
+      but wrapping this in a function is better for language bindings
+    - ...and a similar function in sokol_debugtext.h: ```sdtx_default_context()```
+    - The sokol_gl.h function ```sgl_default_pipeline()``` has been renamed to
+      ```sgl_load_default_pipeline()```. This fits better with the related
+      function ```sgl_load_pipeline()``` and doesn't 'semantically clash'
+      with the new function sgl_default_context(). The sgl_default_pipeline()
+      function is rarely used, so it's quite unlikely that this change breaks
+      your code.
+
 - **19-Aug-2021**: sokol_gl.h gained rendering context support, this allows
   sokol-gl to render into different sokol-gfx render passes. No changes are
   needed for existing sokol-gl code. Check the updated
