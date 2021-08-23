@@ -209,8 +209,8 @@
         .init_userdata_cb (void (*)(void* user_data))
         .frame_userdata_cb (void (*)(void* user_data))
         .cleanup_userdata_cb (void (*)(void* user_data))
-        .event_cb (void(*)(const sapp_event* event, void* user_data))
-        .fail_cb (void(*)(const char* msg, void* user_data))
+        .event_userdata_cb (void(*)(const sapp_event* event, void* user_data))
+        .fail_userdata_cb (void(*)(const char* msg, void* user_data))
             These are the user-data versions of the callback functions. You
             can mix those with the standard callbacks that don't have the
             user_data argument.
