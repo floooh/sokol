@@ -119,6 +119,8 @@
     RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
+    FOCUSED             | TODO    | YES   | TODO  | ---   | ---     | ---  | ---   | TODO
+    UNFOCUSED           | TODO    | YES   | TODO  | ---   | ---     | ---  | ---   | TODO
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
@@ -1047,6 +1049,8 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_RESIZED,
     SAPP_EVENTTYPE_ICONIFIED,
     SAPP_EVENTTYPE_RESTORED,
+    SAPP_EVENTTYPE_FOCUSED,
+    SAPP_EVENTTYPE_UNFOCUSED,
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
@@ -3224,6 +3228,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
+}
+
+- (void)windowDidBecomeKey:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_macos_app_event(SAPP_EVENTTYPE_FOCUSED);
+}
+
+- (void)windowDidResignKey:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_macos_app_event(SAPP_EVENTTYPE_UNFOCUSED);
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification*)notification {
