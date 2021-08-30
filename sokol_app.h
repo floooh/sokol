@@ -6097,6 +6097,12 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 break;
+            case WM_SETFOCUS:
+                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_FOCUSED);
+                break;
+            case WM_KILLFOCUS:
+                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+                break;
             case WM_SETCURSOR:
                 if (_sapp.desc.user_cursor) {
                     if (LOWORD(lParam) == HTCLIENT) {
