@@ -119,8 +119,8 @@
     RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
-    FOCUSED             | TODO    | YES   | TODO  | ---   | ---     | ---  | ---   | TODO
-    UNFOCUSED           | TODO    | YES   | TODO  | ---   | ---     | ---  | ---   | TODO
+    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | ---   | TODO
+    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | TODO
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
@@ -10226,10 +10226,20 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
             }
             break;
+        case FocusIn:
+            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+                _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
+            }
+            break;
         case FocusOut:
             /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
             if (_sapp.mouse.locked) {
                 _sapp_x11_lock_mouse(false);
+            }
+            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+                _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
             }
             break;
         case KeyPress:
