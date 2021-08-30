@@ -6101,6 +6101,10 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_FOCUSED);
                 break;
             case WM_KILLFOCUS:
+                /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
+                if (_sapp.mouse.locked) {
+                    _sapp_win32_lock_mouse(false);
+                }
                 _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UNFOCUSED);
                 break;
             case WM_SETCURSOR:
