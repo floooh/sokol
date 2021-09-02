@@ -119,8 +119,8 @@
     RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
-    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | ---   | TODO
-    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | TODO
+    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
+    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES

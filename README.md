@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**21-Aug-2021** minor API tweaks in sokol_gl.h and sokol_debugtext.h - breaking change: sgl_default_pipeline() has been renamed)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**02-Sep-2021** new FOCUSED/UNFOCUSED event in sokol_app.h)
 
 ## Examples and Related Projects
 
