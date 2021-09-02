@@ -4490,6 +4490,127 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
     return true;
 }
 
+static struct {
+    const char* str;
+    sapp_keycode code;
+} _sapp_emsc_keymap[] = {
+    { "Backspace",      SAPP_KEYCODE_BACKSPACE },
+    { "Tab",            SAPP_KEYCODE_TAB },
+    { "Enter",          SAPP_KEYCODE_ENTER },
+    { "ShiftLeft",      SAPP_KEYCODE_LEFT_SHIFT },
+    { "ShiftRight",     SAPP_KEYCODE_RIGHT_SHIFT },
+    { "ControlLeft",    SAPP_KEYCODE_LEFT_CONTROL },
+    { "ControlRight",   SAPP_KEYCODE_RIGHT_CONTROL },
+    { "AltLeft",        SAPP_KEYCODE_LEFT_ALT },
+    { "AltRight",       SAPP_KEYCODE_RIGHT_ALT },
+    { "Pause",          SAPP_KEYCODE_PAUSE },
+    { "CapsLock",       SAPP_KEYCODE_CAPS_LOCK },
+    { "Escape",         SAPP_KEYCODE_ESCAPE },
+    { "Space",          SAPP_KEYCODE_SPACE },
+    { "PageUp",         SAPP_KEYCODE_PAGE_UP },
+    { "PageDown",       SAPP_KEYCODE_PAGE_DOWN },
+    { "End",            SAPP_KEYCODE_END },
+    { "Home",           SAPP_KEYCODE_HOME },
+    { "ArrowLeft",      SAPP_KEYCODE_LEFT },
+    { "ArrowUp",        SAPP_KEYCODE_UP },
+    { "ArrowRight",     SAPP_KEYCODE_RIGHT },
+    { "ArrowDown",      SAPP_KEYCODE_DOWN },
+    { "PrintScreen",    SAPP_KEYCODE_PRINT_SCREEN },
+    { "Insert",         SAPP_KEYCODE_INSERT },
+    { "Delete",         SAPP_KEYCODE_DELETE },
+    { "Digit0",         SAPP_KEYCODE_0 },
+    { "Digit1",         SAPP_KEYCODE_1 },
+    { "Digit2",         SAPP_KEYCODE_2 },
+    { "Digit3",         SAPP_KEYCODE_3 },
+    { "Digit4",         SAPP_KEYCODE_4 },
+    { "Digit5",         SAPP_KEYCODE_5 },
+    { "Digit6",         SAPP_KEYCODE_6 },
+    { "Digit7",         SAPP_KEYCODE_7 },
+    { "Digit8",         SAPP_KEYCODE_8 },
+    { "Digit9",         SAPP_KEYCODE_9 },
+    { "KeyA",           SAPP_KEYCODE_A },
+    { "KeyB",           SAPP_KEYCODE_B },
+    { "KeyC",           SAPP_KEYCODE_C },
+    { "KeyD",           SAPP_KEYCODE_D },
+    { "KeyE",           SAPP_KEYCODE_E },
+    { "KeyF",           SAPP_KEYCODE_F },
+    { "KeyG",           SAPP_KEYCODE_G },
+    { "KeyH",           SAPP_KEYCODE_H },
+    { "KeyI",           SAPP_KEYCODE_I },
+    { "KeyJ",           SAPP_KEYCODE_J },
+    { "KeyK",           SAPP_KEYCODE_K },
+    { "KeyL",           SAPP_KEYCODE_L },
+    { "KeyM",           SAPP_KEYCODE_M },
+    { "KeyN",           SAPP_KEYCODE_N },
+    { "KeyO",           SAPP_KEYCODE_O },
+    { "KeyP",           SAPP_KEYCODE_P },
+    { "KeyQ",           SAPP_KEYCODE_Q },
+    { "KeyR",           SAPP_KEYCODE_R },
+    { "KeyS",           SAPP_KEYCODE_S },
+    { "KeyT",           SAPP_KEYCODE_T },
+    { "KeyU",           SAPP_KEYCODE_U },
+    { "KeyV",           SAPP_KEYCODE_V },
+    { "KeyW",           SAPP_KEYCODE_W },
+    { "KeyX",           SAPP_KEYCODE_X },
+    { "KeyY",           SAPP_KEYCODE_Y },
+    { "KeyZ",           SAPP_KEYCODE_Z },
+    { "MetaLeft",       SAPP_KEYCODE_LEFT_SUPER },
+    { "MetaRight",      SAPP_KEYCODE_RIGHT_SUPER },
+    { "Numpad0",        SAPP_KEYCODE_KP_0 },
+    { "Numpad1",        SAPP_KEYCODE_KP_1 },
+    { "Numpad2",        SAPP_KEYCODE_KP_2 },
+    { "Numpad3",        SAPP_KEYCODE_KP_3 },
+    { "Numpad4",        SAPP_KEYCODE_KP_4 },
+    { "Numpad5",        SAPP_KEYCODE_KP_5 },
+    { "Numpad6",        SAPP_KEYCODE_KP_6 },
+    { "Numpad7",        SAPP_KEYCODE_KP_7 },
+    { "Numpad8",        SAPP_KEYCODE_KP_8 },
+    { "Numpad9",        SAPP_KEYCODE_KP_9 },
+    { "NumpadMultiply", SAPP_KEYCODE_KP_MULTIPLY },
+    { "NumpadAdd",      SAPP_KEYCODE_KP_ADD },
+    { "NumpadSubtract", SAPP_KEYCODE_KP_SUBTRACT },
+    { "NumpadDecimal",  SAPP_KEYCODE_KP_DECIMAL },
+    { "NumpadDivide",   SAPP_KEYCODE_KP_DIVIDE },
+    { "F1",             SAPP_KEYCODE_F1 },
+    { "F2",             SAPP_KEYCODE_F2 },
+    { "F3",             SAPP_KEYCODE_F3 },
+    { "F4",             SAPP_KEYCODE_F4 },
+    { "F5",             SAPP_KEYCODE_F5 },
+    { "F6",             SAPP_KEYCODE_F6 },
+    { "F7",             SAPP_KEYCODE_F7 },
+    { "F8",             SAPP_KEYCODE_F8 },
+    { "F9",             SAPP_KEYCODE_F9 },
+    { "F10",            SAPP_KEYCODE_F10 },
+    { "F11",            SAPP_KEYCODE_F11 },
+    { "F12",            SAPP_KEYCODE_F12 },
+    { "NumLock",        SAPP_KEYCODE_NUM_LOCK },
+    { "ScrollLock",     SAPP_KEYCODE_SCROLL_LOCK },
+    { "Semicolon",      SAPP_KEYCODE_SEMICOLON },
+    { "Equal",          SAPP_KEYCODE_EQUAL },
+    { "Comma",          SAPP_KEYCODE_COMMA },
+    { "Minus",          SAPP_KEYCODE_MINUS },
+    { "Period",         SAPP_KEYCODE_PERIOD },
+    { "Slash",          SAPP_KEYCODE_SLASH },
+    { "Backquote",      SAPP_KEYCODE_GRAVE_ACCENT },
+    { "BracketLeft",    SAPP_KEYCODE_LEFT_BRACKET },
+    { "Backslash",      SAPP_KEYCODE_BACKSLASH },
+    { "BracketRight",   SAPP_KEYCODE_RIGHT_BRACKET },
+    { "Quote",          SAPP_KEYCODE_GRAVE_ACCENT },    // FIXME: ???
+    { 0, SAPP_KEYCODE_INVALID },
+};
+
+_SOKOL_PRIVATE sapp_keycode _sapp_emsc_translate_key(const char* str) {
+    int i = 0;
+    const char* keystr;
+    while (( keystr = _sapp_emsc_keymap[i].str )) {
+        if (0 == strcmp(str, keystr)) {
+            return _sapp_emsc_keymap[i].code;
+        }
+        i += 1;
+    }
+    return SAPP_KEYCODE_INVALID;
+}
+
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
     bool retval = true;
@@ -4522,7 +4643,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             else {
-                _sapp.event.key_code = _sapp_translate_key((int)emsc_event->keyCode);
+                _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
                     "sticking", we'll send a keyup event following a keydown
@@ -4682,110 +4803,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_blur_cb(int emsc_type, const EmscriptenFocusEv
         _sapp_call_event(&_sapp.event);
     }
     return true;
-}
-
-_SOKOL_PRIVATE void _sapp_emsc_keytable_init(void) {
-    _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
-    _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
-    _sapp.keycodes[13]  = SAPP_KEYCODE_ENTER;
-    _sapp.keycodes[16]  = SAPP_KEYCODE_LEFT_SHIFT;
-    _sapp.keycodes[17]  = SAPP_KEYCODE_LEFT_CONTROL;
-    _sapp.keycodes[18]  = SAPP_KEYCODE_LEFT_ALT;
-    _sapp.keycodes[19]  = SAPP_KEYCODE_PAUSE;
-    _sapp.keycodes[27]  = SAPP_KEYCODE_ESCAPE;
-    _sapp.keycodes[32]  = SAPP_KEYCODE_SPACE;
-    _sapp.keycodes[33]  = SAPP_KEYCODE_PAGE_UP;
-    _sapp.keycodes[34]  = SAPP_KEYCODE_PAGE_DOWN;
-    _sapp.keycodes[35]  = SAPP_KEYCODE_END;
-    _sapp.keycodes[36]  = SAPP_KEYCODE_HOME;
-    _sapp.keycodes[37]  = SAPP_KEYCODE_LEFT;
-    _sapp.keycodes[38]  = SAPP_KEYCODE_UP;
-    _sapp.keycodes[39]  = SAPP_KEYCODE_RIGHT;
-    _sapp.keycodes[40]  = SAPP_KEYCODE_DOWN;
-    _sapp.keycodes[45]  = SAPP_KEYCODE_INSERT;
-    _sapp.keycodes[46]  = SAPP_KEYCODE_DELETE;
-    _sapp.keycodes[48]  = SAPP_KEYCODE_0;
-    _sapp.keycodes[49]  = SAPP_KEYCODE_1;
-    _sapp.keycodes[50]  = SAPP_KEYCODE_2;
-    _sapp.keycodes[51]  = SAPP_KEYCODE_3;
-    _sapp.keycodes[52]  = SAPP_KEYCODE_4;
-    _sapp.keycodes[53]  = SAPP_KEYCODE_5;
-    _sapp.keycodes[54]  = SAPP_KEYCODE_6;
-    _sapp.keycodes[55]  = SAPP_KEYCODE_7;
-    _sapp.keycodes[56]  = SAPP_KEYCODE_8;
-    _sapp.keycodes[57]  = SAPP_KEYCODE_9;
-    _sapp.keycodes[59]  = SAPP_KEYCODE_SEMICOLON;
-    _sapp.keycodes[64]  = SAPP_KEYCODE_EQUAL;
-    _sapp.keycodes[65]  = SAPP_KEYCODE_A;
-    _sapp.keycodes[66]  = SAPP_KEYCODE_B;
-    _sapp.keycodes[67]  = SAPP_KEYCODE_C;
-    _sapp.keycodes[68]  = SAPP_KEYCODE_D;
-    _sapp.keycodes[69]  = SAPP_KEYCODE_E;
-    _sapp.keycodes[70]  = SAPP_KEYCODE_F;
-    _sapp.keycodes[71]  = SAPP_KEYCODE_G;
-    _sapp.keycodes[72]  = SAPP_KEYCODE_H;
-    _sapp.keycodes[73]  = SAPP_KEYCODE_I;
-    _sapp.keycodes[74]  = SAPP_KEYCODE_J;
-    _sapp.keycodes[75]  = SAPP_KEYCODE_K;
-    _sapp.keycodes[76]  = SAPP_KEYCODE_L;
-    _sapp.keycodes[77]  = SAPP_KEYCODE_M;
-    _sapp.keycodes[78]  = SAPP_KEYCODE_N;
-    _sapp.keycodes[79]  = SAPP_KEYCODE_O;
-    _sapp.keycodes[80]  = SAPP_KEYCODE_P;
-    _sapp.keycodes[81]  = SAPP_KEYCODE_Q;
-    _sapp.keycodes[82]  = SAPP_KEYCODE_R;
-    _sapp.keycodes[83]  = SAPP_KEYCODE_S;
-    _sapp.keycodes[84]  = SAPP_KEYCODE_T;
-    _sapp.keycodes[85]  = SAPP_KEYCODE_U;
-    _sapp.keycodes[86]  = SAPP_KEYCODE_V;
-    _sapp.keycodes[87]  = SAPP_KEYCODE_W;
-    _sapp.keycodes[88]  = SAPP_KEYCODE_X;
-    _sapp.keycodes[89]  = SAPP_KEYCODE_Y;
-    _sapp.keycodes[90]  = SAPP_KEYCODE_Z;
-    _sapp.keycodes[91]  = SAPP_KEYCODE_LEFT_SUPER;
-    _sapp.keycodes[93]  = SAPP_KEYCODE_MENU;
-    _sapp.keycodes[96]  = SAPP_KEYCODE_KP_0;
-    _sapp.keycodes[97]  = SAPP_KEYCODE_KP_1;
-    _sapp.keycodes[98]  = SAPP_KEYCODE_KP_2;
-    _sapp.keycodes[99]  = SAPP_KEYCODE_KP_3;
-    _sapp.keycodes[100] = SAPP_KEYCODE_KP_4;
-    _sapp.keycodes[101] = SAPP_KEYCODE_KP_5;
-    _sapp.keycodes[102] = SAPP_KEYCODE_KP_6;
-    _sapp.keycodes[103] = SAPP_KEYCODE_KP_7;
-    _sapp.keycodes[104] = SAPP_KEYCODE_KP_8;
-    _sapp.keycodes[105] = SAPP_KEYCODE_KP_9;
-    _sapp.keycodes[106] = SAPP_KEYCODE_KP_MULTIPLY;
-    _sapp.keycodes[107] = SAPP_KEYCODE_KP_ADD;
-    _sapp.keycodes[109] = SAPP_KEYCODE_KP_SUBTRACT;
-    _sapp.keycodes[110] = SAPP_KEYCODE_KP_DECIMAL;
-    _sapp.keycodes[111] = SAPP_KEYCODE_KP_DIVIDE;
-    _sapp.keycodes[112] = SAPP_KEYCODE_F1;
-    _sapp.keycodes[113] = SAPP_KEYCODE_F2;
-    _sapp.keycodes[114] = SAPP_KEYCODE_F3;
-    _sapp.keycodes[115] = SAPP_KEYCODE_F4;
-    _sapp.keycodes[116] = SAPP_KEYCODE_F5;
-    _sapp.keycodes[117] = SAPP_KEYCODE_F6;
-    _sapp.keycodes[118] = SAPP_KEYCODE_F7;
-    _sapp.keycodes[119] = SAPP_KEYCODE_F8;
-    _sapp.keycodes[120] = SAPP_KEYCODE_F9;
-    _sapp.keycodes[121] = SAPP_KEYCODE_F10;
-    _sapp.keycodes[122] = SAPP_KEYCODE_F11;
-    _sapp.keycodes[123] = SAPP_KEYCODE_F12;
-    _sapp.keycodes[144] = SAPP_KEYCODE_NUM_LOCK;
-    _sapp.keycodes[145] = SAPP_KEYCODE_SCROLL_LOCK;
-    _sapp.keycodes[173] = SAPP_KEYCODE_MINUS;
-    _sapp.keycodes[186] = SAPP_KEYCODE_SEMICOLON;
-    _sapp.keycodes[187] = SAPP_KEYCODE_EQUAL;
-    _sapp.keycodes[188] = SAPP_KEYCODE_COMMA;
-    _sapp.keycodes[189] = SAPP_KEYCODE_MINUS;
-    _sapp.keycodes[190] = SAPP_KEYCODE_PERIOD;
-    _sapp.keycodes[191] = SAPP_KEYCODE_SLASH;
-    _sapp.keycodes[192] = SAPP_KEYCODE_GRAVE_ACCENT;
-    _sapp.keycodes[219] = SAPP_KEYCODE_LEFT_BRACKET;
-    _sapp.keycodes[220] = SAPP_KEYCODE_BACKSLASH;
-    _sapp.keycodes[221] = SAPP_KEYCODE_RIGHT_BRACKET;
-    _sapp.keycodes[222] = SAPP_KEYCODE_APOSTROPHE;
-    _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
 }
 
 #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -5059,7 +5076,6 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
-    _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp.desc.width;
