@@ -4994,8 +4994,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
-    emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
-    emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
+    emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     sapp_js_remove_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_remove_clipboard_listener();
