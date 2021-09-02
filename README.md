@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**02-Sep-2021** new FOCUSED/UNFOCUSED event in sokol_app.h)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**02-Sep-2021** sokol_app.h: new FOCUSED/UNFOCUSED event and better keycode handling in the Emscripten backend)
 
 ## Examples and Related Projects
 
