@@ -1,8 +1,8 @@
 ## Updates
 
 - **02-Sep-2021**: some minor non-breaking additions:
-    - sokol_app.h: new event FOCUSED and UNFOCUSED to indicate that the
-      window has gains or loses the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,
+    - sokol_app.h: new events FOCUSED and UNFOCUSED to indicate that the
+      window has gained or lost the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,
       macOS: windowDidBecomeKey/windowDidResignKey, X11: FocusIn/FocusOut,
       HTML5: focus/blur).
 
