@@ -5,8 +5,8 @@
       window has gained or lost the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,
       macOS: windowDidBecomeKey/windowDidResignKey, X11: FocusIn/FocusOut,
       HTML5: focus/blur).
-    - sokol_app.h: the input event keycode is now extracted from the HTML5
-      code string which yields the actual unmapped virtual key code.
+    - sokol_app.h Emscripten backend: the input event keycode is now extracted
+      from the HTML5 code string which yields the actual unmapped virtual key code.
 
 - **21-Aug-2021**: some minor API tweaks in sokol_gl.h and sokol_debugtext.h,
   one of them breaking (still minor though):
