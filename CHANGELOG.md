@@ -1,5 +1,11 @@
 ## Updates
 
+- **02-Sep-2021**: some minor non-breaking additions:
+    - sokol_app.h: new event FOCUSED and UNFOCUSED to indicate that the
+      window has gains or loses the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,
+      macOS: windowDidBecomeKey/windowDidResignKey, X11: FocusIn/FocusOut,
+      HTML5: focus/blur).
+
 - **21-Aug-2021**: some minor API tweaks in sokol_gl.h and sokol_debugtext.h,
   one of them breaking (still minor though):
     - sokol_gl.h has a new function ```sgl_default_context()``` which returns the
