@@ -9333,7 +9333,11 @@ _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
     switch (usg) {
         case SG_USAGE_IMMUTABLE:
+            #if defined(_SG_TARGET_MACOS)
+            return MTLResourceStorageModeManaged;
+            #else
             return MTLResourceStorageModeShared;
+            #endif
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
             #if defined(_SG_TARGET_MACOS)
