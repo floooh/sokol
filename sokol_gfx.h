@@ -3110,7 +3110,7 @@ typedef struct {
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
+    SOKOL_ASSERT((desc->color_count >= 1) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
     cmn->shader_id = desc->shader;
     cmn->index_type = desc->index_type;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
