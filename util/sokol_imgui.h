@@ -1924,17 +1924,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     int cmd_list_count = 0;
     for (int cl_index = 0; cl_index < draw_data->CmdListsCount; cl_index++, cmd_list_count++) {
         ImDrawList* cl = draw_data->CmdLists[cl_index];
-        #if defined(__cplusplus)
-            const size_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
-            const size_t idx_size = cl->IdxBuffer.size() * sizeof(ImDrawIdx);
-            const ImDrawVert* vtx_ptr = &cl->VtxBuffer.front();
-            const ImDrawIdx* idx_ptr = &cl->IdxBuffer.front();
-        #else
-            const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
-            const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
-            const ImDrawVert* vtx_ptr = cl->VtxBuffer.Data;
-            const ImDrawIdx* idx_ptr = cl->IdxBuffer.Data;
-        #endif
+        const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
+        const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
 
         /* check for buffer overflow */
         if (((all_vtx_size + vtx_size) > _simgui.vertices.size) ||
@@ -1944,10 +1935,16 @@ SOKOL_API_IMPL void simgui_render(void) {
         }
 
         /* copy vertices and indices into common buffers */
-        void* dst_vtx_ptr = (void*) (((uint8_t*)_simgui.vertices.ptr) + all_vtx_size);
-        void* dst_idx_ptr = (void*) (((uint8_t*)_simgui.indices.ptr) + all_idx_size);
-        memcpy(dst_vtx_ptr, vtx_ptr, vtx_size);
-        memcpy(dst_idx_ptr, idx_ptr, idx_size);
+        if (vtx_size > 0) {
+            const ImDrawVert* src_vtx_ptr = cl->VtxBuffer.Data;
+            void* dst_vtx_ptr = (void*) (((uint8_t*)_simgui.vertices.ptr) + all_vtx_size);
+            memcpy(dst_vtx_ptr, src_vtx_ptr, vtx_size);
+        }
+        if (idx_size > 0) {
+            const ImDrawIdx* src_idx_ptr = cl->IdxBuffer.Data;
+            void* dst_idx_ptr = (void*) (((uint8_t*)_simgui.indices.ptr) + all_idx_size);
+            memcpy(dst_idx_ptr, src_idx_ptr, idx_size);
+        }
         all_vtx_size += vtx_size;
         all_idx_size += idx_size;
     }
@@ -1957,12 +1954,16 @@ SOKOL_API_IMPL void simgui_render(void) {
 
     /* update the sokol-gfx vertex- and index-buffer */
     sg_push_debug_group("sokol-imgui");
-    sg_range vtx_data = _simgui.vertices;
-    vtx_data.size = all_vtx_size;
-    sg_range idx_data = _simgui.indices;
-    idx_data.size = all_idx_size;
-    sg_update_buffer(_simgui.vbuf, &vtx_data);
-    sg_update_buffer(_simgui.ibuf, &idx_data);
+    if (all_vtx_size > 0) {
+        sg_range vtx_data = _simgui.vertices;
+        vtx_data.size = all_vtx_size;
+        sg_update_buffer(_simgui.vbuf, &vtx_data);
+    }
+    if (all_idx_size > 0) {
+        sg_range idx_data = _simgui.indices;
+        idx_data.size = all_idx_size;
+        sg_update_buffer(_simgui.ibuf, &idx_data);
+    }
 
     /* render the ImGui command list */
     const float dpi_scale = _simgui.desc.dpi_scale;
