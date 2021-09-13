@@ -15386,6 +15386,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     }
     if (!_sg.next_draw_valid) {
         _SG_TRACE_NOARGS(err_draw_invalid);
+        return;
     }
     _sg_apply_uniforms(stage, ub_index, data);
     _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data);
