@@ -10208,7 +10208,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
     /* render targets are only visible to the GPU */
-    mtl_desc.resourceOptions = MTLResourceStorageModePrivate | MTLResourceCPUCacheModeDefaultCache;
+    mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
     /* MSAA render targets are not shader-readable (instead they are resolved) */
     mtl_desc.usage = MTLTextureUsageRenderTarget;
     mtl_desc.textureType = MTLTextureType2DMultisample;
