@@ -9341,9 +9341,9 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) 
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
             #if defined(_SG_TARGET_MACOS)
-            return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
+            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
             #else
-            return MTLCPUCacheModeWriteCombined;
+            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared;
             #endif
         default:
             SOKOL_UNREACHABLE;
@@ -9989,14 +9989,10 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
-    MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if defined(_SG_TARGET_MACOS)
-    res_opts |= MTLResourceStorageModeManaged;
-    #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg.mtl.uniform_buffers[i] = [_sg.mtl.device
             newBufferWithLength:(NSUInteger)_sg.mtl.ub_size
-            options:res_opts
+            options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
         ];
     }
     _sg_mtl_init_caps();
@@ -10183,18 +10179,18 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
         mtl_desc.arrayLength = 1;
     }
     mtl_desc.usage = MTLTextureUsageShaderRead;
+    MTLResourceOptions res_options = 0;
     if (img->cmn.usage != SG_USAGE_IMMUTABLE) {
-        mtl_desc.cpuCacheMode = MTLCPUCacheModeWriteCombined;
+        res_options |= MTLResourceCPUCacheModeWriteCombined;
     }
     #if defined(_SG_TARGET_MACOS)
         /* macOS: use managed textures */
-        mtl_desc.resourceOptions = MTLResourceStorageModeManaged;
-        mtl_desc.storageMode = MTLStorageModeManaged;
+        res_options |= MTLResourceStorageModeManaged;
     #else
         /* iOS: use CPU/GPU shared memory */
-        mtl_desc.resourceOptions = MTLResourceStorageModeShared;
-        mtl_desc.storageMode = MTLStorageModeShared;
+        res_options |= MTLResourceStorageModeShared;
     #endif
+    mtl_desc.resourceOptions = res_options;
     return true;
 }
 
@@ -10202,11 +10198,8 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.render_target);
     _SOKOL_UNUSED(img);
-    /* reset the cpuCacheMode to 'default' */
-    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
     /* render targets are only visible to the GPU */
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
-    mtl_desc.storageMode = MTLStorageModePrivate;
     /* non-MSAA render targets are shader-readable */
     mtl_desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
 }
@@ -10214,11 +10207,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
 /* initialize MTLTextureDescritor with MSAA attributes */
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
-    /* reset the cpuCacheMode to 'default' */
-    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
     /* render targets are only visible to the GPU */
-    mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
-    mtl_desc.storageMode = MTLStorageModePrivate;
+    mtl_desc.resourceOptions = MTLResourceStorageModePrivate | MTLResourceCPUCacheModeDefaultCache;
     /* MSAA render targets are not shader-readable (instead they are resolved) */
     mtl_desc.usage = MTLTextureUsageRenderTarget;
     mtl_desc.textureType = MTLTextureType2DMultisample;
@@ -10724,10 +10714,6 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(_sg.mtl.drawable_cb || _sg.mtl.drawable_userdata_cb);
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
-
-    #if defined(_SG_TARGET_MACOS)
-    [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
-    #endif
 
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = nil;
