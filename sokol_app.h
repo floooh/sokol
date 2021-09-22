@@ -131,8 +131,8 @@
     RESIZED             | YES     | YES   | YES    | YES   | YES     | YES  | YES
     ICONIFIED           | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
     RESTORED            | YES     | YES   | YES(4) | ---   | ---     | YES  | ---
-    FOCUSED             | YES     | YES   | YES(4) | ---   | ---     | ---  | YES
-    UNFOCUSED           | YES     | YES   | YES(4) | ---   | ---     | ---  | YES
+    FOCUSED             | YES     | YES   | YES    | ---   | ---     | ---  | YES
+    UNFOCUSED           | YES     | YES   | YES    | ---   | ---     | ---  | YES
     SUSPENDED           | ---     | ---   | ---    | YES   | YES     | YES  | TODO
     RESUMED             | ---     | ---   | ---    | YES   | YES     | YES  | TODO
     QUIT_REQUESTED      | YES     | YES   | YES    | ---   | ---     | ---  | YES
@@ -3002,6 +3002,9 @@ typedef struct {
 
     /* dnd data */
     struct wl_data_offer *data_offer;
+
+    /* surface reference for focus/unfocused event */
+    struct wl_surface* focus;
 } _sapp_wl_t;
 
 #endif /* !SOKOL_DISABLE_WAYLAND */
@@ -12859,6 +12862,11 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_enter(void* data, struct wl_keyboard* keyb
     wl_array_for_each(key, keys) {
         _sapp_wl_keyboard_key(data, keyboard, serial, 0, *key, WL_KEYBOARD_KEY_STATE_PRESSED);
     }
+
+    if (NULL == _sapp.wl.focus) {
+        _sapp_wl_app_event(SAPP_EVENTTYPE_FOCUSED);
+    }
+    _sapp.wl.focus = surface;
 }
 
 _SOKOL_PRIVATE void _sapp_wl_keyboard_keymap(void* data, struct wl_keyboard* keyboard, uint32_t format, int32_t fd, uint32_t size) {
@@ -12894,6 +12902,11 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyb
     _SOKOL_UNUSED(surface);
 
     _sapp.wl.serial = serial;
+
+    if (NULL != _sapp.wl.focus) {
+        _sapp_wl_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+    }
+    _sapp.wl.focus = NULL;
 }
 
 _SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
