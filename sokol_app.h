@@ -13523,7 +13523,6 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_close(void* data, struct xdg_toplev
     _SOKOL_UNUSED(toplevel);
 
     _sapp.quit_requested = true;
-    _sapp_wl_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
 }
 
 _SOKOL_PRIVATE const struct xdg_toplevel_listener _sapp_wl_toplevel_listener = {
@@ -13767,7 +13766,10 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
         wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
 
         if (_sapp.quit_requested) {
-            _sapp.quit_ordered = true;
+            _sapp_wl_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
         }
     }
 
