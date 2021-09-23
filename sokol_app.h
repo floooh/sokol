@@ -2005,6 +2005,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <linux/input-event-codes.h>
         #include <sys/epoll.h>
         #include <sys/mman.h>
+        #include <time.h>
         #include <unistd.h>
         #include <wayland-client.h>
         #include <wayland-cursor.h>
@@ -2982,7 +2983,13 @@ typedef struct {
     struct xkb_context* xkb_context;
     struct xkb_state* xkb_state;
     struct xkb_keymap* xkb_keymap;
-    bool repeat_mask[SAPP_MAX_KEYCODES];
+
+    /* repeat information */
+    sapp_keycode repeat_key_code;
+    uint32_t repeat_key_char;
+    struct timespec repeat_delay;
+    struct timespec repeat_rate;
+    struct timespec repeat_next;
 
     /* pointer/cursor related data */
     struct wl_cursor *cursor;
@@ -12349,6 +12356,31 @@ _SOKOL_PRIVATE void _sapp_linux_x11_run(const sapp_desc* desc) {
 #endif /* !SOKOL_DISABLE_X11 */
 #if !defined(SOKOL_DISABLE_WAYLAND)
 
+/* based loosely on <sys/time.h> `timercmp` macro
+ * compare two timespec structs and return 1 if a > b, -1 if a < b, 0 if a == b
+ */
+_SOKOL_PRIVATE int _sapp_wl_timespec_cmp(struct timespec *a, struct timespec *b) {
+    if (a->tv_sec > b->tv_sec) return 1;
+    if (a->tv_sec < b->tv_sec) return -1;
+
+    if (a->tv_nsec > b->tv_nsec) return 1;
+    if (a->tv_nsec < b->tv_nsec) return -1;
+
+    return 0;
+}
+
+/* based on <sys/time.h> `timeradd` macro adapted for timespec structs
+ * calculate sum of two timespec structs
+ */
+_SOKOL_PRIVATE void _sapp_wl_timespec_add(struct timespec *a, struct timespec *b, struct timespec *result) {
+    result->tv_sec = a->tv_sec + b->tv_sec;
+    result->tv_nsec = a->tv_nsec + b->tv_nsec;
+    if (result->tv_nsec >= 1000000000L) {
+        ++result->tv_sec;
+        result->tv_nsec -= 1000000000L;
+    }
+}
+
 _SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
     switch (sym) {
         case XKB_KEY_KP_Space:     return SAPP_KEYCODE_SPACE;
@@ -12369,31 +12401,57 @@ _SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
         case XKB_KEY_9:            return SAPP_KEYCODE_9;
         case XKB_KEY_semicolon:    return SAPP_KEYCODE_SEMICOLON;
         case XKB_KEY_equal:        return SAPP_KEYCODE_EQUAL;
+        case XKB_KEY_A:
         case XKB_KEY_a:            return SAPP_KEYCODE_A;
+        case XKB_KEY_B:
         case XKB_KEY_b:            return SAPP_KEYCODE_B;
+        case XKB_KEY_C:
         case XKB_KEY_c:            return SAPP_KEYCODE_C;
+        case XKB_KEY_D:
         case XKB_KEY_d:            return SAPP_KEYCODE_D;
+        case XKB_KEY_E:
         case XKB_KEY_e:            return SAPP_KEYCODE_E;
+        case XKB_KEY_F:
         case XKB_KEY_f:            return SAPP_KEYCODE_F;
+        case XKB_KEY_G:
         case XKB_KEY_g:            return SAPP_KEYCODE_G;
+        case XKB_KEY_H:
         case XKB_KEY_h:            return SAPP_KEYCODE_H;
+        case XKB_KEY_I:
         case XKB_KEY_i:            return SAPP_KEYCODE_I;
+        case XKB_KEY_J:
         case XKB_KEY_j:            return SAPP_KEYCODE_J;
+        case XKB_KEY_K:
         case XKB_KEY_k:            return SAPP_KEYCODE_K;
+        case XKB_KEY_L:
         case XKB_KEY_l:            return SAPP_KEYCODE_L;
+        case XKB_KEY_M:
         case XKB_KEY_m:            return SAPP_KEYCODE_M;
+        case XKB_KEY_N:
         case XKB_KEY_n:            return SAPP_KEYCODE_N;
+        case XKB_KEY_O:
         case XKB_KEY_o:            return SAPP_KEYCODE_O;
+        case XKB_KEY_P:
         case XKB_KEY_p:            return SAPP_KEYCODE_P;
+        case XKB_KEY_Q:
         case XKB_KEY_q:            return SAPP_KEYCODE_Q;
+        case XKB_KEY_R:
         case XKB_KEY_r:            return SAPP_KEYCODE_R;
+        case XKB_KEY_S:
         case XKB_KEY_s:            return SAPP_KEYCODE_S;
+        case XKB_KEY_T:
         case XKB_KEY_t:            return SAPP_KEYCODE_T;
+        case XKB_KEY_U:
         case XKB_KEY_u:            return SAPP_KEYCODE_U;
+        case XKB_KEY_V:
         case XKB_KEY_v:            return SAPP_KEYCODE_V;
+        case XKB_KEY_W:
         case XKB_KEY_w:            return SAPP_KEYCODE_W;
+        case XKB_KEY_X:
         case XKB_KEY_x:            return SAPP_KEYCODE_X;
+        case XKB_KEY_Y:
         case XKB_KEY_y:            return SAPP_KEYCODE_Y;
+        case XKB_KEY_Z:
         case XKB_KEY_z:            return SAPP_KEYCODE_Z;
         case XKB_KEY_bracketleft:  return SAPP_KEYCODE_LEFT_BRACKET;
         case XKB_KEY_backslash:    return SAPP_KEYCODE_BACKSLASH;
@@ -12831,24 +12889,34 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboa
 
     _sapp.wl.serial = serial;
 
-    xkb_keysym_t sym = xkb_state_key_get_one_sym(_sapp.wl.xkb_state, key + 8);
-    sapp_keycode code = _sapp_wl_translate_key(sym);
-
     if (_sapp_events_enabled()) {
+        xkb_keysym_t sym = xkb_state_key_get_one_sym(_sapp.wl.xkb_state, key + 8);
+        sapp_keycode code = _sapp_wl_translate_key(sym);
         uint32_t modifiers = _sapp_wl_get_modifiers();
 
         if (WL_KEYBOARD_KEY_STATE_PRESSED == key_state) {
-            bool is_repeat = _sapp.wl.repeat_mask[code];
-            _sapp.wl.repeat_mask[code] = true;
-            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, code, is_repeat, modifiers);
+            _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, code, false, modifiers);
 
             const uint32_t utf32_char = xkb_keysym_to_utf32(sym);
             if (utf32_char) {
-                _sapp_wl_char_event(utf32_char, is_repeat, modifiers);
+                _sapp_wl_char_event(utf32_char, false, modifiers);
+            }
+
+            /* only repeat non-modifier xkb keys */
+            if (sym < XKB_KEY_Shift_L || sym > XKB_KEY_Hyper_R) {
+                clock_gettime(CLOCK_MONOTONIC, &_sapp.wl.repeat_next);
+                _sapp_wl_timespec_add(&_sapp.wl.repeat_next, &_sapp.wl.repeat_delay, &_sapp.wl.repeat_next);
+
+                _sapp.wl.repeat_key_char = utf32_char;
+                _sapp.wl.repeat_key_code = code;
             }
         } else if (WL_KEYBOARD_KEY_STATE_RELEASED == key_state) {
             _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_UP, code, false, modifiers);
-            _sapp.wl.repeat_mask[code] = false;
+
+            if (_sapp.wl.repeat_key_code == code) {
+                _sapp.wl.repeat_key_char = 0;
+                _sapp.wl.repeat_key_code = SAPP_KEYCODE_INVALID;
+            }
         }
     }
 }
@@ -12905,6 +12973,8 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyb
 
     if (NULL != _sapp.wl.focus) {
         _sapp_wl_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+        _sapp.wl.repeat_key_char = 0;
+        _sapp.wl.repeat_key_code = SAPP_KEYCODE_INVALID;
     }
     _sapp.wl.focus = NULL;
 }
@@ -12921,8 +12991,11 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* 
 _SOKOL_PRIVATE void _sapp_wl_keyboard_repeat_info(void* data, struct wl_keyboard *keyboard, int32_t rate, int32_t delay) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
-    _SOKOL_UNUSED(rate);
-    _SOKOL_UNUSED(delay);
+
+    /* delay is milliseconds before repeat should start,
+     * rate is number of times per second (i.e. per 1_000_000_000L nanoseconds) */
+    _sapp.wl.repeat_delay = (struct timespec){ .tv_sec = 0, .tv_nsec = 1000000L * delay };
+    _sapp.wl.repeat_rate = (struct timespec){ .tv_sec = 0, .tv_nsec = 1000000000L / rate };
 }
 
 _SOKOL_PRIVATE const struct wl_keyboard_listener _sapp_wl_keyboard_listener = {
@@ -13273,8 +13346,9 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
         /* bind to version 3 for:
          * - `wl_keyboard_release`,
          * - `wl_pointer_release`,
-         * - `wl_pointer_release`, */
-        _sapp.wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 3);
+         * - `wl_pointer_release`,
+         * - `repeat_info` event, */
+        _sapp.wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 4);
         wl_seat_add_listener(_sapp.wl.seat, &_sapp_wl_seat_listener, NULL);
     } else if (0 == strcmp(interface, wl_output_interface.name)) {
         if (_SAPP_WAYLAND_MAX_OUTPUTS > _sapp.wl.max_outputs) {
@@ -13764,6 +13838,22 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
         wl_surface_commit(_sapp.wl.surface);
 
         wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
+
+        /* emulate key repeats */
+        if (_sapp.wl.repeat_key_code != SAPP_KEYCODE_INVALID) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (_sapp_wl_timespec_cmp(&now, &_sapp.wl.repeat_next) > 0) {
+                uint32_t modifiers = _sapp_wl_get_modifiers();
+                _sapp_wl_key_event(SAPP_EVENTTYPE_KEY_DOWN, _sapp.wl.repeat_key_code, true, modifiers);
+
+                if (_sapp.wl.repeat_key_char) {
+                    _sapp_wl_char_event(_sapp.wl.repeat_key_char, false, modifiers);
+                }
+
+                _sapp_wl_timespec_add(&now, &_sapp.wl.repeat_rate, &_sapp.wl.repeat_next);
+            }
+        }
 
         if (_sapp.quit_requested) {
             _sapp_wl_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
