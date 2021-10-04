@@ -10108,11 +10108,12 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             const uint8_t* data_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
             const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
             const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            /* special case PVRTC formats: bytePerRow must be 0 */
+            /* special case PVRTC formats: bytePerRow and bytes_per_slice must be 0 */
             int bytes_per_row = 0;
-            int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+            int bytes_per_slice = 0;
             if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
                 bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
             }
             MTLRegion region;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
