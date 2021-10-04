@@ -4019,7 +4019,6 @@ typedef enum {
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
     _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
-    _SG_VALIDATE_UPDIMG_SIZE,
     _SG_VALIDATE_UPDIMG_ONCE
 } _sg_validate_error_t;
 
@@ -13669,7 +13668,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
         case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
-        case _SG_VALIDATE_UPDIMG_SIZE:          return "sg_update_image: provided subimage data size too big";
         case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
 
         default: return "unknown validation error";
@@ -14235,12 +14233,11 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         const int num_mips = img->cmn.num_mipmaps;
         for (int face_index = 0; face_index < num_faces; face_index++) {
             for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
                 const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
                 const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
                 const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const int expected_size = bytes_per_slice * img->cmn.num_slices;
-                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= (size_t)expected_size, _SG_VALIDATE_UPDIMG_SIZE);
+                const int min_size = bytes_per_slice * img->cmn.num_slices;
+                SOKOL_VALIDATE(min_size <= (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
             }
         }
         return SOKOL_VALIDATE_END();
