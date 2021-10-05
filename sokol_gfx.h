@@ -13746,8 +13746,12 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
 _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_format fmt, int width, int height, int num_faces, int num_mips, int num_slices) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(fmt);
+        _SOKOL_UNUSED(width);
+        _SOKOL_UNUSED(height);
         _SOKOL_UNUSED(num_faces);
         _SOKOL_UNUSED(num_mips);
+        _SOKOL_UNUSED(num_slices);
         return true;
     #else
         for (int face_index = 0; face_index < num_faces; face_index++) {
