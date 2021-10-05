@@ -3914,7 +3914,7 @@ typedef enum {
 
     /* image data (for image creation and updating) */
     _SG_VALIDATE_IMAGEDATA_NODATA,
-    _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA,
+    _SG_VALIDATE_IMAGEDATA_DATA_SIZE,
 
     /* image creation */
     _SG_VALIDATE_IMAGEDESC_CANARY,
@@ -6338,7 +6338,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                             gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
                         const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                         int mip_width = img->cmn.width >> mip_index;
                         if (mip_width == 0) {
                             mip_width = 1;
@@ -6349,6 +6348,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         }
                         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             }
@@ -6368,6 +6368,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 mip_depth = 1;
                             }
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             }
@@ -13576,8 +13577,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_BUFFERDESC_NO_DATA:       return "dynamic/stream usage buffers cannot be initialized with data";
 
         /* image data (in image creation and updating) */
-        case _SG_VALIDATE_IMAGEDATA_NODATA:         return "sg_image_data: no surface data (.ptr and/or .size is zero)";
-        case _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA:  return "sg_image_data: not enough surface data (.size smaller than expected)";
+        case _SG_VALIDATE_IMAGEDATA_NODATA:         return "sg_image_data: no data (.ptr and/or .size is zero)";
+        case _SG_VALIDATE_IMAGEDATA_DATA_SIZE:      return "sg_image_data: data size doesn't match expected surface size";
 
         /* image creation validation errros */
         case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
@@ -13762,8 +13763,8 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
                 const int mip_width = _sg_max(width >> mip_index, 1);
                 const int mip_height = _sg_max(height >> mip_index, 1);
                 const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
-                const int min_size = bytes_per_slice * num_slices;
-                SOKOL_VALIDATE(min_size <= (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA);
+                const int expected_size = bytes_per_slice * num_slices;
+                SOKOL_VALIDATE(expected_size == (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_IMAGEDATA_DATA_SIZE);
             }
         }
     #endif
