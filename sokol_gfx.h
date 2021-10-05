@@ -2976,10 +2976,10 @@ typedef struct {
 /* helper macros */
 #define _sg_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
-#define _sg_min(a,b) ((a<b)?a:b)
-#define _sg_max(a,b) ((a>b)?a:b)
-#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
-#define _sg_fequal(val,cmp,delta) (((val-cmp)> -delta)&&((val-cmp)<delta))
+#define _sg_min(a,b) (((a)<(b))?(a):(b))
+#define _sg_max(a,b) (((a)>(b))?(a):(b))
+#define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
+#define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 
 typedef struct {
     int size;
@@ -3912,6 +3912,10 @@ typedef enum {
     _SG_VALIDATE_BUFFERDESC_DATA_SIZE,
     _SG_VALIDATE_BUFFERDESC_NO_DATA,
 
+    /* image data (for image creation and updating) */
+    _SG_VALIDATE_IMAGEDATA_NODATA,
+    _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA,
+
     /* image creation */
     _SG_VALIDATE_IMAGEDESC_CANARY,
     _SG_VALIDATE_IMAGEDESC_WIDTH,
@@ -4232,7 +4236,21 @@ _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
 }
 
 /* return row pitch for an image
+
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+
+    For the special PVRTC pitch computation, see:
+    GL extension requirement (https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt)
+
+    Quote:
+
+    6) How is the imageSize argument calculated for the CompressedTexImage2D
+       and CompressedTexSubImage2D functions.
+
+       Resolution: For PVRTC 4BPP formats the imageSize is calculated as:
+          ( max(width, 8) * max(height, 8) * 4 + 7) / 8
+       For PVRTC 2BPP formats the imageSize is calculated as:
+          ( max(width, 16) * max(height, 8) * 2 + 7) / 8
 */
 _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
     int pitch;
@@ -4260,23 +4278,11 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            {
-                const int block_size = 4*4;
-                const int bpp = 4;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 8) * 4 + 7) / 8;
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            {
-                const int block_size = 8*4;
-                const int bpp = 2;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 16) * 2 + 7) / 8;
             break;
         default:
             pitch = width * _sg_pixelformat_bytesize(fmt);
@@ -4305,11 +4311,19 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+            num_rows = ((height + 3) / 4);
+            break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            num_rows = ((height + 3) / 4);
+            /* NOTE: this is most likely not correct because it ignores any
+                PVCRTC block size, but multiplied with _sg_row_pitch()
+                it gives the correct surface pitch.
+
+                See: https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
+            */
+            num_rows = ((_sg_max(height, 8) + 7) / 8) * 8;
             break;
         default:
             num_rows = height;
@@ -13561,6 +13575,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_BUFFERDESC_DATA_SIZE:     return "immutable buffer data size differs from buffer size";
         case _SG_VALIDATE_BUFFERDESC_NO_DATA:       return "dynamic/stream usage buffers cannot be initialized with data";
 
+        /* image data (in image creation and updating) */
+        case _SG_VALIDATE_IMAGEDATA_NODATA:         return "sg_image_data: no surface data (.ptr and/or .size is zero)";
+        case _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA:  return "sg_image_data: not enough surface data (.size smaller than expected)";
+
         /* image creation validation errros */
         case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
         case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
@@ -13572,7 +13590,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
         case _SG_VALIDATE_IMAGEDESC_RT_NO_DATA:         return "render target images cannot be initialized with data";
         case _SG_VALIDATE_IMAGEDESC_DATA:               return "missing or invalid data for immutable image";
-        case _SG_VALIDATE_IMAGEDESC_NO_DATA:            return "dynamic/stream usage images cannot be initialized with data";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
@@ -13667,7 +13684,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
 
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
-        case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
         case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
 
         default: return "unknown validation error";
@@ -13727,6 +13743,28 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #endif
 }
 
+_SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_format fmt, int width, int height, int num_faces, int num_mips, int num_slices) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(num_faces);
+        _SOKOL_UNUSED(num_mips);
+        return true;
+    #else
+        for (int face_index = 0; face_index < num_faces; face_index++) {
+            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
+                const bool has_data = data->subimage[face_index][mip_index].ptr != 0;
+                const bool has_size = data->subimage[face_index][mip_index].size > 0;
+                SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDATA_NODATA);
+                const int mip_width = _sg_max(width >> mip_index, 1);
+                const int mip_height = _sg_max(height >> mip_index, 1);
+                const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+                const int min_size = bytes_per_slice * num_slices;
+                SOKOL_VALIDATE(min_size <= (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_IMAGEDATA_NOTENOUGHDATA);
+            }
+        }
+    #endif
+}
+
 _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(desc);
@@ -13764,17 +13802,14 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
-            /* FIXME: should use the same "expected size" computation as in _sg_validate_update_image() here */
             if (!injected && (usage == SG_USAGE_IMMUTABLE)) {
-                const int num_faces = desc->type == SG_IMAGETYPE_CUBE ? 6:1;
-                const int num_mips = desc->num_mipmaps;
-                for (int face_index = 0; face_index < num_faces; face_index++) {
-                    for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                        const bool has_data = desc->data.subimage[face_index][mip_index].ptr != 0;
-                        const bool has_size = desc->data.subimage[face_index][mip_index].size > 0;
-                        SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDESC_DATA);
-                    }
-                }
+                _sg_validate_image_data(&desc->data,
+                    desc->pixel_format,
+                    desc->width,
+                    desc->height,
+                    (desc->type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+                    desc->num_mipmaps,
+                    desc->num_slices);
             }
             else {
                 for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
@@ -14229,17 +14264,13 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(img->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDIMG_USAGE);
         SOKOL_VALIDATE(img->cmn.upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDIMG_ONCE);
-        const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1;
-        const int num_mips = img->cmn.num_mipmaps;
-        for (int face_index = 0; face_index < num_faces; face_index++) {
-            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-                const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const int min_size = bytes_per_slice * img->cmn.num_slices;
-                SOKOL_VALIDATE(min_size <= (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
-            }
-        }
+        _sg_validate_image_data(data,
+            img->cmn.pixel_format,
+            img->cmn.width,
+            img->cmn.height,
+            (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+            img->cmn.num_mipmaps,
+            img->cmn.num_slices);
         return SOKOL_VALIDATE_END();
     #endif
 }
