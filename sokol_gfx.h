@@ -3926,8 +3926,9 @@ typedef enum {
     _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
     _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
     _SG_VALIDATE_IMAGEDESC_RT_NO_DATA,
-    _SG_VALIDATE_IMAGEDESC_DATA,
-    _SG_VALIDATE_IMAGEDESC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE,
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
@@ -13598,7 +13599,9 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA not supported for this pixel format";
         case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
         case _SG_VALIDATE_IMAGEDESC_RT_NO_DATA:         return "render target images cannot be initialized with data";
-        case _SG_VALIDATE_IMAGEDESC_DATA:               return "missing or invalid data for immutable image";
+        case _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA:   return "images with injected textures cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA:    return "dynamic/stream images cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE:   return "compressed images must be immutable";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
@@ -13716,7 +13719,7 @@ _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error_t err) {
 _SOKOL_PRIVATE bool _sg_validate_end(void) {
     if (_sg.validate_error != _SG_VALIDATE_SUCCESS) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
-            SOKOL_LOG("^^^^  VALIDATION FAILED, TERMINATING ^^^^");
+            SOKOL_LOG("^^^^  SOKOL-GFX VALIDATION FAILED, TERMINATING ^^^^");
             SOKOL_ASSERT(false);
         #endif
         return false;
@@ -13761,7 +13764,6 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
         _SOKOL_UNUSED(num_faces);
         _SOKOL_UNUSED(num_mips);
         _SOKOL_UNUSED(num_slices);
-        return true;
     #else
         for (int face_index = 0; face_index < num_faces; face_index++) {
             for (int mip_index = 0; mip_index < num_mips; mip_index++) {
@@ -13815,7 +13817,13 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
-            if (!injected && (usage == SG_USAGE_IMMUTABLE)) {
+            const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
+            const bool is_immutable = (usage == SG_USAGE_IMMUTABLE);
+            if (is_compressed) {
+                SOKOL_VALIDATE(is_immutable, _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+            }
+            if (!injected && is_immutable) {
+                // image desc must have valid data
                 _sg_validate_image_data(&desc->data,
                     desc->pixel_format,
                     desc->width,
@@ -13825,11 +13833,17 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                     desc->num_slices);
             }
             else {
+                // image desc must not have data
                 for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
                     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
                         const bool no_data = 0 == desc->data.subimage[face_index][mip_index].ptr;
                         const bool no_size = 0 == desc->data.subimage[face_index][mip_index].size;
-                        SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_NO_DATA);
+                        if (injected) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
+                        }
+                        if (!is_immutable) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+                        }
                     }
                 }
             }
