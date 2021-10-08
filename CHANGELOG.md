@@ -5,7 +5,7 @@
         - content data validation now also happens in ```sg_make_image()``` (previously only in ```sg_update_image()```)
         - validate that compressed textures are immutable
         - separate "no data" validation checks for immutable vs dynamic/stream textures
-        - provided data size for creating or updating textures must match the expected surface sizez exactly
+        - provided data size for creating or updating textures must match the expected surface sizes exactly
     - fix PVRTC row and surface pitch computation according to the GL PVRTC extension spec
     - better adhere to Metal documentation for the ```MTLTexture.replaceRegion``` parameters (when bytesPerImage is expected to be zero or not)
 
