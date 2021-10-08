@@ -2976,10 +2976,10 @@ typedef struct {
 /* helper macros */
 #define _sg_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
-#define _sg_min(a,b) ((a<b)?a:b)
-#define _sg_max(a,b) ((a>b)?a:b)
-#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
-#define _sg_fequal(val,cmp,delta) (((val-cmp)> -delta)&&((val-cmp)<delta))
+#define _sg_min(a,b) (((a)<(b))?(a):(b))
+#define _sg_max(a,b) (((a)>(b))?(a):(b))
+#define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
+#define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 
 typedef struct {
     int size;
@@ -3912,6 +3912,10 @@ typedef enum {
     _SG_VALIDATE_BUFFERDESC_DATA_SIZE,
     _SG_VALIDATE_BUFFERDESC_NO_DATA,
 
+    /* image data (for image creation and updating) */
+    _SG_VALIDATE_IMAGEDATA_NODATA,
+    _SG_VALIDATE_IMAGEDATA_DATA_SIZE,
+
     /* image creation */
     _SG_VALIDATE_IMAGEDESC_CANARY,
     _SG_VALIDATE_IMAGEDESC_WIDTH,
@@ -3922,8 +3926,9 @@ typedef enum {
     _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
     _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
     _SG_VALIDATE_IMAGEDESC_RT_NO_DATA,
-    _SG_VALIDATE_IMAGEDESC_DATA,
-    _SG_VALIDATE_IMAGEDESC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE,
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
@@ -4019,8 +4024,6 @@ typedef enum {
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
     _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
-    _SG_VALIDATE_UPDIMG_SIZE,
-    _SG_VALIDATE_UPDIMG_COMPRESSED,
     _SG_VALIDATE_UPDIMG_ONCE
 } _sg_validate_error_t;
 
@@ -4234,7 +4237,21 @@ _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
 }
 
 /* return row pitch for an image
+
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+
+    For the special PVRTC pitch computation, see:
+    GL extension requirement (https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt)
+
+    Quote:
+
+    6) How is the imageSize argument calculated for the CompressedTexImage2D
+       and CompressedTexSubImage2D functions.
+
+       Resolution: For PVRTC 4BPP formats the imageSize is calculated as:
+          ( max(width, 8) * max(height, 8) * 4 + 7) / 8
+       For PVRTC 2BPP formats the imageSize is calculated as:
+          ( max(width, 16) * max(height, 8) * 2 + 7) / 8
 */
 _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
     int pitch;
@@ -4262,23 +4279,11 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            {
-                const int block_size = 4*4;
-                const int bpp = 4;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 8) * 4 + 7) / 8;
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            {
-                const int block_size = 8*4;
-                const int bpp = 2;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 16) * 2 + 7) / 8;
             break;
         default:
             pitch = width * _sg_pixelformat_bytesize(fmt);
@@ -4307,11 +4312,19 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+            num_rows = ((height + 3) / 4);
+            break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            num_rows = ((height + 3) / 4);
+            /* NOTE: this is most likely not correct because it ignores any
+                PVCRTC block size, but multiplied with _sg_row_pitch()
+                it gives the correct surface pitch.
+
+                See: https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
+            */
+            num_rows = ((_sg_max(height, 8) + 7) / 8) * 8;
             break;
         default:
             num_rows = height;
@@ -6326,7 +6339,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                             gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
                         const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                         int mip_width = img->cmn.width >> mip_index;
                         if (mip_width == 0) {
                             mip_width = 1;
@@ -6337,6 +6349,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         }
                         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             }
@@ -6356,6 +6369,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 mip_depth = 1;
                             }
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             }
@@ -10109,23 +10123,31 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             const uint8_t* data_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
             const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
             const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            /* special case PVRTC formats: bytePerRow and bytes_per_slice must be 0 */
+            /* special case PVRTC formats: bytePerRow and bytesPerImage must be 0 */
             int bytes_per_row = 0;
             int bytes_per_slice = 0;
             if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
                 bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
                 bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
             }
+            /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
+
+                "Supply a nonzero value only when you copy data to a MTLTextureType3D type texture"
+            */
             MTLRegion region;
+            int bytes_per_image;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
                 const int mip_depth = _sg_max(img->cmn.num_slices >> mip_index, 1);
                 region = MTLRegionMake3D(0, 0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height, (NSUInteger)mip_depth);
+                bytes_per_image = bytes_per_slice;
                 /* FIXME: apparently the minimal bytes_per_image size for 3D texture
                  is 4 KByte... somehow need to handle this */
             }
             else {
                 region = MTLRegionMake2D(0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height);
+                bytes_per_image = 0;
             }
+
             for (int slice_index = 0; slice_index < num_slices; slice_index++) {
                 const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
                 const int slice_offset = slice_index * bytes_per_slice;
@@ -10135,7 +10157,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
                     slice:(NSUInteger)mtl_slice_index
                     withBytes:data_ptr + slice_offset
                     bytesPerRow:(NSUInteger)bytes_per_row
-                    bytesPerImage:(NSUInteger)bytes_per_slice];
+                    bytesPerImage:(NSUInteger)bytes_per_image];
             }
         }
     }
@@ -13563,6 +13585,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_BUFFERDESC_DATA_SIZE:     return "immutable buffer data size differs from buffer size";
         case _SG_VALIDATE_BUFFERDESC_NO_DATA:       return "dynamic/stream usage buffers cannot be initialized with data";
 
+        /* image data (in image creation and updating) */
+        case _SG_VALIDATE_IMAGEDATA_NODATA:         return "sg_image_data: no data (.ptr and/or .size is zero)";
+        case _SG_VALIDATE_IMAGEDATA_DATA_SIZE:      return "sg_image_data: data size doesn't match expected surface size";
+
         /* image creation validation errros */
         case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
         case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
@@ -13573,8 +13599,9 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA not supported for this pixel format";
         case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
         case _SG_VALIDATE_IMAGEDESC_RT_NO_DATA:         return "render target images cannot be initialized with data";
-        case _SG_VALIDATE_IMAGEDESC_DATA:               return "missing or invalid data for immutable image";
-        case _SG_VALIDATE_IMAGEDESC_NO_DATA:            return "dynamic/stream usage images cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA:   return "images with injected textures cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA:    return "dynamic/stream images cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE:   return "compressed images must be immutable";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
@@ -13669,9 +13696,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
 
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
-        case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
-        case _SG_VALIDATE_UPDIMG_SIZE:          return "sg_update_image: provided subimage data size too big";
-        case _SG_VALIDATE_UPDIMG_COMPRESSED:    return "sg_update_image: cannot update images with compressed format";
         case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
 
         default: return "unknown validation error";
@@ -13695,7 +13719,7 @@ _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error_t err) {
 _SOKOL_PRIVATE bool _sg_validate_end(void) {
     if (_sg.validate_error != _SG_VALIDATE_SUCCESS) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
-            SOKOL_LOG("^^^^  VALIDATION FAILED, TERMINATING ^^^^");
+            SOKOL_LOG("^^^^  SOKOL-GFX VALIDATION FAILED, TERMINATING ^^^^");
             SOKOL_ASSERT(false);
         #endif
         return false;
@@ -13728,6 +13752,31 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             SOKOL_VALIDATE(0 == desc->data.ptr, _SG_VALIDATE_BUFFERDESC_NO_DATA);
         }
         return SOKOL_VALIDATE_END();
+    #endif
+}
+
+_SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_format fmt, int width, int height, int num_faces, int num_mips, int num_slices) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(fmt);
+        _SOKOL_UNUSED(width);
+        _SOKOL_UNUSED(height);
+        _SOKOL_UNUSED(num_faces);
+        _SOKOL_UNUSED(num_mips);
+        _SOKOL_UNUSED(num_slices);
+    #else
+        for (int face_index = 0; face_index < num_faces; face_index++) {
+            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
+                const bool has_data = data->subimage[face_index][mip_index].ptr != 0;
+                const bool has_size = data->subimage[face_index][mip_index].size > 0;
+                SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDATA_NODATA);
+                const int mip_width = _sg_max(width >> mip_index, 1);
+                const int mip_height = _sg_max(height >> mip_index, 1);
+                const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+                const int expected_size = bytes_per_slice * num_slices;
+                SOKOL_VALIDATE(expected_size == (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_IMAGEDATA_DATA_SIZE);
+            }
+        }
     #endif
 }
 
@@ -13768,24 +13817,33 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
-            /* FIXME: should use the same "expected size" computation as in _sg_validate_update_image() here */
-            if (!injected && (usage == SG_USAGE_IMMUTABLE)) {
-                const int num_faces = desc->type == SG_IMAGETYPE_CUBE ? 6:1;
-                const int num_mips = desc->num_mipmaps;
-                for (int face_index = 0; face_index < num_faces; face_index++) {
-                    for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                        const bool has_data = desc->data.subimage[face_index][mip_index].ptr != 0;
-                        const bool has_size = desc->data.subimage[face_index][mip_index].size > 0;
-                        SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDESC_DATA);
-                    }
-                }
+            const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
+            const bool is_immutable = (usage == SG_USAGE_IMMUTABLE);
+            if (is_compressed) {
+                SOKOL_VALIDATE(is_immutable, _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+            }
+            if (!injected && is_immutable) {
+                // image desc must have valid data
+                _sg_validate_image_data(&desc->data,
+                    desc->pixel_format,
+                    desc->width,
+                    desc->height,
+                    (desc->type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+                    desc->num_mipmaps,
+                    desc->num_slices);
             }
             else {
+                // image desc must not have data
                 for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
                     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
                         const bool no_data = 0 == desc->data.subimage[face_index][mip_index].ptr;
                         const bool no_size = 0 == desc->data.subimage[face_index][mip_index].size;
-                        SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_NO_DATA);
+                        if (injected) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
+                        }
+                        if (!is_immutable) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+                        }
                     }
                 }
             }
@@ -13866,6 +13924,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                     #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
                     SOKOL_VALIDATE((size_t)uniform_offset == ub_desc->size, _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
                     SOKOL_VALIDATE(num_uniforms > 0, _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS);
+                    #else
+                    _SOKOL_UNUSED(uniform_offset);
+                    _SOKOL_UNUSED(num_uniforms);
                     #endif
                 }
                 else {
@@ -14233,19 +14294,13 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(img->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDIMG_USAGE);
         SOKOL_VALIDATE(img->cmn.upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDIMG_ONCE);
-        SOKOL_VALIDATE(!_sg_is_compressed_pixel_format(img->cmn.pixel_format), _SG_VALIDATE_UPDIMG_COMPRESSED);
-        const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1;
-        const int num_mips = img->cmn.num_mipmaps;
-        for (int face_index = 0; face_index < num_faces; face_index++) {
-            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
-                const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-                const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const int expected_size = bytes_per_slice * img->cmn.num_slices;
-                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= (size_t)expected_size, _SG_VALIDATE_UPDIMG_SIZE);
-            }
-        }
+        _sg_validate_image_data(data,
+            img->cmn.pixel_format,
+            img->cmn.width,
+            img->cmn.height,
+            (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+            img->cmn.num_mipmaps,
+            img->cmn.num_slices);
         return SOKOL_VALIDATE_END();
     #endif
 }
