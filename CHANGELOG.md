@@ -1,5 +1,14 @@
 ## Updates
 
+- **08-Oct-2021**: texture compression support in sokol_gfx.h has been revisited:
+    - tighter validation checks on texture creation:
+        - content data validation now also happens in ```sg_make_image()``` (previously only in ```sg_update_image()```)
+        - validate that compressed textures are immutable
+        - separate "no data" validation checks for immutable vs dynamic/stream textures
+        - provided data size for creating or updating textures must match the expected surface sizez exactly
+    - fix PVRTC row and surface pitch computation according to the GL PVRTC extension spec
+    - better adhere to Metal documentation for the ```MTLTexture.replaceRegion``` parameters (when bytesPerImage is expected to be zero or not)
+
 - **02-Sep-2021**: some minor non-breaking additions:
     - sokol_app.h: new events FOCUSED and UNFOCUSED to indicate that the
       window has gained or lost the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,

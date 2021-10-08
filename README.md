@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**02-Sep-2021** sokol_app.h: new FOCUSED/UNFOCUSED event and better keycode handling in the Emscripten backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**08-Oct-2021** revisited and cleaned up texture compression support in sokol_gfx.h)
 
 ## Examples and Related Projects
 
