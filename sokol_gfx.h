@@ -4762,6 +4762,7 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glBlendFunc,                       void, (GLenum sfactor, GLenum dfactor)) \
     _SG_XMACRO(glUniform1fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
     _SG_XMACRO(glReadBuffer,                      void, (GLenum src)) \
+    _SG_XMACRO(glReadPixels,                      void, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void * data)) \
     _SG_XMACRO(glClear,                           void, (GLbitfield mask)) \
     _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
