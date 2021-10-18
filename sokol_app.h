@@ -3779,7 +3779,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.multipleTouchEnabled = YES;
         // on GLKView, contentScaleFactor appears to work just fine!
         if (_sapp.desc.high_dpi) {
-            _sapp.ios.view.contentScaleFactor = 2.0;
+            _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
         }
         else {
             _sapp.ios.view.contentScaleFactor = 1.0;
