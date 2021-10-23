@@ -2161,7 +2161,11 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         default:
             break;
     }
-    return io->WantCaptureKeyboard || io->WantCaptureMouse;
+
+    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN || ev->type == SAPP_EVENTTYPE_KEY_UP) {
+        return io->WantCaptureKeyboard;
+    }
+    return io->WantCaptureMouse;
 }
 #endif
 
