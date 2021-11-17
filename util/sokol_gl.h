@@ -67,7 +67,7 @@
             - triangle list and strip
             - line list and strip
             - quad list (TODO: quad strips)
-            - point list (TODO: point size)
+            - point list
         - one texture layer (no multi-texturing)
         - viewport and scissor-rect with selectable origin (top-left or bottom-left)
         - all GL 1.x matrix stack functions, and additionally equivalent
@@ -196,6 +196,7 @@
 
             - current texture coordinate to u=0.0f, v=0.0f
             - current color to white (rgba all 1.0f)
+            - current point size to 1.0f
             - unbind the current texture and texturing will be disabled
             - *all* matrices will be set to identity (also the projection matrix)
             - the default render state will be set by loading the 'default pipeline'
@@ -298,10 +299,12 @@
 
     --- perform primitive rendering:
 
-        ...set the current texture coordinate and color 'registers' with:
+        ...set the current texture coordinate and color 'registers' with or
+        point size with:
 
             sgl_t2f(float u, float v)   - set current texture coordinate
             sgl_c*(...)                 - set current color
+            sgl_point_size(float size)  - set current point size
 
         There are several functions for setting the color (as float values,
         unsigned byte values, packed as unsigned 32-bit integer, with
@@ -309,6 +312,9 @@
 
         NOTE that these are the only functions that can be called both inside
         sgl_begin_*() / sgl_end() and outside.
+
+        Also NOTE that point size is currently hardwired to 1.0f if the D3D11
+        backend is used.
 
         ...start a primitive vertex sequence with:
 
@@ -697,13 +703,14 @@ SOKOL_GL_API_DECL void sgl_lookat(float eye_x, float eye_y, float eye_z, float c
 SOKOL_GL_API_DECL void sgl_push_matrix(void);
 SOKOL_GL_API_DECL void sgl_pop_matrix(void);
 
-/* these functions only set the internal 'current texcoord / color' (valid inside or outside begin/end) */
+/* these functions only set the internal 'current texcoord / color / point size' (valid inside or outside begin/end) */
 SOKOL_GL_API_DECL void sgl_t2f(float u, float v);
 SOKOL_GL_API_DECL void sgl_c3f(float r, float g, float b);
 SOKOL_GL_API_DECL void sgl_c4f(float r, float g, float b, float a);
 SOKOL_GL_API_DECL void sgl_c3b(uint8_t r, uint8_t g, uint8_t b);
 SOKOL_GL_API_DECL void sgl_c4b(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 SOKOL_GL_API_DECL void sgl_c1i(uint32_t rgba);
+SOKOL_GL_API_DECL void sgl_point_size(float s);
 
 /* define primitives, each begin/end is one draw command */
 SOKOL_GL_API_DECL void sgl_begin_points(void);
@@ -2131,6 +2138,7 @@ typedef struct {
     float pos[3];
     float uv[2];
     uint32_t rgba;
+    float psize;
 } _sgl_vertex_t;
 
 typedef struct {
@@ -2208,6 +2216,7 @@ typedef struct {
     bool in_begin;
     float u, v;
     uint32_t rgba;
+    float point_size;
     _sgl_primitive_type_t cur_prim_type;
     sg_image cur_img;
     bool texturing_enabled;
@@ -2440,6 +2449,11 @@ static void _sgl_init_pipeline(sgl_pipeline pip_id, const sg_pipeline_desc* in_d
         rgba->offset = offsetof(_sgl_vertex_t, rgba);
         rgba->format = SG_VERTEXFORMAT_UBYTE4N;
     }
+    {
+        sg_vertex_attr_desc* psize = &desc.layout.attrs[3];
+        psize->offset = offsetof(_sgl_vertex_t, psize);
+        psize->format = SG_VERTEXFORMAT_FLOAT;
+    }
     if (in_desc->shader.id == SG_INVALID_ID) {
         desc.shader = _sgl.shd;
     }
@@ -2615,6 +2629,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
 
     // default state
     ctx->rgba = 0xFFFFFFFF;
+    ctx->point_size = 1.0f;
     for (int i = 0; i < SGL_NUM_MATRIXMODES; i++) {
         _sgl_identity(&ctx->matrix_stack[i][0]);
     }
@@ -2750,6 +2765,7 @@ static inline void _sgl_vtx(_sgl_context_t* ctx, float x, float y, float z, floa
         vtx->pos[0] = x; vtx->pos[1] = y; vtx->pos[2] = z;
         vtx->uv[0] = u; vtx->uv[1] = v;
         vtx->rgba = rgba;
+        vtx->psize = ctx->point_size;
     }
     ctx->vtx_count++;
 }
@@ -3320,6 +3336,7 @@ SOKOL_API_IMPL void sgl_defaults(void) {
     SOKOL_ASSERT(!ctx->in_begin);
     ctx->u = 0.0f; ctx->v = 0.0f;
     ctx->rgba = 0xFFFFFFFF;
+    ctx->point_size = 1.0f;
     ctx->texturing_enabled = false;
     ctx->cur_img = _sgl.def_img;
     sgl_load_default_pipeline();
@@ -3519,6 +3536,13 @@ SOKOL_API_IMPL void sgl_end(void) {
             cmd->args.draw.num_vertices = ctx->cur_vertex - ctx->base_vertex;
             cmd->args.draw.uniform_index = ctx->cur_uniform - 1;
         }
+    }
+}
+
+SOKOL_API_IMPL void sgl_point_size(float s) {
+    _sgl_context_t* ctx = _sgl.cur_ctx;
+    if (ctx) {
+        ctx->point_size = s;
     }
 }
 
