@@ -1,5 +1,11 @@
 ## Updates
 
+- **18-Nov-2021**: sokol_gl.h has a new function to control the point size for
+  point list rendering: ```void sgl_point_size(float size)```. Note that on D3D11
+  the point size is currently ignored (since D3D11 doesn't support a point size at
+  all, the feature will need to be emulated in sokol_gl.h when the D3D11 is active).
+  Also note that points cannot currently be textured, only colored.
+
 - **08-Oct-2021**: texture compression support in sokol_gfx.h has been revisited:
     - tighter validation checks on texture creation:
         - content data validation now also happens in ```sg_make_image()``` (previously only in ```sg_update_image()```)
