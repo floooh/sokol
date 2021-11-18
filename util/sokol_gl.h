@@ -78,7 +78,7 @@
         - vertex arrays (although providing whole chunks of vertex data at once
           might be a useful feature for a later version)
         - texture coordinate generation
-        - point size and line width
+        - line width
         - all pixel store functions
         - no ALPHA_TEST
         - no clear functions (clearing is handled by the sokol-gfx render pass)
