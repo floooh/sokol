@@ -821,7 +821,6 @@ typedef struct {
     #endif
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
-    int si16_bytes_per_frame;
     _saudio_wasapi_thread_data_t thread;
 } _saudio_backend_t;
 
@@ -1429,22 +1428,32 @@ _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(int num_frames) {
     }
     SOKOL_ASSERT(wasapi_buffer);
 
-    /* convert float samples to int16_t, refill float buffer if needed */
-    const int num_samples = num_frames * _saudio.num_channels;
-    int16_t* dst = (int16_t*) wasapi_buffer;
+    /* copy samples to WASAPI buffer, refill source buffer if needed */
+#define _SOKOL_MIN(a, b) ((a) < (b) ? (a) : (b))
+    int num_samples = num_frames * _saudio.num_channels;
     int buffer_pos = _saudio.backend.thread.src_buffer_pos;
     const int buffer_float_size = _saudio.backend.thread.src_buffer_byte_size / (int)sizeof(float);
+    float* dst = (float*)wasapi_buffer;
     float* src = _saudio.backend.thread.src_buffer;
-    for (int i = 0; i < num_samples; i++) {
+
+    int samples_to_copy = 0;
+    while (num_samples > 0) {
         if (0 == buffer_pos) {
             _saudio_wasapi_fill_buffer();
         }
-        dst[i] = (int16_t) (src[buffer_pos] * 0x7FFF);
-        buffer_pos += 1;
+
+        samples_to_copy = _SOKOL_MIN(num_samples, buffer_float_size - buffer_pos);
+        memcpy(dst, &src[buffer_pos], (size_t)samples_to_copy * sizeof(float));
+        num_samples -= samples_to_copy;
+        buffer_pos += samples_to_copy;
+        dst += samples_to_copy;
+
         if (buffer_pos == buffer_float_size) {
             buffer_pos = 0;
         }
     }
+#undef _SOKOL_MIN
+
     _saudio.backend.thread.src_buffer_pos = buffer_pos;
 
     IAudioRenderClient_ReleaseBuffer(_saudio.backend.render_client, num_frames, 0);
@@ -1584,20 +1593,25 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
             goto error;
         }
     #endif
-    WAVEFORMATEX fmt;
-    memset(&fmt, 0, sizeof(fmt));
-    fmt.nChannels = (WORD)_saudio.num_channels;
-    fmt.nSamplesPerSec = (DWORD)_saudio.sample_rate;
-    fmt.wFormatTag = WAVE_FORMAT_PCM;
-    fmt.wBitsPerSample = 16;
-    fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
-    fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
+
+    WAVEFORMATEXTENSIBLE fmtex;
+    memset(&fmtex, 0, sizeof(fmtex));
+    fmtex.Format.nChannels = (WORD)_saudio.num_channels;
+    fmtex.Format.nSamplesPerSec = (DWORD)_saudio.sample_rate;
+    fmtex.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    fmtex.Format.wBitsPerSample = 32;
+    fmtex.Format.nBlockAlign = (fmtex.Format.nChannels * fmtex.Format.wBitsPerSample) / 8;
+    fmtex.Format.nAvgBytesPerSec = fmtex.Format.nSamplesPerSec * fmtex.Format.nBlockAlign;
+    fmtex.Format.cbSize = 22;   /* WORD + DWORD + GUID */
+    fmtex.Samples.wValidBitsPerSample = 32;
+    fmtex.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+    fmtex.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
     dur = (REFERENCE_TIME)
         (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
     if (FAILED(IAudioClient_Initialize(_saudio.backend.audio_client,
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM|AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        dur, 0, &fmt, 0)))
+        dur, 0, (WAVEFORMATEX*)&fmtex, 0)))
     {
         SOKOL_LOG("sokol_audio wasapi: audio client initialize failed");
         goto error;
@@ -1617,7 +1631,6 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
-    _saudio.backend.si16_bytes_per_frame = _saudio.num_channels * (int)sizeof(int16_t);
     _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     _saudio.backend.thread.src_buffer_frames = _saudio.buffer_frames;
     _saudio.backend.thread.src_buffer_byte_size = _saudio.backend.thread.src_buffer_frames * _saudio.bytes_per_frame;
