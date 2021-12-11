@@ -77,7 +77,7 @@
 
     Windows:        QueryPerformanceFrequency() / QueryPerformanceCounter()
     MacOS/iOS:      mach_absolute_time()
-    emscripten:     performance.now()
+    emscripten:     emscripten_get_now()
     Linux+others:   clock_gettime(CLOCK_MONOTONIC)
 
     zlib/libpng license
@@ -206,12 +206,6 @@ _SOKOL_PRIVATE int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom)
 }
 #endif
 
-#if defined(__EMSCRIPTEN__)
-EM_JS(double, stm_js_perfnow, (void), {
-    return performance.now();
-});
-#endif
-
 SOKOL_API_IMPL void stm_setup(void) {
     memset(&_stm, 0, sizeof(_stm));
     _stm.initialized = 0xABCDABCD;
@@ -222,7 +216,7 @@ SOKOL_API_IMPL void stm_setup(void) {
         mach_timebase_info(&_stm.timebase);
         _stm.start = mach_absolute_time();
     #elif defined(__EMSCRIPTEN__)
-        _stm.start = stm_js_perfnow();
+        _stm.start = emscripten_get_now();
     #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -241,8 +235,7 @@ SOKOL_API_IMPL uint64_t stm_now(void) {
         const uint64_t mach_now = mach_absolute_time() - _stm.start;
         now = (uint64_t) int64_muldiv((int64_t)mach_now, (int64_t)_stm.timebase.numer, (int64_t)_stm.timebase.denom);
     #elif defined(__EMSCRIPTEN__)
-        double js_now = stm_js_perfnow() - _stm.start;
-        SOKOL_ASSERT(js_now >= 0.0);
+        double js_now = emscripten_get_now() - _stm.start;
         now = (uint64_t) (js_now * 1000000.0);
     #else
         struct timespec ts;
