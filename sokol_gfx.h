@@ -10463,7 +10463,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             vtx_desc.layouts[mtl_vb_slot].stepRate = (NSUInteger)l_desc->step_rate;
             if (SG_VERTEXSTEP_PER_INSTANCE == l_desc->step_func) {
                 // NOTE: not actually used in _sg_mtl_draw()
-                pip->cmn.use_draw_instanced = true;
+                pip->cmn.use_instanced_draw = true;
             }
         }
     }
