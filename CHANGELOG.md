@@ -1,5 +1,11 @@
 ## Updates
 
+- **18-Dec-2021**: the sokol_gfx.h ```sg_draw()``` function now uses the currently applied
+  pipeline object to decide if the GL or D3D11 backend's instanced drawing function
+  should be called instead of the ```num_instances``` argument. This fixes a
+  bug on some WebGL configs when when instanced rendering is configured
+  but ```sg_draw()``` is called with and instance count of 1.
+
 - **18-Nov-2021**: sokol_gl.h has a new function to control the point size for
   point list rendering: ```void sgl_point_size(float size)```. Note that on D3D11
   the point size is currently ignored (since D3D11 doesn't support a point size at
