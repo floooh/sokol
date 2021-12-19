@@ -556,12 +556,13 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #endif
     #include <mmdeviceapi.h>
     #include <audioclient.h>
-    static const IID _saudio_IID_IAudioClient = { 0x1cb9ad4c, 0xdbfa, 0x4c32, { 0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2 } };
-    static const IID _saudio_IID_IMMDeviceEnumerator = { 0xa95664d2, 0x9614, 0x4f35, { 0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6 } };
-    static const CLSID _saudio_CLSID_IMMDeviceEnumerator = { 0xbcde0395, 0xe52f, 0x467c, { 0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e } };
-    static const IID _saudio_IID_IAudioRenderClient = { 0xf294acfc, 0x3146, 0x4483,{ 0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2 } };
-    static const IID _saudio_IID_Devinterface_Audio_Render = { 0xe6327cad, 0xdcec, 0x4949, {0xae, 0x8a, 0x99, 0x1e, 0x97, 0x6a, 0x79, 0xd2 } };
+    static const IID _saudio_IID_IAudioClient                               = { 0x1cb9ad4c, 0xdbfa, 0x4c32, {0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2} };
+    static const IID _saudio_IID_IMMDeviceEnumerator                        = { 0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6} };
+    static const CLSID _saudio_CLSID_IMMDeviceEnumerator                    = { 0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e} };
+    static const IID _saudio_IID_IAudioRenderClient                         = { 0xf294acfc, 0x3146, 0x4483, {0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2} };
+    static const IID _saudio_IID_Devinterface_Audio_Render                  = { 0xe6327cad, 0xdcec, 0x4949, {0xae, 0x8a, 0x99, 0x1e, 0x97, 0x6a, 0x79, 0xd2} };
     static const IID _saudio_IID_IActivateAudioInterface_Completion_Handler = { 0x94ea2b94, 0xe9cc, 0x49e0, {0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90} };
+    static const GUID _saudio_KSDATAFORMAT_SUBTYPE_IEEE_FLOAT               = { 0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} };
     #if defined(__cplusplus)
     #define _SOKOL_AUDIO_WIN32COM_ID(x) (x)
     #else
@@ -821,7 +822,6 @@ typedef struct {
     #endif
     IAudioClient* audio_client;
     IAudioRenderClient* render_client;
-    int si16_bytes_per_frame;
     _saudio_wasapi_thread_data_t thread;
 } _saudio_backend_t;
 
@@ -1422,6 +1422,10 @@ _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     }
 }
 
+_SOKOL_PRIVATE int _saudio_wasapi_min(int a, int b) {
+    return (a < b) ? a : b;
+}
+
 _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(int num_frames) {
     BYTE* wasapi_buffer = 0;
     if (FAILED(IAudioRenderClient_GetBuffer(_saudio.backend.render_client, num_frames, &wasapi_buffer))) {
@@ -1429,24 +1433,33 @@ _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(int num_frames) {
     }
     SOKOL_ASSERT(wasapi_buffer);
 
-    /* convert float samples to int16_t, refill float buffer if needed */
-    const int num_samples = num_frames * _saudio.num_channels;
-    int16_t* dst = (int16_t*) wasapi_buffer;
+    /* copy samples to WASAPI buffer, refill source buffer if needed */
+    int num_remaining_samples = num_frames * _saudio.num_channels;
     int buffer_pos = _saudio.backend.thread.src_buffer_pos;
-    const int buffer_float_size = _saudio.backend.thread.src_buffer_byte_size / (int)sizeof(float);
-    float* src = _saudio.backend.thread.src_buffer;
-    for (int i = 0; i < num_samples; i++) {
+    const int buffer_size_in_samples = _saudio.backend.thread.src_buffer_byte_size / (int)sizeof(float);
+    float* dst = (float*)wasapi_buffer;
+    const float* dst_end = dst + num_remaining_samples;
+    const float* src = _saudio.backend.thread.src_buffer;
+
+    while (num_remaining_samples > 0) {
         if (0 == buffer_pos) {
             _saudio_wasapi_fill_buffer();
         }
-        dst[i] = (int16_t) (src[buffer_pos] * 0x7FFF);
-        buffer_pos += 1;
-        if (buffer_pos == buffer_float_size) {
+        const int samples_to_copy = _saudio_wasapi_min(num_remaining_samples, buffer_size_in_samples - buffer_pos);
+        SOKOL_ASSERT((buffer_pos + samples_to_copy) <= buffer_size_in_samples);
+        SOKOL_ASSERT((dst + samples_to_copy) <= dst_end);
+        memcpy(dst, &src[buffer_pos], (size_t)samples_to_copy * sizeof(float));
+        num_remaining_samples -= samples_to_copy;
+        SOKOL_ASSERT(num_remaining_samples >= 0);
+        buffer_pos += samples_to_copy;
+        dst += samples_to_copy;
+
+        SOKOL_ASSERT(buffer_pos <= buffer_size_in_samples);
+        if (buffer_pos == buffer_size_in_samples) {
             buffer_pos = 0;
         }
     }
     _saudio.backend.thread.src_buffer_pos = buffer_pos;
-
     IAudioRenderClient_ReleaseBuffer(_saudio.backend.render_client, num_frames, 0);
 }
 
@@ -1584,20 +1597,25 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
             goto error;
         }
     #endif
-    WAVEFORMATEX fmt;
-    memset(&fmt, 0, sizeof(fmt));
-    fmt.nChannels = (WORD)_saudio.num_channels;
-    fmt.nSamplesPerSec = (DWORD)_saudio.sample_rate;
-    fmt.wFormatTag = WAVE_FORMAT_PCM;
-    fmt.wBitsPerSample = 16;
-    fmt.nBlockAlign = (fmt.nChannels * fmt.wBitsPerSample) / 8;
-    fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
+
+    WAVEFORMATEXTENSIBLE fmtex;
+    memset(&fmtex, 0, sizeof(fmtex));
+    fmtex.Format.nChannels = (WORD)_saudio.num_channels;
+    fmtex.Format.nSamplesPerSec = (DWORD)_saudio.sample_rate;
+    fmtex.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    fmtex.Format.wBitsPerSample = 32;
+    fmtex.Format.nBlockAlign = (fmtex.Format.nChannels * fmtex.Format.wBitsPerSample) / 8;
+    fmtex.Format.nAvgBytesPerSec = fmtex.Format.nSamplesPerSec * fmtex.Format.nBlockAlign;
+    fmtex.Format.cbSize = 22;   /* WORD + DWORD + GUID */
+    fmtex.Samples.wValidBitsPerSample = 32;
+    fmtex.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+    fmtex.SubFormat = _saudio_KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
     dur = (REFERENCE_TIME)
         (((double)_saudio.buffer_frames) / (((double)_saudio.sample_rate) * (1.0/10000000.0)));
     if (FAILED(IAudioClient_Initialize(_saudio.backend.audio_client,
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK|AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM|AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        dur, 0, &fmt, 0)))
+        dur, 0, (WAVEFORMATEX*)&fmtex, 0)))
     {
         SOKOL_LOG("sokol_audio wasapi: audio client initialize failed");
         goto error;
@@ -1617,7 +1635,6 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         SOKOL_LOG("sokol_audio wasapi: audio client SetEventHandle failed");
         goto error;
     }
-    _saudio.backend.si16_bytes_per_frame = _saudio.num_channels * (int)sizeof(int16_t);
     _saudio.bytes_per_frame = _saudio.num_channels * (int)sizeof(float);
     _saudio.backend.thread.src_buffer_frames = _saudio.buffer_frames;
     _saudio.backend.thread.src_buffer_byte_size = _saudio.backend.thread.src_buffer_frames * _saudio.bytes_per_frame;
