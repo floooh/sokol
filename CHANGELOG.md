@@ -1,8 +1,14 @@
 ## Updates
 
-- **19-Dec-2021**: on Windows, sokol_audio.h no longer converts audio samples
-  from float to int16_t, but instead configures WASAPI to directly accept
-  float samples. Many thanks to github user iOrange for the PR!
+- **19-Dec-2021**: some sokol_audio.h changes:
+  - on Windows, sokol_audio.h no longer converts audio samples
+    from float to int16_t, but instead configures WASAPI to directly accept
+    float samples. Many thanks to github user iOrange for the PR!
+  - sokol_audio.h has a new public function ```saudio_suspended()``` which
+    returns true if the audio device/context is currently in suspended mode.
+    On all backends except WebAudio this always returns false. This allows
+    to show a visual hint to the user that audio is muted until the first
+    input event is received.
 
 - **18-Dec-2021**: the sokol_gfx.h ```sg_draw()``` function now uses the currently applied
   pipeline object to decide if the GL or D3D11 backend's instanced drawing function

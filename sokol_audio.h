@@ -439,6 +439,8 @@ SOKOL_AUDIO_API_DECL int saudio_sample_rate(void);
 SOKOL_AUDIO_API_DECL int saudio_buffer_frames(void);
 /* actual number of channels */
 SOKOL_AUDIO_API_DECL int saudio_channels(void);
+/* return true if audio context is currently suspended (only in WebAudio backend, all other backends return false) */
+SOKOL_AUDIO_API_DECL bool saudio_suspended(void);
 /* get current number of frames to fill packet queue */
 SOKOL_AUDIO_API_DECL int saudio_expect(void);
 /* push sample frames from main thread, returns number of frames actually pushed */
@@ -1794,6 +1796,18 @@ EM_JS(int, saudio_js_buffer_frames, (void), {
     }
 });
 
+/* return 1 if the WebAudio context is currently suspended, else 0 */
+EM_JS(int, saudio_js_suspended, (void), {
+    if (Module._saudio_context) {
+        if (Module._saudio_context.state === 'suspended') {
+            return 1;
+        }
+        else {
+            return 0;
+        }
+    }
+});
+
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     if (saudio_js_init(_saudio.sample_rate, _saudio.num_channels, _saudio.buffer_frames)) {
         _saudio.bytes_per_frame = (int)sizeof(float) * _saudio.num_channels;
@@ -2129,6 +2143,19 @@ SOKOL_API_IMPL int saudio_buffer_frames(void) {
 
 SOKOL_API_IMPL int saudio_channels(void) {
     return _saudio.num_channels;
+}
+
+SOKOL_API_IMPL bool saudio_suspended(void) {
+    #if defined(_SAUDIO_EMSCRIPTEN)
+        if (_saudio.valid) {
+            return 1 == saudio_js_suspended();
+        }
+        else {
+            return false;
+        }
+    #else
+        return false;
+    #endif
 }
 
 SOKOL_API_IMPL int saudio_expect(void) {
