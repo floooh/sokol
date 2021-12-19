@@ -1439,6 +1439,7 @@ _SOKOL_PRIVATE void _saudio_wasapi_submit_buffer(int num_frames) {
     const int buffer_size_in_samples = _saudio.backend.thread.src_buffer_byte_size / (int)sizeof(float);
     float* dst = (float*)wasapi_buffer;
     const float* dst_end = dst + num_remaining_samples;
+    _SOKOL_UNUSED(dst_end); // suppress unused warning in release mode
     const float* src = _saudio.backend.thread.src_buffer;
 
     while (num_remaining_samples > 0) {
