@@ -1,5 +1,9 @@
 ## Updates
 
+- **19-Dec-2021**: on Windows, sokol_audio.h no longer converts audio samples
+  from float to int16_t, but instead configures WASAPI to directly accept
+  float samples. Many thanks to github user iOrange for the PR!
+
 - **18-Dec-2021**: the sokol_gfx.h ```sg_draw()``` function now uses the currently applied
   pipeline object to decide if the GL or D3D11 backend's instanced drawing function
   should be called instead of the ```num_instances``` argument. This fixes a
