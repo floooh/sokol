@@ -251,9 +251,9 @@ def as_extern_c_arg_type(arg_type, prefix):
     elif is_enum_type(arg_type):
         return as_zig_enum_type(arg_type, prefix)
     elif is_void_ptr(arg_type):
-        return "?*c_void"
+        return "?*anyopaque"
     elif is_const_void_ptr(arg_type):
-        return "?*const c_void"
+        return "?*const anyopaque"
     elif is_string_ptr(arg_type):
         return "[*c]const u8"
     elif is_const_struct_ptr(arg_type):
@@ -280,9 +280,9 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     elif is_enum_type(arg_type):
         return pre + as_zig_enum_type(arg_type, prefix)
     elif is_void_ptr(arg_type):
-        return pre + "?*c_void"
+        return pre + "?*anyopaque"
     elif is_const_void_ptr(arg_type):
-        return pre + "?*const c_void"
+        return pre + "?*const anyopaque"
     elif is_string_ptr(arg_type):
         return pre + "[:0]const u8"
     elif is_const_struct_ptr(arg_type):
@@ -316,7 +316,7 @@ def funcptr_res_c(field_type):
     if res_type == 'void':
         return 'void'
     elif is_const_void_ptr(res_type):
-        return '?*const c_void'
+        return '?*const anyopaque'
     else:
         return '???'
 
@@ -374,9 +374,9 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
         elif is_string_ptr(field_type):
             l(f"    {field_name}: [*c]const u8 = null,")
         elif is_const_void_ptr(field_type):
-            l(f"    {field_name}: ?*const c_void = null,")
+            l(f"    {field_name}: ?*const anyopaque = null,")
         elif is_void_ptr(field_type):
-            l(f"    {field_name}: ?*c_void = null,")
+            l(f"    {field_name}: ?*anyopaque = null,")
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(extract_ptr_type(field_type))} = null,")
         elif is_func_ptr(field_type):
@@ -405,7 +405,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
                 t1 = f"[_]{zig_type}"
                 l(f"    {field_name}: {t0} = {t1}{{{def_val}}} ** {array_nums[0]},")
             elif is_const_void_ptr(array_type):
-                l(f"    {field_name}: [{array_nums[0]}]?*const c_void = [_]?*const c_void {{ null }} ** {array_nums[0]},")
+                l(f"    {field_name}: [{array_nums[0]}]?*const anyopaque = [_]?*const anyopaque {{ null }} ** {array_nums[0]},")
             else:
                 l(f"//    FIXME: ??? array {field_name}: {field_type} => {array_type} [{array_nums[0]}]")
         elif is_2d_array_type(field_type):
