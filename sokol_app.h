@@ -1452,6 +1452,8 @@ SOKOL_APP_API_DECL void sapp_quit(void);
 SOKOL_APP_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
+/* get an averaged/smoothed frame duration in seconds */
+SOKOL_APP_API_DECL double sapp_frame_duration(void);
 /* write string into clipboard */
 SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
@@ -1782,6 +1784,93 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
 #endif
+
+/*== frame timing helpers ===================================================*/
+#define _SAPP_RING_NUM_SLOTS (64)
+typedef struct {
+    int head;
+    int tail;
+    double buf[_SAPP_RING_NUM_SLOTS];
+} _sapp_ring_t;
+
+_SOKOL_PRIVATE int _sapp_ring_idx(int i) {
+    return i % _SAPP_RING_NUM_SLOTS;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_init(_sapp_ring_t* ring) {
+    ring->head = 0;
+    ring->tail = 0;
+}
+
+_SOKOL_PRIVATE bool _sapp_ring_full(_sapp_ring_t* ring) {
+    return _sapp_ring_idx(ring->head + 1) == ring->tail;
+}
+    
+_SOKOL_PRIVATE bool _sapp_ring_empty(_sapp_ring_t* ring) {
+    return ring->head == ring->tail;
+}
+
+_SOKOL_PRIVATE int _sapp_ring_count(_sapp_ring_t* ring) {
+    int count;
+    if (ring->head >= ring->tail) {
+        count = ring->head - ring->tail;
+    }
+    else {
+        count = (ring->head + _SAPP_RING_NUM_SLOTS) - ring->tail;
+    }
+    SOKOL_ASSERT((count >= 0) && (count < _SAPP_RING_NUM_SLOTS));
+    return count;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_enqueue(_sapp_ring_t* ring, double val) {
+    SOKOL_ASSERT(!_sapp_ring_full(ring));
+    ring->buf[ring->head] = val;
+    ring->head = _sapp_ring_idx(ring->head + 1);
+}
+
+_SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
+    SOKOL_ASSERT(!_sapp_ring_empty(ring));
+    double val = ring->buf[ring->tail];
+    ring->tail = _sapp_ring_idx(ring->tail + 1);
+    return val;
+}
+
+typedef struct {
+    double accum;
+    double avg;
+    int num;
+    _sapp_ring_t ring;
+} _sapp_timing_t;
+
+_SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+    t->accum = 0.0;
+    t->avg = 0.0;
+    t->num = 0;
+    _sapp_ring_init(&t->ring);
+}
+
+_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double new_val) {
+    if (_sapp_ring_full(&t->ring)) {
+        double old_val = _sapp_ring_dequeue(&t->ring);
+        t->accum -= old_val;
+        t->num -= 1;
+    }
+    _sapp_ring_enqueue(&t->ring, new_val);
+    t->accum += new_val;
+    t->num += 1;
+    SOKOL_ASSERT(t->num > 0);
+    t->avg = t->accum / t->num;
+}
+
+_SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
+    if (0 == t->num) {
+        // dummy value for very first frame, this won't "poison" the average of following frames
+        return 1.0 / 60.0;
+    }
+    else {
+        return t->avg;
+    }
+}
 
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
