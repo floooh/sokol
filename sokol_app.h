@@ -1677,6 +1677,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #import <GLKit/GLKit.h>
         #endif
     #endif
+    #include <mach/mach_time.h>
 #elif defined(_SAPP_EMSCRIPTEN)
     #if defined(SOKOL_WGPU)
         #include <webgpu/webgpu.h>
@@ -1786,7 +1787,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif
 
 /*== frame timing helpers ===================================================*/
-#define _SAPP_RING_NUM_SLOTS (64)
+#define _SAPP_RING_NUM_SLOTS (256)
 typedef struct {
     int head;
     int tail;
@@ -1836,40 +1837,103 @@ _SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
 }
 
 typedef struct {
+    #if defined(_SAPP_APPLE)
+        struct {
+            mach_timebase_info_data_t timebase;
+            uint64_t start;
+        } mach;
+    #endif
+} _sapp_timestamp_t;
+
+_SOKOL_PRIVATE int64_t _sapp_int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
+    int64_t q = value / denom;
+    int64_t r = value % denom;
+    return q * numer + r * numer / denom;
+}
+
+_SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        mach_timebase_info(&ts->mach.timebase);
+        ts->mach.start = mach_absolute_time();
+    #else
+        (void)ts;
+    #endif
+}
+
+_SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        const uint64_t traw = mach_absolute_time() - ts->mach.start;
+        const uint64_t t = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
+        return (double)t / 1000000000.0;
+    #else
+        (void)ts;
+        SOKOL_ASSERT(false);
+        return 0.0;
+    #endif
+}
+
+typedef struct {
+    double last;
     double accum;
     double avg;
     int num;
+    _sapp_timestamp_t timestamp;
     _sapp_ring_t ring;
 } _sapp_timing_t;
 
 _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+    t->last = 0.0;
     t->accum = 0.0;
-    t->avg = 0.0;
+    // dummy value until first actual value is available
+    t->avg = 1.0 / 60.0;
     t->num = 0;
+    _sapp_timestamp_init(&t->timestamp);
     _sapp_ring_init(&t->ring);
 }
 
-_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double new_val) {
+_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
+    // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
+    double min_dur = 0.0;
+    double max_dur = 0.5;
+    // if we have enough samples for a useful average, use a much tighter 'valid window'
+    if (_sapp_ring_full(&t->ring)) {
+        min_dur = t->avg * 0.8;
+        max_dur = t->avg * 1.2;
+    }
+    if ((dur < min_dur) || (dur > max_dur)) {
+        return;
+    }
     if (_sapp_ring_full(&t->ring)) {
         double old_val = _sapp_ring_dequeue(&t->ring);
         t->accum -= old_val;
         t->num -= 1;
     }
-    _sapp_ring_enqueue(&t->ring, new_val);
-    t->accum += new_val;
+    _sapp_ring_enqueue(&t->ring, dur);
+    t->accum += dur;
     t->num += 1;
     SOKOL_ASSERT(t->num > 0);
     t->avg = t->accum / t->num;
 }
 
+_SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
+    const double now = _sapp_timestamp_now(&t->timestamp);
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
 _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
-    if (0 == t->num) {
-        // dummy value for very first frame, this won't "poison" the average of following frames
-        return 1.0 / 60.0;
-    }
-    else {
-        return t->avg;
-    }
+    return t->avg;
 }
 
 /*== MACOS DECLARATIONS ======================================================*/
@@ -2359,6 +2423,7 @@ typedef struct {
     int swap_interval;
     float dpi_scale;
     uint64_t frame_count;
+    _sapp_timing_t timing;
     sapp_event event;
     _sapp_mouse_t mouse;
     _sapp_clipboard_t clipboard;
@@ -2544,6 +2609,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
+    _sapp_timing_init(&_sapp.timing);
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -3466,6 +3532,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    _sapp_timing_measure(&_sapp.timing);
     /* Catch any last-moment input events */
     _sapp_macos_poll_input_events();
     @autoreleasepool {
@@ -3987,6 +4054,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
+    _sapp_timing_measure(&_sapp.timing);
     @autoreleasepool {
         _sapp_ios_frame();
     }
@@ -5116,8 +5184,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
-    _SOKOL_UNUSED(time);
     _SOKOL_UNUSED(userData);
+    _sapp_timing_external(&_sapp.timing, time / 1000.0);
 
     #if defined(SOKOL_WGPU)
         /*
@@ -10749,6 +10817,10 @@ SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
 
 SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
     return _sapp.frame_count;
+}
+
+SOKOL_API_IMPL double sapp_frame_duration(void) {
+    return _sapp_timing_get_avg(&_sapp.timing);
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
