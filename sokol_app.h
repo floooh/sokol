@@ -1836,6 +1836,17 @@ _SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
     return val;
 }
 
+/*
+    NOTE:
+    
+    Q: Why not use CAMetalDrawable.presentedTime on macOS and iOS?
+    A: The value appears to be highly unstable during the first few
+    seconds, sometimes several frames are dropped in sequence, or
+    switch between 120 and 60 Hz for a few frames. Simply measuring
+    and averaging the frame time yielded a more stable frame duration.
+    Maybe switching to CVDisplayLink would yield better results.
+    Until then just measure the time.
+*/
 typedef struct {
     #if defined(_SAPP_APPLE)
         struct {
@@ -3259,10 +3270,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
+        NSInteger max_fps = 60;
+        if (@available(macOS 12.0, *)) {
+            max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
+        }
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
-        _sapp.macos.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.macos.view.device = _sapp.macos.mtl_device;
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3892,10 +3907,11 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
     _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
     _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
+    NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3942,7 +3958,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #endif
     [_sapp.ios.window makeKeyAndVisible];
