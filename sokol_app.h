@@ -1767,6 +1767,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_SAPP_ANDROID)
     #include <pthread.h>
     #include <unistd.h>
+    #include <time.h>
     #include <android/native_activity.h>
     #include <android/looper.h>
     #include <EGL/egl.h>
@@ -1784,6 +1785,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
+    #include <time.h>
 #endif
 
 /*== frame timing helpers ===================================================*/
@@ -1853,6 +1855,20 @@ typedef struct {
             mach_timebase_info_data_t timebase;
             uint64_t start;
         } mach;
+    #elif defined(_SAPP_EMSCRIPTEN)
+        // empty
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        // FIXME
+    #else // Linux, Android, ...
+        #ifdef CLOCK_MONOTONIC
+        #define _SAPP_CLOCK_MONOTONIC CLOCK_MONOTONIC
+        #else
+        // on some embedded platforms, CLOCK_MONOTONIC isn't defined
+        #define _SAPP_CLOCK_MONOTONIC (1)
+        #endif
+        struct {
+            uint64_t start;
+        } posix;
     #endif
 } _sapp_timestamp_t;
 
@@ -1866,20 +1882,33 @@ _SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
     #if defined(_SAPP_APPLE)
         mach_timebase_info(&ts->mach.timebase);
         ts->mach.start = mach_absolute_time();
-    #else
+    #elif defined(_SAPP_EMSCRIPTEN)
         (void)ts;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        // FIXME
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        ts->posix.start = (uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec;
     #endif
 }
 
 _SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
     #if defined(_SAPP_APPLE)
         const uint64_t traw = mach_absolute_time() - ts->mach.start;
-        const uint64_t t = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
-        return (double)t / 1000000000.0;
-    #else
+        const uint64_t now = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
+        return (double)now / 1000000000.0;
+    #elif defined(SAPP_EMSCRIPTEN)
         (void)ts;
         SOKOL_ASSERT(false);
         return 0.0;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        // FIXME
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        uint64_t now = ((uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec) - ts->posix.start;
+        return (double)now / 1000000000.0;
     #endif
 }
 
@@ -8136,6 +8165,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
+    _sapp_timing_measure(&_sapp.timing);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
@@ -10746,6 +10776,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
+        _sapp_timing_measure(&_sapp.timing);
         _sapp_glx_make_current();
         int count = XPending(_sapp.x11.display);
         while (count--) {
