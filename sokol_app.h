@@ -1858,7 +1858,10 @@ typedef struct {
     #elif defined(_SAPP_EMSCRIPTEN)
         // empty
     #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
-        // FIXME
+        struct {
+            LARGE_INTEGER freq;
+            LARGE_INTEGER start;
+        } win;
     #else // Linux, Android, ...
         #ifdef CLOCK_MONOTONIC
         #define _SAPP_CLOCK_MONOTONIC CLOCK_MONOTONIC
@@ -1885,7 +1888,8 @@ _SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
     #elif defined(_SAPP_EMSCRIPTEN)
         (void)ts;
     #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
-        // FIXME
+        QueryPerformanceFrequency(&ts->win.freq);
+        QueryPerformanceCounter(&ts->win.start);
     #else
         struct timespec tspec;
         clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
@@ -1903,11 +1907,14 @@ _SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
         SOKOL_ASSERT(false);
         return 0.0;
     #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
-        // FIXME
+        LARGE_INTEGER qpc;
+        QueryPerformanceCounter(&qpc);
+        const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - ts->win.start.QuadPart, 1000000000, ts->win.freq.QuadPart);
+        return (double)now / 1000000000.0;
     #else
         struct timespec tspec;
         clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
-        uint64_t now = ((uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec) - ts->posix.start;
+        const uint64_t now = ((uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec) - ts->posix.start;
         return (double)now / 1000000000.0;
     #endif
 }
@@ -6474,6 +6481,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
             case WM_TIMER:
+                _sapp_timing_measure(&_sapp.timing);
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
                     _sapp_d3d11_present();
@@ -6846,6 +6854,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
+        _sapp_timing_measure(&_sapp.timing);
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -7786,6 +7795,7 @@ void App::Run() {
     // NOTE: UWP will simply terminate an application, it's not possible to detect when an application is being closed
     while (true) {
         if (m_windowVisible) {
+            _sapp_timing_measure(&_sapp.timing);
             winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessAllIfPresent);
             _sapp_frame();
             m_deviceResources->Present();
