@@ -718,38 +718,38 @@ _SOKOL_PRIVATE void igSeparator() {
 _SOKOL_PRIVATE void igSameLine(float offset_from_start_x, float spacing) {
     return ImGui::SameLine(offset_from_start_x,spacing);
 }
-_SOKOL_PRIVATE void igPushIDInt(int int_id) {
+_SOKOL_PRIVATE void igPushID_Int(int int_id) {
     return ImGui::PushID(int_id);
 }
 _SOKOL_PRIVATE void igPopID() {
     return ImGui::PopID();
 }
-_SOKOL_PRIVATE bool igSelectableBool(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
+_SOKOL_PRIVATE bool igSelectable_Bool(const char* label,bool selected,ImGuiSelectableFlags flags,const ImVec2 size) {
     return ImGui::Selectable(label,selected,flags,size);
 }
 _SOKOL_PRIVATE bool igSmallButton(const char* label) {
     return ImGui::SmallButton(label);
 }
-_SOKOL_PRIVATE bool igBeginChildStr(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
+_SOKOL_PRIVATE bool igBeginChild_Str(const char* str_id,const ImVec2 size,bool border,ImGuiWindowFlags flags) {
     return ImGui::BeginChild(str_id,size,border,flags);
 }
 _SOKOL_PRIVATE void igEndChild() {
     return ImGui::EndChild();
 }
-_SOKOL_PRIVATE void igPushStyleColorU32(ImGuiCol idx, ImU32 col) {
+_SOKOL_PRIVATE void igPushStyleColor_U32(ImGuiCol idx, ImU32 col) {
     return ImGui::PushStyleColor(idx,col);
 }
 _SOKOL_PRIVATE void igPopStyleColor(int count) {
     return ImGui::PopStyleColor(count);
 }
-_SOKOL_PRIVATE bool igTreeNodeStrStr(const char* str_id,const char* fmt,...) {
+_SOKOL_PRIVATE bool igTreeNode_StrStr(const char* str_id,const char* fmt,...) {
     va_list args;
     va_start(args, fmt);
     bool ret = ImGui::TreeNodeV(str_id,fmt,args);
     va_end(args);
     return ret;
 }
-_SOKOL_PRIVATE bool igTreeNodeStr(const char* label) {
+_SOKOL_PRIVATE bool igTreeNode_Str(const char* label) {
     return ImGui::TreeNode(label);
 }
 _SOKOL_PRIVATE void igTreePop() {
@@ -2834,15 +2834,15 @@ _SOKOL_PRIVATE void _sg_imgui_err_bindings_invalid(void* user_data) {
 
 /*--- IMGUI HELPERS ----------------------------------------------------------*/
 _SOKOL_PRIVATE bool _sg_imgui_draw_resid_list_item(uint32_t res_id, const char* label, bool selected) {
-    igPushIDInt((int)res_id);
+    igPushID_Int((int)res_id);
     bool res;
     if (label[0]) {
-        res = igSelectableBool(label, selected, 0, IMVEC2(0,0));
+        res = igSelectable_Bool(label, selected, 0, IMVEC2(0,0));
     }
     else {
         sg_imgui_str_t str;
         _sg_imgui_snprintf(&str, "0x%08X", res_id);
-        res = igSelectableBool(str.buf, selected, 0, IMVEC2(0,0));
+        res = igSelectable_Bool(str.buf, selected, 0, IMVEC2(0,0));
     }
     igPopID();
     return res;
@@ -2859,7 +2859,7 @@ _SOKOL_PRIVATE bool _sg_imgui_draw_resid_link(uint32_t res_type, uint32_t res_id
         _sg_imgui_snprintf(&str_buf, "0x%08X", res_id);
         str = str_buf.buf;
     }
-    igPushIDInt((int)((res_type<<24)|res_id));
+    igPushID_Int((int)((res_type<<24)|res_id));
     bool res = igSmallButton(str);
     igPopID();
     return res;
@@ -2908,7 +2908,7 @@ _SOKOL_PRIVATE void _sg_imgui_show_shader(sg_imgui_t* ctx, sg_shader shd) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
-    igBeginChildStr("buffer_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("buffer_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->buffers.num_slots; i++) {
         sg_buffer buf = ctx->buffers.slots[i].res_id;
         sg_resource_state state = sg_query_buffer_state(buf);
@@ -2923,7 +2923,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_buffer_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
-    igBeginChildStr("image_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("image_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->images.num_slots; i++) {
         sg_image img = ctx->images.slots[i].res_id;
         sg_resource_state state = sg_query_image_state(img);
@@ -2938,7 +2938,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_image_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
-    igBeginChildStr("shader_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("shader_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 0; i < ctx->shaders.num_slots; i++) {
         sg_shader shd = ctx->shaders.slots[i].res_id;
         sg_resource_state state = sg_query_shader_state(shd);
@@ -2953,7 +2953,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
-    igBeginChildStr("pipeline_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("pipeline_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->pipelines.num_slots; i++) {
         sg_pipeline pip = ctx->pipelines.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
@@ -2968,7 +2968,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
-    igBeginChildStr("pass_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("pass_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     for (int i = 1; i < ctx->passes.num_slots; i++) {
         sg_pass pass = ctx->passes.slots[i].res_id;
         sg_resource_state state = sg_query_pass_state(pass);
@@ -2983,19 +2983,19 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_list(sg_imgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
-    igBeginChildStr("capture_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
+    igBeginChild_Str("capture_list", IMVEC2(_SG_IMGUI_LIST_WIDTH,0), true, 0);
     const int num_items = _sg_imgui_capture_num_read_items(ctx);
     uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
     for (int i = 0; i < num_items; i++) {
         const sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, i);
         sg_imgui_str_t item_string = _sg_imgui_capture_item_string(ctx, i, item);
-        igPushStyleColorU32(ImGuiCol_Text, item->color);
-        igPushIDInt(i);
+        igPushStyleColor_U32(ImGuiCol_Text, item->color);
+        igPushID_Int(i);
         if (item->cmd == SG_IMGUI_CMD_PUSH_DEBUG_GROUP) {
             if (group_stack & 1) {
                 group_stack <<= 1;
                 const char* group_name = item->args.push_debug_group.name.buf;
-                if (igTreeNodeStrStr(group_name, "Group: %s", group_name)) {
+                if (igTreeNode_StrStr(group_name, "Group: %s", group_name)) {
                     group_stack |= 1;
                 }
             }
@@ -3010,7 +3010,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
             group_stack >>= 1;
         }
         else if (group_stack & 1) {
-            if (igSelectableBool(item_string.buf, ctx->capture.sel_item == i, 0, IMVEC2(0,0))) {
+            if (igSelectable_Bool(item_string.buf, ctx->capture.sel_item == i, 0, IMVEC2(0,0))) {
                 ctx->capture.sel_item = i;
             }
             if (igIsItemHovered(0)) {
@@ -3025,7 +3025,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_list(sg_imgui_t* ctx) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_buffer_panel(sg_imgui_t* ctx, sg_buffer buf) {
     if (buf.id != SG_INVALID_ID) {
-        igBeginChildStr("buffer", IMVEC2(0,0), false, 0);
+        igBeginChild_Str("buffer", IMVEC2(0,0), false, 0);
         sg_buffer_info info = sg_query_buffer_info(buf);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_buffer_t* buf_ui = &ctx->buffers.slots[_sg_imgui_slot_index(buf.id)];
@@ -3060,7 +3060,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
     if (sg_query_image_state(img) == SG_RESOURCESTATE_VALID) {
         sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
         if (_sg_imgui_image_renderable(img_ui->desc.type, img_ui->desc.pixel_format)) {
-            igPushIDInt((int)img.id);
+            igPushID_Int((int)img.id);
             igSliderFloat("Scale", scale, 0.125f, 8.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
             float w = (float)img_ui->desc.width * (*scale);
             float h = (float)img_ui->desc.height * (*scale);
@@ -3075,7 +3075,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_embedded_image(sg_imgui_t* ctx, sg_image img,
 
 _SOKOL_PRIVATE void _sg_imgui_draw_image_panel(sg_imgui_t* ctx, sg_image img) {
     if (img.id != SG_INVALID_ID) {
-        igBeginChildStr("image", IMVEC2(0,0), false, 0);
+        igBeginChild_Str("image", IMVEC2(0,0), false, 0);
         sg_image_info info = sg_query_image_info(img);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_image_t* img_ui = &ctx->images.slots[_sg_imgui_slot_index(img.id)];
@@ -3139,7 +3139,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
         }
     }
     if (num_valid_ubs > 0) {
-        if (igTreeNodeStr("Uniform Blocks")) {
+        if (igTreeNode_Str("Uniform Blocks")) {
             for (int i = 0; i < num_valid_ubs; i++) {
                 igText("#%d:", i);
                 const sg_shader_uniform_block_desc* ub = &stage->uniform_blocks[i];
@@ -3159,7 +3159,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
         }
     }
     if (num_valid_images > 0) {
-        if (igTreeNodeStr("Images")) {
+        if (igTreeNode_Str("Images")) {
             for (int i = 0; i < SG_MAX_SHADERSTAGE_IMAGES; i++) {
                 const sg_shader_image_desc* sid = &stage->images[i];
                 if (sid->image_type != _SG_IMAGETYPE_DEFAULT) {
@@ -3182,13 +3182,13 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
         igText("D3D11 Target: %s", stage->d3d11_target);
     }
     if (stage->source) {
-        if (igTreeNodeStr("Source")) {
+        if (igTreeNode_Str("Source")) {
             igText("%s", stage->source);
             igTreePop();
         }
     }
     else if (stage->bytecode.ptr) {
-        if (igTreeNodeStr("Byte Code")) {
+        if (igTreeNode_Str("Byte Code")) {
             igText("Byte-code display currently not supported.");
             igTreePop();
         }
@@ -3197,14 +3197,14 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
 
 _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) {
     if (shd.id != SG_INVALID_ID) {
-        igBeginChildStr("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
+        igBeginChild_Str("shader", IMVEC2(0,0), false, ImGuiWindowFlags_HorizontalScrollbar);
         sg_shader_info info = sg_query_shader_info(shd);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_shader_t* shd_ui = &ctx->shaders.slots[_sg_imgui_slot_index(shd.id)];
             igText("Label: %s", shd_ui->label.buf[0] ? shd_ui->label.buf : "---");
             _sg_imgui_draw_resource_slot(&info.slot);
             igSeparator();
-            if (igTreeNodeStr("Attrs")) {
+            if (igTreeNode_Str("Attrs")) {
                 for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
                     const sg_shader_attr_desc* a_desc = &shd_ui->desc.attrs[i];
                     if (a_desc->name || a_desc->sem_index) {
@@ -3216,11 +3216,11 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
                 }
                 igTreePop();
             }
-            if (igTreeNodeStr("Vertex Shader Stage")) {
+            if (igTreeNode_Str("Vertex Shader Stage")) {
                 _sg_imgui_draw_shader_stage(&shd_ui->desc.vs);
                 igTreePop();
             }
-            if (igTreeNodeStr("Fragment Shader Stage")) {
+            if (igTreeNode_Str("Fragment Shader Stage")) {
                 _sg_imgui_draw_shader_stage(&shd_ui->desc.fs);
                 igTreePop();
             }
@@ -3233,7 +3233,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_panel(sg_imgui_t* ctx, sg_shader shd) 
 }
 
 _SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
-    if (igTreeNodeStr("Buffers")) {
+    if (igTreeNode_Str("Buffers")) {
         for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
             const sg_buffer_layout_desc* l_desc = &layout->buffers[i];
             if (l_desc->stride > 0) {
@@ -3245,7 +3245,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_vertex_layout(const sg_layout_desc* layout) {
         }
         igTreePop();
     }
-    if (igTreeNodeStr("Attrs")) {
+    if (igTreeNode_Str("Attrs")) {
         for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
             const sg_vertex_attr_desc* a_desc = &layout->attrs[i];
             if (a_desc->format != SG_VERTEXFORMAT_INVALID) {
@@ -3271,11 +3271,11 @@ _SOKOL_PRIVATE void _sg_imgui_draw_stencil_state(const sg_stencil_state* ss) {
     igText("Read Mask:  0x%02X", ss->read_mask);
     igText("Write Mask: 0x%02X", ss->write_mask);
     igText("Ref:        0x%02X", ss->ref);
-    if (igTreeNodeStr("Front")) {
+    if (igTreeNode_Str("Front")) {
         _sg_imgui_draw_stencil_face_state(&ss->front);
         igTreePop();
     }
-    if (igTreeNodeStr("Back")) {
+    if (igTreeNode_Str("Back")) {
         _sg_imgui_draw_stencil_face_state(&ss->back);
         igTreePop();
     }
@@ -3303,7 +3303,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_blend_state(const sg_blend_state* bs) {
 _SOKOL_PRIVATE void _sg_imgui_draw_color_state(const sg_color_state* cs) {
     igText("Pixel Format:     %s", _sg_imgui_pixelformat_string(cs->pixel_format));
     igText("Write Mask:       %s", _sg_imgui_colormask_string(cs->write_mask));
-    if (igTreeNodeStr("Blend State:")) {
+    if (igTreeNode_Str("Blend State:")) {
         _sg_imgui_draw_blend_state(&cs->blend);
         igTreePop();
     }
@@ -3311,7 +3311,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_color_state(const sg_color_state* cs) {
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline pip) {
     if (pip.id != SG_INVALID_ID) {
-        igBeginChildStr("pipeline", IMVEC2(0,0), false, 0);
+        igBeginChild_Str("pipeline", IMVEC2(0,0), false, 0);
         sg_pipeline_info info = sg_query_pipeline_info(pip);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             const sg_imgui_pipeline_t* pip_ui = &ctx->pipelines.slots[_sg_imgui_slot_index(pip.id)];
@@ -3322,15 +3322,15 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             if (_sg_imgui_draw_shader_link(ctx, pip_ui->desc.shader)) {
                 _sg_imgui_show_shader(ctx, pip_ui->desc.shader);
             }
-            if (igTreeNodeStr("Vertex Layout")) {
+            if (igTreeNode_Str("Vertex Layout")) {
                 _sg_imgui_draw_vertex_layout(&pip_ui->desc.layout);
                 igTreePop();
             }
-            if (igTreeNodeStr("Depth State")) {
+            if (igTreeNode_Str("Depth State")) {
                 _sg_imgui_draw_depth_state(&pip_ui->desc.depth);
                 igTreePop();
             }
-            if (igTreeNodeStr("Stencil State")) {
+            if (igTreeNode_Str("Stencil State")) {
                 _sg_imgui_draw_stencil_state(&pip_ui->desc.stencil);
                 igTreePop();
             }
@@ -3338,7 +3338,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pipeline_panel(sg_imgui_t* ctx, sg_pipeline p
             for (int i = 0; i < pip_ui->desc.color_count; i++) {
                 sg_imgui_str_t str;
                 _sg_imgui_snprintf(&str, "Color %d", i);
-                if (igTreeNodeStr(str.buf)) {
+                if (igTreeNode_Str(str.buf)) {
                     _sg_imgui_draw_color_state(&pip_ui->desc.colors[i]);
                     igTreePop();
                 }
@@ -3371,7 +3371,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_pass_attachment(sg_imgui_t* ctx, const sg_pas
 
 _SOKOL_PRIVATE void _sg_imgui_draw_pass_panel(sg_imgui_t* ctx, sg_pass pass) {
     if (pass.id != SG_INVALID_ID) {
-        igBeginChildStr("pass", IMVEC2(0,0), false, 0);
+        igBeginChild_Str("pass", IMVEC2(0,0), false, 0);
         sg_pass_info info = sg_query_pass_info(pass);
         if (info.slot.state == SG_RESOURCESTATE_VALID) {
             sg_imgui_pass_t* pass_ui = &ctx->passes.slots[_sg_imgui_slot_index(pass.id)];
@@ -3589,8 +3589,8 @@ _SOKOL_PRIVATE void _sg_imgui_draw_capture_panel(sg_imgui_t* ctx) {
         return;
     }
     sg_imgui_capture_item_t* item = _sg_imgui_capture_read_item_at(ctx, sel_item_index);
-    igBeginChildStr("capture_item", IMVEC2(0, 0), false, 0);
-    igPushStyleColorU32(ImGuiCol_Text, item->color);
+    igBeginChild_Str("capture_item", IMVEC2(0, 0), false, 0);
+    igPushStyleColor_U32(ImGuiCol_Text, item->color);
     igText("%s", _sg_imgui_capture_item_string(ctx, sel_item_index, item).buf);
     igPopStyleColor(1);
     igSeparator();
