@@ -1902,7 +1902,7 @@ _SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
         const uint64_t traw = mach_absolute_time() - ts->mach.start;
         const uint64_t now = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
         return (double)now / 1000000000.0;
-    #elif defined(SAPP_EMSCRIPTEN)
+    #elif defined(_SAPP_EMSCRIPTEN)
         (void)ts;
         SOKOL_ASSERT(false);
         return 0.0;
