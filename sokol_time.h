@@ -61,6 +61,8 @@
         The main purpose of this function is to remove jitter/inaccuracies from
         measured frame times, and instead use the display refresh rate as
         frame duration.
+        NOTE: for more robust frame timing, consider using the
+        sokol_app.h function sapp_frame_duration()
 
     Use the following functions to convert a duration in ticks into
     useful time units:

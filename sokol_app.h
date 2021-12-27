@@ -244,6 +244,10 @@
             the default framebuffer size as float values instead of integer. This
             may help to prevent casting back and forth between int and float
             in more strongly typed languages than C and C++.
+            
+        double sapp_frame_duration(void)
+            Returns the frame duration in seconds averaged over a number of
+            frames to smooth out any jittering spikes.
 
         int sapp_color_format(void)
         int sapp_depth_format(void)
