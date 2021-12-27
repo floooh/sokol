@@ -1941,7 +1941,7 @@ _SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
 _SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
     // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
     double min_dur = 0.0;
-    double max_dur = 0.5;
+    double max_dur = 0.1;
     // if we have enough samples for a useful average, use a much tighter 'valid window'
     if (_sapp_ring_full(&t->ring)) {
         min_dur = t->avg * 0.8;
@@ -1969,6 +1969,11 @@ _SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
         _sapp_timing_put(t, dur);
     }
     t->last = now;
+}
+
+// call this if the external timing had been disrupted somehow
+_SOKOL_PRIVATE void _sapp_timing_external_reset(_sapp_timing_t* t) {
+    t->last = 0.0;
 }
 
 _SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
@@ -2092,6 +2097,7 @@ typedef struct {
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
+    UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
 
@@ -5655,6 +5661,14 @@ static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_GetFrameStatistics(IDXGISwapChain* self, DXGI_FRAME_STATISTICS* pStats) {
+    #if defined(__cplusplus)
+        return self->GetFrameStatistics(pStats);
+    #else
+        return self->lpVtbl->GetFrameStatistics(self, pStats);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
@@ -6298,6 +6312,33 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
+    #if defined(SOKOL_D3D11)
+        // on D3D11, use the more precise DXGI timestamp
+        DXGI_FRAME_STATISTICS dxgi_stats;
+        _SAPP_CLEAR(DXGI_FRAME_STATISTICS, dxgi_stats);
+        HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
+        if (SUCCEEDED(hr)) {
+            if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
+                if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
+                    _sapp_timing_external_reset(&_sapp.timing);
+                }
+                _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
+                const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
+                _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
+            }
+        }
+        else {
+            // fallback if GetFrameStats doesn't work for some reason
+            _sapp_timing_measure(&_sapp.timing);
+        }
+    #endif
+    #if defined(SOKOL_GLCORE33)
+        _sapp_timing_measure(&_sapp.timing);
+    #endif
+}
+
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (!_sapp.win32.in_create_window) {
         switch (uMsg) {
@@ -6481,7 +6522,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
             case WM_TIMER:
-                _sapp_timing_measure(&_sapp.timing);
+                _sapp_win32_timing_measure();
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
                     _sapp_d3d11_present();
@@ -6854,7 +6895,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
-        _sapp_timing_measure(&_sapp.timing);
+        _sapp_win32_timing_measure();
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
