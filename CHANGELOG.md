@@ -1,5 +1,31 @@
 ## Updates
 
+- **27-Dec-2021**: sokol_app.h frame timing improvements:
+  - A new function **double sapp_frame_duration()** which returns the frame
+    duration in seconds, averaged over the last 256 frames to smooth out
+    jittering spikes. If available, this uses a platform/backend specific
+    associated with the swap chain:
+      - On Windows: DXGI's GetFrameStatistics().SyncQPCTime.
+      - On Emscripten: the timestamp provided by the RAF callback, this will
+        still be clamped and jittered on some browsers, but averaged over
+        a number of frames yields a pretty accurate approximation
+        of the actual frame duration.
+      - On Metal, the obvious ```CAMetalLayer.presentedTime``` is currently
+        **not** used, this still had so much jitter that it didn't yield
+        better results than just averaging ```mach_absolute_time()``` at the
+        start of the MTKView callback.
+      - In all other situations, the same timing method is used as
+        in sokol_time.h.
+  - On macOS and iOS, sokol_app.h now queries the maximum display refresh rate
+    of the main display and uses this as base to compute the preferred frame
+    rate (by multiplying with ```sapp_desc.swap_interval```), previously the
+    preferred frame rate was hardwired to ```60 * swap_interval```. This means
+    that native macOS and iOS applications may now run at 120Hz instead of
+    60Hz depending on the device (I realize that this isn't ideal, there
+    will probably be a different way to hint the preferred interval at
+    which the frame callback is called, which would also support disabling
+    vsync and probably also adaptive vsync).
+
 - **19-Dec-2021**: some sokol_audio.h changes:
   - on Windows, sokol_audio.h no longer converts audio samples
     from float to int16_t, but instead configures WASAPI to directly accept

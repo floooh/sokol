@@ -244,6 +244,10 @@
             the default framebuffer size as float values instead of integer. This
             may help to prevent casting back and forth between int and float
             in more strongly typed languages than C and C++.
+            
+        double sapp_frame_duration(void)
+            Returns the frame duration in seconds averaged over a number of
+            frames to smooth out any jittering spikes.
 
         int sapp_color_format(void)
         int sapp_depth_format(void)
@@ -1452,6 +1456,8 @@ SOKOL_APP_API_DECL void sapp_quit(void);
 SOKOL_APP_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
+/* get an averaged/smoothed frame duration in seconds */
+SOKOL_APP_API_DECL double sapp_frame_duration(void);
 /* write string into clipboard */
 SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
@@ -1675,6 +1681,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #import <GLKit/GLKit.h>
         #endif
     #endif
+    #include <mach/mach_time.h>
 #elif defined(_SAPP_EMSCRIPTEN)
     #if defined(SOKOL_WGPU)
         #include <webgpu/webgpu.h>
@@ -1764,6 +1771,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_SAPP_ANDROID)
     #include <pthread.h>
     #include <unistd.h>
+    #include <time.h>
     #include <android/native_activity.h>
     #include <android/looper.h>
     #include <EGL/egl.h>
@@ -1781,7 +1789,208 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
+    #include <time.h>
 #endif
+
+/*== frame timing helpers ===================================================*/
+#define _SAPP_RING_NUM_SLOTS (256)
+typedef struct {
+    int head;
+    int tail;
+    double buf[_SAPP_RING_NUM_SLOTS];
+} _sapp_ring_t;
+
+_SOKOL_PRIVATE int _sapp_ring_idx(int i) {
+    return i % _SAPP_RING_NUM_SLOTS;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_init(_sapp_ring_t* ring) {
+    ring->head = 0;
+    ring->tail = 0;
+}
+
+_SOKOL_PRIVATE bool _sapp_ring_full(_sapp_ring_t* ring) {
+    return _sapp_ring_idx(ring->head + 1) == ring->tail;
+}
+    
+_SOKOL_PRIVATE bool _sapp_ring_empty(_sapp_ring_t* ring) {
+    return ring->head == ring->tail;
+}
+
+_SOKOL_PRIVATE int _sapp_ring_count(_sapp_ring_t* ring) {
+    int count;
+    if (ring->head >= ring->tail) {
+        count = ring->head - ring->tail;
+    }
+    else {
+        count = (ring->head + _SAPP_RING_NUM_SLOTS) - ring->tail;
+    }
+    SOKOL_ASSERT((count >= 0) && (count < _SAPP_RING_NUM_SLOTS));
+    return count;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_enqueue(_sapp_ring_t* ring, double val) {
+    SOKOL_ASSERT(!_sapp_ring_full(ring));
+    ring->buf[ring->head] = val;
+    ring->head = _sapp_ring_idx(ring->head + 1);
+}
+
+_SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
+    SOKOL_ASSERT(!_sapp_ring_empty(ring));
+    double val = ring->buf[ring->tail];
+    ring->tail = _sapp_ring_idx(ring->tail + 1);
+    return val;
+}
+
+/*
+    NOTE:
+    
+    Q: Why not use CAMetalDrawable.presentedTime on macOS and iOS?
+    A: The value appears to be highly unstable during the first few
+    seconds, sometimes several frames are dropped in sequence, or
+    switch between 120 and 60 Hz for a few frames. Simply measuring
+    and averaging the frame time yielded a more stable frame duration.
+    Maybe switching to CVDisplayLink would yield better results.
+    Until then just measure the time.
+*/
+typedef struct {
+    #if defined(_SAPP_APPLE)
+        struct {
+            mach_timebase_info_data_t timebase;
+            uint64_t start;
+        } mach;
+    #elif defined(_SAPP_EMSCRIPTEN)
+        // empty
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        struct {
+            LARGE_INTEGER freq;
+            LARGE_INTEGER start;
+        } win;
+    #else // Linux, Android, ...
+        #ifdef CLOCK_MONOTONIC
+        #define _SAPP_CLOCK_MONOTONIC CLOCK_MONOTONIC
+        #else
+        // on some embedded platforms, CLOCK_MONOTONIC isn't defined
+        #define _SAPP_CLOCK_MONOTONIC (1)
+        #endif
+        struct {
+            uint64_t start;
+        } posix;
+    #endif
+} _sapp_timestamp_t;
+
+_SOKOL_PRIVATE int64_t _sapp_int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
+    int64_t q = value / denom;
+    int64_t r = value % denom;
+    return q * numer + r * numer / denom;
+}
+
+_SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        mach_timebase_info(&ts->mach.timebase);
+        ts->mach.start = mach_absolute_time();
+    #elif defined(_SAPP_EMSCRIPTEN)
+        (void)ts;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        QueryPerformanceFrequency(&ts->win.freq);
+        QueryPerformanceCounter(&ts->win.start);
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        ts->posix.start = (uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec;
+    #endif
+}
+
+_SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        const uint64_t traw = mach_absolute_time() - ts->mach.start;
+        const uint64_t now = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
+        return (double)now / 1000000000.0;
+    #elif defined(_SAPP_EMSCRIPTEN)
+        (void)ts;
+        SOKOL_ASSERT(false);
+        return 0.0;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        LARGE_INTEGER qpc;
+        QueryPerformanceCounter(&qpc);
+        const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - ts->win.start.QuadPart, 1000000000, ts->win.freq.QuadPart);
+        return (double)now / 1000000000.0;
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        const uint64_t now = ((uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec) - ts->posix.start;
+        return (double)now / 1000000000.0;
+    #endif
+}
+
+typedef struct {
+    double last;
+    double accum;
+    double avg;
+    int num;
+    _sapp_timestamp_t timestamp;
+    _sapp_ring_t ring;
+} _sapp_timing_t;
+
+_SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+    t->last = 0.0;
+    t->accum = 0.0;
+    // dummy value until first actual value is available
+    t->avg = 1.0 / 60.0;
+    t->num = 0;
+    _sapp_timestamp_init(&t->timestamp);
+    _sapp_ring_init(&t->ring);
+}
+
+_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
+    // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
+    double min_dur = 0.0;
+    double max_dur = 0.1;
+    // if we have enough samples for a useful average, use a much tighter 'valid window'
+    if (_sapp_ring_full(&t->ring)) {
+        min_dur = t->avg * 0.8;
+        max_dur = t->avg * 1.2;
+    }
+    if ((dur < min_dur) || (dur > max_dur)) {
+        return;
+    }
+    if (_sapp_ring_full(&t->ring)) {
+        double old_val = _sapp_ring_dequeue(&t->ring);
+        t->accum -= old_val;
+        t->num -= 1;
+    }
+    _sapp_ring_enqueue(&t->ring, dur);
+    t->accum += dur;
+    t->num += 1;
+    SOKOL_ASSERT(t->num > 0);
+    t->avg = t->accum / t->num;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
+    const double now = _sapp_timestamp_now(&t->timestamp);
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
+// call this if the external timing had been disrupted somehow
+_SOKOL_PRIVATE void _sapp_timing_external_reset(_sapp_timing_t* t) {
+    t->last = 0.0;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
+_SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
+    return t->avg;
+}
 
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
@@ -1892,6 +2101,7 @@ typedef struct {
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
+    UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
 
@@ -2270,6 +2480,7 @@ typedef struct {
     int swap_interval;
     float dpi_scale;
     uint64_t frame_count;
+    _sapp_timing_t timing;
     sapp_event event;
     _sapp_mouse_t mouse;
     _sapp_clipboard_t clipboard;
@@ -2455,6 +2666,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
+    _sapp_timing_init(&_sapp.timing);
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -3104,10 +3316,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
+        NSInteger max_fps = 60;
+        if (@available(macOS 12.0, *)) {
+            max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
+        }
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
-        _sapp.macos.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.macos.view.device = _sapp.macos.mtl_device;
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3377,6 +3593,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    _sapp_timing_measure(&_sapp.timing);
     /* Catch any last-moment input events */
     _sapp_macos_poll_input_events();
     @autoreleasepool {
@@ -3736,10 +3953,11 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
     _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
     _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
+    NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -3786,7 +4004,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         }
         _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #endif
     [_sapp.ios.window makeKeyAndVisible];
@@ -3898,6 +4116,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
+    _sapp_timing_measure(&_sapp.timing);
     @autoreleasepool {
         _sapp_ios_frame();
     }
@@ -5027,8 +5246,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
-    _SOKOL_UNUSED(time);
     _SOKOL_UNUSED(userData);
+    _sapp_timing_external(&_sapp.timing, time / 1000.0);
 
     #if defined(SOKOL_WGPU)
         /*
@@ -5443,6 +5662,14 @@ static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval
         return self->Present(SyncInterval, Flags);
     #else
         return self->lpVtbl->Present(self, SyncInterval, Flags);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetFrameStatistics(IDXGISwapChain* self, DXGI_FRAME_STATISTICS* pStats) {
+    #if defined(__cplusplus)
+        return self->GetFrameStatistics(pStats);
+    #else
+        return self->lpVtbl->GetFrameStatistics(self, pStats);
     #endif
 }
 
@@ -6089,6 +6316,33 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
+    #if defined(SOKOL_D3D11)
+        // on D3D11, use the more precise DXGI timestamp
+        DXGI_FRAME_STATISTICS dxgi_stats;
+        _SAPP_CLEAR(DXGI_FRAME_STATISTICS, dxgi_stats);
+        HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
+        if (SUCCEEDED(hr)) {
+            if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
+                if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
+                    _sapp_timing_external_reset(&_sapp.timing);
+                }
+                _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
+                const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
+                _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
+            }
+        }
+        else {
+            // fallback if GetFrameStats doesn't work for some reason
+            _sapp_timing_measure(&_sapp.timing);
+        }
+    #endif
+    #if defined(SOKOL_GLCORE33)
+        _sapp_timing_measure(&_sapp.timing);
+    #endif
+}
+
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (!_sapp.win32.in_create_window) {
         switch (uMsg) {
@@ -6272,6 +6526,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
             case WM_TIMER:
+                _sapp_win32_timing_measure();
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
                     _sapp_d3d11_present();
@@ -6644,6 +6899,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
+        _sapp_win32_timing_measure();
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -7584,6 +7840,7 @@ void App::Run() {
     // NOTE: UWP will simply terminate an application, it's not possible to detect when an application is being closed
     while (true) {
         if (m_windowVisible) {
+            _sapp_timing_measure(&_sapp.timing);
             winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessAllIfPresent);
             _sapp_frame();
             m_deviceResources->Present();
@@ -7963,6 +8220,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
+    _sapp_timing_measure(&_sapp.timing);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
@@ -10573,6 +10831,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
+        _sapp_timing_measure(&_sapp.timing);
         _sapp_glx_make_current();
         int count = XPending(_sapp.x11.display);
         while (count--) {
@@ -10660,6 +10919,10 @@ SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
 
 SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
     return _sapp.frame_count;
+}
+
+SOKOL_API_IMPL double sapp_frame_duration(void) {
+    return _sapp_timing_get_avg(&_sapp.timing);
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
