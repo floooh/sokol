@@ -1,7 +1,7 @@
 ## Updates
 
 - **27-Dec-2021**: sokol_app.h frame timing improvements:
-  - A new function **double sapp_frame_duration()** which returns the frame
+  - A new function ```double sapp_frame_duration(void)``` which returns the frame
     duration in seconds, averaged over the last 256 frames to smooth out
     jittering spikes. If available, this uses platform/backend specific
     functions of the swapchain API:
@@ -10,10 +10,10 @@
         still be clamped and jittered on some browsers, but averaged over
         a number of frames yields a pretty accurate approximation
         of the actual frame duration.
-      - On Metal, the obvious ```CAMetalLayer.presentedTime``` is currently
-        **not** used, this still had so much jitter that it didn't yield
-        better results than just averaging ```mach_absolute_time()``` at the
-        start of the MTKView callback.
+      - On Metal, ```MTLDrawable addPresentedHandler + presentedTime```
+        doesn't appear to function correctly on macOS Monterey and/or M1 Macs, so 
+        instead mach_absolute_time() is called at the start of the MTKView
+        frame callback.
       - In all other situations, the same timing method is used as
         in sokol_time.h.
   - On macOS and iOS, sokol_app.h now queries the maximum display refresh rate
