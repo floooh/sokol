@@ -1681,6 +1681,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #import <GLKit/GLKit.h>
         #endif
     #endif
+    #include <AvailabilityMacros.h>
     #include <mach/mach_time.h>
 #elif defined(_SAPP_EMSCRIPTEN)
     #if defined(SOKOL_WGPU)
@@ -3317,9 +3318,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
         NSInteger max_fps = 60;
+        #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
         if (@available(macOS 12.0, *)) {
             max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
         }
+        #endif
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
