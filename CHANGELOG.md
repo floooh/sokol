@@ -3,8 +3,8 @@
 - **27-Dec-2021**: sokol_app.h frame timing improvements:
   - A new function **double sapp_frame_duration()** which returns the frame
     duration in seconds, averaged over the last 256 frames to smooth out
-    jittering spikes. If available, this uses a platform/backend specific
-    associated with the swap chain:
+    jittering spikes. If available, this uses platform/backend specific
+    functions of the swapchain API:
       - On Windows: DXGI's GetFrameStatistics().SyncQPCTime.
       - On Emscripten: the timestamp provided by the RAF callback, this will
         still be clamped and jittered on some browsers, but averaged over
