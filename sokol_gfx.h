@@ -127,7 +127,7 @@
 
         to update the resource bindings
 
-    --- optionally update shader uniform data with:
+    --- optionally update shader uniform data (in std140 layout) with:
 
             sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
 
@@ -1208,6 +1208,10 @@ typedef enum sg_uniform_type {
     SG_UNIFORMTYPE_FLOAT2,
     SG_UNIFORMTYPE_FLOAT3,
     SG_UNIFORMTYPE_FLOAT4,
+    SG_UNIFORMTYPE_INT,
+    SG_UNIFORMTYPE_INT2,
+    SG_UNIFORMTYPE_INT3,
+    SG_UNIFORMTYPE_INT4,
     SG_UNIFORMTYPE_MAT4,
     _SG_UNIFORMTYPE_NUM,
     _SG_UNIFORMTYPE_FORCE_U32 = 0x7FFFFFFF
@@ -4115,18 +4119,44 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     }
 }
 
-/* return the byte size of a shader uniform */
-_SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
-    switch (type) {
-        case SG_UNIFORMTYPE_INVALID:    return 0;
-        case SG_UNIFORMTYPE_FLOAT:      return 4 * count;
-        case SG_UNIFORMTYPE_FLOAT2:     return 8 * count;
-        case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
-        case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
-        case SG_UNIFORMTYPE_MAT4:       return 64 * count;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+/* return the byte size of a shader uniform according to std140 layout rules */
+_SOKOL_PRIVATE int _sg_uniform_stride(sg_uniform_type type, int count) {
+    if (count == 1) {
+        switch (type) {
+            case SG_UNIFORMTYPE_INVALID:    return 0;
+            case SG_UNIFORMTYPE_FLOAT:      return 4;
+            case SG_UNIFORMTYPE_FLOAT2:     return 8;
+            case SG_UNIFORMTYPE_FLOAT3:     return 16;
+            case SG_UNIFORMTYPE_FLOAT4:     return 16;
+            case SG_UNIFORMTYPE_INT:        return 4;
+            case SG_UNIFORMTYPE_INT2:       return 8;
+            case SG_UNIFORMTYPE_INT3:       return 16;
+            case SG_UNIFORMTYPE_INT4:       return 16;
+            case SG_UNIFORMTYPE_MAT4:       return 64;
+            default:
+                SOKOL_UNREACHABLE;
+                return -1;
+        }
+    }
+    else {
+        switch (type) {
+            case SG_UNIFORMTYPE_INVALID:
+                return 0;
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT:
+            case SG_UNIFORMTYPE_INT2:
+            case SG_UNIFORMTYPE_INT3:
+            case SG_UNIFORMTYPE_INT4:
+                return 16 * count;
+            case SG_UNIFORMTYPE_MAT4:
+                return 64 * count;
+            default:
+                SOKOL_UNREACHABLE;
+                return -1;
+        }
     }
 }
 
@@ -6500,7 +6530,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 u->type = u_desc->type;
                 u->count = (uint16_t) u_desc->array_count;
                 u->offset = (uint16_t) cur_uniform_offset;
-                cur_uniform_offset += _sg_uniform_size(u->type, u->count);
+                cur_uniform_offset += _sg_uniform_stride(u->type, u->count);
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -7331,24 +7361,43 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
         if (u->gl_loc == -1) {
             continue;
         }
-        GLfloat* ptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
+        GLfloat* fptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
+        GLint* iptr = (GLint) (((uint8_t*)data->ptr) + u->offset);
         switch (u->type) {
             case SG_UNIFORMTYPE_INVALID:
                 break;
             case SG_UNIFORMTYPE_FLOAT:
-                glUniform1fv(u->gl_loc, u->count, ptr);
+                SOKOL_ASSERT(u->count == 1);
+                glUniform1fv(u->gl_loc, 1, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT2:
-                glUniform2fv(u->gl_loc, u->count, ptr);
+                SOKOL_ASSERT(u->count == 1);
+                glUniform2fv(u->gl_loc, 1, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT3:
-                glUniform3fv(u->gl_loc, u->count, ptr);
+                SOKOL_ASSERT(u->count == 1);
+                glUniform3fv(u->gl_loc, 1, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT4:
-                glUniform4fv(u->gl_loc, u->count, ptr);
+                glUniform4fv(u->gl_loc, u->count, fptr);
+                break;
+            case SG_UNIFORMTYPE_INT:
+                SOKOL_ASSERT(count == 1);
+                glUniform1iv(u->gl_loc, 1, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT2:
+                SOKOL_ASSERT(u->count == 1);
+                glUniform2iv(u->gl_loc, 1, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT3:
+                SOKOL_ASSERT(u->count == 1);
+                glUniform3iv(u->gl_loc, 1, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT4:
+                glUniform4iv(u->gl_loc, u->count, iptr);
                 break;
             case SG_UNIFORMTYPE_MAT4:
-                glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, ptr);
+                glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, fptr);
                 break;
             default:
                 SOKOL_UNREACHABLE;
@@ -13926,7 +13975,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             SOKOL_VALIDATE(0 != u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = u_desc->array_count;
-                            uniform_offset += _sg_uniform_size(u_desc->type, array_count);
+                            uniform_offset += _sg_uniform_stride(u_desc->type, array_count);
                             num_uniforms++;
                         }
                         else {
