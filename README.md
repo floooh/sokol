@@ -14,6 +14,8 @@ cross-platform libraries for C and C++, written in C.
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
+
 - [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
