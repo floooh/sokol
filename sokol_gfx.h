@@ -3476,6 +3476,7 @@ typedef struct {
     _sg_gl_state_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
+    bool ext_depth_read;
     GLint max_combined_texture_image_units;
     #if _SOKOL_USE_WIN32_GL_LOADER
     HINSTANCE opengl32_dll;
@@ -5566,6 +5567,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore33(void) {
     _sg.features.image_clamp_to_border = true;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = true;
+    _sg.gl.ext_depth_read = true;
 
     /* scan extensions */
     bool has_s3tc = false;  /* BC1..BC3 */
@@ -5643,6 +5645,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.image_clamp_to_border = false;
     _sg.features.mrt_independent_blend_state = false;
     _sg.features.mrt_independent_write_mask = false;
+    _sg.gl.ext_depth_read = true;
 
     bool has_s3tc = false;  /* BC1..BC3 */
     bool has_rgtc = false;  /* BC4 and BC5 */
@@ -5767,6 +5770,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
         */
         has_instancing = strstr(ext, "_instanced_arrays");
         _sg.gl.ext_anisotropic = strstr(ext, "ext_anisotropic");
+        _sg.gl.ext_depth_read = strstr(ext, "_depth_texture");
     }
 
     _sg.features.origin_top_left = false;
@@ -6236,7 +6240,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     }
     #endif
 
-    if (_sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
+    if (!_sg.gl.ext_depth_read && _sg_is_valid_rendertarget_depth_format(img->cmn.pixel_format)) {
         /* special case depth-stencil-buffer? */
         SOKOL_ASSERT((img->cmn.usage == SG_USAGE_IMMUTABLE) && (img->cmn.num_slots == 1));
         SOKOL_ASSERT(!img->gl.ext_textures);   /* cannot provide external texture for depth images */
@@ -6709,11 +6713,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
 
     /* attach depth-stencil buffer to framebuffer */
     if (pass->gl.ds_att.image) {
-        const GLuint gl_render_buffer = pass->gl.ds_att.image->gl.depth_render_buffer;
-        SOKOL_ASSERT(gl_render_buffer);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
-        if (_sg_is_depth_stencil_format(pass->gl.ds_att.image->cmn.pixel_format)) {
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+        if (_sg.gl.ext_depth_read) {
+            const GLuint gl_depth_tex = pass->gl.ds_att.image->gl.tex[0];
+            SOKOL_ASSERT(gl_depth_tex);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gl_depth_tex, 0);
+             if (_sg_is_depth_stencil_format(pass->gl.ds_att.image->cmn.pixel_format)) {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, gl_depth_tex, 0);
+            }
+        }
+        else {
+            const GLuint gl_render_buffer = pass->gl.ds_att.image->gl.depth_render_buffer;
+            SOKOL_ASSERT(gl_render_buffer);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+            if (_sg_is_depth_stencil_format(pass->gl.ds_att.image->cmn.pixel_format)) {
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gl_render_buffer);
+            }
         }
     }
 
@@ -8323,19 +8337,39 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             SOKOL_LOG("trying to create a D3D11 depth-texture with unsupported pixel format\n");
             return SG_RESOURCESTATE_FAILED;
         }
+        /* need special typeless formats, only support known depth formats */
+        SOKOL_ASSERT(img->cmn.pixel_format == SG_PIXELFORMAT_DEPTH || img->cmn.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL);
+        DXGI_FORMAT res_format = {};
+        DXGI_FORMAT srv_format = {};
+        if (img->cmn.pixel_format == SG_PIXELFORMAT_DEPTH) {
+            res_format = DXGI_FORMAT_R32_TYPELESS;
+            srv_format = DXGI_FORMAT_R32_FLOAT;
+        }
+        else if (img->cmn.pixel_format == SG_PIXELFORMAT_DEPTH_STENCIL) {
+            res_format = DXGI_FORMAT_R24G8_TYPELESS;
+            srv_format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        }
         D3D11_TEXTURE2D_DESC d3d11_desc;
         memset(&d3d11_desc, 0, sizeof(d3d11_desc));
         d3d11_desc.Width = (UINT)img->cmn.width;
         d3d11_desc.Height = (UINT)img->cmn.height;
         d3d11_desc.MipLevels = 1;
         d3d11_desc.ArraySize = 1;
-        d3d11_desc.Format = img->d3d11.format;
+        d3d11_desc.Format = res_format;
         d3d11_desc.Usage = D3D11_USAGE_DEFAULT;
-        d3d11_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        d3d11_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
         d3d11_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
         d3d11_desc.SampleDesc.Quality = (UINT) (msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
         hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11.texds);
         SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texds);
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC d3d11_srv_desc;
+        memset(&d3d11_srv_desc, 0, sizeof(d3d11_srv_desc));
+        d3d11_srv_desc.Format = srv_format;
+        d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        d3d11_srv_desc.Texture2D.MipLevels = 1;
+        hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.texds, &d3d11_srv_desc, &img->d3d11.srv);
+        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
     }
     else {
         /* create (or inject) color texture and shader-resource-view */
@@ -8509,35 +8543,36 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11.texmsaa);
             SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texmsaa);
         }
-
-        /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
-        D3D11_SAMPLER_DESC d3d11_smp_desc;
-        memset(&d3d11_smp_desc, 0, sizeof(d3d11_smp_desc));
-        d3d11_smp_desc.Filter = _sg_d3d11_filter(img->cmn.min_filter, img->cmn.mag_filter, img->cmn.max_anisotropy);
-        d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->cmn.wrap_u);
-        d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->cmn.wrap_v);
-        d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->cmn.wrap_w);
-        switch (img->cmn.border_color) {
-            case SG_BORDERCOLOR_TRANSPARENT_BLACK:
-                /* all 0.0f */
-                break;
-            case SG_BORDERCOLOR_OPAQUE_WHITE:
-                for (int i = 0; i < 4; i++) {
-                    d3d11_smp_desc.BorderColor[i] = 1.0f;
-                }
-                break;
-            default:
-                /* opaque black */
-                d3d11_smp_desc.BorderColor[3] = 1.0f;
-                break;
-        }
-        d3d11_smp_desc.MaxAnisotropy = img->cmn.max_anisotropy;
-        d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-        d3d11_smp_desc.MinLOD = desc->min_lod;
-        d3d11_smp_desc.MaxLOD = desc->max_lod;
-        hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
-        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.smp);
     }
+
+    /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
+    D3D11_SAMPLER_DESC d3d11_smp_desc;
+    memset(&d3d11_smp_desc, 0, sizeof(d3d11_smp_desc));
+    d3d11_smp_desc.Filter = _sg_d3d11_filter(img->cmn.min_filter, img->cmn.mag_filter, img->cmn.max_anisotropy);
+    d3d11_smp_desc.AddressU = _sg_d3d11_address_mode(img->cmn.wrap_u);
+    d3d11_smp_desc.AddressV = _sg_d3d11_address_mode(img->cmn.wrap_v);
+    d3d11_smp_desc.AddressW = _sg_d3d11_address_mode(img->cmn.wrap_w);
+    switch (img->cmn.border_color) {
+        case SG_BORDERCOLOR_TRANSPARENT_BLACK:
+            /* all 0.0f */
+            break;
+        case SG_BORDERCOLOR_OPAQUE_WHITE:
+            for (int i = 0; i < 4; i++) {
+                d3d11_smp_desc.BorderColor[i] = 1.0f;
+            }
+            break;
+        default:
+            /* opaque black */
+            d3d11_smp_desc.BorderColor[3] = 1.0f;
+            break;
+    }
+    d3d11_smp_desc.MaxAnisotropy = img->cmn.max_anisotropy;
+    d3d11_smp_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    d3d11_smp_desc.MinLOD = desc->min_lod;
+    d3d11_smp_desc.MaxLOD = desc->max_lod;
+    hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
+    SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.smp);
+
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -10320,10 +10355,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
             id<MTLTexture> tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
             img->mtl.msaa_tex = _sg_mtl_add_resource(tex);
         }
-
-        /* create (possibly shared) sampler state */
-        img->mtl.sampler_state = _sg_mtl_create_sampler(_sg.mtl.device, desc);
     }
+
+    /* create (possibly shared) sampler state */
+    img->mtl.sampler_state = _sg_mtl_create_sampler(_sg.mtl.device, desc);
+
     _SG_OBJC_RELEASE(mtl_desc);
     return SG_RESOURCESTATE_VALID;
 }
@@ -10908,8 +10944,14 @@ _SOKOL_PRIVATE void _sg_mtl_apply_bindings(
         if ((_sg.mtl.state_cache.cur_fs_images[slot] != img) || (_sg.mtl.state_cache.cur_fs_image_ids[slot].id != img->slot.id)) {
             _sg.mtl.state_cache.cur_fs_images[slot] = img;
             _sg.mtl.state_cache.cur_fs_image_ids[slot].id = img->slot.id;
-            SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX);
-            [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
+            SOKOL_ASSERT(img->mtl.tex[img->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX ||
+                img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
+            if (img->mtl.depth_tex) {
+                [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.depth_tex) atIndex:slot];
+            }
+            else {
+                [_sg.mtl.cmd_encoder setFragmentTexture:_sg_mtl_id(img->mtl.tex[img->cmn.active_slot]) atIndex:slot];
+            }
             SOKOL_ASSERT(img->mtl.sampler_state != _SG_MTL_INVALID_SLOT_INDEX);
             [_sg.mtl.cmd_encoder setFragmentSamplerState:_sg_mtl_id(img->mtl.sampler_state) atIndex:slot];
         }
