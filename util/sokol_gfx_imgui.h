@@ -791,17 +791,78 @@ _SOKOL_PRIVATE int _sg_imgui_slot_index(uint32_t id) {
     return slot_index;
 }
 
-_SOKOL_PRIVATE int _sg_imgui_uniform_size(sg_uniform_type type, int count) {
-    switch (type) {
-        case SG_UNIFORMTYPE_INVALID:    return 0;
-        case SG_UNIFORMTYPE_FLOAT:      return 4 * count;
-        case SG_UNIFORMTYPE_FLOAT2:     return 8 * count;
-        case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
-        case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
-        case SG_UNIFORMTYPE_MAT4:       return 64 * count;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+_SOKOL_PRIVATE uint32_t _sg_imgui_align_u32(uint32_t val, uint32_t align) {
+    SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
+    return (val + (align - 1)) & ~(align - 1);
+}
+
+_SOKOL_PRIVATE uint32_t _sg_imgui_std140_uniform_alignment(sg_uniform_type type, int array_count) {
+    SOKOL_ASSERT(array_count > 0);
+    if (array_count == 1) {
+        switch (type) {
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_INT:
+                return 4;
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_INT2:
+                return 8;
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT3:
+            case SG_UNIFORMTYPE_INT4:
+                return 16;
+            case SG_UNIFORMTYPE_MAT4:
+                return 16;
+            default:
+                SOKOL_UNREACHABLE;
+                return 1;
+        }
+    }
+    else {
+        return 16;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sg_imgui_std140_uniform_size(sg_uniform_type type, int array_count) {
+    SOKOL_ASSERT(array_count > 0);
+    if (array_count == 1) {
+        switch (type) {
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_INT:
+                return 4;
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_INT2:
+                return 8;
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_INT3:
+                return 12;
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT4:
+                return 16;
+            case SG_UNIFORMTYPE_MAT4:
+                return 64;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
+        }
+    }
+    else {
+        switch (type) {
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT:
+            case SG_UNIFORMTYPE_INT2:
+            case SG_UNIFORMTYPE_INT3:
+            case SG_UNIFORMTYPE_INT4:
+                return 16 * (uint32_t)array_count;
+            case SG_UNIFORMTYPE_MAT4:
+                return 64 * (uint32_t)array_count;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
+        }
     }
 }
 
@@ -1045,6 +1106,10 @@ _SOKOL_PRIVATE const char* _sg_imgui_uniformtype_string(sg_uniform_type t) {
         case SG_UNIFORMTYPE_FLOAT2: return "SG_UNIFORMTYPE_FLOAT2";
         case SG_UNIFORMTYPE_FLOAT3: return "SG_UNIFORMTYPE_FLOAT3";
         case SG_UNIFORMTYPE_FLOAT4: return "SG_UNIFORMTYPE_FLOAT4";
+        case SG_UNIFORMTYPE_INT:    return "SG_UNIFORMTYPE_INT";
+        case SG_UNIFORMTYPE_INT2:   return "SG_UNIFORMTYPE_INT2";
+        case SG_UNIFORMTYPE_INT3:   return "SG_UNIFORMTYPE_INT3";
+        case SG_UNIFORMTYPE_INT4:   return "SG_UNIFORMTYPE_INT4";
         case SG_UNIFORMTYPE_MAT4:   return "SG_UNIFORMTYPE_MAT4";
         default:                    return "???";
     }
@@ -3146,7 +3211,7 @@ _SOKOL_PRIVATE void _sg_imgui_draw_shader_stage(const sg_shader_stage_desc* stag
                 for (int j = 0; j < SG_MAX_UB_MEMBERS; j++) {
                     const sg_shader_uniform_desc* u = &ub->uniforms[j];
                     if (SG_UNIFORMTYPE_INVALID != u->type) {
-                        if (u->array_count == 0) {
+                        if (u->array_count <= 1) {
                             igText("  %s %s", _sg_imgui_uniformtype_string(u->type), u->name ? u->name : "");
                         }
                         else {
@@ -3482,7 +3547,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
     sg_imgui_capture_bucket_t* bucket = _sg_imgui_capture_get_read_bucket(ctx);
     SOKOL_ASSERT((args->ubuf_pos + args->data_size) <= bucket->ubuf_size);
     const float* uptrf = (const float*) (bucket->ubuf + args->ubuf_pos);
+    const int32_t* uptri32 = (const int32_t*) uptrf;
     if (!draw_dump) {
+        uint32_t u_off = 0;
         for (int i = 0; i < SG_MAX_UB_MEMBERS; i++) {
             const sg_shader_uniform_desc* ud = &ub_desc->uniforms[i];
             if (ud->type == SG_UNIFORMTYPE_INVALID) {
@@ -3496,38 +3563,54 @@ _SOKOL_PRIVATE void _sg_imgui_draw_uniforms_panel(sg_imgui_t* ctx, const sg_imgu
                 igText("%d: %s %s =", i, _sg_imgui_uniformtype_string(ud->type), ud->name?ud->name:"");
             }
             for (int item_index = 0; item_index < num_items; item_index++) {
+                const uint32_t u_size = _sg_imgui_std140_uniform_size(ud->type, ud->array_count) / 4;
+                const uint32_t u_align = _sg_imgui_std140_uniform_alignment(ud->type, ud->array_count) / 4;
+                u_off = _sg_imgui_align_u32(u_off, u_align);
                 switch (ud->type) {
                     case SG_UNIFORMTYPE_FLOAT:
-                        igText("    %.3f", *uptrf);
+                        igText("    %.3f", uptrf[u_off]);
+                        break;
+                    case SG_UNIFORMTYPE_INT:
+                        igText("    %d", uptri32[u_off]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT2:
-                        igText("    %.3f, %.3f", uptrf[0], uptrf[1]);
+                        igText("    %.3f, %.3f", uptrf[u_off], uptrf[u_off+1]);
+                        break;
+                    case SG_UNIFORMTYPE_INT2:
+                        igText("    %d, %d", uptri32[u_off], uptri32[u_off+1]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT3:
-                        igText("    %.3f, %.3f, %.3f", uptrf[0], uptrf[1], uptrf[2]);
+                        igText("    %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2]);
+                        break;
+                    case SG_UNIFORMTYPE_INT3:
+                        igText("    %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2]);
                         break;
                     case SG_UNIFORMTYPE_FLOAT4:
-                        igText("    %.3f, %.3f, %.3f, %.3f", uptrf[0], uptrf[1], uptrf[2], uptrf[3]);
+                        igText("    %.3f, %.3f, %.3f, %.3f", uptrf[u_off], uptrf[u_off+1], uptrf[u_off+2], uptrf[u_off+3]);
+                        break;
+                    case SG_UNIFORMTYPE_INT4:
+                        igText("    %d, %d, %d, %d", uptri32[u_off], uptri32[u_off+1], uptri32[u_off+2], uptri32[u_off+3]);
                         break;
                     case SG_UNIFORMTYPE_MAT4:
                         igText("    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f\n"
                                "    %.3f, %.3f, %.3f, %.3f",
-                            uptrf[0],  uptrf[1],  uptrf[2],  uptrf[3],
-                            uptrf[4],  uptrf[5],  uptrf[6],  uptrf[7],
-                            uptrf[8],  uptrf[9],  uptrf[10], uptrf[11],
-                            uptrf[12], uptrf[13], uptrf[14], uptrf[15]);
+                            uptrf[u_off+0],  uptrf[u_off+1],  uptrf[u_off+2],  uptrf[u_off+3],
+                            uptrf[u_off+4],  uptrf[u_off+5],  uptrf[u_off+6],  uptrf[u_off+7],
+                            uptrf[u_off+8],  uptrf[u_off+9],  uptrf[u_off+10], uptrf[u_off+11],
+                            uptrf[u_off+12], uptrf[u_off+13], uptrf[u_off+14], uptrf[u_off+15]);
                         break;
                     default:
                         igText("???");
                         break;
                 }
-                uptrf += _sg_imgui_uniform_size(ud->type, 1) / (int)sizeof(float);
+                u_off += u_size;
             }
         }
     }
     else {
+        // FIXME: float vs int
         const size_t num_floats = ub_desc->size / sizeof(float);
         for (uint32_t i = 0; i < num_floats; i++) {
             igText("%.3f, ", uptrf[i]);
