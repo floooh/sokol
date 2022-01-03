@@ -4094,6 +4094,11 @@ _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
     }
 }
 
+_SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
+    SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
+    return (val + (align - 1)) & ~(align - 1);
+}
+
 /* return byte size of a vertex format */
 _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     switch (fmt) {
@@ -4119,29 +4124,60 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     }
 }
 
-/* return the byte size of a shader uniform according to std140 layout rules */
-_SOKOL_PRIVATE int _sg_uniform_stride(sg_uniform_type type, int count) {
-    if (count == 1) {
+/* return uniform block item alignment according to std140 layout rules */
+_SOKOL_PRIVATE uint32_t _sg_std140_uniform_alignment(sg_uniform_type type, int array_count) {
+    SOKOL_ASSERT(array_count > 0);
+    if (array_count == 1) {
         switch (type) {
-            case SG_UNIFORMTYPE_INVALID:    return 0;
-            case SG_UNIFORMTYPE_FLOAT:      return 4;
-            case SG_UNIFORMTYPE_FLOAT2:     return 8;
-            case SG_UNIFORMTYPE_FLOAT3:     return 16;
-            case SG_UNIFORMTYPE_FLOAT4:     return 16;
-            case SG_UNIFORMTYPE_INT:        return 4;
-            case SG_UNIFORMTYPE_INT2:       return 8;
-            case SG_UNIFORMTYPE_INT3:       return 16;
-            case SG_UNIFORMTYPE_INT4:       return 16;
-            case SG_UNIFORMTYPE_MAT4:       return 64;
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_INT:
+                return 4;
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_INT2:
+                return 8;
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT3:
+            case SG_UNIFORMTYPE_INT4:
+                return 16;
+            case SG_UNIFORMTYPE_MAT4:
+                return 16;
             default:
                 SOKOL_UNREACHABLE;
-                return -1;
+                return 1;
+        }
+    }
+    else {
+        return 16;
+    }
+}
+
+/* return uniform block item size according to std140 layout rules */
+_SOKOL_PRIVATE uint32_t _sg_std140_uniform_size(sg_uniform_type type, int array_count) {
+    SOKOL_ASSERT(array_count > 0);
+    if (array_count == 1) {
+        switch (type) {
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_INT:
+                return 4;
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_INT2:
+                return 8;
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_INT3:
+                return 12;
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT4:
+                return 16;
+            case SG_UNIFORMTYPE_MAT4:
+                return 64;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
         }
     }
     else {
         switch (type) {
-            case SG_UNIFORMTYPE_INVALID:
-                return 0;
             case SG_UNIFORMTYPE_FLOAT:
             case SG_UNIFORMTYPE_FLOAT2:
             case SG_UNIFORMTYPE_FLOAT3:
@@ -4150,12 +4186,12 @@ _SOKOL_PRIVATE int _sg_uniform_stride(sg_uniform_type type, int count) {
             case SG_UNIFORMTYPE_INT2:
             case SG_UNIFORMTYPE_INT3:
             case SG_UNIFORMTYPE_INT4:
-                return 16 * count;
+                return 16 * (uint32_t)array_count;
             case SG_UNIFORMTYPE_MAT4:
-                return 64 * count;
+                return 64 * (uint32_t)array_count;
             default:
                 SOKOL_UNREACHABLE;
-                return -1;
+                return 0;
         }
     }
 }
@@ -6520,17 +6556,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             SOKOL_ASSERT(ub_desc->size > 0);
             _sg_gl_uniform_block_t* ub = &gl_stage->uniform_blocks[ub_index];
             SOKOL_ASSERT(ub->num_uniforms == 0);
-            int cur_uniform_offset = 0;
+            uint32_t cur_uniform_offset = 0;
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
                     break;
                 }
+                const uint32_t u_align = _sg_std140_uniform_alignment(u_desc->type, u_desc->array_count);
+                const uint32_t u_size = _sg_std140_uniform_size(u_desc->type, u_desc->array_count);
+                cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
                 _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
                 u->count = (uint16_t) u_desc->array_count;
                 u->offset = (uint16_t) cur_uniform_offset;
-                cur_uniform_offset += _sg_uniform_stride(u->type, u->count);
+                cur_uniform_offset += u_size;
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -13964,8 +14003,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
                 if (ub_desc->size > 0) {
                     SOKOL_VALIDATE(uniform_blocks_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UBS);
+                    #if defined(_SOKOL_ANY_GL)
                     bool uniforms_continuous = true;
-                    int uniform_offset = 0;
+                    uint32_t uniform_offset = 0;
                     int num_uniforms = 0;
                     for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                         const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
@@ -13975,19 +14015,19 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             SOKOL_VALIDATE(0 != u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = u_desc->array_count;
-                            uniform_offset += _sg_uniform_stride(u_desc->type, array_count);
+                            const uint32_t u_align = _sg_std140_uniform_alignment(u_desc->type, array_count);
+                            const uint32_t u_size  = _sg_std140_uniform_size(u_desc->type, array_count);
+                            uniform_offset = _sg_align_u32(uniform_offset, u_align);
+                            uniform_offset += u_size;
                             num_uniforms++;
                         }
                         else {
                             uniforms_continuous = false;
                         }
                     }
-                    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+                    uniform_offset = _sg_align_u32(uniform_offset, 16);
                     SOKOL_VALIDATE((size_t)uniform_offset == ub_desc->size, _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
                     SOKOL_VALIDATE(num_uniforms > 0, _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS);
-                    #else
-                    _SOKOL_UNUSED(uniform_offset);
-                    _SOKOL_UNUSED(num_uniforms);
                     #endif
                 }
                 else {
