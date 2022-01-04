@@ -1218,6 +1218,45 @@ typedef enum sg_uniform_type {
 } sg_uniform_type;
 
 /*
+    sg_uniform_layout
+    
+    A memory layout hint for uniform block descriptions. This is
+    only really relevant for the GL backend where the internal layout
+    of uniform blocks must be declared. For all other backends the
+    internal memory layout of uniform blocks doesn't matter, sokol-gfx
+    will just pass uniform data as a single memory blob to the
+    3D backend.
+    
+    SG_UNIFORMLAYOUT_NATIVE (default)
+        Native layout means that a 'backend-native' memory layout
+        is used. For the GL backend this means that uniforms
+        are packed tightly in memory (e.g. there are no padding
+        bytes).
+        
+    SG_UNIFORMLAYOUT_STD140
+        The memory layout is a subset of std140. Arrays are only
+        allowed for the FLOAT4, INT4 and MAT4. Alignment is as
+        is as follows:
+        
+            FLOAT, INT:         4 byte alignment
+            FLOAT2, INT2:       8 byte alignment
+            FLOAT3, INT3:       16 byte alignment(!)
+            FLOAT4, INT4:       16 byte alignment
+            MAT4:               16 byte alignment
+            FLOAT4[], INT4[]:   16 byte alignment
+            
+        The overall size of the uniform block must be a multiple
+        of 16.
+*/
+typedef enum sg_uniform_layout {
+    _SG_UNIFORMLAYOUT_DEFAULT,     /* value 0 reserved for default-init */
+    SG_UNIFORMLAYOUT_NATIVE,       /* default: layout depends on currently active backend */
+    SG_UNIFORMLAYOUT_STD140,       /* std140: memory layout according to std140 */
+    _SG_UNIFORMLAYOUT_NUM,
+    _SG_UNIFORMLAYOUT_FORCE_U32 = 0x7FFFFFFF
+} sg_uniform_layout;
+ 
+/*
     sg_cull_mode
 
     The face-culling mode, this is used in the
@@ -1750,6 +1789,7 @@ typedef struct sg_shader_uniform_desc {
 
 typedef struct sg_shader_uniform_block_desc {
     size_t size;
+    sg_uniform_layout layout;
     sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
 } sg_shader_uniform_block_desc;
 
@@ -3949,6 +3989,8 @@ typedef enum {
     _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
     _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
     _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
+    _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE,
     _SG_VALIDATE_SHADERDESC_IMG_NAME,
     _SG_VALIDATE_SHADERDESC_ATTR_NAMES,
     _SG_VALIDATE_SHADERDESC_ATTR_SEMANTICS,
@@ -4124,36 +4166,39 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     }
 }
 
-/* return uniform block item alignment according to std140 layout rules */
-_SOKOL_PRIVATE uint32_t _sg_std140_uniform_alignment(sg_uniform_type type, int array_count) {
-    SOKOL_ASSERT(array_count > 0);
-    if (array_count == 1) {
-        switch (type) {
-            case SG_UNIFORMTYPE_FLOAT:
-            case SG_UNIFORMTYPE_INT:
-                return 4;
-            case SG_UNIFORMTYPE_FLOAT2:
-            case SG_UNIFORMTYPE_INT2:
-                return 8;
-            case SG_UNIFORMTYPE_FLOAT3:
-            case SG_UNIFORMTYPE_FLOAT4:
-            case SG_UNIFORMTYPE_INT3:
-            case SG_UNIFORMTYPE_INT4:
-                return 16;
-            case SG_UNIFORMTYPE_MAT4:
-                return 16;
-            default:
-                SOKOL_UNREACHABLE;
-                return 1;
-        }
+_SOKOL_PRIVATE uint32_t _sg_uniform_alignment(sg_uniform_type type, int array_count, sg_uniform_layout ub_layout) {
+    if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
+        return 1;
     }
     else {
-        return 16;
+        SOKOL_ASSERT(array_count > 0);
+        if (array_count == 1) {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_INT:
+                    return 4;
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_INT2:
+                    return 8;
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT3:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 16;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 1;
+            }
+        }
+        else {
+            return 16;
+        }
     }
 }
 
-/* return uniform block item size according to std140 layout rules */
-_SOKOL_PRIVATE uint32_t _sg_std140_uniform_size(sg_uniform_type type, int array_count) {
+_SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count) {
     SOKOL_ASSERT(array_count > 0);
     if (array_count == 1) {
         switch (type) {
@@ -6566,8 +6611,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
                     break;
                 }
-                const uint32_t u_align = _sg_std140_uniform_alignment(u_desc->type, u_desc->array_count);
-                const uint32_t u_size = _sg_std140_uniform_size(u_desc->type, u_desc->array_count);
+                const uint32_t u_align = _sg_uniform_alignment(u_desc->type, u_desc->array_count, ub_desc->layout);
+                const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count);
                 cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
                 _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
@@ -7410,31 +7455,25 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
             case SG_UNIFORMTYPE_INVALID:
                 break;
             case SG_UNIFORMTYPE_FLOAT:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform1fv(u->gl_loc, 1, fptr);
+                glUniform1fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT2:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform2fv(u->gl_loc, 1, fptr);
+                glUniform2fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT3:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform3fv(u->gl_loc, 1, fptr);
+                glUniform3fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT4:
                 glUniform4fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_INT:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform1iv(u->gl_loc, 1, iptr);
+                glUniform1iv(u->gl_loc, u->count, iptr);
                 break;
             case SG_UNIFORMTYPE_INT2:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform2iv(u->gl_loc, 1, iptr);
+                glUniform2iv(u->gl_loc, u->count, iptr);
                 break;
             case SG_UNIFORMTYPE_INT3:
-                SOKOL_ASSERT(u->count == 1);
-                glUniform3iv(u->gl_loc, 1, iptr);
+                glUniform3iv(u->gl_loc, u->count, iptr);
                 break;
             case SG_UNIFORMTYPE_INT4:
                 glUniform4iv(u->gl_loc, u->count, iptr);
@@ -13718,6 +13757,9 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:         return "GL backend requires uniform block member declarations";
         case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:        return "uniform block member name missing";
         case _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH:      return "size of uniform block members doesn't match uniform block size";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:        return "uniform array count must be >= 1";
+        case _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE:  return "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout";
+        
         case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:          return "shader images must occupy continuous slots";
         case _SG_VALIDATE_SHADERDESC_IMG_NAME:              return "GL backend requires uniform block member names";
         case _SG_VALIDATE_SHADERDESC_ATTR_NAMES:            return "GLES2 backend requires vertex attribute names";
@@ -14019,17 +14061,26 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             SOKOL_VALIDATE(0 != u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = u_desc->array_count;
-                            const uint32_t u_align = _sg_std140_uniform_alignment(u_desc->type, array_count);
-                            const uint32_t u_size  = _sg_std140_uniform_size(u_desc->type, array_count);
+                            SOKOL_VALIDATE(array_count > 0, _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT);
+                            const uint32_t u_align = _sg_uniform_alignment(u_desc->type, array_count, ub_desc->layout);
+                            const uint32_t u_size  = _sg_uniform_size(u_desc->type, array_count);
                             uniform_offset = _sg_align_u32(uniform_offset, u_align);
                             uniform_offset += u_size;
                             num_uniforms++;
+                            // with std140, arrays are only allowed for FLOAT4, INT4, MAT4
+                            if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+                                if (array_count > 1) {
+                                    SOKOL_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE);
+                                }
+                            }
                         }
                         else {
                             uniforms_continuous = false;
                         }
                     }
-                    uniform_offset = _sg_align_u32(uniform_offset, 16);
+                    if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+                        uniform_offset = _sg_align_u32(uniform_offset, 16);
+                    }
                     SOKOL_VALIDATE((size_t)uniform_offset == ub_desc->size, _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
                     SOKOL_VALIDATE(num_uniforms > 0, _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS);
                     #endif
@@ -14473,6 +14524,7 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
             if (0 == ub_desc->size) {
                 break;
             }
+            ub_desc->layout = _sg_def(ub_desc->layout, SG_UNIFORMLAYOUT_NATIVE);
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
