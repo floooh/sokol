@@ -127,9 +127,12 @@
 
         to update the resource bindings
 
-    --- optionally update shader uniform data (in std140 layout) with:
+    --- optionally update shader uniform data with:
 
-            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data)
+            
+        Read the section 'UNIFORM DATA LAYOUT' to learn about the expected memory layout
+        of the uniform data passed into sg_apply_uniforms().
 
     --- kick off a draw call with:
 
@@ -335,29 +338,128 @@
             with context information provided by sokol_app.h
 
     See the documention block of the sg_desc struct below for more information.
+    
+
+    UNIFORM DATA LAYOUT:
+    ====================
+    NOTE: if you use the sokol-shdc shader compiler tool, you don't need to worry
+    about the following details.
+
+    The data that's passed into the sg_apply_uniforms() function must adhere to
+    specific layout rules so that the GPU shader finds the uniform block
+    items at the right offset.
+
+    For the D3D11 and Metal backends, sokol-gfx only cares about the size of uniform
+    blocks, but not about the internal layout. The data will just be copied into
+    a uniform/constant buffer in a single operation and it's up you to arrange the
+    CPU-side layout so that it matches the GPU side layout. This also means that with
+    the D3D11 and Metal backends you are not limited to a 'cross-platform' subset
+    of uniform variable types.
+
+    If you ever only use one of the D3D11, Metal *or* WebGPU backend, you can stop reading here.
+
+    For the GL backends, the internal layout of uniform blocks matters though,
+    and you are limited to a small number of uniform variable types. This is
+    because sokol-gfx must be able to locate the uniform block members in order
+    to upload them to the GPU with glUniformXXX() calls.
+
+    To describe the uniform block layout to sokol-gfx, the following information
+    must be passed to the sg_make_shader() call in the sg_shader_desc struct:
+
+        - a hint about the used packing rule (either SG_UNIFORMLAYOUT_NATIVE or
+          SG_UNIFORMLAYOUT_STD140)
+        - a list of the uniform block members types in the correct order they
+          appear on the CPU side
+        
+    For example if the GLSL shader has the following uniform declarations:
+
+        uniform mat4 mvp;
+        uniform vec2 offset0;
+        uniform vec2 offset1;
+        uniform vec2 offset2;
+
+    ...and on the CPU side, there's a similar C struct:
+
+        typedef struct {
+            float mvp[16];
+            float offset0[2];
+            float offset1[2];
+            float offset2[2];
+        } params_t;
+
+    ...the uniform block description in the sg_shader_desc must look like this:
+
+        sg_shader_desc desc = {
+            .vs.uniform_blocks[0] = {
+                .size = sizeof(params_t),
+                .layout = SG_UNIFORMLAYOUT_NATIVE,  // this is the default and can be omitted
+                .uniforms = {
+                    // order must be the same as in 'params_t':
+                    [0] = { .name = "mvp", .type = SG_UNIFORMTYPE_MAT4 },
+                    [1] = { .name = "offset0", .type = SG_UNIFORMTYPE_VEC2 },
+                    [2] = { .name = "offset1", .type = SG_UNIFORMTYPE_VEC2 },
+                    [3] = { .name = "offset2", .type = SG_UNIFORMTYPE_VEC2 },
+                }
+            }
+        };
+
+    With this information sokol-gfx can now compute the correct offsets of the data items
+    within the uniform block struct.
+
+    The SG_UNIFORMLAYOUT_NATIVE packing rule works fine if only the GL backends are used,
+    but for proper D3D11/Metal/GL a subset of the std140 layout must be used which is
+    described in the next section:
+
+
+    CROSS-BACKEND COMMON UNIFORM DATA LAYOUT
+    ========================================
+    For cross-platform / cross-3D-backend code it is important that the same uniform block
+    layout on the CPU side can be used for all sokol-gfx backends. To achieve this, 
+    a common subset of the std140 layout must be used:
+
+    - The uniform block layout hint in sg_shader_desc must be explicitely set to
+      SG_UNIFORMLAYOUT_STD140.
+    - Only the following GLSL uniform types can be used (with their associated sokol-gfx enums):
+        - float => SG_UNIFORMTYPE_FLOAT
+        - vec2  => SG_UNIFORMTYPE_FLOAT2
+        - vec3  => SG_UNIFORMTYPE_FLOAT3
+        - vec4  => SG_UNIFORMTYPE_FLOAT4
+        - int   => SG_UNIFORMTYPE_INT
+        - ivec2 => SG_UNIFORMTYPE_INT2
+        - ivec3 => SG_UNIFORMTYPE_INT3
+        - ivec4 => SG_UNIFORMTYPE_INT4
+        - mat4  => SG_UNIFORMTYPE_MAT4
+    - Alignment for those types must be as follows (in bytes):
+        - float => 4
+        - vec2  => 8
+        - vec3  => 16
+        - vec4  => 16
+        - int   => 4
+        - ivec2 => 8
+        - ivec3 => 16
+        - ivec4 => 16
+        - mat4  => 16
+    - Arrays are only allowed for the following types: vec4, int4, mat4.
+          
+    Note that the HLSL cbuffer layout rules are slightly different from the
+    std140 layout rules, this means that the cbuffer declarations in HLSL code
+    must be tweaked so that the layout is compatible with std140.
+
+    The by far easiest way to tacke the common uniform block layout problem is
+    to use the sokol-shdc shader cross-compiler tool!
+
 
     BACKEND-SPECIFIC TOPICS:
     ========================
-    --- the GL backends need to know about the internal structure of uniform
-        blocks, and the texture sampler-name and -type:
-
-            typedef struct {
-                float mvp[16];      // model-view-projection matrix
-                float offset0[2];   // some 2D vectors
-                float offset1[2];
-                float offset2[2];
-            } params_t;
-
+    --- The GL backends need to know about the internal structure of uniform
+        blocks, and the texture sampler-name and -type. The uniform layout details
+        are  described in the UNIFORM DATA LAYOUT section above.
+        
             // uniform block structure and texture image definition in sg_shader_desc:
             sg_shader_desc desc = {
                 // uniform block description (size and internal structure)
                 .vs.uniform_blocks[0] = {
-                    .size = sizeof(params_t),
-                    .uniforms = {
-                        [0] = { .name="mvp", .type=SG_UNIFORMTYPE_MAT4 },
-                        [1] = { .name="offset0", .type=SG_UNIFORMTYPE_VEC2 },
-                        ...
-                    }
+                    ...
                 },
                 // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
                 .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
@@ -1220,9 +1322,9 @@ typedef enum sg_uniform_type {
 /*
     sg_uniform_layout
     
-    A memory layout hint for uniform block descriptions. This is
+    A hint for the interior memory layout of uniform blocks. This is
     only really relevant for the GL backend where the internal layout
-    of uniform blocks must be declared. For all other backends the
+    of uniform blocks must be known to sokol-gfx. For all other backends the
     internal memory layout of uniform blocks doesn't matter, sokol-gfx
     will just pass uniform data as a single memory blob to the
     3D backend.
@@ -1247,6 +1349,9 @@ typedef enum sg_uniform_type {
             
         The overall size of the uniform block must be a multiple
         of 16.
+        
+    For more information search for 'UNIFORM DATA LAYOUT' in the documentation block
+    at the start of the header.
 */
 typedef enum sg_uniform_layout {
     _SG_UNIFORMLAYOUT_DEFAULT,     /* value 0 reserved for default-init */
@@ -1757,6 +1862,7 @@ typedef struct sg_image_desc {
           defaults are "vs_4_0" and "ps_4_0")
         - reflection info for each uniform block used by the shader stage:
             - the size of the uniform block in bytes
+            - a memory layout hint (native vs std140, only required for GL backends)
             - reflection info for each uniform block member (only required for GL backends):
                 - member name
                 - member type (SG_UNIFORMTYPE_xxx)
