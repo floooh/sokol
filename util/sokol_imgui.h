@@ -1993,7 +1993,6 @@ SOKOL_API_IMPL void simgui_render(void) {
         bind.index_buffer_offset = ib_offset;
         sg_apply_bindings(&bind);
 
-        int base_element = 0;
         #if defined(__cplusplus)
             const int num_cmds = cl->CmdBuffer.size();
         #else
@@ -2023,9 +2022,8 @@ SOKOL_API_IMPL void simgui_render(void) {
                 const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * dpi_scale);
                 const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * dpi_scale);
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
-                sg_draw(base_element, (int)pcmd->ElemCount, 1);
+                sg_draw((int)pcmd->IdxOffset, (int)pcmd->ElemCount, 1);
             }
-            base_element += (int)pcmd->ElemCount;
         }
         #if defined(__cplusplus)
             const size_t vtx_size = cl->VtxBuffer.size() * sizeof(ImDrawVert);
