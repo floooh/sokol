@@ -2,6 +2,8 @@
 
 - **08-Jan-2022**: some enhancements and cleanup to uniform data handling in sokol_gfx.h
   and the sokol-shdc shader compiler:
+    - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
+      don't forget to update the sokol-shdc binaries too!
     - The GLSL uniform types ```int```, ```ivec2```, ```ivec3``` and
       ```ivec4``` can now be used in shader code, those are exposed to the GL
       backends with the new ```sg_uniform_type``` items
