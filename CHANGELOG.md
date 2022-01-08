@@ -33,6 +33,9 @@
     - [documentation of ```sg_uniform_layout```](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L1322-L1355)
     - [enhanced sokol-shdc documentation](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md#glsl-uniform-blocks-and-c-structs)
     - [a new sample 'uniformtypes-sapp'](https://floooh.github.io/sokol-html5/uniformtypes-sapp.html)
+  
+  PS: and an unrelated change: the frame latency on Win32+D3D11 has been slightly improved
+  via IDXGIDevice1::SetMaximumFrameLatency()
 
 - **27-Dec-2021**: sokol_app.h frame timing improvements:
   - A new function ```double sapp_frame_duration(void)``` which returns the frame
