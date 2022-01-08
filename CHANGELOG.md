@@ -1,5 +1,38 @@
 ## Updates
 
+- **08-Jan-2022**: some enhancements and cleanup to uniform data handling in sokol_gfx.h
+  and the sokol-shdc shader compiler:
+    - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
+      don't forget to update the sokol-shdc binaries too!
+    - The GLSL uniform types ```int```, ```ivec2```, ```ivec3``` and
+      ```ivec4``` can now be used in shader code, those are exposed to the GL
+      backends with the new ```sg_uniform_type``` items
+      ```SG_UNIFORM_TYPE_INT[2,3,4]```.
+    - A new enum ```sg_uniform_layout```, currently with the values ```SG_UNIFORMLAYOUT_NATIVE```
+      and ```SG_UNIFORMLAYOUT_STD140```. The enum is used in ```sg_shader_uniform_block_desc```
+      as a 'packing rule hint', so that the GL backend can properly locate the offset
+      of uniform block members. The default (```SG_UNIFORMLAYOUT_NATIVE``` keeps the same
+      behaviour, so existing backend code shouldn't need to be changed. With the packing
+      rule ```SG_UNIFORMLAYOUT_STD140``` the uniform block interior is expected to be
+      layed out according to the OpenGL std140 packing rule.
+    - Note that with the std140 packing rule, arrays are only allowed for the types
+      ```vec4```, ```int4``` and ```mat4```. This is because the uniform data must
+      still be compatible with ```glUniform()``` calls in the GL backends (which
+      have different 'interior alignment' for arrays).
+    - The sokol-shdc compiler supports the new uniform types and will annotate the 
+      code-generated sg_shader_desc structs with ```SG_UNIFORMLAYOUT_STD140```,
+      and there are new errors to make sure that uniform blocks are compatible
+      with all sokol_gfx.h backends.
+    - Likewise, sokol_gfx.h has tighter validation for the ```sg_shader_uniform_block```
+      desc struct, but only when the GL backend is used (in general, the interior
+      layout of uniform blocks is only relevant for GL backends, on all other backends
+      sokol_gfx.h just passes the uniform data as an opaque block to the shader)
+  For more details see:
+    - [new sections in the sokol_gfx.h documentation](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L343-L450)
+    - [documentation of ```sg_uniform_layout```](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L1322-L1355)
+    - [enhanced sokol-shdc documentation](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md#glsl-uniform-blocks-and-c-structs)
+    - [a new sample 'uniformtypes-sapp'](https://floooh.github.io/sokol-html5/uniformtypes-sapp.html)
+
 - **27-Dec-2021**: sokol_app.h frame timing improvements:
   - A new function ```double sapp_frame_duration(void)``` which returns the frame
     duration in seconds, averaged over the last 256 frames to smooth out
