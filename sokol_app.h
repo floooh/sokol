@@ -2102,6 +2102,7 @@ typedef struct {
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
+    IDXGIDevice1* dxgi_device;
     bool use_dxgi_frame_stats;
     UINT sync_refresh_count;
 } _sapp_d3d11_t;
@@ -5727,10 +5728,20 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         &_sapp.d3d11.device_context);   /* ppImmediateContext */
     _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
+
+    // mimimize frame latency
+    hr = _sapp.d3d11.device->QueryInterface(__uuidof(IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
+    if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
+        _sapp.d3d11.dxgi_device->SetMaximumFrameLatency(1);
+    }
+    else {
+        SOKOL_LOG("sokol_app.h: could not obtain IDXGIDevice1 interface\n");
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
     _SAPP_SAFE_RELEASE(_sapp.d3d11.swap_chain);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.dxgi_device);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device_context);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device);
 }
