@@ -4,23 +4,23 @@
   and the sokol-shdc shader compiler:
     - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
       don't forget to update the sokol-shdc binaries too!
-    - The GLSL uniform types ```int```, ```ivec2```, ```ivec3``` and
-      ```ivec4``` can now be used in shader code, those are exposed to the GL
+    - The GLSL uniform types int, ivec2, ivec3 and
+      ivec4 can now be used in shader code, those are exposed to the GL
       backends with the new ```sg_uniform_type``` items
       ```SG_UNIFORM_TYPE_INT[2,3,4]```.
-    - A new enum ```sg_uniform_layout```, currently with the values ```SG_UNIFORMLAYOUT_NATIVE```
-      and ```SG_UNIFORMLAYOUT_STD140```. The enum is used in ```sg_shader_uniform_block_desc```
+    - A new enum ```sg_uniform_layout```, currently with the values SG_UNIFORMLAYOUT_NATIVE
+      and SG_UNIFORMLAYOUT_STD140. The enum is used in ```sg_shader_uniform_block_desc```
       as a 'packing rule hint', so that the GL backend can properly locate the offset
-      of uniform block members. The default (```SG_UNIFORMLAYOUT_NATIVE``` keeps the same
-      behaviour, so existing backend code shouldn't need to be changed. With the packing
-      rule ```SG_UNIFORMLAYOUT_STD140``` the uniform block interior is expected to be
+      of uniform block members. The default (SG_UNIFORMLAYOUT_NATIVE) keeps the same
+      behaviour, so existing code shouldn't need to be changed. With the packing
+      rule SG_UNIFORMLAYOUT_STD140 the uniform block interior is expected to be
       layed out according to the OpenGL std140 packing rule.
     - Note that with the std140 packing rule, arrays are only allowed for the types
-      ```vec4```, ```int4``` and ```mat4```. This is because the uniform data must
+      vec4, int4 and mat4. This is because the uniform data must
       still be compatible with ```glUniform()``` calls in the GL backends (which
       have different 'interior alignment' for arrays).
     - The sokol-shdc compiler supports the new uniform types and will annotate the 
-      code-generated sg_shader_desc structs with ```SG_UNIFORMLAYOUT_STD140```,
+      code-generated sg_shader_desc structs with SG_UNIFORMLAYOUT_STD140,
       and there are new errors to make sure that uniform blocks are compatible
       with all sokol_gfx.h backends.
     - Likewise, sokol_gfx.h has tighter validation for the ```sg_shader_uniform_block```
