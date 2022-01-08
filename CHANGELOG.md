@@ -15,10 +15,11 @@
       behaviour, so existing code shouldn't need to be changed. With the packing
       rule SG_UNIFORMLAYOUT_STD140 the uniform block interior is expected to be
       layed out according to the OpenGL std140 packing rule.
-    - Note that with the std140 packing rule, arrays are only allowed for the types
-      vec4, int4 and mat4. This is because the uniform data must
-      still be compatible with ```glUniform()``` calls in the GL backends (which
-      have different 'interior alignment' for arrays).
+    - Note that the SG_UNIFORMLAYOUT_STD140 only allows a subset of the actual std140
+      packing rule: arrays are only allowed for the types vec4, int4 and mat4.
+      This is because the uniform data must still be compatible with
+      ```glUniform()``` calls in the GL backends (which have different
+      'interior alignment' for arrays).
     - The sokol-shdc compiler supports the new uniform types and will annotate the 
       code-generated sg_shader_desc structs with SG_UNIFORMLAYOUT_STD140,
       and there are new errors to make sure that uniform blocks are compatible
