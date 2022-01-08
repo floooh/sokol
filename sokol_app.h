@@ -2102,6 +2102,7 @@ typedef struct {
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
+    bool use_dxgi_frame_stats;
     UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
@@ -5696,10 +5697,12 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        _sapp.d3d11.use_dxgi_frame_stats = true;
     }
     else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        _sapp.d3d11.use_dxgi_frame_stats = false;
     }
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
@@ -6330,24 +6333,25 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
 _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
     #if defined(SOKOL_D3D11)
         // on D3D11, use the more precise DXGI timestamp
-        DXGI_FRAME_STATISTICS dxgi_stats;
-        _SAPP_CLEAR(DXGI_FRAME_STATISTICS, dxgi_stats);
-        HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
-        if (SUCCEEDED(hr)) {
-            if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
-                if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
-                    _sapp_timing_external_reset(&_sapp.timing);
+        if (_sapp.d3d11.use_dxgi_frame_stats) {
+            DXGI_FRAME_STATISTICS dxgi_stats;
+            _SAPP_CLEAR(DXGI_FRAME_STATISTICS, dxgi_stats);
+            HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
+            if (SUCCEEDED(hr)) {
+                if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
+                    if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
+                        _sapp_timing_external_reset(&_sapp.timing);
+                    }
+                    _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                    LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
+                    const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
+                    _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
                 }
-                _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
-                LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
-                const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
-                _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
+                return;
             }
         }
-        else {
-            // fallback if GetFrameStats doesn't work for some reason
-            _sapp_timing_measure(&_sapp.timing);
-        }
+        // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
+        _sapp_timing_measure(&_sapp.timing);
     #endif
     #if defined(SOKOL_GLCORE33)
         _sapp_timing_measure(&_sapp.timing);
