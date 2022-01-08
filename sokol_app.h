@@ -5631,6 +5631,14 @@ static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, RE
     #endif
 }
 
+static inline HRESULT _sapp_d3d11_QueryInterface(ID3D11Device* self, REFIID riid, void** ppvObject) {
+    #if defined(__cplusplus)
+        return self->QueryInterface(riid, ppvObject);
+    #else
+        return self->lpVtbl->QueryInterface(self, riid, ppvObject);
+    #endif
+}
+
 static inline HRESULT _sapp_d3d11_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource *pResource, const D3D11_RENDER_TARGET_VIEW_DESC* pDesc, ID3D11RenderTargetView** ppRTView) {
     #if defined(__cplusplus)
         return self->CreateRenderTargetView(pResource, pDesc, ppRTView);
@@ -5687,6 +5695,14 @@ static inline HRESULT _sapp_dxgi_GetFrameStatistics(IDXGISwapChain* self, DXGI_F
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_SetMaximumFrameLatency(IDXGIDevice1* self, UINT MaxLatency) {
+    #if defined(__cplusplus)
+        return self->SetMaximumFrameLatency(MaxLatency);
+    #else
+        return self->lpVtbl->SetMaximumFrameLatency(self, MaxLatency);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
@@ -5731,9 +5747,13 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
     // mimimize frame latency
-    hr = _sapp.d3d11.device->QueryInterface(_sapp_IID_IDXGIDevice1, (void**)&_sapp.d3d11.dxgi_device);
+    #ifdef __cplusplus
+    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_IID_IDXGIDevice1, (void**)&_sapp.d3d11.dxgi_device);
+    #else
+    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, &_sapp_IID_IDXGIDevice1, (void**)&_sapp.d3d11.dxgi_device);
+    #endif
     if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
-        _sapp.d3d11.dxgi_device->SetMaximumFrameLatency(1);
+        _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
     }
     else {
         SOKOL_LOG("sokol_app.h: could not obtain IDXGIDevice1 interface\n");
