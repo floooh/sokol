@@ -632,12 +632,12 @@
     Channels and lanes are (somewhat artificial) concepts to manage
     parallelization, prioritization and rate-limiting.
 
-    Channels can be used to parallelize message processing for better
-    'pipeline throughput', and to prioritize messages: user-code could
-    reserve one channel for "small and big" streaming downloads,
-    another channel for "regular" downloads and yet another high-priority channel
-    which would only be used for small files which need to start loading
-    immediately.
+    Channels can be used to parallelize message processing for better 'pipeline
+    throughput', and to prioritize requests: user-code could reserve one
+    channel for streaming downloads which need to run in parallel to other
+    requests, another channel for "regular" downloads and yet another
+    high-priority channel which would only be used for small files which need
+    to start loading immediately.
 
     Each channel comes with its own IO thread and message queues for pumping
     messages in and out of the thread. The channel where a request is
@@ -709,7 +709,7 @@
     the 'inherent latency' of a request:
 
         - if a buffer is provided upfront, the response-callback won't be
-        called in the OPENED state, but start right with the FETCHED state
+        called in the DISPATCHED state, but start right with the FETCHED state
         where data has already been loaded into the buffer
 
         - there is no separate CLOSED state where the callback is invoked
@@ -722,7 +722,7 @@
     the next frame (or two calls to sfetch_dowork()).
 
     If no buffer is provided upfront, one frame of latency is added because
-    the response callback needs to be invoked in the OPENED state so that
+    the response callback needs to be invoked in the DISPATCHED state so that
     the user code can bind a buffer.
 
     This means the best case for a request without an upfront-provided
@@ -747,39 +747,39 @@
         1 LANE (8 frames):
             Lane 0:
             -------------
-            REQ 0 OPENED
+            REQ 0 DISPATCHED
             REQ 0 FETCHED
-            REQ 1 OPENED
+            REQ 1 DISPATCHED
             REQ 1 FETCHED
-            REQ 2 OPENED
+            REQ 2 DISPATCHED
             REQ 2 FETCHED
-            REQ 3 OPENED
+            REQ 3 DISPATCHED
             REQ 3 FETCHED
 
     Note how the request don't overlap, so they can all use the same buffer.
 
         2 LANES (4 frames):
-            Lane 0:         Lane 1:
-            ---------------------------------
-            REQ 0 OPENED    REQ 1 OPENED
-            REQ 0 FETCHED   REQ 1 FETCHED
-            REQ 2 OPENED    REQ 3 OPENED
-            REQ 2 FETCHED   REQ 3 FETCHED
+            Lane 0:             Lane 1:
+            ------------------------------------
+            REQ 0 DISPATCHED    REQ 1 DISPATCHED
+            REQ 0 FETCHED       REQ 1 FETCHED
+            REQ 2 DISPATCHED    REQ 3 DISPATCHED
+            REQ 2 FETCHED       REQ 3 FETCHED
 
     This reduces the overall time to 4 frames, but now you need 2 buffers so
     that requests don't scribble over each other.
 
         4 LANES (2 frames):
-            Lane 0:         Lane 1:         Lane 2:         Lane 3:
-            -------------------------------------------------------------
-            REQ 0 OPENED    REQ 1 OPENED    REQ 2 OPENED    REQ 3 OPENED
-            REQ 0 FETCHED   REQ 1 FETCHED   REQ 2 FETCHED   REQ 3 FETCHED
+            Lane 0:             Lane 1:             Lane 2:             Lane 3:
+            ----------------------------------------------------------------------------
+            REQ 0 DISPATCHED    REQ 1 DISPATCHED    REQ 2 DISPATCHED    REQ 3 DISPATCHED
+            REQ 0 FETCHED       REQ 1 FETCHED       REQ 2 FETCHED       REQ 3 FETCHED
 
     Now we're down to the same 'best-case' latency as sending a single
     request.
 
     Apart from the memory requirements for the streaming buffers (which is
-    under your control), you can be generous with the number of channels,
+    under your control), you can be generous with the number of lanes,
     they don't add any processing overhead.
 
     The last option for tweaking latency and throughput is channels. Each
