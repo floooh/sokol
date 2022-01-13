@@ -4304,7 +4304,7 @@ _SOKOL_PRIVATE uint32_t _sg_uniform_alignment(sg_uniform_type type, int array_co
     }
 }
 
-_SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count) {
+_SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count, sg_uniform_layout ub_layout) {
     SOKOL_ASSERT(array_count > 0);
     if (array_count == 1) {
         switch (type) {
@@ -4328,21 +4328,44 @@ _SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count) 
         }
     }
     else {
-        switch (type) {
-            case SG_UNIFORMTYPE_FLOAT:
-            case SG_UNIFORMTYPE_FLOAT2:
-            case SG_UNIFORMTYPE_FLOAT3:
-            case SG_UNIFORMTYPE_FLOAT4:
-            case SG_UNIFORMTYPE_INT:
-            case SG_UNIFORMTYPE_INT2:
-            case SG_UNIFORMTYPE_INT3:
-            case SG_UNIFORMTYPE_INT4:
-                return 16 * (uint32_t)array_count;
-            case SG_UNIFORMTYPE_MAT4:
-                return 64 * (uint32_t)array_count;
-            default:
-                SOKOL_UNREACHABLE;
-                return 0;
+        if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_INT:
+                    return 4 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_INT2:
+                    return 8 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_INT3:
+                    return 12 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 64 * (uint32_t)array_count;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 0;
+            }
+        }
+        else {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT:
+                case SG_UNIFORMTYPE_INT2:
+                case SG_UNIFORMTYPE_INT3:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 64 * (uint32_t)array_count;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 0;
+            }
         }
     }
 }
@@ -6718,7 +6741,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                     break;
                 }
                 const uint32_t u_align = _sg_uniform_alignment(u_desc->type, u_desc->array_count, ub_desc->layout);
-                const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count);
+                const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count, ub_desc->layout);
                 cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
                 _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
@@ -14214,7 +14237,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             const int array_count = u_desc->array_count;
                             SOKOL_VALIDATE(array_count > 0, _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT);
                             const uint32_t u_align = _sg_uniform_alignment(u_desc->type, array_count, ub_desc->layout);
-                            const uint32_t u_size  = _sg_uniform_size(u_desc->type, array_count);
+                            const uint32_t u_size  = _sg_uniform_size(u_desc->type, array_count, ub_desc->layout);
                             uniform_offset = _sg_align_u32(uniform_offset, u_align);
                             uniform_offset += u_size;
                             num_uniforms++;
