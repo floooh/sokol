@@ -1,5 +1,11 @@
 ## Updates
 
+- **15-Jan-2022**: 
+  - A bugfix in the GL backend for uniform arrays using the 'native' uniform block layout.
+    The bug was a regression in the recent 'uniform data handling' update. See
+    PR #611 for details, and this [new sample/test](https://github.com/floooh/sokol-samples/blob/master/glfw/uniformarrays-glfw.c).
+    Many thanks to @nmr8acme for the PR!
+  
 - **08-Jan-2022**: some enhancements and cleanup to uniform data handling in sokol_gfx.h
   and the sokol-shdc shader compiler:
     - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
