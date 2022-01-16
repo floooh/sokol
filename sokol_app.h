@@ -1366,6 +1366,8 @@ typedef struct sapp_desc {
     /* backend-specific options */
     bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
+    bool win32_default_size;            // if true lets windows select a default window size
+    bool win32_per_monitor_dpi_v2;      // if true and high_dpi is also enabled, enables support for per monitor DPI for Windows 10 (since Creators Update)
     bool win32_console_create;          // if true, attach stdout/stderr to a new console window
     bool win32_console_attach;          // if true, attach stdout/stderr to parent process
     const char* html5_canvas_name;      // the name (id) of the HTML5 canvas element, default is "canvas"
@@ -6227,11 +6229,12 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
         SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
     }
 }
-
 /* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
+
+
         _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
         _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
         int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
@@ -6331,6 +6334,28 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_win32_dpi_changed(HWND hWnd, LPRECT proposed_win_rect)
+{
+    HINSTANCE user32 = LoadLibraryA("user32.dll");
+
+    if (user32) {
+        typedef UINT(WINAPI * GETDPIFORWINDOW_T)(HWND hwnd);
+        GETDPIFORWINDOW_T fn_getdpiforwindow = (GETDPIFORWINDOW_T)(void*)GetProcAddress(user32, "GetDpiForWindow");
+
+        if (fn_getdpiforwindow) {
+
+            UINT dpix = fn_getdpiforwindow(_sapp.win32.hwnd);
+            _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
+            _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
+            _sapp.dpi_scale = _sapp.win32.dpi.window_scale;
+
+            SetWindowPos(hWnd, nullptr, proposed_win_rect->left, proposed_win_rect->top, proposed_win_rect->right - proposed_win_rect->left, proposed_win_rect->bottom - proposed_win_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
+        FreeLibrary(user32);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!_sapp.drop.enabled) {
         return;
@@ -6410,6 +6435,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     PostQuitMessage(0);
                 }
                 return 0;
+
             case WM_SYSCOMMAND:
                 switch (wParam & 0xFFF0) {
                     case SC_SCREENSAVE:
@@ -6458,6 +6484,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 break;
+            // Update window's DPI and size if its moved to another monitor with a different DPI
+            // Only send by windows, if PROCESS_PER_MONITOR_DPI_AWARE:
+            case WM_DPICHANGED:
+            {
+                _sapp_win32_dpi_changed(hWnd, (LPRECT)lParam);
+                break;
+            }
             case WM_LBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
                 _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
@@ -6572,6 +6605,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
+
             case WM_TIMER:
                 _sapp_win32_timing_measure();
                 _sapp_frame();
@@ -6612,6 +6646,7 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
     wndclassw.lpszClassName = L"SOKOLAPP";
     RegisterClassW(&wndclassw);
+    
 
     DWORD win_style;
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
@@ -6637,16 +6672,19 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
         win_style,                  /* dwStyle */
         CW_USEDEFAULT,              /* X */
         CW_USEDEFAULT,              /* Y */
-        win_width,                  /* nWidth */
-        win_height,                 /* nHeight */
+        _sapp.desc.win32_default_size?CW_USEDEFAULT:win_width, /* nWidth */
+        _sapp.desc.win32_default_size?CW_USEDEFAULT:win_height,/* nHeight */
         NULL,                       /* hWndParent */
         NULL,                       /* hMenu */
         GetModuleHandle(NULL),      /* hInstance */
         NULL);                      /* lParam */
+
+
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     _sapp.win32.in_create_window = false;
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
     SOKOL_ASSERT(_sapp.win32.dc);
+
     _sapp_win32_update_dimensions();
 
     DragAcceptFiles(_sapp.win32.hwnd, 1);
@@ -6698,17 +6736,22 @@ _SOKOL_PRIVATE void _sapp_win32_restore_console(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
-
+    
+    DECLARE_HANDLE(DPI_AWARENESS_CONTEXT_T);
     typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
+    typedef bool (WINAPI * SETPROCESSDPIAWARENESSCONTEXT_T)(DPI_AWARENESS_CONTEXT_T); // since Windows 10, version 1703 
     typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
     typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
     SETPROCESSDPIAWARE_T fn_setprocessdpiaware = 0;
     SETPROCESSDPIAWARENESS_T fn_setprocessdpiawareness = 0;
     GETDPIFORMONITOR_T fn_getdpiformonitor = 0;
+    SETPROCESSDPIAWARENESSCONTEXT_T fn_setprocessdpiawarenesscontext =0;
+    
     HINSTANCE user32 = LoadLibraryA("user32.dll");
     if (user32) {
         fn_setprocessdpiaware = (SETPROCESSDPIAWARE_T)(void*) GetProcAddress(user32, "SetProcessDPIAware");
+        fn_setprocessdpiawarenesscontext = (SETPROCESSDPIAWARENESSCONTEXT_T)(void*) GetProcAddress(user32, "SetProcessDpiAwarenessContext");
     }
     HINSTANCE shcore = LoadLibraryA("shcore.dll");
     if (shcore) {
@@ -6722,8 +6765,12 @@ _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
         if (!_sapp.desc.high_dpi) {
             process_dpi_awareness = PROCESS_DPI_UNAWARE;
             _sapp.win32.dpi.aware = false;
+            fn_setprocessdpiawareness(process_dpi_awareness); 
         }
-        fn_setprocessdpiawareness(process_dpi_awareness);
+        else {
+            if (!(_sapp.desc.win32_per_monitor_dpi_v2 && fn_setprocessdpiawarenesscontext&&fn_setprocessdpiawarenesscontext((DPI_AWARENESS_CONTEXT_T)-4)))
+                fn_setprocessdpiawareness(process_dpi_awareness); // fallback system dpi aware
+        }
     }
     else if (fn_setprocessdpiaware) {
         fn_setprocessdpiaware();
