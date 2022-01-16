@@ -6437,7 +6437,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     PostQuitMessage(0);
                 }
                 return 0;
-
             case WM_SYSCOMMAND:
                 switch (wParam & 0xFFF0) {
                     case SC_SCREENSAVE:
@@ -6607,7 +6606,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
-
             case WM_TIMER:
                 _sapp_win32_timing_measure();
                 _sapp_frame();
@@ -6679,12 +6677,10 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
         NULL,                       /* hMenu */
         GetModuleHandle(NULL),      /* hInstance */
         NULL);                      /* lParam */
-
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     _sapp.win32.in_create_window = false;
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
     SOKOL_ASSERT(_sapp.win32.dc);
-
     _sapp_win32_update_dimensions();
 
     DragAcceptFiles(_sapp.win32.hwnd, 1);
