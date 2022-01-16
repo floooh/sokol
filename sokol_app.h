@@ -244,7 +244,7 @@
             the default framebuffer size as float values instead of integer. This
             may help to prevent casting back and forth between int and float
             in more strongly typed languages than C and C++.
-            
+
         double sapp_frame_duration(void)
             Returns the frame duration in seconds averaged over a number of
             frames to smooth out any jittering spikes.
@@ -1813,7 +1813,7 @@ _SOKOL_PRIVATE void _sapp_ring_init(_sapp_ring_t* ring) {
 _SOKOL_PRIVATE bool _sapp_ring_full(_sapp_ring_t* ring) {
     return _sapp_ring_idx(ring->head + 1) == ring->tail;
 }
-    
+
 _SOKOL_PRIVATE bool _sapp_ring_empty(_sapp_ring_t* ring) {
     return ring->head == ring->tail;
 }
@@ -1845,7 +1845,7 @@ _SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
 
 /*
     NOTE:
-    
+
     Q: Why not use CAMetalDrawable.presentedTime on macOS and iOS?
     A: The value appears to be highly unstable during the first few
     seconds, sometimes several frames are dropped in sequence, or
@@ -5834,14 +5834,22 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_present(void) {
+_SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
     /* do MSAA resolve if needed */
     if (_sapp.sample_count > 1) {
         SOKOL_ASSERT(_sapp.d3d11.rt);
         SOKOL_ASSERT(_sapp.d3d11.msaa_rt);
         _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)_sapp.d3d11.rt, 0, (ID3D11Resource*)_sapp.d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, 0);
+    UINT flags = 0;
+    if (_sapp.win32.is_win10_or_greater && do_not_wait) {
+        /* this hack/workaround somewhat improves window-movement and -sizing
+            responsiveness when rendering is controlled via WM_TIMER during window
+            move and resize on NVIDIA cards on Win10 with recent drivers.
+        */
+        flags = DXGI_PRESENT_DO_NOT_WAIT;
+    }
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -6576,7 +6584,8 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_timing_measure();
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
-                    _sapp_d3d11_present();
+                    // present with DXGI_PRESENT_DO_NOT_WAIT
+                    _sapp_d3d11_present(true);
                 #endif
                 #if defined(SOKOL_GLCORE33)
                     _sapp_wgl_swap_buffers();
@@ -6960,7 +6969,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         _sapp_frame();
         #if defined(SOKOL_D3D11)
-            _sapp_d3d11_present();
+            _sapp_d3d11_present(false);
             if (IsIconic(_sapp.win32.hwnd)) {
                 Sleep((DWORD)(16 * _sapp.swap_interval));
             }
