@@ -6601,6 +6601,17 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
                 */
                 break;
+            case WM_NCLBUTTONDOWN:
+                /* workaround for half-second pause when starting to move window
+                    see: https://gamedev.net/forums/topic/672094-keeping-things-moving-during-win32-moveresize-events/5254386/
+                */
+                if (SendMessage(_sapp.win32.hwnd, WM_NCHITTEST, wParam, lParam) == HTCAPTION) {
+                    POINT point;
+                    GetCursorPos(&point);
+                    ScreenToClient(_sapp.win32.hwnd, &point);
+                    PostMessage(_sapp.win32.hwnd, WM_MOUSEMOVE, 0, point.x|(point.y << 16));
+                }
+                break;
             case WM_DROPFILES:
                 _sapp_win32_files_dropped((HDROP)wParam);
                 break;
