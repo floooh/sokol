@@ -6487,8 +6487,9 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_DPICHANGED:
             {
-                // Update window's DPI and size if its moved to another monitor with a different DPI
-                // Only send by windows, if PROCESS_PER_MONITOR_DPI_AWARE:
+                /* Update window's DPI and size if its moved to another monitor with a different DPI
+                   Only sent if DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is used.
+                */
                 _sapp_win32_dpi_changed(hWnd, (LPRECT)lParam);
                 break;
             }
