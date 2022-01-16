@@ -238,8 +238,15 @@ typedef struct simgui_desc_t {
     bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
 } simgui_desc_t;
 
+typedef struct simgui_frame_desc_t {
+    int width;
+    int height;
+    double delta_time;
+    float dpi_scale;
+} simgui_frame_desc_t;
+
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
-SOKOL_IMGUI_API_DECL void simgui_new_frame(int width, int height, double delta_time);
+SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
@@ -313,6 +320,7 @@ typedef struct {
 
 typedef struct {
     simgui_desc_t desc;
+    float cur_dpi_scale;
     sg_buffer vbuf;
     sg_buffer ibuf;
     sg_image img;
@@ -1623,6 +1631,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     _simgui.desc = *desc;
     _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
     _simgui.desc.dpi_scale = _simgui_def(_simgui.desc.dpi_scale, 1.0f);
+    _simgui.cur_dpi_scale = _simgui.desc.dpi_scale;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     _simgui.is_osx = _simgui_is_osx();
     #endif
@@ -1851,15 +1860,19 @@ _SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint32_t mods) {
 }
 #endif
 
-SOKOL_API_IMPL void simgui_new_frame(int width, int height, double delta_time) {
+SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->width > 0);
+    SOKOL_ASSERT(desc->height > 0);
+    _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, _simgui.desc.dpi_scale);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
         ImGuiIO* io = igGetIO();
     #endif
-    io->DisplaySize.x = ((float) width) / _simgui.desc.dpi_scale;
-    io->DisplaySize.y = ((float) height) / _simgui.desc.dpi_scale;
-    io->DeltaTime = (float) delta_time;
+    io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
+    io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
+    io->DeltaTime = (float)desc->delta_time;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
         if (_simgui.btn_down[i]) {
@@ -1966,7 +1979,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     /* render the ImGui command list */
-    const float dpi_scale = _simgui.desc.dpi_scale;
+    const float dpi_scale = _simgui.cur_dpi_scale;
     const int fb_width = (int) (io->DisplaySize.x * dpi_scale);
     const int fb_height = (int) (io->DisplaySize.y * dpi_scale);
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
@@ -2051,7 +2064,7 @@ _SOKOL_PRIVATE bool _simgui_is_ctrl(uint32_t modifiers) {
 }
 
 SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
-    const float dpi_scale = _simgui.desc.dpi_scale;
+    const float dpi_scale = _simgui.cur_dpi_scale;
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
