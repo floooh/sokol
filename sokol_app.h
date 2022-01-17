@@ -3123,18 +3123,32 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     between HighDPI / LowDPI screens.
 */
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
-    #if defined(SOKOL_METAL)
-        const NSRect fb_rect = [_sapp.macos.view bounds];
-        _sapp.framebuffer_width = fb_rect.size.width * _sapp.dpi_scale;
-        _sapp.framebuffer_height = fb_rect.size.height * _sapp.dpi_scale;
-    #elif defined(SOKOL_GLCORE33)
-        const NSRect fb_rect = [_sapp.macos.view convertRectToBacking:[_sapp.macos.view frame]];
-        _sapp.framebuffer_width = fb_rect.size.width;
-        _sapp.framebuffer_height = fb_rect.size.height;
-    #endif
+    CGFloat backing_scale_factor = [_sapp.macos.window screen].backingScaleFactor;
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = backing_scale_factor;
+    }
+    else {
+        _sapp.dpi_scale = 1.0f;
+    }
     const NSRect bounds = [_sapp.macos.view bounds];
     _sapp.window_width = bounds.size.width;
     _sapp.window_height = bounds.size.height;
+    #if defined(SOKOL_METAL)
+        _sapp.framebuffer_width = bounds.size.width * _sapp.dpi_scale;
+        _sapp.framebuffer_height = bounds.size.height * _sapp.dpi_scale;
+        const CGSize fb_size = _sapp.macos.view.drawableSize;
+        const int cur_fb_width = (int) fb_size.width;
+        const int cur_fb_height = (int) fb_size.height;
+        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
+                                 (_sapp.framebuffer_height != cur_fb_height);
+    #elif defined(SOKOL_GLCORE33)
+        const int cur_fb_width = (int) bounds.size.width * _sapp.dpi_scale;
+        const int cur_fb_height = (int) bounds.size.height * _sapp.dpi_scale;
+        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
+                                 (_sapp.framebuffer_height != cur_fb_height);
+        _sapp.framebuffer_width = cur_fb_width;
+        _sapp.framebuffer_height = cur_fb_height;
+    #endif
     if (_sapp.framebuffer_width == 0) {
         _sapp.framebuffer_width = 1;
     }
@@ -3147,17 +3161,17 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     if (_sapp.window_height == 0) {
         _sapp.window_height = 1;
     }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
-
-    /* NOTE: _sapp_macos_update_dimensions() isn't called each frame, but only
-        when the window size actually changes, so resizing the MTKView's
-        in each call is fine even when MTKView doesn't ignore setting an
-        identical drawableSize.
-    */
-    #if defined(SOKOL_METAL)
-    CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-    _sapp.macos.view.drawableSize = drawable_size;
-    #endif
+    if (dim_changed) {
+        #if defined(SOKOL_METAL)
+            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+            _sapp.macos.view.drawableSize = drawable_size;
+        #else
+            // nothing to do for GL?
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
@@ -3299,15 +3313,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.window_width = screen_rect.size.width;
         _sapp.window_height = screen_rect.size.height;
     }
-    if (_sapp.desc.high_dpi) {
-        _sapp.framebuffer_width = 2 * _sapp.window_width;
-        _sapp.framebuffer_height = 2 * _sapp.window_height;
-    }
-    else {
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
-    }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
@@ -3444,9 +3449,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();
-    if (!_sapp.first_frame) {
-        _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
-    }
+}
+
+- (void)windowDidChangeScreen:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_macos_update_dimensions();
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
