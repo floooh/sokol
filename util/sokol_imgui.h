@@ -117,11 +117,6 @@
                 The MSAA sample-count of the render pass where the UI
                 will be rendered. The default is 1.
 
-            float dpi_scale
-                DPI scaling factor. Set this to the result of sapp_dpi_scale().
-                To render in high resolution on a Retina Mac this would
-                typically be 2.0. The default value is 1.0
-
             const char* ini_filename
                 Sets this path as ImGui::GetIO().IniFilename where ImGui will store
                 and load UI persistency data. By default this is 0, so that Dear ImGui
@@ -140,17 +135,24 @@
 
     --- At the start of a frame, call:
 
-        simgui_new_frame(int width, int height, double delta_time)
+        simgui_new_frame(&(simgui_frame_desc_t){.width = ..., .height = ..., .delta_time = ..., .dpi_scale = ...});
 
         'width' and 'height' are the dimensions of the rendering surface,
         passed to ImGui::GetIO().DisplaySize.
 
         'delta_time' is the frame duration passed to ImGui::GetIO().DeltaTime.
 
-        For example, if you're using sokol_app.h and render to the
-        default framebuffer:
+        'dpi_scale' is the current DPI scale factor, if this is left zero-initialized,
+        1.0f will be used instead. Typical values for dpi_scale are >= 1.0f.
 
-        simgui_new_frame(sapp_width(), sapp_height(), delta_time);
+        For example, if you're using sokol_app.h and render to the default framebuffer:
+
+        simgui_new_frame(&(simgui_frame_desc_t){
+            .width = sapp_width(),
+            .height = sapp_height(),
+            .delta_time = sapp_frame_duration(),
+            .dpi_scale = sapp_dpi_scale()
+        });
 
     --- at the end of the frame, before the sg_end_pass() where you
         want to render the UI, call:
@@ -232,7 +234,6 @@ typedef struct simgui_desc_t {
     sg_pixel_format color_format;
     sg_pixel_format depth_format;
     int sample_count;
-    float dpi_scale;
     const char* ini_filename;
     bool no_default_font;
     bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
@@ -1631,8 +1632,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     memset(&_simgui, 0, sizeof(_simgui));
     _simgui.desc = *desc;
     _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
-    _simgui.desc.dpi_scale = _simgui_def(_simgui.desc.dpi_scale, 1.0f);
-    _simgui.cur_dpi_scale = _simgui.desc.dpi_scale;
+    _simgui.cur_dpi_scale = 1.0f;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     _simgui.is_osx = _simgui_is_osx();
     #endif
@@ -1865,7 +1865,7 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width > 0);
     SOKOL_ASSERT(desc->height > 0);
-    _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, _simgui.desc.dpi_scale);
+    _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, 1.0f);
     #if defined(__cplusplus)
         ImGuiIO* io = &ImGui::GetIO();
     #else
