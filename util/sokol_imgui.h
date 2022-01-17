@@ -258,6 +258,7 @@ SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 /* reference-based equivalents for C++ */
 inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
+inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_new_frame(&desc); }
 
 #endif
 #endif /* SOKOL_IMGUI_INCLUDED */
