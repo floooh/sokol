@@ -650,10 +650,18 @@
     In a HighDPI scenario, you still request the same window size during
     sokol_main(), but the framebuffer sizes returned by sapp_width()
     and sapp_height() will be scaled up according to the DPI scaling
-    ratio. You can also get a DPI scaling factor with the function
-    sapp_dpi_scale().
+    ratio.
 
-    Here's an example on a Mac with Retina display:
+    Note that on some platforms the DPI scaling factor may change at any
+    time (for instance when a window is moved from a high-dpi display
+    to a low-dpi display).
+
+    To query the current DPI scaling factor, call the function:
+
+    float sapp_dpi_scale(void);
+
+    For instance on a Retina Mac, returning the following sapp_desc
+    struct from sokol_main():
 
     sapp_desc sokol_main() {
         return (sapp_desc) {
@@ -664,19 +672,32 @@
         };
     }
 
-    The functions sapp_width(), sapp_height() and sapp_dpi_scale() will
-    return the following values:
+    ...the functions the functions sapp_width(), sapp_height()
+    and sapp_dpi_scale() will return the following values:
 
-    sapp_width      -> 1280
-    sapp_height     -> 960
-    sapp_dpi_scale  -> 2.0
+    sapp_width:     1280
+    sapp_height:    960
+    sapp_dpi_scale: 2.0
 
     If the high_dpi flag is false, or you're not running on a Retina display,
     the values would be:
 
-    sapp_width      -> 640
-    sapp_height     -> 480
-    sapp_dpi_scale  -> 1.0
+    sapp_width:     640
+    sapp_height:    480
+    sapp_dpi_scale: 1.0
+
+    If the window is moved from the Retina display to a low-dpi external display,
+    the values would change as follows:
+
+    sapp_width:     1280 => 640
+    sapp_height:    960  => 480
+    sapp_dpi_scale: 2.0  => 1.0
+
+    Currently there is no event associated with a DPI change, but an
+    SAPP_EVENTTYPE_RESIZED will be sent as a side effect of the
+    framebuffer size changing.
+
+    Per-monitor DPI is currently supported on macOS and Windows.
 
     APPLICATION QUIT
     ================
