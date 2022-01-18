@@ -1949,6 +1949,7 @@ typedef struct {
     double last;
     double accum;
     double avg;
+    int spike_count;
     int num;
     _sapp_timestamp_t timestamp;
     _sapp_ring_t ring;
@@ -1958,6 +1959,7 @@ typedef struct {
 _SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
     t->last = 0.0;
     t->accum = 0.0;
+    t->spike_count = 0;
     t->num = 0;
     _sapp_ring_init(&t->ring);
 }
@@ -1978,6 +1980,12 @@ _SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
         max_dur = t->avg * 1.2;
     }
     if ((dur < min_dur) || (dur > max_dur)) {
+        t->spike_count++;
+        // if there have been many spikes in a row, the display refresh rate
+        // might have changed, so a timing reset is needed
+        if (t->spike_count > 20) {
+            _sapp_timing_reset(t);
+        }
         return;
     }
     if (_sapp_ring_full(&t->ring)) {
@@ -1990,6 +1998,7 @@ _SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
     t->num += 1;
     SOKOL_ASSERT(t->num > 0);
     t->avg = t->accum / t->num;
+    t->spike_count = 0;
 }
 
 _SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
