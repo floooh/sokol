@@ -5614,14 +5614,18 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
 
 #if defined(__cplusplus)
 #define _sapp_d3d11_Release(self) (self)->Release()
+#define _sapp_win32_refiid(iid) iid
 #else
 #define _sapp_d3d11_Release(self) (self)->lpVtbl->Release(self)
+#define _sapp_win32_refiid(iid) &iid
 #endif
 
 #define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
 
+
 static const IID _sapp_IID_ID3D11Texture2D = { 0x6f15aaf2,0xd208,0x4e89,0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c };
 static const IID _sapp_IID_IDXGIDevice1    = { 0x77db970f,0x6276,0x48ba,0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c };
+static const IID _sapp_IID_IDXGIFactory    = { 0x7b7166ec,0x21c7,0x44ae,0xb2,0x1a,0xc9,0xae,0x32,0x1a,0xe3,0x69 };
 
 static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
     #if defined(__cplusplus)
@@ -5703,6 +5707,30 @@ static inline HRESULT _sapp_dxgi_SetMaximumFrameLatency(IDXGIDevice1* self, UINT
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_GetAdapter(IDXGIDevice1* self, IDXGIAdapter** pAdapter) {
+    #if defined(__cplusplus)
+        return self->GetAdapter(pAdapter);
+    #else
+        return self->lpVtbl->GetAdapter(self, pAdapter);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetParent(IDXGIObject* self, REFIID riid, void** ppParent) {
+    #if defined(__cplusplus)
+        return self->GetParent(riid, ppParent);
+    #else
+        return self->lpVtbl->GetParent(self, riid, ppParent);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND WindowHandle, UINT Flags) {
+    #if defined(__cplusplus)
+        return self->MakeWindowAssociation(WindowHandle, Flags);
+    #else
+        return self->lpVtbl->MakeWindowAssociation(self, WindowHandle, Flags);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
@@ -5746,14 +5774,25 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     _SOKOL_UNUSED(hr);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
-    // mimimize frame latency
-    #ifdef __cplusplus
-    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_IID_IDXGIDevice1, (void**)&_sapp.d3d11.dxgi_device);
-    #else
-    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, &_sapp_IID_IDXGIDevice1, (void**)&_sapp.d3d11.dxgi_device);
-    #endif
+    // mimimize frame latency, disable Alt-Enter
+    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
     if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
         _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
+        IDXGIAdapter* dxgi_adapter = 0;
+        hr = _sapp_dxgi_GetAdapter(_sapp.d3d11.dxgi_device, &dxgi_adapter);
+        if (SUCCEEDED(hr) && dxgi_adapter) {
+            IDXGIFactory* dxgi_factory = 0;
+            hr = _sapp_dxgi_GetParent((IDXGIObject*)dxgi_adapter, _sapp_win32_refiid(_sapp_IID_IDXGIFactory), (void**)&dxgi_factory);
+            if (SUCCEEDED(hr)) {
+                _sapp_dxgi_MakeWindowAssociation(dxgi_factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
+            }
+            else {
+                SOKOL_LOG("sokol_app.h: could not obtain IDXGIFactory object.\n");
+            }
+        }
+        else {
+            SOKOL_LOG("sokol_app.h: could not obtain IDXGIAdapter object.\n");
+        }
     }
     else {
         SOKOL_LOG("sokol_app.h: could not obtain IDXGIDevice1 interface\n");
@@ -5778,11 +5817,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     HRESULT hr;
 
     /* view for the swapchain-created framebuffer */
-    #ifdef __cplusplus
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
-    #else
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, &_sapp_IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
-    #endif
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
     hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
