@@ -2155,6 +2155,7 @@ typedef struct {
 
 typedef struct {
     HWND hwnd;
+    HMONITOR hmonitor;
     HDC dc;
     HICON big_icon;
     HICON small_icon;
@@ -6283,6 +6284,17 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     return false;
 }
 
+_SOKOL_PRIVATE bool _sapp_win32_update_monitor(void) {
+    const HMONITOR cur_monitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONULL);
+    if (cur_monitor != _sapp.win32.hmonitor) {
+        _sapp.win32.hmonitor = cur_monitor;
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
 _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     uint32_t mods = 0;
     if (GetKeyState(VK_SHIFT) & (1<<15)) {
@@ -6631,9 +6643,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_ENTERSIZEMOVE:
                 SetTimer(_sapp.win32.hwnd, 1, USER_TIMER_MINIMUM, NULL);
+                _sapp_timing_reset(&_sapp.timing);
                 break;
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
+                _sapp_timing_reset(&_sapp.timing);
                 break;
             case WM_TIMER:
                 _sapp_win32_timing_measure();
@@ -6658,6 +6672,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_DROPFILES:
                 _sapp_win32_files_dropped((HDROP)wParam);
                 break;
+            case WM_DISPLAYCHANGE:
+                // refresh rate might have changed
+                _sapp_timing_reset(&_sapp.timing);
+                break;
+
             default:
                 break;
         }
@@ -6709,6 +6728,7 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     _sapp.win32.in_create_window = false;
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
+    _sapp.win32.hmonitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONULL);
     SOKOL_ASSERT(_sapp.win32.dc);
     _sapp_win32_update_dimensions();
 
@@ -7058,6 +7078,12 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             _sapp_d3d11_resize_default_render_target();
             #endif
             _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+        /* check if the window monitor has changed, need to reset timing because
+           the new monitor might have a different refresh rate
+        */
+        if (_sapp_win32_update_monitor()) {
+            _sapp_timing_reset(&_sapp.timing);
         }
         if (_sapp.quit_requested) {
             PostMessage(_sapp.win32.hwnd, WM_CLOSE, 0, 0);
