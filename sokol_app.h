@@ -1760,6 +1760,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
     #endif
+    #ifndef WM_DPICHANGED
+        #define WM_DPICHANGED (0x02E0)
+    #endif
 #elif defined(_SAPP_UWP)
     #ifndef NOMINMAX
         #define NOMINMAX
