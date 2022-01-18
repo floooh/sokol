@@ -1954,14 +1954,18 @@ typedef struct {
     _sapp_ring_t ring;
 } _sapp_timing_t;
 
-_SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+// call this if the frame timing had been disrupted somehow
+_SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
     t->last = 0.0;
     t->accum = 0.0;
-    // dummy value until first actual value is available
-    t->avg = 1.0 / 60.0;
     t->num = 0;
-    _sapp_timestamp_init(&t->timestamp);
     _sapp_ring_init(&t->ring);
+}
+
+_SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+    t->avg = 1.0 / 60.0;    // dummy value until first actual value is available
+    _sapp_timing_reset(t);
+    _sapp_timestamp_init(&t->timestamp);
 }
 
 _SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
@@ -1995,11 +1999,6 @@ _SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
         _sapp_timing_put(t, dur);
     }
     t->last = now;
-}
-
-// call this if the external timing had been disrupted somehow
-_SOKOL_PRIVATE void _sapp_timing_external_reset(_sapp_timing_t* t) {
-    t->last = 0.0;
 }
 
 _SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
@@ -3474,6 +3473,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)windowDidChangeScreen:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
+    _sapp_timing_reset(&_sapp.timing);
     _sapp_macos_update_dimensions();
 }
 
@@ -6427,7 +6427,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
             if (SUCCEEDED(hr)) {
                 if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
                     if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
-                        _sapp_timing_external_reset(&_sapp.timing);
+                        _sapp_timing_reset(&_sapp.timing);
                     }
                     _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
                     LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
