@@ -1955,7 +1955,6 @@ typedef struct {
     _sapp_ring_t ring;
 } _sapp_timing_t;
 
-// call this if the frame timing had been disrupted somehow
 _SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
     t->last = 0.0;
     t->accum = 0.0;
@@ -1999,6 +1998,10 @@ _SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
     SOKOL_ASSERT(t->num > 0);
     t->avg = t->accum / t->num;
     t->spike_count = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_discontinuity(_sapp_timing_t* t) {
+    t->last = 0.0;
 }
 
 _SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
@@ -6491,7 +6494,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
             if (SUCCEEDED(hr)) {
                 if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
                     if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
-                        _sapp_timing_reset(&_sapp.timing);
+                        _sapp_timing_discontinuity(&_sapp.timing);
                     }
                     _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
                     LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
@@ -6695,11 +6698,9 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_ENTERSIZEMOVE:
                 SetTimer(_sapp.win32.hwnd, 1, USER_TIMER_MINIMUM, NULL);
-                _sapp_timing_reset(&_sapp.timing);
                 break;
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
-                _sapp_timing_reset(&_sapp.timing);
                 break;
             case WM_TIMER:
                 _sapp_win32_timing_measure();
