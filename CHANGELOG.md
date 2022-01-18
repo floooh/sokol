@@ -1,5 +1,63 @@
 ## Updates
 
+- **18-Jan-2022**:
+  - sokol_app.h now has per-monitor DPI support on Windows and macOS: when
+    the application window is moved to a monitor with different DPI, the values
+    returned by sapp_dpi_scale(), sapp_width() and sapp_height() will update
+    accordingly (only if the application requested high-dpi rendering with
+    ```sapp_desc.high_dpi=true```, otherwise the dpi scale value remains
+    fixed at 1.0f). The application will receive an SAPP_EVENTTYPE_RESIZED event
+    if the default framebuffer size has changed because of a DPI change.
+    On Windows this feature requires Win10 version 1703 or later (aka the
+    'Creators Update'), older Windows version simply behave as before.
+    Many thank to @tjachmann for the initial PR with the Windows implementation!
+  - sokol_app.h: DPI scale computation on macOS is now more robust using the
+    NSScreen.backingScaleFactor value
+  - sokol_app.h: the new frame timing code in sokol_app.h now detects if the display
+    refresh rate changes and adjusts itself accordingly (for instance if the
+    window is moved between displays with different refresh rate)
+  - sokol_app.h D3D11/DXGI: during window movement and resize, the frame is now
+    presented with DXGI_PRESENT_DO_NOT_WAIT, this fixes some window system
+    stuttering issues on Win10 configs with recent NVIDIA drivers.
+  - sokol_app.h D3D11/DXGI: the application will no longer appear to freeze for
+    0.5 seconds when the title bar is grabbed with the mouse for movement, but
+    then not moving the mouse.
+  - sokol_app.h D3D11/DXGI: DXGI's automatic windowed/fullscreen switching via
+    Alt-Enter has been disabled, because this switched to 'real' fullscreen mode,
+    while sokol_app.h's fullscreen mode uses a borderless window. Use the 
+    programmatic fullscreen/window switching via ```sapp_toggle_fullscreen()```
+    instead.
+  - **BREAKING CHANGE** in sokol_imgui.h: because the applications' DPI scale
+    can now change at any time, the DPI scale value is now communicated to
+    sokol_imgui.h in the ```simgui_new_frame()``` function. This has been
+    changed to accept a pointer to a new ```simgui_frame_desc_t``` struct.
+    With C99, change the simgui_new_frame() call as follows (if also using
+    sokol_app.h):
+    ```c
+    simgui_new_frame(&(simgui_frame_desc_t){
+        .width = sapp_width(),
+        .height = sapp_height(),
+        .delta_time = sapp_frame_duration(),
+        .dpi_scale = sapp_dpi_scale()
+    });
+    ```
+    On C++ this works:
+    ```c++
+    simgui_new_frame({ sapp_width(), sapp_height(), sapp_frame_duration(), sapp_dpi_scale() });
+    ```
+    ...or in C++20:
+    ```c++
+    simgui_new_frame({
+        .width = sapp_width(),
+        .height = sapp_height(),
+        .delta_time = sapp_frame_duration(),
+        .dpi_scale = sapp_dpi_scale()
+    });
+    ```
+  - **KNOWN ISSUE**: the recent change in sokol-audio's WASAPI backend to directly consume
+    float samples doesn't appear to work on some configs (see [#614](https://github.com/floooh/sokol/issues/614)),
+    investigation is underway
+
 - **15-Jan-2022**: 
   - A bugfix in the GL backend for uniform arrays using the 'native' uniform block layout.
     The bug was a regression in the recent 'uniform data handling' update. See
