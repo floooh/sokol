@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**22-Jan-2022** sokol_gfx.h: uniform array bugfix in GL backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**18-Jan-2022** sokol_app.h: per-monitor-DPI, various D3D11/DXGI improvements, breaking change in sokol_imgui.h, sokol_audio.h known issue)
 
 ## Examples and Related Projects
 
