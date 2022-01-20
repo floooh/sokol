@@ -1,10 +1,12 @@
 ## Updates
 
 - **20-Jan-2022**:
-    A compatibility fix in the sokol_audio.h WASAPI backend (Windows):
-    On some configs the IAudioClient::Initialize() call could fail because
+  - sokol_audio.h: A compatibility fix in the sokol_audio.h WASAPI backend (Windows): On
+    some configs the IAudioClient::Initialize() call could fail because
     of a mismatch between the requested number of channels and speaker config.
     See [#614](https://github.com/floooh/sokol/issues/614) for details.
+  - sokol_app.h D3D11/DXGI: Fix an (uncritical) COM interface leak warning for IDXGIAdapter and
+    IDXGIFactory at shutdown, introduced with the recent disabling of Alt-Enter.
 
 - **18-Jan-2022**:
   - sokol_app.h now has per-monitor DPI support on Windows and macOS: when
