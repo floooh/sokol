@@ -1,5 +1,11 @@
 ## Updates
 
+- **20-Jan-2022**:
+    A compatibility fix in the sokol_audio.h WASAP backend (Windows):
+    On some configs the IAudioClient::Initialize() call could fail because
+    of a mismatch between the requested number of channels and speaker config.
+    See [#614](https://github.com/floooh/sokol/issues/614) for details.
+
 - **18-Jan-2022**:
   - sokol_app.h now has per-monitor DPI support on Windows and macOS: when
     the application window is moved to a monitor with different DPI, the values
@@ -24,7 +30,7 @@
     then not moving the mouse.
   - sokol_app.h D3D11/DXGI: DXGI's automatic windowed/fullscreen switching via
     Alt-Enter has been disabled, because this switched to 'real' fullscreen mode,
-    while sokol_app.h's fullscreen mode uses a borderless window. Use the 
+    while sokol_app.h's fullscreen mode uses a borderless window. Use the
     programmatic fullscreen/window switching via ```sapp_toggle_fullscreen()```
     instead.
   - **BREAKING CHANGE** in sokol_imgui.h: because the applications' DPI scale
@@ -58,12 +64,12 @@
     float samples doesn't appear to work on some configs (see [#614](https://github.com/floooh/sokol/issues/614)),
     investigation is underway
 
-- **15-Jan-2022**: 
+- **15-Jan-2022**:
   - A bugfix in the GL backend for uniform arrays using the 'native' uniform block layout.
     The bug was a regression in the recent 'uniform data handling' update. See
     [PR #611](https://github.com/floooh/sokol/pull/611) for details, and this [new sample/test](https://github.com/floooh/sokol-samples/blob/master/glfw/uniformarrays-glfw.c).
     Many thanks to @nmr8acme for the PR!
-  
+
 - **08-Jan-2022**: some enhancements and cleanup to uniform data handling in sokol_gfx.h
   and the sokol-shdc shader compiler:
     - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
@@ -84,7 +90,7 @@
       This is because the uniform data must still be compatible with
       ```glUniform()``` calls in the GL backends (which have different
       'interior alignment' for arrays).
-    - The sokol-shdc compiler supports the new uniform types and will annotate the 
+    - The sokol-shdc compiler supports the new uniform types and will annotate the
       code-generated sg_shader_desc structs with SG_UNIFORMLAYOUT_STD140,
       and there are new errors to make sure that uniform blocks are compatible
       with all sokol_gfx.h backends.
@@ -97,7 +103,7 @@
     - [documentation of ```sg_uniform_layout```](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L1322-L1355)
     - [enhanced sokol-shdc documentation](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md#glsl-uniform-blocks-and-c-structs)
     - [a new sample 'uniformtypes-sapp'](https://floooh.github.io/sokol-html5/uniformtypes-sapp.html)
-  
+
   PS: and an unrelated change: the frame latency on Win32+D3D11 has been slightly improved
   via IDXGIDevice1::SetMaximumFrameLatency()
 
@@ -112,7 +118,7 @@
         a number of frames yields a pretty accurate approximation
         of the actual frame duration.
       - On Metal, ```MTLDrawable addPresentedHandler + presentedTime```
-        doesn't appear to function correctly on macOS Monterey and/or M1 Macs, so 
+        doesn't appear to function correctly on macOS Monterey and/or M1 Macs, so
         instead mach_absolute_time() is called at the start of the MTKView
         frame callback.
       - In all other situations, the same timing method is used as
