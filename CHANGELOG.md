@@ -1,7 +1,7 @@
 ## Updates
 
 - **20-Jan-2022**:
-    A compatibility fix in the sokol_audio.h WASAP backend (Windows):
+    A compatibility fix in the sokol_audio.h WASAPI backend (Windows):
     On some configs the IAudioClient::Initialize() call could fail because
     of a mismatch between the requested number of channels and speaker config.
     See [#614](https://github.com/floooh/sokol/issues/614) for details.
