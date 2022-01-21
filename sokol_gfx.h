@@ -6756,7 +6756,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
                 }
                 ub->num_uniforms++;
             }
+            if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+                cur_uniform_offset = _sg_align_u32(cur_uniform_offset, 16);
+            }
             SOKOL_ASSERT(ub_desc->size == (size_t)cur_uniform_offset);
+            _SOKOL_UNUSED(cur_uniform_offset);
         }
     }
 
