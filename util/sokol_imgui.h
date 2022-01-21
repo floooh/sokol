@@ -1682,6 +1682,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         io->KeyMap[ImGuiKey_Backspace] = SAPP_KEYCODE_BACKSPACE;
         io->KeyMap[ImGuiKey_Space] = SAPP_KEYCODE_SPACE;
         io->KeyMap[ImGuiKey_Enter] = SAPP_KEYCODE_ENTER;
+        io->KeyMap[ImGuiKey_KeyPadEnter] = SAPP_KEYCODE_KP_ENTER;
         io->KeyMap[ImGuiKey_Escape] = SAPP_KEYCODE_ESCAPE;
         if (!_simgui.desc.disable_hotkeys) {
             io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
