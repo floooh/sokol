@@ -173,7 +173,10 @@
         rendering canvas. The actual size may differ from this depending on
         platform and other circumstances. Also the canvas size may change at
         any time (for instance when the user resizes the application window,
-        or rotates the mobile device).
+        or rotates the mobile device). You can just keep .width and .height
+        zero-initialized to open a default-sized window (what "default-size"
+        exactly means is platform-specific, but usually it's a size that covers
+        most of, but not all, of the display).
 
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
@@ -2662,8 +2665,6 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     sapp_desc desc = *in_desc;
-    desc.width = _sapp_def(desc.width, 640);
-    desc.height = _sapp_def(desc.height, 480);
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
@@ -2686,6 +2687,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _SAPP_CLEAR(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
+    // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
     _sapp.window_width = _sapp.desc.width;
     _sapp.window_height = _sapp.desc.height;
     _sapp.framebuffer_width = _sapp.window_width;
@@ -3159,9 +3161,8 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     between HighDPI / LowDPI screens.
 */
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
-    CGFloat backing_scale_factor = [_sapp.macos.window screen].backingScaleFactor;
     if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = backing_scale_factor;
+        _sapp.dpi_scale = [_sapp.macos.window screen].backingScaleFactor;
     }
     else {
         _sapp.dpi_scale = 1.0f;
@@ -3344,10 +3345,21 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    if (_sapp.fullscreen) {
+    if (_sapp.fullscreen || (_sapp.window_width == 0) || (_sapp.window_height == 0)) {
         NSRect screen_rect = NSScreen.mainScreen.frame;
-        _sapp.window_width = screen_rect.size.width;
-        _sapp.window_height = screen_rect.size.height;
+        if (_sapp.fullscreen) {
+            _sapp.window_width = screen_rect.size.width;
+            _sapp.window_height = screen_rect.size.height;
+        }
+        else {
+            // use 4/5 of screen size as default size
+            if (_sapp.window_width == 0) {
+                _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+            }
+            if (_sapp.window_height == 0) {
+                _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+            }
+        }
     }
     const NSUInteger style =
         NSWindowStyleMaskTitled |
@@ -5354,8 +5366,8 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
-        w = (double) _sapp.desc.width;
-        h = (double) _sapp.desc.height;
+        w = (double) _sapp_def(_sapp.desc.width, 640);
+        h = (double) _sapp_def(_sapp.desc.height, 480);
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
