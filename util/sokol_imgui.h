@@ -1904,6 +1904,15 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     if (!io->WantTextInput && sapp_keyboard_shown()) {
         sapp_show_keyboard(false);
     }
+    //Process the inputText Luke Zhou 2021/02/08
+    #if defined(__cplusplus)
+    struct ImGuiInputTextState *state = ImGui::GetInputTextState(ImGui::GetFocusID());
+    #else
+    struct ImGuiInputTextState *state = igGetInputTextState(igGetFocusID());
+    #endif
+    if (io->WantTextInput && state!=NULL) {
+        sapp_input_text(state->ID, state->TextW.Data, state->TextW.Size, state->Stb.cursor, state->Stb.select_start, state->Stb.select_end);
+    }
     #endif
     #if defined(__cplusplus)
         ImGui::NewFrame();
@@ -2154,8 +2163,9 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
                characters, which may confuse some ImGui widgets,
                drop those, also don't forward characters if some
                modifiers have been pressed
+               pass enter to ImGui Luke Zhou 2021/02/08
             */
-            if ((ev->char_code >= 32) &&
+            if ((ev->char_code >= 0x0a) &&
                 (ev->char_code != 127) &&
                 (0 == (ev->modifiers & (SAPP_MODIFIER_ALT|SAPP_MODIFIER_CTRL|SAPP_MODIFIER_SUPER))))
             {
