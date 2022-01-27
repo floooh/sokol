@@ -2030,6 +2030,9 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
 
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
+
+static const NSRange kEmptyRange = { NSNotFound, 0 };
+
 @interface _sapp_macos_app_delegate : NSObject<NSApplicationDelegate>
 @end
 @interface _sapp_macos_window : NSWindow
@@ -2037,10 +2040,17 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
 @interface _sapp_macos_window_delegate : NSObject<NSWindowDelegate>
 @end
 #if defined(SOKOL_METAL)
-    @interface _sapp_macos_view : MTKView
+    @interface _sapp_macos_view : MTKView <NSTextInputClient>
+    {
+        NSMutableAttributedString* markedText;
+        NSTrackingArea* trackingArea;
+    }
     @end
 #elif defined(SOKOL_GLCORE33)
-    @interface _sapp_macos_view : NSOpenGLView
+    @interface _sapp_macos_view : NSOpenGLView <NSTextInputClient>{
+        NSMutableAttributedString* markedText;
+        NSTrackingArea* trackingArea;        
+    }
     - (void)timerFired:(id)sender;
     @end
 #endif // SOKOL_GLCORE33
@@ -3798,22 +3808,10 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         if (0 != (mods & SAPP_MODIFIER_SUPER)) {
             _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP, key_code, event.isARepeat, mods);
         }
-        const NSString* chars = event.characters;
-        const NSUInteger len = chars.length;
-        if (len > 0) {
-            _sapp_init_event(SAPP_EVENTTYPE_CHAR);
-            _sapp.event.modifiers = mods;
-            for (NSUInteger i = 0; i < len; i++) {
-                const unichar codepoint = [chars characterAtIndex:i];
-                if ((codepoint & 0xFF00) == 0xF700) {
-                    continue;
-                }
-                _sapp.event.char_code = codepoint;
-                _sapp.event.key_repeat = event.isARepeat;
-                _sapp_call_event(&_sapp.event);
-            }
-        }
-        /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
+        _sapp.event.modifiers = mods;
+        _sapp.event.key_repeat = event.isARepeat;
+        [[self inputContext] handleEvent:event];
+       /* if this is a Cmd+V (paste), also send a CLIPBOARD_PASTE event */
         if (_sapp.clipboard.enabled && (mods == SAPP_MODIFIER_SUPER) && (key_code == SAPP_KEYCODE_V)) {
             _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
             _sapp_call_event(&_sapp.event);
@@ -3826,6 +3824,81 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         event.isARepeat,
         _sapp_macos_mods(event));
 }
+
+- (BOOL)hasMarkedText
+{
+    return [markedText length] > 0;
+}
+
+- (NSRange)markedRange
+{
+    if ([markedText length] > 0)
+        return NSMakeRange(0, [markedText length] - 1);
+    else
+        return kEmptyRange;
+}
+
+- (NSRange)selectedRange
+{
+    return kEmptyRange;
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange
+{
+    if ([string isKindOfClass:[NSAttributedString class]])
+        markedText = [[NSMutableAttributedString alloc] initWithAttributedString:string];
+    else
+        markedText = [[NSMutableAttributedString alloc] initWithString:string];
+}
+
+- (void)unmarkText
+{
+    [[markedText mutableString] setString:@""];
+}
+
+- (NSArray*)validAttributesForMarkedText
+{
+    return [NSArray array];
+}
+- (void)doCommandBySelector:(SEL)selector
+{
+}
+
+- (void) insertText:(id)aString replacementRange:(NSRange)replacementRange {
+    const NSString* chars = aString;
+    const NSUInteger len = chars.length;
+    if (len > 0) {
+        _sapp_init_event(SAPP_EVENTTYPE_CHAR);
+        for (NSUInteger i = 0; i < len; i++) {
+            const unichar codepoint = [chars characterAtIndex:i];
+            if ((codepoint & 0xFF00) == 0xF700) {
+                continue;
+            }
+            _sapp.event.char_code = codepoint;
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                               actualRange:(NSRangePointer)actualRange
+{
+    return nil;
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+    return 0;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range
+                         actualRange:(NSRangePointer)actualRange
+{   
+    return NSMakeRect(0.0, 0.0, 0.0, 0.0);
+}
+
 - (void)flagsChanged:(NSEvent*)event {
     const uint32_t old_f = _sapp.macos.flags_changed_store;
     const uint32_t new_f = event.modifierFlags;
@@ -6318,30 +6391,30 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
 }
 /* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
-    RECT rect;
-    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
-        /* prevent a framebuffer size of 0 when window is minimized */
-        if (0 == fb_width) {
-            fb_width = 1;
-        }
-        if (0 == fb_height) {
-            fb_height = 1;
-        }
-        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = fb_width;
-            _sapp.framebuffer_height = fb_height;
-            return true;
-        }
-    }
-    else {
-        _sapp.window_width = _sapp.window_height = 1;
-        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
-    }
-    return false;
+   RECT rect;
+   if (GetClientRect(_sapp.win32.hwnd, &rect)) {
+       _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
+       _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
+       int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
+       int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+       /* prevent a framebuffer size of 0 when window is minimized */
+       if (0 == fb_width) {
+           fb_width = 1;
+       }
+       if (0 == fb_height) {
+           fb_height = 1;
+       }
+       if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+           _sapp.framebuffer_width = fb_width;
+           _sapp.framebuffer_height = fb_height;
+           return true;
+       }
+   }
+   else {
+       _sapp.window_width = _sapp.window_height = 1;
+       _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+   }
+   return false; 
 }
 
 _SOKOL_PRIVATE bool _sapp_win32_update_monitor(void) {
