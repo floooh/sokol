@@ -173,7 +173,10 @@
         rendering canvas. The actual size may differ from this depending on
         platform and other circumstances. Also the canvas size may change at
         any time (for instance when the user resizes the application window,
-        or rotates the mobile device).
+        or rotates the mobile device). You can just keep .width and .height
+        zero-initialized to open a default-sized window (what "default-size"
+        exactly means is platform-specific, but usually it's a size that covers
+        most of, but not all, of the display).
 
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
@@ -2176,6 +2179,7 @@ typedef struct {
     HICON small_icon;
     UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
+    RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
     bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
@@ -2458,6 +2462,8 @@ typedef struct {
 #define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
 
 #define _SAPP_MAX_TITLE_LENGTH (128)
+#define _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH (640)
+#define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
 /* NOTE: the pixel format values *must* be compatible with sg_pixel_format */
 #define _SAPP_PIXELFORMAT_RGBA8 (23)
 #define _SAPP_PIXELFORMAT_BGRA8 (27)
@@ -2662,8 +2668,6 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     sapp_desc desc = *in_desc;
-    desc.width = _sapp_def(desc.width, 640);
-    desc.height = _sapp_def(desc.height, 480);
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
     desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
@@ -2686,6 +2690,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _SAPP_CLEAR(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
+    // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
     _sapp.window_width = _sapp.desc.width;
     _sapp.window_height = _sapp.desc.height;
     _sapp.framebuffer_width = _sapp.window_width;
@@ -3159,9 +3164,8 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     between HighDPI / LowDPI screens.
 */
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
-    CGFloat backing_scale_factor = [_sapp.macos.window screen].backingScaleFactor;
     if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = backing_scale_factor;
+        _sapp.dpi_scale = [_sapp.macos.window screen].backingScaleFactor;
     }
     else {
         _sapp.dpi_scale = 1.0f;
@@ -3344,10 +3348,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    if (_sapp.fullscreen) {
+    if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
+        // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
-        _sapp.window_width = screen_rect.size.width;
-        _sapp.window_height = screen_rect.size.height;
+        if (_sapp.window_width == 0) {
+            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+        }
+        if (_sapp.window_height == 0) {
+            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+        }
     }
     const NSUInteger style =
         NSWindowStyleMaskTitled |
@@ -3431,13 +3440,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
         timer_obj = nil;
     #endif
+    [_sapp.macos.window center];
     _sapp.valid = true;
     if (_sapp.fullscreen) {
-        /* on GL, this already toggles a rendered frame, so set the valid flag before */
+        /* ^^^ on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp.macos.window toggleFullScreen:self];
-    }
-    else {
-        [_sapp.macos.window center];
     }
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     [NSApp activateIgnoringOtherApps:YES];
@@ -5354,8 +5361,8 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
-        w = (double) _sapp.desc.width;
-        h = (double) _sapp.desc.height;
+        w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+        h = (double) _sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
@@ -6196,7 +6203,35 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
+/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
+_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
+    RECT rect;
+    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
+        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
+        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
+        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+        /* prevent a framebuffer size of 0 when window is minimized */
+        if (0 == fb_width) {
+            fb_width = 1;
+        }
+        if (0 == fb_height) {
+            fb_height = 1;
+        }
+        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+            _sapp.framebuffer_width = fb_width;
+            _sapp.framebuffer_height = fb_height;
+            return true;
+        }
+    }
+    else {
+        _sapp.window_width = _sapp.window_height = 1;
+        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) {
     HMONITOR monitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO minfo;
     memset(&minfo, 0, sizeof(minfo));
@@ -6210,27 +6245,28 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     DWORD win_style;
     RECT rect = { 0, 0, 0, 0 };
 
-    _sapp.fullscreen = !_sapp.fullscreen;
+    _sapp.fullscreen = fullscreen;
     if (!_sapp.fullscreen) {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.desc.width * _sapp.win32.dpi.window_scale);
-        rect.bottom = (int) ((float)_sapp.desc.height * _sapp.win32.dpi.window_scale);
+        rect = _sapp.win32.stored_window_rect;
     }
     else {
+        GetWindowRect(_sapp.win32.hwnd, &_sapp.win32.stored_window_rect);
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
         rect.right = monitor_w;
         rect.bottom = monitor_h;
+        AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     }
-    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
-    int win_width = rect.right - rect.left;
-    int win_height = rect.bottom - rect.top;
-    if (!_sapp.fullscreen) {
-        rect.left = (monitor_w - win_width) / 2;
-        rect.top = (monitor_h - win_height) / 2;
-    }
-
+    const int win_w = rect.right - rect.left;
+    const int win_h = rect.bottom - rect.top;
+    const int win_x = mr.left + rect.left;
+    const int win_y = mr.top + rect.top;
     SetWindowLongPtr(_sapp.win32.hwnd, GWL_STYLE, win_style);
-    SetWindowPos(_sapp.win32.hwnd, HWND_TOP, mr.left + rect.left, mr.top + rect.top, win_width, win_height, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+    SetWindowPos(_sapp.win32.hwnd, HWND_TOP, win_x, win_y, win_w, win_h, swp_flags | SWP_FRAMECHANGED);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
+    _sapp_win32_set_fullscreen(!_sapp.fullscreen, SWP_SHOWWINDOW);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
@@ -6315,33 +6351,6 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
         BOOL res = SetCursorPos(_sapp.win32.mouse_locked_x, _sapp.win32.mouse_locked_y);
         SOKOL_ASSERT(res); _SOKOL_UNUSED(res);
     }
-}
-/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
-_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
-    RECT rect;
-    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
-        /* prevent a framebuffer size of 0 when window is minimized */
-        if (0 == fb_width) {
-            fb_width = 1;
-        }
-        if (0 == fb_height) {
-            fb_height = 1;
-        }
-        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = fb_width;
-            _sapp.framebuffer_height = fb_height;
-            return true;
-        }
-    }
-    else {
-        _sapp.window_width = _sapp.window_height = 1;
-        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
-    }
-    return false;
 }
 
 _SOKOL_PRIVATE bool _sapp_win32_update_monitor(void) {
@@ -6765,43 +6774,50 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     wndclassw.lpszClassName = L"SOKOLAPP";
     RegisterClassW(&wndclassw);
 
-    DWORD win_style;
+    /* NOTE: regardless whether fullscreen is requested or not, a regular
+       windowed-mode window will always be created first (however in hidden
+       mode, so that no windowed-mode window pops up before the fullscreen window)
+    */
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
     RECT rect = { 0, 0, 0, 0 };
-    if (_sapp.fullscreen) {
-        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = GetSystemMetrics(SM_CXSCREEN);
-        rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-    }
-    else {
-        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
-        rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
-    }
+    DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
+    rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
+    rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
+    const bool use_default_width = 0 == _sapp.window_width;
+    const bool use_default_height = 0 == _sapp.window_height;
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
     const int win_height = rect.bottom - rect.top;
     _sapp.win32.in_create_window = true;
     _sapp.win32.hwnd = CreateWindowExW(
-        win_ex_style,               /* dwExStyle */
-        L"SOKOLAPP",                /* lpClassName */
-        _sapp.window_title_wide,    /* lpWindowName */
-        win_style,                  /* dwStyle */
-        CW_USEDEFAULT,              /* X */
-        CW_USEDEFAULT,              /* Y */
-        win_width,                  /* nWidth */
-        win_height,                 /* nHeight */
-        NULL,                       /* hWndParent */
-        NULL,                       /* hMenu */
-        GetModuleHandle(NULL),      /* hInstance */
-        NULL);                      /* lParam */
-    ShowWindow(_sapp.win32.hwnd, SW_SHOW);
+        win_ex_style,               // dwExStyle
+        L"SOKOLAPP",                // lpClassName
+        _sapp.window_title_wide,    // lpWindowName
+        win_style,                  // dwStyle
+        CW_USEDEFAULT,              // X
+        SW_HIDE,                    // Y (NOTE: CW_USEDEFAULT is not used for position here, but internally calls ShowWindow!
+        use_default_width ? CW_USEDEFAULT : win_width, // nWidth
+        use_default_height ? CW_USEDEFAULT : win_height, // nHeight (NOTE: if width is CW_USEDEFAULT, height is actually ignored)
+        NULL,                       // hWndParent
+        NULL,                       // hMenu
+        GetModuleHandle(NULL),      // hInstance
+        NULL);                      // lParam
     _sapp.win32.in_create_window = false;
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
     _sapp.win32.hmonitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONULL);
     SOKOL_ASSERT(_sapp.win32.dc);
-    _sapp_win32_update_dimensions();
 
+    /* this will get the actual windowed-mode window size, if fullscreen
+       is requested, the set_fullscreen function will then capture the
+       current window rectangle, which then might be used later to
+       restore the window position when switching back to windowed
+    */
+    _sapp_win32_update_dimensions();
+    if (_sapp.fullscreen) {
+        _sapp_win32_set_fullscreen(_sapp.fullscreen, SWP_HIDEWINDOW);
+        _sapp_win32_update_dimensions();
+    }
+    ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     DragAcceptFiles(_sapp.win32.hwnd, 1);
 }
 
@@ -8090,7 +8106,11 @@ void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationVie
     _SOKOL_UNUSED(args);
     _SOKOL_UNUSED(applicationView);
     auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.width, (float)_sapp.desc.height);
+    const float window_width = (float)_sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+    const float window_height = (float)_sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
+    auto targetSize = winrt::Windows::Foundation::Size(window_width, window_height);
+    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchViewSize(targetSize);
+    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchWindowingMode(winrt::Windows::UI::ViewManagement::ApplicationViewWindowingMode::PreferredLaunchViewSize);
     appView.SetPreferredMinSize(targetSize);
     appView.TryResizeView(targetSize);
 
@@ -10260,12 +10280,32 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
                     PointerMotionMask | ButtonPressMask | ButtonReleaseMask |
                     ExposureMask | FocusChangeMask | VisibilityChangeMask |
                     EnterWindowMask | LeaveWindowMask | PropertyChangeMask;
+
+    int display_width = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
+    int display_height = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
+    int window_width = _sapp.window_width;
+    int window_height = _sapp.window_height;
+    if (0 == window_width) {
+        window_width = (display_width * 4) / 5;
+    }
+    if (0 == window_height) {
+        window_height = (display_height * 4) / 5;
+    }
+    int window_xpos = (display_width - window_width) / 2;
+    int window_ypos = (display_height - window_height) / 2;
+    if (window_xpos < 0) {
+        window_xpos = 0;
+    }
+    if (window_ypos < 0) {
+        window_ypos = 0;
+    }
     _sapp_x11_grab_error_handler();
     _sapp.x11.window = XCreateWindow(_sapp.x11.display,
                                      _sapp.x11.root,
-                                     0, 0,
-                                     (uint32_t)_sapp.window_width,
-                                     (uint32_t)_sapp.window_height,
+                                     window_xpos,
+                                     window_ypos,
+                                     (uint32_t)window_width,
+                                     (uint32_t)window_height,
                                      0,     /* border width */
                                      depth, /* color depth */
                                      InputOutput,
@@ -10282,8 +10322,12 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     XSetWMProtocols(_sapp.x11.display, _sapp.x11.window, protocols, 1);
 
     XSizeHints* hints = XAllocSizeHints();
-    hints->flags |= PWinGravity;
+    hints->flags = (PWinGravity | PPosition | PSize);
     hints->win_gravity = StaticGravity;
+    hints->x = window_xpos;
+    hints->y = window_ypos;
+    hints->width = window_width;
+    hints->height = window_height;
     XSetWMNormalHints(_sapp.x11.display, _sapp.x11.window, hints);
     XFree(hints);
 
@@ -10292,8 +10336,8 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
         const Atom version = _SAPP_X11_XDND_VERSION;
         XChangeProperty(_sapp.x11.display, _sapp.x11.window, _sapp.x11.xdnd.XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*) &version, 1);
     }
-
     _sapp_x11_update_window_title();
+    _sapp_x11_query_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
@@ -11059,7 +11103,6 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     if (_sapp.fullscreen) {
         _sapp_x11_set_fullscreen(true);
     }
-    _sapp_x11_query_window_size();
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {

@@ -6,8 +6,8 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**22-Jan-2022** compatibility fix in
-the sokol_audio.h WASAPI backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**28-Jan-2022** sokol_app.h: some non-breaking
+default-window-size behaviour changes on desktop platforms)
 
 ## Examples and Related Projects
 
