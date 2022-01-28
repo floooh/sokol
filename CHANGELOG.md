@@ -8,7 +8,7 @@
       - on macOS and Linux, the window size will be 4/5 of the
         display size
       - no behaviour changes on other platforms
-  - On Windows and macOS, the window is now centered (in a later update,
+  - On Windows and Linux, the window is now centered (in a later update,
     more control over the initial window position, and new functions for
     positioning and sizing might be provided)
   - On Windows, when toggling between windowed and fullscreen, the
