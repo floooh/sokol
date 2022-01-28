@@ -1,5 +1,23 @@
 ## Updates
 
+- **28-Jan-2022**: some window size behaviour changes in sokol_app.h.
+  - Asking for a default-sized window (via sapp_desc.width/height = 0) now
+    behaves a bit differently on desktop platforms. Previously this set the
+    window size to 640x480, now a default window covers more screen area:
+      - on Windows CW_USEDEFAULT will be used for the size
+      - on macOS and Linux, the window size will be 4/5 of the
+        display size
+      - no behaviour changes on other platforms
+  - On Windows and macOS, the window is now centered (in a later update,
+    more control over the initial window position, and new functions for
+    positioning and sizing might be provided)
+  - On Windows, when toggling between windowed and fullscreen, the
+    window position and size will now be restored (on other platforms
+    this already happened automatically through the window system)
+  - On all desktop platforms if an application starts in fullscreen and
+    then is toggled back to windowed, the window will now be of the
+    expected size (provided in sapp_desc.width/height)
+
 - **20-Jan-2022**:
   - sokol_audio.h: A compatibility fix in the sokol_audio.h WASAPI backend (Windows): On
     some configs the IAudioClient::Initialize() call could fail because
