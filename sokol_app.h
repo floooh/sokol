@@ -3348,20 +3348,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    if (_sapp.fullscreen || (_sapp.window_width == 0) || (_sapp.window_height == 0)) {
+    if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
+        // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
-        if (_sapp.fullscreen) {
-            _sapp.window_width = screen_rect.size.width;
-            _sapp.window_height = screen_rect.size.height;
+        if (_sapp.window_width == 0) {
+            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
         }
-        else {
-            // use 4/5 of screen size as default size
-            if (_sapp.window_width == 0) {
-                _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
-            }
-            if (_sapp.window_height == 0) {
-                _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
-            }
+        if (_sapp.window_height == 0) {
+            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
         }
     }
     const NSUInteger style =
@@ -3446,13 +3440,11 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
         timer_obj = nil;
     #endif
+    [_sapp.macos.window center];
     _sapp.valid = true;
     if (_sapp.fullscreen) {
-        /* on GL, this already toggles a rendered frame, so set the valid flag before */
+        /* ^^^ on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp.macos.window toggleFullScreen:self];
-    }
-    else {
-        [_sapp.macos.window center];
     }
     NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
     [NSApp activateIgnoringOtherApps:YES];
