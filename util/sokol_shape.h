@@ -556,7 +556,6 @@ SOKOL_SHAPE_API_DECL sshape_mat4_t sshape_mat4_transpose(const float m[16]);
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-field-initializers"
-#pragma clang diagnostic ignored "-Wmissing-braces"
 #endif
 
 #ifndef SOKOL_API_IMPL
