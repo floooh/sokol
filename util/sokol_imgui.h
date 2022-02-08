@@ -236,6 +236,7 @@ typedef struct simgui_desc_t {
     int sample_count;
     const char* ini_filename;
     bool no_default_font;
+    bool disable_hotkeys;       // don't let ImGui handle Ctrl-A,C,V,X,Y,Z etc...
 } simgui_desc_t;
 
 typedef struct simgui_frame_desc_t {
@@ -2097,9 +2098,9 @@ _SOKOL_PRIVATE ImGuiKey _simgui_map_keycode(sapp_keycode key) {
         case SAPP_KEYCODE_KP_ENTER:     return ImGuiKey_KeypadEnter;
         case SAPP_KEYCODE_KP_EQUAL:     return ImGuiKey_KeypadEqual;
         case SAPP_KEYCODE_LEFT_SHIFT:   return ImGuiKey_LeftShift;
-        case SAPP_KEYCODE_LEFT_CONTROL: return ImGuiKey_LeftCtrl;
+        case SAPP_KEYCODE_LEFT_CONTROL: return _simgui.desc.disable_hotkeys ? ImGuiKey_None : ImGuiKey_LeftCtrl;
         case SAPP_KEYCODE_LEFT_ALT:     return ImGuiKey_LeftAlt;
-        case SAPP_KEYCODE_LEFT_SUPER:   return ImGuiKey_LeftSuper;
+        case SAPP_KEYCODE_LEFT_SUPER:   return _simgui.desc.disable_hotkeys ? ImGuiKey_None : ImGuiKey_LeftSuper;
         case SAPP_KEYCODE_RIGHT_SHIFT:  return ImGuiKey_RightShift;
         case SAPP_KEYCODE_RIGHT_CONTROL:return ImGuiKey_RightCtrl;
         case SAPP_KEYCODE_RIGHT_ALT:    return ImGuiKey_RightAlt;
