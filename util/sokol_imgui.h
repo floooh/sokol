@@ -2198,7 +2198,16 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             break;
         case SAPP_EVENTTYPE_MOUSE_ENTER:
         case SAPP_EVENTTYPE_MOUSE_LEAVE:
-            // FIXME?
+            // FIXME: since the sokol_app.h emscripten backend doesn't support
+            // mouse capture, mouse buttons must be released when the mouse leaves the
+            // browser window, so that they don't "stick" when released outside the window.
+            // A cleaner solution would be a new sokol_app.h function to query
+            // "platform behaviour flags".
+            #if defined(__EMSCRIPTEN__)
+            for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
+                _simgui_add_mouse_button_event(io, i, false);
+            }
+            #endif
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
