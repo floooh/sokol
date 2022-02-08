@@ -236,7 +236,7 @@ typedef struct simgui_desc_t {
     int sample_count;
     const char* ini_filename;
     bool no_default_font;
-    bool disable_hotkeys;       // don't let ImGui handle Ctrl-A,C,V,X,Y,Z etc...
+    bool disable_paste_override;    // if true, don't send Ctrl-V on EVENTTYPE_CLIPBOARD_PASTED
 } simgui_desc_t;
 
 typedef struct simgui_frame_desc_t {
@@ -2098,9 +2098,9 @@ _SOKOL_PRIVATE ImGuiKey _simgui_map_keycode(sapp_keycode key) {
         case SAPP_KEYCODE_KP_ENTER:     return ImGuiKey_KeypadEnter;
         case SAPP_KEYCODE_KP_EQUAL:     return ImGuiKey_KeypadEqual;
         case SAPP_KEYCODE_LEFT_SHIFT:   return ImGuiKey_LeftShift;
-        case SAPP_KEYCODE_LEFT_CONTROL: return _simgui.desc.disable_hotkeys ? ImGuiKey_None : ImGuiKey_LeftCtrl;
+        case SAPP_KEYCODE_LEFT_CONTROL: return ImGuiKey_LeftCtrl;
         case SAPP_KEYCODE_LEFT_ALT:     return ImGuiKey_LeftAlt;
-        case SAPP_KEYCODE_LEFT_SUPER:   return _simgui.desc.disable_hotkeys ? ImGuiKey_None : ImGuiKey_LeftSuper;
+        case SAPP_KEYCODE_LEFT_SUPER:   return ImGuiKey_LeftSuper;
         case SAPP_KEYCODE_RIGHT_SHIFT:  return ImGuiKey_RightShift;
         case SAPP_KEYCODE_RIGHT_CONTROL:return ImGuiKey_RightCtrl;
         case SAPP_KEYCODE_RIGHT_ALT:    return ImGuiKey_RightAlt;
@@ -2230,8 +2230,10 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_KEY_DOWN:
             _simgui_update_modifiers(io, ev->modifiers);
             /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
-            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
-                break;
+            if (!_simgui.desc.disable_paste_override) {
+                if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
+                    break;
+                }
             }
             /* on web platform, don't forward Ctrl-X, Ctrl-V to the browser */
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_X)) {
@@ -2275,10 +2277,12 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             break;
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
             /* simulate a Ctrl-V key down/up */
-            _simgui_add_key_event(io, _simgui_copypaste_modifier(), true);
-            _simgui_add_key_event(io, ImGuiKey_V, true);
-            _simgui_add_key_event(io, _simgui_copypaste_modifier(), false);
-            _simgui_add_key_event(io, ImGuiKey_V, false);
+            if (!_simgui.desc.disable_paste_override) {
+                _simgui_add_key_event(io, _simgui_copypaste_modifier(), true);
+                _simgui_add_key_event(io, ImGuiKey_V, true);
+                _simgui_add_key_event(io, _simgui_copypaste_modifier(), false);
+                _simgui_add_key_event(io, ImGuiKey_V, false);
+            }
             break;
         default:
             break;
