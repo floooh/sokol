@@ -6,8 +6,8 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**28-Jan-2022** sokol_app.h: some non-breaking
-default-window-size behaviour changes on desktop platforms)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**08-Feb-2022** sokol_imgui.h has been
+updated for Dear ImGui v1.87 (support the new evented IO system, and remove the self-rolled input buffering in sokol_imgui.h)
 
 ## Examples and Related Projects
 
