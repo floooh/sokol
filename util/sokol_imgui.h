@@ -236,7 +236,6 @@ typedef struct simgui_desc_t {
     int sample_count;
     const char* ini_filename;
     bool no_default_font;
-    bool disable_hotkeys;   /* don't let ImGui handle Ctrl-A,C,V,X,Y,Z */
 } simgui_desc_t;
 
 typedef struct simgui_frame_desc_t {
@@ -310,15 +309,13 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
     #endif
 #endif
 
-/* helper macros */
+/* helper macros and constants */
 #define _simgui_def(val, def) (((val) == 0) ? (def) : (val))
 
 typedef struct {
     ImVec2 disp_size;
     uint8_t _pad_8[8];
 } _simgui_vs_params_t;
-
-#define SIMGUI_MAX_KEY_VALUE (512)      // same as ImGuis IO.KeysDown array
 
 typedef struct {
     simgui_desc_t desc;
@@ -328,17 +325,9 @@ typedef struct {
     sg_image img;
     sg_shader shd;
     sg_pipeline pip;
-    bool is_osx;    // return true if running on OSX (or HTML5 OSX), needed for copy/paste
-
     sg_range vertices;
     sg_range indices;
-
-    #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-    bool btn_down[SAPP_MAX_MOUSEBUTTONS];
-    bool btn_up[SAPP_MAX_MOUSEBUTTONS];
-    uint8_t keys_down[SIMGUI_MAX_KEY_VALUE];     // bits 0..3 or modifiers, != 0 is key-down
-    uint8_t keys_up[SIMGUI_MAX_KEY_VALUE];       // same is keys_down
-    #endif
+    bool is_osx;    // return true if running on OSX (or HTML5 OSX), needed for copy/paste
 } _simgui_state_t;
 static _simgui_state_t _simgui;
 
@@ -1669,33 +1658,8 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     io->ConfigMacOSXBehaviors = _simgui_is_osx();
     io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-        io->KeyMap[ImGuiKey_Tab] = SAPP_KEYCODE_TAB;
-        io->KeyMap[ImGuiKey_LeftArrow] = SAPP_KEYCODE_LEFT;
-        io->KeyMap[ImGuiKey_RightArrow] = SAPP_KEYCODE_RIGHT;
-        io->KeyMap[ImGuiKey_UpArrow] = SAPP_KEYCODE_UP;
-        io->KeyMap[ImGuiKey_DownArrow] = SAPP_KEYCODE_DOWN;
-        io->KeyMap[ImGuiKey_PageUp] = SAPP_KEYCODE_PAGE_UP;
-        io->KeyMap[ImGuiKey_PageDown] = SAPP_KEYCODE_PAGE_DOWN;
-        io->KeyMap[ImGuiKey_Home] = SAPP_KEYCODE_HOME;
-        io->KeyMap[ImGuiKey_End] = SAPP_KEYCODE_END;
-        io->KeyMap[ImGuiKey_Delete] = SAPP_KEYCODE_DELETE;
-        io->KeyMap[ImGuiKey_Backspace] = SAPP_KEYCODE_BACKSPACE;
-        io->KeyMap[ImGuiKey_Space] = SAPP_KEYCODE_SPACE;
-        io->KeyMap[ImGuiKey_Enter] = SAPP_KEYCODE_ENTER;
-        io->KeyMap[ImGuiKey_KeyPadEnter] = SAPP_KEYCODE_KP_ENTER;
-        io->KeyMap[ImGuiKey_Escape] = SAPP_KEYCODE_ESCAPE;
-        if (!_simgui.desc.disable_hotkeys) {
-            io->KeyMap[ImGuiKey_A] = SAPP_KEYCODE_A;
-            io->KeyMap[ImGuiKey_C] = SAPP_KEYCODE_C;
-            io->KeyMap[ImGuiKey_V] = SAPP_KEYCODE_V;
-            io->KeyMap[ImGuiKey_X] = SAPP_KEYCODE_X;
-            io->KeyMap[ImGuiKey_Y] = SAPP_KEYCODE_Y;
-            io->KeyMap[ImGuiKey_Z] = SAPP_KEYCODE_Z;
-        }
-        #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
         io->SetClipboardTextFn = _simgui_set_clipboard;
         io->GetClipboardTextFn = _simgui_get_clipboard;
-        #endif
     #endif
 
     /* create sokol-gfx resources */
@@ -1853,15 +1817,6 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     SOKOL_FREE((void*)_simgui.indices.ptr);
 }
 
-#if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-_SOKOL_PRIVATE void _simgui_set_imgui_modifiers(ImGuiIO* io, uint32_t mods) {
-    io->KeyAlt = (mods & SAPP_MODIFIER_ALT) != 0;
-    io->KeyCtrl = (mods & SAPP_MODIFIER_CTRL) != 0;
-    io->KeyShift = (mods & SAPP_MODIFIER_SHIFT) != 0;
-    io->KeySuper = (mods & SAPP_MODIFIER_SUPER) != 0;
-}
-#endif
-
 SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width > 0);
@@ -1876,34 +1831,12 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
-    for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
-        if (_simgui.btn_down[i]) {
-            _simgui.btn_down[i] = false;
-            io->MouseDown[i] = true;
+        if (io->WantTextInput && !sapp_keyboard_shown()) {
+            sapp_show_keyboard(true);
         }
-        else if (_simgui.btn_up[i]) {
-            _simgui.btn_up[i] = false;
-            io->MouseDown[i] = false;
+        if (!io->WantTextInput && sapp_keyboard_shown()) {
+            sapp_show_keyboard(false);
         }
-    }
-    for (int i = 0; i < SIMGUI_MAX_KEY_VALUE; i++) {
-        if (_simgui.keys_down[i]) {
-            io->KeysDown[i] = true;
-            _simgui_set_imgui_modifiers(io, _simgui.keys_down[i]);
-            _simgui.keys_down[i] = 0;
-        }
-        else if (_simgui.keys_up[i]) {
-            io->KeysDown[i] = false;
-            _simgui_set_imgui_modifiers(io, _simgui.keys_up[i]);
-            _simgui.keys_up[i] = 0;
-        }
-    }
-    if (io->WantTextInput && !sapp_keyboard_shown()) {
-        sapp_show_keyboard(true);
-    }
-    if (!io->WantTextInput && sapp_keyboard_shown()) {
-        sapp_show_keyboard(false);
-    }
     #endif
     #if defined(__cplusplus)
         ImGui::NewFrame();
@@ -2065,6 +1998,177 @@ _SOKOL_PRIVATE bool _simgui_is_ctrl(uint32_t modifiers) {
     }
 }
 
+_SOKOL_PRIVATE ImGuiKey _simgui_map_keycode(sapp_keycode key) {
+    switch (key) {
+        case SAPP_KEYCODE_SPACE:        return ImGuiKey_Space;
+        case SAPP_KEYCODE_APOSTROPHE:   return ImGuiKey_Apostrophe;
+        case SAPP_KEYCODE_COMMA:        return ImGuiKey_Comma;
+        case SAPP_KEYCODE_MINUS:        return ImGuiKey_Minus;
+        case SAPP_KEYCODE_PERIOD:       return ImGuiKey_Apostrophe;
+        case SAPP_KEYCODE_SLASH:        return ImGuiKey_Slash;
+        case SAPP_KEYCODE_0:            return ImGuiKey_0;
+        case SAPP_KEYCODE_1:            return ImGuiKey_1;
+        case SAPP_KEYCODE_2:            return ImGuiKey_2;
+        case SAPP_KEYCODE_3:            return ImGuiKey_3;
+        case SAPP_KEYCODE_4:            return ImGuiKey_4;
+        case SAPP_KEYCODE_5:            return ImGuiKey_5;
+        case SAPP_KEYCODE_6:            return ImGuiKey_6;
+        case SAPP_KEYCODE_7:            return ImGuiKey_7;
+        case SAPP_KEYCODE_8:            return ImGuiKey_8;
+        case SAPP_KEYCODE_9:            return ImGuiKey_9;
+        case SAPP_KEYCODE_SEMICOLON:    return ImGuiKey_Semicolon;
+        case SAPP_KEYCODE_EQUAL:        return ImGuiKey_Equal;
+        case SAPP_KEYCODE_A:            return ImGuiKey_A;
+        case SAPP_KEYCODE_B:            return ImGuiKey_B;
+        case SAPP_KEYCODE_C:            return ImGuiKey_C;
+        case SAPP_KEYCODE_D:            return ImGuiKey_D;
+        case SAPP_KEYCODE_E:            return ImGuiKey_E;
+        case SAPP_KEYCODE_F:            return ImGuiKey_F;
+        case SAPP_KEYCODE_G:            return ImGuiKey_G;
+        case SAPP_KEYCODE_H:            return ImGuiKey_H;
+        case SAPP_KEYCODE_I:            return ImGuiKey_I;
+        case SAPP_KEYCODE_J:            return ImGuiKey_J;
+        case SAPP_KEYCODE_K:            return ImGuiKey_K;
+        case SAPP_KEYCODE_L:            return ImGuiKey_L;
+        case SAPP_KEYCODE_M:            return ImGuiKey_M;
+        case SAPP_KEYCODE_N:            return ImGuiKey_N;
+        case SAPP_KEYCODE_O:            return ImGuiKey_O;
+        case SAPP_KEYCODE_P:            return ImGuiKey_P;
+        case SAPP_KEYCODE_Q:            return ImGuiKey_Q;
+        case SAPP_KEYCODE_R:            return ImGuiKey_R;
+        case SAPP_KEYCODE_S:            return ImGuiKey_S;
+        case SAPP_KEYCODE_T:            return ImGuiKey_T;
+        case SAPP_KEYCODE_U:            return ImGuiKey_U;
+        case SAPP_KEYCODE_V:            return ImGuiKey_V;
+        case SAPP_KEYCODE_W:            return ImGuiKey_W;
+        case SAPP_KEYCODE_X:            return ImGuiKey_X;
+        case SAPP_KEYCODE_Y:            return ImGuiKey_Y;
+        case SAPP_KEYCODE_Z:            return ImGuiKey_Z;
+        case SAPP_KEYCODE_LEFT_BRACKET: return ImGuiKey_LeftBracket;
+        case SAPP_KEYCODE_BACKSLASH:    return ImGuiKey_Backslash;
+        case SAPP_KEYCODE_RIGHT_BRACKET:return ImGuiKey_RightBracket;
+        case SAPP_KEYCODE_GRAVE_ACCENT: return ImGuiKey_GraveAccent;
+        case SAPP_KEYCODE_ESCAPE:       return ImGuiKey_Escape;
+        case SAPP_KEYCODE_ENTER:        return ImGuiKey_Enter;
+        case SAPP_KEYCODE_TAB:          return ImGuiKey_Tab;
+        case SAPP_KEYCODE_BACKSPACE:    return ImGuiKey_Backspace;
+        case SAPP_KEYCODE_INSERT:       return ImGuiKey_Insert;
+        case SAPP_KEYCODE_DELETE:       return ImGuiKey_Delete;
+        case SAPP_KEYCODE_RIGHT:        return ImGuiKey_RightArrow;
+        case SAPP_KEYCODE_LEFT:         return ImGuiKey_LeftArrow;
+        case SAPP_KEYCODE_DOWN:         return ImGuiKey_DownArrow;
+        case SAPP_KEYCODE_UP:           return ImGuiKey_UpArrow;
+        case SAPP_KEYCODE_PAGE_UP:      return ImGuiKey_PageUp;
+        case SAPP_KEYCODE_PAGE_DOWN:    return ImGuiKey_PageDown;
+        case SAPP_KEYCODE_HOME:         return ImGuiKey_Home;
+        case SAPP_KEYCODE_END:          return ImGuiKey_End;
+        case SAPP_KEYCODE_CAPS_LOCK:    return ImGuiKey_CapsLock;
+        case SAPP_KEYCODE_SCROLL_LOCK:  return ImGuiKey_ScrollLock;
+        case SAPP_KEYCODE_NUM_LOCK:     return ImGuiKey_NumLock;
+        case SAPP_KEYCODE_PRINT_SCREEN: return ImGuiKey_PrintScreen;
+        case SAPP_KEYCODE_PAUSE:        return ImGuiKey_Pause;
+        case SAPP_KEYCODE_F1:           return ImGuiKey_F1;
+        case SAPP_KEYCODE_F2:           return ImGuiKey_F2;
+        case SAPP_KEYCODE_F3:           return ImGuiKey_F3;
+        case SAPP_KEYCODE_F4:           return ImGuiKey_F4;
+        case SAPP_KEYCODE_F5:           return ImGuiKey_F5;
+        case SAPP_KEYCODE_F6:           return ImGuiKey_F6;
+        case SAPP_KEYCODE_F7:           return ImGuiKey_F7;
+        case SAPP_KEYCODE_F8:           return ImGuiKey_F8;
+        case SAPP_KEYCODE_F9:           return ImGuiKey_F9;
+        case SAPP_KEYCODE_F10:          return ImGuiKey_F10;
+        case SAPP_KEYCODE_F11:          return ImGuiKey_F11;
+        case SAPP_KEYCODE_F12:          return ImGuiKey_F12;
+        case SAPP_KEYCODE_KP_0:         return ImGuiKey_Keypad0;
+        case SAPP_KEYCODE_KP_1:         return ImGuiKey_Keypad1;
+        case SAPP_KEYCODE_KP_2:         return ImGuiKey_Keypad2;
+        case SAPP_KEYCODE_KP_3:         return ImGuiKey_Keypad3;
+        case SAPP_KEYCODE_KP_4:         return ImGuiKey_Keypad4;
+        case SAPP_KEYCODE_KP_5:         return ImGuiKey_Keypad5;
+        case SAPP_KEYCODE_KP_6:         return ImGuiKey_Keypad6;
+        case SAPP_KEYCODE_KP_7:         return ImGuiKey_Keypad7;
+        case SAPP_KEYCODE_KP_8:         return ImGuiKey_Keypad8;
+        case SAPP_KEYCODE_KP_9:         return ImGuiKey_Keypad9;
+        case SAPP_KEYCODE_KP_DECIMAL:   return ImGuiKey_KeypadDecimal;
+        case SAPP_KEYCODE_KP_DIVIDE:    return ImGuiKey_KeypadDivide;
+        case SAPP_KEYCODE_KP_MULTIPLY:  return ImGuiKey_KeypadMultiply;
+        case SAPP_KEYCODE_KP_SUBTRACT:  return ImGuiKey_KeypadSubtract;
+        case SAPP_KEYCODE_KP_ADD:       return ImGuiKey_KeypadAdd;
+        case SAPP_KEYCODE_KP_ENTER:     return ImGuiKey_KeypadEnter;
+        case SAPP_KEYCODE_KP_EQUAL:     return ImGuiKey_KeypadEqual;
+        case SAPP_KEYCODE_LEFT_SHIFT:   return ImGuiKey_LeftShift;
+        case SAPP_KEYCODE_LEFT_CONTROL: return ImGuiKey_LeftCtrl;
+        case SAPP_KEYCODE_LEFT_ALT:     return ImGuiKey_LeftAlt;
+        case SAPP_KEYCODE_LEFT_SUPER:   return ImGuiKey_LeftSuper;
+        case SAPP_KEYCODE_RIGHT_SHIFT:  return ImGuiKey_RightShift;
+        case SAPP_KEYCODE_RIGHT_CONTROL:return ImGuiKey_RightCtrl;
+        case SAPP_KEYCODE_RIGHT_ALT:    return ImGuiKey_RightAlt;
+        case SAPP_KEYCODE_RIGHT_SUPER:  return ImGuiKey_RightSuper;
+        case SAPP_KEYCODE_MENU:         return ImGuiKey_Menu;
+        default:                        return ImGuiKey_None;
+    }
+}
+
+_SOKOL_PRIVATE void _simgui_add_focus_event(ImGuiIO* io, bool focus) {
+    #if defined(__cplusplus)
+        io->AddFocusEvent(focus);
+    #else
+        ImGuiIO_AddFocusEvent(io, focus);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_mouse_pos_event(ImGuiIO* io, float x, float y) {
+    #if defined(__cplusplus)
+        io->AddMousePosEvent(x, y);
+    #else
+        ImGuiIO_AddMousePosEvent(io, x, y);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_mouse_button_event(ImGuiIO* io, int mouse_button, bool down) {
+    #if defined(__cplusplus)
+        io->AddMouseButtonEvent(mouse_button, down);
+    #else
+        ImGuiIO_AddMouseButtonEvent(io, mouse_button, down);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_mouse_wheel_event(ImGuiIO* io, float wheel_x, float wheel_y) {
+    #if defined(__cplusplus)
+        io->AddMouseWheelEvent(wheel_x, wheel_y);
+    #else
+        ImGuiIO_AddMouseWheelEvent(io, wheel_x, wheel_y);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_key_event(ImGuiIO* io, ImGuiKey key, bool down) {
+    #if defined(__cplusplus)
+        io->AddKeyEvent(key, down);
+    #else
+        ImGuiIO_AddKeyEvent(io, key, down);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_input_character(ImGuiIO* io, uint32_t c) {
+    #if defined(__cplusplus)
+        io->AddInputCharacter(c);
+    #else
+        ImGuiIO_AddInputCharacter(io, c);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_update_modifiers(ImGuiIO* io, uint32_t mods) {
+    _simgui_add_key_event(io, ImGuiKey_ModCtrl, (mods & SAPP_MODIFIER_CTRL) != 0);
+    _simgui_add_key_event(io, ImGuiKey_ModShift, (mods & SAPP_MODIFIER_SHIFT) != 0);
+    _simgui_add_key_event(io, ImGuiKey_ModAlt, (mods & SAPP_MODIFIER_ALT) != 0);
+    _simgui_add_key_event(io, ImGuiKey_ModSuper, (mods & SAPP_MODIFIER_SUPER) != 0);
+}
+
+// returns Ctrl or Super, depending on platform
+_SOKOL_PRIVATE ImGuiKey _simgui_copypaste_modifier(void) {
+    return _simgui.is_osx ? ImGuiKey_ModSuper : ImGuiKey_ModCtrl;
+}
+
 SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     const float dpi_scale = _simgui.cur_dpi_scale;
     #if defined(__cplusplus)
@@ -2072,56 +2176,58 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
     #else
         ImGuiIO* io = igGetIO();
     #endif
-    _simgui_set_imgui_modifiers(io, ev->modifiers);
     switch (ev->type) {
+        case SAPP_EVENTTYPE_FOCUSED:
+            _simgui_add_focus_event(io, true);
+            break;
+        case SAPP_EVENTTYPE_UNFOCUSED:
+            _simgui_add_focus_event(io, false);
+            break;
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            io->MousePos.x = ev->mouse_x / dpi_scale;
-            io->MousePos.y = ev->mouse_y / dpi_scale;
-            if (ev->mouse_button < 3) {
-                _simgui.btn_down[ev->mouse_button] = true;
-            }
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
+            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            io->MousePos.x = ev->mouse_x / dpi_scale;
-            io->MousePos.y = ev->mouse_y / dpi_scale;
-            if (ev->mouse_button < 3) {
-                _simgui.btn_up[ev->mouse_button] = true;
-            }
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
+            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
-            io->MousePos.x = ev->mouse_x / dpi_scale;
-            io->MousePos.y = ev->mouse_y / dpi_scale;
+            _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_MOUSE_ENTER:
         case SAPP_EVENTTYPE_MOUSE_LEAVE:
-            for (int i = 0; i < 3; i++) {
-                _simgui.btn_down[i] = false;
-                _simgui.btn_up[i] = false;
-                io->MouseDown[i] = false;
+            // FIXME: since the sokol_app.h emscripten backend doesn't support
+            // mouse capture, mouse buttons must be released when the mouse leaves the
+            // browser window, so that they don't "stick" when released outside the window.
+            // A cleaner solution would be a new sokol_app.h function to query
+            // "platform behaviour flags".
+            #if defined(__EMSCRIPTEN__)
+            for (int i = 0; i < SAPP_MAX_MOUSEBUTTONS; i++) {
+                _simgui_add_mouse_button_event(io, i, false);
             }
+            #endif
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            io->MouseWheelH = ev->scroll_x;
-            io->MouseWheel = ev->scroll_y;
+            _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
-            _simgui.btn_down[0] = true;
-            io->MousePos.x = ev->touches[0].pos_x / dpi_scale;
-            io->MousePos.y = ev->touches[0].pos_y / dpi_scale;
+            _simgui_add_mouse_button_event(io, 0, true);
+            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
-            io->MousePos.x = ev->touches[0].pos_x / dpi_scale;
-            io->MousePos.y = ev->touches[0].pos_y / dpi_scale;
+            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
-            _simgui.btn_up[0] = true;
-            io->MousePos.x = ev->touches[0].pos_x / dpi_scale;
-            io->MousePos.y = ev->touches[0].pos_y / dpi_scale;
+            _simgui_add_mouse_button_event(io, 0, false);
+            _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
-            _simgui.btn_up[0] = _simgui.btn_down[0] = false;
+            _simgui_add_mouse_button_event(io, 0, false);
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
+            _simgui_update_modifiers(io, ev->modifiers);
             /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
                 break;
@@ -2133,9 +2239,11 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
                 sapp_consume_event();
             }
-            _simgui.keys_down[ev->key_code] = 0x80 | (uint8_t)ev->modifiers;
+            // it's ok to add ImGuiKey_None key events
+            _simgui_add_key_event(io, _simgui_map_keycode(ev->key_code), true);
             break;
         case SAPP_EVENTTYPE_KEY_UP:
+            _simgui_update_modifiers(io, ev->modifiers);
             /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
                 break;
@@ -2147,7 +2255,8 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_C)) {
                 sapp_consume_event();
             }
-            _simgui.keys_up[ev->key_code] = 0x80 | (uint8_t)ev->modifiers;
+            // it's ok to add ImGuiKey_None key events
+            _simgui_add_key_event(io, _simgui_map_keycode(ev->key_code), false);
             break;
         case SAPP_EVENTTYPE_CHAR:
             /* on some platforms, special keys may be reported as
@@ -2155,27 +2264,26 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
                drop those, also don't forward characters if some
                modifiers have been pressed
             */
+            _simgui_update_modifiers(io, ev->modifiers);
             if ((ev->char_code >= 32) &&
                 (ev->char_code != 127) &&
                 (0 == (ev->modifiers & (SAPP_MODIFIER_ALT|SAPP_MODIFIER_CTRL|SAPP_MODIFIER_SUPER))))
             {
-                #if defined(__cplusplus)
-                    io->AddInputCharacter((ImWchar)ev->char_code);
-                #else
-                    ImGuiIO_AddInputCharacter(io, (ImWchar)ev->char_code);
-                #endif
+                _simgui_add_input_character(io, ev->char_code);
             }
             break;
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
             /* simulate a Ctrl-V key down/up */
-            _simgui.keys_down[SAPP_KEYCODE_V] = _simgui.keys_up[SAPP_KEYCODE_V] =
-                (uint8_t) (0x80 | (_simgui.is_osx ? SAPP_MODIFIER_SUPER:SAPP_MODIFIER_CTRL));
+            _simgui_add_key_event(io, _simgui_copypaste_modifier(), true);
+            _simgui_add_key_event(io, ImGuiKey_V, true);
+            _simgui_add_key_event(io, _simgui_copypaste_modifier(), false);
+            _simgui_add_key_event(io, ImGuiKey_V, false);
             break;
         default:
             break;
     }
     return io->WantCaptureKeyboard || io->WantCaptureMouse;
 }
-#endif
+#endif // SOKOL_IMGUI_NO_SOKOL_APP
 
-#endif /* SOKOL_IMPL */
+#endif // SOKOL_IMPL
