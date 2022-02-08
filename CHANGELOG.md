@@ -7,9 +7,6 @@
     the mouse leaves the screen (since the native desktop platforms
     automatically capture the mouse when mouse buttons are pressed, but mouse
     capture is not supported in the sokol_app.h Emscripten backend)
-  - ```simgui_desc.disable_hotkeys``` has been removed (this is used in
-    [v6502r](https://github.com/floooh/v6502r), don't know yet how to handle this with
-    the new Dear ImGui input system, I may need to add this back somehow)
 
 - **28-Jan-2022**: some window size behaviour changes in sokol_app.h.
   - Asking for a default-sized window (via sapp_desc.width/height = 0) now
