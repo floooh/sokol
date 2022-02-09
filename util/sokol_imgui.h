@@ -107,15 +107,18 @@
 
             sg_pixel_format color_format
                 The color pixel format of the render pass where the UI
-                will be rendered. The default is SG_PIXELFORMAT_RGBA8
+                will be rendered. The default (0) matches sokoL_gfx.h's
+                default pass.
 
             sg_pixel_format depth_format
                 The depth-buffer pixel format of the render pass where
-                the UI will be rendered. The default is SG_PIXELFORMAT_DEPTHSTENCIL.
+                the UI will be rendered. The default (0) matches
+                sokol_gfx.h's default pass depth format.
 
             int sample_count
                 The MSAA sample-count of the render pass where the UI
-                will be rendered. The default is 1.
+                will be rendered. The default (0) matches sokol_gfx.h's
+                default pass sample count.
 
             const char* ini_filename
                 Sets this path as ImGui::GetIO().IniFilename where ImGui will store
@@ -132,6 +135,13 @@
                 Set this to true if you don't want to use ImGui's default
                 font. In this case you need to initialize the font
                 yourself after simgui_setup() is called.
+
+            bool disable_paste_override
+                If set to true, sokol_imgui.h will not 'emulate' a Dear Imgui 
+                clipboard paste action on SAPP_EVENTTYPE_CLIPBOARD_PASTED event.
+                This is mainly a hack/workaround to allow external workarounds
+                for making copy/paste work on the web platform. In general,
+                copy/paste support isn't properly fleshed out in sokol_imgui.h yet.
 
     --- At the start of a frame, call:
 
