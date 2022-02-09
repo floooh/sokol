@@ -3972,31 +3972,34 @@ typedef struct {
 } _sg_wgpu_context_t;
 typedef _sg_wgpu_context_t _sg_context_t;
 
-/* a pool of per-frame uniform buffers */
+// a pool of per-frame uniform buffers
 typedef struct {
     WGPUBindGroupLayout bindgroup_layout;
     uint32_t num_bytes;
-    uint32_t offset;    /* current offset into current frame's mapped uniform buffer */
+    uint32_t offset;    // current offset into current frame's mapped uniform buffer
     uint32_t bind_offsets[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    WGPUBuffer buf;     /* the GPU-side uniform buffer */
+    WGPUBuffer buf;     // the GPU-side uniform buffer
     WGPUBindGroup bindgroup;
     struct {
         int num;
         int cur;
-        WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; /* CPU-side staging buffers */
-        uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   /* if != 0, staging buffer currently mapped */
-    } stage;
+        WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; // CPU-side staging buffers
+        uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   // if != 0, staging buffer currently mapped
+    } staging;
 } _sg_wgpu_ubpool_t;
 
-/* ...a similar pool (like uniform buffer pool) of dynamic-resource staging buffers */
+// ...a similar pool (like uniform buffer pool) of dynamic-resource staging buffers
 typedef struct {
+    WGPUCommandEncoder cmd_enc;
     uint32_t num_bytes;
-    uint32_t offset;    /* current offset into current frame's staging buffer */
-    int num;            /* number of staging buffers */
-    int cur;            /* this frame's staging buffer */
-    WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; /* CPU-side staging buffers */
-    uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   /* if != 0, staging buffer currently mapped */
-} _sg_wgpu_stagingpool_t;
+    uint32_t offset;    // current offset into current frame's staging buffer
+    struct {
+        int num;        // number of staging buffers
+        int cur;        // this frame's staging buffer
+        WGPUBuffer buf[_SG_WGPU_STAGING_PIPELINE_SIZE]; // CPU-side staging buffers
+        uint8_t* ptr[_SG_WGPU_STAGING_PIPELINE_SIZE];   // if != 0, staging buffer currently mapped
+    } staging;
+} _sg_wgpu_uploadpool_t;
 
 /* the WGPU backend state */
 typedef struct {
@@ -4015,14 +4018,13 @@ typedef struct {
     void* user_data;
     WGPUQueue queue;
     WGPUCommandEncoder render_cmd_enc;
-    WGPUCommandEncoder staging_cmd_enc;
     WGPURenderPassEncoder pass_enc;
     WGPUBindGroup empty_bind_group;
     const _sg_pipeline_t* cur_pipeline;
     sg_pipeline cur_pipeline_id;
     _sg_sampler_cache_t sampler_cache;
     _sg_wgpu_ubpool_t ub;
-    _sg_wgpu_stagingpool_t staging;
+    _sg_wgpu_uploadpool_t upload;
 } _sg_wgpu_backend_t;
 #endif
 
@@ -4476,6 +4478,10 @@ _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
 }
 
 _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
+_SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
@@ -11728,16 +11734,14 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
 
+    // FIXME FIXME FIXME
     /* Add the max-uniform-update size (64 KB) to the requested buffer size,
        this is to prevent validation errors in the WebGPU implementation
        if the entire buffer size is used per frame. 64 KB is the allowed
        max uniform update size on NVIDIA
     */
-    _sg.wgpu.ub.num_bytes = (uint32_t)(desc->uniform_buffer_size + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
+    _sg.wgpu.ub.num_bytes = (uint32_t)desc->uniform_buffer_size;// + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
-SOKOL_ASSERT(false && "FIXME");
-/*
-FIXME
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
     ub_desc.size = _sg.wgpu.ub.num_bytes;
@@ -11745,45 +11749,45 @@ FIXME
     _sg.wgpu.ub.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &ub_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.buf);
 
-    WGPUBindGroupLayoutBinding ub_bglb_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    memset(ub_bglb_desc, 0, sizeof(ub_bglb_desc));
+    WGPUBindGroupLayoutEntry ub_bgentries_desc[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    memset(ub_bgentries_desc, 0, sizeof(ub_bgentries_desc));
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         WGPUShaderStage vis = (stage_index == SG_SHADERSTAGE_VS) ? WGPUShaderStage_Vertex : WGPUShaderStage_Fragment;
         for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
-            ub_bglb_desc[stage_index][ub_index].binding = bind_index;
-            ub_bglb_desc[stage_index][ub_index].visibility = vis;
-            ub_bglb_desc[stage_index][ub_index].type = WGPUBindingType_UniformBuffer;
-            ub_bglb_desc[stage_index][ub_index].hasDynamicOffset = true;
+            uint32_t bind_index = (uint32_t) (stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index);
+            ub_bgentries_desc[stage_index][ub_index].binding = bind_index;
+            ub_bgentries_desc[stage_index][ub_index].visibility = vis;
+            ub_bgentries_desc[stage_index][ub_index].buffer.type = WGPUBufferBindingType_Uniform;
+            ub_bgentries_desc[stage_index][ub_index].buffer.hasDynamicOffset = true;
         }
     }
 
-    WGPUBindGroupLayoutDescriptor ub_bgl_desc;
-    memset(&ub_bgl_desc, 0, sizeof(ub_bgl_desc));
-    ub_bgl_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
-    ub_bgl_desc.bindings = &ub_bglb_desc[0][0];
-    _sg.wgpu.ub.bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bgl_desc);
+    WGPUBindGroupLayoutDescriptor ub_bglayout_desc;
+    memset(&ub_bglayout_desc, 0, sizeof(ub_bglayout_desc));
+    ub_bglayout_desc.entryCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
+    ub_bglayout_desc.entries = &ub_bgentries_desc[0][0];
+    _sg.wgpu.ub.bindgroup_layout = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &ub_bglayout_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.bindgroup_layout);
 
-    WGPUBindGroupBinding ub_bgb[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
-    memset(ub_bgb, 0, sizeof(ub_bgb));
+    WGPUBindGroupEntry ub_bgentries[SG_NUM_SHADER_STAGES][SG_MAX_SHADERSTAGE_UBS];
+    memset(ub_bgentries, 0, sizeof(ub_bgentries));
     for (int stage_index = 0; stage_index < SG_NUM_SHADER_STAGES; stage_index++) {
         for (int ub_index = 0; ub_index < SG_MAX_SHADERSTAGE_UBS; ub_index++) {
-            int bind_index = stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index;
-            ub_bgb[stage_index][ub_index].binding = bind_index;
-            ub_bgb[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
+            uint32_t bind_index = (uint32_t) (stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index);
+            ub_bgentries[stage_index][ub_index].binding = bind_index;
+            ub_bgentries[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
+            ub_bgentries[stage_index][ub_index].size = _sg.wgpu.ub.num_bytes;
             // FIXME FIXME FIXME FIXME: HACK FOR VALIDATION BUG IN DAWN
-            ub_bgb[stage_index][ub_index].size = (1<<16);
+            //ub_bgb[stage_index][ub_index].size = (1<<16);
         }
     }
     WGPUBindGroupDescriptor bg_desc;
     memset(&bg_desc, 0, sizeof(bg_desc));
     bg_desc.layout = _sg.wgpu.ub.bindgroup_layout;
-    bg_desc.bindingCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
-    bg_desc.bindings = &ub_bgb[0][0];
+    bg_desc.entryCount = SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS;
+    bg_desc.entries = &ub_bgentries[0][0];
     _sg.wgpu.ub.bindgroup = wgpuDeviceCreateBindGroup(_sg.wgpu.dev, &bg_desc);
     SOKOL_ASSERT(_sg.wgpu.ub.bindgroup);
-*/
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
@@ -11799,16 +11803,16 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_discard(void) {
         wgpuBindGroupLayoutRelease(_sg.wgpu.ub.bindgroup_layout);
         _sg.wgpu.ub.bindgroup_layout = 0;
     }
-    for (int i = 0; i < _sg.wgpu.ub.stage.num; i++) {
-        if (_sg.wgpu.ub.stage.buf[i]) {
-            wgpuBufferRelease(_sg.wgpu.ub.stage.buf[i]);
-            _sg.wgpu.ub.stage.buf[i] = 0;
-            _sg.wgpu.ub.stage.ptr[i] = 0;
+    for (int i = 0; i < _sg.wgpu.ub.staging.num; i++) {
+        if (_sg.wgpu.ub.staging.buf[i]) {
+            wgpuBufferRelease(_sg.wgpu.ub.staging.buf[i]);
+            _sg.wgpu.ub.staging.buf[i] = 0;
+            _sg.wgpu.ub.staging.ptr[i] = 0;
         }
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+_SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus status, void* user_data) {
     if (!_sg.wgpu.valid) {
         return;
     }
@@ -11817,20 +11821,26 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_mapped_callback(WGPUBufferMapAsyncStatus sta
         SOKOL_LOG("Mapping uniform buffer failed!\n");
         SOKOL_ASSERT(false);
     }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.ub.num_bytes));
-    int index = (int)(intptr_t) user_data;
-    SOKOL_ASSERT(index < _sg.wgpu.ub.stage.num);
-    SOKOL_ASSERT(0 == _sg.wgpu.ub.stage.ptr[index]);
-    _sg.wgpu.ub.stage.ptr[index] = (uint8_t*) data;
+    const int staging_index = (int)(intptr_t)user_data;
+    SOKOL_ASSERT(staging_index < _sg.wgpu.ub.staging.num);
+    void* data = wgpuBufferGetMappedRange(_sg.wgpu.ub.staging.buf[staging_index], 0, _sg.wgpu.ub.num_bytes);
+    SOKOL_ASSERT(data);
+    SOKOL_ASSERT(0 == _sg.wgpu.ub.staging.ptr[staging_index]);
+    _sg.wgpu.ub.staging.ptr[staging_index] = (uint8_t*)data;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
-SOKOL_ASSERT(false && "FIXME");
-/*
     // immediately request a new mapping for the last frame's current staging buffer
     if (!first_frame) {
-        WGPUBuffer ub_src = _sg.wgpu.ub.stage.buf[_sg.wgpu.ub.stage.cur];
-        wgpuBufferMapWriteAsync(ub_src, _sg_wgpu_ubpool_mapped_callback, (void*)(intptr_t)_sg.wgpu.ub.stage.cur);
+        WGPUBuffer ub_src = _sg.wgpu.ub.staging.buf[_sg.wgpu.ub.staging.cur];
+        SOKOL_ASSERT(ub_src);
+        wgpuBufferMapAsync(
+            ub_src,                 // buffer
+            WGPUMapMode_Write,      // mode
+            0,                      // offset
+            _sg.wgpu.ub.num_bytes,  // size
+            _sg_wgpu_ubpool_mapped_callback,            // callback
+            (void*)(intptr_t)_sg.wgpu.ub.staging.cur);    // userdata
     }
 
     // rewind per-frame offsets
@@ -11838,37 +11848,35 @@ SOKOL_ASSERT(false && "FIXME");
     memset(&_sg.wgpu.ub.bind_offsets, 0, sizeof(_sg.wgpu.ub.bind_offsets));
 
     // check if a mapped staging buffer is available, otherwise create one
-    for (int i = 0; i < _sg.wgpu.ub.stage.num; i++) {
-        if (_sg.wgpu.ub.stage.ptr[i]) {
-            _sg.wgpu.ub.stage.cur = i;
+    for (int i = 0; i < _sg.wgpu.ub.staging.num; i++) {
+        if (_sg.wgpu.ub.staging.ptr[i]) {
+            _sg.wgpu.ub.staging.cur = i;
             return;
         }
     }
 
     // no mapped uniform buffer available, create one
-    SOKOL_ASSERT(_sg.wgpu.ub.stage.num < _SG_WGPU_STAGING_PIPELINE_SIZE);
-    _sg.wgpu.ub.stage.cur = _sg.wgpu.ub.stage.num++;
-    const int cur = _sg.wgpu.ub.stage.cur;
+    SOKOL_ASSERT(_sg.wgpu.ub.staging.num < _SG_WGPU_STAGING_PIPELINE_SIZE);
+    _sg.wgpu.ub.staging.cur = _sg.wgpu.ub.staging.num++;
+    const int cur = _sg.wgpu.ub.staging.cur;
 
     WGPUBufferDescriptor desc;
     memset(&desc, 0, sizeof(desc));
     desc.size = _sg.wgpu.ub.num_bytes;
     desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
-    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &desc);
-    _sg.wgpu.ub.stage.buf[cur] = res.buffer;
-    _sg.wgpu.ub.stage.ptr[cur] = (uint8_t*) res.data;
-    SOKOL_ASSERT(_sg.wgpu.ub.stage.buf[cur]);
-    SOKOL_ASSERT(_sg.wgpu.ub.stage.ptr[cur]);
-    SOKOL_ASSERT(res.dataLength == _sg.wgpu.ub.num_bytes);
-*/
+    desc.mappedAtCreation = true;
+    _sg.wgpu.ub.staging.buf[cur] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &desc);
+    SOKOL_ASSERT(_sg.wgpu.ub.staging.buf[cur]);
+    _sg.wgpu.ub.staging.ptr[cur] = wgpuBufferGetMappedRange(_sg.wgpu.ub.staging.buf[cur], 0, _sg.wgpu.ub.num_bytes);
+    SOKOL_ASSERT(_sg.wgpu.ub.staging.ptr[cur]);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
     // unmap staging buffer and copy to uniform buffer
-    const int cur = _sg.wgpu.ub.stage.cur;
-    SOKOL_ASSERT(_sg.wgpu.ub.stage.ptr[cur]);
-    _sg.wgpu.ub.stage.ptr[cur] = 0;
-    WGPUBuffer src_buf = _sg.wgpu.ub.stage.buf[cur];
+    const int cur = _sg.wgpu.ub.staging.cur;
+    SOKOL_ASSERT(_sg.wgpu.ub.staging.ptr[cur]);
+    _sg.wgpu.ub.staging.ptr[cur] = 0;
+    WGPUBuffer src_buf = _sg.wgpu.ub.staging.buf[cur];
     wgpuBufferUnmap(src_buf);
     if (_sg.wgpu.ub.offset > 0) {
         WGPUBuffer dst_buf = _sg.wgpu.ub.buf;
@@ -11878,17 +11886,17 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
 
 /* helper function to compute number of bytes needed in staging buffer to copy image data */
 _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) {
-    uint32_t num_bytes = 0;
-    const uint32_t num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const uint32_t num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
+    int num_bytes = 0;
+    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
+    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-        const uint32_t mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-        const uint32_t mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+        const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
+        const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
         /* row-pitch must be 256-aligend */
-        const uint32_t bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
+        const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
         num_bytes += bytes_per_slice * num_slices * num_faces;
     }
-    return num_bytes;
+    return (uint32_t)num_bytes;
 }
 
 /* helper function to copy image data into a texture via a staging buffer, returns number of
@@ -11998,21 +12006,21 @@ SOKOL_ASSERT(false && "FIXME");
 */
 _SOKOL_PRIVATE void _sg_wgpu_staging_init(const sg_desc* desc) {
     SOKOL_ASSERT(desc && (desc->staging_buffer_size > 0));
-    _sg.wgpu.staging.num_bytes = desc->staging_buffer_size;
+    _sg.wgpu.upload.num_bytes = (uint32_t) desc->staging_buffer_size;
     /* there's actually nothing more to do here */
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_staging_discard(void) {
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
-        if (_sg.wgpu.staging.buf[i]) {
-            wgpuBufferRelease(_sg.wgpu.staging.buf[i]);
-            _sg.wgpu.staging.buf[i] = 0;
-            _sg.wgpu.staging.ptr[i] = 0;
+    for (int i = 0; i < _sg.wgpu.upload.staging.num; i++) {
+        if (_sg.wgpu.upload.staging.buf[i]) {
+            wgpuBufferRelease(_sg.wgpu.upload.staging.buf[i]);
+            _sg.wgpu.upload.staging.buf[i] = 0;
+            _sg.wgpu.upload.staging.ptr[i] = 0;
         }
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus status, void* data, uint64_t data_len, void* user_data) {
+_SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus status, void* user_data) {
     if (!_sg.wgpu.valid) {
         return;
     }
@@ -12021,49 +12029,53 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_mapped_callback(WGPUBufferMapAsyncStatus st
         SOKOL_ASSERT("Mapping staging buffer failed!\n");
         SOKOL_ASSERT(false);
     }
-    SOKOL_ASSERT(data && (data_len == _sg.wgpu.staging.num_bytes));
-    int index = (int)(intptr_t) user_data;
-    SOKOL_ASSERT(index < _sg.wgpu.staging.num);
-    SOKOL_ASSERT(0 == _sg.wgpu.staging.ptr[index]);
-    _sg.wgpu.staging.ptr[index] = (uint8_t*) data;
+    const int staging_index = (int)(intptr_t)user_data;
+    SOKOL_ASSERT(staging_index < _sg.wgpu.upload.staging.num);
+    void* data = wgpuBufferGetMappedRange(_sg.wgpu.upload.staging.buf[staging_index], 0, _sg.wgpu.upload.num_bytes);
+    SOKOL_ASSERT(data);
+    SOKOL_ASSERT(0 == _sg.wgpu.upload.staging.ptr[staging_index]);
+    _sg.wgpu.upload.staging.ptr[staging_index] = (uint8_t*)data;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
-SOKOL_ASSERT(false && "FIXME");
-/*
     // immediately request a new mapping for the last frame's current staging buffer
     if (!first_frame) {
-        WGPUBuffer cur_buf = _sg.wgpu.staging.buf[_sg.wgpu.staging.cur];
-        wgpuBufferMapWriteAsync(cur_buf, _sg_wgpu_staging_mapped_callback, (void*)(intptr_t)_sg.wgpu.staging.cur);
+        WGPUBuffer cur_buf = _sg.wgpu.upload.staging.buf[_sg.wgpu.upload.staging.cur];
+        SOKOL_ASSERT(cur_buf);
+        wgpuBufferMapAsync(
+            cur_buf,                // buffer
+            WGPUMapMode_Write,      // mode
+            0,                      // offset
+            _sg.wgpu.ub.num_bytes,  // size
+            _sg_wgpu_staging_mapped_callback,
+            (void*)(intptr_t)_sg.wgpu.upload.staging.cur);
     }
 
     // rewind staging-buffer offset
-    _sg.wgpu.staging.offset = 0;
+    _sg.wgpu.upload.offset = 0;
 
     // check if mapped staging buffer is available, otherwise create one
-    for (int i = 0; i < _sg.wgpu.staging.num; i++) {
-        if (_sg.wgpu.staging.ptr[i]) {
-            _sg.wgpu.staging.cur = i;
+    for (int i = 0; i < _sg.wgpu.upload.staging.num; i++) {
+        if (_sg.wgpu.upload.staging.ptr[i]) {
+            _sg.wgpu.upload.staging.cur = i;
             return;
         }
     }
 
     // no mapped buffer available, create one
-    SOKOL_ASSERT(_sg.wgpu.staging.num < _SG_WGPU_STAGING_PIPELINE_SIZE);
-    _sg.wgpu.staging.cur = _sg.wgpu.staging.num++;
-    const int cur = _sg.wgpu.staging.cur;
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.num < _SG_WGPU_STAGING_PIPELINE_SIZE);
+    _sg.wgpu.upload.staging.cur = _sg.wgpu.upload.staging.num++;
+    const int cur = _sg.wgpu.upload.staging.cur;
 
     WGPUBufferDescriptor desc;
     memset(&desc, 0, sizeof(desc));
-    desc.size = _sg.wgpu.staging.num_bytes;
+    desc.size = _sg.wgpu.upload.num_bytes;
     desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_MapWrite;
-    WGPUCreateBufferMappedResult res = wgpuDeviceCreateBufferMapped(_sg.wgpu.dev, &desc);
-    _sg.wgpu.staging.buf[cur] = res.buffer;
-    _sg.wgpu.staging.ptr[cur] = (uint8_t*) res.data;
-    SOKOL_ASSERT(_sg.wgpu.staging.buf[cur]);
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    SOKOL_ASSERT(res.dataLength == _sg.wgpu.staging.num_bytes);
-*/
+    desc.mappedAtCreation = true;
+    _sg.wgpu.upload.staging.buf[cur] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &desc);
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.buf[cur]);
+    _sg.wgpu.upload.staging.ptr[cur] = wgpuBufferGetMappedRange(_sg.wgpu.upload.staging.buf[cur], 0, _sg.wgpu.upload.num_bytes);
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.ptr[cur]);
 }
 
 _SOKOL_PRIVATE uint32_t _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, uint32_t dst_buf_offset, const void* data, uint32_t data_num_bytes) {
@@ -12075,51 +12087,51 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_staging_copy_to_buffer(WGPUBuffer dst_buf, uint
         NOTE: that the number of staging bytes to be copied must be a multiple of 4.
 
     */
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
     SOKOL_ASSERT((dst_buf_offset & 3) == 0);
     SOKOL_ASSERT(data_num_bytes > 0);
-    uint32_t copy_num_bytes = _sg_roundup(data_num_bytes, 4);
-    if ((_sg.wgpu.staging.offset + copy_num_bytes) >= _sg.wgpu.staging.num_bytes) {
+    uint32_t copy_num_bytes = _sg_roundup_u32(data_num_bytes, 4);
+    if ((_sg.wgpu.upload.offset + copy_num_bytes) >= _sg.wgpu.upload.num_bytes) {
         SOKOL_LOG("WGPU: Per frame staging buffer full (in _sg_wgpu_staging_copy_to_buffer())!\n");
         return false;
     }
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    uint32_t stg_buf_offset = _sg.wgpu.staging.offset;
-    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur] + stg_buf_offset;
+    const int cur = _sg.wgpu.upload.staging.cur;
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.ptr[cur]);
+    uint32_t stg_buf_offset = _sg.wgpu.upload.offset;
+    uint8_t* stg_ptr = _sg.wgpu.upload.staging.ptr[cur] + stg_buf_offset;
     memcpy(stg_ptr, data, data_num_bytes);
-    WGPUBuffer stg_buf = _sg.wgpu.staging.buf[cur];
-    wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.staging_cmd_enc, stg_buf, stg_buf_offset, dst_buf, dst_buf_offset, copy_num_bytes);
-    _sg.wgpu.staging.offset = stg_buf_offset + copy_num_bytes;
+    WGPUBuffer stg_buf = _sg.wgpu.upload.staging.buf[cur];
+    wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.upload.cmd_enc, stg_buf, stg_buf_offset, dst_buf, dst_buf_offset, copy_num_bytes);
+    _sg.wgpu.upload.offset = stg_buf_offset + copy_num_bytes;
     return copy_num_bytes;
 }
 
 _SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_texture(_sg_image_t* img, const sg_image_data* data) {
     /* similar to _sg_wgpu_staging_copy_to_buffer(), but with image data instead */
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
     uint32_t num_bytes = _sg_wgpu_image_data_buffer_size(img);
-    if ((_sg.wgpu.staging.offset + num_bytes) >= _sg.wgpu.staging.num_bytes) {
+    if ((_sg.wgpu.upload.offset + num_bytes) >= _sg.wgpu.upload.num_bytes) {
         SOKOL_LOG("WGPU: Per frame staging buffer full (in _sg_wgpu_staging_copy_to_texture)!\n");
         return false;
     }
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    uint32_t stg_offset = _sg.wgpu.staging.offset;
-    uint8_t* stg_ptr = _sg.wgpu.staging.ptr[cur];
-    WGPUBuffer stg_buf = _sg.wgpu.staging.buf[cur];
+    const int cur = _sg.wgpu.upload.staging.cur;
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.ptr[cur]);
+    uint32_t stg_offset = _sg.wgpu.upload.offset;
+    uint8_t* stg_ptr = _sg.wgpu.upload.staging.ptr[cur];
+    WGPUBuffer stg_buf = _sg.wgpu.upload.staging.buf[cur];
     uint32_t bytes_copied = _sg_wgpu_copy_image_data(stg_buf, stg_ptr, stg_offset, img, data);
     _SOKOL_UNUSED(bytes_copied);
     SOKOL_ASSERT(bytes_copied == num_bytes);
-    _sg.wgpu.staging.offset = _sg_roundup(stg_offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.upload.offset = _sg_roundup_u32(stg_offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
     return true;
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_staging_unmap(void) {
     /* called at end of frame before queue-submit */
-    const int cur = _sg.wgpu.staging.cur;
-    SOKOL_ASSERT(_sg.wgpu.staging.ptr[cur]);
-    _sg.wgpu.staging.ptr[cur] = 0;
-    wgpuBufferUnmap(_sg.wgpu.staging.buf[cur]);
+    const int cur = _sg.wgpu.upload.staging.cur;
+    SOKOL_ASSERT(_sg.wgpu.upload.staging.ptr[cur]);
+    _sg.wgpu.upload.staging.ptr[cur] = 0;
+    wgpuBufferUnmap(_sg.wgpu.upload.staging.buf[cur]);
 }
 
 /*--- WGPU sampler cache functions ---*/
@@ -12186,17 +12198,17 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     _sg.wgpu.queue = wgpuDeviceGetQueue(_sg.wgpu.dev);
     SOKOL_ASSERT(_sg.wgpu.queue);
 
-    /* setup WebGPU features and limits */
+    // setup WebGPU features and limits
     _sg_wgpu_init_caps();
 
-    /* setup the sampler cache, uniform and staging buffer pools */
+    // setup the sampler cache, uniform and staging buffer pools
     _sg_wgpu_init_sampler_cache(&_sg.desc);
     _sg_wgpu_ubpool_init(desc);
     _sg_wgpu_ubpool_next_frame(true);
     _sg_wgpu_staging_init(desc);
     _sg_wgpu_staging_next_frame(true);
 
-    /* create an empty bind group for shader stages without bound images */
+    // create an empty bind group for shader stages without bound images
     WGPUBindGroupLayoutDescriptor bgl_desc;
     memset(&bgl_desc, 0, sizeof(bgl_desc));
     WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(_sg.wgpu.dev, &bgl_desc);
@@ -12208,19 +12220,19 @@ _SOKOL_PRIVATE void _sg_wgpu_setup_backend(const sg_desc* desc) {
     SOKOL_ASSERT(_sg.wgpu.empty_bind_group);
     wgpuBindGroupLayoutRelease(empty_bgl);
 
-    /* create initial per-frame command encoders */
+    // create initial per-frame command encoders
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
     _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
-    _sg.wgpu.staging_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    _sg.wgpu.upload.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     SOKOL_ASSERT(_sg.wgpu.valid);
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
     _sg.wgpu.valid = false;
     _sg_wgpu_ubpool_discard();
     _sg_wgpu_staging_discard();
@@ -12228,8 +12240,8 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_backend(void) {
     wgpuBindGroupRelease(_sg.wgpu.empty_bind_group);
     wgpuCommandEncoderRelease(_sg.wgpu.render_cmd_enc);
     _sg.wgpu.render_cmd_enc = 0;
-    wgpuCommandEncoderRelease(_sg.wgpu.staging_cmd_enc);
-    _sg.wgpu.staging_cmd_enc = 0;
+    wgpuCommandEncoderRelease(_sg.wgpu.upload.cmd_enc);
+    _sg.wgpu.upload.cmd_enc = 0;
     if (_sg.wgpu.queue) {
         wgpuQueueRelease(_sg.wgpu.queue);
         _sg.wgpu.queue = 0;
@@ -12323,7 +12335,7 @@ SOKOL_ASSERT(false && "FIXME");
 _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(_sg.wgpu.dev);
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
 
 SOKOL_ASSERT(false && "FIXME");
 /*
@@ -12854,7 +12866,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(!_sg.wgpu.in_pass);
     SOKOL_ASSERT(_sg.wgpu.queue);
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
-    SOKOL_ASSERT(_sg.wgpu.staging_cmd_enc);
+    SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
 
     /* finish and submit this frame's work */
     _sg_wgpu_ubpool_flush();
@@ -12864,10 +12876,10 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
 
     WGPUCommandBufferDescriptor cmd_buf_desc;
     memset(&cmd_buf_desc, 0, sizeof(cmd_buf_desc));
-    cmd_bufs[0] = wgpuCommandEncoderFinish(_sg.wgpu.staging_cmd_enc, &cmd_buf_desc);
+    cmd_bufs[0] = wgpuCommandEncoderFinish(_sg.wgpu.upload.cmd_enc, &cmd_buf_desc);
     SOKOL_ASSERT(cmd_bufs[0]);
-    wgpuCommandEncoderRelease(_sg.wgpu.staging_cmd_enc);
-    _sg.wgpu.staging_cmd_enc = 0;
+    wgpuCommandEncoderRelease(_sg.wgpu.upload.cmd_enc);
+    _sg.wgpu.upload.cmd_enc = 0;
 
     cmd_bufs[1] = wgpuCommandEncoderFinish(_sg.wgpu.render_cmd_enc, &cmd_buf_desc);
     SOKOL_ASSERT(cmd_bufs[1]);
@@ -12882,7 +12894,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     /* create a new render- and staging-command-encoders for next frame */
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
-    _sg.wgpu.staging_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+    _sg.wgpu.upload.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
     _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
 
     /* grab new staging buffers for uniform- and vertex/image-updates */
@@ -13028,9 +13040,9 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
     SOKOL_ASSERT(ub_index < _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].num_uniform_blocks);
     SOKOL_ASSERT(data->size <= _sg.wgpu.cur_pipeline->shader->cmn.stage[stage_index].uniform_blocks[ub_index].size);
     SOKOL_ASSERT(data->size <= _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
-    SOKOL_ASSERT(0 != _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur]);
+    SOKOL_ASSERT(0 != _sg.wgpu.ub.staging.ptr[_sg.wgpu.ub.staging.cur]);
 
-    uint8_t* dst_ptr = _sg.wgpu.ub.stage.ptr[_sg.wgpu.ub.stage.cur] + _sg.wgpu.ub.offset;
+    uint8_t* dst_ptr = _sg.wgpu.ub.staging.ptr[_sg.wgpu.ub.staging.cur] + _sg.wgpu.ub.offset;
     memcpy(dst_ptr, data->ptr, data->size);
     _sg.wgpu.ub.bind_offsets[stage_index][ub_index] = _sg.wgpu.ub.offset;
     wgpuRenderPassEncoderSetBindGroup(_sg.wgpu.pass_enc,
