@@ -11734,13 +11734,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
 */
 _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
 
-    // FIXME FIXME FIXME
-    /* Add the max-uniform-update size (64 KB) to the requested buffer size,
-       this is to prevent validation errors in the WebGPU implementation
-       if the entire buffer size is used per frame. 64 KB is the allowed
-       max uniform update size on NVIDIA
-    */
-    _sg.wgpu.ub.num_bytes = (uint32_t)desc->uniform_buffer_size;// + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
+    _sg.wgpu.ub.num_bytes = (uint32_t)(desc->uniform_buffer_size + _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE);
 
     WGPUBufferDescriptor ub_desc;
     memset(&ub_desc, 0, sizeof(ub_desc));
@@ -11776,9 +11770,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_init(const sg_desc* desc) {
             uint32_t bind_index = (uint32_t) (stage_index * SG_MAX_SHADERSTAGE_UBS + ub_index);
             ub_bgentries[stage_index][ub_index].binding = bind_index;
             ub_bgentries[stage_index][ub_index].buffer = _sg.wgpu.ub.buf;
-            ub_bgentries[stage_index][ub_index].size = _sg.wgpu.ub.num_bytes;
-            // FIXME FIXME FIXME FIXME: HACK FOR VALIDATION BUG IN DAWN
-            //ub_bgb[stage_index][ub_index].size = (1<<16);
+            ub_bgentries[stage_index][ub_index].size = _SG_WGPU_MAX_UNIFORM_UPDATE_SIZE;
         }
     }
     WGPUBindGroupDescriptor bg_desc;
@@ -12043,10 +12035,10 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
         WGPUBuffer cur_buf = _sg.wgpu.upload.staging.buf[_sg.wgpu.upload.staging.cur];
         SOKOL_ASSERT(cur_buf);
         wgpuBufferMapAsync(
-            cur_buf,                // buffer
-            WGPUMapMode_Write,      // mode
-            0,                      // offset
-            _sg.wgpu.ub.num_bytes,  // size
+            cur_buf,                    // buffer
+            WGPUMapMode_Write,          // mode
+            0,                          // offset
+            _sg.wgpu.upload.num_bytes,  // size
             _sg_wgpu_staging_mapped_callback,
             (void*)(intptr_t)_sg.wgpu.upload.staging.cur);
     }
@@ -12679,7 +12671,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
 
     /* copy image pointers and create render-texture views */
     const sg_pass_attachment_desc* att_desc;
-    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
         if (att_desc->image.id != SG_INVALID_ID) {
             SOKOL_ASSERT(att_desc->image.id != SG_INVALID_ID);
@@ -12733,7 +12725,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
-    for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
+    for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         if (pass->wgpu.color_atts[i].render_tex_view) {
             wgpuTextureViewRelease(pass->wgpu.color_atts[i].render_tex_view);
             pass->wgpu.color_atts[i].render_tex_view = 0;
@@ -12775,71 +12767,75 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
     _sg.wgpu.cur_pipeline = 0;
     _sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
 
-
-SOKOL_ASSERT(false && "FIXME");
-/*
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     if (pass) {
-        WGPURenderPassDescriptor wgpu_pass_desc;
-        memset(&wgpu_pass_desc, 0, sizeof(wgpu_pass_desc));
-        WGPURenderPassColorAttachmentDescriptor wgpu_color_att_desc[SG_MAX_COLOR_ATTACHMENTS];
-        memset(&wgpu_color_att_desc, 0, sizeof(wgpu_color_att_desc));
+        WGPURenderPassDescriptor pass_desc;
+        memset(&pass_desc, 0, sizeof(pass_desc));
+        WGPURenderPassColorAttachment color_att[SG_MAX_COLOR_ATTACHMENTS];
+        memset(&color_att, 0, sizeof(color_att));
         SOKOL_ASSERT(pass->slot.state == SG_RESOURCESTATE_VALID);
-        for (uint32_t i = 0; i < pass->cmn.num_color_atts; i++) {
-            const _sg_wgpu_attachment_t* wgpu_att = &pass->wgpu.color_atts[i];
-            wgpu_color_att_desc[i].loadOp = _sg_wgpu_load_op(action->colors[i].action);
-            wgpu_color_att_desc[i].storeOp = WGPUStoreOp_Store;
-            wgpu_color_att_desc[i].clearColor.r = action->colors[i].value.r;
-            wgpu_color_att_desc[i].clearColor.g = action->colors[i].value.g;
-            wgpu_color_att_desc[i].clearColor.b = action->colors[i].value.b;
-            wgpu_color_att_desc[i].clearColor.a = action->colors[i].value.a;
-            wgpu_color_att_desc[i].attachment = wgpu_att->render_tex_view;
-            if (wgpu_att->image->cmn.sample_count > 1) {
-                wgpu_color_att_desc[i].resolveTarget = wgpu_att->resolve_tex_view;
+        for (int i = 0; i < pass->cmn.num_color_atts; i++) {
+            const _sg_wgpu_attachment_t* att = &pass->wgpu.color_atts[i];
+            color_att[i].view = att->render_tex_view;
+            if (att->image->cmn.sample_count > 1) {
+                color_att[i].resolveTarget = att->resolve_tex_view;
             }
+            color_att[i].loadOp = _sg_wgpu_load_op(action->colors[i].action);
+            color_att[i].storeOp = WGPUStoreOp_Store;
+            color_att[i].clearColor.r = action->colors[i].value.r;
+            color_att[i].clearColor.g = action->colors[i].value.g;
+            color_att[i].clearColor.b = action->colors[i].value.b;
+            color_att[i].clearColor.a = action->colors[i].value.a;
         }
-        wgpu_pass_desc.colorAttachmentCount = pass->cmn.num_color_atts;
-        wgpu_pass_desc.colorAttachments = &wgpu_color_att_desc[0];
+        pass_desc.colorAttachmentCount = (uint32_t)pass->cmn.num_color_atts;
+        pass_desc.colorAttachments = &color_att[0];
         if (pass->wgpu.ds_att.image) {
-            WGPURenderPassDepthStencilAttachmentDescriptor wgpu_ds_att_desc;
-            memset(&wgpu_ds_att_desc, 0, sizeof(wgpu_ds_att_desc));
-            wgpu_ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
-            wgpu_ds_att_desc.clearDepth = action->depth.value;
-            wgpu_ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
-            wgpu_ds_att_desc.clearStencil = action->stencil.value;
-            wgpu_ds_att_desc.attachment = pass->wgpu.ds_att.render_tex_view;
-            wgpu_pass_desc.depthStencilAttachment = &wgpu_ds_att_desc;
-            _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &wgpu_pass_desc);
+            WGPURenderPassDepthStencilAttachment ds_att;
+            memset(&ds_att, 0, sizeof(ds_att));
+            ds_att.view = pass->wgpu.ds_att.render_tex_view;
+            ds_att.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
+            ds_att.depthStoreOp = WGPUStoreOp_Discard;
+            ds_att.clearDepth = action->depth.value;
+            ds_att.depthReadOnly = false;
+            ds_att.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
+            ds_att.stencilStoreOp = WGPUStoreOp_Discard;
+            ds_att.clearStencil = action->stencil.value;
+            pass_desc.depthStencilAttachment = &ds_att;
+            _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &pass_desc);
         }
     }
     else {
         // default render pass
-        WGPUTextureView wgpu_render_view = _sg.wgpu.render_view_cb ? _sg.wgpu.render_view_cb() : _sg.wgpu.render_view_userdata_cb(_sg.wgpu.user_data);
-        WGPUTextureView wgpu_resolve_view = _sg.wgpu.resolve_view_cb ? _sg.wgpu.resolve_view_cb() : _sg.wgpu.resolve_view_userdata_cb(_sg.wgpu.user_data);
-        WGPUTextureView wgpu_depth_stencil_view = _sg.wgpu.depth_stencil_view_cb ? _sg.wgpu.depth_stencil_view_cb() : _sg.wgpu.depth_stencil_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView render_view = _sg.wgpu.render_view_cb ? _sg.wgpu.render_view_cb() : _sg.wgpu.render_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView resolve_view = _sg.wgpu.resolve_view_cb ? _sg.wgpu.resolve_view_cb() : _sg.wgpu.resolve_view_userdata_cb(_sg.wgpu.user_data);
+        WGPUTextureView depth_stencil_view = _sg.wgpu.depth_stencil_view_cb ? _sg.wgpu.depth_stencil_view_cb() : _sg.wgpu.depth_stencil_view_userdata_cb(_sg.wgpu.user_data);
 
         WGPURenderPassDescriptor pass_desc;
         memset(&pass_desc, 0, sizeof(pass_desc));
-        WGPURenderPassColorAttachmentDescriptor color_att_desc;
-        memset(&color_att_desc, 0, sizeof(color_att_desc));
-        color_att_desc.loadOp = _sg_wgpu_load_op(action->colors[0].action);
-        color_att_desc.clearColor.r = action->colors[0].value.r;
-        color_att_desc.clearColor.g = action->colors[0].value.g;
-        color_att_desc.clearColor.b = action->colors[0].value.b;
-        color_att_desc.clearColor.a = action->colors[0].value.a;
-        color_att_desc.attachment = wgpu_render_view;
-        color_att_desc.resolveTarget = wgpu_resolve_view;   // null if no MSAA rendering
+        WGPURenderPassColorAttachment color_att;
+        memset(&color_att, 0, sizeof(color_att));
+        color_att.view = render_view;
+        color_att.resolveTarget = resolve_view;   // null if no MSAA rendering
+        color_att.loadOp = _sg_wgpu_load_op(action->colors[0].action);
+        color_att.storeOp = WGPUStoreOp_Store;
+        color_att.clearColor.r = action->colors[0].value.r;
+        color_att.clearColor.g = action->colors[0].value.g;
+        color_att.clearColor.b = action->colors[0].value.b;
+        color_att.clearColor.a = action->colors[0].value.a;
         pass_desc.colorAttachmentCount = 1;
-        pass_desc.colorAttachments = &color_att_desc;
-        WGPURenderPassDepthStencilAttachmentDescriptor ds_att_desc;
-        memset(&ds_att_desc, 0, sizeof(ds_att_desc));
-        ds_att_desc.attachment = wgpu_depth_stencil_view;
-        SOKOL_ASSERT(0 != ds_att_desc.attachment);
-        ds_att_desc.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
-        ds_att_desc.clearDepth = action->depth.value;
-        ds_att_desc.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
-        ds_att_desc.clearStencil = action->stencil.value;
-        pass_desc.depthStencilAttachment = &ds_att_desc;
+        pass_desc.colorAttachments = &color_att;
+        WGPURenderPassDepthStencilAttachment ds_att;
+        memset(&ds_att, 0, sizeof(ds_att));
+        ds_att.view = depth_stencil_view;
+        SOKOL_ASSERT(0 != ds_att.view);
+        ds_att.depthLoadOp = _sg_wgpu_load_op(action->depth.action);
+        ds_att.depthStoreOp = WGPUStoreOp_Discard;
+        ds_att.clearDepth = action->depth.value;
+        ds_att.depthReadOnly = false;
+        ds_att.stencilLoadOp = _sg_wgpu_load_op(action->stencil.action);
+        ds_att.stencilStoreOp = WGPUStoreOp_Discard;
+        ds_att.clearStencil = action->stencil.value;
+        pass_desc.depthStencilAttachment = &ds_att;
         _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &pass_desc);
     }
     SOKOL_ASSERT(_sg.wgpu.pass_enc);
@@ -12850,7 +12846,6 @@ SOKOL_ASSERT(false && "FIXME");
                                       _sg.wgpu.ub.bindgroup,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
                                       &_sg.wgpu.ub.bind_offsets[0][0]);
-*/
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_end_pass(void) {
@@ -13050,7 +13045,7 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_uniforms(sg_shader_stage stage_index, int ub_
                                       _sg.wgpu.ub.bindgroup,
                                       SG_NUM_SHADER_STAGES * SG_MAX_SHADERSTAGE_UBS,
                                       &_sg.wgpu.ub.bind_offsets[0][0]);
-    _sg.wgpu.ub.offset = _sg_roundup(_sg.wgpu.ub.offset + data->size, _SG_WGPU_STAGING_ALIGN);
+    _sg.wgpu.ub.offset = _sg_roundup_u32(_sg.wgpu.ub.offset + data->size, _SG_WGPU_STAGING_ALIGN);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_instances) {
