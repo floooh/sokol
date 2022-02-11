@@ -4485,6 +4485,10 @@ _SOKOL_PRIVATE uint32_t _sg_roundup_u32(uint32_t val, uint32_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
+_SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
+    return (val+(round_to-1)) & ~(round_to-1);
+}
+
 /* return row pitch for an image
 
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
@@ -12280,10 +12284,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         wgpuBufferReference(buf->wgpu.buf);
     }
     else {
+        // buffer mapping size must be multiple of 4, so round up the buffer size
+        // (only a problem in uint16_t index buffer with an odd number of indices)
+        const uint64_t wgpu_buf_size = _sg_roundup_u64((uint64_t)buf->cmn.size, 4);
+
         WGPUBufferDescriptor wgpu_buf_desc;
         memset(&wgpu_buf_desc, 0, sizeof(wgpu_buf_desc));
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(buf->cmn.type, buf->cmn.usage);
-        wgpu_buf_desc.size = (uint64_t)buf->cmn.size;
+        wgpu_buf_desc.size = wgpu_buf_size;
         wgpu_buf_desc.mappedAtCreation = (SG_USAGE_IMMUTABLE == buf->cmn.usage);
         buf->wgpu.buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
         if (0 == buf->wgpu.buf) {
@@ -12291,8 +12299,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
             return SG_RESOURCESTATE_FAILED;
         }
         if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
-            SOKOL_ASSERT(desc->data.ptr && (desc->data.size == (size_t)buf->cmn.size));
-            void* ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, desc->data.size);
+            SOKOL_ASSERT(desc->data.ptr && (desc->data.size <= (size_t)buf->cmn.size));
+            void* ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
             SOKOL_ASSERT(ptr);
             memcpy(ptr, desc->data.ptr, desc->data.size);
             wgpuBufferUnmap(buf->wgpu.buf);
