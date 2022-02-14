@@ -12689,7 +12689,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
     SOKOL_ASSERT(att_images && att_images[0]);
     _sg_pass_common_init(&pass->cmn, desc);
 
-    /* copy image pointers and create render-texture views */
+    // copy image pointers and create render-texture views
     const sg_pass_attachment_desc* att_desc;
     for (int i = 0; i < pass->cmn.num_color_atts; i++) {
         att_desc = &desc->color_attachments[i];
@@ -12700,22 +12700,22 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
             SOKOL_ASSERT(img && (img->slot.id == att_desc->image.id));
             SOKOL_ASSERT(_sg_is_valid_rendertarget_color_format(img->cmn.pixel_format));
             pass->wgpu.color_atts[i].image = img;
-            /* create a render-texture-view to render into the right sub-surface */
+            // create a render-texture-view to render into the right sub-surface
             const bool is_msaa = img->cmn.sample_count > 1;
             WGPUTextureViewDescriptor view_desc;
             memset(&view_desc, 0, sizeof(view_desc));
-            view_desc.baseMipLevel = is_msaa ? 0 : att_desc->mip_level;
+            view_desc.baseMipLevel = is_msaa ? 0 : (uint32_t)att_desc->mip_level;
             view_desc.mipLevelCount = 1;
-            view_desc.baseArrayLayer = is_msaa ? 0 : att_desc->slice;
+            view_desc.baseArrayLayer = is_msaa ? 0 : (uint32_t)att_desc->slice;
             view_desc.arrayLayerCount = 1;
             WGPUTexture wgpu_tex = is_msaa ? img->wgpu.msaa_tex : img->wgpu.tex;
             SOKOL_ASSERT(wgpu_tex);
             pass->wgpu.color_atts[i].render_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
             SOKOL_ASSERT(pass->wgpu.color_atts[i].render_tex_view);
-            /* ... and if needed a separate resolve texture view */
+            // ... and if needed a separate resolve texture view
             if (is_msaa) {
-                view_desc.baseMipLevel = att_desc->mip_level;
-                view_desc.baseArrayLayer = att_desc->slice;
+                view_desc.baseMipLevel = (uint32_t)att_desc->mip_level;
+                view_desc.baseArrayLayer = (uint32_t)att_desc->slice;
                 WGPUTexture wgpu_tex = img->wgpu.tex;
                 pass->wgpu.color_atts[i].resolve_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
                 SOKOL_ASSERT(pass->wgpu.color_atts[i].resolve_tex_view);
@@ -12730,11 +12730,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pass(_sg_pass_t* pass, _sg_imag
         SOKOL_ASSERT(_sg_is_valid_rendertarget_depth_format(att_images[ds_img_index]->cmn.pixel_format));
         _sg_image_t* ds_img = att_images[ds_img_index];
         pass->wgpu.ds_att.image = ds_img;
-        /* create a render-texture view */
+        // create a render-texture view
         SOKOL_ASSERT(0 == att_desc->mip_level);
         SOKOL_ASSERT(0 == att_desc->slice);
         WGPUTextureViewDescriptor view_desc;
         memset(&view_desc, 0, sizeof(view_desc));
+        view_desc.mipLevelCount = 1;
+        view_desc.arrayLayerCount = 1;
         WGPUTexture wgpu_tex = ds_img->wgpu.tex;
         SOKOL_ASSERT(wgpu_tex);
         pass->wgpu.ds_att.render_tex_view = wgpuTextureCreateView(wgpu_tex, &view_desc);
@@ -12883,7 +12885,7 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     SOKOL_ASSERT(_sg.wgpu.render_cmd_enc);
     SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
 
-    /* finish and submit this frame's work */
+    // finish and submit this frame's work
     _sg_wgpu_ubpool_flush();
     _sg_wgpu_staging_unmap();
 
@@ -12906,13 +12908,13 @@ _SOKOL_PRIVATE void _sg_wgpu_commit(void) {
     wgpuCommandBufferRelease(cmd_bufs[0]);
     wgpuCommandBufferRelease(cmd_bufs[1]);
 
-    /* create a new render- and staging-command-encoders for next frame */
+    // create a new render- and staging-command-encoders for next frame
     WGPUCommandEncoderDescriptor cmd_enc_desc;
     memset(&cmd_enc_desc, 0, sizeof(cmd_enc_desc));
     _sg.wgpu.upload.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
     _sg.wgpu.render_cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
 
-    /* grab new staging buffers for uniform- and vertex/image-updates */
+    // grab new staging buffers for uniform- and vertex/image-updates
     _sg_wgpu_ubpool_next_frame(false);
     _sg_wgpu_staging_next_frame(false);
 }
