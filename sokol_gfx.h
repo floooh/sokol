@@ -12596,10 +12596,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         const int vb_idx = src_va_desc->buffer_index;
         SOKOL_ASSERT(vb_idx < SG_MAX_SHADERSTAGE_BUFFERS);
         pip->cmn.vertex_layout_valid[vb_idx] = true;
-        vb_layouts[vb_idx].attributeCount++;
-        vtx_attrs[vb_idx][va_idx].format = _sg_wgpu_vertexformat(src_va_desc->format);
-        vtx_attrs[vb_idx][va_idx].offset = (uint64_t)src_va_desc->offset;
-        vtx_attrs[vb_idx][va_idx].shaderLocation = (uint32_t)va_idx;
+        const uint32_t vb_attr_index = vb_layouts[vb_idx].attributeCount;
+        vtx_attrs[vb_idx][vb_attr_index].format = _sg_wgpu_vertexformat(src_va_desc->format);
+        vtx_attrs[vb_idx][vb_attr_index].offset = (uint64_t)src_va_desc->offset;
+        vtx_attrs[vb_idx][vb_attr_index].shaderLocation = (uint32_t)va_idx;
+        vb_layouts[vb_idx].attributeCount = vb_attr_index + 1;
     }
 
     WGPUDepthStencilState ds_state;
