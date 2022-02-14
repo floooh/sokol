@@ -12947,11 +12947,11 @@ _SOKOL_PRIVATE void _sg_wgpu_apply_scissor_rect(int x, int y, int w, int h, bool
     w = _sg_max(w, 1);
     h = _sg_max(h, 1);
 
-    uint32_t sx = (uint32_t) x;
-    uint32_t sy = origin_top_left ? y : (_sg.wgpu.cur_height - (y + h));
-    uint32_t sw = w;
-    uint32_t sh = h;
-    wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.pass_enc, sx, sy, sw, sh);
+    int sx = x;
+    int sy = origin_top_left ? y : (_sg.wgpu.cur_height - (y + h));
+    int sw = w;
+    int sh = h;
+    wgpuRenderPassEncoderSetScissorRect(_sg.wgpu.pass_enc, (uint32_t)sx, (uint32_t)sy, (uint32_t)sw, (uint32_t)sh);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_apply_pipeline(_sg_pipeline_t* pip) {
@@ -13095,7 +13095,7 @@ _SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* da
 _SOKOL_PRIVATE int _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
     SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
     _SOKOL_UNUSED(new_frame);
-    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, buf->cmn.append_pos, data->ptr, data->size);
+    uint32_t copied_num_bytes = _sg_wgpu_staging_copy_to_buffer(buf->wgpu.buf, (uint32_t)buf->cmn.append_pos, data->ptr, data->size);
     SOKOL_ASSERT(copied_num_bytes > 0); _SOKOL_UNUSED(copied_num_bytes);
     return (int)copied_num_bytes;
 }
