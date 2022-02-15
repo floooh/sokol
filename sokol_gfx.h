@@ -11995,7 +11995,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
         extent.depthOrArrayLayers = (uint32_t)num_slices;
         SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
         wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.upload.cmd_enc, &copy_src, &copy_dst, &extent);
-        stg_offset += (uint32_t)(dst_bytes_per_row * mip_height);
+        stg_offset += (uint32_t)(dst_bytes_per_row * mip_height * num_slices);
         SOKOL_ASSERT(stg_offset <= _sg.wgpu.upload.num_bytes);
     }
     SOKOL_ASSERT(stg_offset >= stg_base_offset);
