@@ -11668,12 +11668,11 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.mrt_independent_blend_state = true;
     _sg.features.mrt_independent_write_mask = true;
 
-    /* FIXME: max images size??? */
     _sg.limits.max_image_size_2d = 8 * 1024;
     _sg.limits.max_image_size_cube = 8 * 1024;
     _sg.limits.max_image_size_3d = 2 * 1024;
     _sg.limits.max_image_size_array = 8 * 1024;
-    _sg.limits.max_image_array_layers = 2 * 1024;
+    _sg.limits.max_image_array_layers = 256;
     _sg.limits.max_vertex_attrs = SG_MAX_VERTEX_ATTRIBUTES;
 
     _sg_pixelformat_all(&_sg.formats[SG_PIXELFORMAT_R8]);
