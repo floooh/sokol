@@ -11974,7 +11974,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
             for (int slice_index = 0; slice_index < num_slices; slice_index++) {
                 SOKOL_ASSERT(dst_ptr == dst_base_ptr + slice_index * dst_bytes_per_slice);
                 for (int row_index = 0; row_index < num_rows; row_index++) {
-                    memcpy(dst_ptr, src_ptr, src_bytes_per_row);
+                    memcpy(dst_ptr, src_ptr, (size_t)src_bytes_per_row);
                     src_ptr += src_bytes_per_row;
                     dst_ptr += dst_bytes_per_row;
                 }
@@ -12650,7 +12650,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
     pip_desc.vertex.bufferCount = (uint32_t)vb_num;
     pip_desc.vertex.buffers = &vb_layouts[0];
     pip_desc.primitive.topology = _sg_wgpu_topology(desc->primitive_type);
-    pip_desc.primitive.stripIndexFormat = _sg_wgpu_strip_indexformat(desc->primitive_type, desc->primitive_type);
+    pip_desc.primitive.stripIndexFormat = _sg_wgpu_strip_indexformat(desc->primitive_type, desc->index_type);
     pip_desc.primitive.frontFace = _sg_wgpu_frontface(desc->face_winding);
     pip_desc.primitive.cullMode = _sg_wgpu_cullmode(desc->cull_mode);
     if (SG_PIXELFORMAT_NONE != desc->depth.pixel_format) {
