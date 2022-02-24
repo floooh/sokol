@@ -5169,11 +5169,13 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_device_cb(WGPURequestDeviceStatus st
 
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_check_add_feature(WGPUDeviceDescriptor* desc, WGPUFeatureName feature) {
     SOKOL_ASSERT(desc && (desc->requiredFeaturesCount < _SAPP_EMSC_WGPU_MAX_DEVICE_FEATURES));
-    if (wgpuAdapterHasFeature(_sapp.emsc.wgpu.adapter, feature)) {
+    // FIXME: wgpuAdapterHasFeature() currently not implemented
+    // in Emscripten WGPU shim
+//    if (wgpuAdapterHasFeature(_sapp.emsc.wgpu.adapter, feature)) {
         // this looks so weird because WGPUDeviceDescriptor.requiredFeatures is const
         WGPUFeatureName* ptr = (WGPUFeatureName*)&desc->requiredFeatures[desc->requiredFeaturesCount++];
         *ptr = feature;
-    }
+//    }
 }
 
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_adapter_cb(WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* userdata) {
@@ -5188,9 +5190,10 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_request_adapter_cb(WGPURequestAdapterStatus 
         memset(&dev_desc, 0, sizeof(dev_desc));
         WGPUFeatureName features[_SAPP_EMSC_WGPU_MAX_DEVICE_FEATURES];
         dev_desc.requiredFeatures = features;
+        // FIXME FIXME FIXME
         _sapp_emsc_wgpu_check_add_feature(&dev_desc, WGPUFeatureName_TextureCompressionBC);
-        _sapp_emsc_wgpu_check_add_feature(&dev_desc, WGPUFeatureName_TextureCompressionETC2);
-        _sapp_emsc_wgpu_check_add_feature(&dev_desc, WGPUFeatureName_TextureCompressionASTC);
+        //_sapp_emsc_wgpu_check_add_feature(&dev_desc, WGPUFeatureName_TextureCompressionETC2);
+        //_sapp_emsc_wgpu_check_add_feature(&dev_desc, WGPUFeatureName_TextureCompressionASTC);
         wgpuAdapterRequestDevice(adapter, &dev_desc, _sapp_emsc_wgpu_request_device_cb, 0);
     }
     else {
@@ -5335,6 +5338,7 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     sapp_js_add_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
@@ -5366,6 +5370,7 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     sapp_js_remove_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_remove_clipboard_listener();
@@ -5441,7 +5446,6 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
-        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, false, _sapp_emsc_size_changed);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
@@ -5460,12 +5464,11 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_emsc_register_eventhandlers();
     sapp_set_icon(&desc->icon);
 
-    /* start the frame loop */
+    // start the frame loop
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
 
-    /* NOT A BUG: do not call _sapp_discard_state() here, instead this is
-       called in _sapp_emsc_frame() when the application is ordered to quit
-     */
+    // NOT A BUG: do not call _sapp_discard_state() here, instead this is
+    // called in _sapp_emsc_frame() when the application is ordered to quit
 }
 
 #if !defined(SOKOL_NO_ENTRY)
