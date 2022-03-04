@@ -11866,7 +11866,7 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_next_frame(bool first_frame) {
     desc.mappedAtCreation = true;
     _sg.wgpu.ub.staging.buf[cur] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &desc);
     SOKOL_ASSERT(_sg.wgpu.ub.staging.buf[cur]);
-    _sg.wgpu.ub.staging.ptr[cur] = wgpuBufferGetMappedRange(_sg.wgpu.ub.staging.buf[cur], 0, _sg.wgpu.ub.num_bytes);
+    _sg.wgpu.ub.staging.ptr[cur] = (uint8_t*)wgpuBufferGetMappedRange(_sg.wgpu.ub.staging.buf[cur], 0, _sg.wgpu.ub.num_bytes);
     SOKOL_ASSERT(_sg.wgpu.ub.staging.ptr[cur]);
 }
 
@@ -12084,7 +12084,7 @@ _SOKOL_PRIVATE void _sg_wgpu_staging_next_frame(bool first_frame) {
     desc.mappedAtCreation = true;
     _sg.wgpu.upload.staging.buf[cur] = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &desc);
     SOKOL_ASSERT(_sg.wgpu.upload.staging.buf[cur]);
-    _sg.wgpu.upload.staging.ptr[cur] = wgpuBufferGetMappedRange(_sg.wgpu.upload.staging.buf[cur], 0, _sg.wgpu.upload.num_bytes);
+    _sg.wgpu.upload.staging.ptr[cur] = (uint8_t*)wgpuBufferGetMappedRange(_sg.wgpu.upload.staging.buf[cur], 0, _sg.wgpu.upload.num_bytes);
     SOKOL_ASSERT(_sg.wgpu.upload.staging.ptr[cur]);
 }
 
