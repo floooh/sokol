@@ -12818,8 +12818,8 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_pass(_sg_pass_t* pass, const sg_pass_action* 
             ds_att.stencilStoreOp = WGPUStoreOp_Discard;
             ds_att.clearStencil = action->stencil.value;
             pass_desc.depthStencilAttachment = &ds_att;
-            _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &pass_desc);
         }
+        _sg.wgpu.pass_enc = wgpuCommandEncoderBeginRenderPass(_sg.wgpu.render_cmd_enc, &pass_desc);
     }
     else {
         // default render pass
