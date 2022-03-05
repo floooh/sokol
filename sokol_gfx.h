@@ -4485,6 +4485,39 @@ _SOKOL_PRIVATE uint64_t _sg_roundup_u64(uint64_t val, uint64_t round_to) {
     return (val+(round_to-1)) & ~(round_to-1);
 }
 
+_SOKOL_PRIVATE int _sg_pixelformat_block_dim(sg_pixel_format fmt) {
+    switch (fmt) {
+        case SG_PIXELFORMAT_BC1_RGBA:
+        case SG_PIXELFORMAT_BC4_R:
+        case SG_PIXELFORMAT_BC4_RSN:
+        case SG_PIXELFORMAT_ETC2_RGB8:
+        case SG_PIXELFORMAT_ETC2_RGB8A1:
+            return 4;
+        case SG_PIXELFORMAT_BC2_RGBA:
+        case SG_PIXELFORMAT_BC3_RGBA:
+        case SG_PIXELFORMAT_BC5_RG:
+        case SG_PIXELFORMAT_BC5_RGSN:
+        case SG_PIXELFORMAT_BC6H_RGBF:
+        case SG_PIXELFORMAT_BC6H_RGBUF:
+        case SG_PIXELFORMAT_BC7_RGBA:
+        case SG_PIXELFORMAT_ETC2_RGBA8:
+        case SG_PIXELFORMAT_ETC2_RG11:
+        case SG_PIXELFORMAT_ETC2_RG11SN:
+            // FIXME ???
+            return 4;
+        case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
+            // FIXME ???
+            return 8;
+        case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
+        case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
+            // FIXME ???
+            return 16;
+        default:
+            return 1;
+    }
+}
+
 /* return row pitch for an image
 
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
@@ -11915,7 +11948,7 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
     WGPUImageCopyTexture copy_dst;
     memset(&copy_dst, 0, sizeof(copy_dst));
     copy_dst.texture = img->wgpu.tex;
-    copy_dst.aspect = _sg_wgpu_texture_aspect(img->cmn.pixel_format);
+    copy_dst.aspect = _sg_wgpu_texture_aspect(fmt);
     WGPUExtent3D extent;
     memset(&extent, 0, sizeof(extent));
 
@@ -11985,12 +12018,13 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
         copy_src.layout.offset = stg_offset;
         copy_src.layout.bytesPerRow = (uint32_t)dst_bytes_per_row;
         copy_src.layout.rowsPerImage = (uint32_t)mip_height;
-        extent.width = (uint32_t)mip_width;
-        extent.height = (uint32_t)mip_height;
+        const int block_dim = _sg_pixelformat_block_dim(fmt);
+        extent.width = (uint32_t)_sg_roundup(mip_width, block_dim);
+        extent.height = (uint32_t)_sg_roundup(mip_height, block_dim);
         extent.depthOrArrayLayers = (uint32_t)num_slices;
         SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
         wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.upload.cmd_enc, &copy_src, &copy_dst, &extent);
-        stg_offset += (uint32_t)(dst_bytes_per_row * mip_height * num_slices);
+        stg_offset += (uint32_t)(dst_bytes_per_slice * num_slices);
         SOKOL_ASSERT(stg_offset <= _sg.wgpu.upload.num_bytes);
     }
     SOKOL_ASSERT(stg_offset >= stg_base_offset);
