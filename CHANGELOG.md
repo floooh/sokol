@@ -1,5 +1,13 @@
 ## Updates
 
+- **08-Feb-2022**: sokol_imgui.h has been updated for Dear ImGui 1.87:
+  - sokol_imgui.h's input code has been rewritten to use the new evented IO
+    system and extended virtual key codes in Dear ImGui
+  - on non-Emscripten platforms, mouse buttons are no longer "cancelled" when
+    the mouse leaves the window (since the native desktop platforms
+    automatically capture the mouse when mouse buttons are pressed, but mouse
+    capture is not supported in the sokol_app.h Emscripten backend)
+
 - **28-Jan-2022**: some window size behaviour changes in sokol_app.h.
   - Asking for a default-sized window (via sapp_desc.width/height = 0) now
     behaves a bit differently on desktop platforms. Previously this set the
