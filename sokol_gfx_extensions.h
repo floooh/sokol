@@ -24,7 +24,19 @@
 extern "C" {
 #endif
 
-// Read pixels from the frame buffer -- currently only available for GL
+// Get backend renderer info
+SOKOL_API_DECL const char* sgx_get_backend_renderer();
+
+// Get backend shading language version info
+SOKOL_API_DECL const char* sgx_get_backend_shading_language_version();
+
+// Get backend vendor info
+SOKOL_API_DECL const char* sgx_get_backend_vendor();
+
+// Get backend version info
+SOKOL_API_DECL const char* sgx_get_backend_version();
+
+// Read pixels from the frame buffer
 // Beware: assumes an RGBA unsigned byte frame buffer
 SOKOL_API_DECL void sgx_read_pixels(int x, int y, int w, int h, void* pixels);
 
@@ -57,11 +69,47 @@ SOKOL_API_DECL void sgx_read_pixels(int x, int y, int w, int h, void* pixels);
 
 #ifdef _SOKOL_ANY_GL
 
+SOKOL_API_IMPL const char* sgx_get_backend_renderer() {
+  return (const char*)glGetString(GL_RENDERER);
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_shading_language_version() {
+  return (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_vendor() {
+  return (const char*)glGetString(GL_VENDOR);
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_version() {
+  return (const char*)glGetString(GL_VERSION);
+}
+
 SOKOL_API_IMPL void sgx_read_pixels(int x, int y, int w, int h, void* pixels) {
   glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 }
 
 #elif defined(SOKOL_METAL)
+
+SOKOL_API_IMPL const char* sgx_get_backend_renderer() {
+  // Not implemented yet
+  return "";
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_shading_language_version() {
+  // Not implemented yet
+  return "";
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_vendor() {
+  // Not implemented yet
+  return "";
+}
+
+SOKOL_API_IMPL const char* sgx_get_backend_version() {
+  // Not implemented yet
+  return "";
+}
 
 SOKOL_API_IMPL void sgx_read_pixels(int x, int y, int w, int h, void* pixels) {
   // Not implemented yet
