@@ -11919,14 +11919,30 @@ _SOKOL_PRIVATE void _sg_wgpu_ubpool_flush(void) {
 /* helper function to compute number of bytes needed in staging buffer to copy image data */
 _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) {
     int num_bytes = 0;
-    const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6:1;
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices : 1;
     for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
         const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
         const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
+        int num_slices;
+        switch (img->cmn.type) {
+            case SG_IMAGETYPE_2D:
+                num_slices = 1;
+                break;
+            case SG_IMAGETYPE_CUBE:
+                num_slices = 6;
+                break;
+            case SG_IMAGETYPE_3D:
+                num_slices = _sg_max(img->cmn.num_slices >> mip_index, 1);
+                break;
+            case SG_IMAGETYPE_ARRAY:
+                num_slices = img->cmn.num_slices;
+                break;
+            default:
+                SOKOL_UNREACHABLE;
+                break;
+        }
         /* row-pitch must be 256-aligend */
         const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, _SG_WGPU_ROWPITCH_ALIGN);
-        num_bytes += bytes_per_slice * num_slices * num_faces;
+        num_bytes += bytes_per_slice * num_slices;
     }
     return (uint32_t)num_bytes;
 }
@@ -12430,7 +12446,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         memset(&wgpu_view_desc, 0, sizeof(wgpu_view_desc));
         wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
         wgpu_view_desc.mipLevelCount = wgpu_tex_desc.mipLevelCount;
-        wgpu_view_desc.arrayLayerCount = wgpu_tex_desc.size.depthOrArrayLayers;
+        switch (img->cmn.type) {
+            case SG_IMAGETYPE_CUBE:
+                wgpu_view_desc.arrayLayerCount = 6;
+                break;
+            case SG_IMAGETYPE_ARRAY:
+                wgpu_view_desc.arrayLayerCount = wgpu_tex_desc.size.depthOrArrayLayers;
+                break;
+            default:
+                wgpu_view_desc.arrayLayerCount = 1;
+                break;
+        }
         wgpu_view_desc.aspect = _sg_wgpu_texture_aspect(img->cmn.pixel_format);
         img->wgpu.tex_view = wgpuTextureCreateView(img->wgpu.tex, &wgpu_view_desc);
         SOKOL_ASSERT(img->wgpu.tex_view);
