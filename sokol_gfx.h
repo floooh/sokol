@@ -1107,10 +1107,10 @@ typedef enum sg_image_type {
 /*
     sg_sampler_type
 
-    Indicates the basic data type of a shader's texture sampler which
-    can be float , unsigned integer or signed integer. The sampler
-    type is used in the sg_shader_image_desc to describe the
-    sampler type of a shader's texture sampler binding.
+    Indicates the basic data type of a shader's texture sampler which can be
+    float, unfilterable-float, unsigned integer or signed integer. The sampler
+    type is used in the sg_shader_image_desc struct to describe the pixel format
+    and filtering capabilities of a texture binding.
 
     The default sampler type is SG_SAMPLERTYPE_FLOAT.
 */
@@ -1119,6 +1119,7 @@ typedef enum sg_sampler_type {
     SG_SAMPLERTYPE_FLOAT,
     SG_SAMPLERTYPE_SINT,
     SG_SAMPLERTYPE_UINT,
+    SG_SAMPLERTYPE_UNFILTERABLE_FLOAT,
 } sg_sampler_type;
 
 /*
@@ -11401,10 +11402,11 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_tex_viewdim(sg_image_type t) {
 
 _SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_tex_sampletype(sg_sampler_type t) {
     switch (t) {
-        case SG_SAMPLERTYPE_FLOAT:  return WGPUTextureSampleType_Float;
-        case SG_SAMPLERTYPE_SINT:   return WGPUTextureSampleType_Sint;
-        case SG_SAMPLERTYPE_UINT:   return WGPUTextureSampleType_Uint;
-        default: SOKOL_UNREACHABLE; return WGPUTextureSampleType_Force32;
+        case SG_SAMPLERTYPE_FLOAT:              return WGPUTextureSampleType_Float;
+        case SG_SAMPLERTYPE_SINT:               return WGPUTextureSampleType_Sint;
+        case SG_SAMPLERTYPE_UINT:               return WGPUTextureSampleType_Uint;
+        case SG_SAMPLERTYPE_UNFILTERABLE_FLOAT: return WGPUTextureSampleType_UnfilterableFloat;
+        default: SOKOL_UNREACHABLE;             return WGPUTextureSampleType_Force32;
     }
 }
 
@@ -12444,6 +12446,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         // create texture view object
         WGPUTextureViewDescriptor wgpu_view_desc;
         memset(&wgpu_view_desc, 0, sizeof(wgpu_view_desc));
+        wgpu_view_desc.format = wgpu_tex_desc.format;
         wgpu_view_desc.dimension = _sg_wgpu_tex_viewdim(desc->type);
         wgpu_view_desc.mipLevelCount = wgpu_tex_desc.mipLevelCount;
         switch (img->cmn.type) {
