@@ -11410,6 +11410,21 @@ _SOKOL_PRIVATE WGPUTextureSampleType _sg_wgpu_tex_sampletype(sg_sampler_type t) 
     }
 }
 
+_SOKOL_PRIVATE WGPUSamplerBindingType _sg_wgpu_smp_samplerbindingtype(sg_sampler_type t) {
+    switch (t) {
+        case SG_SAMPLERTYPE_FLOAT:
+            return WGPUSamplerBindingType_Filtering;
+        // FIXME: are SINT and UINT filterable, or unfilterable?
+        case SG_SAMPLERTYPE_SINT:
+        case SG_SAMPLERTYPE_UINT:
+        case SG_SAMPLERTYPE_UNFILTERABLE_FLOAT:
+            return WGPUSamplerBindingType_NonFiltering;
+        default:
+            SOKOL_UNREACHABLE;
+            return WGPUSamplerBindingType_Force32;
+    }
+}
+
 _SOKOL_PRIVATE WGPUTextureDimension _sg_wgpu_tex_dim(sg_image_type t) {
     if (SG_IMAGETYPE_3D == t) {
         return WGPUTextureDimension_3D;
@@ -12583,7 +12598,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_shader(_sg_shader_t* shd, const
             WGPUBindGroupLayoutEntry* smp_desc = &bglentry_desc[smp_binding];
             smp_desc->binding = smp_binding;
             smp_desc->visibility = visibility;
-            smp_desc->sampler.type = WGPUSamplerBindingType_Filtering;  // FIXME ?
+            smp_desc->sampler.type = _sg_wgpu_smp_samplerbindingtype(cmn_stage->images[img_index].sampler_type);
         }
         WGPUBindGroupLayoutDescriptor img_bgl_desc;
         memset(&img_bgl_desc, 0, sizeof(img_bgl_desc));
@@ -12644,7 +12659,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
         vb_layouts[vb_idx].arrayStride = (uint64_t)src_vb_desc->stride;
         vb_layouts[vb_idx].stepMode = _sg_wgpu_stepmode(src_vb_desc->step_func);
         vb_layouts[vb_idx].attributes = &vtx_attrs[vb_idx][0];
-        // NOTE: WebGPU has no support for vertex step rate (because that's not supported by Core Vulkan)
+        // NOTE: WebGPU has no support for vertex step rate (because this is not supported by Core Vulkan)
     }
     for (int va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++) {
         const sg_vertex_attr_desc* src_va_desc = &desc->layout.attrs[va_idx];
