@@ -4081,6 +4081,8 @@ typedef enum {
     _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA,
     _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA,
     _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE,
+    _SG_VALIDATE_IMAGEDESC_MINFILTER,
+    _SG_VALIDATE_IMAGEDESC_MAGFILTER,
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
@@ -4155,9 +4157,11 @@ typedef enum {
     _SG_VALIDATE_ABND_VS_IMGS,
     _SG_VALIDATE_ABND_VS_IMG_EXISTS,
     _SG_VALIDATE_ABND_VS_IMG_TYPES,
+    _SG_VALIDATE_ABND_VS_SMP_TYPES,
     _SG_VALIDATE_ABND_FS_IMGS,
     _SG_VALIDATE_ABND_FS_IMG_EXISTS,
     _SG_VALIDATE_ABND_FS_IMG_TYPES,
+    _SG_VALIDATE_ABND_FS_SMP_TYPES,
 
     /* sg_apply_uniforms validation */
     _SG_VALIDATE_AUB_NO_PIPELINE,
@@ -14061,6 +14065,8 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA:   return "images with injected textures cannot be initialized with data";
         case _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA:    return "dynamic/stream images cannot be initialized with data";
         case _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE:   return "compressed images must be immutable";
+        case _SG_VALIDATE_IMAGEDESC_MINFILTER:          return "sg_image_desc.min_filter is linear, but sg_image_desc.pixel_format isn't filterable";
+        case _SG_VALIDATE_IMAGEDESC_MAGFILTER:          return "sg_image_desc.mag_filter is linear, but sg_image_desc.pixel_format isn't filterable";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
@@ -14136,9 +14142,11 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_ABND_VS_IMGS:             return "sg_apply_bindings: vertex shader image count doesn't match sg_shader_desc";
         case _SG_VALIDATE_ABND_VS_IMG_EXISTS:       return "sg_apply_bindings: vertex shader image no longer alive";
         case _SG_VALIDATE_ABND_VS_IMG_TYPES:        return "sg_apply_bindings: one or more vertex shader image types don't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_VS_SMP_TYPES:        return "sg_apply_bindings: trying to bind linear filtered image to vertex shader expecting unfiltered image";
         case _SG_VALIDATE_ABND_FS_IMGS:             return "sg_apply_bindings: fragment shader image count doesn't match sg_shader_desc";
         case _SG_VALIDATE_ABND_FS_IMG_EXISTS:       return "sg_apply_bindings: fragment shader image no longer alive";
         case _SG_VALIDATE_ABND_FS_IMG_TYPES:        return "sg_apply_bindings: one or more fragment shader image types don't match sg_shader_desc";
+        case _SG_VALIDATE_ABND_FS_SMP_TYPES:        return "sg_apply_bindings: trying to bind linear filtered image to fragment shader expecting unfiltered image";
 
         /* sg_apply_uniforms */
         case _SG_VALIDATE_AUB_NO_PIPELINE:      return "sg_apply_uniforms: must be called after sg_apply_pipeline()";
@@ -14242,6 +14250,15 @@ _SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_image_format_filter(sg_pixel_format fmt, sg_filter filter) {
+    if ((filter != SG_FILTER_NEAREST) && (filter != SG_FILTER_NEAREST_MIPMAP_NEAREST)) {
+        return _sg.formats[fmt].filter;
+    }
+    else {
+        return true;
+    }
+}
+
 _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(desc);
@@ -14259,6 +14276,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
                               (0 != desc->mtl_textures[0]) ||
                               (0 != desc->d3d11_texture) ||
                               (0 != desc->wgpu_texture);
+        SOKOL_VALIDATE(_sg_validate_image_format_filter(fmt, desc->min_filter), _SG_VALIDATE_IMAGEDESC_MINFILTER);
+        SOKOL_VALIDATE(_sg_validate_image_format_filter(fmt, desc->mag_filter), _SG_VALIDATE_IMAGEDESC_MAGFILTER);
         if (desc->render_target) {
             SOKOL_ASSERT(((int)fmt >= 0) && ((int)fmt < _SG_PIXELFORMAT_NUM));
             SOKOL_VALIDATE(_sg.formats[fmt].render, _SG_VALIDATE_IMAGEDESC_RT_PIXELFORMAT);
@@ -14606,6 +14625,17 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_sampler_type(const _sg_image_t* img, sg_sampler_type smp_type) {
+    // FIXME: is FLOAT actually the only filterable sampler type? (e.g. what about SINT and UINT?)
+    if (smp_type != SG_SAMPLERTYPE_FLOAT) {
+        return ((img->cmn.min_filter == SG_FILTER_NEAREST) || (img->cmn.min_filter == SG_FILTER_NEAREST_MIPMAP_NEAREST)) &&
+               ((img->cmn.mag_filter == SG_FILTER_NEAREST) || (img->cmn.mag_filter == SG_FILTER_NEAREST_MIPMAP_NEAREST));
+    }
+    else {
+        return true;
+    }
+}
+
 _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(bindings);
@@ -14669,6 +14699,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_VS_IMG_EXISTS);
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->cmn.type == stage->images[i].image_type, _SG_VALIDATE_ABND_VS_IMG_TYPES);
+                    SOKOL_VALIDATE(_sg_validate_sampler_type(img, stage->images[i].sampler_type), _SG_VALIDATE_ABND_VS_SMP_TYPES);
                 }
             }
             else {
@@ -14685,6 +14716,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 SOKOL_VALIDATE(img != 0, _SG_VALIDATE_ABND_FS_IMG_EXISTS);
                 if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
                     SOKOL_VALIDATE(img->cmn.type == stage->images[i].image_type, _SG_VALIDATE_ABND_FS_IMG_TYPES);
+                    SOKOL_VALIDATE(_sg_validate_sampler_type(img, stage->images[i].sampler_type), _SG_VALIDATE_ABND_FS_SMP_TYPES);
                 }
             }
             else {
