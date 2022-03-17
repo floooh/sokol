@@ -6331,14 +6331,16 @@ _SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) 
     else {
         GetWindowRect(_sapp.win32.hwnd, &_sapp.win32.stored_window_rect);
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = monitor_w;
-        rect.bottom = monitor_h;
+        rect.left = mr.left;
+        rect.top = mr.top;
+        rect.right = rect.left + monitor_w;
+        rect.bottom = rect.top + monitor_h;
         AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     }
     const int win_w = rect.right - rect.left;
     const int win_h = rect.bottom - rect.top;
-    const int win_x = mr.left + rect.left;
-    const int win_y = mr.top + rect.top;
+    const int win_x = rect.left;
+    const int win_y = rect.top;
     SetWindowLongPtr(_sapp.win32.hwnd, GWL_STYLE, win_style);
     SetWindowPos(_sapp.win32.hwnd, HWND_TOP, win_x, win_y, win_w, win_h, swp_flags | SWP_FRAMECHANGED);
 }
