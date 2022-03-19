@@ -2473,7 +2473,7 @@ typedef struct {
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SAPP_CLEAR(type, item) { item = (type) { }; }
+        #define _SAPP_CLEAR(type, item) { item = { }; }
     #else
         #define _SAPP_CLEAR(type, item) { item = (type) { 0 }; }
     #endif

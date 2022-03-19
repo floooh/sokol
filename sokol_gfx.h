@@ -15096,7 +15096,7 @@ _SOKOL_PRIVATE bool _sg_uninit_pass(sg_pass pass_id) {
 #if defined(SOKOL_METAL)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SG_CLEAR(type, item) { item = (type) { }; }
+        #define _SG_CLEAR(type, item) { item = { }; }
     #else
         #define _SG_CLEAR(type, item) { item = (type) { 0 }; }
     #endif
