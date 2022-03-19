@@ -91,25 +91,15 @@ SOKOL_API_IMPL void sgx_read_pixels(int x, int y, int w, int h, void* pixels) {
 
 #elif defined(SOKOL_METAL)
 
-SOKOL_API_IMPL const char* sgx_get_backend_renderer() {
-  // Not implemented yet
-  return "";
-}
+SOKOL_API_IMPL const char* sgx_get_backend_renderer() { return "Metal"; }
 
 SOKOL_API_IMPL const char* sgx_get_backend_shading_language_version() {
-  // Not implemented yet
-  return "";
+  return "n/a";
 }
 
-SOKOL_API_IMPL const char* sgx_get_backend_vendor() {
-  // Not implemented yet
-  return "";
-}
+SOKOL_API_IMPL const char* sgx_get_backend_vendor() { return "Apple"; }
 
-SOKOL_API_IMPL const char* sgx_get_backend_version() {
-  // Not implemented yet
-  return "";
-}
+SOKOL_API_IMPL const char* sgx_get_backend_version() { return "n/a"; }
 
 SOKOL_API_IMPL void sgx_read_pixels(int x, int y, int w, int h, void* pixels) {
   // Not implemented yet
