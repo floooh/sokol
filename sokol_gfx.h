@@ -6864,8 +6864,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
         }
         else {
-            SOKOL_LOG("Vertex attribute not found in shader: ");
-            SOKOL_LOG(_sg_strptr(&shd->gl.attrs[attr_index].name));
+            // Ignore attributes that were optimized away
+            // SOKOL_LOG("Vertex attribute not found in shader: ");
+            // SOKOL_LOG(_sg_strptr(&shd->gl.attrs[attr_index].name));
         }
     }
     return SG_RESOURCESTATE_VALID;
