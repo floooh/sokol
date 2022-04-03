@@ -2473,7 +2473,7 @@ typedef struct {
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SAPP_CLEAR(type, item) { item = (type) { }; }
+        #define _SAPP_CLEAR(type, item) { item = { }; }
     #else
         #define _SAPP_CLEAR(type, item) { item = (type) { 0 }; }
     #endif
@@ -3953,6 +3953,11 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
                              (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         #if defined(SOKOL_METAL)
+            // NOTE: explicitely resize the drawable here again, despite MTKView using
+            // autoResizeDrawable, this seems to be the only way so that the MTKView's
+            // contentScaleFactor is honored, but also the correct screen size being
+            // reported when device rotations happen
+            // (see: https://github.com/floooh/sokol-samples/issues/101)
             const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
             _sapp.ios.view.drawableSize = drawable_size;
         #else
@@ -4026,11 +4031,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
-        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
-            and automatically renders at Retina resolution. We'll disable
-            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
-        */
-        _sapp.ios.view.autoResizeDrawable = false;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
         _sapp.ios.view_ctrl = [[UIViewController alloc] init];
@@ -6253,14 +6253,16 @@ _SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) 
     else {
         GetWindowRect(_sapp.win32.hwnd, &_sapp.win32.stored_window_rect);
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = monitor_w;
-        rect.bottom = monitor_h;
+        rect.left = mr.left;
+        rect.top = mr.top;
+        rect.right = rect.left + monitor_w;
+        rect.bottom = rect.top + monitor_h;
         AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     }
     const int win_w = rect.right - rect.left;
     const int win_h = rect.bottom - rect.top;
-    const int win_x = mr.left + rect.left;
-    const int win_y = mr.top + rect.top;
+    const int win_x = rect.left;
+    const int win_y = rect.top;
     SetWindowLongPtr(_sapp.win32.hwnd, GWL_STYLE, win_style);
     SetWindowPos(_sapp.win32.hwnd, HWND_TOP, win_x, win_y, win_w, win_h, swp_flags | SWP_FRAMECHANGED);
 }

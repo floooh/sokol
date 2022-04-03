@@ -1223,14 +1223,14 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     fmt.mBytesPerPacket = fmt.mBytesPerFrame;
     fmt.mBitsPerChannel = 32;
     _saudio_OSStatus res = AudioQueueNewOutput(&fmt, _saudio_coreaudio_callback, 0, NULL, NULL, 0, &_saudio.backend.ca_audio_queue);
-    SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue);
+    SOKOL_ASSERT((res == 0) && _saudio.backend.ca_audio_queue); (void)res;
 
     /* create 2 audio buffers */
     for (int i = 0; i < 2; i++) {
         _saudio_AudioQueueBufferRef buf = NULL;
         const uint32_t buf_byte_size = (uint32_t)_saudio.buffer_frames * fmt.mBytesPerFrame;
         res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
-        SOKOL_ASSERT((res == 0) && buf);
+        SOKOL_ASSERT((res == 0) && buf); (void)res;
         buf->mAudioDataByteSize = buf_byte_size;
         memset(buf->mAudioData, 0, buf->mAudioDataByteSize);
         AudioQueueEnqueueBuffer(_saudio.backend.ca_audio_queue, buf, 0, NULL);
@@ -1241,7 +1241,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     /* ...and start playback */
     res = AudioQueueStart(_saudio.backend.ca_audio_queue, NULL);
-    SOKOL_ASSERT(0 == res);
+    SOKOL_ASSERT(0 == res); (void)res;
 
     return true;
 }
