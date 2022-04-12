@@ -88,7 +88,7 @@
 
     --- finally on application shutdown, call:
 
-            sfons_shutdown()
+            sfons_destroy(FONScontext* ctx)
 
         before sgl_shutdown() and sg_shutdown()
 
@@ -96,7 +96,7 @@
     WHAT HAPPENS UNDER THE HOOD:
     ============================
 
-    sfons_create():
+    FONScontext* sfons_create(int width, int height, int flags):
         - creates a sokol-gfx shader compatible with sokol-gl
         - creates an sgl_pipeline object with alpha-blending using
           this shader
@@ -122,12 +122,12 @@
           all calls to fonsDrawText() will be merged into a single draw call
           as long as all calls use the same FONScontext
 
-    sfons_flush():
+    sfons_flush(FONScontext* ctx):
         - this will call sg_update_image() on the font atlas texture
           if fontstash.h has added any rasterized glyphs since the last
           frame
 
-    sfons_shutdown():
+    sfons_destroy(FONScontext* ctx):
         - destroy the font atlas texture, sgl_pipeline and sg_shader objects
 
     LICENSE
