@@ -11367,6 +11367,12 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 /*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
 #elif defined(SOKOL_WGPU)
 
+EM_JS(void, sg_js_buffer_mapped_range_copy, (uint32_t buf_id, uint32_t map_offset, const void* data_ptr, uint32_t data_num_bytes), {
+    var bufferWrapper = WebGPU.mgrBuffer.objects[buf_id];
+    var mapped = bufferWrapper.object["getMappedRange"](map_offset, data_num_bytes);
+    new Uint8Array(mapped).set(HEAPU8.subarray(data_ptr, data_ptr + data_num_bytes));
+});
+
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
     WGPUBufferUsageFlags res = 0;
     if (SG_BUFFERTYPE_VERTEXBUFFER == t) {
@@ -12375,9 +12381,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         }
         if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
             SOKOL_ASSERT(desc->data.ptr && (desc->data.size <= (size_t)buf->cmn.size));
-            void* ptr = wgpuBufferGetMappedRange(buf->wgpu.buf, 0, wgpu_buf_size);
-            SOKOL_ASSERT(ptr);
-            memcpy(ptr, desc->data.ptr, desc->data.size);
+            sg_js_buffer_mapped_range_copy((uint32_t)(uintptr_t)buf->wgpu.buf, 0, desc->data.ptr, desc->data.size);
             wgpuBufferUnmap(buf->wgpu.buf);
         }
     }
