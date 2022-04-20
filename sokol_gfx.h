@@ -11367,10 +11367,20 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 /*== WEBGPU BACKEND IMPLEMENTATION ===========================================*/
 #elif defined(SOKOL_WGPU)
 
-EM_JS(void, sg_js_buffer_mapped_range_copy, (uint32_t buf_id, uint32_t map_offset, const void* data_ptr, uint32_t data_num_bytes), {
-    var bufferWrapper = WebGPU.mgrBuffer.objects[buf_id];
-    var mapped = bufferWrapper.object["getMappedRange"](map_offset, data_num_bytes);
-    new Uint8Array(mapped).set(HEAPU8.subarray(data_ptr, data_ptr + data_num_bytes));
+// JS helper functions to copy into buffer mapped range without temporary allocation
+EM_JS(void, sg_wgpu_js_buffer_map_range, (uint32_t buf_id, uint32_t offset, uint32_t size), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+    buffer_wrapper.sokol_buffer_mapping = buffer_wrapper.object["getMappedRange"](offset, size);
+});
+
+EM_JS(void, sg_wgpu_js_buffer_unmap_range, (uint32_t buf_id), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+    buffer_wrapper.sokol_buffer_mapping = null;
+});
+
+EM_JS(void, sg_wgpu_js_buffer_copy_range, (uint32_t buf_id, uint32_t range_offset, const void* data_ptr, uint32_t data_size), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+    new Uint8Array(buffer_wrapper.sokol_buffer_mapping, range_offset, data_size).set(HEAPU8.subarray(data_ptr, data_ptr + data_size));
 });
 
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
@@ -12381,7 +12391,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         }
         if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
             SOKOL_ASSERT(desc->data.ptr && (desc->data.size <= (size_t)buf->cmn.size));
-            sg_js_buffer_mapped_range_copy((uint32_t)(uintptr_t)buf->wgpu.buf, 0, desc->data.ptr, desc->data.size);
+            uint32_t wgpu_buf_id = (uint32_t)(uintptr_t)buf->wgpu.buf;
+            sg_wgpu_js_buffer_map_range(wgpu_buf_id, 0, desc->data.size);
+            sg_wgpu_js_buffer_copy_range(wgpu_buf_id, 0, desc->data.ptr, desc->data.size);
+            sg_wgpu_js_buffer_unmap_range(wgpu_buf_id);
             wgpuBufferUnmap(buf->wgpu.buf);
         }
     }
