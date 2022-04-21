@@ -2702,6 +2702,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #import <Metal/Metal.h>
 #elif defined(SOKOL_WGPU)
     #include <webgpu/webgpu.h>
+    #if defined(__EMSCRIPTEN__)
+        #include <emscripten/emscripten.h>
+    #endif
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
 
@@ -11381,6 +11384,10 @@ EM_JS(void, sg_wgpu_js_buffer_unmap_range, (uint32_t buf_id), {
 EM_JS(void, sg_wgpu_js_buffer_copy_range, (uint32_t buf_id, uint32_t range_offset, const void* data_ptr, uint32_t data_size), {
     var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
     new Uint8Array(buffer_wrapper.sokol_buffer_mapping, range_offset, data_size).set(HEAPU8.subarray(data_ptr, data_ptr + data_size));
+});
+
+EM_JS(void, sg_wgpu_js_buffer_copy_rows, (uint32_t buf_id, uint32_t range_offset, const void* data_ptr, uint32_t row_size, uint32_t row_pitch, uint32_t num_rows), {
+    console.log("sg_wgpu_js_buffer_copy_rows: FIXME FIXME FIXME");
 });
 
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
