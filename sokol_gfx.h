@@ -11373,21 +11373,30 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 // JS helper functions to copy into buffer mapped range without temporary allocation
 EM_JS(void, sg_wgpu_js_buffer_map_range, (uint32_t buf_id, uint32_t offset, uint32_t size), {
     var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
-    buffer_wrapper.sokol_buffer_mapping = buffer_wrapper.object["getMappedRange"](offset, size);
+    var u8_array = new Uint8Array(buffer_wrapper.object["getMappedRange"](offset, size));
+    buffer_wrapper.sokol_mapping = u8_array;
 });
 
 EM_JS(void, sg_wgpu_js_buffer_unmap_range, (uint32_t buf_id), {
     var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
-    buffer_wrapper.sokol_buffer_mapping = null;
+    buffer_wrapper.sokol_mapping = null;
 });
 
-EM_JS(void, sg_wgpu_js_buffer_copy_range, (uint32_t buf_id, uint32_t range_offset, const void* data_ptr, uint32_t data_size), {
+EM_JS(void, sg_wgpu_js_buffer_copy_range, (uint32_t buf_id, uint32_t dst_offset, const void* src_ptr, uint32_t src_size), {
     var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
-    new Uint8Array(buffer_wrapper.sokol_buffer_mapping, range_offset, data_size).set(HEAPU8.subarray(data_ptr, data_ptr + data_size));
+    buffer_wrapper.sokol_mapping.set(HEAPU8.subarray(src_ptr, src_ptr + src_size), dst_offset);
 });
 
-EM_JS(void, sg_wgpu_js_buffer_copy_rows, (uint32_t buf_id, uint32_t range_offset, const void* data_ptr, uint32_t row_size, uint32_t row_pitch, uint32_t num_rows), {
-    console.log("sg_wgpu_js_buffer_copy_rows: FIXME FIXME FIXME");
+EM_JS(void, sg_wgpu_js_buffer_copy_rows, (uint32_t buf_id, uint32_t dst_offset, uint32_t dst_pitch, const void* src_ptr, uint32_t row_size, uint32_t row_pitch, uint32_t num_rows), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+    var dst = buffer_wrapper.sokol_mapping;
+    for (var i = 0; i < num_rows; i++) {
+        // meh, creating a new object for each row sucks :/
+        var src = HEAPU8.subarray(src_ptr, src_ptr + row_size);
+        dst.set(src, dst_offset);
+        dst_offset += dst_pitch;
+        src_ptr += row_pitch;
+    }
 });
 
 _SOKOL_PRIVATE WGPUBufferUsageFlags _sg_wgpu_buffer_usage(sg_buffer_type t, sg_usage u) {
