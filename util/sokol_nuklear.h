@@ -1941,8 +1941,15 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         int idx_offset = 0;
         nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
             if (cmd->elem_count > 0) {
+                sg_image img;
+                if (cmd->texture.id != 0) {
+                    img = (sg_image){ .id = (uint32_t) cmd->texture.id };
+                }
+                else {
+                    img = _snuklear.img;
+                }
                 sg_apply_bindings(&(sg_bindings){
-                    .fs_images[0] = _snuklear.img,
+                    .fs_images[0] = img,
                     .vertex_buffers[0] = _snuklear.vbuf,
                     .index_buffer = _snuklear.ibuf,
                     .vertex_buffer_offsets[0] = 0,
