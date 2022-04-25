@@ -11371,7 +11371,7 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 #elif defined(SOKOL_WGPU)
 
 // JS helper functions to copy into buffer mapped range without temporary allocation
-EM_JS(void, sg_wgpu_js_buffer_map_range, (WGPUBuffer buf, uint32_t offset, uint32_t size), {
+EM_JS(void, sg_wgpu_js_buffer_map_range, (WGPUBuffer buf, int offset, int size), {
     var buffer_wrapper = WebGPU.mgrBuffer.objects[buf];
     var u8_array = new Uint8Array(buffer_wrapper.object["getMappedRange"](offset, size));
     buffer_wrapper.sokol_mapping = u8_array;
@@ -12411,7 +12411,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         }
         if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
             SOKOL_ASSERT(desc->data.ptr && (desc->data.size <= (size_t)buf->cmn.size));
-            sg_wgpu_js_buffer_map_range(buf->wgpu.buf, 0, desc->data.size);
+            sg_wgpu_js_buffer_map_range(buf->wgpu.buf, 0, (int)desc->data.size);
             sg_wgpu_js_buffer_copy_range(buf->wgpu.buf, 0, desc->data.ptr, (int)desc->data.size);
             sg_wgpu_js_buffer_unmap_range(buf->wgpu.buf);
             wgpuBufferUnmap(buf->wgpu.buf);
@@ -12489,7 +12489,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
                 wgpu_buf_desc.mappedAtCreation = true;
                 WGPUBuffer wgpu_buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
                 SOKOL_ASSERT(wgpu_buf);
-                sg_wgpu_js_buffer_map_range(wgpu_buf, 0, wgpu_buf_desc.size);
+                sg_wgpu_js_buffer_map_range(wgpu_buf, 0, (int)wgpu_buf_desc.size);
                 uint32_t num_bytes = (uint32_t)_sg_wgpu_copy_image_data(wgpu_buf, 0, img, &desc->data);
                 sg_wgpu_js_buffer_unmap_range(wgpu_buf);
                 SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size); _SOKOL_UNUSED(num_bytes);
