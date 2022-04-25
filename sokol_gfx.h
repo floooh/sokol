@@ -11371,24 +11371,24 @@ _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* 
 #elif defined(SOKOL_WGPU)
 
 // JS helper functions to copy into buffer mapped range without temporary allocation
-EM_JS(void, sg_wgpu_js_buffer_map_range, (uint32_t buf_id, uint32_t offset, uint32_t size), {
-    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+EM_JS(void, sg_wgpu_js_buffer_map_range, (WGPUBuffer buf, uint32_t offset, uint32_t size), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf];
     var u8_array = new Uint8Array(buffer_wrapper.object["getMappedRange"](offset, size));
     buffer_wrapper.sokol_mapping = u8_array;
 });
 
-EM_JS(void, sg_wgpu_js_buffer_unmap_range, (uint32_t buf_id), {
-    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+EM_JS(void, sg_wgpu_js_buffer_unmap_range, (WGPUBuffer buf), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf];
     buffer_wrapper.sokol_mapping = null;
 });
 
-EM_JS(void, sg_wgpu_js_buffer_copy_range, (uint32_t buf_id, uint32_t dst_offset, const void* src_ptr, uint32_t src_size), {
-    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+EM_JS(void, sg_wgpu_js_buffer_copy_range, (WGPUBuffer buf, int dst_offset, const void* src_ptr, int src_size), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf];
     buffer_wrapper.sokol_mapping.set(HEAPU8.subarray(src_ptr, src_ptr + src_size), dst_offset);
 });
 
-EM_JS(void, sg_wgpu_js_buffer_copy_rows, (uint32_t buf_id, uint32_t dst_offset, uint32_t dst_pitch, const void* src_ptr, uint32_t row_size, uint32_t row_pitch, uint32_t num_rows), {
-    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf_id];
+EM_JS(void, sg_wgpu_js_buffer_copy_rows, (WGPUBuffer buf, int dst_offset, int dst_pitch, const void* src_ptr, int row_size, int row_pitch, int num_rows), {
+    var buffer_wrapper = WebGPU.mgrBuffer.objects[buf];
     var dst = buffer_wrapper.sokol_mapping;
     for (var i = 0; i < num_rows; i++) {
         // meh, creating a new object for each row sucks :/
@@ -12003,17 +12003,17 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_image_data_buffer_size(const _sg_image_t* img) 
 /* helper function to copy image data into a texture via a staging buffer, returns number of
    bytes copied
 */
-_SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* stg_base_ptr, uint32_t stg_base_offset, _sg_image_t* img, const sg_image_data* data) {
+_SOKOL_PRIVATE int _sg_wgpu_copy_image_data(WGPUBuffer wgpu_buf, int buf_base_offset, _sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.wgpu.upload.cmd_enc);
-    SOKOL_ASSERT(stg_buf && stg_base_ptr);
+    SOKOL_ASSERT(wgpu_buf);
     SOKOL_ASSERT(img);
     SOKOL_ASSERT(data);
-    uint32_t stg_offset = stg_base_offset;
+    int buf_offset = buf_base_offset;
     const sg_pixel_format fmt = img->cmn.pixel_format;
     WGPUImageCopyBuffer copy_src;
     memset(&copy_src, 0, sizeof(copy_src));
-    copy_src.buffer = stg_buf;
-    copy_src.layout.offset = stg_base_offset;
+    copy_src.buffer = wgpu_buf;
+    copy_src.layout.offset = (uint64_t)buf_base_offset;
     WGPUImageCopyTexture copy_dst;
     memset(&copy_dst, 0, sizeof(copy_dst));
     copy_dst.texture = img->wgpu.tex;
@@ -12030,7 +12030,6 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
         SOKOL_ASSERT(data->subimage[0][mip_index].size > 0);
         const uint8_t* src_base_ptr = (const uint8_t*)data->subimage[0][mip_index].ptr;
         SOKOL_ASSERT(src_base_ptr);
-        uint8_t* dst_base_ptr = stg_base_ptr + stg_offset;
 
         const int mip_width  = _sg_max(img->cmn.width >> mip_index, 1);
         const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
@@ -12066,25 +12065,28 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
         // copy data into mapped staging buffer
         if (src_bytes_per_row == dst_bytes_per_row) {
             // can do a single memcpy
-            uint32_t num_bytes = data->subimage[0][mip_index].size;
-            memcpy(dst_base_ptr, src_base_ptr, num_bytes);
+            int num_bytes = (int)data->subimage[0][mip_index].size;
+            sg_wgpu_js_buffer_copy_range(wgpu_buf, buf_offset, src_base_ptr, num_bytes);
         }
         else {
-            // src/dst pitch doesn't match, need to copy row by row
-            uint8_t* dst_ptr = dst_base_ptr;
+            // src/dst pitch doesn't match, need to copy row-wise
+            int dst_offset = buf_offset;
             const uint8_t* src_ptr = src_base_ptr;
             for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-                SOKOL_ASSERT(dst_ptr == dst_base_ptr + slice_index * dst_bytes_per_slice);
-                for (int row_index = 0; row_index < num_rows; row_index++) {
-                    memcpy(dst_ptr, src_ptr, (size_t)src_bytes_per_row);
-                    src_ptr += src_bytes_per_row;
-                    dst_ptr += dst_bytes_per_row;
-                }
+                sg_wgpu_js_buffer_copy_rows(wgpu_buf,
+                    dst_offset,
+                    dst_bytes_per_row,
+                    src_ptr,
+                    src_bytes_per_row,
+                    src_bytes_per_row,
+                    num_rows);
+                src_ptr += src_bytes_per_row * num_rows;
+                dst_offset += dst_bytes_per_row * num_rows;
             }
         }
 
         // record the staging copy operations into command encoder
-        copy_src.layout.offset = stg_offset;
+        copy_src.layout.offset = (uint64_t)buf_offset;
         copy_src.layout.bytesPerRow = (uint32_t)dst_bytes_per_row;
         copy_src.layout.rowsPerImage = (uint32_t)mip_height;
         const int block_dim = _sg_pixelformat_block_dim(fmt);
@@ -12093,11 +12095,11 @@ _SOKOL_PRIVATE uint32_t _sg_wgpu_copy_image_data(WGPUBuffer stg_buf, uint8_t* st
         extent.depthOrArrayLayers = (uint32_t)num_slices;
         SOKOL_ASSERT((img->cmn.type != SG_IMAGETYPE_CUBE) || (num_slices == 1));
         wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.upload.cmd_enc, &copy_src, &copy_dst, &extent);
-        stg_offset += (uint32_t)(dst_bytes_per_slice * num_slices);
-        SOKOL_ASSERT(stg_offset <= _sg.wgpu.upload.num_bytes);
+        buf_offset += (uint32_t)(dst_bytes_per_slice * num_slices);
+        SOKOL_ASSERT(buf_offset <= (int)_sg.wgpu.upload.num_bytes);
     }
-    SOKOL_ASSERT(stg_offset >= stg_base_offset);
-    return (stg_offset - stg_base_offset);
+    SOKOL_ASSERT(buf_offset >= buf_base_offset);
+    return (buf_offset - buf_base_offset);
 }
 
 /*
@@ -12232,9 +12234,11 @@ _SOKOL_PRIVATE bool _sg_wgpu_staging_copy_to_texture(_sg_image_t* img, const sg_
     uint32_t stg_offset = _sg.wgpu.upload.offset;
     uint8_t* stg_ptr = _sg.wgpu.upload.staging.ptr[cur];
     WGPUBuffer stg_buf = _sg.wgpu.upload.staging.buf[cur];
-    uint32_t bytes_copied = _sg_wgpu_copy_image_data(stg_buf, stg_ptr, stg_offset, img, data);
-    _SOKOL_UNUSED(bytes_copied);
-    SOKOL_ASSERT(bytes_copied == num_bytes);
+SOKOL_ASSERT(false);
+// FIXME FIXME FIXME    
+//    uint32_t bytes_copied = _sg_wgpu_copy_image_data(stg_buf, stg_ptr, stg_offset, img, data);
+//    _SOKOL_UNUSED(bytes_copied);
+//    SOKOL_ASSERT(bytes_copied == num_bytes);
     _sg.wgpu.upload.offset = _sg_roundup_u32(stg_offset + num_bytes, _SG_WGPU_STAGING_ALIGN);
     return true;
 }
@@ -12407,10 +12411,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         }
         if (SG_USAGE_IMMUTABLE == buf->cmn.usage) {
             SOKOL_ASSERT(desc->data.ptr && (desc->data.size <= (size_t)buf->cmn.size));
-            uint32_t wgpu_buf_id = (uint32_t)(uintptr_t)buf->wgpu.buf;
-            sg_wgpu_js_buffer_map_range(wgpu_buf_id, 0, desc->data.size);
-            sg_wgpu_js_buffer_copy_range(wgpu_buf_id, 0, desc->data.ptr, desc->data.size);
-            sg_wgpu_js_buffer_unmap_range(wgpu_buf_id);
+            sg_wgpu_js_buffer_map_range(buf->wgpu.buf, 0, desc->data.size);
+            sg_wgpu_js_buffer_copy_range(buf->wgpu.buf, 0, desc->data.ptr, (int)desc->data.size);
+            sg_wgpu_js_buffer_unmap_range(buf->wgpu.buf);
             wgpuBufferUnmap(buf->wgpu.buf);
         }
     }
@@ -12484,14 +12487,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
                 wgpu_buf_desc.usage = WGPUBufferUsage_CopySrc|WGPUBufferUsage_CopyDst;
                 wgpu_buf_desc.size = _sg_wgpu_image_data_buffer_size(img);
                 wgpu_buf_desc.mappedAtCreation = true;
-                WGPUBuffer buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
-                SOKOL_ASSERT(buf);
-                void* dst_ptr = wgpuBufferGetMappedRange(buf, 0, wgpu_buf_desc.size);
-                SOKOL_ASSERT(dst_ptr);
-                uint32_t num_bytes = _sg_wgpu_copy_image_data(buf, (uint8_t*)dst_ptr, 0, img, &desc->data);
+                WGPUBuffer wgpu_buf = wgpuDeviceCreateBuffer(_sg.wgpu.dev, &wgpu_buf_desc);
+                SOKOL_ASSERT(wgpu_buf);
+                sg_wgpu_js_buffer_map_range(wgpu_buf, 0, wgpu_buf_desc.size);
+                uint32_t num_bytes = (uint32_t)_sg_wgpu_copy_image_data(wgpu_buf, 0, img, &desc->data);
+                sg_wgpu_js_buffer_unmap_range(wgpu_buf);
                 SOKOL_ASSERT(num_bytes == wgpu_buf_desc.size); _SOKOL_UNUSED(num_bytes);
-                wgpuBufferUnmap(buf);
-                wgpuBufferRelease(buf);
+                wgpuBufferUnmap(wgpu_buf);
+                wgpuBufferRelease(wgpu_buf);
             }
         }
 
