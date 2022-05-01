@@ -2580,9 +2580,9 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #if !(defined(SOKOL_GLCORE33)||defined(SOKOL_GLES2)||defined(SOKOL_GLES3)||defined(SOKOL_D3D11)||defined(SOKOL_METAL)||defined(SOKOL_WGPU)||defined(SOKOL_DUMMY_BACKEND))
 #error "Please select a backend with SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU or SOKOL_DUMMY_BACKEND"
 #endif
-#include <stdlib.h> /* malloc/free */
-#include <string.h> /* memset */
-#include <float.h> /* FLT_MAX */
+#include <stdlib.h> // malloc, free
+#include <string.h> // memset
+#include <float.h> // FLT_MAX
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
