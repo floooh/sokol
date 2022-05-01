@@ -2268,6 +2268,9 @@ typedef struct sg_pass_info {
     .uniform_buffer_size    4 MB (4*1024*1024)
     .staging_buffer_size    8 MB (8*1024*1024)
 
+    .allocator.alloc        malloc (from the C standard library)
+    .allocator.free         free (from the C standard library)
+
     .context.color_format: default value depends on selected backend:
         all GL backends:    SG_PIXELFORMAT_RGBA8
         Metal and D3D11:    SG_PIXELFORMAT_BGRA8
@@ -2417,8 +2420,8 @@ typedef struct sg_desc {
     int uniform_buffer_size;
     int staging_buffer_size;
     int sampler_cache_size;
-    sg_context_desc context;
     sg_allocator allocator;
+    sg_context_desc context;
     uint32_t _end_canary;
 } sg_desc;
 
@@ -15169,7 +15172,7 @@ SOKOL_API_IMPL void sg_shutdown(void) {
     }
     _sg_discard_backend();
     _sg_discard_pools(&_sg.pools);
-    _sg.valid = false;
+    _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
 }
 
 SOKOL_API_IMPL bool sg_isvalid(void) {
