@@ -1090,6 +1090,21 @@ typedef enum sapp_event_type {
 } sapp_event_type;
 
 /*
+    Window Border Style
+
+    Only WBS_Full will provide a close button. All other mode the programers must provide
+    a button, a key entry or an automated close method.
+
+    WIP: Only available for Windows system.
+*/
+typedef enum WindowBorderStyle {
+    WBS_FULL = 0,
+    WBS_RESIZE_AND_CAPTION,
+    WBS_RESIZE,
+    WBS_BORDERLESS,
+} WindowBorderStyle;
+
+/*
     sapp_keycode
 
     The 'virtual keycode' of a KEY_DOWN or KEY_UP event in the
@@ -1386,6 +1401,7 @@ typedef struct sapp_desc {
     int max_dropped_files;              // max number of dropped files to process (default: 1)
     int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
     sapp_icon_desc icon;                // the initial window icon to set
+    WindowBorderStyle wbs;              // the window border style, default "WBS_FULL"  
 
     /* backend-specific options */
     bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
@@ -2560,6 +2576,7 @@ typedef struct {
     char window_title[_SAPP_MAX_TITLE_LENGTH];      /* UTF-8 */
     wchar_t window_title_wide[_SAPP_MAX_TITLE_LENGTH];   /* UTF-32 or UCS-2 */
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
+    WindowBorderStyle wbs;
 } _sapp_t;
 static _sapp_t _sapp;
 
@@ -2675,6 +2692,7 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
     desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
     desc.window_title = _sapp_def(desc.window_title, "sokol_app");
+    desc.wbs = _sapp_def(desc.wbs, WBS_FULL);
     return desc;
 }
 
@@ -2719,6 +2737,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
     _sapp_timing_init(&_sapp.timing);
+    _sapp.wbs =_sapp.desc.wbs;
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
@@ -6782,7 +6801,33 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     */
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
     RECT rect = { 0, 0, 0, 0 };
-    DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
+    
+    /*
+    typedef enum WindowBorderStyle {
+        WBS_FULL = 0,
+        WBS_RESIZE_AND_CAPTION,
+        WBS_RESIZE,
+        WBS_BORDERLESS,
+    } WindowBorderStyle; */
+    
+    WindowBorderStyle windowstype = _sapp.wbs; //   WBS_FULL;
+    DWORD win_style;
+    switch (windowstype) {
+    case WBS_RESIZE_AND_CAPTION:
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP | WS_CAPTION | WS_SIZEBOX;
+        break;
+    case  WBS_RESIZE:
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP | WS_SIZEBOX;
+        break;
+    case  WBS_BORDERLESS:
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP;
+        break;
+    case WBS_FULL:
+    default:
+        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
+        break;
+    }
+
     rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
     rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
     const bool use_default_width = 0 == _sapp.window_width;
