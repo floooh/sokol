@@ -16,8 +16,6 @@
     Optionally provide the following defines with your own implementations:
 
     SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)             - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)               - your own free function (default: free(p))
     SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
     SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
     SOKOL_FETCH_API_DECL        - public function declaration prefix (default: extern)
@@ -837,6 +835,7 @@
         distribution.
 */
 #define SOKOL_FETCH_INCLUDED (1)
+#include <stddef.h> // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -857,13 +856,25 @@
 extern "C" {
 #endif
 
+/*
+    An allocator interface used in sfetch_desc_t to override memory
+    allocation functions. The function prototypes are compatible
+    with malloc/free.
+*/
+typedef void*(*sfetch_malloc_t)(size_t size);
+typedef void(*sfetch_free_t)(void* ptr);
+
+typedef struct sfetch_allocator_t {
+    sfetch_malloc_t alloc;
+    sfetch_free_t free;
+} sfetch_allocator_t;
+
 /* configuration values for sfetch_setup() */
 typedef struct sfetch_desc_t {
-    uint32_t _start_canary;
-    uint32_t max_requests;          /* max number of active requests across all channels, default is 128 */
-    uint32_t num_channels;          /* number of channels to fetch requests in parallel, default is 1 */
-    uint32_t num_lanes;             /* max number of requests active on the same channel, default is 1 */
-    uint32_t _end_canary;
+    uint32_t max_requests;          /* max number of active requests across all channels (default: 128) */
+    uint32_t num_channels;          /* number of channels to fetch requests in parallel (default: 1) */
+    uint32_t num_lanes;             /* max number of requests active on the same channel (default: 1) */
+    sfetch_allocator_t allocator;   /* optional memory allocation overrides (default: malloc/free) */
 } sfetch_desc_t;
 
 /* a request handle to identify an active fetch request, returned by sfetch_send() */
@@ -905,7 +916,6 @@ typedef void(*sfetch_callback_t)(const sfetch_response_t*);
 
 /* request parameters passed to sfetch_send() */
 typedef struct sfetch_request_t {
-    uint32_t _start_canary;
     uint32_t channel;               /* index of channel this request is assigned to (default: 0) */
     const char* path;               /* filesystem path or HTTP URL (required) */
     sfetch_callback_t callback;     /* response callback function pointer (required) */
@@ -914,7 +924,6 @@ typedef struct sfetch_request_t {
     uint32_t chunk_size;            /* number of bytes to load per stream-block (optional) */
     const void* user_data_ptr;      /* pointer to a POD user-data block which will be memcpy'd(!) (optional) */
     uint32_t user_data_size;        /* size of user-data block (optional) */
-    uint32_t _end_canary;
 } sfetch_request_t;
 
 /* setup sokol-fetch (can be called on multiple threads) */
@@ -961,6 +970,7 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_FETCH_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
+#include <stdlib.h> /* malloc, free */
 #include <string.h> /* memset, memcpy */
 
 #ifndef SFETCH_MAX_PATH
@@ -984,11 +994,6 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
@@ -1206,6 +1211,29 @@ static _sfetch_t* _sfetch;
 /*=== general helper functions and macros =====================================*/
 #define _sfetch_def(val, def) (((val) == 0) ? (def) : (val))
 
+_SOKOL_PRIVATE void _sfetch_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _sfetch_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr = _sfetch->desc.allocator.alloc(size);
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sfetch_malloc_clear(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr = _sfetch_malloc(size);
+    _sfetch_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _sfetch_free(void* ptr) {
+    _sfetch->desc.allocator.free(ptr);
+}
+
 _SOKOL_PRIVATE _sfetch_t* _sfetch_ctx(void) {
     return _sfetch;
 }
@@ -1221,7 +1249,7 @@ _SOKOL_PRIVATE void _sfetch_path_copy(_sfetch_path_t* dst, const char* src) {
         dst->buf[SFETCH_MAX_PATH-1] = 0;
     }
     else {
-        memset(dst->buf, 0, SFETCH_MAX_PATH);
+        _sfetch_clear(dst->buf, SFETCH_MAX_PATH);
     }
 }
 
@@ -1253,7 +1281,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_wrap(const _sfetch_ring_t* rb, uint32_t i) 
 _SOKOL_PRIVATE void _sfetch_ring_discard(_sfetch_ring_t* rb) {
     SOKOL_ASSERT(rb);
     if (rb->buf) {
-        SOKOL_FREE(rb->buf);
+        _sfetch_free(rb->buf);
         rb->buf = 0;
     }
     rb->head = 0;
@@ -1269,9 +1297,8 @@ _SOKOL_PRIVATE bool _sfetch_ring_init(_sfetch_ring_t* rb, uint32_t num_slots) {
     /* one slot reserved to detect full vs empty */
     rb->num = num_slots + 1;
     const size_t queue_size = rb->num * sizeof(sfetch_handle_t);
-    rb->buf = (uint32_t*) SOKOL_MALLOC(queue_size);
+    rb->buf = (uint32_t*) _sfetch_malloc_clear(queue_size);
     if (rb->buf) {
-        memset(rb->buf, 0, queue_size);
         return true;
     }
     else {
@@ -1332,7 +1359,7 @@ _SOKOL_PRIVATE uint32_t _sfetch_ring_peek(const _sfetch_ring_t* rb, uint32_t ind
 _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, const sfetch_request_t* request) {
     SOKOL_ASSERT(item && (0 == item->handle.id));
     SOKOL_ASSERT(request && request->path);
-    memset(item, 0, sizeof(_sfetch_item_t));
+    _sfetch_clear(item, sizeof(_sfetch_item_t));
     item->handle.id = slot_id;
     item->state = _SFETCH_STATE_INITIAL;
     item->channel = request->channel;
@@ -1356,21 +1383,21 @@ _SOKOL_PRIVATE void _sfetch_item_init(_sfetch_item_t* item, uint32_t slot_id, co
 
 _SOKOL_PRIVATE void _sfetch_item_discard(_sfetch_item_t* item) {
     SOKOL_ASSERT(item && (0 != item->handle.id));
-    memset(item, 0, sizeof(_sfetch_item_t));
+    _sfetch_clear(item, sizeof(_sfetch_item_t));
 }
 
 _SOKOL_PRIVATE void _sfetch_pool_discard(_sfetch_pool_t* pool) {
     SOKOL_ASSERT(pool);
     if (pool->free_slots) {
-        SOKOL_FREE(pool->free_slots);
+        _sfetch_free(pool->free_slots);
         pool->free_slots = 0;
     }
     if (pool->gen_ctrs) {
-        SOKOL_FREE(pool->gen_ctrs);
+        _sfetch_free(pool->gen_ctrs);
         pool->gen_ctrs = 0;
     }
     if (pool->items) {
-        SOKOL_FREE(pool->items);
+        _sfetch_free(pool->items);
         pool->items = 0;
     }
     pool->size = 0;
@@ -1385,17 +1412,15 @@ _SOKOL_PRIVATE bool _sfetch_pool_init(_sfetch_pool_t* pool, uint32_t num_items) 
     pool->size = num_items + 1;
     pool->free_top = 0;
     const size_t items_size = pool->size * sizeof(_sfetch_item_t);
-    pool->items = (_sfetch_item_t*) SOKOL_MALLOC(items_size);
+    pool->items = (_sfetch_item_t*) _sfetch_malloc_clear(items_size);
     /* generation counters indexable by pool slot index, slot 0 is reserved */
     const size_t gen_ctrs_size = sizeof(uint32_t) * pool->size;
-    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
+    pool->gen_ctrs = (uint32_t*) _sfetch_malloc_clear(gen_ctrs_size);
     SOKOL_ASSERT(pool->gen_ctrs);
     /* NOTE: it's not a bug to only reserve num_items here */
     const size_t free_slots_size = num_items * sizeof(int);
-    pool->free_slots = (uint32_t*) SOKOL_MALLOC(free_slots_size);
+    pool->free_slots = (uint32_t*) _sfetch_malloc_clear(free_slots_size);
     if (pool->items && pool->free_slots) {
-        memset(pool->items, 0, items_size);
-        memset(pool->gen_ctrs, 0, gen_ctrs_size);
         /* never allocate the 0-th item, this is the reserved 'invalid item' */
         for (uint32_t i = pool->size - 1; i >= 1; i--) {
             pool->free_slots[pool->free_top++] = i;
@@ -1621,7 +1646,7 @@ _SOKOL_PRIVATE void _sfetch_thread_dequeue_outgoing(_sfetch_thread_t* thread, _s
 #if _SFETCH_PLATFORM_WINDOWS
 _SOKOL_PRIVATE bool _sfetch_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, (size_t)dst_num_bytes);
+    _sfetch_clear(dst, (size_t)dst_num_bytes);
     const int dst_chars = dst_num_bytes / (int)sizeof(wchar_t);
     const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
@@ -2162,7 +2187,7 @@ _SOKOL_PRIVATE bool _sfetch_channel_send(_sfetch_channel_t* chn, uint32_t slot_i
 
 _SOKOL_PRIVATE void _sfetch_invoke_response_callback(_sfetch_item_t* item) {
     sfetch_response_t response;
-    memset(&response, 0, sizeof(response));
+    _sfetch_clear(&response, sizeof(response));
     response.handle = item->handle;
     response.dispatched = (item->state == _SFETCH_STATE_DISPATCHED);
     response.fetched = (item->state == _SFETCH_STATE_FETCHED);
@@ -2338,23 +2363,31 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
     return true;
 }
 
+_SOKOL_PRIVATE sfetch_desc_t _sfetch_desc_defaults(const sfetch_desc_t* desc) {
+    sfetch_desc_t res = *desc;
+    res.max_requests = _sfetch_def(desc->max_requests, 128);
+    res.num_channels = _sfetch_def(desc->num_channels, 1);
+    res.num_lanes = _sfetch_def(desc->num_lanes, 1);
+    res.allocator.alloc = _sfetch_def(desc->allocator.alloc, malloc);
+    res.allocator.free = _sfetch_def(desc->allocator.free, free);
+    return res;
+}
+
 /*=== PUBLIC API FUNCTIONS ===================================================*/
-SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
+SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc_) {
+    SOKOL_ASSERT(desc_);
     SOKOL_ASSERT(0 == _sfetch);
-    _sfetch = (_sfetch_t*) SOKOL_MALLOC(sizeof(_sfetch_t));
+
+    sfetch_desc_t desc = _sfetch_desc_defaults(desc_);
+    _sfetch = (_sfetch_t*) desc.allocator.alloc(sizeof(_sfetch_t));
     SOKOL_ASSERT(_sfetch);
-    memset(_sfetch, 0, sizeof(_sfetch_t));
     _sfetch_t* ctx = _sfetch_ctx();
-    ctx->desc = *desc;
+    _sfetch_clear(ctx, sizeof(_sfetch_t));
+    ctx->desc = desc;
     ctx->setup = true;
     ctx->valid = true;
 
     /* replace zero-init items with default values */
-    ctx->desc.max_requests = _sfetch_def(ctx->desc.max_requests, 128);
-    ctx->desc.num_channels = _sfetch_def(ctx->desc.num_channels, 1);
-    ctx->desc.num_lanes = _sfetch_def(ctx->desc.num_lanes, 1);
     if (ctx->desc.num_channels > SFETCH_MAX_CHANNELS) {
         ctx->desc.num_channels = SFETCH_MAX_CHANNELS;
         SOKOL_LOG("sfetch_setup: clamping num_channels to SFETCH_MAX_CHANNELS");
@@ -2381,7 +2414,7 @@ SOKOL_API_IMPL void sfetch_shutdown(void) {
     }
     _sfetch_pool_discard(&ctx->pool);
     ctx->setup = false;
-    SOKOL_FREE(ctx);
+    _sfetch_free(ctx);
     _sfetch = 0;
 }
 
@@ -2417,7 +2450,6 @@ SOKOL_API_IMPL bool sfetch_handle_valid(sfetch_handle_t h) {
 SOKOL_API_IMPL sfetch_handle_t sfetch_send(const sfetch_request_t* request) {
     _sfetch_t* ctx = _sfetch_ctx();
     SOKOL_ASSERT(ctx && ctx->setup);
-    SOKOL_ASSERT(request && (request->_start_canary == 0) && (request->_end_canary == 0));
 
     const sfetch_handle_t invalid_handle = _sfetch_make_handle(0);
     if (!ctx->valid) {
