@@ -3908,21 +3908,21 @@ static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
     }
 }
 
-static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
-    SOKOL_ASSERT((in_desc->allocator.alloc && in_desc->allocator.free) || (!in_desc->allocator.alloc && !in_desc->allocator.free));
-    sdtx_desc_t desc = *in_desc;
-    desc.context_pool_size = _sdtx_def(desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
-    desc.printf_buf_size = _sdtx_def(desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
+static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sdtx_desc_t res = *desc;
+    res.context_pool_size = _sdtx_def(res.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
+    res.printf_buf_size = _sdtx_def(res.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (desc.fonts[i].data.ptr) {
-            desc.fonts[i].last_char = _sdtx_def(desc.fonts[i].last_char, 255);
+        if (res.fonts[i].data.ptr) {
+            res.fonts[i].last_char = _sdtx_def(res.fonts[i].last_char, 255);
         }
     }
-    desc.context = _sdtx_context_desc_defaults(&desc.context);
-    SOKOL_ASSERT(desc.context_pool_size > 0);
-    SOKOL_ASSERT(desc.printf_buf_size > 0);
-    SOKOL_ASSERT(desc.context.char_buf_size > 0);
-    return desc;
+    res.context = _sdtx_context_desc_defaults(&res.context);
+    SOKOL_ASSERT(res.context_pool_size > 0);
+    SOKOL_ASSERT(res.printf_buf_size > 0);
+    SOKOL_ASSERT(res.context.char_buf_size > 0);
+    return res;
 }
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
