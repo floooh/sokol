@@ -1358,15 +1358,16 @@ typedef struct sapp_icon_desc {
     sapp_allocator
 
     Used in sapp_desc to provide custom memory-alloc and -free functions
-    to sokol_app.h. The function prototypes are compatible with
-    malloc/free.
+    to sokol_app.h. If no allocator is provided, malloc() and free()
+    will be called.
 */
-typedef void*(*sapp_malloc)(size_t size);
-typedef void(*sapp_free)(void* ptr);
+typedef void*(*sapp_malloc)(size_t size, void* user_data);
+typedef void(*sapp_free)(void* ptr, void* user_data);
 
 typedef struct sapp_allocator {
     sapp_malloc alloc;
     sapp_free free;
+    void* user_data;
 } sapp_allocator;
 
 typedef struct sapp_desc {
@@ -2573,16 +2574,32 @@ _SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
     memset(ptr, 0, size);
 }
 
-_SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
+_SOKOL_PRIVATE void* _sapp_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _sapp.desc.allocator.alloc(size);
+    void* ptr;
+    if (_sapp.desc.allocator.alloc) {
+        ptr = _sapp.desc.allocator.alloc(size, _sapp.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
+    void* ptr = _sapp_malloc(size);
     _sapp_clear(ptr, size);
     return ptr;
 }
 
 _SOKOL_PRIVATE void _sapp_free(void* ptr) {
-    _sapp.desc.allocator.free(ptr);
+    if (_sapp.desc.allocator.free) {
+        _sapp.desc.allocator.free(ptr, _sapp.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
@@ -2696,8 +2713,6 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
     desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
     desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
     desc.window_title = _sapp_def(desc.window_title, "sokol_app");
-    desc.allocator.alloc = _sapp_def(desc.allocator.alloc, malloc);
-    desc.allocator.free = _sapp_def(desc.allocator.free, free);
     return desc;
 }
 
@@ -2710,6 +2725,7 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc->clipboard_size >= 0);
     SOKOL_ASSERT(desc->max_dropped_files >= 0);
     SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
