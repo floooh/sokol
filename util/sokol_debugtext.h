@@ -504,16 +504,18 @@ typedef struct sdtx_context_desc_t {
 /*
     sdtx_allocator_t
 
-    Used in sdtx_desc_t to provide custom memory alloc and free functions
-    to sokol_debugtext.h. The function prototypes are compatible with
-    malloc/free.
+    Used in sdtx_desc_t to provide custom memory-alloc and -free functions
+    to sokol_debugtext.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
-typedef void*(*sdtx_malloc_t)(size_t size);
-typedef void(*sdtx_free_t)(void* ptr);
+typedef void*(*sdtx_malloc_t)(size_t size, void* user_data);
+typedef void(*sdtx_free_t)(void* ptr, void* user_data);
 
 typedef struct sdtx_allocator_t {
     sdtx_malloc_t alloc;
     sdtx_free_t free;
+    void* user_data;
 } sdtx_allocator_t;
 
 /*
@@ -3453,20 +3455,30 @@ static void _sdtx_clear(void* ptr, size_t size) {
 
 static void* _sdtx_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _sdtx.desc.allocator.alloc(size);
+    void* ptr;
+    if (_sdtx.desc.allocator.alloc) {
+        ptr = _sdtx.desc.allocator.alloc(size, _sdtx.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
 static void* _sdtx_malloc_clear(size_t size) {
-    SOKOL_ASSERT(size > 0);
     void* ptr = _sdtx_malloc(size);
     _sdtx_clear(ptr, size);
     return ptr;
 }
 
 static void _sdtx_free(void* ptr) {
-    _sdtx.desc.allocator.free(ptr);
+    if (_sdtx.desc.allocator.free) {
+        _sdtx.desc.allocator.free(ptr, _sdtx.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 /*=== CONTEXT POOL ===========================================================*/
@@ -3897,6 +3909,7 @@ static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
 }
 
 static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
+    SOKOL_ASSERT((in_desc->allocator.alloc && in_desc->allocator.free) || (!in_desc->allocator.alloc && !in_desc->allocator.free));
     sdtx_desc_t desc = *in_desc;
     desc.context_pool_size = _sdtx_def(desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
     desc.printf_buf_size = _sdtx_def(desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
@@ -3906,8 +3919,6 @@ static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
         }
     }
     desc.context = _sdtx_context_desc_defaults(&desc.context);
-    desc.allocator.alloc = _sdtx_def(desc.allocator.alloc, malloc);
-    desc.allocator.free = _sdtx_def(desc.allocator.free, free);
     SOKOL_ASSERT(desc.context_pool_size > 0);
     SOKOL_ASSERT(desc.printf_buf_size > 0);
     SOKOL_ASSERT(desc.context.char_buf_size > 0);
