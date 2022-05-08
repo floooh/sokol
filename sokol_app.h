@@ -1358,8 +1358,9 @@ typedef struct sapp_icon_desc {
     sapp_allocator
 
     Used in sapp_desc to provide custom memory-alloc and -free functions
-    to sokol_app.h. If no allocator is provided, malloc() and free()
-    will be called.
+    to sokol_app.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
 typedef void*(*sapp_malloc)(size_t size, void* user_data);
 typedef void(*sapp_free)(void* ptr, void* user_data);
