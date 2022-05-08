@@ -632,16 +632,18 @@ typedef struct sg_imgui_caps_t {
 /*
     sg_imgui_allocator_t
 
-    Used in sg_imgui_desc_t to provide custom memory alloc and free functions
-    to sokol_gfx_imgui.h. The function prototypes are compatible with
-    malloc/free.
+    Used in sg_imgui_desc_t to provide custom memory-alloc and -free functions
+    to sokol_gfx_imgui.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
-typedef void*(*sg_imgui_malloc_t)(size_t size);
-typedef void(*sg_imgui_free_t)(void* ptr);
+typedef void*(*sg_imgui_malloc_t)(size_t size, void* user_data);
+typedef void(*sg_imgui_free_t)(void* ptr, void* user_data);
 
 typedef struct sg_imgui_allocator_t {
     sg_imgui_malloc_t alloc;
     sg_imgui_free_t free;
+    void* user_data;
 } sg_imgui_allocator_t;
 
 /*
@@ -825,23 +827,31 @@ _SOKOL_PRIVATE void _sg_imgui_clear(void* ptr, size_t size) {
 }
 
 _SOKOL_PRIVATE void* _sg_imgui_malloc(const sg_imgui_allocator_t* allocator, size_t size) {
-    SOKOL_ASSERT(allocator && allocator->alloc && (size > 0));
-    void* ptr = allocator->alloc(size);
+    SOKOL_ASSERT(allocator && (size > 0));
+    void* ptr;
+    if (allocator->alloc) {
+        ptr = allocator->alloc(size, allocator->user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
 _SOKOL_PRIVATE void* _sg_imgui_malloc_clear(const sg_imgui_allocator_t* allocator, size_t size) {
-    SOKOL_ASSERT(allocator && allocator->alloc && (size > 0));
     void* ptr = _sg_imgui_malloc(allocator, size);
     _sg_imgui_clear(ptr, size);
     return ptr;
 }
 
 _SOKOL_PRIVATE void _sg_imgui_free(const sg_imgui_allocator_t* allocator, void* ptr) {
-    SOKOL_ASSERT(allocator && allocator->free);
-    if (ptr) {
-        allocator->free(ptr);
+    SOKOL_ASSERT(allocator);
+    if (allocator->free) {
+        allocator->free(ptr, allocator->user_data);
+    }
+    else {
+        free(ptr);
     }
 }
 
@@ -3886,10 +3896,9 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
 #define _sg_imgui_def(val, def) (((val) == 0) ? (def) : (val))
 
 _SOKOL_PRIVATE sg_imgui_desc_t _sg_imgui_desc_defaults(const sg_imgui_desc_t* desc) {
-    sg_imgui_desc_t res;
-    _sg_imgui_clear(&res, sizeof(res));
-    res.allocator.alloc = _sg_imgui_def(desc->allocator.alloc, malloc);
-    res.allocator.free = _sg_imgui_def(desc->allocator.free, free);
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sg_imgui_desc_t res = *desc;
+    // FIXME: any additional default overrides would go here
     return res;
 }
 
