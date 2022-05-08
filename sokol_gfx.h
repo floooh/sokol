@@ -15138,6 +15138,33 @@ _SOKOL_PRIVATE bool _sg_uninit_pass(sg_pass pass_id) {
     return false;
 }
 
+_SOKOL_PRIVATE sg_desc _sg_desc_defaults(const sg_desc* desc) {
+    /*
+        NOTE: on WebGPU, the default color pixel format MUST be provided,
+        cannot be a default compile-time constant.
+    */
+    sg_desc res = *desc;
+    #if defined(SOKOL_WGPU)
+        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != res.context.color_format);
+    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
+        res.context.color_format = _sg_def(res.context.color_format, SG_PIXELFORMAT_BGRA8);
+    #else
+        res.context.color_format = _sg_def(res.context.color_format, SG_PIXELFORMAT_RGBA8);
+    #endif
+    res.context.depth_format = _sg_def(res.context.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
+    res.context.sample_count = _sg_def(res.context.sample_count, 1);
+    res.buffer_pool_size = _sg_def(res.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
+    res.image_pool_size = _sg_def(res.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
+    res.shader_pool_size = _sg_def(res.shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE);
+    res.pipeline_pool_size = _sg_def(res.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
+    res.pass_pool_size = _sg_def(res.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
+    res.context_pool_size = _sg_def(res.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
+    res.uniform_buffer_size = _sg_def(res.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
+    res.staging_buffer_size = _sg_def(res.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
+    res.sampler_cache_size = _sg_def(res.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
+    return res;
+}
+
 /*== PUBLIC API FUNCTIONS ====================================================*/
 
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
@@ -15145,31 +15172,7 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
     SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
-    _sg.desc = *desc;
-
-    /* replace zero-init items with their default values
-        NOTE: on WebGPU, the default color pixel format MUST be provided,
-        cannot be a default compile-time constant.
-    */
-    #if defined(SOKOL_WGPU)
-        SOKOL_ASSERT(SG_PIXELFORMAT_NONE != _sg.desc.context.color_format);
-    #elif defined(SOKOL_METAL) || defined(SOKOL_D3D11)
-        _sg.desc.context.color_format = _sg_def(_sg.desc.context.color_format, SG_PIXELFORMAT_BGRA8);
-    #else
-        _sg.desc.context.color_format = _sg_def(_sg.desc.context.color_format, SG_PIXELFORMAT_RGBA8);
-    #endif
-    _sg.desc.context.depth_format = _sg_def(_sg.desc.context.depth_format, SG_PIXELFORMAT_DEPTH_STENCIL);
-    _sg.desc.context.sample_count = _sg_def(_sg.desc.context.sample_count, 1);
-    _sg.desc.buffer_pool_size = _sg_def(_sg.desc.buffer_pool_size, _SG_DEFAULT_BUFFER_POOL_SIZE);
-    _sg.desc.image_pool_size = _sg_def(_sg.desc.image_pool_size, _SG_DEFAULT_IMAGE_POOL_SIZE);
-    _sg.desc.shader_pool_size = _sg_def(_sg.desc.shader_pool_size, _SG_DEFAULT_SHADER_POOL_SIZE);
-    _sg.desc.pipeline_pool_size = _sg_def(_sg.desc.pipeline_pool_size, _SG_DEFAULT_PIPELINE_POOL_SIZE);
-    _sg.desc.pass_pool_size = _sg_def(_sg.desc.pass_pool_size, _SG_DEFAULT_PASS_POOL_SIZE);
-    _sg.desc.context_pool_size = _sg_def(_sg.desc.context_pool_size, _SG_DEFAULT_CONTEXT_POOL_SIZE);
-    _sg.desc.uniform_buffer_size = _sg_def(_sg.desc.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
-    _sg.desc.staging_buffer_size = _sg_def(_sg.desc.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
-    _sg.desc.sampler_cache_size = _sg_def(_sg.desc.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
-
+    _sg.desc = _sg_desc_defaults(desc);
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
     _sg_setup_backend(&_sg.desc);
