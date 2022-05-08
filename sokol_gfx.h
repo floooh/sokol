@@ -2268,8 +2268,9 @@ typedef struct sg_pass_info {
     .uniform_buffer_size    4 MB (4*1024*1024)
     .staging_buffer_size    8 MB (8*1024*1024)
 
-    .allocator.alloc        malloc (from the C standard library)
-    .allocator.free         free (from the C standard library)
+    .allocator.alloc        0 (in this case, malloc() will be called)
+    .allocator.free         0 (in this case, free() will be called)
+    .allocator.user_data    0
 
     .context.color_format: default value depends on selected backend:
         all GL backends:    SG_PIXELFORMAT_RGBA8
@@ -2401,12 +2402,21 @@ typedef struct sg_context_desc {
     sg_wgpu_context_desc wgpu;
 } sg_context_desc;
 
-typedef void*(*sg_malloc)(size_t size);
-typedef void(*sg_free)(void* ptr);
+/*
+    sg_allocator
+
+    Used in sg_desc to provide custom memory-alloc and -free functions
+    to sokol_gfx.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef void*(*sg_malloc)(size_t size, void* user_data);
+typedef void(*sg_free)(void* ptr, void* user_data);
 
 typedef struct sg_allocator {
     sg_malloc alloc;
     sg_free free;
+    void* user_data;
 } sg_allocator;
 
 typedef struct sg_desc {
@@ -4245,20 +4255,30 @@ _SOKOL_PRIVATE void _sg_clear(void* ptr, size_t size) {
 
 _SOKOL_PRIVATE void* _sg_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _sg.desc.allocator.alloc(size);
+    void* ptr;
+    if (_sg.desc.allocator.alloc) {
+        ptr = _sg.desc.allocator.alloc(size, _sg.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
 _SOKOL_PRIVATE void* _sg_malloc_clear(size_t size) {
-    SOKOL_ASSERT(size > 0);
     void* ptr = _sg_malloc(size);
     _sg_clear(ptr, size);
     return ptr;
 }
 
 _SOKOL_PRIVATE void _sg_free(void* ptr) {
-    _sg.desc.allocator.free(ptr);
+    if (_sg.desc.allocator.free) {
+        _sg.desc.allocator.free(ptr, _sg.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 _SOKOL_PRIVATE bool _sg_strempty(const _sg_str_t* str) {
@@ -15123,6 +15143,7 @@ _SOKOL_PRIVATE bool _sg_uninit_pass(sg_pass pass_id) {
 SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->_start_canary == 0) && (desc->_end_canary == 0));
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     _SG_CLEAR_ARC_STRUCT(_sg_state_t, _sg);
     _sg.desc = *desc;
 
@@ -15148,8 +15169,6 @@ SOKOL_API_IMPL void sg_setup(const sg_desc* desc) {
     _sg.desc.uniform_buffer_size = _sg_def(_sg.desc.uniform_buffer_size, _SG_DEFAULT_UB_SIZE);
     _sg.desc.staging_buffer_size = _sg_def(_sg.desc.staging_buffer_size, _SG_DEFAULT_STAGING_SIZE);
     _sg.desc.sampler_cache_size = _sg_def(_sg.desc.sampler_cache_size, _SG_DEFAULT_SAMPLER_CACHE_CAPACITY);
-    _sg.desc.allocator.alloc = _sg_def(_sg.desc.allocator.alloc, malloc);
-    _sg.desc.allocator.free = _sg_def(_sg.desc.allocator.free, free);
 
     _sg_setup_pools(&_sg.pools, &_sg.desc);
     _sg.frame_index = 1;
