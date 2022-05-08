@@ -241,16 +241,18 @@ extern "C" {
 /*
     simgui_allocator_t
 
-    Used in simgui_desc_t to provide custom memory alloc and free functions
-    to sokol_imgui.h. The function prototypes are compatible with
-    malloc/free.
+    Used in simgui_desc_t to provide custom memory-alloc and -free functions
+    to sokol_imgui.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
-typedef void*(*simgui_malloc_t)(size_t size);
-typedef void(*simgui_free_t)(void* ptr);
+typedef void*(*simgui_malloc_t)(size_t size, void* user_data);
+typedef void(*simgui_free_t)(void* ptr, void* user_data);
 
 typedef struct simgui_allocator_t {
     simgui_malloc_t alloc;
     simgui_free_t free;
+    void* user_data;
 } simgui_allocator_t;
 
 typedef struct simgui_desc_t {
@@ -1632,13 +1634,24 @@ static void _simgui_clear(void* ptr, size_t size) {
 
 static void* _simgui_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _simgui.desc.allocator.alloc(size);
+    void* ptr;
+    if (_simgui.desc.allocator.alloc) {
+        ptr = _simgui.desc.allocator.alloc(size, _simgui.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
 static void _simgui_free(void* ptr) {
-    _simgui.desc.allocator.free(ptr);
+    if (_simgui.desc.allocator.free) {
+        _simgui.desc.allocator.free(ptr, _simgui.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 static bool _simgui_is_osx(void) {
@@ -1653,13 +1666,17 @@ static bool _simgui_is_osx(void) {
     #endif
 }
 
+static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    simgui_desc_t res = *desc;
+    res.max_vertices = _simgui_def(res.max_vertices, 65536);
+    return res;
+}
+
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
     _simgui_clear(&_simgui, sizeof(_simgui));
-    _simgui.desc = *desc;
-    _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
-    _simgui.desc.allocator.alloc = _simgui_def(_simgui.desc.allocator.alloc, malloc);
-    _simgui.desc.allocator.free = _simgui_def(_simgui.desc.allocator.free, free);
+    _simgui.desc = _simgui_desc_defaults(desc);
     _simgui.cur_dpi_scale = 1.0f;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     _simgui.is_osx = _simgui_is_osx();
