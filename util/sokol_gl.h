@@ -636,16 +636,18 @@ typedef struct sgl_context_desc_t {
 /*
     sgl_allocator_t
 
-    Used in sgl_desc_t to provide custom memory alloc and free functions
-    to sokol_gl.h. The function prototypes are compatible with
-    malloc/free.
+    Used in sgl_desc_t to provide custom memory-alloc and -free functions
+    to sokol_gl.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
-typedef void*(*sgl_malloc_t)(size_t size);
-typedef void(*sgl_free_t)(void* ptr);
+typedef void*(*sgl_malloc_t)(size_t size, void* user_data);
+typedef void(*sgl_free_t)(void* ptr, void* user_data);
 
 typedef struct sgl_allocator_t {
     sgl_malloc_t alloc;
     sgl_free_t free;
+    void* user_data;
 } sgl_allocator_t;
 
 typedef struct sgl_desc_t {
@@ -2283,20 +2285,30 @@ static void _sgl_clear(void* ptr, size_t size) {
 
 static void* _sgl_malloc(size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _sgl.desc.allocator.alloc(size);
+    void* ptr;
+    if (_sgl.desc.allocator.alloc) {
+        ptr = _sgl.desc.allocator.alloc(size, _sgl.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
 static void* _sgl_malloc_clear(size_t size) {
-    SOKOL_ASSERT(size > 0);
     void* ptr = _sgl_malloc(size);
     _sgl_clear(ptr, size);
     return ptr;
 }
 
 static void _sgl_free(void* ptr) {
-    _sgl.desc.allocator.free(ptr);
+    if (_sgl.desc.allocator.free) {
+        _sgl.desc.allocator.free(ptr, _sgl.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
@@ -3014,14 +3026,13 @@ static inline _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
 
 // return sg_context_desc_t with patched defaults
 static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     sgl_desc_t res = *desc;
     res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
     res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);
     res.context_pool_size = _sgl_def(desc->context_pool_size, _SGL_DEFAULT_CONTEXT_POOL_SIZE);
     res.pipeline_pool_size = _sgl_def(desc->pipeline_pool_size, _SGL_DEFAULT_PIPELINE_POOL_SIZE);
     res.face_winding = _sgl_def(desc->face_winding, SG_FACEWINDING_CCW);
-    res.allocator.alloc = _sgl_def(desc->allocator.alloc, malloc);
-    res.allocator.free = _sgl_def(desc->allocator.free, free);
     return res;
 }
 
