@@ -2706,6 +2706,7 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
+    SOKOL_ASSERT((in_desc->allocator.alloc && in_desc->allocator.free) || (!in_desc->allocator.alloc && !in_desc->allocator.free));
     sapp_desc desc = *in_desc;
     desc.sample_count = _sapp_def(desc.sample_count, 1);
     desc.swap_interval = _sapp_def(desc.swap_interval, 1);
@@ -2726,7 +2727,6 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     SOKOL_ASSERT(desc->clipboard_size >= 0);
     SOKOL_ASSERT(desc->max_dropped_files >= 0);
     SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
-    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
