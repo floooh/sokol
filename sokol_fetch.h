@@ -857,17 +857,22 @@ extern "C" {
 #endif
 
 /*
-    An allocator interface used in sfetch_desc_t to override memory
-    allocation functions. The function prototypes are compatible
-    with malloc/free.
+    sfetch_allocator_t
+
+    Used in sfetch_desc_t to provide custom memory-alloc and -free functions
+    to sokol_fetch.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
 */
-typedef void*(*sfetch_malloc_t)(size_t size);
-typedef void(*sfetch_free_t)(void* ptr);
+typedef void*(*sfetch_malloc_t)(size_t size, void* user_data);
+typedef void(*sfetch_free_t)(void* ptr, void* user_data);
 
 typedef struct sfetch_allocator_t {
     sfetch_malloc_t alloc;
     sfetch_free_t free;
+    void* user_data;
 } sfetch_allocator_t;
+
 
 /* configuration values for sfetch_setup() */
 typedef struct sfetch_desc_t {
@@ -1216,22 +1221,36 @@ _SOKOL_PRIVATE void _sfetch_clear(void* ptr, size_t size) {
     memset(ptr, 0, size);
 }
 
-_SOKOL_PRIVATE void* _sfetch_malloc(size_t size) {
+_SOKOL_PRIVATE void* _sfetch_malloc_with_allocator(const sfetch_allocator_t* allocator, size_t size) {
     SOKOL_ASSERT(size > 0);
-    void* ptr = _sfetch->desc.allocator.alloc(size);
+    void* ptr;
+    if (allocator->alloc) {
+        ptr = allocator->alloc(size, allocator->user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
     SOKOL_ASSERT(ptr);
     return ptr;
 }
 
+_SOKOL_PRIVATE void* _sfetch_malloc(size_t size) {
+    return _sfetch_malloc_with_allocator(&_sfetch->desc.allocator, size);
+}
+
 _SOKOL_PRIVATE void* _sfetch_malloc_clear(size_t size) {
-    SOKOL_ASSERT(size > 0);
     void* ptr = _sfetch_malloc(size);
     _sfetch_clear(ptr, size);
     return ptr;
 }
 
 _SOKOL_PRIVATE void _sfetch_free(void* ptr) {
-    _sfetch->desc.allocator.free(ptr);
+    if (_sfetch->desc.allocator.free) {
+        _sfetch->desc.allocator.free(ptr, _sfetch->desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
 }
 
 _SOKOL_PRIVATE _sfetch_t* _sfetch_ctx(void) {
@@ -2364,12 +2383,11 @@ _SOKOL_PRIVATE bool _sfetch_validate_request(_sfetch_t* ctx, const sfetch_reques
 }
 
 _SOKOL_PRIVATE sfetch_desc_t _sfetch_desc_defaults(const sfetch_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     sfetch_desc_t res = *desc;
     res.max_requests = _sfetch_def(desc->max_requests, 128);
     res.num_channels = _sfetch_def(desc->num_channels, 1);
     res.num_lanes = _sfetch_def(desc->num_lanes, 1);
-    res.allocator.alloc = _sfetch_def(desc->allocator.alloc, malloc);
-    res.allocator.free = _sfetch_def(desc->allocator.free, free);
     return res;
 }
 
@@ -2379,7 +2397,7 @@ SOKOL_API_IMPL void sfetch_setup(const sfetch_desc_t* desc_) {
     SOKOL_ASSERT(0 == _sfetch);
 
     sfetch_desc_t desc = _sfetch_desc_defaults(desc_);
-    _sfetch = (_sfetch_t*) desc.allocator.alloc(sizeof(_sfetch_t));
+    _sfetch = (_sfetch_t*) _sfetch_malloc_with_allocator(&desc.allocator, sizeof(_sfetch_t));
     SOKOL_ASSERT(_sfetch);
     _sfetch_t* ctx = _sfetch_ctx();
     _sfetch_clear(ctx, sizeof(_sfetch_t));
