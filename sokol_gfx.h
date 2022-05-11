@@ -654,6 +654,37 @@
         - SG_VERTEXFORMAT_SHORT4N,
         - SG_VERTEXFORMAT_USHORT4N
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sg_setup(&(sg_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_gfx.h
+    itself though, not any allocations in OS libraries.
+
+
     TODO:
     ====
     - talk about asynchronous resource creation

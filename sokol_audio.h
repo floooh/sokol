@@ -363,6 +363,40 @@
     header must be present (usually both are installed with some sort
     of ALSA development package).
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            saudio_setup(&(saudio_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_audio.h
+    itself though, not any allocations in OS libraries.
+
+    Memory allocation will only happen on the same thread where saudio_setup()
+    was called, so you don't need to worry about thread-safety.
+
+
     LICENSE
     =======
 

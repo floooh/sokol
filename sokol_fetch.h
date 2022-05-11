@@ -791,6 +791,39 @@
     the blocking traditional file IO functions, not for performance reasons.
 
 
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sfetch_setup(&(sfetch_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_fetch.h
+    itself though, not any allocations in OS libraries.
+
+    Memory allocation will only happen on the same thread where sfetch_setup()
+    was called, so you don't need to worry about thread-safety.
+
+
     FUTURE PLANS / V2.0 IDEA DUMP
     =============================
     - An optional polling API (as alternative to callback API)
