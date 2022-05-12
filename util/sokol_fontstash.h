@@ -1859,6 +1859,16 @@ static sfons_desc_t _sfons_desc_defaults(const sfons_desc_t* desc) {
     return res;
 }
 
+// NOTE clang analyzer will report a potential memory leak for the call
+// to _sfons_malloc_clear in the sfons_create() function, this is a false positive
+// (the freeing happens in sfons_destroy()). The following macro
+// silences the false positive when compilation happens with the analyzer active
+#if __clang_analyzer__
+#define _SFONS_CLANG_ANALYZER_SILENCE_POTENTIAL_LEAK_FALSE_POSITIVE(a,x) _sfons_free(a,x)
+#else
+#define _SFONS_CLANG_ANALYZER_SILENCE_POTENTIAL_LEAK_FALSE_POSITIVE(a,x)
+#endif
+
 SOKOL_API_IMPL FONScontext* sfons_create(const sfons_desc_t* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
@@ -1876,6 +1886,7 @@ SOKOL_API_IMPL FONScontext* sfons_create(const sfons_desc_t* desc) {
     params.renderDelete = _sfons_render_delete;
     params.userPtr = sfons;
     FONScontext* ctx = fonsCreateInternal(&params);
+    _SFONS_CLANG_ANALYZER_SILENCE_POTENTIAL_LEAK_FALSE_POSITIVE(&desc->allocator, sfons);
     return ctx;
 }
 
