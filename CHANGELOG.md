@@ -1,5 +1,23 @@
 ## Updates
 
+- **14-May-2022**: added a helper function ```simgui_map_keycode()``` to
+  sokol_imgui.h to map sokol_app.h keycodes (```sapp_keycode```,
+  ```SAPP_KEYCODE_*```) to Dear ImGui keycodes (```ImGuiKey```, ```ImGuiKey_*```).
+  If you're using Dear ImGui function to check for key input, you'll need to
+  update the code like this:
+
+  - Old:
+    ```cpp
+    ImGui::IsKeyPressed(SAPP_KEYCODE_A);
+    ```
+  - New:
+    ```cpp
+    ImGui::IsKeyPressed(simgui_map_keycode(SAPP_KEYCODE_A));
+    ```
+
+  This was basically 'fallout' from rewriting the input system in sokol_imgui.h
+  to the new evented IO system in Dear ImGui.
+
 - **08-Feb-2022**: sokol_imgui.h has been updated for Dear ImGui 1.87:
   - sokol_imgui.h's input code has been rewritten to use the new evented IO
     system and extended virtual key codes in Dear ImGui

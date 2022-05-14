@@ -181,6 +181,14 @@
         if this is true, you might want to skip keyboard input handling
         in your own event handler.
 
+        If you want to use the ImGui functions for checking if a key is pressed
+        (e.g. ImGui::IsKeyPressed()) the following helper function to map 
+        an sapp_keycode to an ImGuiKey value may be useful:
+
+        int simgui_map_keycode(sapp_keycode c);
+
+        Note that simgui_map_keycode() can be called outside simgui_setup()/simgui_shutdown().
+
     --- finally, on application shutdown, call
 
         simgui_shutdown()
@@ -261,6 +269,7 @@ SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
 SOKOL_IMGUI_API_DECL void simgui_render(void);
 #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
 SOKOL_IMGUI_API_DECL bool simgui_handle_event(const sapp_event* ev);
+SOKOL_IMGUI_API_DECL int simgui_map_keycode(sapp_keycode keycode);  // returns ImGuiKey_*
 #endif
 SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
@@ -2178,6 +2187,10 @@ _SOKOL_PRIVATE void _simgui_update_modifiers(ImGuiIO* io, uint32_t mods) {
 // returns Ctrl or Super, depending on platform
 _SOKOL_PRIVATE ImGuiKey _simgui_copypaste_modifier(void) {
     return _simgui.is_osx ? ImGuiKey_ModSuper : ImGuiKey_ModCtrl;
+}
+
+SOKOL_API_IMPL int simgui_map_keycode(sapp_keycode keycode) {
+    return (int)_simgui_map_keycode(keycode);
 }
 
 SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
