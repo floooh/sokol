@@ -1,6 +1,6 @@
 ## Updates
 
-- **15-May-2022**: The way internal memory allocation can be overriden with
+- **15-May-2022**: The way internal memory allocation can be overridden with
   your own functions has been changed from global macros to callbacks
   provided in the API setup call. For instance in sokol_gfx.h:
 
