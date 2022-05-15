@@ -6578,7 +6578,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
         // on D3D11, use the more precise DXGI timestamp
         if (_sapp.d3d11.use_dxgi_frame_stats) {
             DXGI_FRAME_STATISTICS dxgi_stats;
-            _sapp_clear(DXGI_FRAME_STATISTICS, dxgi_stats);
+            _sapp_clear(&dxgi_stats, sizeof(dxgi_stats));
             HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
             if (SUCCEEDED(hr)) {
                 if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
