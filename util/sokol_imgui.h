@@ -42,8 +42,6 @@
     to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_IMGUI_API_DECL- public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_IMGUI_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -193,6 +191,37 @@
 
         simgui_shutdown()
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            simgui_setup(&(simgui_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_imgui.h
+    itself though, not any allocations in Dear ImGui.
+
+
     LICENSE
     =======
 
@@ -222,6 +251,7 @@
 #define SOKOL_IMGUI_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_imgui.h"
@@ -247,6 +277,23 @@
 extern "C" {
 #endif
 
+/*
+    simgui_allocator_t
+
+    Used in simgui_desc_t to provide custom memory-alloc and -free functions
+    to sokol_imgui.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef void*(*simgui_malloc_t)(size_t size, void* user_data);
+typedef void(*simgui_free_t)(void* ptr, void* user_data);
+
+typedef struct simgui_allocator_t {
+    simgui_malloc_t alloc;
+    simgui_free_t free;
+    void* user_data;
+} simgui_allocator_t;
+
 typedef struct simgui_desc_t {
     int max_vertices;
     sg_pixel_format color_format;
@@ -255,6 +302,7 @@ typedef struct simgui_desc_t {
     const char* ini_filename;
     bool no_default_font;
     bool disable_paste_override;    // if true, don't send Ctrl-V on EVENTTYPE_CLIPBOARD_PASTED
+    simgui_allocator_t allocator;   // optional memory allocation overrides (default: malloc/free)
 } simgui_desc_t;
 
 typedef struct simgui_frame_desc_t {
@@ -287,6 +335,10 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 #ifdef SOKOL_IMGUI_IMPL
 #define SOKOL_IMGUI_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use simgui_desc_t.allocator to override memory allocation functions"
+#endif
+
 #if defined(__cplusplus)
     #if !defined(IMGUI_VERSION)
     #error "Please include imgui.h before the sokol_imgui.h implementation"
@@ -297,8 +349,8 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
     #endif
 #endif
 
-#include <stddef.h> /* offsetof */
-#include <string.h> /* memset */
+#include <string.h> // memset
+#include <stdlib.h> // malloc/free
 
 #if defined(__EMSCRIPTEN__) && !defined(SOKOL_DUMMY_BACKEND)
 #include <emscripten.h>
@@ -315,11 +367,6 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__) || defined(__clang__)
@@ -1624,6 +1671,33 @@ EM_JS(int, simgui_js_is_osx, (void), {
 });
 #endif
 
+static void _simgui_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+static void* _simgui_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_simgui.desc.allocator.alloc) {
+        ptr = _simgui.desc.allocator.alloc(size, _simgui.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+static void _simgui_free(void* ptr) {
+    if (_simgui.desc.allocator.free) {
+        _simgui.desc.allocator.free(ptr, _simgui.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
+
 static bool _simgui_is_osx(void) {
     #if defined(SOKOL_DUMMY_BACKEND)
         return false;
@@ -1636,11 +1710,17 @@ static bool _simgui_is_osx(void) {
     #endif
 }
 
+static simgui_desc_t _simgui_desc_defaults(const simgui_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    simgui_desc_t res = *desc;
+    res.max_vertices = _simgui_def(res.max_vertices, 65536);
+    return res;
+}
+
 SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     SOKOL_ASSERT(desc);
-    memset(&_simgui, 0, sizeof(_simgui));
-    _simgui.desc = *desc;
-    _simgui.desc.max_vertices = _simgui_def(_simgui.desc.max_vertices, 65536);
+    _simgui_clear(&_simgui, sizeof(_simgui));
+    _simgui.desc = _simgui_desc_defaults(desc);
     _simgui.cur_dpi_scale = 1.0f;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
     _simgui.is_osx = _simgui_is_osx();
@@ -1652,11 +1732,9 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     /* allocate an intermediate vertex- and index-buffer */
     SOKOL_ASSERT(_simgui.desc.max_vertices > 0);
     _simgui.vertices.size = (size_t)_simgui.desc.max_vertices * sizeof(ImDrawVert);
-    _simgui.vertices.ptr = SOKOL_MALLOC(_simgui.vertices.size);
-    SOKOL_ASSERT(_simgui.vertices.ptr);
+    _simgui.vertices.ptr = _simgui_malloc(_simgui.vertices.size);
     _simgui.indices.size = (size_t)_simgui.desc.max_vertices * 3 * sizeof(ImDrawIdx);
-    _simgui.indices.ptr = SOKOL_MALLOC(_simgui.indices.size);
-    SOKOL_ASSERT(_simgui.indices.ptr);
+    _simgui.indices.ptr = _simgui_malloc(_simgui.indices.size);
 
     /* initialize Dear ImGui */
     #if defined(__cplusplus)
@@ -1687,14 +1765,14 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
 
     /* NOTE: since we're in C++ mode here we can't use C99 designated init */
     sg_buffer_desc vb_desc;
-    memset(&vb_desc, 0, sizeof(vb_desc));
+    _simgui_clear(&vb_desc, sizeof(vb_desc));
     vb_desc.usage = SG_USAGE_STREAM;
     vb_desc.size = _simgui.vertices.size;
     vb_desc.label = "sokol-imgui-vertices";
     _simgui.vbuf = sg_make_buffer(&vb_desc);
 
     sg_buffer_desc ib_desc;
-    memset(&ib_desc, 0, sizeof(ib_desc));
+    _simgui_clear(&ib_desc, sizeof(ib_desc));
     ib_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
     ib_desc.usage = SG_USAGE_STREAM;
     ib_desc.size = _simgui.indices.size;
@@ -1712,7 +1790,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
             ImFontAtlas_GetTexDataAsRGBA32(io->Fonts, &font_pixels, &font_width, &font_height, &bytes_per_pixel);
         #endif
         sg_image_desc img_desc;
-        memset(&img_desc, 0, sizeof(img_desc));
+        _simgui_clear(&img_desc, sizeof(img_desc));
         img_desc.width = font_width;
         img_desc.height = font_height;
         img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
@@ -1729,7 +1807,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
 
     /* shader object for using the embedded shader source (or bytecode) */
     sg_shader_desc shd_desc;
-    memset(&shd_desc, 0, sizeof(shd_desc));
+    _simgui_clear(&shd_desc, sizeof(shd_desc));
     shd_desc.attrs[0].name = "position";
     shd_desc.attrs[1].name = "texcoord0";
     shd_desc.attrs[2].name = "color0";
@@ -1785,7 +1863,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
 
     /* pipeline object for imgui rendering */
     sg_pipeline_desc pip_desc;
-    memset(&pip_desc, 0, sizeof(pip_desc));
+    _simgui_clear(&pip_desc, sizeof(pip_desc));
     pip_desc.layout.buffers[0].stride = sizeof(ImDrawVert);
     {
         sg_vertex_attr_desc* attr = &pip_desc.layout.attrs[0];
@@ -1832,9 +1910,9 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_buffer(_simgui.vbuf);
     sg_pop_debug_group();
     SOKOL_ASSERT(_simgui.vertices.ptr);
-    SOKOL_FREE((void*)_simgui.vertices.ptr);
+    _simgui_free((void*)_simgui.vertices.ptr);
     SOKOL_ASSERT(_simgui.indices.ptr);
-    SOKOL_FREE((void*)_simgui.indices.ptr);
+    _simgui_free((void*)_simgui.indices.ptr);
 }
 
 SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
@@ -1942,12 +2020,12 @@ SOKOL_API_IMPL void simgui_render(void) {
 
     sg_apply_pipeline(_simgui.pip);
     _simgui_vs_params_t vs_params;
-    memset((void*)&vs_params, 0, sizeof(vs_params));
+    _simgui_clear((void*)&vs_params, sizeof(vs_params));
     vs_params.disp_size.x = io->DisplaySize.x;
     vs_params.disp_size.y = io->DisplaySize.y;
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, SG_RANGE_REF(vs_params));
     sg_bindings bind;
-    memset((void*)&bind, 0, sizeof(bind));
+    _simgui_clear((void*)&bind, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
     ImTextureID tex_id = io->Fonts->TexID;

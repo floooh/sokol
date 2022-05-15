@@ -45,8 +45,6 @@
         SOKOL_ASSERT(c)     -- your own assert macro, default: assert(c)
         SOKOL_UNREACHABLE   -- your own macro to annotate unreachable code,
                                default: SOKOL_ASSERT(false)
-        SOKOL_MALLOC(s)     -- your own memory allocation function, default: malloc(s)
-        SOKOL_FREE(p)       -- your own memory free function, default: free(p)
         SOKOL_GFX_IMGUI_API_DECL      - public function declaration prefix (default: extern)
         SOKOL_API_DECL      - same as SOKOL_GFX_IMGUI_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -64,7 +62,21 @@
     --- create an sg_imgui_t struct (which must be preserved between frames)
         and initialize it with:
 
-            sg_imgui_init(&sg_imgui);
+            sg_imgui_init(&sg_imgui, &(sg_imgui_desc_t){ 0 });
+
+        Note that from C++ you can't inline the desc structure initialization:
+
+            const sg_imgui_desc_t desc = { };
+            sg_imgui_init(&sg_imgui, &desc);
+
+        Provide optional memory allocator override functions (compatible with malloc/free) like this:
+
+            sg_imgui_init(&sg_imgui, &(sg_imgui_desc_t){
+                .allocator = {
+                    .alloc = my_malloc,
+                    .free = my_free,
+                }
+            });
 
     --- somewhere in the per-frame code call:
 
@@ -136,6 +148,34 @@
     Finer-grained drawing functions may be moved to the public API
     in the future as needed.
 
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sg_imgui_init(&(&ctx, &(sg_imgui_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    This only affects memory allocation calls done by sokol_gfx_imgui.h
+    itself though, not any allocations in OS libraries.
+
+
     LICENSE
     =======
     zlib/libpng license
@@ -164,6 +204,7 @@
 #define SOKOL_GFX_IMGUI_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_gfx_imgui.h"
@@ -616,8 +657,35 @@ typedef struct sg_imgui_caps_t {
     bool open;
 } sg_imgui_caps_t;
 
+/*
+    sg_imgui_allocator_t
+
+    Used in sg_imgui_desc_t to provide custom memory-alloc and -free functions
+    to sokol_gfx_imgui.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef void*(*sg_imgui_malloc_t)(size_t size, void* user_data);
+typedef void(*sg_imgui_free_t)(void* ptr, void* user_data);
+
+typedef struct sg_imgui_allocator_t {
+    sg_imgui_malloc_t alloc;
+    sg_imgui_free_t free;
+    void* user_data;
+} sg_imgui_allocator_t;
+
+/*
+    sg_imgui_desc_t
+
+    Initialization options for sg_imgui_init().
+*/
+typedef struct sg_imgui_desc_t {
+    sg_imgui_allocator_t allocator; // optional memory allocation overrides (default: malloc/free)
+} sg_imgui_desc_t;
+
 typedef struct sg_imgui_t {
     uint32_t init_tag;
+    sg_imgui_desc_t desc;
     sg_imgui_buffers_t buffers;
     sg_imgui_images_t images;
     sg_imgui_shaders_t shaders;
@@ -629,7 +697,7 @@ typedef struct sg_imgui_t {
     sg_trace_hooks hooks;
 } sg_imgui_t;
 
-SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx);
+SOKOL_GFX_IMGUI_API_DECL void sg_imgui_init(sg_imgui_t* ctx, const sg_imgui_desc_t* desc);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_discard(sg_imgui_t* ctx);
 SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw(sg_imgui_t* ctx);
 
@@ -657,6 +725,11 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx)
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_GFX_IMGUI_IMPL
 #define SOKOL_GFX_IMGUI_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sg_imgui_desc_t.allocator to override memory allocation functions"
+#endif
+
 #if defined(__cplusplus)
     #if !defined(IMGUI_VERSION)
     #error "Please include imgui.h before the sokol_imgui.h implementation"
@@ -673,11 +746,6 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx)
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
-#endif
 #ifndef _SOKOL_PRIVATE
     #if defined(__GNUC__) || defined(__clang__)
         #define _SOKOL_PRIVATE __attribute__((unused)) static
@@ -693,7 +761,8 @@ SOKOL_GFX_IMGUI_API_DECL void sg_imgui_draw_capabilities_window(sg_imgui_t* ctx)
 #endif
 
 #include <string.h>
-#include <stdio.h>      /* snprintf */
+#include <stdio.h>      // snprintf
+#include <stdlib.h>     // malloc, free
 
 #define _SG_IMGUI_SLOT_MASK (0xFFFF)
 #define _SG_IMGUI_LIST_WIDTH (192)
@@ -785,6 +854,52 @@ _SOKOL_PRIVATE void igEnd() {
 #endif
 
 /*--- UTILS ------------------------------------------------------------------*/
+_SOKOL_PRIVATE void _sg_imgui_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _sg_imgui_malloc(const sg_imgui_allocator_t* allocator, size_t size) {
+    SOKOL_ASSERT(allocator && (size > 0));
+    void* ptr;
+    if (allocator->alloc) {
+        ptr = allocator->alloc(size, allocator->user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sg_imgui_malloc_clear(const sg_imgui_allocator_t* allocator, size_t size) {
+    void* ptr = _sg_imgui_malloc(allocator, size);
+    _sg_imgui_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _sg_imgui_free(const sg_imgui_allocator_t* allocator, void* ptr) {
+    SOKOL_ASSERT(allocator);
+    if (allocator->free) {
+        allocator->free(ptr, allocator->user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
+
+ _SOKOL_PRIVATE void* _sg_imgui_realloc(const sg_imgui_allocator_t* allocator, void* old_ptr, size_t old_size, size_t new_size) {
+    SOKOL_ASSERT(allocator && (new_size > 0) && (new_size > old_size));
+    void* new_ptr = _sg_imgui_malloc(allocator, new_size);
+    if (old_ptr) {
+        if (old_size > 0) {
+            memcpy(new_ptr, old_ptr, old_size);
+        }
+        _sg_imgui_free(allocator, old_ptr);
+    }
+    return new_ptr;
+}
+
 _SOKOL_PRIVATE int _sg_imgui_slot_index(uint32_t id) {
     int slot_index = (int) (id & _SG_IMGUI_SLOT_MASK);
     SOKOL_ASSERT(0 != slot_index);
@@ -866,30 +981,6 @@ _SOKOL_PRIVATE uint32_t _sg_imgui_std140_uniform_size(sg_uniform_type type, int 
     }
 }
 
-_SOKOL_PRIVATE void* _sg_imgui_alloc(size_t size) {
-    SOKOL_ASSERT(size > 0);
-    return SOKOL_MALLOC(size);
-}
-
-_SOKOL_PRIVATE void _sg_imgui_free(void* ptr) {
-    if (ptr) {
-        SOKOL_FREE(ptr);
-    }
-}
-
-_SOKOL_PRIVATE void* _sg_imgui_realloc(void* old_ptr, size_t old_size, size_t new_size) {
-    SOKOL_ASSERT((new_size > 0) && (new_size > old_size));
-    void* new_ptr = SOKOL_MALLOC(new_size);
-    SOKOL_ASSERT(new_ptr);
-    if (old_ptr) {
-        if (old_size > 0) {
-            memcpy(new_ptr, old_ptr, old_size);
-        }
-        _sg_imgui_free(old_ptr);
-    }
-    return new_ptr;
-}
-
 _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
     SOKOL_ASSERT(dst);
     if (src) {
@@ -901,7 +992,7 @@ _SOKOL_PRIVATE void _sg_imgui_strcpy(sg_imgui_str_t* dst, const char* src) {
         dst->buf[SG_IMGUI_STRBUF_LEN-1] = 0;
     }
     else {
-        memset(dst->buf, 0, SG_IMGUI_STRBUF_LEN);
+        _sg_imgui_clear(dst->buf, SG_IMGUI_STRBUF_LEN);
     }
 }
 
@@ -911,17 +1002,17 @@ _SOKOL_PRIVATE sg_imgui_str_t _sg_imgui_make_str(const char* str) {
     return res;
 }
 
-_SOKOL_PRIVATE const char* _sg_imgui_str_dup(const char* src) {
-    SOKOL_ASSERT(src);
+_SOKOL_PRIVATE const char* _sg_imgui_str_dup(const sg_imgui_allocator_t* allocator, const char* src) {
+    SOKOL_ASSERT(allocator && src);
     size_t len = strlen(src) + 1;
-    char* dst = (char*) _sg_imgui_alloc(len);
+    char* dst = (char*) _sg_imgui_malloc(allocator, len);
     memcpy(dst, src, len);
     return (const char*) dst;
 }
 
-_SOKOL_PRIVATE const void* _sg_imgui_bin_dup(const void* src, size_t num_bytes) {
-    SOKOL_ASSERT(src && (num_bytes > 0));
-    void* dst = _sg_imgui_alloc(num_bytes);
+_SOKOL_PRIVATE const void* _sg_imgui_bin_dup(const sg_imgui_allocator_t* allocator, const void* src, size_t num_bytes) {
+    SOKOL_ASSERT(allocator && src && (num_bytes > 0));
+    void* dst = _sg_imgui_malloc(allocator, num_bytes);
     memcpy(dst, src, num_bytes);
     return (const void*) dst;
 }
@@ -1423,16 +1514,16 @@ _SOKOL_PRIVATE void _sg_imgui_shader_created(sg_imgui_t* ctx, sg_shader res_id, 
         }
     }
     if (shd->desc.vs.source) {
-        shd->desc.vs.source = _sg_imgui_str_dup(shd->desc.vs.source);
+        shd->desc.vs.source = _sg_imgui_str_dup(&ctx->desc.allocator, shd->desc.vs.source);
     }
     if (shd->desc.vs.bytecode.ptr) {
-        shd->desc.vs.bytecode.ptr = _sg_imgui_bin_dup(shd->desc.vs.bytecode.ptr, shd->desc.vs.bytecode.size);
+        shd->desc.vs.bytecode.ptr = _sg_imgui_bin_dup(&ctx->desc.allocator, shd->desc.vs.bytecode.ptr, shd->desc.vs.bytecode.size);
     }
     if (shd->desc.fs.source) {
-        shd->desc.fs.source = _sg_imgui_str_dup(shd->desc.fs.source);
+        shd->desc.fs.source = _sg_imgui_str_dup(&ctx->desc.allocator, shd->desc.fs.source);
     }
     if (shd->desc.fs.bytecode.ptr) {
-        shd->desc.fs.bytecode.ptr = _sg_imgui_bin_dup(shd->desc.fs.bytecode.ptr, shd->desc.fs.bytecode.size);
+        shd->desc.fs.bytecode.ptr = _sg_imgui_bin_dup(&ctx->desc.allocator, shd->desc.fs.bytecode.ptr, shd->desc.fs.bytecode.size);
     }
     for (int i = 0; i < SG_MAX_VERTEX_ATTRIBUTES; i++) {
         sg_shader_attr_desc* ad = &shd->desc.attrs[i];
@@ -1452,19 +1543,19 @@ _SOKOL_PRIVATE void _sg_imgui_shader_destroyed(sg_imgui_t* ctx, int slot_index) 
     sg_imgui_shader_t* shd = &ctx->shaders.slots[slot_index];
     shd->res_id.id = SG_INVALID_ID;
     if (shd->desc.vs.source) {
-        _sg_imgui_free((void*)shd->desc.vs.source);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)shd->desc.vs.source);
         shd->desc.vs.source = 0;
     }
     if (shd->desc.vs.bytecode.ptr) {
-        _sg_imgui_free((void*)shd->desc.vs.bytecode.ptr);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)shd->desc.vs.bytecode.ptr);
         shd->desc.vs.bytecode.ptr = 0;
     }
     if (shd->desc.fs.source) {
-        _sg_imgui_free((void*)shd->desc.fs.source);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)shd->desc.fs.source);
         shd->desc.fs.source = 0;
     }
     if (shd->desc.fs.bytecode.ptr) {
-        _sg_imgui_free((void*)shd->desc.fs.bytecode.ptr);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)shd->desc.fs.bytecode.ptr);
         shd->desc.fs.bytecode.ptr = 0;
     }
 }
@@ -1508,8 +1599,7 @@ _SOKOL_PRIVATE void _sg_imgui_capture_init(sg_imgui_t* ctx) {
     for (int i = 0; i < 2; i++) {
         sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[i];
         bucket->ubuf_size = ubuf_initial_size;
-        bucket->ubuf = (uint8_t*) _sg_imgui_alloc(bucket->ubuf_size);
-        SOKOL_ASSERT(bucket->ubuf);
+        bucket->ubuf = (uint8_t*) _sg_imgui_malloc(&ctx->desc.allocator, bucket->ubuf_size);
     }
 }
 
@@ -1517,7 +1607,7 @@ _SOKOL_PRIVATE void _sg_imgui_capture_discard(sg_imgui_t* ctx) {
     for (int i = 0; i < 2; i++) {
         sg_imgui_capture_bucket_t* bucket = &ctx->capture.bucket[i];
         SOKOL_ASSERT(bucket->ubuf);
-        _sg_imgui_free(bucket->ubuf);
+        _sg_imgui_free(&ctx->desc.allocator, bucket->ubuf);
         bucket->ubuf = 0;
     }
 }
@@ -1543,7 +1633,7 @@ _SOKOL_PRIVATE void _sg_imgui_capture_grow_ubuf(sg_imgui_t* ctx, size_t required
     size_t old_size = bucket->ubuf_size;
     size_t new_size = required_size + (required_size>>1);  /* allocate a bit ahead */
     bucket->ubuf_size = new_size;
-    bucket->ubuf = (uint8_t*) _sg_imgui_realloc(bucket->ubuf, old_size, new_size);
+    bucket->ubuf = (uint8_t*) _sg_imgui_realloc(&ctx->desc.allocator, bucket->ubuf, old_size, new_size);
 }
 
 _SOKOL_PRIVATE sg_imgui_capture_item_t* _sg_imgui_capture_next_write_item(sg_imgui_t* ctx) {
@@ -3836,16 +3926,26 @@ _SOKOL_PRIVATE void _sg_imgui_draw_caps_panel(void) {
     }
 }
 
+#define _sg_imgui_def(val, def) (((val) == 0) ? (def) : (val))
+
+_SOKOL_PRIVATE sg_imgui_desc_t _sg_imgui_desc_defaults(const sg_imgui_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sg_imgui_desc_t res = *desc;
+    // FIXME: any additional default overrides would go here
+    return res;
+}
+
 /*--- PUBLIC FUNCTIONS -------------------------------------------------------*/
-SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
-    SOKOL_ASSERT(ctx);
-    memset(ctx, 0, sizeof(sg_imgui_t));
+SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx, const sg_imgui_desc_t* desc) {
+    SOKOL_ASSERT(ctx && desc);
+    _sg_imgui_clear(ctx, sizeof(sg_imgui_t));
     ctx->init_tag = 0xABCDABCD;
+    ctx->desc = _sg_imgui_desc_defaults(desc);
     _sg_imgui_capture_init(ctx);
 
     /* hook into sokol_gfx functions */
     sg_trace_hooks hooks;
-    memset(&hooks, 0, sizeof(hooks));
+    _sg_imgui_clear(&hooks, sizeof(hooks));
     hooks.user_data = (void*) ctx;
     hooks.reset_state_cache = _sg_imgui_reset_state_cache;
     hooks.make_buffer = _sg_imgui_make_buffer;
@@ -3910,37 +4010,27 @@ SOKOL_API_IMPL void sg_imgui_init(sg_imgui_t* ctx) {
     ctx->hooks = sg_install_trace_hooks(&hooks);
 
     /* allocate resource debug-info slots */
-    sg_desc desc = sg_query_desc();
-    ctx->buffers.num_slots = desc.buffer_pool_size;
-    ctx->images.num_slots = desc.image_pool_size;
-    ctx->shaders.num_slots = desc.shader_pool_size;
-    ctx->pipelines.num_slots = desc.pipeline_pool_size;
-    ctx->passes.num_slots = desc.pass_pool_size;
+    const sg_desc sgdesc = sg_query_desc();
+    ctx->buffers.num_slots = sgdesc.buffer_pool_size;
+    ctx->images.num_slots = sgdesc.image_pool_size;
+    ctx->shaders.num_slots = sgdesc.shader_pool_size;
+    ctx->pipelines.num_slots = sgdesc.pipeline_pool_size;
+    ctx->passes.num_slots = sgdesc.pass_pool_size;
 
     const size_t buffer_pool_size = (size_t)ctx->buffers.num_slots * sizeof(sg_imgui_buffer_t);
-    ctx->buffers.slots = (sg_imgui_buffer_t*) _sg_imgui_alloc(buffer_pool_size);
-    SOKOL_ASSERT(ctx->buffers.slots);
-    memset(ctx->buffers.slots, 0, buffer_pool_size);
+    ctx->buffers.slots = (sg_imgui_buffer_t*) _sg_imgui_malloc_clear(&ctx->desc.allocator, buffer_pool_size);
 
     const size_t image_pool_size = (size_t)ctx->images.num_slots * sizeof(sg_imgui_image_t);
-    ctx->images.slots = (sg_imgui_image_t*) _sg_imgui_alloc(image_pool_size);
-    SOKOL_ASSERT(ctx->images.slots);
-    memset(ctx->images.slots, 0, image_pool_size);
+    ctx->images.slots = (sg_imgui_image_t*) _sg_imgui_malloc_clear(&ctx->desc.allocator, image_pool_size);
 
     const size_t shader_pool_size = (size_t)ctx->shaders.num_slots * sizeof(sg_imgui_shader_t);
-    ctx->shaders.slots = (sg_imgui_shader_t*) _sg_imgui_alloc(shader_pool_size);
-    SOKOL_ASSERT(ctx->shaders.slots);
-    memset(ctx->shaders.slots, 0, shader_pool_size);
+    ctx->shaders.slots = (sg_imgui_shader_t*) _sg_imgui_malloc_clear(&ctx->desc.allocator, shader_pool_size);
 
     const size_t pipeline_pool_size = (size_t)ctx->pipelines.num_slots * sizeof(sg_imgui_pipeline_t);
-    ctx->pipelines.slots = (sg_imgui_pipeline_t*) _sg_imgui_alloc(pipeline_pool_size);
-    SOKOL_ASSERT(ctx->pipelines.slots);
-    memset(ctx->pipelines.slots, 0, pipeline_pool_size);
+    ctx->pipelines.slots = (sg_imgui_pipeline_t*) _sg_imgui_malloc_clear(&ctx->desc.allocator, pipeline_pool_size);
 
     const size_t pass_pool_size = (size_t)ctx->passes.num_slots * sizeof(sg_imgui_pass_t);
-    ctx->passes.slots = (sg_imgui_pass_t*) _sg_imgui_alloc(pass_pool_size);
-    SOKOL_ASSERT(ctx->passes.slots);
-    memset(ctx->passes.slots, 0, pass_pool_size);
+    ctx->passes.slots = (sg_imgui_pass_t*) _sg_imgui_malloc_clear(&ctx->desc.allocator, pass_pool_size);
 }
 
 SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
@@ -3955,7 +4045,7 @@ SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
                 _sg_imgui_buffer_destroyed(ctx, i);
             }
         }
-        _sg_imgui_free((void*)ctx->buffers.slots);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)ctx->buffers.slots);
         ctx->buffers.slots = 0;
     }
     if (ctx->images.slots) {
@@ -3964,7 +4054,7 @@ SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
                 _sg_imgui_image_destroyed(ctx, i);
             }
         }
-        _sg_imgui_free((void*)ctx->images.slots);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)ctx->images.slots);
         ctx->images.slots = 0;
     }
     if (ctx->shaders.slots) {
@@ -3973,7 +4063,7 @@ SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
                 _sg_imgui_shader_destroyed(ctx, i);
             }
         }
-        _sg_imgui_free((void*)ctx->shaders.slots);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)ctx->shaders.slots);
         ctx->shaders.slots = 0;
     }
     if (ctx->pipelines.slots) {
@@ -3982,7 +4072,7 @@ SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
                 _sg_imgui_pipeline_destroyed(ctx, i);
             }
         }
-        _sg_imgui_free((void*)ctx->pipelines.slots);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)ctx->pipelines.slots);
         ctx->pipelines.slots = 0;
     }
     if (ctx->passes.slots) {
@@ -3991,7 +4081,7 @@ SOKOL_API_IMPL void sg_imgui_discard(sg_imgui_t* ctx) {
                 _sg_imgui_pass_destroyed(ctx, i);
             }
         }
-        _sg_imgui_free((void*)ctx->passes.slots);
+        _sg_imgui_free(&ctx->desc.allocator, (void*)ctx->passes.slots);
         ctx->passes.slots = 0;
     }
 }

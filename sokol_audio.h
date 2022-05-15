@@ -18,8 +18,6 @@
     SOKOL_DUMMY_BACKEND - use a dummy backend
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_MALLOC(s)     - your own malloc() implementation (default: malloc(s))
-    SOKOL_FREE(p)       - your own free() implementation (default: free(p))
     SOKOL_AUDIO_API_DECL- public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_AUDIO_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -365,6 +363,40 @@
     header must be present (usually both are installed with some sort
     of ALSA development package).
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            saudio_setup(&(saudio_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_audio.h
+    itself though, not any allocations in OS libraries.
+
+    Memory allocation will only happen on the same thread where saudio_setup()
+    was called, so you don't need to worry about thread-safety.
+
+
     LICENSE
     =======
 
@@ -392,6 +424,7 @@
         distribution.
 */
 #define SOKOL_AUDIO_INCLUDED (1)
+#include <stddef.h> // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -412,15 +445,33 @@
 extern "C" {
 #endif
 
+/*
+    saudio_allocator
+
+    Used in saudio_desc to provide custom memory-alloc and -free functions
+    to sokol_audio.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef void*(*saudio_malloc)(size_t size, void* user_data);
+typedef void(*saudio_free)(void* ptr, void* user_data);
+
+typedef struct saudio_allocator {
+    saudio_malloc alloc;
+    saudio_free free;
+    void* user_data;
+} saudio_allocator;
+
 typedef struct saudio_desc {
-    int sample_rate;        /* requested sample rate */
-    int num_channels;       /* number of channels, default: 1 (mono) */
-    int buffer_frames;      /* number of frames in streaming buffer */
-    int packet_frames;      /* number of frames in a packet */
-    int num_packets;        /* number of packets in packet queue */
-    void (*stream_cb)(float* buffer, int num_frames, int num_channels);  /* optional streaming callback (no user data) */
-    void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); /*... and with user data */
-    void* user_data;        /* optional user data argument for stream_userdata_cb */
+    int sample_rate;        // requested sample rate
+    int num_channels;       // number of channels, default: 1 (mono)
+    int buffer_frames;      // number of frames in streaming buffer
+    int packet_frames;      // number of frames in a packet
+    int num_packets;        // number of packets in packet queue
+    void (*stream_cb)(float* buffer, int num_frames, int num_channels);  // optional streaming callback (no user data)
+    void (*stream_userdata_cb)(float* buffer, int num_frames, int num_channels, void* user_data); //... and with user data
+    void* user_data;        // optional user data argument for stream_userdata_cb
+    saudio_allocator allocator;     // optional allocation override functions
 } saudio_desc;
 
 /* setup sokol-audio */
@@ -458,6 +509,12 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use saudio_desc.allocator to override memory allocation functions"
+#endif
+
+#include <stdlib.h> // alloc, free
 #include <string.h> // memset, memcpy
 #include <stddef.h> // size_t
 
@@ -472,11 +529,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
@@ -893,6 +945,40 @@ _SOKOL_PRIVATE void _saudio_stream_callback(float* buffer, int num_frames, int n
     }
 }
 
+/*=== MEMORY HELPERS ========================================================*/
+_SOKOL_PRIVATE void _saudio_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _saudio_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_saudio.desc.allocator.alloc) {
+        ptr = _saudio.desc.allocator.alloc(size, _saudio.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _saudio_malloc_clear(size_t size) {
+    void* ptr = _saudio_malloc(size);
+    _saudio_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _saudio_free(void* ptr) {
+    if (_saudio.desc.allocator.free) {
+        _saudio.desc.allocator.free(ptr, _saudio.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
+
 /*=== MUTEX IMPLEMENTATION ===================================================*/
 #if defined(_SAUDIO_NOTHREADS)
 
@@ -1003,8 +1089,7 @@ _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo_t* fifo, int packet_size, int
     SOKOL_ASSERT((packet_size > 0) && (num_packets > 0));
     fifo->packet_size = packet_size;
     fifo->num_packets = num_packets;
-    fifo->base_ptr = (uint8_t*) SOKOL_MALLOC((size_t)(packet_size * num_packets));
-    SOKOL_ASSERT(fifo->base_ptr);
+    fifo->base_ptr = (uint8_t*) _saudio_malloc((size_t)(packet_size * num_packets));
     fifo->cur_packet = -1;
     fifo->cur_offset = 0;
     _saudio_ring_init(&fifo->read_queue, num_packets);
@@ -1022,7 +1107,7 @@ _SOKOL_PRIVATE void _saudio_fifo_init(_saudio_fifo_t* fifo, int packet_size, int
 
 _SOKOL_PRIVATE void _saudio_fifo_shutdown(_saudio_fifo_t* fifo) {
     SOKOL_ASSERT(fifo->base_ptr);
-    SOKOL_FREE(fifo->base_ptr);
+    _saudio_free(fifo->base_ptr);
     fifo->base_ptr = 0;
     fifo->valid = false;
     _saudio_mutex_destroy(&fifo->mutex);
@@ -1191,7 +1276,7 @@ _SOKOL_PRIVATE void _saudio_coreaudio_callback(void* user_data, _saudio_AudioQue
         int num_bytes = (int) buffer->mAudioDataByteSize;
         if (0 == _saudio_fifo_read(&_saudio.fifo, ptr, num_bytes)) {
             /* not enough read data available, fill the entire buffer with silence */
-            memset(ptr, 0, (size_t)num_bytes);
+            _saudio_clear(ptr, (size_t)num_bytes);
         }
     }
     AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
@@ -1213,7 +1298,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     /* create an audio queue with fp32 samples */
     _saudio_AudioStreamBasicDescription fmt;
-    memset(&fmt, 0, sizeof(fmt));
+    _saudio_clear(&fmt, sizeof(fmt));
     fmt.mSampleRate = (double) _saudio.sample_rate;
     fmt.mFormatID = _saudio_kAudioFormatLinearPCM;
     fmt.mFormatFlags = _saudio_kLinearPCMFormatFlagIsFloat | _saudio_kAudioFormatFlagIsPacked;
@@ -1232,7 +1317,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         res = AudioQueueAllocateBuffer(_saudio.backend.ca_audio_queue, buf_byte_size, &buf);
         SOKOL_ASSERT((res == 0) && buf); (void)res;
         buf->mAudioDataByteSize = buf_byte_size;
-        memset(buf->mAudioData, 0, buf->mAudioDataByteSize);
+        _saudio_clear(buf->mAudioData, buf->mAudioDataByteSize);
         AudioQueueEnqueueBuffer(_saudio.backend.ca_audio_queue, buf, 0, NULL);
     }
 
@@ -1284,7 +1369,7 @@ _SOKOL_PRIVATE void* _saudio_alsa_cb(void* param) {
             else {
                 if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.buffer, _saudio.backend.buffer_byte_size)) {
                     /* not enough read data available, fill the entire buffer with silence */
-                    memset(_saudio.backend.buffer, 0, (size_t)_saudio.backend.buffer_byte_size);
+                    _saudio_clear(_saudio.backend.buffer, (size_t)_saudio.backend.buffer_byte_size);
                 }
             }
         }
@@ -1339,8 +1424,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     /* allocate the streaming buffer */
     _saudio.backend.buffer_byte_size = _saudio.buffer_frames * _saudio.bytes_per_frame;
     _saudio.backend.buffer_frames = _saudio.buffer_frames;
-    _saudio.backend.buffer = (float*) SOKOL_MALLOC((size_t)_saudio.backend.buffer_byte_size);
-    memset(_saudio.backend.buffer, 0, (size_t)_saudio.backend.buffer_byte_size);
+    _saudio.backend.buffer = (float*) _saudio_malloc_clear((size_t)_saudio.backend.buffer_byte_size);
 
     /* create the buffer-streaming start thread */
     if (0 != pthread_create(&_saudio.backend.thread, 0, _saudio_alsa_cb, 0)) {
@@ -1363,7 +1447,7 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     pthread_join(_saudio.backend.thread, 0);
     snd_pcm_drain(_saudio.backend.device);
     snd_pcm_close(_saudio.backend.device);
-    SOKOL_FREE(_saudio.backend.buffer);
+    _saudio_free(_saudio.backend.buffer);
 };
 
 /*=== WASAPI BACKEND IMPLEMENTATION ==========================================*/
@@ -1419,7 +1503,7 @@ _SOKOL_PRIVATE void _saudio_wasapi_fill_buffer(void) {
     else {
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.thread.src_buffer, _saudio.backend.thread.src_buffer_byte_size)) {
             /* not enough read data available, fill the entire buffer with silence */
-            memset(_saudio.backend.thread.src_buffer, 0, (size_t)_saudio.backend.thread.src_buffer_byte_size);
+            _saudio_clear(_saudio.backend.thread.src_buffer, (size_t)_saudio.backend.thread.src_buffer_byte_size);
         }
     }
 }
@@ -1487,7 +1571,7 @@ _SOKOL_PRIVATE DWORD WINAPI _saudio_wasapi_thread_fn(LPVOID param) {
 
 _SOKOL_PRIVATE void _saudio_wasapi_release(void) {
     if (_saudio.backend.thread.src_buffer) {
-        SOKOL_FREE(_saudio.backend.thread.src_buffer);
+        _saudio_free(_saudio.backend.thread.src_buffer);
         _saudio.backend.thread.src_buffer = 0;
     }
     if (_saudio.backend.render_client) {
@@ -1602,7 +1686,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     #endif
 
     WAVEFORMATEXTENSIBLE fmtex;
-    memset(&fmtex, 0, sizeof(fmtex));
+    _saudio_clear(&fmtex, sizeof(fmtex));
     fmtex.Format.nChannels = (WORD)_saudio.num_channels;
     fmtex.Format.nSamplesPerSec = (DWORD)_saudio.sample_rate;
     fmtex.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
@@ -1648,8 +1732,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     _saudio.backend.thread.src_buffer_byte_size = _saudio.backend.thread.src_buffer_frames * _saudio.bytes_per_frame;
 
     /* allocate an intermediate buffer for sample format conversion */
-    _saudio.backend.thread.src_buffer = (float*) SOKOL_MALLOC((size_t)_saudio.backend.thread.src_buffer_byte_size);
-    SOKOL_ASSERT(_saudio.backend.thread.src_buffer);
+    _saudio.backend.thread.src_buffer = (float*) _saudio_malloc((size_t)_saudio.backend.thread.src_buffer_byte_size);
 
     /* create streaming thread */
     _saudio.backend.thread.thread_handle = CreateThread(NULL, 0, _saudio_wasapi_thread_fn, 0, 0, 0);
@@ -1698,7 +1781,7 @@ EMSCRIPTEN_KEEPALIVE int _saudio_emsc_pull(int num_frames) {
             const int num_bytes = num_frames * _saudio.bytes_per_frame;
             if (0 == _saudio_fifo_read(&_saudio.fifo, _saudio.backend.buffer, num_bytes)) {
                 /* not enough read data available, fill the entire buffer with silence */
-                memset(_saudio.backend.buffer, 0, (size_t)num_bytes);
+                _saudio_clear(_saudio.backend.buffer, (size_t)num_bytes);
             }
         }
         int res = (int) _saudio.backend.buffer;
@@ -1819,7 +1902,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
         _saudio.sample_rate = saudio_js_sample_rate();
         _saudio.buffer_frames = saudio_js_buffer_frames();
         const size_t buf_size = (size_t) (_saudio.buffer_frames * _saudio.bytes_per_frame);
-        _saudio.backend.buffer = (uint8_t*) SOKOL_MALLOC(buf_size);
+        _saudio.backend.buffer = (uint8_t*) _saudio_malloc(buf_size);
         return true;
     }
     else {
@@ -1830,7 +1913,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     saudio_js_shutdown();
     if (_saudio.backend.buffer) {
-        SOKOL_FREE(_saudio.backend.buffer);
+        _saudio_free(_saudio.backend.buffer);
         _saudio.backend.buffer = 0;
     }
 }
@@ -1904,7 +1987,7 @@ _SOKOL_PRIVATE void _saudio_opensles_fill_buffer(void) {
         const int src_buffer_byte_size = src_buffer_frames * _saudio.num_channels * (int)sizeof(float);
         if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)_saudio.backend.src_buffer, src_buffer_byte_size)) {
             /* not enough read data available, fill the entire buffer with silence */
-            memset(_saudio.backend.src_buffer, 0x0, (size_t)src_buffer_byte_size);
+            _saudio_clear(_saudio.backend.src_buffer, (size_t)src_buffer_byte_size);
         }
     }
 }
@@ -1959,9 +2042,9 @@ _SOKOL_PRIVATE void _saudio_backend_shutdown(void) {
     }
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; i++) {
-        SOKOL_FREE(_saudio.backend.output_buffers[i]);
+        _saudio_free(_saudio.backend.output_buffers[i]);
     }
-    SOKOL_FREE(_saudio.backend.src_buffer);
+    _saudio_free(_saudio.backend.src_buffer);
 }
 
 _SOKOL_PRIVATE bool _saudio_backend_init(void) {
@@ -1969,16 +2052,12 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 
     for (int i = 0; i < SAUDIO_NUM_BUFFERS; ++i) {
         const int buffer_size_bytes = (int)sizeof(int16_t) * _saudio.num_channels * _saudio.buffer_frames;
-        _saudio.backend.output_buffers[i] = (int16_t*) SOKOL_MALLOC((size_t)buffer_size_bytes);
-        SOKOL_ASSERT(_saudio.backend.output_buffers[i]);
-        memset(_saudio.backend.output_buffers[i], 0x0, (size_t)buffer_size_bytes);
+        _saudio.backend.output_buffers[i] = (int16_t*) _saudio_malloc_clear((size_t)buffer_size_bytes);
     }
 
     {
         const int buffer_size_bytes = _saudio.bytes_per_frame * _saudio.buffer_frames;
-        _saudio.backend.src_buffer = (float*) SOKOL_MALLOC((size_t)buffer_size_bytes);
-        SOKOL_ASSERT(_saudio.backend.src_buffer);
-        memset(_saudio.backend.src_buffer, 0x0, (size_t)buffer_size_bytes);
+        _saudio.backend.src_buffer = (float*) _saudio_malloc_clear((size_t)buffer_size_bytes);
     }
 
     /* Create engine */
@@ -2091,7 +2170,8 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
 SOKOL_API_IMPL void saudio_setup(const saudio_desc* desc) {
     SOKOL_ASSERT(!_saudio.valid);
     SOKOL_ASSERT(desc);
-    memset(&_saudio, 0, sizeof(_saudio));
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    _saudio_clear(&_saudio, sizeof(_saudio));
     _saudio.desc = *desc;
     _saudio.stream_cb = desc->stream_cb;
     _saudio.stream_userdata_cb = desc->stream_userdata_cb;
