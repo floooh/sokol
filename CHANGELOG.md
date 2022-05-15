@@ -26,7 +26,7 @@
     });
   ```
 
-  sokol_gfx.h will now call ```my_alloc()``` and ```my_free()``` whenever it needs
+  sokol_gfx.h will now call ```my_malloc()``` and ```my_free()``` whenever it needs
   to allocator or free memory (note however that allocations inside OS
   functions or other libraries are not affected).
 
