@@ -27,11 +27,11 @@
   ```
 
   sokol_gfx.h will now call ```my_malloc()``` and ```my_free()``` whenever it needs
-  to allocator or free memory (note however that allocations inside OS
-  functions or other libraries are not affected).
+  to allocate or free memory (note however that allocations inside OS
+  functions or 3rd party libraries are not affected).
 
-  If no override functions are provided, the standard library ```malloc()``` and ```free()```
-  will be used (just as before).
+  If no override functions are provided, the standard library functions ```malloc()``` and ```free()```
+  will be used, just as before.
 
   This change breaks source compatibility in the following headers:
 
@@ -46,8 +46,8 @@
   macros ```SOKOL_MALLOC```, ```SOKOL_CALLOC``` and ```SOKOL_FREE``` and throw
   a compilation error if those macros are detected.
 
-  (if configuration through macros is still desired this can be added back, but I figured
-  that the new way is better for every situation).
+  (if configuration through macros is still desired this could be added back in
+  the future, but I figured that the new way is more flexible in most situations).
 
   The header sokol_memtrack.h and the sample [restart-sapp](https://floooh.github.io/sokol-html5/restart-sapp.html) have been updated accordingly.
 
