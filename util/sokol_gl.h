@@ -809,6 +809,10 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #ifdef SOKOL_GL_IMPL
 #define SOKOL_GL_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sgl_desc_t.allocator to override memory allocation functions"
+#endif
+
 #include <stdlib.h> // malloc/free
 #include <string.h> // memset
 #include <math.h>   // M_PI, sqrtf, sinf, cosf

@@ -249,6 +249,11 @@ SOKOL_FONTSTASH_API_DECL uint32_t sfons_rgba(uint8_t r, uint8_t g, uint8_t b, ui
 /*-- IMPLEMENTATION ----------------------------------------------------------*/
 #ifdef SOKOL_FONTSTASH_IMPL
 #define SOKOL_FONTSTASH_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sfons_desc_t.allocator to override memory allocation functions"
+#endif
+
 #include <string.h>     // memset, memcpy
 #include <stdlib.h>     // malloc, free
 

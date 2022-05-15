@@ -1610,6 +1610,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sapp_desc.allocator to override memory allocation functions"
+#endif
+
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t

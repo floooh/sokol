@@ -637,6 +637,10 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #ifdef SOKOL_DEBUGTEXT_IMPL
 #define SOKOL_DEBUGTEXT_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sdtx_desc_t.allocator to override memory allocation functions"
+#endif
+
 #include <string.h> // memset
 #include <math.h>   // fmodf
 #include <stdarg.h> // for vsnprintf

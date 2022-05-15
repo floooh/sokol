@@ -509,6 +509,11 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_AUDIO_IMPL
 #define SOKOL_AUDIO_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use saudio_desc.allocator to override memory allocation functions"
+#endif
+
 #include <stdlib.h> // alloc, free
 #include <string.h> // memset, memcpy
 #include <stddef.h> // size_t

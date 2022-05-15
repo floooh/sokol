@@ -326,6 +326,10 @@ inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_ne
 #ifdef SOKOL_IMGUI_IMPL
 #define SOKOL_IMGUI_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use simgui_desc_t.allocator to override memory allocation functions"
+#endif
+
 #if defined(__cplusplus)
     #if !defined(IMGUI_VERSION)
     #error "Please include imgui.h before the sokol_imgui.h implementation"

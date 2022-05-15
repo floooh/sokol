@@ -1008,6 +1008,11 @@ inline sfetch_handle_t sfetch_send(const sfetch_request_t& request) { return sfe
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_FETCH_IMPL
 #define SOKOL_FETCH_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sfetch_desc_t.allocator to override memory allocation functions"
+#endif
+
 #include <stdlib.h> /* malloc, free */
 #include <string.h> /* memset, memcpy */
 

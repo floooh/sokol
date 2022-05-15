@@ -361,6 +361,11 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_ARGS_IMPL
 #define SOKOL_ARGS_IMPL_INCLUDED (1)
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sargs_desc.allocator to override memory allocation functions"
+#endif
+
 #include <string.h> // memset, strcmp
 #include <stdlib.h> // malloc, free
 
