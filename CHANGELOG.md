@@ -1,5 +1,59 @@
 ## Updates
 
+- **15-May-2022**: The way internal memory allocation can be overriden with
+  your own functions has been changed from global macros to callbacks
+  provided in the API setup call. For instance in sokol_gfx.h:
+
+  ```c
+  void* my_malloc(size_t size, void* userdata) {
+    (void)userdata; // unused
+    return malloc(size);
+  }
+
+  void my_free(void* ptr, void* userdata) {
+    (void)userdata; // unused
+    free(ptr);
+  }
+
+  //...
+    sg_setup(&(sg_desc){
+      //...
+      .allocator = {
+        .alloc = my_malloc,
+        .free = my_free,
+        .user_data = ...,
+      }
+    });
+  ```
+
+  sokol_gfx.h will now call ```my_alloc()``` and ```my_free()``` whenever it needs
+  to allocator or free memory (note however that allocations inside OS
+  functions or other libraries are not affected).
+
+  If no override functions are provided, the standard library ```malloc()``` and ```free()```
+  will be used (just as before).
+
+  This change breaks source compatibility in the following headers:
+
+    - **sokol_fontstash.h**: the function signature of ```sfons_create()``` has changed,
+      this now takes a pointer to a new ```sfons_desc_t``` struct instead of 
+      individual parameters.
+    - **sokol_gfx_imgui.h** (NOT sokol_imgui.h!): likewise, the function signature of 
+      ```sg_imgui_init()``` has changed, this now takes an additional parameter
+      which is a pointer to a new ```sg_imgui_desc_t``` struct.
+
+  All affected headers also have a preprocessor check for the outdated
+  macros ```SOKOL_MALLOC```, ```SOKOL_CALLOC``` and ```SOKOL_FREE``` and throw
+  a compilation error if those macros are detected.
+
+  (if configuration through macros is still desired this can be added back, but I figured
+  that the new way is better for every situation).
+
+  The header sokol_memtrack.h and the sample [restart-sapp](https://floooh.github.io/sokol-html5/restart-sapp.html) have been updated accordingly.
+
+  Also search for ```MEMORY ALLOCATION OVERRIDE``` in the header documentation block
+  for more details.
+
 - **14-May-2022**: added a helper function ```simgui_map_keycode()``` to
   sokol_imgui.h to map sokol_app.h keycodes (```sapp_keycode```,
   ```SAPP_KEYCODE_*```) to Dear ImGui keycodes (```ImGuiKey```, ```ImGuiKey_*```).
