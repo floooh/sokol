@@ -27,8 +27,6 @@
     ...optionally provide the following macros to override defaults:
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_GL_API_DECL   - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_GL_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -547,6 +545,34 @@
     to render in the previous draw command will be incremented by the
     number of vertices in the new draw command.
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sgl_setup(&(sgl_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+
     LICENSE
     =======
     zlib/libpng license
@@ -575,6 +601,7 @@
 #define SOKOL_GL_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t, offsetof
 
 #if !defined(SOKOL_GFX_INCLUDED)
 #error "Please include sokol_gfx.h before sokol_gl.h"
@@ -634,6 +661,23 @@ typedef struct sgl_context_desc_t {
     int sample_count;
 } sgl_context_desc_t;
 
+/*
+    sgl_allocator_t
+
+    Used in sgl_desc_t to provide custom memory-alloc and -free functions
+    to sokol_gl.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef void*(*sgl_malloc_t)(size_t size, void* user_data);
+typedef void(*sgl_free_t)(void* ptr, void* user_data);
+
+typedef struct sgl_allocator_t {
+    sgl_malloc_t alloc;
+    sgl_free_t free;
+    void* user_data;
+} sgl_allocator_t;
+
 typedef struct sgl_desc_t {
     int max_vertices;               // default: 64k
     int max_commands;               // default: 16k
@@ -643,6 +687,7 @@ typedef struct sgl_desc_t {
     sg_pixel_format depth_format;
     int sample_count;
     sg_face_winding face_winding;   // default: SG_FACEWINDING_CCW
+    sgl_allocator_t allocator;      // optional memory allocation overrides (default: malloc/free)
 } sgl_desc_t;
 
 /* the default context handle */
@@ -764,9 +809,13 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #ifdef SOKOL_GL_IMPL
 #define SOKOL_GL_IMPL_INCLUDED (1)
 
-#include <stddef.h> /* offsetof */
-#include <string.h> /* memset */
-#include <math.h> /* M_PI, sqrtf, sinf, cosf */
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sgl_desc_t.allocator to override memory allocation functions"
+#endif
+
+#include <stdlib.h> // malloc/free
+#include <string.h> // memset
+#include <math.h>   // M_PI, sqrtf, sinf, cosf
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327
@@ -783,11 +832,6 @@ inline sgl_pipeline sgl_context_make_pipeline(sgl_context ctx, const sg_pipeline
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
@@ -2266,6 +2310,38 @@ typedef struct {
 static _sgl_t _sgl;
 
 /*== PRIVATE FUNCTIONS =======================================================*/
+static void _sgl_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+static void* _sgl_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sgl.desc.allocator.alloc) {
+        ptr = _sgl.desc.allocator.alloc(size, _sgl.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+static void* _sgl_malloc_clear(size_t size) {
+    void* ptr = _sgl_malloc(size);
+    _sgl_clear(ptr, size);
+    return ptr;
+}
+
+static void _sgl_free(void* ptr) {
+    if (_sgl.desc.allocator.free) {
+        _sgl.desc.allocator.free(ptr, _sgl.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
 
 static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -2274,12 +2350,9 @@ static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
     size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
-    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
-    SOKOL_ASSERT(pool->gen_ctrs);
-    memset(pool->gen_ctrs, 0, gen_ctrs_size);
+    pool->gen_ctrs = (uint32_t*) _sgl_malloc_clear(gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
-    SOKOL_ASSERT(pool->free_queue);
+    pool->free_queue = (int*) _sgl_malloc_clear(sizeof(int) * (size_t)num);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
@@ -2289,10 +2362,10 @@ static void _sgl_init_pool(_sgl_pool_t* pool, int num) {
 static void _sgl_discard_pool(_sgl_pool_t* pool) {
     SOKOL_ASSERT(pool);
     SOKOL_ASSERT(pool->free_queue);
-    SOKOL_FREE(pool->free_queue);
+    _sgl_free(pool->free_queue);
     pool->free_queue = 0;
     SOKOL_ASSERT(pool->gen_ctrs);
-    SOKOL_FREE(pool->gen_ctrs);
+    _sgl_free(pool->gen_ctrs);
     pool->gen_ctrs = 0;
     pool->size = 0;
     pool->queue_top = 0;
@@ -2332,7 +2405,7 @@ static void _sgl_reset_context(_sgl_context_t* ctx) {
     SOKOL_ASSERT(0 == ctx->vertices);
     SOKOL_ASSERT(0 == ctx->uniforms);
     SOKOL_ASSERT(0 == ctx->commands);
-    memset(ctx, 0, sizeof(_sgl_context_t));
+    _sgl_clear(ctx, sizeof(_sgl_context_t));
 }
 
 static void _sgl_setup_context_pool(int pool_size) {
@@ -2340,20 +2413,18 @@ static void _sgl_setup_context_pool(int pool_size) {
     SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
     _sgl_init_pool(&_sgl.context_pool.pool, pool_size);
     size_t pool_byte_size = sizeof(_sgl_context_t) * (size_t)_sgl.context_pool.pool.size;
-    _sgl.context_pool.contexts = (_sgl_context_t*) SOKOL_MALLOC(pool_byte_size);
-    SOKOL_ASSERT(_sgl.context_pool.contexts);
-    memset(_sgl.context_pool.contexts, 0, pool_byte_size);
+    _sgl.context_pool.contexts = (_sgl_context_t*) _sgl_malloc_clear(pool_byte_size);
 }
 
 static void _sgl_discard_context_pool(void) {
     SOKOL_ASSERT(0 != _sgl.context_pool.contexts);
-    SOKOL_FREE(_sgl.context_pool.contexts); _sgl.context_pool.contexts = 0;
+    _sgl_free(_sgl.context_pool.contexts); _sgl.context_pool.contexts = 0;
     _sgl_discard_pool(&_sgl.context_pool.pool);
 }
 
 static void _sgl_reset_pipeline(_sgl_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    memset(pip, 0, sizeof(_sgl_pipeline_t));
+    _sgl_clear(pip, sizeof(_sgl_pipeline_t));
 }
 
 static void _sgl_setup_pipeline_pool(int pool_size) {
@@ -2361,14 +2432,12 @@ static void _sgl_setup_pipeline_pool(int pool_size) {
     SOKOL_ASSERT((pool_size > 0) && (pool_size < _SGL_MAX_POOL_SIZE));
     _sgl_init_pool(&_sgl.pip_pool.pool, pool_size);
     size_t pool_byte_size = sizeof(_sgl_pipeline_t) * (size_t)_sgl.pip_pool.pool.size;
-    _sgl.pip_pool.pips = (_sgl_pipeline_t*) SOKOL_MALLOC(pool_byte_size);
-    SOKOL_ASSERT(_sgl.pip_pool.pips);
-    memset(_sgl.pip_pool.pips, 0, pool_byte_size);
+    _sgl.pip_pool.pips = (_sgl_pipeline_t*) _sgl_malloc_clear(pool_byte_size);
 }
 
 static void _sgl_discard_pipeline_pool(void) {
     SOKOL_ASSERT(0 != _sgl.pip_pool.pips);
-    SOKOL_FREE(_sgl.pip_pool.pips); _sgl.pip_pool.pips = 0;
+    _sgl_free(_sgl.pip_pool.pips); _sgl.pip_pool.pips = 0;
     _sgl_discard_pool(&_sgl.pip_pool.pool);
 }
 
@@ -2612,18 +2681,15 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     // allocate buffers and pools
     ctx->num_vertices = ctx->desc.max_vertices;
     ctx->num_commands = ctx->num_uniforms = ctx->desc.max_commands;
-    ctx->vertices = (_sgl_vertex_t*) SOKOL_MALLOC((size_t)ctx->num_vertices * sizeof(_sgl_vertex_t));
-    SOKOL_ASSERT(ctx->vertices);
-    ctx->uniforms = (_sgl_uniform_t*) SOKOL_MALLOC((size_t)ctx->num_uniforms * sizeof(_sgl_uniform_t));
-    SOKOL_ASSERT(ctx->uniforms);
-    ctx->commands = (_sgl_command_t*) SOKOL_MALLOC((size_t)ctx->num_commands * sizeof(_sgl_command_t));
-    SOKOL_ASSERT(ctx->commands);
+    ctx->vertices = (_sgl_vertex_t*) _sgl_malloc((size_t)ctx->num_vertices * sizeof(_sgl_vertex_t));
+    ctx->uniforms = (_sgl_uniform_t*) _sgl_malloc((size_t)ctx->num_uniforms * sizeof(_sgl_uniform_t));
+    ctx->commands = (_sgl_command_t*) _sgl_malloc((size_t)ctx->num_commands * sizeof(_sgl_command_t));
 
     // create sokol-gfx resource objects
     sg_push_debug_group("sokol-gl");
 
     sg_buffer_desc vbuf_desc;
-    memset(&vbuf_desc, 0, sizeof(vbuf_desc));
+    _sgl_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = (size_t)ctx->num_vertices * sizeof(_sgl_vertex_t);
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
@@ -2632,7 +2698,7 @@ static void _sgl_init_context(sgl_context ctx_id, const sgl_context_desc_t* in_d
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);
 
     sg_pipeline_desc def_pip_desc;
-    memset(&def_pip_desc, 0, sizeof(def_pip_desc));
+    _sgl_clear(&def_pip_desc, sizeof(def_pip_desc));
     def_pip_desc.depth.write_enabled = true;
     ctx->def_pip = _sgl_make_pipeline(&def_pip_desc, &ctx->desc);
     sg_pop_debug_group();
@@ -2666,9 +2732,9 @@ static void _sgl_destroy_context(sgl_context ctx_id) {
         SOKOL_ASSERT(ctx->uniforms);
         SOKOL_ASSERT(ctx->commands);
 
-        SOKOL_FREE(ctx->vertices);
-        SOKOL_FREE(ctx->uniforms);
-        SOKOL_FREE(ctx->commands);
+        _sgl_free(ctx->vertices);
+        _sgl_free(ctx->uniforms);
+        _sgl_free(ctx->commands);
 
         ctx->vertices = 0;
         ctx->uniforms = 0;
@@ -2992,6 +3058,7 @@ static inline _sgl_matrix_t* _sgl_matrix(_sgl_context_t* ctx) {
 
 // return sg_context_desc_t with patched defaults
 static sgl_desc_t _sgl_desc_defaults(const sgl_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
     sgl_desc_t res = *desc;
     res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
     res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);
@@ -3010,7 +3077,7 @@ static void _sgl_setup_common(void) {
         pixels[i] = 0xFFFFFFFF;
     }
     sg_image_desc img_desc;
-    memset(&img_desc, 0, sizeof(img_desc));
+    _sgl_clear(&img_desc, sizeof(img_desc));
     img_desc.type = SG_IMAGETYPE_2D;
     img_desc.width = 8;
     img_desc.height = 8;
@@ -3025,7 +3092,7 @@ static void _sgl_setup_common(void) {
 
     // one shader for all contexts
     sg_shader_desc shd_desc;
-    memset(&shd_desc, 0, sizeof(shd_desc));
+    _sgl_clear(&shd_desc, sizeof(shd_desc));
     shd_desc.attrs[0].name = "position";
     shd_desc.attrs[1].name = "texcoord0";
     shd_desc.attrs[2].name = "color0";
@@ -3157,7 +3224,7 @@ static void _sgl_draw(_sgl_context_t* ctx) {
 
 static sgl_context_desc_t _sgl_as_context_desc(const sgl_desc_t* desc) {
     sgl_context_desc_t ctx_desc;
-    memset(&ctx_desc, 0, sizeof(ctx_desc));
+    _sgl_clear(&ctx_desc, sizeof(ctx_desc));
     ctx_desc.max_vertices = desc->max_vertices;
     ctx_desc.max_commands = desc->max_commands;
     ctx_desc.color_format = desc->color_format;
@@ -3169,7 +3236,7 @@ static sgl_context_desc_t _sgl_as_context_desc(const sgl_desc_t* desc) {
 /*== PUBLIC FUNCTIONS ========================================================*/
 SOKOL_API_IMPL void sgl_setup(const sgl_desc_t* desc) {
     SOKOL_ASSERT(desc);
-    memset(&_sgl, 0, sizeof(_sgl));
+    _sgl_clear(&_sgl, sizeof(_sgl));
     _sgl.init_cookie = _SGL_INIT_COOKIE;
     _sgl.desc = _sgl_desc_defaults(desc);
     _sgl_setup_pipeline_pool(_sgl.desc.pipeline_pool_size);
