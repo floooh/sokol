@@ -1433,6 +1433,8 @@ typedef struct sapp_desc {
 
     /* backend-specific options */
     bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
+    int gl_major_version;               // set GL major version (default: 3)
+    int gl_minor_version;               // set GL minor version (default: 2)
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
     bool win32_console_create;          // if true, attach stdout/stderr to a new console window
     bool win32_console_attach;          // if true, attach stdout/stderr to parent process
@@ -3473,7 +3475,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         int i = 0;
         attrs[i++] = NSOpenGLPFAAccelerated;
         attrs[i++] = NSOpenGLPFADoubleBuffer;
-        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
+        attrs[i++] = NSOpenGLPFAOpenGLProfile;
+        int glVersion = _sapp_def(_sapp.desc.gl_major_version, 3) * 10 + _sapp_def(_sapp.desc.gl_minor_version, 2);
+        switch(glVersion) {
+            case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
+            case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
+            case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
+            default:
+                _sapp_fail("Invalid NSOpenGLProfile (valid choices are 1.0, 3.2, and 4.1)\n");
+        }
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
         attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
@@ -6221,8 +6231,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _sapp_fail("WGL: ARB_create_context_profile required!\n");
     }
     const int attrs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_major_version, 3),
+        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_minor_version, 2),
         WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
         0, 0
@@ -10146,8 +10156,8 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     }
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
-        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-        GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_major_version, 3),
+        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_minor_version, 2),
         GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
         GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         0, 0
