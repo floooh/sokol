@@ -2239,11 +2239,22 @@ _SOKOL_PRIVATE void _simgui_add_mouse_wheel_event(ImGuiIO* io, float wheel_x, fl
     #endif
 }
 
-_SOKOL_PRIVATE void _simgui_add_key_event(ImGuiIO* io, ImGuiKey key, bool down) {
+_SOKOL_PRIVATE void _simgui_add_sapp_key_event(ImGuiIO* io, sapp_keycode sapp_key, bool down) {
+    const ImGuiKey imgui_key = _simgui_map_keycode(sapp_key);
     #if defined(__cplusplus)
-        io->AddKeyEvent(key, down);
+        io->AddKeyEvent(imgui_key, down);
+        io->SetKeyEventNativeData(imgui_key, (int)sapp_key, 0, -1);
     #else
-        ImGuiIO_AddKeyEvent(io, key, down);
+        ImGuiIO_AddKeyEvent(io, imgui_key, down);
+        ImGuiIO_SetKeyEventNativeData(io, imgui_key, (int)sapp_key, 0, -1);
+    #endif
+}
+
+_SOKOL_PRIVATE void _simgui_add_imgui_key_event(ImGuiIO* io, ImGuiKey imgui_key, bool down) {
+    #if defined(__cplusplus)
+        io->AddKeyEvent(imgui_key, down);
+    #else
+        ImGuiIO_AddKeyEvent(io, imgui_key, down);
     #endif
 }
 
@@ -2256,10 +2267,10 @@ _SOKOL_PRIVATE void _simgui_add_input_character(ImGuiIO* io, uint32_t c) {
 }
 
 _SOKOL_PRIVATE void _simgui_update_modifiers(ImGuiIO* io, uint32_t mods) {
-    _simgui_add_key_event(io, ImGuiKey_ModCtrl, (mods & SAPP_MODIFIER_CTRL) != 0);
-    _simgui_add_key_event(io, ImGuiKey_ModShift, (mods & SAPP_MODIFIER_SHIFT) != 0);
-    _simgui_add_key_event(io, ImGuiKey_ModAlt, (mods & SAPP_MODIFIER_ALT) != 0);
-    _simgui_add_key_event(io, ImGuiKey_ModSuper, (mods & SAPP_MODIFIER_SUPER) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiKey_ModCtrl, (mods & SAPP_MODIFIER_CTRL) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiKey_ModShift, (mods & SAPP_MODIFIER_SHIFT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiKey_ModAlt, (mods & SAPP_MODIFIER_ALT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiKey_ModSuper, (mods & SAPP_MODIFIER_SUPER) != 0);
 }
 
 // returns Ctrl or Super, depending on platform
@@ -2344,7 +2355,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
                 sapp_consume_event();
             }
             // it's ok to add ImGuiKey_None key events
-            _simgui_add_key_event(io, _simgui_map_keycode(ev->key_code), true);
+            _simgui_add_sapp_key_event(io, ev->key_code, true);
             break;
         case SAPP_EVENTTYPE_KEY_UP:
             _simgui_update_modifiers(io, ev->modifiers);
@@ -2360,7 +2371,7 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
                 sapp_consume_event();
             }
             // it's ok to add ImGuiKey_None key events
-            _simgui_add_key_event(io, _simgui_map_keycode(ev->key_code), false);
+            _simgui_add_sapp_key_event(io, ev->key_code, false);
             break;
         case SAPP_EVENTTYPE_CHAR:
             /* on some platforms, special keys may be reported as
@@ -2379,10 +2390,10 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED:
             /* simulate a Ctrl-V key down/up */
             if (!_simgui.desc.disable_paste_override) {
-                _simgui_add_key_event(io, _simgui_copypaste_modifier(), true);
-                _simgui_add_key_event(io, ImGuiKey_V, true);
-                _simgui_add_key_event(io, _simgui_copypaste_modifier(), false);
-                _simgui_add_key_event(io, ImGuiKey_V, false);
+                _simgui_add_imgui_key_event(io, _simgui_copypaste_modifier(), true);
+                _simgui_add_imgui_key_event(io, ImGuiKey_V, true);
+                _simgui_add_imgui_key_event(io, _simgui_copypaste_modifier(), false);
+                _simgui_add_imgui_key_event(io, ImGuiKey_V, false);
             }
             break;
         default:
