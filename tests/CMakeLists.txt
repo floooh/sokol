@@ -101,3 +101,4 @@ add_library(imgui
 target_include_directories(imgui PUBLIC ext/fips-cimgui/cimgui/imgui)
 
 add_subdirectory(compile)
+add_subdirectory(functional)
