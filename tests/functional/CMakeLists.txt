@@ -1,6 +1,6 @@
 if (NOT ANDROID AND NOT UWP)
 
-file(COPY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m ${CMAKE_CURRENT_BINARY_DIR}/comsi.s3m)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/comsi.s3m DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 set(c_sources
     sokol_args_test.c
