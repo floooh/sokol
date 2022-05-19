@@ -12,7 +12,7 @@
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #endif
 #include <stdlib.h>     // malloc/free
-#include "fontstash/fontstash.h"
+#include "fontstash.h"
 #define SOKOL_IMPL
 #include "sokol_fontstash.h"
 
