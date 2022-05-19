@@ -722,6 +722,9 @@ typedef OSStatus _saudio_OSStatus;
 #define _saudio_kAudioFormatFlagIsPacked (kAudioFormatFlagIsPacked)
 
 #else
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // embedded AudioToolbox declarations
 typedef uint32_t _saudio_AudioFormatID;
@@ -797,6 +800,11 @@ extern _saudio_OSStatus AudioQueueAllocateBuffer(_saudio_AudioQueueRef inAQ, uin
 extern _saudio_OSStatus AudioQueueEnqueueBuffer(_saudio_AudioQueueRef inAQ, _saudio_AudioQueueBufferRef inBuffer, uint32_t inNumPacketDescs, const _saudio_AudioStreamPacketDescription* inPacketDescs);
 extern _saudio_OSStatus AudioQueueStart(_saudio_AudioQueueRef inAQ, const _saudio_AudioTimeStamp * inStartTime);
 extern _saudio_OSStatus AudioQueueStop(_saudio_AudioQueueRef inAQ, bool inImmediate);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
 #endif // SAUDIO_OSX_USE_SYSTEM_HEADERS
 
 typedef struct {
