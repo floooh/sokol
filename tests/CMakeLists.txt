@@ -3,6 +3,8 @@ project(sokol-test)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 
+include_directories(ext)
+
 # SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_DUMMY
 option(SOKOL_BACKEND "Select 3D backend API" SOKOL_GLCORE33)
 
@@ -56,15 +58,28 @@ elseif (WINDOWS)
     set(exe_type WIN32)
 endif()
 
-macro(configure_c target)
+macro(configure_common target)
     target_compile_definitions(${target} PRIVATE ${SOKOL_BACKEND})
-    target_compile_options(${target} PRIVATE ${c_flags})
-    if (OSX_MACOS OR OSX_IOS)
-        target_compile_options(${target} PRIVATE -x objective-c)
-    endif()
     target_link_options(${target} PRIVATE ${link_flags})
     target_link_libraries(${target} PRIVATE ${system_libs})
     target_include_directories(${target} PRIVATE ../.. ../../util)
+
+endmacro()
+
+macro(configure_c target)
+    configure_common(${target})
+    target_compile_options(${target} PRIVATE ${cxx_flags})
+    if (OSX_MACOS OR OSX_IOS)
+        target_compile_options(${target} PRIVATE -x objective-c)
+    endif()
+endmacro()
+
+macro(configure_cxx target)
+    configure_common(${target})
+    target_compile_options(${target} PRIVATE ${c_flags})
+    if (OSX_MACOS OR OSX_IOS)
+        target_compile_options(${target} PRIVATE -x objective-c++)
+    endif()
 endmacro()
 
 #--- cimgui
@@ -76,5 +91,13 @@ add_library(cimgui
     ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
     ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
 target_include_directories(cimgui PUBLIC ext/fips-cimgui)
+
+add_library(imgui
+    ext/fips-cimgui/cimgui/imgui/imgui.cpp
+    ext/fips-cimgui/cimgui/imgui/imgui_demo.cpp
+    ext/fips-cimgui/cimgui/imgui/imgui_draw.cpp
+    ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
+    ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
+target_include_directories(imgui PUBLIC ext/fips-cimgui/cimgui/imgui)
 
 add_subdirectory(compile)

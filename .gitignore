@@ -1,7 +1,4 @@
 .vscode/
-tests/build/
-tests/ext/fips-cimgui/
-tests/ext/sokol-tools-bin/
 #>fips
 # this area is managed by fips, do not edit
 .fips-*
