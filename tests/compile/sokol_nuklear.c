@@ -24,9 +24,16 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #endif
 #if defined(_MSC_VER)
+#pragma warning(push)
 #pragma warning(disable:4996)   // sprintf,fopen,localtime: This function or variable may be unsafe
+#pragma warning(disable:4127)   // conditional expression is constant
+#pragma warning(disable:4100)   // unreferenced formal parameter
+#pragma warning(disable:4701)   // potentially uninitialized local variable used
 #endif
 #include "nuklear.h"
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #define SOKOL_IMPL
 #if defined(SOKOL_DUMMY_BACKEND)

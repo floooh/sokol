@@ -18,8 +18,7 @@ build() {
 
 runtest() {
     cfg=$1
-    cd build/$cfg/functional
-    echo $(pwd)
+    cd build/$cfg
     ./sokol-test
     cd ../../..
 }

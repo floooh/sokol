@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(sokol-test)
+set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
-
-include_directories(ext)
 
 # SOKOL_GLCORE33, SOKOL_GLES2, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_DUMMY
 option(SOKOL_BACKEND "Select 3D backend API" SOKOL_GLCORE33)
@@ -67,7 +66,7 @@ macro(configure_common target)
     target_link_options(${target} PRIVATE ${link_flags})
     target_link_libraries(${target} PRIVATE ${system_libs})
     target_include_directories(${target} PRIVATE ../.. ../../util)
-
+    target_include_directories(${target} PRIVATE ../ext)
 endmacro()
 
 macro(configure_c target)
@@ -94,7 +93,7 @@ add_library(cimgui
     ext/fips-cimgui/cimgui/imgui/imgui_draw.cpp
     ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
     ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(cimgui PUBLIC ext/fips-cimgui)
+target_include_directories(cimgui SYSTEM PUBLIC ext/fips-cimgui)
 
 add_library(imgui
     ext/fips-cimgui/cimgui/imgui/imgui.cpp
@@ -102,7 +101,7 @@ add_library(imgui
     ext/fips-cimgui/cimgui/imgui/imgui_draw.cpp
     ext/fips-cimgui/cimgui/imgui/imgui_tables.cpp
     ext/fips-cimgui/cimgui/imgui/imgui_widgets.cpp)
-target_include_directories(imgui PUBLIC ext/fips-cimgui/cimgui/imgui)
+target_include_directories(imgui SYSTEM PUBLIC ext/fips-cimgui/cimgui/imgui)
 
 add_subdirectory(compile)
 add_subdirectory(functional)
