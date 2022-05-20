@@ -11,6 +11,7 @@ jobs:
           run: |
             cd tests
             test_win.cmd
+          shell: cmd
     mac:
         runs-on: macos-latest
         steps:
@@ -71,3 +72,4 @@ jobs:
           run: |
             cd tests
             test_uwp.cmd
+          shell: cmd
