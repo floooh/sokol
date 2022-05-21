@@ -28,8 +28,7 @@ jobs:
         - uses: seanmiddleditch/gha-setup-ninja@master
         - name: test_ios
           run: |
-            cd tests
-            echo "FIXME!"
+            echo "FIXME!" && exit 10
     linux:
         runs-on: ubuntu-latest
         steps:
@@ -55,8 +54,7 @@ jobs:
             cd workspace
         - name: test_emscripten
           run: |
-            cd tests
-            echo "FIXME!"
+            echo "FIXME!" && exit 10
     android:
         runs-on: ubuntu-latest
         steps:
@@ -67,8 +65,7 @@ jobs:
             java-version: '8'
         - name: test_android
           run: |
-            cd tests
-            echo "FIXME!"
+            echo "FIXME!" && exit 10
     uwp:
         runs-on: windows-latest
         steps:
