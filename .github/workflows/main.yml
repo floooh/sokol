@@ -28,7 +28,8 @@ jobs:
         - uses: seanmiddleditch/gha-setup-ninja@master
         - name: test_ios
           run: |
-            echo "FIXME!" && exit 10
+            cd tests
+            ./test_ios.sh
     linux:
         runs-on: ubuntu-latest
         steps:

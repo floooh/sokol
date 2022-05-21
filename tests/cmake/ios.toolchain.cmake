@@ -1,0 +1,5 @@
+set(CMAKE_SYSTEM_NAME iOS)
+set(CMAKE_OSX_SYSROOT "iphoneos")
+set(CMAKE_XCODE_EFFECTIVE_PLATFORMS "-iphoneos;-iphonesimulator")
+set(CMAKE_XCODE_GENERATE_SCHEME 1)
+add_definitions(-DGLES_SILENCE_DEPRECATION)

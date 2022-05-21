@@ -16,6 +16,35 @@ build() {
     cd ../..
 }
 
+build_arc() {
+    cfg=$1
+    backend=$2
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D USE_ARC:BOOL=ON ../..
+    cmake --build .
+    cd ../..
+}
+
+build_toolchain() {
+    cfg=$1
+    backend=$2
+    toolchain=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D CMAKE_TOOLCHAIN_FILE=$toolchain ../..
+    cmake --build .
+    cd ../..
+}
+
+build_arc_toolchain() {
+    cfg=$1
+    backend=$2
+    toolchain=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -D CMAKE_TOOLCHAIN_FILE=$toolchain ../..
+    cmake --build .
+    cd ../..
+}
+
 runtest() {
     cfg=$1
     cd build/$cfg
