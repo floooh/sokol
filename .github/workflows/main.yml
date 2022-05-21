@@ -16,6 +16,7 @@ jobs:
         runs-on: macos-latest
         steps:
         - uses: actions/checkout@v1
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - name: test_macos
           run: |
             cd tests
@@ -24,6 +25,7 @@ jobs:
         runs-on: macos-latest
         steps:
         - uses: actions/checkout@v1
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - name: test_ios
           run: |
             cd tests
@@ -32,6 +34,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v1
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - name: prepare
           run: |
             sudo apt-get update
@@ -44,6 +47,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v1
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - name: prepare
           run: |
             sudo apt-get install ninja-build
@@ -57,6 +61,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v1
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - uses: actions/setup-java@v1
           with:
             java-version: '8'
