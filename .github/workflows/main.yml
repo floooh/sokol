@@ -48,14 +48,10 @@ jobs:
         steps:
         - uses: actions/checkout@v1
         - uses: seanmiddleditch/gha-setup-ninja@master
-        - name: prepare
-          run: |
-            sudo apt-get install ninja-build
-            mkdir workspace
-            cd workspace
         - name: test_emscripten
           run: |
-            echo "FIXME!" && exit 10
+            cd tests
+            ./test_emscripten.sh
     android:
         runs-on: ubuntu-latest
         steps:

@@ -51,7 +51,7 @@ endif()
 # FIXME: Android, iOS, UWP
 if (EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
-    set(link_flags -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
+    set(link_flags -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1 -s INITIAL_MEMORY=33554432)
 elseif (OSX_IOS)
     set(exe_type MACOSX_BUNDLE)
     if (USE_ARC)
