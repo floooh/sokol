@@ -1,3 +1,4 @@
+set -e
 source test_common.sh
 prepare
 build macos_gl SOKOL_GLCORE33
