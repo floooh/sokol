@@ -65,6 +65,7 @@ elseif (OSX_IOS)
         set(system_libs ${system_libs} "-framework OpenGLES" "-framework GLKit")
     endif()
 elseif (ANDROID)
+    set(system_libs GLESv3 EGL OpenSLES log android)
     # FIXME
 elseif (LINUX)
     set(THREADS_PREFER_PTHREAD_FLAG ON)

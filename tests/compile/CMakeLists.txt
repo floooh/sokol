@@ -1,4 +1,6 @@
 set(c_sources
+    sokol_app.c
+    sokol_glue.c
     sokol_gfx.c
     sokol_time.c
     sokol_args.c
@@ -17,6 +19,8 @@ if (NOT ANDROID AND NOT UWP)
 endif()
 
 set(cxx_sources
+    sokol_app.cc
+    sokol_glue.cc
     sokol_gfx.cc
     sokol_time.cc
     sokol_args.cc
@@ -34,11 +38,19 @@ if (NOT ANDROID AND NOT UWP)
 endif()
 
 if (NOT UWP)
-    add_executable(sokol-compiletest-c ${exe_type} sokol_app.c sokol_glue.c ${c_sources})
+    if (ANDROID)
+        add_library(sokol-compiletest-c SHARED ${c_sources})
+    else()
+        add_executable(sokol-compiletest-c ${exe_type} sokol_app.c sokol_glue.c ${c_sources})
+    endif()
     target_link_libraries(sokol-compiletest-c PUBLIC cimgui)
     configure_c(sokol-compiletest-c)
 endif()
 
-add_executable(sokol-compiletest-cxx ${exe_type} sokol_app.cc sokol_glue.cc ${cxx_sources})
+if (ANDROID)
+    add_library(sokol-compiletest-cxx SHARED ${cxx_sources})
+else()
+    add_executable(sokol-compiletest-cxx ${exe_type} ${cxx_sources})
+endif()
 target_link_libraries(sokol-compiletest-cxx PUBLIC imgui)
 configure_cxx(sokol-compiletest-cxx)

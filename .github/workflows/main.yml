@@ -61,7 +61,8 @@ jobs:
             java-version: '8'
         - name: test_android
           run: |
-            echo "FIXME!" && exit 10
+            cd tests
+            ./test_android.sh
     uwp:
         runs-on: windows-latest
         steps:
