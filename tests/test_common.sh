@@ -52,7 +52,6 @@ build_arc() {
 build_ios() {
     cfg=$1
     backend=$2
-    toolchain=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -G Xcode -D SOKOL_BACKEND=$backend -D CMAKE_SYSTEM_NAME=iOS ../..
     cmake --build . -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
@@ -62,7 +61,6 @@ build_ios() {
 build_arc_ios() {
     cfg=$1
     backend=$2
-    toolchain=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -G Xcode -D SOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -D CMAKE_SYSTEM_NAME=iOS ../..
     cmake --build . -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
