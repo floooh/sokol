@@ -2010,6 +2010,7 @@ _SOKOL_PRIVATE void SLAPIENTRY _saudio_opensles_play_cb(SLPlayItf player, void *
 }
 
 _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
+    _SOKOL_UNUSED(param);
     while (!_saudio.backend.thread_stop)  {
         /* get next output buffer, advance, next buffer. */
         int16_t* out_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
@@ -2069,7 +2070,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     }
 
     /* Create engine */
-    const SLEngineOption opts[] = { SL_ENGINEOPTION_THREADSAFE, SL_BOOLEAN_TRUE };
+    const SLEngineOption opts[] = { { SL_ENGINEOPTION_THREADSAFE, SL_BOOLEAN_TRUE } };
     if (slCreateEngine(&_saudio.backend.engine_obj, 1, opts, 0, NULL, NULL ) != SL_RESULT_SUCCESS) {
         SOKOL_LOG("sokol_audio opensles: slCreateEngine failed");
         _saudio_backend_shutdown();
