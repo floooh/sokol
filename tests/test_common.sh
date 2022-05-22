@@ -17,14 +17,17 @@ setup_emsdk() {
 }
 
 setup_android() {
-    if [[ "$OSTYPE" == "darwin"* ]] ; then
-        sdk_file="sdk-tools-darwin-3859397.zip"
-    else
-        sdk_file="sdk-tools-linux-3859397.zip"
-    fi
     if [ ! -d "build/android_sdk" ] ; then
         mkdir -p build/android_sdk && cd build/android_sdk
+        sdk_file="sdk-tools-linux-3859397.zip"
         wget https://dl.google.com/android/repository/$sdk_file
+        unzip $sdk_file
+        cd tools/bin
+        yes | ./sdkmanager "platforms;android-28"
+        yes | ./sdkmanager "build-tools;29.0.3"
+        yes | ./sdkmanager "platform-tools"
+        yes | ./sdkmanager "ndk-bundle"
+        cd ../../../..
     fi
 }
 
@@ -71,6 +74,15 @@ build_emsc() {
     backend=$2
     mkdir -p build/$cfg && cd build/$cfg
     emcmake cmake -G Ninja -D SOKOL_BACKEND=$backend ../..
+    cmake --build .
+    cd ../..
+}
+
+build_android() {
+    cfg=$1
+    backend=$2
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D ANDROID_ABI=armeabi-v7a -D ANDROID_PLATFORM=android-28 -D CMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ../..
     cmake --build .
     cd ../..
 }
