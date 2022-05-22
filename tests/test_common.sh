@@ -16,6 +16,18 @@ setup_emsdk() {
     source build/emsdk/emsdk_env.sh
 }
 
+setup_android() {
+    if [[ "$OSTYPE" == "darwin"* ]] ; then
+        sdk_file="sdk-tools-darwin-3859397.zip"
+    else
+        sdk_file="sdk-tools-linux-3859397.zip"
+    fi
+    if [ ! -d "build/android_sdk" ] ; then
+        mkdir -p build/android_sdk && cd build/android_sdk
+        wget https://dl.google.com/android/repository/$sdk_file
+    fi
+}
+
 build() {
     cfg=$1
     backend=$2
