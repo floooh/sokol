@@ -21,7 +21,7 @@ setup_android() {
         mkdir -p build/android_sdk && cd build/android_sdk
         sdk_file="sdk-tools-linux-3859397.zip"
         wget --no-verbose https://dl.google.com/android/repository/$sdk_file
-        unzip $sdk_file
+        unzip -q $sdk_file
         cd tools/bin
         yes | ./sdkmanager "platforms;android-28"
         yes | ./sdkmanager "build-tools;29.0.3"
