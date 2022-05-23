@@ -34,8 +34,9 @@ setup_android() {
 build() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend ../..
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D CMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }
@@ -43,8 +44,9 @@ build() {
 build_arc() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend -D USE_ARC:BOOL=ON ../..
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D USE_ARC:BOOL=ON -D CMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }
@@ -52,26 +54,29 @@ build_arc() {
 build_ios() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -G Xcode -D SOKOL_BACKEND=$backend -D CMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     cd ../..
 }
 
 build_arc_ios() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
     cmake -G Xcode -D SOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -D CMAKE_SYSTEM_NAME=iOS ../..
-    cmake --build . -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+    cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     cd ../..
 }
 
 build_emsc() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    emcmake cmake -G Ninja -D SOKOL_BACKEND=$backend ../..
+    emcmake cmake -G Ninja -D SOKOL_BACKEND=$backend -D CMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }
@@ -79,8 +84,9 @@ build_emsc() {
 build_android() {
     cfg=$1
     backend=$2
+    mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend -D ANDROID_ABI=armeabi-v7a -D ANDROID_PLATFORM=android-28 -D CMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake ../..
+    cmake -G Ninja -D SOKOL_BACKEND=$backend -D ANDROID_ABI=armeabi-v7a -D ANDROID_PLATFORM=android-28 -D CMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake -D CMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }

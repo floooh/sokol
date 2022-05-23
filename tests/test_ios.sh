@@ -1,7 +1,11 @@
 set -e
 source test_common.sh
 prepare
-build_ios ios_gl SOKOL_GLES3
-build_ios ios_metal SOKOL_METAL
-build_arc_ios ios_arc_gl SOKOL_GLES3
-build_arc_ios ios_arc_metal SOKOL_METAL
+build_ios ios_gl_debug SOKOL_GLES3 Debug
+build_ios ios_gl_release SOKOL_GLES3 Release
+build_ios ios_metal_debug SOKOL_METAL Debug
+build_ios ios_metal_release SOKOL_METAL Release
+build_arc_ios ios_arc_gl_debug SOKOL_GLES3 Debug
+build_arc_ios ios_arc_gl_release SOKOL_GLES3 Release
+build_arc_ios ios_arc_metal_debug SOKOL_METAL Debug
+build_arc_ios ios_arc_metal_release SOKOL_METAL Release
