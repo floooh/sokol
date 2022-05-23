@@ -23,10 +23,10 @@ setup_android() {
         wget --no-verbose https://dl.google.com/android/repository/$sdk_file
         unzip -q $sdk_file
         cd tools/bin
-        yes | ./sdkmanager "platforms;android-28"
-        yes | ./sdkmanager "build-tools;29.0.3"
-        yes | ./sdkmanager "platform-tools"
-        yes | ./sdkmanager "ndk-bundle"
+        yes | ./sdkmanager "platforms;android-28" >/dev/null
+        yes | ./sdkmanager "build-tools;29.0.3" >/dev/null
+        yes | ./sdkmanager "platform-tools" >/dev/null
+        yes | ./sdkmanager "ndk-bundle" >/dev/null
         cd ../../../..
     fi
 }
