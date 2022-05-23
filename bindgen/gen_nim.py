@@ -47,7 +47,7 @@ const_bitfield_overrides = {
 }
 
 struct_field_type_overrides = {
-    'sapp_event.modifiers': 'sapp_event_modifiers', # note the extra 's' at the end
+    'sapp_event.modifiers': 'sapp_event_modifier', # type declared above
     'sapp_allocator.alloc': 'void * (*)(size_t, void *)',
     'sapp_allocator.free': 'void (*)(void *, void *)',
     'sg_allocator.alloc': 'void * (*)(size_t, void *)',
@@ -413,9 +413,9 @@ def gen_enum(decl, prefix, bitfield=None):
     enum_name_nim = as_nim_type_name(enum_name, prefix)
     l('type')
     if has_force_u32:
-        l(f"  {enum_name_nim}* {{.pure, size:sizeof(cint).}} = enum")
+        l(f"  {enum_name_nim}* {{.pure, size:sizeof(uint32).}} = enum")
     else:
-        l(f"  {enum_name_nim}* {{.pure.}} = enum")
+        l(f"  {enum_name_nim}* {{.pure, size:sizeof(cint).}} = enum")
     if has_explicit_values:
         # Nim requires explicit enum values to be declared in ascending order
         for value in sorted(item_names_by_value):
