@@ -2745,6 +2745,8 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     sapp_desc res = *desc;
     res.sample_count = _sapp_def(res.sample_count, 1);
     res.swap_interval = _sapp_def(res.swap_interval, 1);
+    res.gl_major_version = _sapp_def(res.gl_major_version, 3);
+    res.gl_minor_version = _sapp_def(res.gl_minor_version, 2);
     res.html5_canvas_name = _sapp_def(res.html5_canvas_name, "canvas");
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
     res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
@@ -3476,7 +3478,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         attrs[i++] = NSOpenGLPFAAccelerated;
         attrs[i++] = NSOpenGLPFADoubleBuffer;
         attrs[i++] = NSOpenGLPFAOpenGLProfile;
-        int glVersion = _sapp_def(_sapp.desc.gl_major_version, 3) * 10 + _sapp_def(_sapp.desc.gl_minor_version, 2);
+        const int glVersion = _sapp.desc.gl_major_version * 10 + _sapp.desc.gl_minor_version;
         switch(glVersion) {
             case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
             case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
@@ -6231,8 +6233,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _sapp_fail("WGL: ARB_create_context_profile required!\n");
     }
     const int attrs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_major_version, 3),
-        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_minor_version, 2),
+        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
+        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
         WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
         0, 0
@@ -10156,8 +10158,8 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     }
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
-        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_major_version, 3),
-        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp_def(_sapp.desc.gl_minor_version, 2),
+        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
+        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
         GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
         GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         0, 0
