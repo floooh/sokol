@@ -1,5 +1,17 @@
 ## Updates
 
+- **26-May-2022**: The GL backend in sokol_app.h now allows to override the GL
+  context version via two new items in the ```sapp_desc``` struct:
+  ```sapp_desc.gl_major_version``` and ```sapp_desc.gl_minor_version```. The
+  default GL context version remains at 3.2. Overriding the GL version might make
+  sense if you're not using sokol_app.h together with sokol_gfx.h, or otherwise
+  want to call GL functions directly. Note that this only works for the
+  'desktop GL' backends (Windows, Linux and macOS), but not for the GLES backends
+  (Android, iOS, web). Furthermore, on macOS only the GL versions 3.2 and 4.1
+  are available (plus the special config major=1 minor=0 creates an
+  NSOpenGLProfileVersionLegacy context). In general: use at your risk :) Many
+  thanks to Github user @pplux for the PR!
+
 - **15-May-2022**: The way internal memory allocation can be overridden with
   your own functions has been changed from global macros to callbacks
   provided in the API setup call. For instance in sokol_gfx.h:
