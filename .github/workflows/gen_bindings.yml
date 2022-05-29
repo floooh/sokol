@@ -37,6 +37,8 @@ jobs:
     runs-on: ${{matrix.os}
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
       - uses: goto-bus-stop/setup-zig@v1
         with:
           version: 0.9.0
