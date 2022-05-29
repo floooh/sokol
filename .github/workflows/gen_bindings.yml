@@ -34,7 +34,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{matrix.os}
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -51,5 +51,5 @@ jobs:
         run: |
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-        - name: build
-          run: zig build
+      - name: build
+        run: zig build
