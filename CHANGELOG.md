@@ -1,5 +1,11 @@
 ## Updates
 
+- **29-May-2022**: The code generation scripts for the
+[sokol-nim](https://github.com/floooh/sokol-nim) language bindings have been
+revised and updated, many thanks to Gustav Olsson for the PR! (I'm planning to
+spend a few more days integrating the bindings generation with Github Actions,
+so that it's easier to publish new bindings after updates to the sokol headers).
+
 - **26-May-2022**: The GL backend in sokol_app.h now allows to override the GL
   context version via two new items in the ```sapp_desc``` struct:
   ```sapp_desc.gl_major_version``` and ```sapp_desc.gl_minor_version```. The
