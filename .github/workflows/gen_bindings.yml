@@ -31,6 +31,7 @@ jobs:
           path: bindgen/sokol-nim/src/sokol
           retention-days: 1
   test-zig:
+    needs: generate
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
