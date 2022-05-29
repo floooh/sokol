@@ -1,0 +1,32 @@
+name: Generate Bindings
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
+          path: bindgen/sokol-zig
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+          path: bindgen/sokol-nim
+      - name: generate
+        run: |
+          cd bindgen
+          python3 gen_all.py
+      - name: upload-zig-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: zig-files
+          path: bindgen/sokol-zig/src/sokol
+          retention-days: 1
+      - name: upload-nim-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: nim-files
+          path: bindgen/sokol-nim/src/sokol
+          retention-days: 1
