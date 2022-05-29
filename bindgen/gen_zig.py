@@ -564,6 +564,9 @@ def prepare():
         os.makedirs('sokol-zig/src/sokol/c')
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
+    if not c_prefix in module_names:
+        print(f'warning: skipping generation for {c_prefix} prefix...')
+        return
     module_name = module_names[c_prefix]
     c_source_path = c_source_paths[c_prefix]
     print(f'  {c_header_path} => {module_name}')
