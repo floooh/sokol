@@ -54,3 +54,28 @@ jobs:
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: zig build
+  test-nim:
+    needs: generate
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: jiro4989/setup-nim-action@v1
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+      - uses: actions/download-artifact@v2
+        with:
+          name: nim-files
+          path: src/sokol
+      - name: prepare-linux
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: |
+          nimble install
+          nimble install glm
+          nim c examples/cube.nim
