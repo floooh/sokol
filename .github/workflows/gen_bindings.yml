@@ -2,7 +2,7 @@ name: Generate Bindings
 on: workflow_dispatch
 
 jobs:
-  build:
+  generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
