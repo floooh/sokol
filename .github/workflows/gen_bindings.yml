@@ -76,6 +76,6 @@ jobs:
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: |
-          nimble install
-          nimble install glm
+          nimble install -Y
+          nimble install glm -Y
           nim c examples/cube.nim
