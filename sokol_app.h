@@ -1391,12 +1391,9 @@ typedef struct sapp_icon_desc {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sapp_malloc)(size_t size, void* user_data);
-typedef void(*sapp_free)(void* ptr, void* user_data);
-
 typedef struct sapp_allocator {
-    sapp_malloc alloc;
-    sapp_free free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sapp_allocator;
 

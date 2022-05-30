@@ -307,12 +307,9 @@ extern "C" {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sargs_malloc)(size_t size, void* user_data);
-typedef void(*sargs_free)(void* ptr, void* user_data);
-
 typedef struct sargs_allocator {
-    sargs_malloc alloc;
-    sargs_free free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sargs_allocator;
 

@@ -2441,12 +2441,9 @@ typedef struct sg_context_desc {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sg_malloc)(size_t size, void* user_data);
-typedef void(*sg_free)(void* ptr, void* user_data);
-
 typedef struct sg_allocator {
-    sg_malloc alloc;
-    sg_free free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sg_allocator;
 

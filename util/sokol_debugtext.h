@@ -537,12 +537,9 @@ typedef struct sdtx_context_desc_t {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sdtx_malloc_t)(size_t size, void* user_data);
-typedef void(*sdtx_free_t)(void* ptr, void* user_data);
-
 typedef struct sdtx_allocator_t {
-    sdtx_malloc_t alloc;
-    sdtx_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sdtx_allocator_t;
 

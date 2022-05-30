@@ -221,12 +221,9 @@ extern "C" {
     NOTE that this does not affect memory allocation calls inside
     fontstash.h
 */
-typedef void*(*sfons_malloc_t)(size_t size, void* user_data);
-typedef void(*sfons_free_t)(void* ptr, void* user_data);
-
 typedef struct sfons_allocator_t {
-    sfons_malloc_t alloc;
-    sfons_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sfons_allocator_t;
 

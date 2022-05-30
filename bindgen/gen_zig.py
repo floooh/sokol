@@ -7,7 +7,7 @@
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
 import gen_ir
-import json, re, os, shutil
+import json, re, os, shutil, sys
 
 module_names = {
     'sg_':      'gfx',
@@ -263,7 +263,7 @@ def as_extern_c_arg_type(arg_type, prefix):
     elif is_const_prim_ptr(arg_type):
         return f"[*c]const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        return '??? (as_extern_c_arg_type)'
+        sys.exit(f"Error as_extern_c_arg_type(): {arg_type}")
 
 def as_zig_arg_type(arg_prefix, arg_type, prefix):
     # NOTE: if arg_prefix is None, the result is used as return value
@@ -293,7 +293,7 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     elif is_const_prim_ptr(arg_type):
         return pre + f"*const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        return arg_prefix + "??? (as_zig_arg_type)"
+        sys.exit(f"ERROR as_zig_arg_type(): {arg_type}")
 
 # get C-style arguments of a function pointer as string
 def funcptr_args_c(field_type, prefix):
@@ -317,8 +317,10 @@ def funcptr_res_c(field_type):
         return 'void'
     elif is_const_void_ptr(res_type):
         return '?*const anyopaque'
+    elif is_void_ptr(res_type):
+        return '?*anyopaque'
     else:
-        return '???'
+        sys.exit(f"ERROR funcptr_res_c(): {field_type}")
 
 def funcdecl_args_c(decl, prefix):
     s = ""
@@ -398,8 +400,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
                     zig_type = as_zig_enum_type(array_type, prefix)
                     def_val = '.{}'
                 else:
-                    zig_type = '??? (array type)'
-                    def_val = '???'
+                    sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
                 t0 = f"[{array_nums[0]}]{zig_type}"
                 t0_slice = f"[]const {zig_type}"
                 t1 = f"[_]{zig_type}"
@@ -407,7 +408,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
             elif is_const_void_ptr(array_type):
                 l(f"    {field_name}: [{array_nums[0]}]?*const anyopaque = [_]?*const anyopaque {{ null }} ** {array_nums[0]},")
             else:
-                l(f"//    FIXME: ??? array {field_name}: {field_type} => {array_type} [{array_nums[0]}]")
+                sys.exit(f"ERROR gen_struct: array {field_name}: {field_type} => {array_type} [{array_nums[0]}]")
         elif is_2d_array_type(field_type):
             array_type = extract_array_type(field_type)
             array_nums = extract_array_nums(field_type)
@@ -418,12 +419,11 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
                 zig_type = as_zig_struct_type(array_type, prefix)
                 def_val = ".{ }"
             else:
-                zig_type = "???"
-                def_val = "???"
+                sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
             t0 = f"[{array_nums[0]}][{array_nums[1]}]{zig_type}"
             l(f"    {field_name}: {t0} = [_][{array_nums[1]}]{zig_type}{{[_]{zig_type}{{ {def_val} }}**{array_nums[1]}}}**{array_nums[0]},")
         else:
-            l(f"// FIXME: {field_name}: {field_type};")
+            sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
 
 def gen_consts(decl, prefix):
