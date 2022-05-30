@@ -6,7 +6,7 @@
 #   - reference: https://nim-lang.org/docs/nep1.html
 #-------------------------------------------------------------------------------
 import gen_ir
-import json, re, os, shutil
+import json, re, os, shutil, sys
 
 module_names = {
     'sg_':      'gfx',
@@ -316,7 +316,7 @@ def as_nim_type(ctype, prefix):
         array_nums = extract_array_nums(ctype)
         return f"array[{array_nums}, {as_nim_type(array_ctype, prefix)}]"
     else:
-        l(f"// FIXME: {ctype};")
+        sys.exit(f"ERROR as_nim_type: {ctype}")
 
 def funcptr_args(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
