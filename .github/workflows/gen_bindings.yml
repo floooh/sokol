@@ -88,7 +88,7 @@ jobs:
   deploy-zig:
     needs: test-zig
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -99,12 +99,12 @@ jobs:
           path: src/sokol
       - name: push
         run: |
-          echo "FIXME!"
+          echo "GITHUB.REF: ${{ github.ref }}"
 
   deploy-nim:
     needs: test-nim
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -115,4 +115,4 @@ jobs:
           path: src/sokol
       - name: push
         run: |
-          echo "FIXME!"
+          echo "GITHUB.REF: ${{ github.ref }}"
