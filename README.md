@@ -1,6 +1,6 @@
 # Sokol
 
-[![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
+[![Build Status](/../../actions/workflows/main.yml/badge.svg)](/../../actions)
 
 Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
