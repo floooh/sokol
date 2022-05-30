@@ -87,6 +87,7 @@ jobs:
   # only deploy the bindings for commits on the main branch
   deploy-zig:
     needs: test-zig
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     # if: github.ref == 'refs/heads/main'
     steps:
@@ -103,6 +104,7 @@ jobs:
 
   deploy-nim:
     needs: test-nim
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     # if: github.ref == 'refs/heads/main'
     steps:
