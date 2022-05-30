@@ -1,6 +1,6 @@
 # Sokol
 
-[![Build Status](/../../actions/workflows/build_and_test/badge.svg)](/../../actions)
+[![Build Status](/../../actions/workflows/main.yml/badge.svg)](/../../actions)
 
 Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
