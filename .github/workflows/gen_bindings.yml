@@ -88,7 +88,7 @@ jobs:
   deploy-zig:
     needs: test-zig
     runs-on: ubuntu-latest
-    if: ${{ github.ref == 'refs/head/master' }}
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -104,7 +104,7 @@ jobs:
   deploy-nim:
     needs: test-nim
     runs-on: ubuntu-latest
-    if: ${{ github.ref == 'refs/head/master' }}
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
