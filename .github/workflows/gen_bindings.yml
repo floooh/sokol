@@ -1,4 +1,4 @@
-name: Generate Bindings
+name: Language Bindings
 on: workflow_dispatch
 
 jobs:
@@ -30,6 +30,7 @@ jobs:
           name: nim-files
           path: bindgen/sokol-nim/src/sokol
           retention-days: 1
+
   test-zig:
     needs: generate
     strategy:
@@ -54,6 +55,7 @@ jobs:
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
       - name: build
         run: zig build
+
   test-nim:
     needs: generate
     strategy:
@@ -79,3 +81,36 @@ jobs:
           nimble install -Y
           nimble install glm -Y
           nim c examples/cube.nim
+
+  # only deploy the bindings for commits on the main branch
+  deploy-zig:
+    needs: test-zig
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/head/master' }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
+      - uses: actions/download-artifact@v2
+        with:
+          name: zig-files
+          path: src/sokol
+      - name: push
+        run: |
+          echo "FIXME!"
+
+  deploy-nim:
+    needs: test-nim
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/head/master' }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+      - uses: actions/download-artifact@v2
+        with:
+          name: nim-files
+          path: src/sokol
+      - name: push
+        run: |
+          echo "FIXME!"
