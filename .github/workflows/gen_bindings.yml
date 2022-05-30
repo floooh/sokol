@@ -71,16 +71,18 @@ jobs:
         with:
           name: nim-files
           path: src/sokol
-      - name: prepare-linux
-        if: runner.os == 'Linux'
+      - if: runner.os == 'Linux'
         run: |
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-      - name: build
-        run: |
+      - run: |
           nimble install -Y
           nimble install glm -Y
-          nim c examples/cube.nim
+      # FIXME: this should be solved better
+      - if: runner.os == 'Windows'
+        run: nim c --cc:vcc examples/cube.nim
+      - if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: nim c examples/cube.nim
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
