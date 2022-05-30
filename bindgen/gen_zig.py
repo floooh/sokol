@@ -317,8 +317,10 @@ def funcptr_res_c(field_type):
         return 'void'
     elif is_const_void_ptr(res_type):
         return '?*const anyopaque'
+    elif is_void_ptr(res_type):
+        return '?*anyopaque'
     else:
-        return '???'
+        return '??? (funcptr_res_c)'
 
 def funcdecl_args_c(decl, prefix):
     s = ""

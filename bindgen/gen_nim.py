@@ -48,16 +48,6 @@ const_bitfield_overrides = {
 
 struct_field_type_overrides = {
     'sapp_event.modifiers': 'sapp_event_modifier', # type declared above
-    'sapp_allocator.alloc': 'void * (*)(size_t, void *)',
-    'sapp_allocator.free': 'void (*)(void *, void *)',
-    'sg_allocator.alloc': 'void * (*)(size_t, void *)',
-    'sg_allocator.free': 'void (*)(void *, void *)',
-    'sgl_allocator_t.alloc': 'void * (*)(size_t, void *)',
-    'sgl_allocator_t.free': 'void (*)(void *, void *)',
-    'sdtx_allocator_t.alloc': 'void * (*)(size_t, void *)',
-    'sdtx_allocator_t.free': 'void (*)(void *, void *)',
-    'saudio_allocator.alloc': 'void * (*)(size_t, void *)',
-    'saudio_allocator.free': 'void (*)(void *, void *)',
 }
 
 prim_types = {
