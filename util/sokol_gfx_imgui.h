@@ -665,12 +665,9 @@ typedef struct sg_imgui_caps_t {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sg_imgui_malloc_t)(size_t size, void* user_data);
-typedef void(*sg_imgui_free_t)(void* ptr, void* user_data);
-
 typedef struct sg_imgui_allocator_t {
-    sg_imgui_malloc_t alloc;
-    sg_imgui_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sg_imgui_allocator_t;
 

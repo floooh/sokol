@@ -285,12 +285,9 @@ extern "C" {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*simgui_malloc_t)(size_t size, void* user_data);
-typedef void(*simgui_free_t)(void* ptr, void* user_data);
-
 typedef struct simgui_allocator_t {
-    simgui_malloc_t alloc;
-    simgui_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } simgui_allocator_t;
 

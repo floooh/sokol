@@ -669,12 +669,9 @@ typedef struct sgl_context_desc_t {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sgl_malloc_t)(size_t size, void* user_data);
-typedef void(*sgl_free_t)(void* ptr, void* user_data);
-
 typedef struct sgl_allocator_t {
-    sgl_malloc_t alloc;
-    sgl_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sgl_allocator_t;
 
