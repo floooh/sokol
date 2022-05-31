@@ -295,6 +295,9 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     else:
         sys.exit(f"ERROR as_zig_arg_type(): {arg_type}")
 
+def is_zig_string(zig_type):
+    return zig_type == "[:0]const u8"
+
 # get C-style arguments of a function pointer as string
 def funcptr_args_c(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
@@ -449,7 +452,10 @@ def gen_func_zig(decl, prefix):
     zig_func_name = as_camel_case(check_name_override(decl['name']))
     zig_res_type = funcdecl_result_zig(decl, prefix)
     l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{")
-    if zig_res_type != 'void':
+    if is_zig_string(zig_res_type):
+        # special case: convert C string to Zig string slice
+        s = f"    return cStrToZig({c_func_name}("
+    elif zig_res_type != 'void':
         s = f"    return {c_func_name}("
     else:
         s = f"    {c_func_name}("
@@ -464,6 +470,8 @@ def gen_func_zig(decl, prefix):
             s += f"@ptrCast([*c]const u8,{arg_name})"
         else:
             s += arg_name
+    if is_zig_string(zig_res_type):
+        s += ")"
     s += ");"
     l(s)
     l("}")
@@ -489,6 +497,10 @@ def gen_imports(inp, dep_prefixes):
         l('')
 
 def gen_helpers(inp):
+    l('// helper function to convert a C string to a Zig string slice')
+    l('fn cStrToZig(c_str: [*c]const u8) [:0]const u8 {')
+    l('  return @import("std").mem.span(c_str);')
+    l('}')
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
         l('// helper function to convert "anything" to a Range struct')
         l('pub fn asRange(val: anytype) Range {')
