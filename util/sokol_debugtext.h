@@ -215,7 +215,7 @@
           have to be inside a render pass.
         - Note that character codes <32 are reserved as control characters
           and won't render anything. Currently only the following control
-          characters are implements:
+          characters are implemented:
 
             \r  - carriage return (same as sdtx_pos_x(0))
             \n  - carriage return + line feed (same as stdx_crlf())
