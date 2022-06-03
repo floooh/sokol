@@ -94,13 +94,18 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: floooh/sokol-zig
+          ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
       - uses: actions/download-artifact@v2
         with:
           name: zig-files
           path: src/sokol
-      - name: push
+      - name: "commit and push"
         run: |
-          echo "GITHUB.REF: ${{ github.ref }}"
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add .
+          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.ref }})"
+          git push
 
   deploy-nim:
     needs: test-nim
@@ -111,10 +116,15 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: floooh/sokol-nim
+          ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
       - uses: actions/download-artifact@v2
         with:
           name: nim-files
           path: src/sokol
-      - name: push
+      - name: "commit and push"
         run: |
-          echo "GITHUB.REF: ${{ github.ref }}"
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add .
+          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.ref }})"
+          git push
