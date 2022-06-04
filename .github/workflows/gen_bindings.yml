@@ -103,8 +103,8 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git add -A
-          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-          git push || true
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
 
   deploy-nim:
     needs: test-nim
@@ -124,5 +124,5 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git add -A
-          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-          git push || true
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
