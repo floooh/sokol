@@ -1,4 +1,4 @@
-name: build_and_test
+name: "Build & Test"
 
 on: [push, pull_request]
 
