@@ -89,7 +89,6 @@ jobs:
     needs: test-zig
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    # if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -104,14 +103,13 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git add .
-          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.ref }})"
+          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
 
   deploy-nim:
     needs: test-nim
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    # if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
         with:
@@ -126,5 +124,5 @@ jobs:
           git config user.email "none"
           git config user.name "GH Action"
           git add .
-          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.ref }})"
+          git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
           git push
