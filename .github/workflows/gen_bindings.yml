@@ -102,9 +102,9 @@ jobs:
         run: |
           git config user.email "none"
           git config user.name "GH Action"
-          git add .
+          git add -A
           git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-          git push
+          git push || true
 
   deploy-nim:
     needs: test-nim
@@ -123,6 +123,6 @@ jobs:
         run: |
           git config user.email "none"
           git config user.name "GH Action"
-          git add .
+          git add -A
           git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
-          git push
+          git push || true
