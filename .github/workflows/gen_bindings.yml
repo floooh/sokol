@@ -1,5 +1,6 @@
-name: Generate Bindings
-on: workflow_dispatch
+name: Bindings
+
+on: [push, pull_request]
 
 jobs:
   test-windows:
