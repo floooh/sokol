@@ -2,6 +2,8 @@
 
 [![Build Status](/../../actions/workflows/main.yml/badge.svg)](/../../actions)
 
+[![Language Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml)
+
 Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
