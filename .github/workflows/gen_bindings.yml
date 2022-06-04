@@ -2,7 +2,42 @@ name: Language Bindings
 on: workflow_dispatch
 
 jobs:
-  generate:
+  test-windows:
+      runs-on: windows-latest
+      steps:
+      - uses: actions/checkout@v1
+      - name: test_win
+        run: |
+          cd tests
+          test_win.cmd
+        shell: cmd
+
+  test-mac:
+      runs-on: macos-latest
+      steps:
+      - uses: actions/checkout@v1
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: test_macos
+        run: |
+          cd tests
+          ./test_macos.sh
+
+  test-linux:
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v1
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: prepare
+        run: |
+          sudo apt-get update
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: test_linux
+        run: |
+          cd tests
+          ./test_linux.sh
+
+  gen-bindings:
+    needs: [ test-windows, test-mac, test-linux ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -32,7 +67,7 @@ jobs:
           retention-days: 1
 
   test-zig:
-    needs: generate
+    needs: gen-bindings
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -57,7 +92,7 @@ jobs:
         run: zig build
 
   test-nim:
-    needs: generate
+    needs: gen-bindings
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
