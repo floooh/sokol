@@ -5,7 +5,7 @@ Simple
 cross-platform libraries for C and C++, written in C.
 
 
-[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions)
+[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml)
 
 [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml)
 
