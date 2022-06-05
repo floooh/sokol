@@ -1,12 +1,12 @@
 #-------------------------------------------------------------------------------
-#   Read output of gen_json.py and generate Zig language bindings.
+#   Generate Nim bindings
 #
 #   Nim coding style:
 #   - type identifiers are PascalCase, everything else is camelCase
 #   - reference: https://nim-lang.org/docs/nep1.html
 #-------------------------------------------------------------------------------
 import gen_ir
-import json, re, os, shutil, sys
+import re, os, shutil, sys
 
 module_names = {
     'sg_':      'gfx',
@@ -20,33 +20,33 @@ module_names = {
 }
 
 c_source_paths = {
-    'sg_':      'sokol-nim/src/sokol/gen/sokol_gfx.c',
-    'sapp_':    'sokol-nim/src/sokol/gen/sokol_app.c',
-    'sapp_sg':  'sokol-nim/src/sokol/gen/sokol_glue.c',
-    'stm_':     'sokol-nim/src/sokol/gen/sokol_time.c',
-    'saudio_':  'sokol-nim/src/sokol/gen/sokol_audio.c',
-    'sgl_':     'sokol-nim/src/sokol/gen/sokol_gl.c',
-    'sdtx_':    'sokol-nim/src/sokol/gen/sokol_debugtext.c',
-    'sshape_':  'sokol-nim/src/sokol/gen/sokol_shape.c',
+    'sg_':      'sokol-nim/src/sokol/c/sokol_gfx.c',
+    'sapp_':    'sokol-nim/src/sokol/c/sokol_app.c',
+    'sapp_sg':  'sokol-nim/src/sokol/c/sokol_glue.c',
+    'stm_':     'sokol-nim/src/sokol/c/sokol_time.c',
+    'saudio_':  'sokol-nim/src/sokol/c/sokol_audio.c',
+    'sgl_':     'sokol-nim/src/sokol/c/sokol_gl.c',
+    'sdtx_':    'sokol-nim/src/sokol/c/sokol_debugtext.c',
+    'sshape_':  'sokol-nim/src/sokol/c/sokol_shape.c',
 }
 
-func_name_ignores = [
+ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
 ]
-
-func_name_overrides = {
-    'sgl_error': 'sgl_get_error',   # 'error' is reserved in Zig
-    'sgl_deg': 'sgl_as_degrees',
-    'sgl_rad': 'sgl_as_radians',
-}
 
 # consts that should be converted to Nim enum bitfields, values mimic C type declarations
 const_bitfield_overrides = {
     'SAPP_MODIFIER_': 'sapp_event_modifier',
 }
 
-struct_field_type_overrides = {
+overrides = {
+    'sgl_error': 'sgl_get_error',
+    'sgl_deg': 'sgl_as_degrees',
+    'sgl_rad': 'sgl_as_radians',
+    'SG_BUFFERTYPE_VERTEXBUFFER': 'SG_BUFFERTYPE_VERTEX_BUFFER',
+    'SG_BUFFERTYPE_INDEXBUFFER': 'SG_BUFFERTYPE_INDEX_BUFFER',
+    'SG_ACTION_DONTCARE': 'SG_ACTION_DONT_CARE',
     'sapp_event.modifiers': 'sapp_event_modifier', # type declared above
 }
 
@@ -155,25 +155,21 @@ def as_nim_type_name(s, prefix):
     if not s.startswith(prefix) and dep in module_names:
         outp = module_names[dep] + '.'
     for part in parts[1:]:
+        # ignore '_t' type postfix
         if (part != 't'):
             outp += part.capitalize()
     return outp
 
-def check_struct_field_type_override(struct_name, field_name, orig_type):
-    s = f"{struct_name}.{field_name}"
-    if s in struct_field_type_overrides:
-        return struct_field_type_overrides[s]
+def check_override(name, default=None):
+    if name in overrides:
+        return overrides[name]
+    elif default is None:
+        return name
     else:
-        return orig_type
+        return default
 
-def check_func_name_ignore(func_name):
-    return func_name in func_name_ignores
-
-def check_func_name_override(func_name):
-    if func_name in func_name_overrides:
-        return func_name_overrides[func_name]
-    else:
-        return func_name
+def check_ignore(name):
+    return name in ignores
 
 def is_power_of_two(val):
     return val == 0 or val & (val - 1) == 0
@@ -186,12 +182,6 @@ def check_consts_bitfield_override(decl):
             return const_bitfield_overrides[override]
     return None
 
-def trim_prefix(s, prefix):
-    outp = s;
-    if outp.lower().startswith(prefix.lower()):
-        outp = outp[len(prefix):]
-    return outp
-
 def wrap_keywords(s):
     if s in keywords:
         return f'`{s}`'
@@ -199,32 +189,25 @@ def wrap_keywords(s):
         return s
 
 # prefix_bla_blub => blaBlub
-def as_camel_case(s, prefix = ""):
-    parts = trim_prefix(s, prefix).lower().split('_')
+def as_camel_case(s, prefix):
+    outp = s.lower()
+    if outp.startswith(prefix):
+        outp = outp[len(prefix):]
+    parts = outp.lstrip('_').split('_')
     outp = parts[0]
     for part in parts[1:]:
-        outp += part.capitalize()
-    return wrap_keywords(outp)
-
-# prefix_bla_blub => BlaBlub
-def as_pascal_case(s, prefix):
-    parts = trim_prefix(s, prefix).lower().split('_')
-    outp = ""
-    for part in parts:
         outp += part.capitalize()
     return wrap_keywords(outp)
 
 # PREFIX_ENUM_BLA_BLO => Bla, _PREFIX_ENUM_BLA_BLO => blaBlo
 def as_enum_item_name(s):
-    outp = s
-    if outp.startswith('_'):
-        outp = outp[1:]
+    outp = s.lstrip('_')
     parts = outp.lower().split('_')[2:]
     outp = parts[0]
     for part in parts[1:]:
         outp += part.capitalize()
     if outp[0].isdigit():
-        outp = 'n' + outp
+        outp = '_' + outp
     return wrap_keywords(outp)
 
 def enum_default_item(enum_name):
@@ -307,7 +290,7 @@ def as_nim_type(ctype, prefix):
         return f"ptr {as_nim_type(extract_ptr_type(ctype), prefix)}"
     elif is_func_ptr(ctype):
         args = funcptr_args(ctype, prefix)
-        res = funcptr_res(ctype, prefix)
+        res = funcptr_result(ctype, prefix)
         if res != "":
             res = ":" + res
         return f"proc({args}){res} {{.cdecl.}}"
@@ -335,50 +318,49 @@ def funcptr_args(field_type, prefix):
         s = ""
     return s
 
-def funcptr_res(field_type, prefix):
+def funcptr_result(field_type, prefix):
     ctype = field_type[:field_type.index('(*)')].strip()
     return as_nim_type(ctype, prefix)
 
 def funcdecl_args(decl, prefix):
     s = ""
+    func_name = decl['name']
     for param_decl in decl['params']:
         if s != "":
             s += ", "
         arg_name = param_decl['name']
-        arg_type = param_decl['type']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
         s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
     return s
 
-def funcdecl_res(decl, prefix):
+def funcdecl_result(decl, prefix):
+    func_name = decl['name']
     decl_type = decl['type']
-    res_type = decl_type[:decl_type.index('(')].strip()
-    nim_res_type = as_nim_type(res_type, prefix)
+    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
+    nim_res_type = as_nim_type(result_type, prefix)
     if nim_res_type == "":
         nim_res_type = "void"
     return nim_res_type
 
-def gen_struct(decl, prefix, use_raw_name=False):
-    struct_name = decl['name']
-    nim_type = struct_name if use_raw_name else as_nim_type_name(struct_name, prefix)
+def gen_struct(decl, prefix):
+    struct_name = check_override(decl['name'])
+    nim_type = as_nim_type_name(struct_name, prefix)
     l(f"type {nim_type}* = object")
-    is_public = True
     for field in decl['fields']:
-        field_name = field['name']
-        if field_name == "__pad":
-            # FIXME: these should be guarded by SOKOL_ZIG_BINDINGS, but aren't?
-            continue
-        is_public = not field_name.startswith("_")
-        field_name = as_camel_case(field_name, "_")
-        if is_public:
+        field_name = check_override(field['name'])
+        field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
+        is_private = field_name.startswith('_')
+        field_name = as_camel_case(field_name, prefix)
+        if not is_private:
             field_name += "*"
-        field_type = check_struct_field_type_override(decl['name'], field['name'], field['type'])
         l(f"  {field_name}:{as_nim_type(field_type, prefix)}")
     l("")
 
 def gen_consts(decl, prefix):
     l("const")
     for item in decl['items']:
-        l(f"  {as_camel_case(trim_prefix(item['name'], prefix), prefix)}* = {item['value']}")
+        item_name = check_override(item['name'])
+        l(f"  {as_camel_case(item_name, prefix)}* = {item['value']}")
     l("")
 
 def gen_enum(decl, prefix, bitfield=None):
@@ -387,10 +369,10 @@ def gen_enum(decl, prefix, bitfield=None):
     has_force_u32 = False
     has_explicit_values = False
     for item in decl['items']:
-        itemName = item['name']
-        if itemName.endswith("_FORCE_U32"):
+        item_name = check_override(item['name'])
+        if item_name.endswith("_FORCE_U32"):
             has_force_u32 = True
-        elif itemName.endswith("_NUM"):
+        elif item_name.endswith("_NUM"):
             continue
         else:
             if 'value' in item:
@@ -398,7 +380,7 @@ def gen_enum(decl, prefix, bitfield=None):
                 value = int(item['value'])
             else:
                 value += 1
-            item_names_by_value[value] = as_enum_item_name(item['name']);
+            item_names_by_value[value] = as_enum_item_name(item_name)
     enum_name = bitfield if bitfield is not None else decl['name']
     enum_name_nim = as_nim_type_name(enum_name, prefix)
     l('type')
@@ -421,8 +403,8 @@ def gen_enum(decl, prefix, bitfield=None):
 def gen_func_nim(decl, prefix):
     c_func_name = decl['name']
     nim_func_name = as_camel_case(decl['name'], prefix)
-    nim_res_type = funcdecl_res(decl, prefix)
-    l(f"proc {nim_func_name}*({funcdecl_args(decl, prefix)}):{funcdecl_res(decl, prefix)} {{.cdecl, importc:\"{decl['name']}\".}}")
+    nim_res_type = funcdecl_result(decl, prefix)
+    l(f"proc {nim_func_name}*({funcdecl_args(decl, prefix)}):{funcdecl_result(decl, prefix)} {{.cdecl, importc:\"{decl['name']}\".}}")
     l("")
 
 def pre_parse(inp):
@@ -463,20 +445,20 @@ def gen_module(inp, dep_prefixes):
                     gen_enum(decl, prefix, bitfield=bitfield)
                 else:
                     gen_consts(decl, prefix)
-            elif kind == 'enum':
-                gen_enum(decl, prefix)
-            elif kind == 'struct':
-                gen_struct(decl, prefix)
-            elif kind == 'func':
-                if not check_func_name_ignore(decl['name']):
+            elif not check_ignore(decl['name']):
+                if kind == 'struct':
+                    gen_struct(decl, prefix)
+                elif kind == 'enum':
+                    gen_enum(decl, prefix)
+                elif kind == 'func':
                     gen_func_nim(decl, prefix)
 
 def prepare():
     print('Generating nim bindings:')
     if not os.path.isdir('sokol-nim/src/sokol'):
         os.makedirs('sokol-nim/src/sokol')
-    if not os.path.isdir('sokol-nim/src/sokol/gen'):
-        os.makedirs('sokol-nim/src/sokol/gen')
+    if not os.path.isdir('sokol-nim/src/sokol/c'):
+        os.makedirs('sokol-nim/src/sokol/c')
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
@@ -487,18 +469,10 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     c_source_path = c_source_paths[c_prefix]
     print(f'  {c_header_path} => {module_name}')
     reset_globals()
-    shutil.copyfile(c_header_path, f'sokol-nim/src/sokol/gen/{os.path.basename(c_header_path)}')
+    shutil.copyfile(c_header_path, f'sokol-nim/src/sokol/c/{os.path.basename(c_header_path)}')
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-nim/src/sokol/{ir['module']}.nim"
-
-    ## some changes for readability
-    out_lines = out_lines.replace("pixelformatInfo", "pixelFormatInfo")
-    out_lines = out_lines.replace(" dontcare,", " dontCare,")
-    out_lines = out_lines.replace(" vertexbuffer,", " vertexBuffer,")
-    out_lines = out_lines.replace(" indexbuffer,", " indexBuffer,")
-    out_lines = out_lines.replace(" n2d,", " plane,")
-    out_lines = out_lines.replace(" n3d,", " volume,")
 
     ## include extensions in generated code
     l("# Nim-specific API extensions")
