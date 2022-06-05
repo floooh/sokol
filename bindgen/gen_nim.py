@@ -41,13 +41,25 @@ const_bitfield_overrides = {
 }
 
 overrides = {
-    'sgl_error': 'sgl_get_error',
-    'sgl_deg': 'sgl_as_degrees',
-    'sgl_rad': 'sgl_as_radians',
-    'SG_BUFFERTYPE_VERTEXBUFFER': 'SG_BUFFERTYPE_VERTEX_BUFFER',
-    'SG_BUFFERTYPE_INDEXBUFFER': 'SG_BUFFERTYPE_INDEX_BUFFER',
-    'SG_ACTION_DONTCARE': 'SG_ACTION_DONT_CARE',
-    'sapp_event.modifiers': 'sapp_event_modifier', # type declared above
+    'sgl_error':                    'sgl_get_error',
+    'sgl_deg':                      'sgl_as_degrees',
+    'sgl_rad':                      'sgl_as_radians',
+    'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
+    'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
+    'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
+    'SAPP_KEYCODE_0':               'SAPP_KEYCODE_DIGIT_0',
+    'SAPP_KEYCODE_1':               'SAPP_KEYCODE_DIGIT_1',
+    'SAPP_KEYCODE_2':               'SAPP_KEYCODE_DIGIT_2',
+    'SAPP_KEYCODE_3':               'SAPP_KEYCODE_DIGIT_3',
+    'SAPP_KEYCODE_4':               'SAPP_KEYCODE_DIGIT_4',
+    'SAPP_KEYCODE_5':               'SAPP_KEYCODE_DIGIT_5',
+    'SAPP_KEYCODE_6':               'SAPP_KEYCODE_DIGIT_6',
+    'SAPP_KEYCODE_7':               'SAPP_KEYCODE_DIGIT_7',
+    'SAPP_KEYCODE_8':               'SAPP_KEYCODE_DIGIT_8',
+    'SAPP_KEYCODE_9':               'SAPP_KEYCODE_DIGIT_9',
+    'SG_IMAGETYPE_2D':              'SG_IMAGETYPE_TWO_DEE',
+    'SG_IMAGETYPE_3D':              'SG_IMAGETYPE_THREE_DEE',
+    'sapp_event.modifiers':         'sapp_event_modifier', # type declared above
 }
 
 prim_types = {
@@ -401,10 +413,9 @@ def gen_enum(decl, prefix, bitfield=None):
     l("")
 
 def gen_func_nim(decl, prefix):
-    c_func_name = decl['name']
-    nim_func_name = as_camel_case(decl['name'], prefix)
+    nim_func_name = as_camel_case(check_override(decl['name']), prefix)
     nim_res_type = funcdecl_result(decl, prefix)
-    l(f"proc {nim_func_name}*({funcdecl_args(decl, prefix)}):{funcdecl_result(decl, prefix)} {{.cdecl, importc:\"{decl['name']}\".}}")
+    l(f"proc {nim_func_name}*({funcdecl_args(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{decl['name']}\".}}")
     l("")
 
 def pre_parse(inp):
