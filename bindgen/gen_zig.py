@@ -1,5 +1,5 @@
 #-------------------------------------------------------------------------------
-#   Read output of gen_json.py and generate Zig language bindings.
+#   Generate Zig bindings.
 #
 #   Zig coding style:
 #   - types are PascalCase
@@ -29,21 +29,18 @@ c_source_paths = {
     'sshape_':  'sokol-zig/src/sokol/c/sokol_shape.c',
 }
 
-name_ignores = [
+ignores = [
     'sdtx_printf',
     'sdtx_vprintf',
     'sg_install_trace_hooks',
     'sg_trace_hooks',
 ]
 
-name_overrides = {
-    'sgl_error':    'sgl_get_error',   # 'error' is reserved in Zig
-    'sgl_deg':      'sgl_as_degrees',
-    'sgl_rad':      'sgl_as_radians'
-}
-
 # NOTE: syntax for function results: "func_name.RESULT"
-type_overrides = {
+overrides = {
+    'sgl_error':                            'sgl_get_error',   # 'error' is reserved in Zig
+    'sgl_deg':                              'sgl_as_degrees',
+    'sgl_rad':                              'sgl_as_radians',
     'sg_context_desc.color_format':         'int',
     'sg_context_desc.depth_format':         'int',
     'sg_apply_uniforms.ub_index':           'uint32_t',
@@ -122,6 +119,7 @@ def as_zig_struct_type(s, prefix):
     parts = s.lower().split('_')
     outp = '' if s.startswith(prefix) else f'{parts[0]}.'
     for part in parts[1:]:
+        # ignore '_t' type postfix
         if (part != 't'):
             outp += part.capitalize()
     return outp
@@ -135,21 +133,16 @@ def as_zig_enum_type(s, prefix):
             outp += part.capitalize()
     return outp
 
-def check_type_override(func_or_struct_name, field_or_arg_name, orig_type):
-    s = f"{func_or_struct_name}.{field_or_arg_name}"
-    if s in type_overrides:
-        return type_overrides[s]
-    else:
-        return orig_type
-
-def check_name_override(name):
-    if name in name_overrides:
-        return name_overrides[name]
-    else:
+def check_override(name, default=None):
+    if name in overrides:
+        return overrides[name]
+    elif default is None:
         return name
+    else:
+        return default
 
-def check_name_ignore(name):
-    return name in name_ignores
+def check_ignore(name):
+    return name in ignores
 
 # PREFIX_BLA_BLUB to bla_blub
 def as_snake_case(s, prefix):
@@ -159,8 +152,11 @@ def as_snake_case(s, prefix):
     return outp
 
 # prefix_bla_blub => blaBlub
-def as_camel_case(s):
-    parts = s.lower().split('_')[1:]
+def as_camel_case(s, prefix):
+    outp = s.lower()
+    if outp.startswith(prefix):
+        outp = outp[len(prefix):]
+    parts = outp.split('_')
     outp = parts[0]
     for part in parts[1:]:
         outp += part.capitalize()
@@ -168,9 +164,7 @@ def as_camel_case(s):
 
 # PREFIX_ENUM_BLA => Bla, _PREFIX_ENUM_BLA => Bla
 def as_enum_item_name(s):
-    outp = s
-    if outp.startswith('_'):
-        outp = outp[1:]
+    outp = s.lstrip('_')
     parts = outp.split('_')[2:]
     outp = '_'.join(parts)
     if outp[0].isdigit():
@@ -314,7 +308,7 @@ def funcptr_args_c(field_type, prefix):
     return s
 
 # get C-style result of a function pointer as string
-def funcptr_res_c(field_type):
+def funcptr_result_c(field_type):
     res_type = field_type[:field_type.index('(*)')].strip()
     if res_type == 'void':
         return 'void'
@@ -323,7 +317,7 @@ def funcptr_res_c(field_type):
     elif is_void_ptr(res_type):
         return '?*anyopaque'
     else:
-        sys.exit(f"ERROR funcptr_res_c(): {field_type}")
+        sys.exit(f"ERROR funcptr_result_c(): {field_type}")
 
 def funcdecl_args_c(decl, prefix):
     s = ""
@@ -332,7 +326,7 @@ def funcdecl_args_c(decl, prefix):
         if s != "":
             s += ", "
         param_name = param_decl['name']
-        param_type = check_type_override(func_name, param_name, param_decl['type'])
+        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
         s += as_extern_c_arg_type(param_type, prefix)
     return s
 
@@ -343,33 +337,30 @@ def funcdecl_args_zig(decl, prefix):
         if s != "":
             s += ", "
         param_name = param_decl['name']
-        param_type = check_type_override(func_name, param_name, param_decl['type'])
+        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
         s += f"{as_zig_arg_type(f'{param_name}: ', param_type, prefix)}"
     return s
 
 def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
-    result_type = check_type_override(func_name, 'RESULT', decl_type[:decl_type.index('(')].strip())
+    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
     return as_extern_c_arg_type(result_type, prefix)
 
 def funcdecl_result_zig(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
-    result_type = check_type_override(func_name, 'RESULT', decl_type[:decl_type.index('(')].strip())
+    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
     zig_res_type = as_zig_arg_type(None, result_type, prefix)
-    if zig_res_type == "":
-        zig_res_type = "void"
     return zig_res_type
 
-def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_extern=True):
-    struct_name = decl['name']
-    zig_type = struct_name if use_raw_name else as_zig_struct_type(struct_name, prefix)
-    l(f"pub const {zig_type} = {'extern ' if use_extern else ''}struct {{")
+def gen_struct(decl, prefix):
+    struct_name = check_override(decl['name'])
+    zig_type = as_zig_struct_type(struct_name, prefix)
+    l(f"pub const {zig_type} = extern struct {{")
     for field in decl['fields']:
-        field_name = field['name']
-        field_type = field['type']
-        field_type = check_type_override(struct_name, field_name, field_type)
+        field_name = check_override(field['name'])
+        field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
         if is_prim_type(field_type):
             l(f"    {field_name}: {as_zig_prim_type(field_type)} = {type_default_value(field_type)},")
         elif is_struct_type(field_type):
@@ -385,10 +376,7 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(extract_ptr_type(field_type))} = null,")
         elif is_func_ptr(field_type):
-            if callconvc_funcptrs:
-                l(f"    {field_name}: ?fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_res_c(field_type)} = null,")
-            else:
-                l(f"    {field_name}: ?fn({funcptr_args_c(field_type, prefix)}) {funcptr_res_c(field_type)} = null,")
+            l(f"    {field_name}: ?fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)} = null,")
         elif is_1d_array_type(field_type):
             array_type = extract_array_type(field_type)
             array_nums = extract_array_nums(field_type)
@@ -431,12 +419,14 @@ def gen_struct(decl, prefix, callconvc_funcptrs = True, use_raw_name=False, use_
 
 def gen_consts(decl, prefix):
     for item in decl['items']:
-        l(f"pub const {as_snake_case(item['name'], prefix)} = {item['value']};")
+        item_name = check_override(item['name'])
+        l(f"pub const {as_snake_case(item_name, prefix)} = {item['value']};")
 
 def gen_enum(decl, prefix):
-    l(f"pub const {as_zig_enum_type(decl['name'], prefix)} = enum(i32) {{")
+    enum_name = check_override(decl['name'])
+    l(f"pub const {as_zig_enum_type(enum_name, prefix)} = enum(i32) {{")
     for item in decl['items']:
-        item_name = as_enum_item_name(item['name'])
+        item_name = as_enum_item_name(check_override(item['name']))
         if item_name != "FORCE_U32":
             if 'value' in item:
                 l(f"    {item_name} = {item['value']},")
@@ -449,7 +439,7 @@ def gen_func_c(decl, prefix):
 
 def gen_func_zig(decl, prefix):
     c_func_name = decl['name']
-    zig_func_name = as_camel_case(check_name_override(decl['name']))
+    zig_func_name = as_camel_case(check_override(decl['name']), prefix)
     zig_res_type = funcdecl_result_zig(decl, prefix)
     l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{")
     if is_zig_string(zig_res_type):
@@ -559,7 +549,7 @@ def gen_module(inp, dep_prefixes):
             kind = decl['kind']
             if kind == 'consts':
                 gen_consts(decl, prefix)
-            elif not check_name_ignore(decl['name']):
+            elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
                 elif kind == 'enum':
