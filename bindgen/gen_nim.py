@@ -283,7 +283,7 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
-def as_nim_type(ctype, prefix):
+def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     if ctype == "void":
         return ""
     elif is_prim_type(ctype):
@@ -297,7 +297,11 @@ def as_nim_type(ctype, prefix):
     elif is_void_ptr(ctype) or is_const_void_ptr(ctype):
         return "pointer"
     elif is_const_struct_ptr(ctype):
-        return f"ptr {as_nim_type(extract_ptr_type(ctype), prefix)}"
+        nim_type = as_nim_type(extract_ptr_type(ctype), prefix)
+        if struct_ptr_as_value:
+            return f"{nim_type}"
+        else:
+            return f"ptr {nim_type}"
     elif is_prim_ptr(ctype) or is_const_prim_ptr(ctype):
         return f"ptr {as_nim_type(extract_ptr_type(ctype), prefix)}"
     elif is_func_ptr(ctype):
@@ -334,7 +338,8 @@ def funcptr_result(field_type, prefix):
     ctype = field_type[:field_type.index('(*)')].strip()
     return as_nim_type(ctype, prefix)
 
-def funcdecl_args(decl, prefix):
+# returns C prototype compatible function args (with pointers)
+def funcdecl_args_c(decl, prefix):
     s = ""
     func_name = decl['name']
     for param_decl in decl['params']:
@@ -343,6 +348,18 @@ def funcdecl_args(decl, prefix):
         arg_name = param_decl['name']
         arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
         s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
+    return s
+
+# returns Nim function args (pass structs by value)
+def funcdecl_args_nim(decl, prefix):
+    s = ""
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != "":
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
+        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
     return s
 
 def funcdecl_result(decl, prefix):
@@ -415,7 +432,20 @@ def gen_enum(decl, prefix, bitfield=None):
 def gen_func_nim(decl, prefix):
     nim_func_name = as_camel_case(check_override(decl['name']), prefix)
     nim_res_type = funcdecl_result(decl, prefix)
-    l(f"proc {nim_func_name}*({funcdecl_args(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{decl['name']}\".}}")
+    l(f"proc c_{nim_func_name}({funcdecl_args_c(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{decl['name']}\".}}")
+    l(f"proc {nim_func_name}*({funcdecl_args_nim(decl, prefix)}):{nim_res_type} =")
+    s = f"    c_{nim_func_name}("
+    for i, param_decl in enumerate(decl['params']):
+        if i > 0:
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = param_decl['type']
+        if is_const_struct_ptr(arg_type):
+            s += f"unsafeAddr({arg_name})"
+        else:
+            s += arg_name
+    s += ")"
+    l(s)
     l("")
 
 def pre_parse(inp):
