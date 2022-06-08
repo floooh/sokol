@@ -273,7 +273,7 @@ def type_default_value(s):
 def extract_array_type(s):
     return s[:s.find('[')].strip() + s[s.find(']')+1:].strip()
 
-def extract_array_nums(s):
+def extract_array_sizes(s):
     return s[s.find('[')+1:s.find(']')].strip()
 
 def extract_ptr_type(s):
@@ -312,8 +312,8 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
         return f"proc({args}){res} {{.cdecl.}}"
     elif is_array_type(ctype):
         array_ctype = extract_array_type(ctype)
-        array_nums = extract_array_nums(ctype)
-        return f"array[{array_nums}, {as_nim_type(array_ctype, prefix)}]"
+        array_sizes = extract_array_sizes(ctype)
+        return f"array[{array_sizes}, {as_nim_type(array_ctype, prefix)}]"
     else:
         sys.exit(f"ERROR as_nim_type: {ctype}")
 
@@ -448,6 +448,13 @@ def gen_func_nim(decl, prefix):
     l(s)
     l("")
 
+def gen_struct_array_converters(decl):
+    for field in decl['fields']:
+        if is_array_type(field['type']):
+            array_type = extract_array_type(field['type'])
+            if not is_prim_type(array_type):
+                print(f"struct: {decl['name']}, field: {field['name']}, type: {field['type']}")
+
 def pre_parse(inp):
     global struct_types
     global enum_types
@@ -489,6 +496,7 @@ def gen_module(inp, dep_prefixes):
             elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
+                    gen_struct_array_converters(decl)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
                 elif kind == 'func':
