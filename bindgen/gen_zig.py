@@ -7,7 +7,7 @@
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
 import gen_ir
-import json, re, os, shutil, sys
+import re, os, shutil, sys
 
 module_names = {
     'sg_':      'gfx',
@@ -225,7 +225,7 @@ def type_default_value(s):
 def extract_array_type(s):
     return s[:s.index('[')].strip()
 
-def extract_array_nums(s):
+def extract_array_sizes(s):
     return s[s.index('['):].replace('[', ' ').replace(']', ' ').split()
 
 def extract_ptr_type(s):
@@ -379,7 +379,7 @@ def gen_struct(decl, prefix):
             l(f"    {field_name}: ?fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)} = null,")
         elif is_1d_array_type(field_type):
             array_type = extract_array_type(field_type)
-            array_nums = extract_array_nums(field_type)
+            array_sizes = extract_array_sizes(field_type)
             if is_prim_type(array_type) or is_struct_type(array_type):
                 if is_prim_type(array_type):
                     zig_type = as_zig_prim_type(array_type)
@@ -392,17 +392,17 @@ def gen_struct(decl, prefix):
                     def_val = '.{}'
                 else:
                     sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
-                t0 = f"[{array_nums[0]}]{zig_type}"
+                t0 = f"[{array_sizes[0]}]{zig_type}"
                 t0_slice = f"[]const {zig_type}"
                 t1 = f"[_]{zig_type}"
-                l(f"    {field_name}: {t0} = {t1}{{{def_val}}} ** {array_nums[0]},")
+                l(f"    {field_name}: {t0} = {t1}{{{def_val}}} ** {array_sizes[0]},")
             elif is_const_void_ptr(array_type):
-                l(f"    {field_name}: [{array_nums[0]}]?*const anyopaque = [_]?*const anyopaque {{ null }} ** {array_nums[0]},")
+                l(f"    {field_name}: [{array_sizes[0]}]?*const anyopaque = [_]?*const anyopaque {{ null }} ** {array_sizes[0]},")
             else:
-                sys.exit(f"ERROR gen_struct: array {field_name}: {field_type} => {array_type} [{array_nums[0]}]")
+                sys.exit(f"ERROR gen_struct: array {field_name}: {field_type} => {array_type} [{array_sizes[0]}]")
         elif is_2d_array_type(field_type):
             array_type = extract_array_type(field_type)
-            array_nums = extract_array_nums(field_type)
+            array_sizes = extract_array_sizes(field_type)
             if is_prim_type(array_type):
                 zig_type = as_zig_prim_type(array_type)
                 def_val = type_default_value(array_type)
@@ -411,8 +411,8 @@ def gen_struct(decl, prefix):
                 def_val = ".{ }"
             else:
                 sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
-            t0 = f"[{array_nums[0]}][{array_nums[1]}]{zig_type}"
-            l(f"    {field_name}: {t0} = [_][{array_nums[1]}]{zig_type}{{[_]{zig_type}{{ {def_val} }}**{array_nums[1]}}}**{array_nums[0]},")
+            t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{zig_type}"
+            l(f"    {field_name}: {t0} = [_][{array_sizes[1]}]{zig_type}{{[_]{zig_type}{{ {def_val} }}**{array_sizes[1]}}}**{array_sizes[0]},")
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type};")
     l("};")
