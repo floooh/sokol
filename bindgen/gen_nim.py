@@ -283,6 +283,27 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
+def funcptr_args(field_type, prefix):
+    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
+    s = ""
+    n = 0
+    for token in tokens:
+        n += 1
+        arg_ctype = token.strip()
+        if s != "":
+            s += ", "
+        arg_nimtype = as_nim_type(arg_ctype, prefix)
+        if arg_nimtype == "":
+            return "" # fun(void)
+        s += f"a{n}:{arg_nimtype}"
+    if s == "a1:void":
+        s = ""
+    return s
+
+def funcptr_result(field_type, prefix):
+    ctype = field_type[:field_type.index('(*)')].strip()
+    return as_nim_type(ctype, prefix)
+
 def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     if ctype == "void":
         return ""
@@ -317,72 +338,26 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     else:
         sys.exit(f"ERROR as_nim_type: {ctype}")
 
-def funcptr_args(field_type, prefix):
-    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
-    s = ""
-    n = 0
-    for token in tokens:
-        n += 1
-        arg_ctype = token.strip()
-        if s != "":
-            s += ", "
-        arg_nimtype = as_nim_type(arg_ctype, prefix)
-        if arg_nimtype == "":
-            return "" # fun(void)
-        s += f"a{n}:{arg_nimtype}"
-    if s == "a1:void":
-        s = ""
-    return s
+def as_nim_struct_name(struct_decl, prefix):
+    struct_name = check_override(struct_decl['name'])
+    nim_type = f'{as_nim_type_name(struct_name, prefix)}'
+    return nim_type
 
-def funcptr_result(field_type, prefix):
-    ctype = field_type[:field_type.index('(*)')].strip()
-    return as_nim_type(ctype, prefix)
-
-# returns C prototype compatible function args (with pointers)
-def funcdecl_args_c(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
-    return s
-
-# returns Nim function args (pass structs by value)
-def funcdecl_args_nim(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
-    return s
-
-def funcdecl_result(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    nim_res_type = as_nim_type(result_type, prefix)
-    if nim_res_type == "":
-        nim_res_type = "void"
-    return nim_res_type
-
-def gen_struct(decl, prefix):
-    struct_name = check_override(decl['name'])
-    nim_type = as_nim_type_name(struct_name, prefix)
-    l(f"type {nim_type}* = object")
-    for field in decl['fields']:
-        field_name = check_override(field['name'])
-        field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
-        is_private = field_name.startswith('_')
-        field_name = as_camel_case(field_name, prefix)
+def as_nim_field_name(field_decl, prefix, check_private=True):
+    field_name = as_camel_case(check_override(field_decl['name']), prefix)
+    if check_private:
+        is_private = field_decl['name'].startswith('_')
         if not is_private:
             field_name += "*"
-        l(f"  {field_name}:{as_nim_type(field_type, prefix)}")
+    return field_name
+
+def as_nim_field_type(struct_decl, field_decl, prefix):
+    return as_nim_type(check_override(f"{struct_decl['name']}.{field_decl['name']}", default=field_decl['type']), prefix)
+
+def gen_struct(decl, prefix):
+    l(f"type {as_nim_struct_name(decl, prefix)}* = object")
+    for field in decl['fields']:
+        l(f"  {as_nim_field_name(field, prefix)}:{as_nim_field_type(decl, field, prefix)}")
     l("")
 
 def gen_consts(decl, prefix):
@@ -429,6 +404,39 @@ def gen_enum(decl, prefix, bitfield=None):
         l(f"  {enum_name_nim}s = set[{enum_name_nim}]")
     l("")
 
+# returns C prototype compatible function args (with pointers)
+def funcdecl_args_c(decl, prefix):
+    s = ""
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != "":
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
+        s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
+    return s
+
+# returns Nim function args (pass structs by value)
+def funcdecl_args_nim(decl, prefix):
+    s = ""
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != "":
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
+        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
+    return s
+
+def funcdecl_result(decl, prefix):
+    func_name = decl['name']
+    decl_type = decl['type']
+    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
+    nim_res_type = as_nim_type(result_type, prefix)
+    if nim_res_type == "":
+        nim_res_type = "void"
+    return nim_res_type
+
 def gen_func_nim(decl, prefix):
     nim_func_name = as_camel_case(check_override(decl['name']), prefix)
     nim_res_type = funcdecl_result(decl, prefix)
@@ -448,12 +456,16 @@ def gen_func_nim(decl, prefix):
     l(s)
     l("")
 
-def gen_struct_array_converters(decl):
+def gen_struct_array_converters(decl, prefix):
     for field in decl['fields']:
         if is_array_type(field['type']):
             array_type = extract_array_type(field['type'])
+            array_sizes = extract_array_sizes(field['type'])
             if not is_prim_type(array_type):
-                print(f"struct: {decl['name']}, field: {field['name']}, type: {field['type']}")
+                struct_name = as_nim_struct_name(decl, prefix)
+                field_name = as_nim_field_name(field, prefix, check_private=False)
+                array_base_type = as_nim_type(array_type, prefix)
+                print(f'converter to{struct_name}_{field_name}*[N:static[int]](items:array[N, {array_base_type}]):array[{array_sizes}, {array_base_type}] =')
 
 def pre_parse(inp):
     global struct_types
@@ -496,7 +508,7 @@ def gen_module(inp, dep_prefixes):
             elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
-                    gen_struct_array_converters(decl)
+                    gen_struct_array_converters(decl, prefix)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
                 elif kind == 'func':
