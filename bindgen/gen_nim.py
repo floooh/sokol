@@ -150,7 +150,8 @@ def reset_globals():
     enum_items = {}
     out_lines = ''
 
-re_array = re.compile("([a-z_\d\s\*]+)\s*\[(\d+)\]")
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -264,17 +265,23 @@ def is_const_struct_ptr(s):
 def is_func_ptr(s):
     return '(*)' in s
 
+def is_1d_array_type(s):
+    return re_1d_array.match(s) is not None
+
+def is_2d_array_type(s):
+    return re_2d_array.match(s) is not None
+
 def is_array_type(s):
-    return re_array.match(s) is not None
+    return is_1d_array_type(s) or is_2d_array_type(s)
 
 def type_default_value(s):
     return prim_defaults[s]
 
 def extract_array_type(s):
-    return s[:s.find('[')].strip() + s[s.find(']')+1:].strip()
+    return s[:s.index('[')].strip()
 
 def extract_array_sizes(s):
-    return s[s.find('[')+1:s.find(']')].strip()
+    return s[s.index('['):].replace('[', ' ').replace(']', ' ').split()
 
 def extract_ptr_type(s):
     tokens = s.split()
@@ -331,10 +338,14 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
         if res != "":
             res = ":" + res
         return f"proc({args}){res} {{.cdecl.}}"
-    elif is_array_type(ctype):
+    elif is_1d_array_type(ctype):
         array_ctype = extract_array_type(ctype)
         array_sizes = extract_array_sizes(ctype)
-        return f"array[{array_sizes}, {as_nim_type(array_ctype, prefix)}]"
+        return f'array[{array_sizes[0]}, {as_nim_type(array_ctype, prefix)}]'
+    elif is_2d_array_type(ctype):
+        array_ctype = extract_array_type(ctype)
+        array_sizes = extract_array_sizes(ctype)
+        return f'array[{array_sizes[0]}, array[{array_sizes[1]}, {as_nim_type(array_ctype, prefix)}]]'
     else:
         sys.exit(f"ERROR as_nim_type: {ctype}")
 
@@ -456,19 +467,32 @@ def gen_func_nim(decl, prefix):
     l(s)
     l("")
 
-def gen_struct_array_converters(decl, prefix):
+def gen_array_converters(decl, prefix):
     for field in decl['fields']:
         if is_array_type(field['type']):
             array_type = extract_array_type(field['type'])
             array_sizes = extract_array_sizes(field['type'])
-            if not is_prim_type(array_type):
-                struct_name = as_nim_struct_name(decl, prefix)
-                field_name = as_nim_field_name(field, prefix, check_private=False)
-                array_base_type = as_nim_type(array_type, prefix)
-                l(f'converter to{struct_name}_{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{array_sizes}, {array_base_type}] =')
-                l(f'  static: assert(N < {array_sizes})')
+            struct_name = as_nim_struct_name(decl, prefix)
+            field_name = as_nim_field_name(field, prefix, check_private=False)
+            array_base_type = as_nim_type(array_type, prefix)
+            if is_1d_array_type(field['type']):
+                n = array_sizes[0]
+                l(f'converter to_{struct_name}_{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
+                l(f'  static: assert(N < {n})')
                 l(f'  for index,item in items.pairs: result[index]=item')
                 l('')
+            elif is_2d_array_type(field['type']):
+                x = array_sizes[1]
+                y = array_sizes[0]
+                l(f'converter to_{struct_name}_{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
+                l(f'  static: assert(X < {x})')
+                l(f'  static: assert(Y < {y})')
+                l(f'  for indexY,itemY in items.pairs:')
+                l(f'    for indexX, itemX in itemY.pairs:')
+                l(f'      result[indexY][indexX] = itemX')
+                l('')
+            else:
+                sys.exit('Unsupported converter array dimension (> 2)!')
 
 def pre_parse(inp):
     global struct_types
@@ -493,6 +517,22 @@ def gen_imports(inp, dep_prefixes):
         l(f'import {dep_module_name}')
         l('')
 
+def gen_helpers(inp):
+    if (inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']):
+        l('# helper function to convert "anything" into a Range')
+        l('converter to_Range*[T](source: T): Range =')
+        l('  Range(`ptr`: source.unsafeAddr, size: source.sizeof.uint)')
+        l('')
+    if (inp['prefix'] in ['sg_']):
+        l('## Convert a 4-element tuple of numbers to a gfx.Color')
+        l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber,A:SomeNumber](rgba: tuple [r:R,g:G,b:B,a:A]):Color =')
+        l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:rgba.a.float32)')
+        l('')
+        l('## Convert a 3-element tuple of numbers to a gfx.Color')
+        l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber](rgba: tuple [r:R,g:G,b:B]):Color =')
+        l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:1.float32)')
+        l('')
+
 def gen_module(inp, dep_prefixes):
     l('## machine generated, do not edit')
     l('')
@@ -511,11 +551,12 @@ def gen_module(inp, dep_prefixes):
             elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
-                    gen_struct_array_converters(decl, prefix)
+                    gen_array_converters(decl, prefix)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
                 elif kind == 'func':
                     gen_func_nim(decl, prefix)
+    gen_helpers(inp)
 
 def prepare():
     print('Generating nim bindings:')
