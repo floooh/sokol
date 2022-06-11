@@ -214,10 +214,10 @@ def is_func_ptr(s):
     return '(*)' in s
 
 def is_1d_array_type(s):
-    return re_1d_array.match(s)
+    return re_1d_array.match(s) is not None
 
 def is_2d_array_type(s):
-    return re_2d_array.match(s)
+    return re_2d_array.match(s) is not None
 
 def type_default_value(s):
     return prim_defaults[s]
@@ -393,7 +393,6 @@ def gen_struct(decl, prefix):
                 else:
                     sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
                 t0 = f"[{array_sizes[0]}]{zig_type}"
-                t0_slice = f"[]const {zig_type}"
                 t1 = f"[_]{zig_type}"
                 l(f"    {field_name}: {t0} = {t1}{{{def_val}}} ** {array_sizes[0]},")
             elif is_const_void_ptr(array_type):
