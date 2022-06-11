@@ -465,7 +465,10 @@ def gen_struct_array_converters(decl, prefix):
                 struct_name = as_nim_struct_name(decl, prefix)
                 field_name = as_nim_field_name(field, prefix, check_private=False)
                 array_base_type = as_nim_type(array_type, prefix)
-                print(f'converter to{struct_name}_{field_name}*[N:static[int]](items:array[N, {array_base_type}]):array[{array_sizes}, {array_base_type}] =')
+                l(f'converter to{struct_name}_{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{array_sizes}, {array_base_type}] =')
+                l(f'  static: assert(N < {array_sizes})')
+                l(f'  for index,item in items.pairs: result[index]=item')
+                l('')
 
 def pre_parse(inp):
     global struct_types
