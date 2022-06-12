@@ -150,7 +150,8 @@ def reset_globals():
     enum_items = {}
     out_lines = ''
 
-re_array = re.compile("([a-z_\d\s\*]+)\s*\[(\d+)\]")
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -264,17 +265,23 @@ def is_const_struct_ptr(s):
 def is_func_ptr(s):
     return '(*)' in s
 
+def is_1d_array_type(s):
+    return re_1d_array.match(s) is not None
+
+def is_2d_array_type(s):
+    return re_2d_array.match(s) is not None
+
 def is_array_type(s):
-    return re_array.match(s) is not None
+    return is_1d_array_type(s) or is_2d_array_type(s)
 
 def type_default_value(s):
     return prim_defaults[s]
 
 def extract_array_type(s):
-    return s[:s.find('[')].strip() + s[s.find(']')+1:].strip()
+    return s[:s.index('[')].strip()
 
-def extract_array_nums(s):
-    return s[s.find('[')+1:s.find(']')].strip()
+def extract_array_sizes(s):
+    return s[s.index('['):].replace('[', ' ').replace(']', ' ').split()
 
 def extract_ptr_type(s):
     tokens = s.split()
@@ -282,6 +289,27 @@ def extract_ptr_type(s):
         return tokens[1]
     else:
         return tokens[0]
+
+def funcptr_args(field_type, prefix):
+    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
+    s = ""
+    n = 0
+    for token in tokens:
+        n += 1
+        arg_ctype = token.strip()
+        if s != "":
+            s += ", "
+        arg_nimtype = as_nim_type(arg_ctype, prefix)
+        if arg_nimtype == "":
+            return "" # fun(void)
+        s += f"a{n}:{arg_nimtype}"
+    if s == "a1:void":
+        s = ""
+    return s
+
+def funcptr_result(field_type, prefix):
+    ctype = field_type[:field_type.index('(*)')].strip()
+    return as_nim_type(ctype, prefix)
 
 def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     if ctype == "void":
@@ -310,79 +338,37 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
         if res != "":
             res = ":" + res
         return f"proc({args}){res} {{.cdecl.}}"
-    elif is_array_type(ctype):
+    elif is_1d_array_type(ctype):
         array_ctype = extract_array_type(ctype)
-        array_nums = extract_array_nums(ctype)
-        return f"array[{array_nums}, {as_nim_type(array_ctype, prefix)}]"
+        array_sizes = extract_array_sizes(ctype)
+        return f'array[{array_sizes[0]}, {as_nim_type(array_ctype, prefix)}]'
+    elif is_2d_array_type(ctype):
+        array_ctype = extract_array_type(ctype)
+        array_sizes = extract_array_sizes(ctype)
+        return f'array[{array_sizes[0]}, array[{array_sizes[1]}, {as_nim_type(array_ctype, prefix)}]]'
     else:
         sys.exit(f"ERROR as_nim_type: {ctype}")
 
-def funcptr_args(field_type, prefix):
-    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
-    s = ""
-    n = 0
-    for token in tokens:
-        n += 1
-        arg_ctype = token.strip()
-        if s != "":
-            s += ", "
-        arg_nimtype = as_nim_type(arg_ctype, prefix)
-        if arg_nimtype == "":
-            return "" # fun(void)
-        s += f"a{n}:{arg_nimtype}"
-    if s == "a1:void":
-        s = ""
-    return s
+def as_nim_struct_name(struct_decl, prefix):
+    struct_name = check_override(struct_decl['name'])
+    nim_type = f'{as_nim_type_name(struct_name, prefix)}'
+    return nim_type
 
-def funcptr_result(field_type, prefix):
-    ctype = field_type[:field_type.index('(*)')].strip()
-    return as_nim_type(ctype, prefix)
-
-# returns C prototype compatible function args (with pointers)
-def funcdecl_args_c(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
-    return s
-
-# returns Nim function args (pass structs by value)
-def funcdecl_args_nim(decl, prefix):
-    s = ""
-    func_name = decl['name']
-    for param_decl in decl['params']:
-        if s != "":
-            s += ", "
-        arg_name = param_decl['name']
-        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
-        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
-    return s
-
-def funcdecl_result(decl, prefix):
-    func_name = decl['name']
-    decl_type = decl['type']
-    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    nim_res_type = as_nim_type(result_type, prefix)
-    if nim_res_type == "":
-        nim_res_type = "void"
-    return nim_res_type
-
-def gen_struct(decl, prefix):
-    struct_name = check_override(decl['name'])
-    nim_type = as_nim_type_name(struct_name, prefix)
-    l(f"type {nim_type}* = object")
-    for field in decl['fields']:
-        field_name = check_override(field['name'])
-        field_type = check_override(f'{struct_name}.{field_name}', default=field['type'])
-        is_private = field_name.startswith('_')
-        field_name = as_camel_case(field_name, prefix)
+def as_nim_field_name(field_decl, prefix, check_private=True):
+    field_name = as_camel_case(check_override(field_decl['name']), prefix)
+    if check_private:
+        is_private = field_decl['name'].startswith('_')
         if not is_private:
             field_name += "*"
-        l(f"  {field_name}:{as_nim_type(field_type, prefix)}")
+    return field_name
+
+def as_nim_field_type(struct_decl, field_decl, prefix):
+    return as_nim_type(check_override(f"{struct_decl['name']}.{field_decl['name']}", default=field_decl['type']), prefix)
+
+def gen_struct(decl, prefix):
+    l(f"type {as_nim_struct_name(decl, prefix)}* = object")
+    for field in decl['fields']:
+        l(f"  {as_nim_field_name(field, prefix)}:{as_nim_field_type(decl, field, prefix)}")
     l("")
 
 def gen_consts(decl, prefix):
@@ -429,6 +415,39 @@ def gen_enum(decl, prefix, bitfield=None):
         l(f"  {enum_name_nim}s = set[{enum_name_nim}]")
     l("")
 
+# returns C prototype compatible function args (with pointers)
+def funcdecl_args_c(decl, prefix):
+    s = ""
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != "":
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
+        s += f"{arg_name}:{as_nim_type(arg_type, prefix)}"
+    return s
+
+# returns Nim function args (pass structs by value)
+def funcdecl_args_nim(decl, prefix):
+    s = ""
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != "":
+            s += ", "
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{func_name}.{arg_name}', default=param_decl['type'])
+        s += f"{arg_name}:{as_nim_type(arg_type, prefix, struct_ptr_as_value=True)}"
+    return s
+
+def funcdecl_result(decl, prefix):
+    func_name = decl['name']
+    decl_type = decl['type']
+    result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
+    nim_res_type = as_nim_type(result_type, prefix)
+    if nim_res_type == "":
+        nim_res_type = "void"
+    return nim_res_type
+
 def gen_func_nim(decl, prefix):
     nim_func_name = as_camel_case(check_override(decl['name']), prefix)
     nim_res_type = funcdecl_result(decl, prefix)
@@ -447,6 +466,33 @@ def gen_func_nim(decl, prefix):
     s += ")"
     l(s)
     l("")
+
+def gen_array_converters(decl, prefix):
+    for field in decl['fields']:
+        if is_array_type(field['type']):
+            array_type = extract_array_type(field['type'])
+            array_sizes = extract_array_sizes(field['type'])
+            struct_name = as_nim_struct_name(decl, prefix)
+            field_name = as_nim_field_name(field, prefix, check_private=False)
+            array_base_type = as_nim_type(array_type, prefix)
+            if is_1d_array_type(field['type']):
+                n = array_sizes[0]
+                l(f'converter to_{struct_name}_{field_name}*[N:static[int]](items: array[N, {array_base_type}]): array[{n}, {array_base_type}] =')
+                l(f'  static: assert(N < {n})')
+                l(f'  for index,item in items.pairs: result[index]=item')
+                l('')
+            elif is_2d_array_type(field['type']):
+                x = array_sizes[1]
+                y = array_sizes[0]
+                l(f'converter to_{struct_name}_{field_name}*[Y:static[int], X:static[int]](items: array[Y, array[X, {array_base_type}]]): array[{y}, array[{x}, {array_base_type}]] =')
+                l(f'  static: assert(X < {x})')
+                l(f'  static: assert(Y < {y})')
+                l(f'  for indexY,itemY in items.pairs:')
+                l(f'    for indexX, itemX in itemY.pairs:')
+                l(f'      result[indexY][indexX] = itemX')
+                l('')
+            else:
+                sys.exit('Unsupported converter array dimension (> 2)!')
 
 def pre_parse(inp):
     global struct_types
@@ -471,6 +517,79 @@ def gen_imports(inp, dep_prefixes):
         l(f'import {dep_module_name}')
         l('')
 
+def gen_extra(inp):
+    if inp['prefix'] in ['sg_']:
+        # FIXME: remove when sokol-shdc has been integrated!
+        l('when defined gl:')
+        l('  const gl*    = true')
+        l('  const d3d11* = false')
+        l('  const metal* = false')
+        l('elif defined windows:')
+        l('  const gl*    = false')
+        l('  const d3d11* = true')
+        l('  const metal* = false')
+        l('elif defined macosx:')
+        l('  const gl*    = false')
+        l('  const d3d11* = false')
+        l('  const metal* = true')
+        l('elif defined linux:')
+        l('  const gl*    = true')
+        l('  const d3d11* = false')
+        l('  const metal* = false')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['sg_', 'sapp_']:
+        l('when defined windows:')
+        l('  {.passl:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
+        l('  when defined gl:')
+        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('  else:')
+        l('    {.passc:"-DSOKOL_D3D11".}')
+        l('    {.passl:"-ld3d11 -ldxgi".}')
+        l('elif defined macosx:')
+        l('  {.passc:"-x objective-c".}')
+        l('  {.passl:"-framework Cocoa -framework QuartzCore".}')
+        l('  when defined gl:')
+        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('    {.passl:"-framework OpenGL".}')
+        l('  else:')
+        l('    {.passc:"-DSOKOL_METAL".}')
+        l('    {.passl:"-framework Metal -framework MetalKit".}')
+        l('elif defined linux:')
+        l('  {.passc:"-DSOKOL_GLCORE33".}')
+        l('  {.passl:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['saudio_']:
+        l('when defined windows:')
+        l('  {.passl:"-lkernel32 -lole32".}')
+        l('elif defined macosx:')
+        l('  {.passl:"-framework AudioToolbox".}')
+        l('elif defined linux:')
+        l('  {.passl:"-lasound -lm -lpthread".}')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
+        l('# helper function to convert "anything" into a Range')
+        l('converter to_Range*[T](source: T): Range =')
+        l('  Range(`ptr`: source.unsafeAddr, size: source.sizeof.uint)')
+        l('')
+    if inp['prefix'] in ['sg_']:
+        l('## Convert a 4-element tuple of numbers to a gfx.Color')
+        l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber,A:SomeNumber](rgba: tuple [r:R,g:G,b:B,a:A]):Color =')
+        l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:rgba.a.float32)')
+        l('')
+        l('## Convert a 3-element tuple of numbers to a gfx.Color')
+        l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber](rgba: tuple [r:R,g:G,b:B]):Color =')
+        l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:1.float32)')
+        l('')
+    c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
+    l('{.passc:"-DSOKOL_NIM_IMPL".}')
+    l(f'{{.compile:"{c_source_path}".}}')
+
 def gen_module(inp, dep_prefixes):
     l('## machine generated, do not edit')
     l('')
@@ -489,10 +608,12 @@ def gen_module(inp, dep_prefixes):
             elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
+                    gen_array_converters(decl, prefix)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
                 elif kind == 'func':
                     gen_func_nim(decl, prefix)
+    gen_extra(inp)
 
 def prepare():
     print('Generating nim bindings:')
@@ -514,10 +635,5 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-nim/src/sokol/{ir['module']}.nim"
-
-    ## include extensions in generated code
-    l("# Nim-specific API extensions")
-    l(f"include extra/{ir['module']}")
-
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
