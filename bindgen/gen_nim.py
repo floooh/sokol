@@ -517,13 +517,67 @@ def gen_imports(inp, dep_prefixes):
         l(f'import {dep_module_name}')
         l('')
 
-def gen_helpers(inp):
-    if (inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']):
+def gen_extra(inp):
+    if inp['prefix'] in ['sg_']:
+        # FIXME: remove when sokol-shdc has been integrated!
+        l('when defined gl:')
+        l('  const gl*    = true')
+        l('  const d3d11* = false')
+        l('  const metal* = false')
+        l('elif defined windows:')
+        l('  const gl*    = false')
+        l('  const d3d11* = true')
+        l('  const metal* = false')
+        l('elif defined macosx:')
+        l('  const gl*    = false')
+        l('  const d3d11* = false')
+        l('  const metal* = true')
+        l('elif defined linux:')
+        l('  const gl*    = true')
+        l('  const d3d11* = false')
+        l('  const metal* = false')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['sg_', 'sapp_']:
+        l('when defined windows:')
+        l('  {.passl:"-lkernel32 -luser32 -lshell32 -lgdi32".}')
+        l('  when defined gl:')
+        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('  else:')
+        l('    {.passc:"-DSOKOL_D3D11".}')
+        l('    {.passl:"-ld3d11 -ldxgi".}')
+        l('elif defined macosx:')
+        l('  {.passc:"-x objective-c".}')
+        l('  {.passl:"-framework Cocoa -framework QuartzCore".}')
+        l('  when defined gl:')
+        l('    {.passc:"-DSOKOL_GLCORE33".}')
+        l('    {.passl:"-framework OpenGL".}')
+        l('  else:')
+        l('    {.passc:"-DSOKOL_METAL".}')
+        l('    {.passl:"-framework Metal -framework MetalKit".}')
+        l('elif defined linux:')
+        l('  {.passc:"-DSOKOL_GLCORE33".}')
+        l('  {.passl:"-lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread".}')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['saudio_']:
+        l('when defined windows:')
+        l('  {.passl:"-lkernel32 -lole32".}')
+        l('elif defined macosx:')
+        l('  {.passl:"-framework AudioToolbox".}')
+        l('elif defined linux:')
+        l('  {.passl:"-lasound -lm -lpthread".}')
+        l('else:')
+        l('  error("unsupported platform")')
+        l('')
+    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
         l('# helper function to convert "anything" into a Range')
         l('converter to_Range*[T](source: T): Range =')
         l('  Range(`ptr`: source.unsafeAddr, size: source.sizeof.uint)')
         l('')
-    if (inp['prefix'] in ['sg_']):
+    if inp['prefix'] in ['sg_']:
         l('## Convert a 4-element tuple of numbers to a gfx.Color')
         l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber,A:SomeNumber](rgba: tuple [r:R,g:G,b:B,a:A]):Color =')
         l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:rgba.a.float32)')
@@ -532,6 +586,9 @@ def gen_helpers(inp):
         l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber](rgba: tuple [r:R,g:G,b:B]):Color =')
         l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:1.float32)')
         l('')
+    c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
+    l('{.passc:"-DSOKOL_NIM_IMPL".}')
+    l(f'{{.compile:"{c_source_path}".}}')
 
 def gen_module(inp, dep_prefixes):
     l('## machine generated, do not edit')
@@ -556,7 +613,7 @@ def gen_module(inp, dep_prefixes):
                     gen_enum(decl, prefix)
                 elif kind == 'func':
                     gen_func_nim(decl, prefix)
-    gen_helpers(inp)
+    gen_extra(inp)
 
 def prepare():
     print('Generating nim bindings:')
@@ -578,10 +635,5 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     ir = gen_ir.gen(c_header_path, c_source_path, module_name, c_prefix, dep_c_prefixes)
     gen_module(ir, dep_c_prefixes)
     output_path = f"sokol-nim/src/sokol/{ir['module']}.nim"
-
-    ## include extensions in generated code
-    l("# Nim-specific API extensions")
-    l(f"include extra/{ir['module']}")
-
     with open(output_path, 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
