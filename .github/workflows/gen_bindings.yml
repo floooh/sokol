@@ -84,7 +84,7 @@ jobs:
         with:
           name: ignore-me-zig
           path: src/sokol
-      - name: prepare-linux
+      - name: prepare
         if: runner.os == 'Linux'
         run: |
             sudo apt-get update
@@ -108,10 +108,12 @@ jobs:
           name: ignore-me-nim
           path: src/sokol
       - if: runner.os == 'Linux'
+        name: prepare
         run: |
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-      - run: |
+      - name: build
+        run: |
           nimble install -Y
           nimble install glm -Y
           nimble build_all
