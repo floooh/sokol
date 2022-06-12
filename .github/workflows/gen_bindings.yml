@@ -114,11 +114,7 @@ jobs:
       - run: |
           nimble install -Y
           nimble install glm -Y
-      # FIXME: this should be solved better
-      - if: runner.os == 'Windows'
-        run: nim c --cc:vcc examples/cube.nim
-      - if: runner.os == 'Linux' || runner.os == 'macOS'
-        run: nim c examples/cube.nim
+          nimble build_all
 
   # only deploy the bindings for commits on the main branch
   deploy-zig:
