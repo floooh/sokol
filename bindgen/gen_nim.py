@@ -100,6 +100,7 @@ prim_defaults = {
 }
 
 common_prim_types = """
+array
 untyped typed void
 bool byte char
 int int8 int16 int32 int64
