@@ -2389,8 +2389,8 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             if (!_simgui.desc.disable_paste_override) {
                 _simgui_add_imgui_key_event(io, _simgui_copypaste_modifier(), true);
                 _simgui_add_imgui_key_event(io, ImGuiKey_V, true);
-                _simgui_add_imgui_key_event(io, _simgui_copypaste_modifier(), false);
                 _simgui_add_imgui_key_event(io, ImGuiKey_V, false);
+                _simgui_add_imgui_key_event(io, _simgui_copypaste_modifier(), false);
             }
             break;
         default:
