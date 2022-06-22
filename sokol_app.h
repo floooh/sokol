@@ -1470,6 +1470,21 @@ typedef struct sapp_html5_fetch_request {
     void* user_data;                        /* optional userdata pointer */
 } sapp_html5_fetch_request;
 
+
+typedef struct sapp_cursor sapp_cursor_t;
+
+/* Same set of standard cursors as GLFW */
+extern sapp_cursor_t SAPP_ARROW_CURSOR;
+extern sapp_cursor_t SAPP_IBEAM_CURSOR;
+extern sapp_cursor_t SAPP_CROSSHAIR_CURSOR;
+extern sapp_cursor_t SAPP_POINTING_HAND_CURSOR;
+extern sapp_cursor_t SAPP_RESIZE_EW_CURSOR;
+extern sapp_cursor_t SAPP_RESIZE_NS_CURSOR;
+extern sapp_cursor_t SAPP_RESIZE_NWSE_CURSOR;
+extern sapp_cursor_t SAPP_RESIZE_NESW_CURSOR;
+extern sapp_cursor_t SAPP_RESIZE_ALL_CURSOR;
+extern sapp_cursor_t SAPP_NOT_ALLOWED_CURSOR;
+
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
@@ -1509,6 +1524,8 @@ SOKOL_APP_API_DECL bool sapp_mouse_shown(void);
 SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
 SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
+  /* set the OS cursor, multiple standard cursors exist already - see e.g. SAPP_ARROW_CURSOR */
+SOKOL_APP_API_DECL void sapp_set_cursor(const sapp_cursor_t *cursor);
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_APP_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -1851,6 +1868,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/Xatom.h>
     #include <X11/extensions/XInput2.h>
     #include <X11/Xcursor/Xcursor.h>
+    #include <X11/cursorfont.h> /* XC_* font cursors */
     #include <X11/Xmd.h> /* CARD32 */
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
@@ -2519,6 +2537,12 @@ typedef struct {
     #define _SAPP_CLEAR_ARC_STRUCT(type, item) { _sapp_clear(&item, sizeof(item)); }
 #endif
 
+typedef struct sapp_cursor {
+    #if defined(_SAPP_LINUX)
+    Cursor handle;
+    #endif
+} sapp_cursor_t;
+
 typedef struct {
     bool enabled;
     int buf_size;
@@ -2600,6 +2624,17 @@ typedef struct {
     sapp_keycode keycodes[SAPP_MAX_KEYCODES];
 } _sapp_t;
 static _sapp_t _sapp;
+
+sapp_cursor_t SAPP_ARROW_CURSOR;
+sapp_cursor_t SAPP_IBEAM_CURSOR;
+sapp_cursor_t SAPP_CROSSHAIR_CURSOR;
+sapp_cursor_t SAPP_POINTING_HAND_CURSOR;
+sapp_cursor_t SAPP_RESIZE_EW_CURSOR;
+sapp_cursor_t SAPP_RESIZE_NS_CURSOR;
+sapp_cursor_t SAPP_RESIZE_NWSE_CURSOR;
+sapp_cursor_t SAPP_RESIZE_NESW_CURSOR;
+sapp_cursor_t SAPP_RESIZE_ALL_CURSOR;
+sapp_cursor_t SAPP_NOT_ALLOWED_CURSOR;
 
 /*=== PRIVATE HELPER FUNCTIONS ===============================================*/
 _SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
@@ -10314,6 +10349,11 @@ _SOKOL_PRIVATE void _sapp_x11_show_mouse(bool show) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_x11_set_cursor(const sapp_cursor_t *cursor) {
+  XDefineCursor(_sapp.x11.display, _sapp.x11.window, cursor->handle);
+  XFlush(_sapp.x11.display);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
     if (lock == _sapp.mouse.locked) {
         return;
@@ -11204,6 +11244,28 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
+/** Load a standard cursor via XcursorLibraryLoadImage.
+ * fallback_native is the native font cursor to use if the cursor with
+ * `name` isn't found, which is passed into
+ * XCreateFontCursor. fallback_native can be 0, in which case no font
+ * cursor is loaded.
+ * If theme is null, then the fallback is used. */
+ _SOKOL_PRIVATE sapp_cursor_t _sapp_x11_create_standard_cursor(const char* name, const char* theme, int size, unsigned int fallback_native) {
+   sapp_cursor_t ret = {0};
+   if (theme) {
+      XcursorImage* img = XcursorLibraryLoadImage(name, theme, size);
+      if (img) {
+        ret.handle = XcursorImageLoadCursor(_sapp.x11.display, img);
+        XcursorImageDestroy(img);
+      }
+   }
+      if (!ret.handle) {
+        // load fallback
+        ret.handle = XCreateFontCursor(_sapp.x11.display, fallback_native);
+      }
+      return ret;
+ }
+
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     /* The following lines are here to trigger a linker error instead of an
         obscure runtime error if the user has forgotten to add -pthread to
@@ -11242,6 +11304,30 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         _sapp_x11_set_fullscreen(true);
     }
     _sapp_glx_swapinterval(_sapp.swap_interval);
+
+    // setup standard cursors
+    const char* cursor_theme = XcursorGetTheme(_sapp.x11.display);
+    const int size = XcursorGetDefaultSize(_sapp.x11.display);
+      SAPP_ARROW_CURSOR =
+        _sapp_x11_create_standard_cursor("default", cursor_theme, size, XC_left_ptr);
+      SAPP_IBEAM_CURSOR = _sapp_x11_create_standard_cursor("text", cursor_theme, size, XC_xterm);
+      SAPP_CROSSHAIR_CURSOR =
+        _sapp_x11_create_standard_cursor("crosshair", cursor_theme, size, XC_crosshair);
+      SAPP_POINTING_HAND_CURSOR =
+        _sapp_x11_create_standard_cursor("pointer", cursor_theme, size, XC_hand2);
+      SAPP_RESIZE_EW_CURSOR =
+        _sapp_x11_create_standard_cursor("ew-resize", cursor_theme, size, XC_sb_h_double_arrow);
+      SAPP_RESIZE_NS_CURSOR =
+        _sapp_x11_create_standard_cursor("ns-resize", cursor_theme, size, XC_sb_v_double_arrow);
+      SAPP_RESIZE_NWSE_CURSOR =
+        _sapp_x11_create_standard_cursor("nwse-resize", cursor_theme, size, 0);
+      SAPP_RESIZE_NESW_CURSOR =
+        _sapp_x11_create_standard_cursor("nesw-resize", cursor_theme, size, 0);
+      SAPP_RESIZE_ALL_CURSOR =
+        _sapp_x11_create_standard_cursor("all-scroll", cursor_theme, size, XC_fleur);
+      SAPP_NOT_ALLOWED_CURSOR =
+        _sapp_x11_create_standard_cursor("not-allowed", cursor_theme, size, 0);
+
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
         _sapp_timing_measure(&_sapp.timing);
@@ -11460,6 +11546,14 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
 
 SOKOL_API_IMPL bool sapp_mouse_locked(void) {
     return _sapp.mouse.locked;
+}
+
+SOKOL_API_IMPL void sapp_set_cursor(const sapp_cursor_t *cursor) {
+    #if defined(_SAPP_LINUX)
+    _sapp_x11_set_cursor(cursor);
+    #else
+    SOKOL_LOG("sapp_set_cursor unimplemented for this platform, ignoring");
+    #endif
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {
