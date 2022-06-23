@@ -60,6 +60,7 @@ overrides = {
     'SG_IMAGETYPE_2D':              'SG_IMAGETYPE_TWO_DEE',
     'SG_IMAGETYPE_3D':              'SG_IMAGETYPE_THREE_DEE',
     'sapp_event.modifiers':         'sapp_event_modifier', # type declared above
+    'ptr':                          'pointer', # range ptr
 }
 
 prim_types = {
@@ -579,7 +580,7 @@ def gen_extra(inp):
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
         l('# helper function to convert "anything" into a Range')
         l('converter to_Range*[T](source: T): Range =')
-        l('  Range(`ptr`: source.unsafeAddr, size: source.sizeof.uint)')
+        l('  Range(pointer: source.unsafeAddr, size: source.sizeof.uint)')
         l('')
     if inp['prefix'] in ['sg_']:
         l('## Convert a 4-element tuple of numbers to a gfx.Color')
