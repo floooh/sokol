@@ -14538,7 +14538,11 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
 
 SOKOL_API_IMPL sapp_linux_display_protocol sapp_linux_get_display_protocol(void) {
     SOKOL_ASSERT(_sapp.valid);
-    return _sapp.linux_display_protocol;
+    #if defined(_SAPP_LINUX)
+        return _sapp.linux_display_protocol;
+    #else
+        return SAPP_LINUX_DISPLAY_PROTOCOL_INVALID;
+    #endif
 }
 
 #endif /* SOKOL_APP_IMPL */
