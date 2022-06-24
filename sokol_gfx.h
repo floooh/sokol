@@ -247,6 +247,11 @@
 
             bool sg_query_buffer_overflow(sg_buffer buf)
 
+        You can manually check to see if an overflow would occur before adding
+        any data to a buffer by calling
+
+            bool sg_query_will_buffer_overflow(sg_buffer buf, size_t size)
+
         NOTE: Due to restrictions in underlying 3D-APIs, appended chunks of
         data will be 4-byte aligned in the destination buffer. This means
         that there will be gaps in index buffers containing 16-bit indices
@@ -2487,6 +2492,7 @@ SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
 SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
+SOKOL_GFX_API_DECL bool sg_query_will_buffer_overflow(sg_buffer buf, size_t size);
 
 /* rendering functions */
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
@@ -15958,6 +15964,23 @@ SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     bool result = buf ? buf->cmn.append_overflow : false;
+    return result;
+}
+
+SOKOL_API_IMPL bool sg_query_will_buffer_overflow(sg_buffer buf_id, size_t size) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    bool result = false;
+    if (buf) {
+        int append_pos = buf->cmn.append_pos;
+        /* rewind append cursor in a new frame */
+        if (buf->cmn.append_frame_index != _sg.frame_index) {
+            append_pos = 0;
+        }
+        if ((append_pos + _sg_roundup((int)size, 4)) > buf->cmn.size) {
+            result = true;
+        }
+    }
     return result;
 }
 
