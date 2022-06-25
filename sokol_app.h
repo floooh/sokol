@@ -12920,8 +12920,16 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_enter(void* data, struct wl_keyboard* keyb
 
     _sapp.wl.serial = serial;
 
+    /* cast to custom array-struct to silence C++-compilation errors,
+     * that complain about `void* data` being cast to `int* toplevel_state` */
+    struct states_array {
+        size_t size;
+        size_t alloc;
+        uint32_t *data;
+    } *arr = (struct states_array *) keys;
+
     uint32_t* key;
-    wl_array_for_each(key, keys) {
+    wl_array_for_each(key, arr) {
         _sapp_wl_keyboard_key(data, keyboard, serial, 0, *key, WL_KEYBOARD_KEY_STATE_PRESSED);
     }
 
@@ -13425,8 +13433,16 @@ _SOKOL_PRIVATE void _sapp_wl_toplevel_handle_configure(void* data, struct xdg_to
 
     bool is_resizing = false;
 
+    /* cast to custom array-struct to silence C++-compilation errors,
+     * that complain about `void* data` being cast to `int* toplevel_state` */
+    struct states_array {
+        size_t size;
+        size_t alloc;
+        int *data;
+    } *arr = (struct states_array *) states;
+
     int* toplevel_state;
-    wl_array_for_each(toplevel_state, states) {
+    wl_array_for_each(toplevel_state, arr) {
         switch (*toplevel_state) {
             case XDG_TOPLEVEL_STATE_ACTIVATED:
             case XDG_TOPLEVEL_STATE_FULLSCREEN:
