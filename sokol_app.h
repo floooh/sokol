@@ -2531,12 +2531,6 @@ typedef struct {
 # define __has_attribute(x) 0  /* Compatibility with non-clang compilers. */
 #endif
 
-#if (__has_attribute(visibility) || defined(__GNUC__) && __GNUC__ >= 4)
-#define WL_PRIVATE __attribute__ ((visibility("hidden")))
-#else
-#define WL_PRIVATE
-#endif
-
 /* Wayland protocol extension: xdg shell */
 /**
  *
@@ -2689,7 +2683,7 @@ static const struct wl_message xdg_wm_base_events[] = {
     { "ping", "u", xdg_shell_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface xdg_wm_base_interface = {
+const struct wl_interface xdg_wm_base_interface = {
     "xdg_wm_base", 3, 4, xdg_wm_base_requests, 1, xdg_wm_base_events,
 };
 
@@ -2705,7 +2699,7 @@ static const struct wl_message xdg_surface_events[] = {
     { "configure", "u", xdg_shell_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface xdg_surface_interface = {
+const struct wl_interface xdg_surface_interface = {
     "xdg_surface", 3, 5, xdg_surface_requests, 1, xdg_surface_events,
 };
 
@@ -2731,7 +2725,7 @@ static const struct wl_message xdg_toplevel_events[] = {
     { "close", "", xdg_shell_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface xdg_toplevel_interface = {
+const struct wl_interface xdg_toplevel_interface = {
     "xdg_toplevel", 3, 14, xdg_toplevel_requests, 2, xdg_toplevel_events,
 };
 
@@ -2814,7 +2808,7 @@ static const struct wl_message zwp_pointer_constraints_v1_requests[] = {
     { "lock_pointer", "noo?ou", pointer_constraints_unstable_v1_types + 2 },
 };
 
-WL_PRIVATE const struct wl_interface zwp_pointer_constraints_v1_interface = {
+const struct wl_interface zwp_pointer_constraints_v1_interface = {
     "zwp_pointer_constraints_v1", 1, 3, zwp_pointer_constraints_v1_requests, 0, NULL,
 };
 
@@ -2827,7 +2821,7 @@ static const struct wl_message zwp_locked_pointer_v1_events[] = {
     { "unlocked", "", pointer_constraints_unstable_v1_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface zwp_locked_pointer_v1_interface = {
+const struct wl_interface zwp_locked_pointer_v1_interface = {
     "zwp_locked_pointer_v1", 1, 3, zwp_locked_pointer_v1_requests, 2, zwp_locked_pointer_v1_events,
 };
 
@@ -2914,7 +2908,7 @@ static const struct wl_message zwp_relative_pointer_manager_v1_requests[] = {
     { "get_relative_pointer", "no", relative_pointer_unstable_v1_types + 6 },
 };
 
-WL_PRIVATE const struct wl_interface zwp_relative_pointer_manager_v1_interface = {
+const struct wl_interface zwp_relative_pointer_manager_v1_interface = {
     "zwp_relative_pointer_manager_v1", 1, 2, zwp_relative_pointer_manager_v1_requests, 0, NULL,
 };
 
@@ -2926,7 +2920,7 @@ static const struct wl_message zwp_relative_pointer_v1_events[] = {
     { "relative_motion", "uuffff", relative_pointer_unstable_v1_types + 0 },
 };
 
-WL_PRIVATE const struct wl_interface zwp_relative_pointer_v1_interface = {
+const struct wl_interface zwp_relative_pointer_v1_interface = {
     "zwp_relative_pointer_v1", 1, 1, zwp_relative_pointer_v1_requests, 1, zwp_relative_pointer_v1_events,
 };
 /* manually curated wayland protocol extension section: end */
