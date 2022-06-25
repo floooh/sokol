@@ -12532,7 +12532,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_wl_translate_key(xkb_keysym_t sym) {
 _SOKOL_PRIVATE uint32_t _sapp_wl_get_modifiers(void) {
     uint32_t modifiers = 0;
 
-    enum xkb_state_component active_mask = XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED;
+    enum xkb_state_component active_mask = (enum xkb_state_component) (XKB_STATE_MODS_DEPRESSED | XKB_STATE_MODS_LATCHED | XKB_STATE_MODS_LOCKED);
 
     if (0 < xkb_state_mod_name_is_active(_sapp.wl.xkb_state, XKB_MOD_NAME_SHIFT, active_mask)) {
         modifiers |= SAPP_MODIFIER_SHIFT;
@@ -12612,7 +12612,7 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
 
 _SOKOL_PRIVATE void _sapp_wl_show_mouse(bool show, uint32_t serial) {
     if (show && NULL != _sapp.wl.cursor_surface && NULL != _sapp.wl.cursor) {
-        wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, _sapp.wl.cursor->images[0]->hotspot_x, _sapp.wl.cursor->images[0]->hotspot_y);
+        wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, (int32_t) _sapp.wl.cursor->images[0]->hotspot_x, (int32_t) _sapp.wl.cursor->images[0]->hotspot_y);
     } else {
         wl_pointer_set_cursor(_sapp.wl.pointer, serial, NULL, 0, 0);
     }
@@ -12771,7 +12771,7 @@ _SOKOL_PRIVATE void _sapp_wl_touch_event(sapp_event_type type, int32_t id, uint3
         for (int i = 0; i < SAPP_MAX_TOUCHPOINTS; i++) {
             if (_sapp.wl.touchpoints[i].valid) {
                 sapp_touchpoint* point = &_sapp.event.touches[max_touchpoints++];
-                point->identifier = _sapp.wl.touchpoints[i].id;
+                point->identifier = (uintptr_t) _sapp.wl.touchpoints[i].id;
                 point->pos_x = _sapp.dpi_scale * _sapp.wl.touchpoints[i].x;
                 point->pos_y = _sapp.dpi_scale * _sapp.wl.touchpoints[i].y;
                 point->changed = _sapp.wl.touchpoints[i].changed;
@@ -12828,7 +12828,7 @@ _SOKOL_PRIVATE void _sapp_wl_data_source_handle_send(void* data, struct wl_data_
     } else {
         const char* fmt = "Unable to handle clipboard mime type: '%s'!";
         const size_t len = strlen(fmt) + 32;
-        char* msg = _sapp_malloc(len * sizeof(char));
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
         snprintf(msg, len, fmt, mime_type);
         SOKOL_LOG(msg);
         _sapp_free(msg);
@@ -12935,7 +12935,7 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_keymap(void* data, struct wl_keyboard* key
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
 
-    char* keymap_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    char* keymap_shm = (char *) mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (MAP_FAILED == keymap_shm) {
         _sapp_fail("wayland: unable to read keymap via mmap()");
     }
@@ -13286,7 +13286,7 @@ _SOKOL_PRIVATE const struct wl_seat_listener _sapp_wl_seat_listener = {
 };
 
 _SOKOL_PRIVATE void _sapp_wl_output_done(void* data, struct wl_output* output) {
-    struct _sapp_wl_output* out = data;
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) data;
     wl_output_set_user_data(output, out);
 }
 
@@ -13315,7 +13315,7 @@ _SOKOL_PRIVATE void _sapp_wl_output_mode(void* data, struct wl_output* output, u
 _SOKOL_PRIVATE void _sapp_wl_output_scale(void* data, struct wl_output* output, int32_t factor) {
     _SOKOL_UNUSED(output);
 
-    struct _sapp_wl_output* out = data;
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) data;
     out->factor = factor;
 }
 
@@ -13332,9 +13332,9 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
 
     if (0 == strcmp(interface, wl_compositor_interface.name)) {
         /* bind to version 4 for: `wl_surface_damage_buffer` */
-        _sapp.wl.compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+        _sapp.wl.compositor = (struct wl_compositor *) wl_registry_bind(registry, name, &wl_compositor_interface, 4);
     } else if (0 == strcmp(interface, xdg_wm_base_interface.name)) {
-        _sapp.wl.wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+        _sapp.wl.wm_base = (struct xdg_wm_base *) wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
         xdg_wm_base_add_listener(_sapp.wl.wm_base, &_sapp_wl_wm_base_listener, NULL);
     } else if (0 == strcmp(interface, wl_seat_interface.name)) {
         /* bind to version 3 for:
@@ -13342,14 +13342,14 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
          * - `wl_pointer_release`,
          * - `wl_pointer_release`,
          * - `repeat_info` event, */
-        _sapp.wl.seat = wl_registry_bind(registry, name, &wl_seat_interface, 4);
+        _sapp.wl.seat = (struct wl_seat *) wl_registry_bind(registry, name, &wl_seat_interface, 4);
         wl_seat_add_listener(_sapp.wl.seat, &_sapp_wl_seat_listener, NULL);
     } else if (0 == strcmp(interface, wl_output_interface.name)) {
         if (_SAPP_WAYLAND_MAX_OUTPUTS > _sapp.wl.max_outputs) {
             struct _sapp_wl_output* output = &_sapp.wl.outputs[_sapp.wl.max_outputs];
 
             /* bind to version 2 for: `wl_output_done` */
-            output->output = wl_registry_bind(registry, name, &wl_output_interface, 2);
+            output->output = (struct wl_output *) wl_registry_bind(registry, name, &wl_output_interface, 2);
             output->factor = _SAPP_WAYLAND_DEFAULT_DPI_SCALE;
 
             if (NULL != output->output) {
@@ -13358,13 +13358,13 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
             }
         }
     } else if (0 == strcmp(interface, wl_shm_interface.name)) {
-        _sapp.wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+        _sapp.wl.shm = (struct wl_shm *) wl_registry_bind(registry, name, &wl_shm_interface, 1);
     } else if (0 == strcmp(interface, zwp_relative_pointer_manager_v1_interface.name)) {
-        _sapp.wl.relative_pointer_manager = wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
+        _sapp.wl.relative_pointer_manager = (struct zwp_relative_pointer_manager_v1 *) wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1);
     } else if (0 == strcmp(interface, zwp_pointer_constraints_v1_interface.name)) {
-        _sapp.wl.pointer_constraints = wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1);
+        _sapp.wl.pointer_constraints = (struct zwp_pointer_constraints_v1 *) wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1);
     } else if (0 == strcmp(interface, wl_data_device_manager_interface.name)) {
-        _sapp.wl.data_device_manager = wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
+        _sapp.wl.data_device_manager = (struct wl_data_device_manager *) wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
     }
 }
 
@@ -13383,7 +13383,7 @@ _SOKOL_PRIVATE void _sapp_wl_surface_enter(void* data, struct wl_surface* surfac
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(surface);
 
-    struct _sapp_wl_output* out = wl_output_get_user_data(output);
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) wl_output_get_user_data(output);
     out->active = true;
     _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
 }
@@ -13392,7 +13392,7 @@ _SOKOL_PRIVATE void _sapp_wl_surface_leave(void* data, struct wl_surface* surfac
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(surface);
 
-    struct _sapp_wl_output* out = wl_output_get_user_data(output);
+    struct _sapp_wl_output* out = (struct _sapp_wl_output *) wl_output_get_user_data(output);
     out->active = false;
     _sapp_wl_resize_window(_sapp.window_width, _sapp.window_height);
 }
@@ -13506,8 +13506,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_
 
     wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
 
-    char *buf = _sapp_malloc(_sapp.drop.buf_size);
-    read(fds[0], buf, _sapp.drop.buf_size);
+    size_t buf_size = (size_t) _sapp.drop.buf_size;
+    char *buf = (char *) _sapp_malloc(buf_size);
+    read(fds[0], buf, buf_size);
     close(fds[0]);
 
     if (_sapp.drop.enabled) {
@@ -13567,7 +13568,8 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_
 
     wl_display_roundtrip_queue(_sapp.wl.display, _sapp.wl.event_queue);
 
-    ssize_t n = read(fds[0], _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    size_t buf_size = (size_t) _sapp.clipboard.buf_size;
+    ssize_t n = read(fds[0], _sapp.clipboard.buffer, buf_size);
     _sapp.clipboard.buffer[n] = 0;
     close(fds[0]);
 
@@ -13658,7 +13660,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
     }
 #endif /* SOKOL_GLCORE33 */
 
-    _sapp.wl.egl_display = eglGetDisplay((EGLNativeDisplayType) _sapp.wl.display);
+    _sapp.wl.egl_display = (EGLDisplay *) eglGetDisplay((EGLNativeDisplayType) _sapp.wl.display);
     if (EGL_NO_DISPLAY == _sapp.wl.egl_display) {
         _sapp_fail("wayland: eglGetDisplay() failed");
     }
@@ -13673,7 +13675,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
 
     EGLint total_config_count;
     eglGetConfigs(_sapp.wl.egl_display, NULL, 0, &total_config_count);
-    EGLConfig* egl_configs = (EGLConfig *) _sapp_malloc(total_config_count * sizeof(EGLConfig));
+    EGLConfig* egl_configs = (EGLConfig *) _sapp_malloc((size_t) total_config_count * sizeof(EGLConfig));
     EGLint attribs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
 
@@ -13703,7 +13705,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
         /* format the egl error into a printable string */
         const char* fmt = "wayland: eglChooseConfig() failed (%x)";
         const size_t len = strlen(fmt) + 16;
-        char* msg = _sapp_malloc(len * sizeof(char));
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
         snprintf(msg, len, fmt, eglGetError());
         _sapp_fail(msg);
     }
@@ -13743,7 +13745,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
         EGL_NONE,
     };
 
-    _sapp.wl.egl_context = eglCreateContext(_sapp.wl.egl_display, egl_configs[egl_config_id], EGL_NO_CONTEXT, context_attrib);
+    _sapp.wl.egl_context = (EGLContext *) eglCreateContext(_sapp.wl.egl_display, egl_configs[egl_config_id], EGL_NO_CONTEXT, context_attrib);
     if (EGL_NO_CONTEXT == _sapp.wl.egl_context) {
         _sapp_free(egl_configs);
         _sapp_fail("wayland: eglCreateContext() failed");
@@ -13757,8 +13759,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
         _sapp_fail("wayland: wl_egl_window_create() failed");
     }
 
-    _sapp.wl.egl_surface = eglCreateWindowSurface(_sapp.wl.egl_display, egl_configs[egl_config_id],
-                                                  (EGLNativeWindowType) _sapp.wl.egl_window, NULL);
+    _sapp.wl.egl_surface = (EGLSurface *) eglCreateWindowSurface(_sapp.wl.egl_display, egl_configs[egl_config_id], (EGLNativeWindowType) _sapp.wl.egl_window, NULL);
     _sapp_free(egl_configs);
     if (EGL_NO_SURFACE == _sapp.wl.egl_window) {
         _sapp_fail("wayland: eglCreateWindowSurface() failed");
@@ -13815,8 +13816,8 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
         }
         wl_display_flush(_sapp.wl.display);
 
-        size_t event_count = epoll_wait(_sapp.wl.epoll_fd, _sapp.wl.events, _SAPP_WAYLAND_MAX_EPOLL_EVENTS, -1);
-        for (size_t i = 0; i < event_count; i++) {
+        int event_count = epoll_wait(_sapp.wl.epoll_fd, _sapp.wl.events, _SAPP_WAYLAND_MAX_EPOLL_EVENTS, -1);
+        for (int i = 0; i < event_count; i++) {
             if (_sapp.wl.event_fd == _sapp.wl.events[i].data.fd) {
                 /* NOTE: check _sapp_wl_setup() for wl_proxy_set_queue()
                  * call, that sets the custom event_queue as proxy for
