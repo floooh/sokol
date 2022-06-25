@@ -37,7 +37,9 @@ jobs:
         - name: prepare
           run: |
             sudo apt-get update
-            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+            sudo apt-get install libgl1-mesa-dev libegl1-mesa-dev mesa-common-dev \
+                                 xorg-dev libasound-dev libegl-dev libwayland-dev \
+                                 libxkbcommon-dev
         - name: test_linux
           run: |
             cd tests
