@@ -42,19 +42,36 @@ overrides = {
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
-    'SAPP_KEYCODE_0':               'SAPP_KEYCODE_DIGIT_0',
-    'SAPP_KEYCODE_1':               'SAPP_KEYCODE_DIGIT_1',
-    'SAPP_KEYCODE_2':               'SAPP_KEYCODE_DIGIT_2',
-    'SAPP_KEYCODE_3':               'SAPP_KEYCODE_DIGIT_3',
-    'SAPP_KEYCODE_4':               'SAPP_KEYCODE_DIGIT_4',
-    'SAPP_KEYCODE_5':               'SAPP_KEYCODE_DIGIT_5',
-    'SAPP_KEYCODE_6':               'SAPP_KEYCODE_DIGIT_6',
-    'SAPP_KEYCODE_7':               'SAPP_KEYCODE_DIGIT_7',
-    'SAPP_KEYCODE_8':               'SAPP_KEYCODE_DIGIT_8',
-    'SAPP_KEYCODE_9':               'SAPP_KEYCODE_DIGIT_9',
-    'SG_IMAGETYPE_2D':              'SG_IMAGETYPE_TWO_DEE',
-    'SG_IMAGETYPE_3D':              'SG_IMAGETYPE_THREE_DEE',
     'ptr':                          'pointer', # range ptr
+}
+
+enumPrefixOverrides = {
+    # sokol_gfx.h
+    'PIXELFORMAT': 'pixelFormat',
+    'RESOURCESTATE': 'resourceState',
+    'BUFFERTYPE': 'bufferType',
+    'INDEXTYPE': 'indexType',
+    'IMAGETYPE': 'imageType',
+    'SAMPLERTYPE': 'samplerType',
+    'CUBEFACE': 'cubeFace',
+    'SHADERSTAGE': 'shaderStage',
+    'PRIMITIVETYPE': 'primitiveType',
+    'BORDERCOLOR': 'borderColor',
+    'VERTEXFORMAT': 'vertexFormat',
+    'VERTEXSTEP': 'vertexStep',
+    'UNIFORMTYPE': 'uniformType',
+    'UNIFORMLAYOUT': 'uniformLayout',
+    'CULLMODE': 'cullMode',
+    'FACEWINDING': 'faceWinding',
+    'COMPAREFUNC': 'compareFunc',
+    'STENCILOP': 'stencilOp',
+    'BLENDFACTOR': 'blendFactor',
+    'BLENDOP': 'blendOp',
+    'COLORMASK': 'colorMask',
+    # sokol_app.h
+    'EVENTTYPE': 'eventType',
+    'KEYCODE': 'keyCode',
+    'MOUSEBUTTON': 'mouseButton',
 }
 
 prim_types = {
@@ -133,17 +150,14 @@ yield
 
 struct_types = []
 enum_types = []
-enum_items = {}
 out_lines = ''
 
 def reset_globals():
     global struct_types
     global enum_types
-    global enum_items
     global out_lines
     struct_types = []
     enum_types = []
-    enum_items = {}
     out_lines = ''
 
 re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
@@ -200,19 +214,18 @@ def as_camel_case(s, prefix):
         outp += part.capitalize()
     return wrap_keywords(outp)
 
-# PREFIX_ENUM_BLA_BLO => Bla, _PREFIX_ENUM_BLA_BLO => blaBlo
+# PREFIX_ENUM_BLA_BLO => blaBlo
 def as_enum_item_name(s):
     outp = s.lstrip('_')
-    parts = outp.lower().split('_')[2:]
+    parts = outp.split('_')[1:]
+    if parts[0] in enumPrefixOverrides:
+        parts[0] = enumPrefixOverrides[parts[0]]
+    else:
+        parts[0] = parts[0].lower()
     outp = parts[0]
     for part in parts[1:]:
         outp += part.capitalize()
-    if outp[0].isdigit():
-        outp = '_' + outp
     return wrap_keywords(outp)
-
-def enum_default_item(enum_name):
-    return enum_items[enum_name][0]
 
 def is_prim_type(s):
     return s in prim_types
@@ -383,7 +396,7 @@ def gen_enum(decl, prefix):
             item_names_by_value[value] = as_enum_item_name(item_name)
     enum_name_nim = as_nim_type_name(decl['name'], prefix)
     l('type')
-    l(f"  {enum_name_nim}* {{.pure, size:sizeof(int32).}} = enum")
+    l(f"  {enum_name_nim}* {{.size:sizeof(int32).}} = enum")
     if has_explicit_values:
         # Nim requires explicit enum values to be declared in ascending order
         for value in sorted(item_names_by_value):
@@ -483,9 +496,6 @@ def pre_parse(inp):
         elif kind == 'enum':
             enum_name = decl['name']
             enum_types.append(enum_name)
-            enum_items[enum_name] = []
-            for item in decl['items']:
-                enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
