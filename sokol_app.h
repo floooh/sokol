@@ -13410,7 +13410,7 @@ _SOKOL_PRIVATE void _sapp_wl_shell_handle_configure(void* data, struct xdg_surfa
         _sapp_frame();
         eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
     }
-    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
+    wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, INT32_MAX, INT32_MAX);
     wl_surface_commit(_sapp.wl.surface);
 }
 
@@ -13829,7 +13829,7 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
 
         _sapp_frame();
         eglSwapBuffers(_sapp.wl.egl_display, _sapp.wl.egl_surface);
-        wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, UINT32_MAX, UINT32_MAX);
+        wl_surface_damage_buffer(_sapp.wl.surface, 0, 0, INT32_MAX, INT32_MAX);
         wl_surface_commit(_sapp.wl.surface);
 
         wl_display_dispatch_queue_pending(_sapp.wl.display, _sapp.wl.event_queue);
