@@ -12844,12 +12844,12 @@ _SOKOL_PRIVATE void _sapp_wl_data_source_handle_target(void* data, struct wl_dat
 }
 
 _SOKOL_PRIVATE const struct wl_data_source_listener _sapp_wl_data_source_listener = {
-    .action = _sapp_wl_data_source_handle_action,
+    .target = _sapp_wl_data_source_handle_target,
+    .send = _sapp_wl_data_source_handle_send,
     .cancelled = _sapp_wl_data_source_handle_cancelled,
     .dnd_drop_performed = _sapp_wl_data_source_handle_dnd_drop_performed,
     .dnd_finished = _sapp_wl_data_source_handle_dnd_finished,
-    .send = _sapp_wl_data_source_handle_send,
-    .target = _sapp_wl_data_source_handle_target,
+    .action = _sapp_wl_data_source_handle_action,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_set_clipboard_string(const char* str) {
@@ -12993,10 +12993,10 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_repeat_info(void* data, struct wl_keyboard
 }
 
 _SOKOL_PRIVATE const struct wl_keyboard_listener _sapp_wl_keyboard_listener = {
-    .enter = _sapp_wl_keyboard_enter,
-    .key = _sapp_wl_keyboard_key,
     .keymap = _sapp_wl_keyboard_keymap,
+    .enter = _sapp_wl_keyboard_enter,
     .leave = _sapp_wl_keyboard_leave,
+    .key = _sapp_wl_keyboard_key,
     .modifiers = _sapp_wl_keyboard_modifiers,
     .repeat_info = _sapp_wl_keyboard_repeat_info,
 };
@@ -13113,15 +13113,15 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_motion(void* data, struct wl_pointer* point
 }
 
 _SOKOL_PRIVATE const struct wl_pointer_listener _sapp_wl_pointer_listener = {
-    .axis = _sapp_wl_pointer_axis,
-    .axis_discrete = _sapp_wl_pointer_axis_discrete,
-    .axis_source = _sapp_wl_pointer_axis_source,
-    .axis_stop = _sapp_wl_pointer_axis_stop,
-    .button = _sapp_wl_pointer_button,
     .enter = _sapp_wl_pointer_enter,
-    .frame = _sapp_wl_pointer_frame,
     .leave = _sapp_wl_pointer_leave,
     .motion = _sapp_wl_pointer_motion,
+    .button = _sapp_wl_pointer_button,
+    .axis = _sapp_wl_pointer_axis,
+    .frame = _sapp_wl_pointer_frame,
+    .axis_source = _sapp_wl_pointer_axis_source,
+    .axis_stop = _sapp_wl_pointer_axis_stop,
+    .axis_discrete = _sapp_wl_pointer_axis_discrete,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_relative_pointer_motion(void* data, struct zwp_relative_pointer_v1* relative_pointer, uint32_t utime_hi, uint32_t utime_lo, wl_fixed_t dx, wl_fixed_t dy, wl_fixed_t dx_unaccel, wl_fixed_t dy_unaccel) {
@@ -13213,13 +13213,13 @@ _SOKOL_PRIVATE void _sapp_wl_touch_up(void* data, struct wl_touch* touch, uint32
 }
 
 _SOKOL_PRIVATE const struct wl_touch_listener _sapp_wl_touch_listener = {
-    .cancel = _sapp_wl_touch_cancel,
     .down = _sapp_wl_touch_down,
-    .frame = _sapp_wl_touch_frame,
-    .motion = _sapp_wl_touch_motion,
-    .orientation = _sapp_wl_touch_orientation,
-    .shape = _sapp_wl_touch_shape,
     .up = _sapp_wl_touch_up,
+    .motion = _sapp_wl_touch_motion,
+    .frame = _sapp_wl_touch_frame,
+    .cancel = _sapp_wl_touch_cancel,
+    .shape = _sapp_wl_touch_shape,
+    .orientation = _sapp_wl_touch_orientation,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
@@ -13320,9 +13320,9 @@ _SOKOL_PRIVATE void _sapp_wl_output_scale(void* data, struct wl_output* output, 
 }
 
 _SOKOL_PRIVATE const struct wl_output_listener _sapp_wl_output_listener = {
-    .done = _sapp_wl_output_done,
     .geometry = _sapp_wl_output_geometry,
     .mode = _sapp_wl_output_mode,
+    .done = _sapp_wl_output_done,
     .scale = _sapp_wl_output_scale,
 };
 
@@ -13470,9 +13470,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_offer_handle_source_actions(void* data, struct
 }
 
 _SOKOL_PRIVATE const struct wl_data_offer_listener _sapp_wl_data_offer_listener = {
-    .action = _sapp_wl_data_offer_handle_action,
     .offer = _sapp_wl_data_offer_handle_offer,
     .source_actions = _sapp_wl_data_offer_handle_source_actions,
+    .action = _sapp_wl_data_offer_handle_action,
 };
 
 _SOKOL_PRIVATE void _sapp_wl_data_device_handle_data_offer(void* data, struct wl_data_device* data_device, struct wl_data_offer* offer) {
@@ -13581,10 +13581,10 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_
 
 _SOKOL_PRIVATE const struct wl_data_device_listener _sapp_wl_data_device_listener = {
     .data_offer = _sapp_wl_data_device_handle_data_offer,
-    .drop = _sapp_wl_data_device_handle_drop,
     .enter = _sapp_wl_data_device_handle_enter,
     .leave = _sapp_wl_data_device_handle_leave,
     .motion = _sapp_wl_data_device_handle_motion,
+    .drop = _sapp_wl_data_device_handle_drop,
     .selection = _sapp_wl_data_device_handle_selection,
 };
 
