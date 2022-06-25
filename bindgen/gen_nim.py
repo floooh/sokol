@@ -35,11 +35,6 @@ ignores = [
     'sdtx_vprintf',
 ]
 
-# consts that should be converted to Nim enum bitfields, values mimic C type declarations
-const_bitfield_overrides = {
-    'SAPP_MODIFIER_': 'sapp_event_modifier',
-}
-
 overrides = {
     'sgl_error':                    'sgl_get_error',
     'sgl_deg':                      'sgl_as_degrees',
@@ -59,7 +54,6 @@ overrides = {
     'SAPP_KEYCODE_9':               'SAPP_KEYCODE_DIGIT_9',
     'SG_IMAGETYPE_2D':              'SG_IMAGETYPE_TWO_DEE',
     'SG_IMAGETYPE_3D':              'SG_IMAGETYPE_THREE_DEE',
-    'sapp_event.modifiers':         'sapp_event_modifier', # type declared above
     'ptr':                          'pointer', # range ptr
 }
 
@@ -188,14 +182,6 @@ def check_ignore(name):
 
 def is_power_of_two(val):
     return val == 0 or val & (val - 1) == 0
-
-def check_consts_bitfield_override(decl):
-    for override in const_bitfield_overrides:
-        if all(override in item['name'] for item in decl['items']):
-            if any(not is_power_of_two(int(item['value'])) for item in decl['items']):
-                print(f"warning: bitfield override '{override}' encountered non-power-of-two value")
-            return const_bitfield_overrides[override]
-    return None
 
 def wrap_keywords(s):
     if s in keywords:
@@ -380,7 +366,7 @@ def gen_consts(decl, prefix):
         l(f"  {as_camel_case(item_name, prefix)}* = {item['value']}")
     l("")
 
-def gen_enum(decl, prefix, bitfield=None):
+def gen_enum(decl, prefix):
     item_names_by_value = {}
     value = -1
     has_explicit_values = False
@@ -395,8 +381,7 @@ def gen_enum(decl, prefix, bitfield=None):
             else:
                 value += 1
             item_names_by_value[value] = as_enum_item_name(item_name)
-    enum_name = bitfield if bitfield is not None else decl['name']
-    enum_name_nim = as_nim_type_name(enum_name, prefix)
+    enum_name_nim = as_nim_type_name(decl['name'], prefix)
     l('type')
     l(f"  {enum_name_nim}* {{.pure, size:sizeof(int32).}} = enum")
     if has_explicit_values:
@@ -407,8 +392,6 @@ def gen_enum(decl, prefix, bitfield=None):
     else:
         for name in item_names_by_value.values():
             l(f"    {name},")
-    if bitfield is not None:
-        l(f"  {enum_name_nim}s = set[{enum_name_nim}]")
     l("")
 
 # returns C prototype compatible function args (with pointers)
@@ -503,9 +486,6 @@ def pre_parse(inp):
             enum_items[enum_name] = []
             for item in decl['items']:
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
-    for bitfield in const_bitfield_overrides.values():
-        enum_types.append(bitfield)
-        enum_types.append(bitfield + 's')
 
 def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
@@ -599,11 +579,7 @@ def gen_module(inp, dep_prefixes):
         if not decl['is_dep']:
             kind = decl['kind']
             if kind == 'consts':
-                bitfield = check_consts_bitfield_override(decl)
-                if bitfield is not None:
-                    gen_enum(decl, prefix, bitfield=bitfield)
-                else:
-                    gen_consts(decl, prefix)
+                gen_consts(decl, prefix)
             elif not check_ignore(decl['name']):
                 if kind == 'struct':
                     gen_struct(decl, prefix)
