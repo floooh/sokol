@@ -383,13 +383,10 @@ def gen_consts(decl, prefix):
 def gen_enum(decl, prefix, bitfield=None):
     item_names_by_value = {}
     value = -1
-    has_force_u32 = False
     has_explicit_values = False
     for item in decl['items']:
         item_name = check_override(item['name'])
-        if item_name.endswith("_FORCE_U32"):
-            has_force_u32 = True
-        elif item_name.endswith("_NUM"):
+        if item_name.endswith("_NUM") or item_name.endswith("_FORCE_U32"):
             continue
         else:
             if 'value' in item:
@@ -401,10 +398,7 @@ def gen_enum(decl, prefix, bitfield=None):
     enum_name = bitfield if bitfield is not None else decl['name']
     enum_name_nim = as_nim_type_name(enum_name, prefix)
     l('type')
-    if has_force_u32:
-        l(f"  {enum_name_nim}* {{.pure, size:sizeof(uint32).}} = enum")
-    else:
-        l(f"  {enum_name_nim}* {{.pure, size:sizeof(cint).}} = enum")
+    l(f"  {enum_name_nim}* {{.pure, size:sizeof(int32).}} = enum")
     if has_explicit_values:
         # Nim requires explicit enum values to be declared in ascending order
         for value in sorted(item_names_by_value):
