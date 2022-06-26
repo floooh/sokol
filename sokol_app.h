@@ -12824,7 +12824,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_source_handle_send(void* data, struct wl_data_
     _SOKOL_UNUSED(data_source);
 
     if (0 == strcmp(mime_type, "text/plain")) {
-        write(fd, _sapp.clipboard.buffer, strlen(_sapp.clipboard.buffer));
+        if (write(fd, _sapp.clipboard.buffer, strlen(_sapp.clipboard.buffer)) < 0) {
+            _sapp_fail("wayland: write() failed, unable to send clipboard data");
+        }
     } else {
         const char* fmt = "Unable to handle clipboard mime type: '%s'!";
         const size_t len = strlen(fmt) + 32;
@@ -13516,7 +13518,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_
     }
 
     int fds[2];
-    pipe(fds);
+    if (pipe(fds) < 0) {
+        _sapp_fail("wayland: pipe() failed to create drag-and-drop communication channel");
+    }
     wl_data_offer_receive(_sapp.wl.data_offer, "text/uri-list", fds[1]);
     close(fds[1]);
 
@@ -13524,7 +13528,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_drop(void* data, struct wl_data_
 
     size_t buf_size = (size_t) _sapp.drop.buf_size;
     char *buf = (char *) _sapp_malloc(buf_size);
-    read(fds[0], buf, buf_size);
+    if (read(fds[0], buf, buf_size) < 0) {
+        _sapp_fail("wayland: read() failed to receive drag-and-drop offer");
+    }
     close(fds[0]);
 
     if (_sapp.drop.enabled) {
@@ -13578,7 +13584,9 @@ _SOKOL_PRIVATE void _sapp_wl_data_device_handle_selection(void* data, struct wl_
     }
 
     int fds[2];
-    pipe(fds);
+    if (pipe(fds) < 0) {
+        _sapp_fail("wayland: pipe() failed to create communication channel for clipboard selection");
+    }
     wl_data_offer_receive(offer, "text/plain", fds[1]);
     close(fds[1]);
 
