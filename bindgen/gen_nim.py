@@ -204,7 +204,7 @@ def wrap_keywords(s):
         return s
 
 # prefix_bla_blub => blaBlub
-def as_camel_case(s, prefix):
+def as_camel_case(s, prefix, wrap=True):
     outp = s.lower()
     if outp.startswith(prefix):
         outp = outp[len(prefix):]
@@ -212,10 +212,12 @@ def as_camel_case(s, prefix):
     outp = parts[0]
     for part in parts[1:]:
         outp += part.capitalize()
-    return wrap_keywords(outp)
+    if wrap:
+        outp = wrap_keywords(outp)
+    return outp
 
 # PREFIX_ENUM_BLA_BLO => blaBlo
-def as_enum_item_name(s):
+def as_enum_item_name(s, wrap=True):
     outp = s.lstrip('_')
     parts = outp.split('_')[1:]
     if parts[0] in enumPrefixOverrides:
@@ -225,7 +227,9 @@ def as_enum_item_name(s):
     outp = parts[0]
     for part in parts[1:]:
         outp += part.capitalize()
-    return wrap_keywords(outp)
+    if wrap:
+        outp = wrap_keywords(outp)
+    return outp
 
 def is_prim_type(s):
     return s in prim_types
@@ -441,10 +445,10 @@ def funcdecl_result(decl, prefix):
     return nim_res_type
 
 def gen_func_nim(decl, prefix):
-    nim_func_name = as_camel_case(check_override(decl['name']), prefix)
+    nim_func_name = as_camel_case(check_override(decl['name']), prefix, wrap=False)
     nim_res_type = funcdecl_result(decl, prefix)
     l(f"proc c_{nim_func_name}({funcdecl_args_c(decl, prefix)}):{nim_res_type} {{.cdecl, importc:\"{decl['name']}\".}}")
-    l(f"proc {nim_func_name}*({funcdecl_args_nim(decl, prefix)}):{nim_res_type} =")
+    l(f"proc {wrap_keywords(nim_func_name)}*({funcdecl_args_nim(decl, prefix)}):{nim_res_type} =")
     s = f"    c_{nim_func_name}("
     for i, param_decl in enumerate(decl['params']):
         if i > 0:
