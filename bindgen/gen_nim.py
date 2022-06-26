@@ -75,9 +75,9 @@ enumPrefixOverrides = {
 }
 
 prim_types = {
-    'int':          'cint',
+    'int':          'int32',
     'bool':         'bool',
-    'char':         'cchar',
+    'char':         'char',
     'int8_t':       'int8',
     'uint8_t':      'uint8',
     'int16_t':      'int16',
@@ -86,11 +86,11 @@ prim_types = {
     'uint32_t':     'uint32',
     'int64_t':      'int64',
     'uint64_t':     'uint64',
-    'float':        'cfloat',
-    'double':       'cdouble',
+    'float':        'float32',
+    'double':       'float64',
     'uintptr_t':    'uint',
     'intptr_t':     'int',
-    'size_t':       'csize_t',
+    'size_t':       'uint',
 }
 
 prim_defaults = {
