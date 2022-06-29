@@ -1,5 +1,14 @@
 ## Updates
 
+- **29-Jun-2022**: In sokol_app.h with the D3D11 backend, if SOKOL_DEBUG is
+defined, and the D3D11 device creation fails, there's now a fallback code
+path which tries to create the device again without the D3D11_CREATE_DEVICE_DEBUG
+flag. Turns out the D3D11 debug support may suddenly stop working (just happened
+to me, indicated by the Win10 "Graphics Tool" feature being silently uninstalled
+and failing to install when asked to do so). This fix at least allows sokol_app.h
+applications compiled in debug mode to run, even if the D3D11 debug layer doesn't
+work.
+
 - **29-May-2022**: The code generation scripts for the
 [sokol-nim](https://github.com/floooh/sokol-nim) language bindings have been
 revised and updated, many thanks to Gustav Olsson for the PR! (I'm planning to
@@ -54,9 +63,9 @@ so that it's easier to publish new bindings after updates to the sokol headers).
   This change breaks source compatibility in the following headers:
 
     - **sokol_fontstash.h**: the function signature of ```sfons_create()``` has changed,
-      this now takes a pointer to a new ```sfons_desc_t``` struct instead of 
+      this now takes a pointer to a new ```sfons_desc_t``` struct instead of
       individual parameters.
-    - **sokol_gfx_imgui.h** (NOT sokol_imgui.h!): likewise, the function signature of 
+    - **sokol_gfx_imgui.h** (NOT sokol_imgui.h!): likewise, the function signature of
       ```sg_imgui_init()``` has changed, this now takes an additional parameter
       which is a pointer to a new ```sg_imgui_desc_t``` struct.
 
