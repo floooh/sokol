@@ -17,8 +17,6 @@
 
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
     SOKOL_LOG(msg)      - your own logging functions (default: puts(msg))
-    SOKOL_CALLOC(n,s)   - your own calloc() implementation (default: calloc(n,s))
-    SOKOL_FREE(p)       - your own free() implementation (default: free(p))
     SOKOL_ARGS_API_DECL - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_ARGS_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -218,6 +216,37 @@
         Return the value of argument at index. Returns empty string
         if index is outside range.
 
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sargs_setup(&(sargs_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_args.h
+    itself though, not any allocations in OS libraries.
+
+
     TODO
     ====
     - parsing errors?
@@ -251,6 +280,7 @@
 #define SOKOL_ARGS_INCLUDED (1)
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h> // size_t
 
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_ARGS_API_DECL)
 #define SOKOL_ARGS_API_DECL SOKOL_API_DECL
@@ -269,11 +299,26 @@
 extern "C" {
 #endif
 
+/*
+    sargs_allocator
+
+    Used in sargs_desc to provide custom memory-alloc and -free functions
+    to sokol_args.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef struct sargs_allocator {
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
+    void* user_data;
+} sargs_allocator;
+
 typedef struct sargs_desc {
     int argc;
     char** argv;
     int max_args;
     int buf_size;
+    sargs_allocator allocator;
 } sargs_desc;
 
 /* setup sokol-args */
@@ -313,7 +358,13 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 /*--- IMPLEMENTATION ---------------------------------------------------------*/
 #ifdef SOKOL_ARGS_IMPL
 #define SOKOL_ARGS_IMPL_INCLUDED (1)
-#include <string.h> /* memset, strcmp */
+
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sargs_desc.allocator to override memory allocation functions"
+#endif
+
+#include <string.h> // memset, strcmp
+#include <stdlib.h> // malloc, free
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
@@ -330,15 +381,6 @@ inline void sargs_setup(const sargs_desc& desc) { return sargs_setup(&desc); }
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#if !defined(SOKOL_CALLOC) && !defined(SOKOL_FREE)
-    #include <stdlib.h>
-#endif
-#if !defined(SOKOL_CALLOC)
-    #define SOKOL_CALLOC(n,s) calloc(n,s)
-#endif
-#if !defined(SOKOL_FREE)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
@@ -388,10 +430,43 @@ typedef struct {
     uint32_t parse_state;
     char quote;         /* current quote char, 0 if not in a quote */
     bool in_escape;     /* currently in an escape sequence */
+    sargs_allocator allocator;
 } _sargs_state_t;
 static _sargs_state_t _sargs;
 
 /*== PRIVATE IMPLEMENTATION FUNCTIONS ========================================*/
+_SOKOL_PRIVATE void _sargs_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _sargs_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sargs.allocator.alloc) {
+        ptr = _sargs.allocator.alloc(size, _sargs.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sargs_malloc_clear(size_t size) {
+    void* ptr = _sargs_malloc(size);
+    _sargs_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _sargs_free(void* ptr) {
+    if (_sargs.allocator.free) {
+        _sargs.allocator.free(ptr, _sargs.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
 
 _SOKOL_PRIVATE void _sargs_putc(char c) {
     if ((_sargs.buf_pos+2) < _sargs.buf_size) {
@@ -661,14 +736,15 @@ EM_JS(void, sargs_js_parse_url, (void), {
 /*== PUBLIC IMPLEMENTATION FUNCTIONS =========================================*/
 SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
     SOKOL_ASSERT(desc);
-    memset(&_sargs, 0, sizeof(_sargs));
+    _sargs_clear(&_sargs, sizeof(_sargs));
     _sargs.max_args = _sargs_def(desc->max_args, _SARGS_MAX_ARGS_DEF);
     _sargs.buf_size = _sargs_def(desc->buf_size, _SARGS_BUF_SIZE_DEF);
     SOKOL_ASSERT(_sargs.buf_size > 8);
-    _sargs.args = (_sargs_kvp_t*) SOKOL_CALLOC((size_t)_sargs.max_args, sizeof(_sargs_kvp_t));
-    _sargs.buf = (char*) SOKOL_CALLOC((size_t)_sargs.buf_size, sizeof(char));
+    _sargs.args = (_sargs_kvp_t*) _sargs_malloc_clear((size_t)_sargs.max_args * sizeof(_sargs_kvp_t));
+    _sargs.buf = (char*) _sargs_malloc_clear((size_t)_sargs.buf_size * sizeof(char));
     /* the first character in buf is reserved and always zero, this is the 'empty string' */
     _sargs.buf_pos = 1;
+    _sargs.allocator = desc->allocator;
     _sargs.valid = true;
 
     /* parse argc/argv */
@@ -683,11 +759,11 @@ SOKOL_API_IMPL void sargs_setup(const sargs_desc* desc) {
 SOKOL_API_IMPL void sargs_shutdown(void) {
     SOKOL_ASSERT(_sargs.valid);
     if (_sargs.args) {
-        SOKOL_FREE(_sargs.args);
+        _sargs_free(_sargs.args);
         _sargs.args = 0;
     }
     if (_sargs.buf) {
-        SOKOL_FREE(_sargs.buf);
+        _sargs_free(_sargs.buf);
         _sargs.buf = 0;
     }
     _sargs.valid = false;

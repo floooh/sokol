@@ -36,8 +36,6 @@
         SOKOL_APP_API_DECL  - public function declaration prefix (default: extern)
         SOKOL_API_DECL      - same as SOKOL_APP_API_DECL
         SOKOL_API_IMPL      - public function implementation prefix (default: -)
-        SOKOL_CALLOC        - your own calloc function (default: calloc(n, s))
-        SOKOL_FREE          - your own free function (default: free(p))
 
     Optionally define the following to force debug checks and validations
     even in release mode:
@@ -54,8 +52,8 @@
 
     For example code, see https://github.com/floooh/sokol-samples/tree/master/sapp
 
-    Portions of the Windows and Linux GL initialization and event code have been
-    taken from GLFW (http://www.glfw.org/)
+    Portions of the Windows and Linux GL initialization, event-, icon- etc... code
+    have been taken from GLFW (http://www.glfw.org/)
 
     iOS onscreen keyboard support 'inspired' by libgdx.
 
@@ -71,7 +69,7 @@
     - on Windows with MINGW/MSYS2 gcc: compile with '-mwin32' so that _WIN32 is defined
         - link with the following libs: -lkernel32 -luser32 -lshell32
         - additionally with the GL backend: -lgdi32
-        - additionally with the D3D11 backend: -ld3d11 -ldxgi -dxguid
+        - additionally with the D3D11 backend: -ld3d11 -ldxgi
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
@@ -119,6 +117,8 @@
     RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
     ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
     RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
+    FOCUSED             | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
+    UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
@@ -135,14 +135,9 @@
     clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
     drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | TODO  | YES
 
-    TODO
-    ====
-    - Linux:
-        - clipboard support
-    - UWP:
-        - clipboard, mouselock
-    - sapp_consume_event() on non-web platforms?
+    (1) macOS has no regular window icons, instead the dock icon is changed
 
     STEP BY STEP
     ============
@@ -176,7 +171,10 @@
         rendering canvas. The actual size may differ from this depending on
         platform and other circumstances. Also the canvas size may change at
         any time (for instance when the user resizes the application window,
-        or rotates the mobile device).
+        or rotates the mobile device). You can just keep .width and .height
+        zero-initialized to open a default-sized window (what "default-size"
+        exactly means is platform-specific, but usually it's a size that covers
+        most of, but not all, of the display).
 
         All provided function callbacks will be called from the same thread,
         but this may be different from the thread where sokol_main() was called.
@@ -214,8 +212,8 @@
         .init_userdata_cb (void (*)(void* user_data))
         .frame_userdata_cb (void (*)(void* user_data))
         .cleanup_userdata_cb (void (*)(void* user_data))
-        .event_cb (void(*)(const sapp_event* event, void* user_data))
-        .fail_cb (void(*)(const char* msg, void* user_data))
+        .event_userdata_cb (void(*)(const sapp_event* event, void* user_data))
+        .fail_userdata_cb (void(*)(const char* msg, void* user_data))
             These are the user-data versions of the callback functions. You
             can mix those with the standard callbacks that don't have the
             user_data argument.
@@ -247,6 +245,10 @@
             the default framebuffer size as float values instead of integer. This
             may help to prevent casting back and forth between int and float
             in more strongly typed languages than C and C++.
+
+        double sapp_frame_duration(void)
+            Returns the frame duration in seconds averaged over a number of
+            frames to smooth out any jittering spikes.
 
         int sapp_color_format(void)
         int sapp_depth_format(void)
@@ -407,7 +409,7 @@
             - SAPP_EVENTTYPE_MOUSE_DOWN
             - SAPP_EVENTTYPE_MOUSE_UP
             - SAPP_EVENTTYPE_MOUSE_SCROLL
-            - SAPP_EVENTYTPE_KEY_UP
+            - SAPP_EVENTTYPE_KEY_UP
             - SAPP_EVENTTYPE_KEY_DOWN
         - The mouse lock/unlock action on the web platform is asynchronous,
           this means that sapp_mouse_locked() won't immediately return
@@ -649,10 +651,18 @@
     In a HighDPI scenario, you still request the same window size during
     sokol_main(), but the framebuffer sizes returned by sapp_width()
     and sapp_height() will be scaled up according to the DPI scaling
-    ratio. You can also get a DPI scaling factor with the function
-    sapp_dpi_scale().
+    ratio.
 
-    Here's an example on a Mac with Retina display:
+    Note that on some platforms the DPI scaling factor may change at any
+    time (for instance when a window is moved from a high-dpi display
+    to a low-dpi display).
+
+    To query the current DPI scaling factor, call the function:
+
+    float sapp_dpi_scale(void);
+
+    For instance on a Retina Mac, returning the following sapp_desc
+    struct from sokol_main():
 
     sapp_desc sokol_main() {
         return (sapp_desc) {
@@ -663,19 +673,32 @@
         };
     }
 
-    The functions sapp_width(), sapp_height() and sapp_dpi_scale() will
-    return the following values:
+    ...the functions the functions sapp_width(), sapp_height()
+    and sapp_dpi_scale() will return the following values:
 
-    sapp_width      -> 1280
-    sapp_height     -> 960
-    sapp_dpi_scale  -> 2.0
+    sapp_width:     1280
+    sapp_height:    960
+    sapp_dpi_scale: 2.0
 
     If the high_dpi flag is false, or you're not running on a Retina display,
     the values would be:
 
-    sapp_width      -> 640
-    sapp_height     -> 480
-    sapp_dpi_scale  -> 1.0
+    sapp_width:     640
+    sapp_height:    480
+    sapp_dpi_scale: 1.0
+
+    If the window is moved from the Retina display to a low-dpi external display,
+    the values would change as follows:
+
+    sapp_width:     1280 => 640
+    sapp_height:    960  => 480
+    sapp_dpi_scale: 2.0  => 1.0
+
+    Currently there is no event associated with a DPI change, but an
+    SAPP_EVENTTYPE_RESIZED will be sent as a side effect of the
+    framebuffer size changing.
+
+    Per-monitor DPI is currently supported on macOS and Windows.
 
     APPLICATION QUIT
     ================
@@ -776,6 +799,113 @@
     To check if the application window is currently in fullscreen mode,
     call sapp_is_fullscreen().
 
+    WINDOW ICON SUPPORT
+    ===================
+    Some sokol_app.h backends allow to change the window icon programmatically:
+
+        - on Win32: the small icon in the window's title bar, and the
+          bigger icon in the task bar
+        - on Linux: highly dependent on the used window manager, but usually
+          the window's title bar icon and/or the task bar icon
+        - on HTML5: the favicon shown in the page's browser tab
+
+    NOTE that it is not possible to set the actual application icon which is
+    displayed by the operating system on the desktop or 'home screen'. Those
+    icons must be provided 'traditionally' through operating-system-specific
+    resources which are associated with the application (sokol_app.h might
+    later support setting the window icon from platform specific resource data
+    though).
+
+    There are two ways to set the window icon:
+
+        - at application start in the sokol_main() function by initializing
+          the sapp_desc.icon nested struct
+        - or later by calling the function sapp_set_icon()
+
+    As a convenient shortcut, sokol_app.h comes with a builtin default-icon
+    (a rainbow-colored 'S', which at least looks a bit better than the Windows
+    default icon for applications), which can be activated like this:
+
+    At startup in sokol_main():
+
+        sapp_desc sokol_main(...) {
+            return (sapp_desc){
+                ...
+                icon.sokol_default = true
+            };
+        }
+
+    Or later by calling:
+
+        sapp_set_icon(&(sapp_icon_desc){ .sokol_default = true });
+
+    NOTE that a completely zero-initialized sapp_icon_desc struct will not
+    update the window icon in any way. This is an 'escape hatch' so that you
+    can handle the window icon update yourself (or if you do this already,
+    sokol_app.h won't get in your way, in this case just leave the
+    sapp_desc.icon struct zero-initialized).
+
+    Providing your own icon images works exactly like in GLFW (down to the
+    data format):
+
+    You provide one or more 'candidate images' in different sizes, and the
+    sokol_app.h platform backends pick the best match for the specific backend
+    and icon type.
+
+    For each candidate image, you need to provide:
+
+        - the width in pixels
+        - the height in pixels
+        - and the actual pixel data in RGBA8 pixel format (e.g. 0xFFCC8844
+          on a little-endian CPU means: alpha=0xFF, blue=0xCC, green=0x88, red=0x44)
+
+    For instance, if you have 3 candidate images (small, medium, big) of
+    sizes 16x16, 32x32 and 64x64 the corresponding sapp_icon_desc struct is setup
+    like this:
+
+        // the actual pixel data (RGBA8, origin top-left)
+        const uint32_t small[16][16]  = { ... };
+        const uint32_t medium[32][32] = { ... };
+        const uint32_t big[64][64]    = { ... };
+
+        const sapp_icon_desc icon_desc = {
+            .images = {
+                { .width = 16, .height = 16, .pixels = SAPP_RANGE(small) },
+                { .width = 32, .height = 32, .pixels = SAPP_RANGE(medium) },
+                // ...or without the SAPP_RANGE helper macro:
+                { .width = 64, .height = 64, .pixels = { .ptr=big, .size=sizeof(big) } }
+            }
+        };
+
+    An sapp_icon_desc struct initialized like this can then either be applied
+    at application start in sokol_main:
+
+        sapp_desc sokol_main(...) {
+            return (sapp_desc){
+                ...
+                icon = icon_desc
+            };
+        }
+
+    ...or later by calling sapp_set_icon():
+
+        sapp_set_icon(&icon_desc);
+
+    Some window icon caveats:
+
+        - once the window icon has been updated, there's no way to go back to
+          the platform's default icon, this is because some platforms (Linux
+          and HTML5) don't switch the icon visual back to the default even if
+          the custom icon is deleted or removed
+        - on HTML5, if the sokol_app.h icon doesn't show up in the browser
+          tab, check that there's no traditional favicon 'link' element
+          is defined in the page's index.html, sokol_app.h will only
+          append a new favicon link element, but not delete any manually
+          defined favicon in the page
+
+    For an example and test of the window icon feature, check out the the
+    'icon-sapp' sample on the sokol-samples git repository.
+
     ONSCREEN KEYBOARD
     =================
     On some platforms which don't provide a physical keyboard, sokol-app
@@ -849,6 +979,35 @@
             doesn't matter if the application is started from the command
             line or via double-click.
 
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        sapp_desc sokol_main(int argc, char* argv[]) {
+            return (sapp_desc){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            };
+        }
+
+    If no overrides are provided, malloc and free will be used.
+
+    This only affects memory allocation calls done by sokol_app.h
+    itself though, not any allocations in OS libraries.
+
     TEMP NOTE DUMP
     ==============
     - onscreen keyboard support on Android requires Java :(, should we even bother?
@@ -890,6 +1049,7 @@
         distribution.
 */
 #define SOKOL_APP_INCLUDED (1)
+#include <stddef.h> // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -910,12 +1070,22 @@
 extern "C" {
 #endif
 
+/* misc constants */
 enum {
     SAPP_MAX_TOUCHPOINTS = 8,
     SAPP_MAX_MOUSEBUTTONS = 3,
     SAPP_MAX_KEYCODES = 512,
+    SAPP_MAX_ICONIMAGES = 8,
 };
 
+/*
+    sapp_event_type
+
+    The type of event that's passed to the event handler callback
+    in the sapp_event.type field. These are not just "traditional"
+    input events, but also notify the application about state changes
+    or other user-invoked actions.
+*/
 typedef enum sapp_event_type {
     SAPP_EVENTTYPE_INVALID,
     SAPP_EVENTTYPE_KEY_DOWN,
@@ -934,6 +1104,8 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_RESIZED,
     SAPP_EVENTTYPE_ICONIFIED,
     SAPP_EVENTTYPE_RESTORED,
+    SAPP_EVENTTYPE_FOCUSED,
+    SAPP_EVENTTYPE_UNFOCUSED,
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
     SAPP_EVENTTYPE_UPDATE_CURSOR,
@@ -944,7 +1116,14 @@ typedef enum sapp_event_type {
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF
 } sapp_event_type;
 
-/* key codes are the same names and values as GLFW */
+/*
+    sapp_keycode
+
+    The 'virtual keycode' of a KEY_DOWN or KEY_UP event in the
+    struct field sapp_event.key_code.
+
+    Note that the keycode values are identical with GLFW.
+*/
 typedef enum sapp_keycode {
     SAPP_KEYCODE_INVALID          = 0,
     SAPP_KEYCODE_SPACE            = 32,
@@ -1069,6 +1248,15 @@ typedef enum sapp_keycode {
     SAPP_KEYCODE_MENU             = 348,
 } sapp_keycode;
 
+/*
+    sapp_touchpoint
+
+    Describes a single touchpoint in a multitouch event (TOUCHES_BEGAN,
+    TOUCHES_MOVED, TOUCHES_ENDED).
+
+    Touch points are stored in the nested array sapp_event.touches[],
+    and the number of touches is stored in sapp_event.num_touches.
+*/
 typedef struct sapp_touchpoint {
     uintptr_t identifier;
     float pos_x;
@@ -1076,6 +1264,12 @@ typedef struct sapp_touchpoint {
     bool changed;
 } sapp_touchpoint;
 
+/*
+    sapp_mousebutton
+
+    The currently pressed mouse button in the events MOUSE_DOWN
+    and MOUSE_UP, stored in the struct field sapp_event.mouse_button.
+*/
 typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_LEFT = 0x0,
     SAPP_MOUSEBUTTON_RIGHT = 0x1,
@@ -1083,75 +1277,170 @@ typedef enum sapp_mousebutton {
     SAPP_MOUSEBUTTON_INVALID = 0x100,
 } sapp_mousebutton;
 
+/*
+    These are currently pressed modifier keys (and mouse buttons) which are
+    passed in the event struct field sapp_event.modifiers.
+*/
 enum {
-    SAPP_MODIFIER_SHIFT = 0x1,
-    SAPP_MODIFIER_CTRL = 0x2,
-    SAPP_MODIFIER_ALT = 0x4,
-    SAPP_MODIFIER_SUPER = 0x8
+    SAPP_MODIFIER_SHIFT = 0x1,      // left or right shift key
+    SAPP_MODIFIER_CTRL  = 0x2,      // left or right control key
+    SAPP_MODIFIER_ALT   = 0x4,      // left or right alt key
+    SAPP_MODIFIER_SUPER = 0x8,      // left or right 'super' key
+    SAPP_MODIFIER_LMB   = 0x100,    // left mouse button
+    SAPP_MODIFIER_RMB   = 0x200,    // right mouse button
+    SAPP_MODIFIER_MMB   = 0x400,    // middle mouse button
 };
 
+/*
+    sapp_event
+
+    This is an all-in-one event struct passed to the event handler
+    user callback function. Note that it depends on the event
+    type what struct fields actually contain useful values, so you
+    should first check the event type before reading other struct
+    fields.
+*/
 typedef struct sapp_event {
-    uint64_t frame_count;
-    sapp_event_type type;
-    sapp_keycode key_code;
-    uint32_t char_code;
-    bool key_repeat;
-    uint32_t modifiers;
-    sapp_mousebutton mouse_button;
-    float mouse_x;
-    float mouse_y;
-    float mouse_dx;
-    float mouse_dy;
-    float scroll_x;
-    float scroll_y;
-    int num_touches;
-    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];
-    int window_width;
+    uint64_t frame_count;               // current frame counter, always valid, useful for checking if two events were issued in the same frame
+    sapp_event_type type;               // the event type, always valid
+    sapp_keycode key_code;              // the virtual key code, only valid in KEY_UP, KEY_DOWN
+    uint32_t char_code;                 // the UTF-32 character code, only valid in CHAR events
+    bool key_repeat;                    // true if this is a key-repeat event, valid in KEY_UP, KEY_DOWN and CHAR
+    uint32_t modifiers;                 // current modifier keys, valid in all key-, char- and mouse-events
+    sapp_mousebutton mouse_button;      // mouse button that was pressed or released, valid in MOUSE_DOWN, MOUSE_UP
+    float mouse_x;                      // current horizontal mouse position in pixels, always valid except during mouse lock
+    float mouse_y;                      // current vertical mouse position in pixels, always valid except during mouse lock
+    float mouse_dx;                     // relative horizontal mouse movement since last frame, always valid
+    float mouse_dy;                     // relative vertical mouse movement since last frame, always valid
+    float scroll_x;                     // horizontal mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    float scroll_y;                     // vertical mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    int num_touches;                    // number of valid items in the touches[] array
+    sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];  // current touch points, valid in TOUCHES_BEGIN, TOUCHES_MOVED, TOUCHES_ENDED
+    int window_width;                   // current window- and framebuffer sizes in pixels, always valid
     int window_height;
-    int framebuffer_width;
-    int framebuffer_height;
+    int framebuffer_width;              // = window_width * dpi_scale
+    int framebuffer_height;             // = window_height * dpi_scale
 } sapp_event;
 
+/*
+    sg_range
+
+    A general pointer/size-pair struct and constructor macros for passing binary blobs
+    into sokol_app.h.
+*/
+typedef struct sapp_range {
+    const void* ptr;
+    size_t size;
+} sapp_range;
+// disabling this for every includer isn't great, but the warnings are also quite pointless
+#if defined(_MSC_VER)
+#pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#endif
+#if defined(__cplusplus)
+#define SAPP_RANGE(x) sapp_range{ &x, sizeof(x) }
+#else
+#define SAPP_RANGE(x) (sapp_range){ &x, sizeof(x) }
+#endif
+
+/*
+    sapp_image_desc
+
+    This is used to describe image data to sokol_app.h (at first, window
+    icons, later maybe cursor images).
+
+    Note that the actual image pixel format depends on the use case:
+
+    - window icon pixels are RGBA8
+    - cursor images are ??? (FIXME)
+*/
+typedef struct sapp_image_desc {
+    int width;
+    int height;
+    sapp_range pixels;
+} sapp_image_desc;
+
+/*
+    sapp_icon_desc
+
+    An icon description structure for use in sapp_desc.icon and
+    sapp_set_icon().
+
+    When setting a custom image, the application can provide a number of
+    candidates differing in size, and sokol_app.h will pick the image(s)
+    closest to the size expected by the platform's window system.
+
+    To set sokol-app's default icon, set .sokol_default to true.
+
+    Otherwise provide candidate images of different sizes in the
+    images[] array.
+
+    If both the sokol_default flag is set to true, any image candidates
+    will be ignored and the sokol_app.h default icon will be set.
+*/
+typedef struct sapp_icon_desc {
+    bool sokol_default;
+    sapp_image_desc images[SAPP_MAX_ICONIMAGES];
+} sapp_icon_desc;
+
+/*
+    sapp_allocator
+
+    Used in sapp_desc to provide custom memory-alloc and -free functions
+    to sokol_app.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef struct sapp_allocator {
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
+    void* user_data;
+} sapp_allocator;
+
 typedef struct sapp_desc {
-    void (*init_cb)(void);                  /* these are the user-provided callbacks without user data */
+    void (*init_cb)(void);                  // these are the user-provided callbacks without user data
     void (*frame_cb)(void);
     void (*cleanup_cb)(void);
     void (*event_cb)(const sapp_event*);
     void (*fail_cb)(const char*);
 
-    void* user_data;                        /* these are the user-provided callbacks with user data */
+    void* user_data;                        // these are the user-provided callbacks with user data
     void (*init_userdata_cb)(void*);
     void (*frame_userdata_cb)(void*);
     void (*cleanup_userdata_cb)(void*);
     void (*event_userdata_cb)(const sapp_event*, void*);
     void (*fail_userdata_cb)(const char*, void*);
 
-    int width;                          /* the preferred width of the window / canvas */
-    int height;                         /* the preferred height of the window / canvas */
-    int sample_count;                   /* MSAA sample count */
-    int swap_interval;                  /* the preferred swap interval (ignored on some platforms) */
-    bool high_dpi;                      /* whether the rendering canvas is full-resolution on HighDPI displays */
-    bool fullscreen;                    /* whether the window should be created in fullscreen mode */
-    bool alpha;                         /* whether the framebuffer should have an alpha channel (ignored on some platforms) */
-    const char* window_title;           /* the window title as UTF-8 encoded string */
-    bool user_cursor;                   /* if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR */
-    bool enable_clipboard;              /* enable clipboard access, default is false */
-    int clipboard_size;                 /* max size of clipboard content in bytes */
-    bool enable_dragndrop;              /* enable file dropping (drag'n'drop), default is false */
-    int max_dropped_files;              /* max number of dropped files to process (default: 1) */
-    int max_dropped_file_path_length;   /* max length in bytes of a dropped UTF-8 file path (default: 2048) */
+    int width;                          // the preferred width of the window / canvas
+    int height;                         // the preferred height of the window / canvas
+    int sample_count;                   // MSAA sample count
+    int swap_interval;                  // the preferred swap interval (ignored on some platforms)
+    bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
+    bool fullscreen;                    // whether the window should be created in fullscreen mode
+    bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
+    const char* window_title;           // the window title as UTF-8 encoded string
+    bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
+    bool enable_clipboard;              // enable clipboard access, default is false
+    int clipboard_size;                 // max size of clipboard content in bytes
+    bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
+    int max_dropped_files;              // max number of dropped files to process (default: 1)
+    int max_dropped_file_path_length;   // max length in bytes of a dropped UTF-8 file path (default: 2048)
+    sapp_icon_desc icon;                // the initial window icon to set
+    sapp_allocator allocator;           // optional memory allocation overrides (default: malloc/free)
 
     /* backend-specific options */
-    bool gl_force_gles2;                /* if true, setup GLES2/WebGL even if GLES3/WebGL2 is available */
-    bool win32_console_utf8;            /* if true, set the output console codepage to UTF-8 */
-    bool win32_console_create;          /* if true, attach stdout/stderr to a new console window */
-    bool win32_console_attach;          /* if true, attach stdout/stderr to parent process */
-    const char* html5_canvas_name;      /* the name (id) of the HTML5 canvas element, default is "canvas" */
-    bool html5_canvas_resize;           /* if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked */
-    bool html5_preserve_drawing_buffer; /* HTML5 only: whether to preserve default framebuffer content between frames */
-    bool html5_premultiplied_alpha;     /* HTML5 only: whether the rendered pixels use premultiplied alpha convention */
-    bool html5_ask_leave_site;          /* initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site()) */
-    bool ios_keyboard_resizes_canvas;   /* if true, showing the iOS keyboard shrinks the canvas */
+    bool gl_force_gles2;                // if true, setup GLES2/WebGL even if GLES3/WebGL2 is available
+    int gl_major_version;               // override GL major and minor version (the default GL version is 3.2)
+    int gl_minor_version;
+    bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
+    bool win32_console_create;          // if true, attach stdout/stderr to a new console window
+    bool win32_console_attach;          // if true, attach stdout/stderr to parent process
+    const char* html5_canvas_name;      // the name (id) of the HTML5 canvas element, default is "canvas"
+    bool html5_canvas_resize;           // if true, the HTML5 canvas size is set to sapp_desc.width/height, otherwise canvas size is tracked
+    bool html5_preserve_drawing_buffer; // HTML5 only: whether to preserve default framebuffer content between frames
+    bool html5_premultiplied_alpha;     // HTML5 only: whether the rendered pixels use premultiplied alpha convention
+    bool html5_ask_leave_site;          // initial state of the internal html5_ask_leave_site flag (see sapp_html5_ask_leave_site())
+    bool ios_keyboard_resizes_canvas;   // if true, showing the iOS keyboard shrinks the canvas
 } sapp_desc;
 
 /* HTML5 specific: request and response structs for
@@ -1215,7 +1504,7 @@ SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void);
 /* show or hide the mouse cursor */
 SOKOL_APP_API_DECL void sapp_show_mouse(bool show);
 /* show or hide the mouse cursor */
-SOKOL_APP_API_DECL bool sapp_mouse_shown();
+SOKOL_APP_API_DECL bool sapp_mouse_shown(void);
 /* enable/disable mouse-pointer-lock mode */
 SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
@@ -1234,12 +1523,16 @@ SOKOL_APP_API_DECL void sapp_quit(void);
 SOKOL_APP_API_DECL void sapp_consume_event(void);
 /* get the current frame counter (for comparison with sapp_event.frame_count) */
 SOKOL_APP_API_DECL uint64_t sapp_frame_count(void);
+/* get an averaged/smoothed frame duration in seconds */
+SOKOL_APP_API_DECL double sapp_frame_duration(void);
 /* write string into clipboard */
 SOKOL_APP_API_DECL void sapp_set_clipboard_string(const char* str);
 /* read string from clipboard (usually during SAPP_EVENTTYPE_CLIPBOARD_PASTED) */
 SOKOL_APP_API_DECL const char* sapp_get_clipboard_string(void);
 /* set the window title (only on desktop platforms) */
 SOKOL_APP_API_DECL void sapp_set_window_title(const char* str);
+/* set the window icon (only on Windows and Linux) */
+SOKOL_APP_API_DECL void sapp_set_icon(const sapp_icon_desc* icon_desc);
 /* gets the total number of dropped files (after an SAPP_EVENTTYPE_FILES_DROPPED event) */
 SOKOL_APP_API_DECL int sapp_get_num_dropped_files(void);
 /* gets the dropped file paths */
@@ -1273,6 +1566,8 @@ SOKOL_APP_API_DECL const void* sapp_ios_get_window(void);
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device(void);
 /* D3D11: get pointer to ID3D11DeviceContext object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_device_context(void);
+/* D3D11: get pointer to IDXGISwapChain object */
+SOKOL_APP_API_DECL const void* sapp_d3d11_get_swap_chain(void);
 /* D3D11: get pointer to ID3D11RenderTargetView object */
 SOKOL_APP_API_DECL const void* sapp_d3d11_get_render_target_view(void);
 /* D3D11: get pointer to ID3D11DepthStencilView */
@@ -1314,6 +1609,11 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sapp_desc.allocator to override memory allocation functions"
+#endif
+
+#include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t
 
@@ -1397,15 +1697,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #ifndef SOKOL_UNREACHABLE
     #define SOKOL_UNREACHABLE SOKOL_ASSERT(false)
 #endif
-#if !defined(SOKOL_CALLOC) || !defined(SOKOL_FREE)
-    #include <stdlib.h>
-#endif
-#if !defined(SOKOL_CALLOC)
-    #define SOKOL_CALLOC(n,s) calloc(n,s)
-#endif
-#if !defined(SOKOL_FREE)
-    #define SOKOL_FREE(p) free(p)
-#endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
         #if defined(__ANDROID__)
@@ -1420,7 +1711,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 #endif
 #ifndef SOKOL_ABORT
-    #include <stdlib.h>
     #define SOKOL_ABORT() abort()
 #endif
 #ifndef _SOKOL_PRIVATE
@@ -1453,6 +1743,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #import <GLKit/GLKit.h>
         #endif
     #endif
+    #include <AvailabilityMacros.h>
+    #include <mach/mach_time.h>
 #elif defined(_SAPP_EMSCRIPTEN)
     #if defined(SOKOL_WGPU)
         #include <webgpu/webgpu.h>
@@ -1491,13 +1783,10 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
     #pragma comment (lib, "shell32")    /* CommandLineToArgvW, DragQueryFileW, DragFinished */
+    #pragma comment (lib, "gdi32")
     #if defined(SOKOL_D3D11)
         #pragma comment (lib, "dxgi")
         #pragma comment (lib, "d3d11")
-        #pragma comment (lib, "dxguid")
-    #endif
-    #if defined(SOKOL_GLCORE33)
-        #pragma comment (lib, "gdi32")
     #endif
 
     #if defined(SOKOL_D3D11)
@@ -1511,6 +1800,9 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
+    #endif
+    #ifndef WM_DPICHANGED
+        #define WM_DPICHANGED (0x02E0)
     #endif
 #elif defined(_SAPP_UWP)
     #ifndef NOMINMAX
@@ -1545,6 +1837,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_SAPP_ANDROID)
     #include <pthread.h>
     #include <unistd.h>
+    #include <time.h>
     #include <android/native_activity.h>
     #include <android/looper.h>
     #include <EGL/egl.h>
@@ -1562,7 +1855,219 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
     #include <pthread.h>    /* only used a linker-guard, search for _sapp_linux_run() and see first comment */
+    #include <time.h>
 #endif
+
+/*== frame timing helpers ===================================================*/
+#define _SAPP_RING_NUM_SLOTS (256)
+typedef struct {
+    int head;
+    int tail;
+    double buf[_SAPP_RING_NUM_SLOTS];
+} _sapp_ring_t;
+
+_SOKOL_PRIVATE int _sapp_ring_idx(int i) {
+    return i % _SAPP_RING_NUM_SLOTS;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_init(_sapp_ring_t* ring) {
+    ring->head = 0;
+    ring->tail = 0;
+}
+
+_SOKOL_PRIVATE bool _sapp_ring_full(_sapp_ring_t* ring) {
+    return _sapp_ring_idx(ring->head + 1) == ring->tail;
+}
+
+_SOKOL_PRIVATE bool _sapp_ring_empty(_sapp_ring_t* ring) {
+    return ring->head == ring->tail;
+}
+
+_SOKOL_PRIVATE int _sapp_ring_count(_sapp_ring_t* ring) {
+    int count;
+    if (ring->head >= ring->tail) {
+        count = ring->head - ring->tail;
+    }
+    else {
+        count = (ring->head + _SAPP_RING_NUM_SLOTS) - ring->tail;
+    }
+    SOKOL_ASSERT((count >= 0) && (count < _SAPP_RING_NUM_SLOTS));
+    return count;
+}
+
+_SOKOL_PRIVATE void _sapp_ring_enqueue(_sapp_ring_t* ring, double val) {
+    SOKOL_ASSERT(!_sapp_ring_full(ring));
+    ring->buf[ring->head] = val;
+    ring->head = _sapp_ring_idx(ring->head + 1);
+}
+
+_SOKOL_PRIVATE double _sapp_ring_dequeue(_sapp_ring_t* ring) {
+    SOKOL_ASSERT(!_sapp_ring_empty(ring));
+    double val = ring->buf[ring->tail];
+    ring->tail = _sapp_ring_idx(ring->tail + 1);
+    return val;
+}
+
+/*
+    NOTE:
+
+    Q: Why not use CAMetalDrawable.presentedTime on macOS and iOS?
+    A: The value appears to be highly unstable during the first few
+    seconds, sometimes several frames are dropped in sequence, or
+    switch between 120 and 60 Hz for a few frames. Simply measuring
+    and averaging the frame time yielded a more stable frame duration.
+    Maybe switching to CVDisplayLink would yield better results.
+    Until then just measure the time.
+*/
+typedef struct {
+    #if defined(_SAPP_APPLE)
+        struct {
+            mach_timebase_info_data_t timebase;
+            uint64_t start;
+        } mach;
+    #elif defined(_SAPP_EMSCRIPTEN)
+        // empty
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        struct {
+            LARGE_INTEGER freq;
+            LARGE_INTEGER start;
+        } win;
+    #else // Linux, Android, ...
+        #ifdef CLOCK_MONOTONIC
+        #define _SAPP_CLOCK_MONOTONIC CLOCK_MONOTONIC
+        #else
+        // on some embedded platforms, CLOCK_MONOTONIC isn't defined
+        #define _SAPP_CLOCK_MONOTONIC (1)
+        #endif
+        struct {
+            uint64_t start;
+        } posix;
+    #endif
+} _sapp_timestamp_t;
+
+_SOKOL_PRIVATE int64_t _sapp_int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
+    int64_t q = value / denom;
+    int64_t r = value % denom;
+    return q * numer + r * numer / denom;
+}
+
+_SOKOL_PRIVATE void _sapp_timestamp_init(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        mach_timebase_info(&ts->mach.timebase);
+        ts->mach.start = mach_absolute_time();
+    #elif defined(_SAPP_EMSCRIPTEN)
+        (void)ts;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        QueryPerformanceFrequency(&ts->win.freq);
+        QueryPerformanceCounter(&ts->win.start);
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        ts->posix.start = (uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec;
+    #endif
+}
+
+_SOKOL_PRIVATE double _sapp_timestamp_now(_sapp_timestamp_t* ts) {
+    #if defined(_SAPP_APPLE)
+        const uint64_t traw = mach_absolute_time() - ts->mach.start;
+        const uint64_t now = (uint64_t) _sapp_int64_muldiv((int64_t)traw, (int64_t)ts->mach.timebase.numer, (int64_t)ts->mach.timebase.denom);
+        return (double)now / 1000000000.0;
+    #elif defined(_SAPP_EMSCRIPTEN)
+        (void)ts;
+        SOKOL_ASSERT(false);
+        return 0.0;
+    #elif defined(_SAPP_WIN32) || defined(_SAPP_UWP)
+        LARGE_INTEGER qpc;
+        QueryPerformanceCounter(&qpc);
+        const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - ts->win.start.QuadPart, 1000000000, ts->win.freq.QuadPart);
+        return (double)now / 1000000000.0;
+    #else
+        struct timespec tspec;
+        clock_gettime(_SAPP_CLOCK_MONOTONIC, &tspec);
+        const uint64_t now = ((uint64_t)tspec.tv_sec*1000000000 + (uint64_t)tspec.tv_nsec) - ts->posix.start;
+        return (double)now / 1000000000.0;
+    #endif
+}
+
+typedef struct {
+    double last;
+    double accum;
+    double avg;
+    int spike_count;
+    int num;
+    _sapp_timestamp_t timestamp;
+    _sapp_ring_t ring;
+} _sapp_timing_t;
+
+_SOKOL_PRIVATE void _sapp_timing_reset(_sapp_timing_t* t) {
+    t->last = 0.0;
+    t->accum = 0.0;
+    t->spike_count = 0;
+    t->num = 0;
+    _sapp_ring_init(&t->ring);
+}
+
+_SOKOL_PRIVATE void _sapp_timing_init(_sapp_timing_t* t) {
+    t->avg = 1.0 / 60.0;    // dummy value until first actual value is available
+    _sapp_timing_reset(t);
+    _sapp_timestamp_init(&t->timestamp);
+}
+
+_SOKOL_PRIVATE void _sapp_timing_put(_sapp_timing_t* t, double dur) {
+    // arbitrary upper limit to ignore outliers (e.g. during window resizing, or debugging)
+    double min_dur = 0.0;
+    double max_dur = 0.1;
+    // if we have enough samples for a useful average, use a much tighter 'valid window'
+    if (_sapp_ring_full(&t->ring)) {
+        min_dur = t->avg * 0.8;
+        max_dur = t->avg * 1.2;
+    }
+    if ((dur < min_dur) || (dur > max_dur)) {
+        t->spike_count++;
+        // if there have been many spikes in a row, the display refresh rate
+        // might have changed, so a timing reset is needed
+        if (t->spike_count > 20) {
+            _sapp_timing_reset(t);
+        }
+        return;
+    }
+    if (_sapp_ring_full(&t->ring)) {
+        double old_val = _sapp_ring_dequeue(&t->ring);
+        t->accum -= old_val;
+        t->num -= 1;
+    }
+    _sapp_ring_enqueue(&t->ring, dur);
+    t->accum += dur;
+    t->num += 1;
+    SOKOL_ASSERT(t->num > 0);
+    t->avg = t->accum / t->num;
+    t->spike_count = 0;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_discontinuity(_sapp_timing_t* t) {
+    t->last = 0.0;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_measure(_sapp_timing_t* t) {
+    const double now = _sapp_timestamp_now(&t->timestamp);
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
+_SOKOL_PRIVATE void _sapp_timing_external(_sapp_timing_t* t, double now) {
+    if (t->last > 0.0) {
+        double dur = now - t->last;
+        _sapp_timing_put(t, dur);
+    }
+    t->last = now;
+}
+
+_SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
+    return t->avg;
+}
 
 /*== MACOS DECLARATIONS ======================================================*/
 #if defined(_SAPP_MACOS)
@@ -1653,6 +2158,7 @@ typedef struct {
     bool wants_show_keyboard;
     bool wants_hide_keyboard;
     bool mouse_lock_requested;
+    uint16_t mouse_buttons;
     #if defined(SOKOL_WGPU)
     _sapp_wgpu_t wgpu;
     #endif
@@ -1672,6 +2178,9 @@ typedef struct {
     ID3D11DepthStencilView* dsv;
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     IDXGISwapChain* swap_chain;
+    IDXGIDevice1* dxgi_device;
+    bool use_dxgi_frame_stats;
+    UINT sync_refresh_count;
 } _sapp_d3d11_t;
 #endif
 
@@ -1702,9 +2211,13 @@ typedef struct {
 
 typedef struct {
     HWND hwnd;
+    HMONITOR hmonitor;
     HDC dc;
+    HICON big_icon;
+    HICON small_icon;
     UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
+    RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
     bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
@@ -1933,6 +2446,7 @@ typedef struct {
     Atom WM_STATE;
     Atom NET_WM_NAME;
     Atom NET_WM_ICON_NAME;
+    Atom NET_WM_ICON;
     Atom NET_WM_STATE;
     Atom NET_WM_STATE_FULLSCREEN;
     _sapp_xi_t xi;
@@ -1986,6 +2500,8 @@ typedef struct {
 #define _sapp_absf(a) (((a)<0.0f)?-(a):(a))
 
 #define _SAPP_MAX_TITLE_LENGTH (128)
+#define _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH (640)
+#define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
 /* NOTE: the pixel format values *must* be compatible with sg_pixel_format */
 #define _SAPP_PIXELFORMAT_RGBA8 (23)
 #define _SAPP_PIXELFORMAT_BGRA8 (27)
@@ -1995,12 +2511,12 @@ typedef struct {
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SAPP_CLEAR(type, item) { item = (type) { }; }
+        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = { }; }
     #else
-        #define _SAPP_CLEAR(type, item) { item = (type) { 0 }; }
+        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
     #endif
 #else
-    #define _SAPP_CLEAR(type, item) { memset(&item, 0, sizeof(item)); }
+    #define _SAPP_CLEAR_ARC_STRUCT(type, item) { _sapp_clear(&item, sizeof(item)); }
 #endif
 
 typedef struct {
@@ -2047,10 +2563,13 @@ typedef struct {
     int swap_interval;
     float dpi_scale;
     uint64_t frame_count;
+    _sapp_timing_t timing;
     sapp_event event;
     _sapp_mouse_t mouse;
     _sapp_clipboard_t clipboard;
     _sapp_drop_t drop;
+    sapp_icon_desc default_icon_desc;
+    uint32_t* default_icon_pixels;
     #if defined(_SAPP_MACOS)
         _sapp_macos_t macos;
     #elif defined(_SAPP_IOS)
@@ -2083,6 +2602,39 @@ typedef struct {
 static _sapp_t _sapp;
 
 /*=== PRIVATE HELPER FUNCTIONS ===============================================*/
+_SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+_SOKOL_PRIVATE void* _sapp_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sapp.desc.allocator.alloc) {
+        ptr = _sapp.desc.allocator.alloc(size, _sapp.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void* _sapp_malloc_clear(size_t size) {
+    void* ptr = _sapp_malloc(size);
+    _sapp_clear(ptr, size);
+    return ptr;
+}
+
+_SOKOL_PRIVATE void _sapp_free(void* ptr) {
+    if (_sapp.desc.allocator.free) {
+        _sapp.desc.allocator.free(ptr, _sapp.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_fail(const char* msg) {
     if (_sapp.desc.fail_cb) {
         _sapp.desc.fail_cb(msg);
@@ -2185,24 +2737,40 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, int max_len) {
     }
 }
 
-_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* in_desc) {
-    sapp_desc desc = *in_desc;
-    desc.width = _sapp_def(desc.width, 640);
-    desc.height = _sapp_def(desc.height, 480);
-    desc.sample_count = _sapp_def(desc.sample_count, 1);
-    desc.swap_interval = _sapp_def(desc.swap_interval, 1);
-    desc.html5_canvas_name = _sapp_def(desc.html5_canvas_name, "canvas");
-    desc.clipboard_size = _sapp_def(desc.clipboard_size, 8192);
-    desc.max_dropped_files = _sapp_def(desc.max_dropped_files, 1);
-    desc.max_dropped_file_path_length = _sapp_def(desc.max_dropped_file_path_length, 2048);
-    desc.window_title = _sapp_def(desc.window_title, "sokol_app");
-    return desc;
+_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sapp_desc res = *desc;
+    res.sample_count = _sapp_def(res.sample_count, 1);
+    res.swap_interval = _sapp_def(res.swap_interval, 1);
+    // NOTE: can't patch the default for gl_major_version and gl_minor_version
+    // independently, because a desired version 4.0 would be patched to 4.2
+    // (or expressed differently: zero is a valid value for gl_minor_version
+    // and can't be used to indicate 'default')
+    if (0 == res.gl_major_version) {
+        res.gl_major_version = 3;
+        res.gl_minor_version = 2;
+    }
+    res.html5_canvas_name = _sapp_def(res.html5_canvas_name, "canvas");
+    res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
+    res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
+    res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
+    res.window_title = _sapp_def(res.window_title, "sokol_app");
+    return res;
 }
 
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
-    _SAPP_CLEAR(_sapp_t, _sapp);
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->width >= 0);
+    SOKOL_ASSERT(desc->height >= 0);
+    SOKOL_ASSERT(desc->sample_count >= 0);
+    SOKOL_ASSERT(desc->swap_interval >= 0);
+    SOKOL_ASSERT(desc->clipboard_size >= 0);
+    SOKOL_ASSERT(desc->max_dropped_files >= 0);
+    SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
+    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
     _sapp.desc = _sapp_desc_defaults(desc);
     _sapp.first_frame = true;
+    // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
     _sapp.window_width = _sapp.desc.width;
     _sapp.window_height = _sapp.desc.height;
     _sapp.framebuffer_width = _sapp.window_width;
@@ -2216,36 +2784,40 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard.enabled) {
         _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
-        _sapp.clipboard.buffer = (char*) SOKOL_CALLOC(1, (size_t)_sapp.clipboard.buf_size);
+        _sapp.clipboard.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.clipboard.buf_size);
     }
     _sapp.drop.enabled = _sapp.desc.enable_dragndrop;
     if (_sapp.drop.enabled) {
         _sapp.drop.max_files = _sapp.desc.max_dropped_files;
         _sapp.drop.max_path_length = _sapp.desc.max_dropped_file_path_length;
         _sapp.drop.buf_size = _sapp.drop.max_files * _sapp.drop.max_path_length;
-        _sapp.drop.buffer = (char*) SOKOL_CALLOC(1, (size_t)_sapp.drop.buf_size);
+        _sapp.drop.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.drop.buf_size);
     }
     _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
     _sapp.desc.window_title = _sapp.window_title;
     _sapp.dpi_scale = 1.0f;
     _sapp.fullscreen = _sapp.desc.fullscreen;
     _sapp.mouse.shown = true;
+    _sapp_timing_init(&_sapp.timing);
 }
 
 _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.clipboard.enabled) {
         SOKOL_ASSERT(_sapp.clipboard.buffer);
-        SOKOL_FREE((void*)_sapp.clipboard.buffer);
+        _sapp_free((void*)_sapp.clipboard.buffer);
     }
     if (_sapp.drop.enabled) {
         SOKOL_ASSERT(_sapp.drop.buffer);
-        SOKOL_FREE((void*)_sapp.drop.buffer);
+        _sapp_free((void*)_sapp.drop.buffer);
     }
-    _SAPP_CLEAR(_sapp_t, _sapp);
+    if (_sapp.default_icon_pixels) {
+        _sapp_free((void*)_sapp.default_icon_pixels);
+    }
+    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
-    memset(&_sapp.event, 0, sizeof(_sapp.event));
+    _sapp_clear(&_sapp.event, sizeof(_sapp.event));
     _sapp.event.type = type;
     _sapp.event.frame_count = _sapp.frame_count;
     _sapp.event.mouse_button = SAPP_MOUSEBUTTON_INVALID;
@@ -2276,7 +2848,7 @@ _SOKOL_PRIVATE sapp_keycode _sapp_translate_key(int scan_code) {
 _SOKOL_PRIVATE void _sapp_clear_drop_buffer(void) {
     if (_sapp.drop.enabled) {
         SOKOL_ASSERT(_sapp.drop.buffer);
-        memset(_sapp.drop.buffer, 0, (size_t)_sapp.drop.buf_size);
+        _sapp_clear(_sapp.drop.buffer, (size_t)_sapp.drop.buf_size);
     }
 }
 
@@ -2287,6 +2859,169 @@ _SOKOL_PRIVATE void _sapp_frame(void) {
     }
     _sapp_call_frame();
     _sapp.frame_count++;
+}
+
+_SOKOL_PRIVATE bool _sapp_image_validate(const sapp_image_desc* desc) {
+    SOKOL_ASSERT(desc->width > 0);
+    SOKOL_ASSERT(desc->height > 0);
+    SOKOL_ASSERT(desc->pixels.ptr != 0);
+    SOKOL_ASSERT(desc->pixels.size > 0);
+    const size_t wh_size = (size_t)(desc->width * desc->height) * sizeof(uint32_t);
+    if (wh_size != desc->pixels.size) {
+        SOKOL_LOG("Image data size mismatch (must be width*height*4 bytes)\n");
+        return false;
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE int _sapp_image_bestmatch(const sapp_image_desc image_descs[], int num_images, int width, int height) {
+    int least_diff = 0x7FFFFFFF;
+    int least_index = 0;
+    for (int i = 0; i < num_images; i++) {
+        int diff = (image_descs[i].width * image_descs[i].height) - (width * height);
+        if (diff < 0) {
+            diff = -diff;
+        }
+        if (diff < least_diff) {
+            least_diff = diff;
+            least_index = i;
+        }
+    }
+    return least_index;
+}
+
+_SOKOL_PRIVATE int _sapp_icon_num_images(const sapp_icon_desc* desc) {
+    int index = 0;
+    for (; index < SAPP_MAX_ICONIMAGES; index++) {
+        if (0 == desc->images[index].pixels.ptr) {
+            break;
+        }
+    }
+    return index;
+}
+
+_SOKOL_PRIVATE bool _sapp_validate_icon_desc(const sapp_icon_desc* desc, int num_images) {
+    SOKOL_ASSERT(num_images <= SAPP_MAX_ICONIMAGES);
+    for (int i = 0; i < num_images; i++) {
+        const sapp_image_desc* img_desc = &desc->images[i];
+        if (!_sapp_image_validate(img_desc)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
+    SOKOL_ASSERT(0 == _sapp.default_icon_pixels);
+
+    const int num_icons = 3;
+    const int icon_sizes[3] = { 16, 32, 64 };   // must be multiple of 8!
+
+    // allocate a pixel buffer for all icon pixels
+    int all_num_pixels = 0;
+    for (int i = 0; i < num_icons; i++) {
+        all_num_pixels += icon_sizes[i] * icon_sizes[i];
+    }
+    _sapp.default_icon_pixels = (uint32_t*) _sapp_malloc_clear((size_t)all_num_pixels * sizeof(uint32_t));
+
+    // initialize default_icon_desc struct
+    uint32_t* dst = _sapp.default_icon_pixels;
+    const uint32_t* dst_end = dst + all_num_pixels;
+    (void)dst_end; // silence unused warning in release mode
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = (int) icon_sizes[i];
+        const int num_pixels = dim * dim;
+        sapp_image_desc* img_desc = &_sapp.default_icon_desc.images[i];
+        img_desc->width = dim;
+        img_desc->height = dim;
+        img_desc->pixels.ptr = dst;
+        img_desc->pixels.size = (size_t)num_pixels * sizeof(uint32_t);
+        dst += num_pixels;
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // Amstrad CPC font 'S'
+    const uint8_t tile[8] = {
+        0x3C,
+        0x66,
+        0x60,
+        0x3C,
+        0x06,
+        0x66,
+        0x3C,
+        0x00,
+    };
+    // rainbow colors
+    const uint32_t colors[8] = {
+        0xFF4370FF,
+        0xFF26A7FF,
+        0xFF58EEFF,
+        0xFF57E1D4,
+        0xFF65CC9C,
+        0xFF6ABB66,
+        0xFFF5A542,
+        0xFFC2577E,
+    };
+    dst = _sapp.default_icon_pixels;
+    const uint32_t blank = 0x00FFFFFF;
+    const uint32_t shadow = 0xFF000000;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        SOKOL_ASSERT((dim % 8) == 0);
+        const int scale = dim / 8;
+        for (int ty = 0, y = 0; ty < 8; ty++) {
+            const uint32_t color = colors[ty];
+            for (int sy = 0; sy < scale; sy++, y++) {
+                uint8_t bits = tile[ty];
+                for (int tx = 0, x = 0; tx < 8; tx++, bits<<=1) {
+                    uint32_t pixel = (0 == (bits & 0x80)) ? blank : color;
+                    for (int sx = 0; sx < scale; sx++, x++) {
+                        SOKOL_ASSERT(dst < dst_end);
+                        *dst++ = pixel;
+                    }
+                }
+            }
+        }
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // right shadow
+    dst = _sapp.default_icon_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        for (int y = 0; y < dim; y++) {
+            uint32_t prev_color = blank;
+            for (int x = 0; x < dim; x++) {
+                const int dst_index = y * dim + x;
+                const uint32_t cur_color = dst[dst_index];
+                if ((cur_color == blank) && (prev_color != blank)) {
+                    dst[dst_index] = shadow;
+                }
+                prev_color = cur_color;
+            }
+        }
+        dst += dim * dim;
+    }
+    SOKOL_ASSERT(dst == dst_end);
+
+    // bottom shadow
+    dst = _sapp.default_icon_pixels;
+    for (int i = 0; i < num_icons; i++) {
+        const int dim = icon_sizes[i];
+        for (int x = 0; x < dim; x++) {
+            uint32_t prev_color = blank;
+            for (int y = 0; y < dim; y++) {
+                const int dst_index = y * dim + x;
+                const uint32_t cur_color = dst[dst_index];
+                if ((cur_color == blank) && (prev_color != blank)) {
+                    dst[dst_index] = shadow;
+                }
+                prev_color = cur_color;
+            }
+        }
+        dst += dim * dim;
+    }
+    SOKOL_ASSERT(dst == dst_end);
 }
 
 /*== MacOS/iOS ===============================================================*/
@@ -2431,10 +3166,11 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
     [NSApplication sharedApplication];
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    // set the application dock icon as early as possible, otherwise
+    // the dummy icon will be visible for a short time
+    sapp_set_icon(&_sapp.desc.icon);
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
-    [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
     // NOTE: [NSApp run] never returns, instead cleanup code
     // must be put into applicationWillTerminate
@@ -2449,7 +3185,9 @@ int main(int argc, char* argv[]) {
 }
 #endif /* SOKOL_NO_ENTRY */
 
-_SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
+_SOKOL_PRIVATE uint32_t _sapp_macos_mods(NSEvent* ev) {
+    const NSEventModifierFlags f = ev.modifierFlags;
+    const NSUInteger b = NSEvent.pressedMouseButtons;
     uint32_t m = 0;
     if (f & NSEventModifierFlagShift) {
         m |= SAPP_MODIFIER_SHIFT;
@@ -2462,6 +3200,15 @@ _SOKOL_PRIVATE uint32_t _sapp_macos_mod(NSEventModifierFlags f) {
     }
     if (f & NSEventModifierFlagCommand) {
         m |= SAPP_MODIFIER_SUPER;
+    }
+    if (0 != (b & (1<<0))) {
+        m |= SAPP_MODIFIER_LMB;
+    }
+    if (0 != (b & (1<<1))) {
+        m |= SAPP_MODIFIER_RMB;
+    }
+    if (0 != (b & (1<<2))) {
+        m |= SAPP_MODIFIER_MMB;
     }
     return m;
 }
@@ -2497,18 +3244,31 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     between HighDPI / LowDPI screens.
 */
 _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
-    #if defined(SOKOL_METAL)
-        const NSRect fb_rect = [_sapp.macos.view bounds];
-        _sapp.framebuffer_width = fb_rect.size.width * _sapp.dpi_scale;
-        _sapp.framebuffer_height = fb_rect.size.height * _sapp.dpi_scale;
-    #elif defined(SOKOL_GLCORE33)
-        const NSRect fb_rect = [_sapp.macos.view convertRectToBacking:[_sapp.macos.view frame]];
-        _sapp.framebuffer_width = fb_rect.size.width;
-        _sapp.framebuffer_height = fb_rect.size.height;
-    #endif
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = [_sapp.macos.window screen].backingScaleFactor;
+    }
+    else {
+        _sapp.dpi_scale = 1.0f;
+    }
     const NSRect bounds = [_sapp.macos.view bounds];
     _sapp.window_width = bounds.size.width;
     _sapp.window_height = bounds.size.height;
+    #if defined(SOKOL_METAL)
+        _sapp.framebuffer_width = bounds.size.width * _sapp.dpi_scale;
+        _sapp.framebuffer_height = bounds.size.height * _sapp.dpi_scale;
+        const CGSize fb_size = _sapp.macos.view.drawableSize;
+        const int cur_fb_width = (int) fb_size.width;
+        const int cur_fb_height = (int) fb_size.height;
+        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
+                                 (_sapp.framebuffer_height != cur_fb_height);
+    #elif defined(SOKOL_GLCORE33)
+        const int cur_fb_width = (int) bounds.size.width * _sapp.dpi_scale;
+        const int cur_fb_height = (int) bounds.size.height * _sapp.dpi_scale;
+        const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
+                                 (_sapp.framebuffer_height != cur_fb_height);
+        _sapp.framebuffer_width = cur_fb_width;
+        _sapp.framebuffer_height = cur_fb_height;
+    #endif
     if (_sapp.framebuffer_width == 0) {
         _sapp.framebuffer_width = 1;
     }
@@ -2521,17 +3281,17 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
     if (_sapp.window_height == 0) {
         _sapp.window_height = 1;
     }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float)_sapp.window_width;
-
-    /* NOTE: _sapp_macos_update_dimensions() isn't called each frame, but only
-        when the window size actually changes, so resizing the MTKView's
-        in each call is fine even when MTKView doesn't ignore setting an
-        identical drawableSize.
-    */
-    #if defined(SOKOL_METAL)
-    CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
-    _sapp.macos.view.drawableSize = drawable_size;
-    #endif
+    if (dim_changed) {
+        #if defined(SOKOL_METAL)
+            CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
+            _sapp.macos.view.drawableSize = drawable_size;
+        #else
+            // nothing to do for GL?
+        #endif
+        if (!_sapp.first_frame) {
+            _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_toggle_fullscreen(void) {
@@ -2625,6 +3385,39 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    NSDockTile* dock_tile = NSApp.dockTile;
+    const int wanted_width = (int) dock_tile.size.width;
+    const int wanted_height = (int) dock_tile.size.height;
+    const int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, wanted_width, wanted_height);
+    const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+
+    CGColorSpaceRef cg_color_space = CGColorSpaceCreateDeviceRGB();
+    CFDataRef cf_data = CFDataCreate(kCFAllocatorDefault, (const UInt8*)img_desc->pixels.ptr, (CFIndex)img_desc->pixels.size);
+    CGDataProviderRef cg_data_provider = CGDataProviderCreateWithCFData(cf_data);
+    CGImageRef cg_img = CGImageCreate(
+        (size_t)img_desc->width,    // width
+        (size_t)img_desc->height,   // height
+        8,                          // bitsPerComponent
+        32,                         // bitsPerPixel
+        (size_t)img_desc->width * 4,// bytesPerRow
+        cg_color_space,             // space
+        kCGImageAlphaLast | kCGImageByteOrderDefault,  // bitmapInfo
+        cg_data_provider,           // provider
+        NULL,                       // decode
+        false,                      // shouldInterpolate
+        kCGRenderingIntentDefault);
+    CFRelease(cf_data);
+    CGDataProviderRelease(cg_data_provider);
+    CGColorSpaceRelease(cg_color_space);
+
+    NSImage* ns_image = [[NSImage alloc] initWithCGImage:cg_img size:dock_tile.size];
+    dock_tile.contentView = [NSImageView imageViewWithImage:ns_image];
+    [dock_tile display];
+    _SAPP_OBJC_RELEASE(ns_image);
+    CGImageRelease(cg_img);
+}
+
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
@@ -2635,20 +3428,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    if (_sapp.fullscreen) {
+    if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
+        // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
-        _sapp.window_width = screen_rect.size.width;
-        _sapp.window_height = screen_rect.size.height;
+        if (_sapp.window_width == 0) {
+            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+        }
+        if (_sapp.window_height == 0) {
+            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+        }
     }
-    if (_sapp.desc.high_dpi) {
-        _sapp.framebuffer_width = 2 * _sapp.window_width;
-        _sapp.framebuffer_height = 2 * _sapp.window_height;
-    }
-    else {
-        _sapp.framebuffer_width = _sapp.window_width;
-        _sapp.framebuffer_height = _sapp.window_height;
-    }
-    _sapp.dpi_scale = (float)_sapp.framebuffer_width / (float) _sapp.window_width;
     const NSUInteger style =
         NSWindowStyleMaskTitled |
         NSWindowStyleMaskClosable |
@@ -2668,10 +3457,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp.macos.win_dlg = [[_sapp_macos_window_delegate alloc] init];
     _sapp.macos.window.delegate = _sapp.macos.win_dlg;
     #if defined(SOKOL_METAL)
+        NSInteger max_fps = 60;
+        #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
+        if (@available(macOS 12.0, *)) {
+            max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
+        }
+        #endif
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
-        _sapp.macos.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.macos.view.device = _sapp.macos.mtl_device;
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.macos.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
@@ -2685,7 +3480,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         int i = 0;
         attrs[i++] = NSOpenGLPFAAccelerated;
         attrs[i++] = NSOpenGLPFADoubleBuffer;
-        attrs[i++] = NSOpenGLPFAOpenGLProfile; attrs[i++] = NSOpenGLProfileVersion3_2Core;
+        attrs[i++] = NSOpenGLPFAOpenGLProfile;
+        const int glVersion = _sapp.desc.gl_major_version * 10 + _sapp.desc.gl_minor_version;
+        switch(glVersion) {
+            case 10: attrs[i++] = NSOpenGLProfileVersionLegacy;  break;
+            case 32: attrs[i++] = NSOpenGLProfileVersion3_2Core; break;
+            case 41: attrs[i++] = NSOpenGLProfileVersion4_1Core; break;
+            default:
+                _sapp_fail("Invalid NSOpenGLProfile (valid choices are 1.0, 3.2, and 4.1)\n");
+        }
         attrs[i++] = NSOpenGLPFAColorSize; attrs[i++] = 24;
         attrs[i++] = NSOpenGLPFAAlphaSize; attrs[i++] = 8;
         attrs[i++] = NSOpenGLPFADepthSize; attrs[i++] = 24;
@@ -2725,14 +3528,14 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
         timer_obj = nil;
     #endif
+    [_sapp.macos.window center];
     _sapp.valid = true;
     if (_sapp.fullscreen) {
-        /* on GL, this already toggles a rendered frame, so set the valid flag before */
+        /* ^^^ on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp.macos.window toggleFullScreen:self];
     }
-    else {
-        [_sapp.macos.window center];
-    }
+    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    [NSApp activateIgnoringOtherApps:YES];
     [_sapp.macos.window makeKeyAndOrderFront:nil];
     _sapp_macos_update_dimensions();
     [NSEvent setMouseCoalescingEnabled:NO];
@@ -2777,9 +3580,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();
-    if (!_sapp.first_frame) {
-        _sapp_macos_app_event(SAPP_EVENTTYPE_RESIZED);
-    }
+}
+
+- (void)windowDidChangeScreen:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_timing_reset(&_sapp.timing);
+    _sapp_macos_update_dimensions();
 }
 
 - (void)windowDidMiniaturize:(NSNotification*)notification {
@@ -2790,6 +3596,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_app_event(SAPP_EVENTTYPE_RESTORED);
+}
+
+- (void)windowDidBecomeKey:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_macos_app_event(SAPP_EVENTTYPE_FOCUSED);
+}
+
+- (void)windowDidResignKey:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    _sapp_macos_app_event(SAPP_EVENTTYPE_UNFOCUSED);
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification*)notification {
@@ -2929,9 +3745,12 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 
 - (void)drawRect:(NSRect)rect {
     _SOKOL_UNUSED(rect);
+    _sapp_timing_measure(&_sapp.timing);
     /* Catch any last-moment input events */
     _sapp_macos_poll_input_events();
-    _sapp_macos_frame();
+    @autoreleasepool {
+        _sapp_macos_frame();
+    }
     #if !defined(SOKOL_METAL)
     [[_sapp.macos.view openGLContext] flushBuffer];
     #endif
@@ -2967,46 +3786,46 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
        on Windows while SetCapture is active
     */
     if (0 == _sapp.macos.mouse_buttons) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseExited:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (0 == _sapp.macos.mouse_buttons) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)mouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_LEFT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_LEFT);
 }
 - (void)rightMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)rightMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_RIGHT, _sapp_macos_mods(event));
     _sapp.macos.mouse_buttons &= ~(1<<SAPP_MOUSEBUTTON_RIGHT);
 }
 - (void)otherMouseDown:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
         _sapp.macos.mouse_buttons |= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
 - (void)otherMouseUp:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
     if (2 == event.buttonNumber) {
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mods(event));
         _sapp.macos.mouse_buttons &= (1<<SAPP_MOUSEBUTTON_MIDDLE);
     }
 }
@@ -3017,7 +3836,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             _sapp.mouse.dx = [event deltaX];
             _sapp.mouse.dy = [event deltaY];
         }
-        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_MIDDLE, _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
     }
 }
 - (void)mouseMoved:(NSEvent*)event {
@@ -3026,7 +3845,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mods(event));
 }
 - (void)mouseDragged:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3034,7 +3853,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID , _sapp_macos_mods(event));
 }
 - (void)rightMouseDragged:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3042,7 +3861,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp.mouse.dx = [event deltaX];
         _sapp.mouse.dy = [event deltaY];
     }
-    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mod(event.modifierFlags));
+    _sapp_macos_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_macos_mods(event));
 }
 - (void)scrollWheel:(NSEvent*)event {
     _sapp_macos_update_mouse(event);
@@ -3055,7 +3874,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         }
         if ((_sapp_absf(dx) > 0.0f) || (_sapp_absf(dy) > 0.0f)) {
             _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-            _sapp.event.modifiers = _sapp_macos_mod(event.modifierFlags);
+            _sapp.event.modifiers = _sapp_macos_mods(event);
             _sapp.event.scroll_x = dx;
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
@@ -3064,7 +3883,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
 }
 - (void)keyDown:(NSEvent*)event {
     if (_sapp_events_enabled()) {
-        const uint32_t mods = _sapp_macos_mod(event.modifierFlags);
+        const uint32_t mods = _sapp_macos_mods(event);
         /* NOTE: macOS doesn't send keyUp events while the Cmd key is pressed,
             as a workaround, to prevent key presses from sticking we'll send
             a keyup event following right after the keydown if SUPER is also pressed
@@ -3100,7 +3919,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
     _sapp_macos_key_event(SAPP_EVENTTYPE_KEY_UP,
         _sapp_translate_key(event.keyCode),
         event.isARepeat,
-        _sapp_macos_mod(event.modifierFlags));
+        _sapp_macos_mods(event));
 }
 - (void)flagsChanged:(NSEvent*)event {
     const uint32_t old_f = _sapp.macos.flags_changed_store;
@@ -3128,7 +3947,7 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
         _sapp_macos_key_event(down ? SAPP_EVENTTYPE_KEY_DOWN : SAPP_EVENTTYPE_KEY_UP,
             key_code,
             false,
-            _sapp_macos_mod(event.modifierFlags));
+            _sapp_macos_mods(event));
     }
 }
 - (void)cursorUpdate:(NSEvent*)event {
@@ -3222,6 +4041,11 @@ _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
                              (_sapp.framebuffer_height != cur_fb_height);
     if (dim_changed) {
         #if defined(SOKOL_METAL)
+            // NOTE: explicitely resize the drawable here again, despite MTKView using
+            // autoResizeDrawable, this seems to be the only way so that the MTKView's
+            // contentScaleFactor is honored, but also the correct screen size being
+            // reported when device rotations happen
+            // (see: https://github.com/floooh/sokol-samples/issues/101)
             const CGSize drawable_size = { (CGFloat) _sapp.framebuffer_width, (CGFloat) _sapp.framebuffer_height };
             _sapp.ios.view.drawableSize = drawable_size;
         #else
@@ -3286,19 +4110,15 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     }
     _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
     _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
+    NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.ios.view = [[_sapp_ios_view alloc] init];
-        _sapp.ios.view.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.view.device = _sapp.ios.mtl_device;
         _sapp.ios.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
         _sapp.ios.view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         _sapp.ios.view.sampleCount = (NSUInteger)_sapp.sample_count;
-        /* NOTE: iOS MTKView seems to ignore thew view's contentScaleFactor
-            and automatically renders at Retina resolution. We'll disable
-            autoResize and instead do the resizing in _sapp_ios_update_dimensions()
-        */
-        _sapp.ios.view.autoResizeDrawable = false;
         _sapp.ios.view.userInteractionEnabled = YES;
         _sapp.ios.view.multipleTouchEnabled = YES;
         _sapp.ios.view_ctrl = [[UIViewController alloc] init];
@@ -3329,14 +4149,14 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
         _sapp.ios.view.multipleTouchEnabled = YES;
         // on GLKView, contentScaleFactor appears to work just fine!
         if (_sapp.desc.high_dpi) {
-            _sapp.ios.view.contentScaleFactor = 2.0;
+            _sapp.ios.view.contentScaleFactor = _sapp.dpi_scale;
         }
         else {
             _sapp.ios.view.contentScaleFactor = 1.0;
         }
         _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
         _sapp.ios.view_ctrl.view = _sapp.ios.view;
-        _sapp.ios.view_ctrl.preferredFramesPerSecond = 60 / _sapp.swap_interval;
+        _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
     #endif
     [_sapp.ios.window makeKeyAndVisible];
@@ -3448,7 +4268,10 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 @implementation _sapp_ios_view
 - (void)drawRect:(CGRect)rect {
     _SOKOL_UNUSED(rect);
-    _sapp_ios_frame();
+    _sapp_timing_measure(&_sapp.timing);
+    @autoreleasepool {
+        _sapp_ios_frame();
+    }
 }
 - (BOOL)isOpaque {
     return YES;
@@ -3555,7 +4378,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y) {
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, _sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
     sapp_html5_fetch_response response;
-    memset(&response, 0, sizeof(response));
+    _sapp_clear(&response, sizeof(response));
     response.succeeded = (0 != success);
     response.error_code = (sapp_html5_fetch_error) error_code;
     response.file_index = index;
@@ -3815,10 +4638,80 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     }
 }
 
+/* JS helper functions to update browser tab favicon */
+EM_JS(void, sapp_js_clear_favicon, (void), {
+    var link = document.getElementById('sokol-app-favicon');
+    if (link) {
+        document.head.removeChild(link);
+    }
+});
+
+EM_JS(void, sapp_js_set_favicon, (int w, int h, const uint8_t* pixels), {
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    var img_data = ctx.createImageData(w, h);
+    img_data.data.set(HEAPU8.subarray(pixels, pixels + w*h*4));
+    ctx.putImageData(img_data, 0, 0);
+    var new_link = document.createElement('link');
+    new_link.id = 'sokol-app-favicon';
+    new_link.rel = 'shortcut icon';
+    new_link.href = canvas.toDataURL();
+    document.head.appendChild(new_link);
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
+    sapp_js_clear_favicon();
+    // find the best matching image candidate for 16x16 pixels
+    int img_index = _sapp_image_bestmatch(icon_desc->images, num_images, 16, 16);
+    const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+    sapp_js_set_favicon(img_desc->width, img_desc->height, (const uint8_t*) img_desc->pixels.ptr);
+}
+
 #if defined(SOKOL_WGPU)
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void);
 _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_discard(void);
 #endif
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_mouse_button_mods(uint16_t buttons) {
+    uint32_t m = 0;
+    if (0 != (buttons & (1<<0))) { m |= SAPP_MODIFIER_LMB; }
+    if (0 != (buttons & (1<<1))) { m |= SAPP_MODIFIER_RMB; } // not a bug
+    if (0 != (buttons & (1<<2))) { m |= SAPP_MODIFIER_MMB; } // not a bug
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_mouse_event_mods(const EmscriptenMouseEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_key_event_mods(const EmscriptenKeyboardEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_emsc_touch_event_mods(const EmscriptenTouchEvent* ev) {
+    uint32_t m = 0;
+    if (ev->ctrlKey)    { m |= SAPP_MODIFIER_CTRL; }
+    if (ev->shiftKey)   { m |= SAPP_MODIFIER_SHIFT; }
+    if (ev->altKey)     { m |= SAPP_MODIFIER_ALT; }
+    if (ev->metaKey)    { m |= SAPP_MODIFIER_SUPER; }
+    m |= _sapp_emsc_mouse_button_mods(_sapp.emsc.mouse_buttons);
+    return m;
+}
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenUiEvent* ui_event, void* user_data) {
     _SOKOL_UNUSED(event_type);
@@ -3878,6 +4771,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(user_data);
+    _sapp.emsc.mouse_buttons = emsc_event->buttons;
     if (_sapp.mouse.locked) {
         _sapp.mouse.dx = (float) emsc_event->movementX;
         _sapp.mouse.dy = (float) emsc_event->movementY;
@@ -3920,18 +4814,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_mouse_event_mods(emsc_event);
             if (is_button_event) {
                 switch (emsc_event->button) {
                     case 0: _sapp.event.mouse_button = SAPP_MOUSEBUTTON_LEFT; break;
@@ -3957,20 +4840,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_mouse_cb(int emsc_type, const EmscriptenMouseE
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelEvent* emsc_event, void* user_data) {
     _SOKOL_UNUSED(emsc_type);
     _SOKOL_UNUSED(user_data);
+    _sapp.emsc.mouse_buttons = emsc_event->mouse.buttons;
     if (_sapp_events_enabled()) {
         _sapp_init_event(SAPP_EVENTTYPE_MOUSE_SCROLL);
-        if (emsc_event->mouse.ctrlKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-        }
-        if (emsc_event->mouse.shiftKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-        }
-        if (emsc_event->mouse.altKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-        }
-        if (emsc_event->mouse.metaKey) {
-            _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-        }
+        _sapp.event.modifiers = _sapp_emsc_mouse_event_mods(&emsc_event->mouse);
         /* see https://github.com/floooh/sokol/issues/339 */
         float scale;
         switch (emsc_event->deltaMode) {
@@ -3986,6 +4859,127 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_wheel_cb(int emsc_type, const EmscriptenWheelE
     _sapp_emsc_update_keyboard_state();
     _sapp_emsc_update_mouse_lock_state();
     return true;
+}
+
+static struct {
+    const char* str;
+    sapp_keycode code;
+} _sapp_emsc_keymap[] = {
+    { "Backspace",      SAPP_KEYCODE_BACKSPACE },
+    { "Tab",            SAPP_KEYCODE_TAB },
+    { "Enter",          SAPP_KEYCODE_ENTER },
+    { "ShiftLeft",      SAPP_KEYCODE_LEFT_SHIFT },
+    { "ShiftRight",     SAPP_KEYCODE_RIGHT_SHIFT },
+    { "ControlLeft",    SAPP_KEYCODE_LEFT_CONTROL },
+    { "ControlRight",   SAPP_KEYCODE_RIGHT_CONTROL },
+    { "AltLeft",        SAPP_KEYCODE_LEFT_ALT },
+    { "AltRight",       SAPP_KEYCODE_RIGHT_ALT },
+    { "Pause",          SAPP_KEYCODE_PAUSE },
+    { "CapsLock",       SAPP_KEYCODE_CAPS_LOCK },
+    { "Escape",         SAPP_KEYCODE_ESCAPE },
+    { "Space",          SAPP_KEYCODE_SPACE },
+    { "PageUp",         SAPP_KEYCODE_PAGE_UP },
+    { "PageDown",       SAPP_KEYCODE_PAGE_DOWN },
+    { "End",            SAPP_KEYCODE_END },
+    { "Home",           SAPP_KEYCODE_HOME },
+    { "ArrowLeft",      SAPP_KEYCODE_LEFT },
+    { "ArrowUp",        SAPP_KEYCODE_UP },
+    { "ArrowRight",     SAPP_KEYCODE_RIGHT },
+    { "ArrowDown",      SAPP_KEYCODE_DOWN },
+    { "PrintScreen",    SAPP_KEYCODE_PRINT_SCREEN },
+    { "Insert",         SAPP_KEYCODE_INSERT },
+    { "Delete",         SAPP_KEYCODE_DELETE },
+    { "Digit0",         SAPP_KEYCODE_0 },
+    { "Digit1",         SAPP_KEYCODE_1 },
+    { "Digit2",         SAPP_KEYCODE_2 },
+    { "Digit3",         SAPP_KEYCODE_3 },
+    { "Digit4",         SAPP_KEYCODE_4 },
+    { "Digit5",         SAPP_KEYCODE_5 },
+    { "Digit6",         SAPP_KEYCODE_6 },
+    { "Digit7",         SAPP_KEYCODE_7 },
+    { "Digit8",         SAPP_KEYCODE_8 },
+    { "Digit9",         SAPP_KEYCODE_9 },
+    { "KeyA",           SAPP_KEYCODE_A },
+    { "KeyB",           SAPP_KEYCODE_B },
+    { "KeyC",           SAPP_KEYCODE_C },
+    { "KeyD",           SAPP_KEYCODE_D },
+    { "KeyE",           SAPP_KEYCODE_E },
+    { "KeyF",           SAPP_KEYCODE_F },
+    { "KeyG",           SAPP_KEYCODE_G },
+    { "KeyH",           SAPP_KEYCODE_H },
+    { "KeyI",           SAPP_KEYCODE_I },
+    { "KeyJ",           SAPP_KEYCODE_J },
+    { "KeyK",           SAPP_KEYCODE_K },
+    { "KeyL",           SAPP_KEYCODE_L },
+    { "KeyM",           SAPP_KEYCODE_M },
+    { "KeyN",           SAPP_KEYCODE_N },
+    { "KeyO",           SAPP_KEYCODE_O },
+    { "KeyP",           SAPP_KEYCODE_P },
+    { "KeyQ",           SAPP_KEYCODE_Q },
+    { "KeyR",           SAPP_KEYCODE_R },
+    { "KeyS",           SAPP_KEYCODE_S },
+    { "KeyT",           SAPP_KEYCODE_T },
+    { "KeyU",           SAPP_KEYCODE_U },
+    { "KeyV",           SAPP_KEYCODE_V },
+    { "KeyW",           SAPP_KEYCODE_W },
+    { "KeyX",           SAPP_KEYCODE_X },
+    { "KeyY",           SAPP_KEYCODE_Y },
+    { "KeyZ",           SAPP_KEYCODE_Z },
+    { "MetaLeft",       SAPP_KEYCODE_LEFT_SUPER },
+    { "MetaRight",      SAPP_KEYCODE_RIGHT_SUPER },
+    { "Numpad0",        SAPP_KEYCODE_KP_0 },
+    { "Numpad1",        SAPP_KEYCODE_KP_1 },
+    { "Numpad2",        SAPP_KEYCODE_KP_2 },
+    { "Numpad3",        SAPP_KEYCODE_KP_3 },
+    { "Numpad4",        SAPP_KEYCODE_KP_4 },
+    { "Numpad5",        SAPP_KEYCODE_KP_5 },
+    { "Numpad6",        SAPP_KEYCODE_KP_6 },
+    { "Numpad7",        SAPP_KEYCODE_KP_7 },
+    { "Numpad8",        SAPP_KEYCODE_KP_8 },
+    { "Numpad9",        SAPP_KEYCODE_KP_9 },
+    { "NumpadMultiply", SAPP_KEYCODE_KP_MULTIPLY },
+    { "NumpadAdd",      SAPP_KEYCODE_KP_ADD },
+    { "NumpadSubtract", SAPP_KEYCODE_KP_SUBTRACT },
+    { "NumpadDecimal",  SAPP_KEYCODE_KP_DECIMAL },
+    { "NumpadDivide",   SAPP_KEYCODE_KP_DIVIDE },
+    { "F1",             SAPP_KEYCODE_F1 },
+    { "F2",             SAPP_KEYCODE_F2 },
+    { "F3",             SAPP_KEYCODE_F3 },
+    { "F4",             SAPP_KEYCODE_F4 },
+    { "F5",             SAPP_KEYCODE_F5 },
+    { "F6",             SAPP_KEYCODE_F6 },
+    { "F7",             SAPP_KEYCODE_F7 },
+    { "F8",             SAPP_KEYCODE_F8 },
+    { "F9",             SAPP_KEYCODE_F9 },
+    { "F10",            SAPP_KEYCODE_F10 },
+    { "F11",            SAPP_KEYCODE_F11 },
+    { "F12",            SAPP_KEYCODE_F12 },
+    { "NumLock",        SAPP_KEYCODE_NUM_LOCK },
+    { "ScrollLock",     SAPP_KEYCODE_SCROLL_LOCK },
+    { "Semicolon",      SAPP_KEYCODE_SEMICOLON },
+    { "Equal",          SAPP_KEYCODE_EQUAL },
+    { "Comma",          SAPP_KEYCODE_COMMA },
+    { "Minus",          SAPP_KEYCODE_MINUS },
+    { "Period",         SAPP_KEYCODE_PERIOD },
+    { "Slash",          SAPP_KEYCODE_SLASH },
+    { "Backquote",      SAPP_KEYCODE_GRAVE_ACCENT },
+    { "BracketLeft",    SAPP_KEYCODE_LEFT_BRACKET },
+    { "Backslash",      SAPP_KEYCODE_BACKSLASH },
+    { "BracketRight",   SAPP_KEYCODE_RIGHT_BRACKET },
+    { "Quote",          SAPP_KEYCODE_GRAVE_ACCENT },    // FIXME: ???
+    { 0, SAPP_KEYCODE_INVALID },
+};
+
+_SOKOL_PRIVATE sapp_keycode _sapp_emsc_translate_key(const char* str) {
+    int i = 0;
+    const char* keystr;
+    while (( keystr = _sapp_emsc_keymap[i].str )) {
+        if (0 == strcmp(str, keystr)) {
+            return _sapp_emsc_keymap[i].code;
+        }
+        i += 1;
+    }
+    return SAPP_KEYCODE_INVALID;
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboardEvent* emsc_event, void* user_data) {
@@ -4011,18 +5005,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
             bool send_keyup_followup = false;
             _sapp_init_event(type);
             _sapp.event.key_repeat = emsc_event->repeat;
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_key_event_mods(emsc_event);
             if (type == SAPP_EVENTTYPE_CHAR) {
                 _sapp.event.char_code = emsc_event->charCode;
                 /* workaround to make Cmd+V work on Safari */
@@ -4031,7 +5014,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_key_cb(int emsc_type, const EmscriptenKeyboard
                 }
             }
             else {
-                _sapp.event.key_code = _sapp_translate_key((int)emsc_event->keyCode);
+                _sapp.event.key_code = _sapp_emsc_translate_key(emsc_event->code);
                 /* Special hack for macOS: if the Super key is pressed, macOS doesn't
                     send keyUp events. As a workaround, to prevent keys from
                     "sticking", we'll send a keyup event following a keydown
@@ -4151,18 +5134,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
         }
         if (type != SAPP_EVENTTYPE_INVALID) {
             _sapp_init_event(type);
-            if (emsc_event->ctrlKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_CTRL;
-            }
-            if (emsc_event->shiftKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SHIFT;
-            }
-            if (emsc_event->altKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_ALT;
-            }
-            if (emsc_event->metaKey) {
-                _sapp.event.modifiers |= SAPP_MODIFIER_SUPER;
-            }
+            _sapp.event.modifiers = _sapp_emsc_touch_event_mods(emsc_event);
             _sapp.event.num_touches = emsc_event->numTouches;
             if (_sapp.event.num_touches > SAPP_MAX_TOUCHPOINTS) {
                 _sapp.event.num_touches = SAPP_MAX_TOUCHPOINTS;
@@ -4182,108 +5154,26 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_touch_cb(int emsc_type, const EmscriptenTouchE
     return retval;
 }
 
-_SOKOL_PRIVATE void _sapp_emsc_keytable_init(void) {
-    _sapp.keycodes[8]   = SAPP_KEYCODE_BACKSPACE;
-    _sapp.keycodes[9]   = SAPP_KEYCODE_TAB;
-    _sapp.keycodes[13]  = SAPP_KEYCODE_ENTER;
-    _sapp.keycodes[16]  = SAPP_KEYCODE_LEFT_SHIFT;
-    _sapp.keycodes[17]  = SAPP_KEYCODE_LEFT_CONTROL;
-    _sapp.keycodes[18]  = SAPP_KEYCODE_LEFT_ALT;
-    _sapp.keycodes[19]  = SAPP_KEYCODE_PAUSE;
-    _sapp.keycodes[27]  = SAPP_KEYCODE_ESCAPE;
-    _sapp.keycodes[32]  = SAPP_KEYCODE_SPACE;
-    _sapp.keycodes[33]  = SAPP_KEYCODE_PAGE_UP;
-    _sapp.keycodes[34]  = SAPP_KEYCODE_PAGE_DOWN;
-    _sapp.keycodes[35]  = SAPP_KEYCODE_END;
-    _sapp.keycodes[36]  = SAPP_KEYCODE_HOME;
-    _sapp.keycodes[37]  = SAPP_KEYCODE_LEFT;
-    _sapp.keycodes[38]  = SAPP_KEYCODE_UP;
-    _sapp.keycodes[39]  = SAPP_KEYCODE_RIGHT;
-    _sapp.keycodes[40]  = SAPP_KEYCODE_DOWN;
-    _sapp.keycodes[45]  = SAPP_KEYCODE_INSERT;
-    _sapp.keycodes[46]  = SAPP_KEYCODE_DELETE;
-    _sapp.keycodes[48]  = SAPP_KEYCODE_0;
-    _sapp.keycodes[49]  = SAPP_KEYCODE_1;
-    _sapp.keycodes[50]  = SAPP_KEYCODE_2;
-    _sapp.keycodes[51]  = SAPP_KEYCODE_3;
-    _sapp.keycodes[52]  = SAPP_KEYCODE_4;
-    _sapp.keycodes[53]  = SAPP_KEYCODE_5;
-    _sapp.keycodes[54]  = SAPP_KEYCODE_6;
-    _sapp.keycodes[55]  = SAPP_KEYCODE_7;
-    _sapp.keycodes[56]  = SAPP_KEYCODE_8;
-    _sapp.keycodes[57]  = SAPP_KEYCODE_9;
-    _sapp.keycodes[59]  = SAPP_KEYCODE_SEMICOLON;
-    _sapp.keycodes[64]  = SAPP_KEYCODE_EQUAL;
-    _sapp.keycodes[65]  = SAPP_KEYCODE_A;
-    _sapp.keycodes[66]  = SAPP_KEYCODE_B;
-    _sapp.keycodes[67]  = SAPP_KEYCODE_C;
-    _sapp.keycodes[68]  = SAPP_KEYCODE_D;
-    _sapp.keycodes[69]  = SAPP_KEYCODE_E;
-    _sapp.keycodes[70]  = SAPP_KEYCODE_F;
-    _sapp.keycodes[71]  = SAPP_KEYCODE_G;
-    _sapp.keycodes[72]  = SAPP_KEYCODE_H;
-    _sapp.keycodes[73]  = SAPP_KEYCODE_I;
-    _sapp.keycodes[74]  = SAPP_KEYCODE_J;
-    _sapp.keycodes[75]  = SAPP_KEYCODE_K;
-    _sapp.keycodes[76]  = SAPP_KEYCODE_L;
-    _sapp.keycodes[77]  = SAPP_KEYCODE_M;
-    _sapp.keycodes[78]  = SAPP_KEYCODE_N;
-    _sapp.keycodes[79]  = SAPP_KEYCODE_O;
-    _sapp.keycodes[80]  = SAPP_KEYCODE_P;
-    _sapp.keycodes[81]  = SAPP_KEYCODE_Q;
-    _sapp.keycodes[82]  = SAPP_KEYCODE_R;
-    _sapp.keycodes[83]  = SAPP_KEYCODE_S;
-    _sapp.keycodes[84]  = SAPP_KEYCODE_T;
-    _sapp.keycodes[85]  = SAPP_KEYCODE_U;
-    _sapp.keycodes[86]  = SAPP_KEYCODE_V;
-    _sapp.keycodes[87]  = SAPP_KEYCODE_W;
-    _sapp.keycodes[88]  = SAPP_KEYCODE_X;
-    _sapp.keycodes[89]  = SAPP_KEYCODE_Y;
-    _sapp.keycodes[90]  = SAPP_KEYCODE_Z;
-    _sapp.keycodes[91]  = SAPP_KEYCODE_LEFT_SUPER;
-    _sapp.keycodes[93]  = SAPP_KEYCODE_MENU;
-    _sapp.keycodes[96]  = SAPP_KEYCODE_KP_0;
-    _sapp.keycodes[97]  = SAPP_KEYCODE_KP_1;
-    _sapp.keycodes[98]  = SAPP_KEYCODE_KP_2;
-    _sapp.keycodes[99]  = SAPP_KEYCODE_KP_3;
-    _sapp.keycodes[100] = SAPP_KEYCODE_KP_4;
-    _sapp.keycodes[101] = SAPP_KEYCODE_KP_5;
-    _sapp.keycodes[102] = SAPP_KEYCODE_KP_6;
-    _sapp.keycodes[103] = SAPP_KEYCODE_KP_7;
-    _sapp.keycodes[104] = SAPP_KEYCODE_KP_8;
-    _sapp.keycodes[105] = SAPP_KEYCODE_KP_9;
-    _sapp.keycodes[106] = SAPP_KEYCODE_KP_MULTIPLY;
-    _sapp.keycodes[107] = SAPP_KEYCODE_KP_ADD;
-    _sapp.keycodes[109] = SAPP_KEYCODE_KP_SUBTRACT;
-    _sapp.keycodes[110] = SAPP_KEYCODE_KP_DECIMAL;
-    _sapp.keycodes[111] = SAPP_KEYCODE_KP_DIVIDE;
-    _sapp.keycodes[112] = SAPP_KEYCODE_F1;
-    _sapp.keycodes[113] = SAPP_KEYCODE_F2;
-    _sapp.keycodes[114] = SAPP_KEYCODE_F3;
-    _sapp.keycodes[115] = SAPP_KEYCODE_F4;
-    _sapp.keycodes[116] = SAPP_KEYCODE_F5;
-    _sapp.keycodes[117] = SAPP_KEYCODE_F6;
-    _sapp.keycodes[118] = SAPP_KEYCODE_F7;
-    _sapp.keycodes[119] = SAPP_KEYCODE_F8;
-    _sapp.keycodes[120] = SAPP_KEYCODE_F9;
-    _sapp.keycodes[121] = SAPP_KEYCODE_F10;
-    _sapp.keycodes[122] = SAPP_KEYCODE_F11;
-    _sapp.keycodes[123] = SAPP_KEYCODE_F12;
-    _sapp.keycodes[144] = SAPP_KEYCODE_NUM_LOCK;
-    _sapp.keycodes[145] = SAPP_KEYCODE_SCROLL_LOCK;
-    _sapp.keycodes[173] = SAPP_KEYCODE_MINUS;
-    _sapp.keycodes[186] = SAPP_KEYCODE_SEMICOLON;
-    _sapp.keycodes[187] = SAPP_KEYCODE_EQUAL;
-    _sapp.keycodes[188] = SAPP_KEYCODE_COMMA;
-    _sapp.keycodes[189] = SAPP_KEYCODE_MINUS;
-    _sapp.keycodes[190] = SAPP_KEYCODE_PERIOD;
-    _sapp.keycodes[191] = SAPP_KEYCODE_SLASH;
-    _sapp.keycodes[192] = SAPP_KEYCODE_GRAVE_ACCENT;
-    _sapp.keycodes[219] = SAPP_KEYCODE_LEFT_BRACKET;
-    _sapp.keycodes[220] = SAPP_KEYCODE_BACKSLASH;
-    _sapp.keycodes[221] = SAPP_KEYCODE_RIGHT_BRACKET;
-    _sapp.keycodes[222] = SAPP_KEYCODE_APOSTROPHE;
-    _sapp.keycodes[224] = SAPP_KEYCODE_LEFT_SUPER;
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_focus_cb(int emsc_type, const EmscriptenFocusEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(emsc_event);
+    _SOKOL_UNUSED(user_data);
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_FOCUSED);
+        _sapp_call_event(&_sapp.event);
+    }
+    return true;
+}
+
+_SOKOL_PRIVATE EM_BOOL _sapp_emsc_blur_cb(int emsc_type, const EmscriptenFocusEvent* emsc_event, void* user_data) {
+    _SOKOL_UNUSED(emsc_type);
+    _SOKOL_UNUSED(emsc_event);
+    _SOKOL_UNUSED(user_data);
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_UNFOCUSED);
+        _sapp_call_event(&_sapp.event);
+    }
+    return true;
 }
 
 #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
@@ -4388,7 +5278,7 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void) {
     SOKOL_ASSERT(0 == _sapp.emsc.wgpu.msaa_view);
 
     WGPUTextureDescriptor ds_desc;
-    memset(&ds_desc, 0, sizeof(ds_desc));
+    _sapp_clear(&ds_desc, sizeof(ds_desc));
     ds_desc.usage = WGPUTextureUsage_OutputAttachment;
     ds_desc.dimension = WGPUTextureDimension_2D;
     ds_desc.size.width = (uint32_t) _sapp.framebuffer_width;
@@ -4403,7 +5293,7 @@ _SOKOL_PRIVATE void _sapp_emsc_wgpu_surfaces_create(void) {
 
     if (_sapp.sample_count > 1) {
         WGPUTextureDescriptor msaa_desc;
-        memset(&msaa_desc, 0, sizeof(msaa_desc));
+        _sapp_clear(&msaa_desc, sizeof(msaa_desc));
         msaa_desc.usage = WGPUTextureUsage_OutputAttachment;
         msaa_desc.dimension = WGPUTextureDimension_2D;
         msaa_desc.size.width = (uint32_t) _sapp.framebuffer_width;
@@ -4461,6 +5351,8 @@ _SOKOL_PRIVATE void _sapp_emsc_register_eventhandlers(void) {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_selector, 0, true, _sapp_emsc_touch_cb);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockchange_cb);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, _sapp_emsc_pointerlockerror_cb);
+    emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_focus_cb);
+    emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, _sapp_emsc_blur_cb);
     sapp_js_add_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_add_clipboard_listener();
@@ -4490,6 +5382,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
     emscripten_set_touchcancel_callback(_sapp.html5_canvas_selector, 0, true, 0);
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
     emscripten_set_pointerlockerror_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, true, 0);
+    emscripten_set_focus_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
+    emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, 0);
     sapp_js_remove_beforeunload_listener();
     if (_sapp.clipboard.enabled) {
         sapp_js_remove_clipboard_listener();
@@ -4504,8 +5398,8 @@ _SOKOL_PRIVATE void _sapp_emsc_unregister_eventhandlers() {
 }
 
 _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
-    _SOKOL_UNUSED(time);
     _SOKOL_UNUSED(userData);
+    _sapp_timing_external(&_sapp.timing, time / 1000.0);
 
     #if defined(SOKOL_WGPU)
         /*
@@ -4553,11 +5447,10 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
-    _sapp_emsc_keytable_init();
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
-        w = (double) _sapp.desc.width;
-        h = (double) _sapp.desc.height;
+        w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+        h = (double) _sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
     }
     else {
         emscripten_get_element_css_size(_sapp.html5_canvas_selector, &w, &h);
@@ -4578,6 +5471,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     #endif
     _sapp.valid = true;
     _sapp_emsc_register_eventhandlers();
+    sapp_set_icon(&desc->icon);
 
     /* start the frame loop */
     emscripten_request_animation_frame_loop(_sapp_emsc_frame, 0);
@@ -4611,7 +5505,7 @@ typedef struct {
 } _sapp_gl_fbconfig;
 
 _SOKOL_PRIVATE void _sapp_gl_init_fbconfig(_sapp_gl_fbconfig* fbconfig) {
-    memset(fbconfig, 0, sizeof(_sapp_gl_fbconfig));
+    _sapp_clear(fbconfig, sizeof(_sapp_gl_fbconfig));
     /* -1 means "don't care" */
     fbconfig->red_bits = -1;
     fbconfig->green_bits = -1;
@@ -4709,7 +5603,7 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #if defined(_SAPP_WIN32) || defined(_SAPP_UWP)
 _SOKOL_PRIVATE bool _sapp_win32_uwp_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, (size_t)dst_num_bytes);
+    _sapp_clear(dst, (size_t)dst_num_bytes);
     const int dst_chars = dst_num_bytes / (int)sizeof(wchar_t);
     const int dst_needed = MultiByteToWideChar(CP_UTF8, 0, src, -1, 0, 0);
     if ((dst_needed > 0) && (dst_needed < dst_chars)) {
@@ -4859,17 +5753,32 @@ _SOKOL_PRIVATE void _sapp_win32_uwp_init_keytable(void) {
 
 #if defined(__cplusplus)
 #define _sapp_d3d11_Release(self) (self)->Release()
+#define _sapp_win32_refiid(iid) iid
 #else
 #define _sapp_d3d11_Release(self) (self)->lpVtbl->Release(self)
+#define _sapp_win32_refiid(iid) &iid
 #endif
 
 #define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
+
+
+static const IID _sapp_IID_ID3D11Texture2D = { 0x6f15aaf2,0xd208,0x4e89, {0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c} };
+static const IID _sapp_IID_IDXGIDevice1    = { 0x77db970f,0x6276,0x48ba, {0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c} };
+static const IID _sapp_IID_IDXGIFactory    = { 0x7b7166ec,0x21c7,0x44ae, {0xb2,0x1a,0xc9,0xae,0x32,0x1a,0xe3,0x69} };
 
 static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
     #if defined(__cplusplus)
         return self->GetBuffer(Buffer, riid, ppSurface);
     #else
         return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
+    #endif
+}
+
+static inline HRESULT _sapp_d3d11_QueryInterface(ID3D11Device* self, REFIID riid, void** ppvObject) {
+    #if defined(__cplusplus)
+        return self->QueryInterface(riid, ppvObject);
+    #else
+        return self->lpVtbl->QueryInterface(self, riid, ppvObject);
     #endif
 }
 
@@ -4921,6 +5830,46 @@ static inline HRESULT _sapp_dxgi_Present(IDXGISwapChain* self, UINT SyncInterval
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_GetFrameStatistics(IDXGISwapChain* self, DXGI_FRAME_STATISTICS* pStats) {
+    #if defined(__cplusplus)
+        return self->GetFrameStatistics(pStats);
+    #else
+        return self->lpVtbl->GetFrameStatistics(self, pStats);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_SetMaximumFrameLatency(IDXGIDevice1* self, UINT MaxLatency) {
+    #if defined(__cplusplus)
+        return self->SetMaximumFrameLatency(MaxLatency);
+    #else
+        return self->lpVtbl->SetMaximumFrameLatency(self, MaxLatency);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetAdapter(IDXGIDevice1* self, IDXGIAdapter** pAdapter) {
+    #if defined(__cplusplus)
+        return self->GetAdapter(pAdapter);
+    #else
+        return self->lpVtbl->GetAdapter(self, pAdapter);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetParent(IDXGIObject* self, REFIID riid, void** ppParent) {
+    #if defined(__cplusplus)
+        return self->GetParent(riid, ppParent);
+    #else
+        return self->lpVtbl->GetParent(self, riid, ppParent);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND WindowHandle, UINT Flags) {
+    #if defined(__cplusplus)
+        return self->MakeWindowAssociation(WindowHandle, Flags);
+    #else
+        return self->lpVtbl->MakeWindowAssociation(self, WindowHandle, Flags);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
@@ -4933,10 +5882,12 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        _sapp.d3d11.use_dxgi_frame_stats = true;
     }
     else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        _sapp.d3d11.use_dxgi_frame_stats = false;
     }
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
@@ -4960,11 +5911,66 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         &feature_level,                 /* pFeatureLevel */
         &_sapp.d3d11.device_context);   /* ppImmediateContext */
     _SOKOL_UNUSED(hr);
+    #if defined(SOKOL_DEBUG)
+    if (!SUCCEEDED(hr)) {
+        // if initialization with D3D11_CREATE_DEVICE_DEBUG failes, this could be because the
+        // 'D3D11 debug layer' stopped working, indicated by the error message:
+        // ===
+        // D3D11CreateDevice: Flags (0x2) were specified which require the D3D11 SDK Layers for Windows 10, but they are not present on the system.
+        // These flags must be removed, or the Windows 10 SDK must be installed.
+        // Flags include: D3D11_CREATE_DEVICE_DEBUG
+        // ===
+        //
+        // ...just retry with the DEBUG flag switched off
+        SOKOL_LOG("sokol_app.h: D3D11CreateDeviceAndSwapChain() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.\n");
+        create_flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        hr = D3D11CreateDeviceAndSwapChain(
+            NULL,                           /* pAdapter (use default) */
+            D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
+            NULL,                           /* Software */
+            create_flags,                   /* Flags */
+            NULL,                           /* pFeatureLevels */
+            0,                              /* FeatureLevels */
+            D3D11_SDK_VERSION,              /* SDKVersion */
+            sc_desc,                        /* pSwapChainDesc */
+            &_sapp.d3d11.swap_chain,        /* ppSwapChain */
+            &_sapp.d3d11.device,            /* ppDevice */
+            &feature_level,                 /* pFeatureLevel */
+            &_sapp.d3d11.device_context);   /* ppImmediateContext */
+    }
+    #endif
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
+
+    // mimimize frame latency, disable Alt-Enter
+    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
+    if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
+        _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
+        IDXGIAdapter* dxgi_adapter = 0;
+        hr = _sapp_dxgi_GetAdapter(_sapp.d3d11.dxgi_device, &dxgi_adapter);
+        if (SUCCEEDED(hr) && dxgi_adapter) {
+            IDXGIFactory* dxgi_factory = 0;
+            hr = _sapp_dxgi_GetParent((IDXGIObject*)dxgi_adapter, _sapp_win32_refiid(_sapp_IID_IDXGIFactory), (void**)&dxgi_factory);
+            if (SUCCEEDED(hr)) {
+                _sapp_dxgi_MakeWindowAssociation(dxgi_factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
+                _SAPP_SAFE_RELEASE(dxgi_factory);
+            }
+            else {
+                SOKOL_LOG("sokol_app.h: could not obtain IDXGIFactory object.\n");
+            }
+            _SAPP_SAFE_RELEASE(dxgi_adapter);
+        }
+        else {
+            SOKOL_LOG("sokol_app.h: could not obtain IDXGIAdapter object.\n");
+        }
+    }
+    else {
+        SOKOL_LOG("sokol_app.h: could not obtain IDXGIDevice1 interface\n");
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
     _SAPP_SAFE_RELEASE(_sapp.d3d11.swap_chain);
+    _SAPP_SAFE_RELEASE(_sapp.d3d11.dxgi_device);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device_context);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device);
 }
@@ -4980,18 +5986,14 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     HRESULT hr;
 
     /* view for the swapchain-created framebuffer */
-    #ifdef __cplusplus
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
-    #else
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, &IID_ID3D11Texture2D, (void**)&_sapp.d3d11.rt);
-    #endif
+    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
     hr = _sapp_d3d11_CreateRenderTargetView(_sapp.d3d11.device, (ID3D11Resource*)_sapp.d3d11.rt, NULL, &_sapp.d3d11.rtv);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
 
     /* common desc for MSAA and depth-stencil texture */
     D3D11_TEXTURE2D_DESC tex_desc;
-    memset(&tex_desc, 0, sizeof(tex_desc));
+    _sapp_clear(&tex_desc, sizeof(tex_desc));
     tex_desc.Width = (UINT)_sapp.framebuffer_width;
     tex_desc.Height = (UINT)_sapp.framebuffer_height;
     tex_desc.MipLevels = 1;
@@ -5036,14 +6038,22 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_present(void) {
+_SOKOL_PRIVATE void _sapp_d3d11_present(bool do_not_wait) {
     /* do MSAA resolve if needed */
     if (_sapp.sample_count > 1) {
         SOKOL_ASSERT(_sapp.d3d11.rt);
         SOKOL_ASSERT(_sapp.d3d11.msaa_rt);
         _sapp_d3d11_ResolveSubresource(_sapp.d3d11.device_context, (ID3D11Resource*)_sapp.d3d11.rt, 0, (ID3D11Resource*)_sapp.d3d11.msaa_rt, 0, DXGI_FORMAT_B8G8R8A8_UNORM);
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, 0);
+    UINT flags = 0;
+    if (_sapp.win32.is_win10_or_greater && do_not_wait) {
+        /* this hack/workaround somewhat improves window-movement and -sizing
+            responsiveness when rendering is controlled via WM_TIMER during window
+            move and resize on NVIDIA cards on Win10 with recent drivers.
+        */
+        flags = DXGI_PRESENT_DO_NOT_WAIT;
+    }
+    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, (UINT)_sapp.swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -5139,7 +6149,7 @@ _SOKOL_PRIVATE bool _sapp_wgl_ext_supported(const char* ext) {
 _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     SOKOL_ASSERT(_sapp.wgl.msg_dc);
     PIXELFORMATDESCRIPTOR pfd;
-    memset(&pfd, 0, sizeof(pfd));
+    _sapp_clear(&pfd, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
     pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
@@ -5184,7 +6194,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     const _sapp_gl_fbconfig* closest;
 
     int native_count = _sapp_wgl_attrib(1, WGL_NUMBER_PIXEL_FORMATS_ARB);
-    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC((size_t)native_count, sizeof(_sapp_gl_fbconfig));
+    _sapp_gl_fbconfig* usable_configs = (_sapp_gl_fbconfig*) _sapp_malloc_clear((size_t)native_count * sizeof(_sapp_gl_fbconfig));
     SOKOL_ASSERT(usable_configs);
     int usable_count = 0;
     for (int i = 0; i < native_count; i++) {
@@ -5231,7 +6241,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
     if (closest) {
         pixel_format = (int) closest->handle;
     }
-    SOKOL_FREE(usable_configs);
+    _sapp_free(usable_configs);
     return pixel_format;
 }
 
@@ -5254,8 +6264,8 @@ _SOKOL_PRIVATE void _sapp_wgl_create_context(void) {
         _sapp_fail("WGL: ARB_create_context_profile required!\n");
     }
     const int attrs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
+        WGL_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
         WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
         0, 0
@@ -5298,7 +6308,7 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 
 _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
-    memset(dst, 0, (size_t)dst_num_bytes);
+    _sapp_clear(dst, (size_t)dst_num_bytes);
     const int bytes_needed = WideCharToMultiByte(CP_UTF8, 0, src, -1, NULL, 0, NULL, NULL);
     if (bytes_needed <= dst_num_bytes) {
         WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_num_bytes, NULL, NULL);
@@ -5309,10 +6319,38 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     }
 }
 
-_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
+/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
+_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
+    RECT rect;
+    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
+        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
+        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
+        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+        /* prevent a framebuffer size of 0 when window is minimized */
+        if (0 == fb_width) {
+            fb_width = 1;
+        }
+        if (0 == fb_height) {
+            fb_height = 1;
+        }
+        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
+            _sapp.framebuffer_width = fb_width;
+            _sapp.framebuffer_height = fb_height;
+            return true;
+        }
+    }
+    else {
+        _sapp.window_width = _sapp.window_height = 1;
+        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+    }
+    return false;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) {
     HMONITOR monitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO minfo;
-    memset(&minfo, 0, sizeof(minfo));
+    _sapp_clear(&minfo, sizeof(minfo));
     minfo.cbSize = sizeof(MONITORINFO);
     GetMonitorInfo(monitor, &minfo);
     const RECT mr = minfo.rcMonitor;
@@ -5323,27 +6361,30 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     DWORD win_style;
     RECT rect = { 0, 0, 0, 0 };
 
-    _sapp.fullscreen = !_sapp.fullscreen;
+    _sapp.fullscreen = fullscreen;
     if (!_sapp.fullscreen) {
         win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.desc.width * _sapp.win32.dpi.window_scale);
-        rect.bottom = (int) ((float)_sapp.desc.height * _sapp.win32.dpi.window_scale);
+        rect = _sapp.win32.stored_window_rect;
     }
     else {
+        GetWindowRect(_sapp.win32.hwnd, &_sapp.win32.stored_window_rect);
         win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = monitor_w;
-        rect.bottom = monitor_h;
+        rect.left = mr.left;
+        rect.top = mr.top;
+        rect.right = rect.left + monitor_w;
+        rect.bottom = rect.top + monitor_h;
+        AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     }
-    AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
-    int win_width = rect.right - rect.left;
-    int win_height = rect.bottom - rect.top;
-    if (!_sapp.fullscreen) {
-        rect.left = (monitor_w - win_width) / 2;
-        rect.top = (monitor_h - win_height) / 2;
-    }
-
+    const int win_w = rect.right - rect.left;
+    const int win_h = rect.bottom - rect.top;
+    const int win_x = rect.left;
+    const int win_y = rect.top;
     SetWindowLongPtr(_sapp.win32.hwnd, GWL_STYLE, win_style);
-    SetWindowPos(_sapp.win32.hwnd, HWND_TOP, mr.left + rect.left, mr.top + rect.top, win_width, win_height, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+    SetWindowPos(_sapp.win32.hwnd, HWND_TOP, win_x, win_y, win_w, win_h, swp_flags | SWP_FRAMECHANGED);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
+    _sapp_win32_set_fullscreen(!_sapp.fullscreen, SWP_SHOWWINDOW);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
@@ -5430,32 +6471,15 @@ _SOKOL_PRIVATE void _sapp_win32_lock_mouse(bool lock) {
     }
 }
 
-/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
-_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
-    RECT rect;
-    if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        const int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        const int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
-        if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
-            _sapp.framebuffer_width = fb_width;
-            _sapp.framebuffer_height = fb_height;
-            /* prevent a framebuffer size of 0 when window is minimized */
-            if (_sapp.framebuffer_width == 0) {
-                _sapp.framebuffer_width = 1;
-            }
-            if (_sapp.framebuffer_height == 0) {
-                _sapp.framebuffer_height = 1;
-            }
-            return true;
-        }
+_SOKOL_PRIVATE bool _sapp_win32_update_monitor(void) {
+    const HMONITOR cur_monitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONULL);
+    if (cur_monitor != _sapp.win32.hmonitor) {
+        _sapp.win32.hmonitor = cur_monitor;
+        return true;
     }
     else {
-        _sapp.window_width = _sapp.window_height = 1;
-        _sapp.framebuffer_width = _sapp.framebuffer_height = 1;
+        return false;
     }
-    return false;
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
@@ -5471,6 +6495,16 @@ _SOKOL_PRIVATE uint32_t _sapp_win32_mods(void) {
     }
     if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & (1<<15)) {
         mods |= SAPP_MODIFIER_SUPER;
+    }
+    const bool swapped = (TRUE == GetSystemMetrics(SM_SWAPBUTTON));
+    if (GetAsyncKeyState(VK_LBUTTON)) {
+        mods |= swapped ? SAPP_MODIFIER_RMB : SAPP_MODIFIER_LMB;
+    }
+    if (GetAsyncKeyState(VK_RBUTTON)) {
+        mods |= swapped ? SAPP_MODIFIER_LMB : SAPP_MODIFIER_RMB;
+    }
+    if (GetAsyncKeyState(VK_MBUTTON)) {
+        mods |= SAPP_MODIFIER_MMB;
     }
     return mods;
 }
@@ -5523,6 +6557,34 @@ _SOKOL_PRIVATE void _sapp_win32_char_event(uint32_t c, bool repeat) {
     }
 }
 
+_SOKOL_PRIVATE void _sapp_win32_dpi_changed(HWND hWnd, LPRECT proposed_win_rect) {
+    /* called on WM_DPICHANGED, which will only be sent to the application
+        if sapp_desc.high_dpi is true and the Windows version is recent enough
+        to support DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    */
+    SOKOL_ASSERT(_sapp.desc.high_dpi);
+    HINSTANCE user32 = LoadLibraryA("user32.dll");
+    if (!user32) {
+        return;
+    }
+    typedef UINT(WINAPI * GETDPIFORWINDOW_T)(HWND hwnd);
+    GETDPIFORWINDOW_T fn_getdpiforwindow = (GETDPIFORWINDOW_T)(void*)GetProcAddress(user32, "GetDpiForWindow");
+    if (fn_getdpiforwindow) {
+        UINT dpix = fn_getdpiforwindow(_sapp.win32.hwnd);
+        // NOTE: for high-dpi apps, mouse_scale remains one
+        _sapp.win32.dpi.window_scale = (float)dpix / 96.0f;
+        _sapp.win32.dpi.content_scale = _sapp.win32.dpi.window_scale;
+        _sapp.dpi_scale = _sapp.win32.dpi.window_scale;
+        SetWindowPos(hWnd, 0,
+            proposed_win_rect->left,
+            proposed_win_rect->top,
+            proposed_win_rect->right - proposed_win_rect->left,
+            proposed_win_rect->bottom - proposed_win_rect->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    FreeLibrary(user32);
+}
+
 _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     if (!_sapp.drop.enabled) {
         return;
@@ -5533,13 +6595,13 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
     _sapp.drop.num_files = (count > _sapp.drop.max_files) ? _sapp.drop.max_files : count;
     for (UINT i = 0;  i < (UINT)_sapp.drop.num_files;  i++) {
         const UINT num_chars = DragQueryFileW(hdrop, i, NULL, 0) + 1;
-        WCHAR* buffer = (WCHAR*) SOKOL_CALLOC(num_chars, sizeof(WCHAR));
+        WCHAR* buffer = (WCHAR*) _sapp_malloc_clear(num_chars * sizeof(WCHAR));
         DragQueryFileW(hdrop, i, buffer, num_chars);
         if (!_sapp_win32_wide_to_utf8(buffer, _sapp_dropped_file_path_ptr((int)i), _sapp.drop.max_path_length)) {
             SOKOL_LOG("sokol_app.h: dropped file path too long (sapp_desc.max_dropped_file_path_length)\n");
             drop_failed = true;
         }
-        SOKOL_FREE(buffer);
+        _sapp_free(buffer);
     }
     DragFinish(hdrop);
     if (!drop_failed) {
@@ -5552,6 +6614,34 @@ _SOKOL_PRIVATE void _sapp_win32_files_dropped(HDROP hdrop) {
         _sapp_clear_drop_buffer();
         _sapp.drop.num_files = 0;
     }
+}
+
+_SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
+    #if defined(SOKOL_D3D11)
+        // on D3D11, use the more precise DXGI timestamp
+        if (_sapp.d3d11.use_dxgi_frame_stats) {
+            DXGI_FRAME_STATISTICS dxgi_stats;
+            _sapp_clear(&dxgi_stats, sizeof(dxgi_stats));
+            HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
+            if (SUCCEEDED(hr)) {
+                if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
+                    if ((_sapp.d3d11.sync_refresh_count + 1) != dxgi_stats.SyncRefreshCount) {
+                        _sapp_timing_discontinuity(&_sapp.timing);
+                    }
+                    _sapp.d3d11.sync_refresh_count = dxgi_stats.SyncRefreshCount;
+                    LARGE_INTEGER qpc = dxgi_stats.SyncQPCTime;
+                    const uint64_t now = (uint64_t)_sapp_int64_muldiv(qpc.QuadPart - _sapp.timing.timestamp.win.start.QuadPart, 1000000000, _sapp.timing.timestamp.win.freq.QuadPart);
+                    _sapp_timing_external(&_sapp.timing, (double)now / 1000000000.0);
+                }
+                return;
+            }
+        }
+        // fallback if swap model isn't "flip-discard" or GetFrameStatistics failed for another reason
+        _sapp_timing_measure(&_sapp.timing);
+    #endif
+    #if defined(SOKOL_GLCORE33)
+        _sapp_timing_measure(&_sapp.timing);
+    #endif
 }
 
 _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -5604,6 +6694,16 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 break;
+            case WM_SETFOCUS:
+                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_FOCUSED);
+                break;
+            case WM_KILLFOCUS:
+                /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
+                if (_sapp.mouse.locked) {
+                    _sapp_win32_lock_mouse(false);
+                }
+                _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UNFOCUSED);
+                break;
             case WM_SETCURSOR:
                 if (_sapp.desc.user_cursor) {
                     if (LOWORD(lParam) == HTCLIENT) {
@@ -5612,6 +6712,14 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     }
                 }
                 break;
+            case WM_DPICHANGED:
+            {
+                /* Update window's DPI and size if its moved to another monitor with a different DPI
+                   Only sent if DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is used.
+                */
+                _sapp_win32_dpi_changed(hWnd, (LPRECT)lParam);
+                break;
+            }
             case WM_LBUTTONDOWN:
                 _sapp_win32_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, SAPP_MOUSEBUTTON_LEFT);
                 _sapp_win32_capture_mouse(1<<SAPP_MOUSEBUTTON_LEFT);
@@ -5651,7 +6759,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     if (!_sapp.win32.mouse_tracked) {
                         _sapp.win32.mouse_tracked = true;
                         TRACKMOUSEEVENT tme;
-                        memset(&tme, 0, sizeof(tme));
+                        _sapp_clear(&tme, sizeof(tme));
                         tme.cbSize = sizeof(tme);
                         tme.dwFlags = TME_LEAVE;
                         tme.hwndTrack = _sapp.win32.hwnd;
@@ -5727,9 +6835,11 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 KillTimer(_sapp.win32.hwnd, 1);
                 break;
             case WM_TIMER:
+                _sapp_win32_timing_measure();
                 _sapp_frame();
                 #if defined(SOKOL_D3D11)
-                    _sapp_d3d11_present();
+                    // present with DXGI_PRESENT_DO_NOT_WAIT
+                    _sapp_d3d11_present(true);
                 #endif
                 #if defined(SOKOL_GLCORE33)
                     _sapp_wgl_swap_buffers();
@@ -5745,9 +6855,25 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
                 */
                 break;
+            case WM_NCLBUTTONDOWN:
+                /* workaround for half-second pause when starting to move window
+                    see: https://gamedev.net/forums/topic/672094-keeping-things-moving-during-win32-moveresize-events/5254386/
+                */
+                if (SendMessage(_sapp.win32.hwnd, WM_NCHITTEST, wParam, lParam) == HTCAPTION) {
+                    POINT point;
+                    GetCursorPos(&point);
+                    ScreenToClient(_sapp.win32.hwnd, &point);
+                    PostMessage(_sapp.win32.hwnd, WM_MOUSEMOVE, 0, ((uint32_t)point.x)|(((uint32_t)point.y) << 16));
+                }
+                break;
             case WM_DROPFILES:
                 _sapp_win32_files_dropped((HDROP)wParam);
                 break;
+            case WM_DISPLAYCHANGE:
+                // refresh rate might have changed
+                _sapp_timing_reset(&_sapp.timing);
+                break;
+
             default:
                 break;
         }
@@ -5757,7 +6883,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
 
 _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     WNDCLASSW wndclassw;
-    memset(&wndclassw, 0, sizeof(wndclassw));
+    _sapp_clear(&wndclassw, sizeof(wndclassw));
     wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
     wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
     wndclassw.hInstance = GetModuleHandleW(NULL);
@@ -5766,48 +6892,67 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
     wndclassw.lpszClassName = L"SOKOLAPP";
     RegisterClassW(&wndclassw);
 
-    DWORD win_style;
+    /* NOTE: regardless whether fullscreen is requested or not, a regular
+       windowed-mode window will always be created first (however in hidden
+       mode, so that no windowed-mode window pops up before the fullscreen window)
+    */
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
     RECT rect = { 0, 0, 0, 0 };
-    if (_sapp.fullscreen) {
-        win_style = WS_POPUP | WS_SYSMENU | WS_VISIBLE;
-        rect.right = GetSystemMetrics(SM_CXSCREEN);
-        rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-    }
-    else {
-        win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
-        rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
-        rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
-    }
+    DWORD win_style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX;
+    rect.right = (int) ((float)_sapp.window_width * _sapp.win32.dpi.window_scale);
+    rect.bottom = (int) ((float)_sapp.window_height * _sapp.win32.dpi.window_scale);
+    const bool use_default_width = 0 == _sapp.window_width;
+    const bool use_default_height = 0 == _sapp.window_height;
     AdjustWindowRectEx(&rect, win_style, FALSE, win_ex_style);
     const int win_width = rect.right - rect.left;
     const int win_height = rect.bottom - rect.top;
     _sapp.win32.in_create_window = true;
     _sapp.win32.hwnd = CreateWindowExW(
-        win_ex_style,               /* dwExStyle */
-        L"SOKOLAPP",                /* lpClassName */
-        _sapp.window_title_wide,    /* lpWindowName */
-        win_style,                  /* dwStyle */
-        CW_USEDEFAULT,              /* X */
-        CW_USEDEFAULT,              /* Y */
-        win_width,                  /* nWidth */
-        win_height,                 /* nHeight */
-        NULL,                       /* hWndParent */
-        NULL,                       /* hMenu */
-        GetModuleHandle(NULL),      /* hInstance */
-        NULL);                      /* lParam */
-    ShowWindow(_sapp.win32.hwnd, SW_SHOW);
+        win_ex_style,               // dwExStyle
+        L"SOKOLAPP",                // lpClassName
+        _sapp.window_title_wide,    // lpWindowName
+        win_style,                  // dwStyle
+        CW_USEDEFAULT,              // X
+        SW_HIDE,                    // Y (NOTE: CW_USEDEFAULT is not used for position here, but internally calls ShowWindow!
+        use_default_width ? CW_USEDEFAULT : win_width, // nWidth
+        use_default_height ? CW_USEDEFAULT : win_height, // nHeight (NOTE: if width is CW_USEDEFAULT, height is actually ignored)
+        NULL,                       // hWndParent
+        NULL,                       // hMenu
+        GetModuleHandle(NULL),      // hInstance
+        NULL);                      // lParam
     _sapp.win32.in_create_window = false;
     _sapp.win32.dc = GetDC(_sapp.win32.hwnd);
+    _sapp.win32.hmonitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONULL);
     SOKOL_ASSERT(_sapp.win32.dc);
-    _sapp_win32_update_dimensions();
 
+    /* this will get the actual windowed-mode window size, if fullscreen
+       is requested, the set_fullscreen function will then capture the
+       current window rectangle, which then might be used later to
+       restore the window position when switching back to windowed
+    */
+    _sapp_win32_update_dimensions();
+    if (_sapp.fullscreen) {
+        _sapp_win32_set_fullscreen(_sapp.fullscreen, SWP_HIDEWINDOW);
+        _sapp_win32_update_dimensions();
+    }
+    ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     DragAcceptFiles(_sapp.win32.hwnd, 1);
 }
 
 _SOKOL_PRIVATE void _sapp_win32_destroy_window(void) {
     DestroyWindow(_sapp.win32.hwnd); _sapp.win32.hwnd = 0;
     UnregisterClassW(L"SOKOLAPP", GetModuleHandleW(NULL));
+}
+
+_SOKOL_PRIVATE void _sapp_win32_destroy_icons(void) {
+    if (_sapp.win32.big_icon) {
+        DestroyIcon(_sapp.win32.big_icon);
+        _sapp.win32.big_icon = 0;
+    }
+    if (_sapp.win32.small_icon) {
+        DestroyIcon(_sapp.win32.small_icon);
+        _sapp.win32.small_icon = 0;
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
@@ -5841,35 +6986,56 @@ _SOKOL_PRIVATE void _sapp_win32_restore_console(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_init_dpi(void) {
 
+    DECLARE_HANDLE(DPI_AWARENESS_CONTEXT_T);
     typedef BOOL(WINAPI * SETPROCESSDPIAWARE_T)(void);
+    typedef bool (WINAPI * SETPROCESSDPIAWARENESSCONTEXT_T)(DPI_AWARENESS_CONTEXT_T); // since Windows 10, version 1703
     typedef HRESULT(WINAPI * SETPROCESSDPIAWARENESS_T)(PROCESS_DPI_AWARENESS);
     typedef HRESULT(WINAPI * GETDPIFORMONITOR_T)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
     SETPROCESSDPIAWARE_T fn_setprocessdpiaware = 0;
     SETPROCESSDPIAWARENESS_T fn_setprocessdpiawareness = 0;
     GETDPIFORMONITOR_T fn_getdpiformonitor = 0;
+    SETPROCESSDPIAWARENESSCONTEXT_T fn_setprocessdpiawarenesscontext =0;
+
     HINSTANCE user32 = LoadLibraryA("user32.dll");
     if (user32) {
         fn_setprocessdpiaware = (SETPROCESSDPIAWARE_T)(void*) GetProcAddress(user32, "SetProcessDPIAware");
+        fn_setprocessdpiawarenesscontext = (SETPROCESSDPIAWARENESSCONTEXT_T)(void*) GetProcAddress(user32, "SetProcessDpiAwarenessContext");
     }
     HINSTANCE shcore = LoadLibraryA("shcore.dll");
     if (shcore) {
         fn_setprocessdpiawareness = (SETPROCESSDPIAWARENESS_T)(void*) GetProcAddress(shcore, "SetProcessDpiAwareness");
         fn_getdpiformonitor = (GETDPIFORMONITOR_T)(void*) GetProcAddress(shcore, "GetDpiForMonitor");
     }
+    /*
+        NOTE on SetProcessDpiAware() vs SetProcessDpiAwareness() vs SetProcessDpiAwarenessContext():
+
+        These are different attempts to get DPI handling on Windows right, from oldest
+        to newest. SetProcessDpiAwarenessContext() is required for the new
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 method.
+    */
     if (fn_setprocessdpiawareness) {
-        /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
-        PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_SYSTEM_DPI_AWARE;
-        _sapp.win32.dpi.aware = true;
-        if (!_sapp.desc.high_dpi) {
-            process_dpi_awareness = PROCESS_DPI_UNAWARE;
-            _sapp.win32.dpi.aware = false;
+        if (_sapp.desc.high_dpi) {
+            /* app requests HighDPI rendering, first try the Win10 Creator Update per-monitor-dpi awareness,
+               if that fails, fall back to system-dpi-awareness
+            */
+            _sapp.win32.dpi.aware = true;
+            DPI_AWARENESS_CONTEXT_T per_monitor_aware_v2 = (DPI_AWARENESS_CONTEXT_T)-4;
+            if (!(fn_setprocessdpiawarenesscontext && fn_setprocessdpiawarenesscontext(per_monitor_aware_v2))) {
+                // fallback to system-dpi-aware
+                fn_setprocessdpiawareness(PROCESS_SYSTEM_DPI_AWARE);
+            }
         }
-        fn_setprocessdpiawareness(process_dpi_awareness);
+        else {
+            /* if the app didn't request HighDPI rendering, let Windows do the upscaling */
+            _sapp.win32.dpi.aware = false;
+            fn_setprocessdpiawareness(PROCESS_DPI_UNAWARE);
+        }
     }
     else if (fn_setprocessdpiaware) {
-        fn_setprocessdpiaware();
+        // fallback for Windows 7
         _sapp.win32.dpi.aware = true;
+        fn_setprocessdpiaware();
     }
     /* get dpi scale factor for main monitor */
     if (fn_getdpiformonitor && _sapp.win32.dpi.aware) {
@@ -5972,6 +7138,85 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
     SetWindowTextW(_sapp.win32.hwnd, _sapp.window_title_wide);
 }
 
+_SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc) {
+    BITMAPV5HEADER bi;
+    _sapp_clear(&bi, sizeof(bi));
+    bi.bV5Size = sizeof(bi);
+    bi.bV5Width = desc->width;
+    bi.bV5Height = -desc->height;   // NOTE the '-' here to indicate that origin is top-left
+    bi.bV5Planes = 1;
+    bi.bV5BitCount = 32;
+    bi.bV5Compression = BI_BITFIELDS;
+    bi.bV5RedMask = 0x00FF0000;
+    bi.bV5GreenMask = 0x0000FF00;
+    bi.bV5BlueMask = 0x000000FF;
+    bi.bV5AlphaMask = 0xFF000000;
+
+    uint8_t* target = 0;
+    const uint8_t* source = (const uint8_t*)desc->pixels.ptr;
+
+    HDC dc = GetDC(NULL);
+    HBITMAP color = CreateDIBSection(dc, (BITMAPINFO*)&bi, DIB_RGB_COLORS, (void**)&target, NULL, (DWORD)0);
+    ReleaseDC(NULL, dc);
+    if (0 == color) {
+        return NULL;
+    }
+    SOKOL_ASSERT(target);
+
+    HBITMAP mask = CreateBitmap(desc->width, desc->height, 1, 1, NULL);
+    if (0 == mask) {
+        DeleteObject(color);
+        return NULL;
+    }
+
+    for (int i = 0; i < (desc->width*desc->height); i++) {
+        target[0] = source[2];
+        target[1] = source[1];
+        target[2] = source[0];
+        target[3] = source[3];
+        target += 4;
+        source += 4;
+    }
+
+    ICONINFO icon_info;
+    _sapp_clear(&icon_info, sizeof(icon_info));
+    icon_info.fIcon = true;
+    icon_info.xHotspot = 0;
+    icon_info.yHotspot = 0;
+    icon_info.hbmMask = mask;
+    icon_info.hbmColor = color;
+    HICON icon_handle = CreateIconIndirect(&icon_info);
+    DeleteObject(color);
+    DeleteObject(mask);
+
+    return icon_handle;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
+
+    int big_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+    int sml_img_index = _sapp_image_bestmatch(icon_desc->images, num_images, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+    HICON big_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[big_img_index]);
+    HICON sml_icon = _sapp_win32_create_icon_from_image(&icon_desc->images[sml_img_index]);
+
+    // if icon creation or lookup has failed for some reason, leave the currently set icon untouched
+    if (0 != big_icon) {
+        SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_BIG, (LPARAM) big_icon);
+        if (0 != _sapp.win32.big_icon) {
+            DestroyIcon(_sapp.win32.big_icon);
+        }
+        _sapp.win32.big_icon = big_icon;
+    }
+    if (0 != sml_icon) {
+        SendMessage(_sapp.win32.hwnd, WM_SETICON, ICON_SMALL, (LPARAM) sml_icon);
+        if (0 != _sapp.win32.small_icon) {
+            DestroyIcon(_sapp.win32.small_icon);
+        }
+        _sapp.win32.small_icon = sml_icon;
+    }
+}
+
 /* don't laugh, but this seems to be the easiest and most robust
    way to check if we're running on Win10
 
@@ -5995,6 +7240,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
     _sapp_win32_create_window();
+    sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
@@ -6008,6 +7254,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
 
     bool done = false;
     while (!(done || _sapp.quit_ordered)) {
+        _sapp_win32_timing_measure();
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (WM_QUIT == msg.message) {
@@ -6021,7 +7268,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         _sapp_frame();
         #if defined(SOKOL_D3D11)
-            _sapp_d3d11_present();
+            _sapp_d3d11_present(false);
             if (IsIconic(_sapp.win32.hwnd)) {
                 Sleep((DWORD)(16 * _sapp.swap_interval));
             }
@@ -6035,6 +7282,12 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             _sapp_d3d11_resize_default_render_target();
             #endif
             _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_RESIZED);
+        }
+        /* check if the window monitor has changed, need to reset timing because
+           the new monitor might have a different refresh rate
+        */
+        if (_sapp_win32_update_monitor()) {
+            _sapp_timing_reset(&_sapp.timing);
         }
         if (_sapp.quit_requested) {
             PostMessage(_sapp.win32.hwnd, WM_CLOSE, 0, 0);
@@ -6050,6 +7303,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #endif
     _sapp_win32_destroy_window();
+    _sapp_win32_destroy_icons();
     _sapp_win32_restore_console();
     _sapp_discard_state();
 }
@@ -6064,7 +7318,7 @@ _SOKOL_PRIVATE char** _sapp_win32_command_line_to_utf8_argv(LPWSTR w_command_lin
         _sapp_fail("Win32: failed to parse command line");
     } else {
         size_t size = wcslen(w_command_line) * 4;
-        argv = (char**) SOKOL_CALLOC(1, ((size_t)argc + 1) * sizeof(char*) + size);
+        argv = (char**) _sapp_malloc_clear(((size_t)argc + 1) * sizeof(char*) + size);
         SOKOL_ASSERT(argv);
         args = (char*) &argv[argc + 1];
         int n;
@@ -6101,7 +7355,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
     sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
     _sapp_win32_run(&desc);
-    SOKOL_FREE(argv_utf8);
+    _sapp_free(argv_utf8);
     return 0;
 }
 #endif /* SOKOL_WIN32_FORCE_MAIN */
@@ -6157,6 +7411,15 @@ _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow cons
         ((sender_window.GetKeyState(VirtualKey::RightWindows) & CoreVirtualKeyStates::Down) == CoreVirtualKeyStates::Down))
     {
         mods |= SAPP_MODIFIER_SUPER;
+    }
+    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_LEFT))) {
+        mods |= SAPP_MODIFIER_LMB;
+    }
+    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_MIDDLE))) {
+        mods |= SAPP_MODIFIER_MMB;
+    }
+    if (0 != (_sapp.uwp.mouse_buttons & (1<<SAPP_MOUSEBUTTON_RIGHT))) {
+        mods |= SAPP_MODIFIER_RMB;
     }
     return mods;
 }
@@ -6938,6 +8201,7 @@ void App::Run() {
     // NOTE: UWP will simply terminate an application, it's not possible to detect when an application is being closed
     while (true) {
         if (m_windowVisible) {
+            _sapp_timing_measure(&_sapp.timing);
             winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher().ProcessEvents(winrt::Windows::UI::Core::CoreProcessEventsOption::ProcessAllIfPresent);
             _sapp_frame();
             m_deviceResources->Present();
@@ -6960,7 +8224,11 @@ void App::OnActivated(winrt::Windows::ApplicationModel::Core::CoreApplicationVie
     _SOKOL_UNUSED(args);
     _SOKOL_UNUSED(applicationView);
     auto appView = winrt::Windows::UI::ViewManagement::ApplicationView::GetForCurrentView();
-    auto targetSize = winrt::Windows::Foundation::Size((float)_sapp.desc.width, (float)_sapp.desc.height);
+    const float window_width = (float)_sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
+    const float window_height = (float)_sapp_def(_sapp.desc.height, _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT);
+    auto targetSize = winrt::Windows::Foundation::Size(window_width, window_height);
+    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchViewSize(targetSize);
+    winrt::Windows::UI::ViewManagement::ApplicationView::PreferredLaunchWindowingMode(winrt::Windows::UI::ViewManagement::ApplicationViewWindowingMode::PreferredLaunchViewSize);
     appView.SetPreferredMinSize(targetSize);
     appView.TryResizeView(targetSize);
 
@@ -7133,6 +8401,11 @@ _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     EGLint alpha_size = _sapp.desc.alpha ? 8 : 0;
     const EGLint cfg_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        #if defined(SOKOL_GLES3)
+            EGL_RENDERABLE_TYPE, _sapp.desc.gl_force_gles2?EGL_OPENGL_ES2_BIT:EGL_OPENGL_ES3_BIT,
+        #else
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        #endif
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
@@ -7264,14 +8537,14 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
             const int32_t buf_h = win_h / 2;
             EGLint format;
             EGLBoolean egl_result = eglGetConfigAttrib(_sapp.android.display, _sapp.android.config, EGL_NATIVE_VISUAL_ID, &format);
-            SOKOL_ASSERT(egl_result == EGL_TRUE);
+            SOKOL_ASSERT(egl_result == EGL_TRUE); _SOKOL_UNUSED(egl_result);
             /* NOTE: calling ANativeWindow_setBuffersGeometry() with the same dimensions
                 as the ANativeWindow size results in weird display artefacts, that's
                 why it's only called when the buffer geometry is different from
                 the window size
             */
             int32_t result = ANativeWindow_setBuffersGeometry(window, buf_w, buf_h, format);
-            SOKOL_ASSERT(result == 0);
+            SOKOL_ASSERT(result == 0); _SOKOL_UNUSED(result);
         }
     }
 
@@ -7279,8 +8552,8 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
     EGLint fb_w, fb_h;
     EGLBoolean egl_result_w = eglQuerySurface(_sapp.android.display, _sapp.android.surface, EGL_WIDTH, &fb_w);
     EGLBoolean egl_result_h = eglQuerySurface(_sapp.android.display, _sapp.android.surface, EGL_HEIGHT, &fb_h);
-    SOKOL_ASSERT(egl_result_w == EGL_TRUE);
-    SOKOL_ASSERT(egl_result_h == EGL_TRUE);
+    SOKOL_ASSERT(egl_result_w == EGL_TRUE); _SOKOL_UNUSED(egl_result_w);
+    SOKOL_ASSERT(egl_result_h == EGL_TRUE); _SOKOL_UNUSED(egl_result_h);
     const bool fb_changed = (fb_w != _sapp.framebuffer_width) || (fb_h != _sapp.framebuffer_height);
     _sapp.framebuffer_width = fb_w;
     _sapp.framebuffer_height = fb_h;
@@ -7317,6 +8590,7 @@ _SOKOL_PRIVATE void _sapp_android_frame(void) {
     SOKOL_ASSERT(_sapp.android.display != EGL_NO_DISPLAY);
     SOKOL_ASSERT(_sapp.android.context != EGL_NO_CONTEXT);
     SOKOL_ASSERT(_sapp.android.surface != EGL_NO_SURFACE);
+    _sapp_timing_measure(&_sapp.timing);
     _sapp_android_update_dimensions(_sapp.android.current.window, false);
     _sapp_frame();
     eglSwapBuffers(_sapp.android.display, _sapp.android.surface);
@@ -7397,6 +8671,8 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
 }
 
 _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
+    _SOKOL_UNUSED(fd);
+    _SOKOL_UNUSED(data);
     if ((events & ALOOPER_EVENT_INPUT) == 0) {
         SOKOL_LOG("_sapp_android_input_cb() encountered unsupported event");
         return 1;
@@ -7417,6 +8693,7 @@ _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
 }
 
 _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
+    _SOKOL_UNUSED(data);
     if ((events & ALOOPER_EVENT_INPUT) == 0) {
         SOKOL_LOG("_sapp_android_main_cb() encountered unsupported event");
         return 1;
@@ -7435,7 +8712,7 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
                 SOKOL_LOG("MSG_CREATE");
                 SOKOL_ASSERT(!_sapp.valid);
                 bool result = _sapp_android_init_egl();
-                SOKOL_ASSERT(result);
+                SOKOL_ASSERT(result); _SOKOL_UNUSED(result);
                 _sapp.valid = true;
                 _sapp.android.has_created = true;
             }
@@ -7586,21 +8863,25 @@ _SOKOL_PRIVATE void _sapp_android_msg(_sapp_android_msg_t msg) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_start(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onStart()");
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_resume(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onResume()");
     _sapp_android_msg(_SOKOL_ANDROID_MSG_RESUME);
 }
 
 _SOKOL_PRIVATE void* _sapp_android_on_save_instance_state(ANativeActivity* activity, size_t* out_size) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onSaveInstanceState()");
     *out_size = 0;
     return NULL;
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activity, int has_focus) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onWindowFocusChanged()");
     if (has_focus) {
         _sapp_android_msg(_SOKOL_ANDROID_MSG_FOCUS);
@@ -7610,11 +8891,13 @@ _SOKOL_PRIVATE void _sapp_android_on_window_focus_changed(ANativeActivity* activ
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_pause(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onPause()");
     _sapp_android_msg(_SOKOL_ANDROID_MSG_PAUSE);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_stop(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onStop()");
 }
 
@@ -7629,11 +8912,14 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_native_window(ANativeWindow* window) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_created(ANativeActivity* activity, ANativeWindow* window) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onNativeWindowCreated()");
     _sapp_android_msg_set_native_window(window);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_native_window_destroyed(ANativeActivity* activity, ANativeWindow* window) {
+    _SOKOL_UNUSED(activity);
+    _SOKOL_UNUSED(window);
     SOKOL_LOG("NativeActivity onNativeWindowDestroyed()");
     _sapp_android_msg_set_native_window(NULL);
 }
@@ -7649,21 +8935,26 @@ _SOKOL_PRIVATE void _sapp_android_msg_set_input_queue(AInputQueue* input) {
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_created(ANativeActivity* activity, AInputQueue* queue) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onInputQueueCreated()");
     _sapp_android_msg_set_input_queue(queue);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_input_queue_destroyed(ANativeActivity* activity, AInputQueue* queue) {
+    _SOKOL_UNUSED(activity);
+    _SOKOL_UNUSED(queue);
     SOKOL_LOG("NativeActivity onInputQueueDestroyed()");
     _sapp_android_msg_set_input_queue(NULL);
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_config_changed(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onConfigurationChanged()");
     /* see android:configChanges in manifest */
 }
 
 _SOKOL_PRIVATE void _sapp_android_on_low_memory(ANativeActivity* activity) {
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onLowMemory()");
 }
 
@@ -7676,6 +8967,7 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
      * However, if ANativeActivity_finish() is explicitly called from for example
      * _sapp_android_on_stop(), the crash disappears. Is this a bug in NativeActivity?
      */
+    _SOKOL_UNUSED(activity);
     SOKOL_LOG("NativeActivity onDestroy()");
 
     /* send destroy msg */
@@ -7701,6 +8993,8 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
 
 JNIEXPORT
 void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size_t saved_state_size) {
+    _SOKOL_UNUSED(saved_state);
+    _SOKOL_UNUSED(saved_state_size);
     SOKOL_LOG("NativeActivity onCreate()");
 
     sapp_desc desc = sokol_main(0, NULL);
@@ -8627,6 +9921,7 @@ _SOKOL_PRIVATE void _sapp_x11_init_extensions(void) {
     _sapp.x11.WM_STATE                = XInternAtom(_sapp.x11.display, "WM_STATE", False);
     _sapp.x11.NET_WM_NAME             = XInternAtom(_sapp.x11.display, "_NET_WM_NAME", False);
     _sapp.x11.NET_WM_ICON_NAME        = XInternAtom(_sapp.x11.display, "_NET_WM_ICON_NAME", False);
+    _sapp.x11.NET_WM_ICON             = XInternAtom(_sapp.x11.display, "_NET_WM_ICON", False);
     _sapp.x11.NET_WM_STATE            = XInternAtom(_sapp.x11.display, "_NET_WM_STATE", False);
     _sapp.x11.NET_WM_STATE_FULLSCREEN = XInternAtom(_sapp.x11.display, "_NET_WM_STATE_FULLSCREEN", False);
     if (_sapp.drop.enabled) {
@@ -8818,7 +10113,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         _sapp_fail("GLX: No GLXFBConfigs returned");
     }
 
-    usable_configs = (_sapp_gl_fbconfig*) SOKOL_CALLOC((size_t)native_count, sizeof(_sapp_gl_fbconfig));
+    usable_configs = (_sapp_gl_fbconfig*) _sapp_malloc_clear((size_t)native_count * sizeof(_sapp_gl_fbconfig));
     usable_count = 0;
     for (i = 0;  i < native_count;  i++) {
         const GLXFBConfig n = native_configs[i];
@@ -8866,7 +10161,7 @@ _SOKOL_PRIVATE GLXFBConfig _sapp_glx_choosefbconfig() {
         result = (GLXFBConfig) closest->handle;
     }
     XFree(native_configs);
-    SOKOL_FREE(usable_configs);
+    _sapp_free(usable_configs);
     return result;
 }
 
@@ -8894,8 +10189,8 @@ _SOKOL_PRIVATE void _sapp_glx_create_context(void) {
     }
     _sapp_x11_grab_error_handler();
     const int attribs[] = {
-        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-        GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MAJOR_VERSION_ARB, _sapp.desc.gl_major_version,
+        GLX_CONTEXT_MINOR_VERSION_ARB, _sapp.desc.gl_minor_version,
         GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
         GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
         0, 0
@@ -8942,7 +10237,7 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
 
 _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
     XEvent event;
-    memset(&event, 0, sizeof(event));
+    _sapp_clear(&event, sizeof(event));
 
     event.type = ClientMessage;
     event.xclient.window = _sapp.x11.window;
@@ -8999,7 +10294,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
     img->xhot = 0;
     img->yhot = 0;
     const size_t num_bytes = (size_t)(w * h) * sizeof(XcursorPixel);
-    memset(img->pixels, 0, num_bytes);
+    _sapp_clear(img->pixels, num_bytes);
     _sapp.x11.hidden_cursor = XcursorImageLoadCursor(_sapp.x11.display, img);
     XcursorImageDestroy(img);
 }
@@ -9079,10 +10374,43 @@ _SOKOL_PRIVATE void _sapp_x11_update_window_title(void) {
     XFlush(_sapp.x11.display);
 }
 
+_SOKOL_PRIVATE void _sapp_x11_set_icon(const sapp_icon_desc* icon_desc, int num_images) {
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
+    int long_count = 0;
+    for (int i = 0; i < num_images; i++) {
+        const sapp_image_desc* img_desc = &icon_desc->images[i];
+        long_count += 2 + (img_desc->width * img_desc->height);
+    }
+    long* icon_data = (long*) _sapp_malloc_clear((size_t)long_count * sizeof(long));
+    SOKOL_ASSERT(icon_data);
+    long* dst = icon_data;
+    for (int img_index = 0; img_index < num_images; img_index++) {
+        const sapp_image_desc* img_desc = &icon_desc->images[img_index];
+        const uint8_t* src = (const uint8_t*) img_desc->pixels.ptr;
+        *dst++ = img_desc->width;
+        *dst++ = img_desc->height;
+        const int num_pixels = img_desc->width * img_desc->height;
+        for (int pixel_index = 0; pixel_index < num_pixels; pixel_index++) {
+            *dst++ = ((long)(src[pixel_index * 4 + 0]) << 16) |
+                     ((long)(src[pixel_index * 4 + 1]) << 8) |
+                     ((long)(src[pixel_index * 4 + 2]) << 0) |
+                     ((long)(src[pixel_index * 4 + 3]) << 24);
+        }
+    }
+    XChangeProperty(_sapp.x11.display, _sapp.x11.window,
+        _sapp.x11.NET_WM_ICON,
+        XA_CARDINAL, 32,
+        PropModeReplace,
+        (unsigned char*)icon_data,
+        long_count);
+    _sapp_free(icon_data);
+    XFlush(_sapp.x11.display);
+}
+
 _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     _sapp.x11.colormap = XCreateColormap(_sapp.x11.display, _sapp.x11.root, visual, AllocNone);
     XSetWindowAttributes wa;
-    memset(&wa, 0, sizeof(wa));
+    _sapp_clear(&wa, sizeof(wa));
     const uint32_t wamask = CWBorderPixel | CWColormap | CWEventMask;
     wa.colormap = _sapp.x11.colormap;
     wa.border_pixel = 0;
@@ -9090,12 +10418,32 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
                     PointerMotionMask | ButtonPressMask | ButtonReleaseMask |
                     ExposureMask | FocusChangeMask | VisibilityChangeMask |
                     EnterWindowMask | LeaveWindowMask | PropertyChangeMask;
+
+    int display_width = DisplayWidth(_sapp.x11.display, _sapp.x11.screen);
+    int display_height = DisplayHeight(_sapp.x11.display, _sapp.x11.screen);
+    int window_width = _sapp.window_width;
+    int window_height = _sapp.window_height;
+    if (0 == window_width) {
+        window_width = (display_width * 4) / 5;
+    }
+    if (0 == window_height) {
+        window_height = (display_height * 4) / 5;
+    }
+    int window_xpos = (display_width - window_width) / 2;
+    int window_ypos = (display_height - window_height) / 2;
+    if (window_xpos < 0) {
+        window_xpos = 0;
+    }
+    if (window_ypos < 0) {
+        window_ypos = 0;
+    }
     _sapp_x11_grab_error_handler();
     _sapp.x11.window = XCreateWindow(_sapp.x11.display,
                                      _sapp.x11.root,
-                                     0, 0,
-                                     (uint32_t)_sapp.window_width,
-                                     (uint32_t)_sapp.window_height,
+                                     window_xpos,
+                                     window_ypos,
+                                     (uint32_t)window_width,
+                                     (uint32_t)window_height,
                                      0,     /* border width */
                                      depth, /* color depth */
                                      InputOutput,
@@ -9112,8 +10460,12 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
     XSetWMProtocols(_sapp.x11.display, _sapp.x11.window, protocols, 1);
 
     XSizeHints* hints = XAllocSizeHints();
-    hints->flags |= PWinGravity;
+    hints->flags = (PWinGravity | PPosition | PSize);
     hints->win_gravity = StaticGravity;
+    hints->x = window_xpos;
+    hints->y = window_ypos;
+    hints->width = window_width;
+    hints->height = window_height;
     XSetWMNormalHints(_sapp.x11.display, _sapp.x11.window, hints);
     XFree(hints);
 
@@ -9122,8 +10474,8 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual, int depth) {
         const Atom version = _SAPP_X11_XDND_VERSION;
         XChangeProperty(_sapp.x11.display, _sapp.x11.window, _sapp.x11.xdnd.XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*) &version, 1);
     }
-
     _sapp_x11_update_window_title();
+    _sapp_x11_query_window_size();
 }
 
 _SOKOL_PRIVATE void _sapp_x11_destroy_window(void) {
@@ -9193,7 +10545,35 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
     return result;
 }
 
-_SOKOL_PRIVATE uint32_t _sapp_x11_mod(uint32_t x11_mods) {
+_SOKOL_PRIVATE uint32_t _sapp_x11_key_modifier_bit(sapp_keycode key) {
+    switch (key) {
+        case SAPP_KEYCODE_LEFT_SHIFT:
+        case SAPP_KEYCODE_RIGHT_SHIFT:
+            return SAPP_MODIFIER_SHIFT;
+        case SAPP_KEYCODE_LEFT_CONTROL:
+        case SAPP_KEYCODE_RIGHT_CONTROL:
+            return SAPP_MODIFIER_CTRL;
+        case SAPP_KEYCODE_LEFT_ALT:
+        case SAPP_KEYCODE_RIGHT_ALT:
+            return SAPP_MODIFIER_ALT;
+        case SAPP_KEYCODE_LEFT_SUPER:
+        case SAPP_KEYCODE_RIGHT_SUPER:
+            return SAPP_MODIFIER_SUPER;
+        default:
+            return 0;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_x11_button_modifier_bit(sapp_mousebutton btn) {
+    switch (btn) {
+        case SAPP_MOUSEBUTTON_LEFT:     return SAPP_MODIFIER_LMB;
+        case SAPP_MOUSEBUTTON_RIGHT:    return SAPP_MODIFIER_RMB;
+        case SAPP_MOUSEBUTTON_MIDDLE:   return SAPP_MODIFIER_MMB;
+        default: return 0;
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sapp_x11_mods(uint32_t x11_mods) {
     uint32_t mods = 0;
     if (x11_mods & ShiftMask) {
         mods |= SAPP_MODIFIER_SHIFT;
@@ -9206,6 +10586,15 @@ _SOKOL_PRIVATE uint32_t _sapp_x11_mod(uint32_t x11_mods) {
     }
     if (x11_mods & Mod4Mask) {
         mods |= SAPP_MODIFIER_SUPER;
+    }
+    if (x11_mods & Button1Mask) {
+        mods |= SAPP_MODIFIER_LMB;
+    }
+    if (x11_mods & Button2Mask) {
+        mods |= SAPP_MODIFIER_MMB;
+    }
+    if (x11_mods & Button3Mask) {
+        mods |= SAPP_MODIFIER_RMB;
     }
     return mods;
 }
@@ -9547,7 +10936,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                                 if (XIMaskIsSet(re->valuators.mask, 1)) {
                                     _sapp.mouse.dy = (float) *values;
                                 }
-                                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+                                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
                             }
                         }
                         XFreeEventData(_sapp.x11.display, &event->xcookie);
@@ -9555,10 +10944,20 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
             }
             break;
+        case FocusIn:
+            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+                _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
+            }
+            break;
         case FocusOut:
             /* if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock */
             if (_sapp.mouse.locked) {
                 _sapp_x11_lock_mouse(false);
+            }
+            // NOTE: ingnoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
+            if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+                _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
             }
             break;
         case KeyPress:
@@ -9567,7 +10966,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 bool repeat = _sapp_x11_keycodes[keycode & 0xFF];
                 _sapp_x11_keycodes[keycode & 0xFF] = true;
-                const uint32_t mods = _sapp_x11_mod(event->xkey.state);
+                uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                // X11 doesn't set modifier bit on key down, so emulate that
+                mods |= _sapp_x11_key_modifier_bit(key);
                 if (key != SAPP_KEYCODE_INVALID) {
                     _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_DOWN, key, repeat, mods);
                 }
@@ -9585,7 +10986,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 const sapp_keycode key = _sapp_x11_translate_key(keycode);
                 _sapp_x11_keycodes[keycode & 0xFF] = false;
                 if (key != SAPP_KEYCODE_INVALID) {
-                    const uint32_t mods = _sapp_x11_mod(event->xkey.state);
+                    uint32_t mods = _sapp_x11_mods(event->xkey.state);
+                    // X11 doesn't clear modifier bit on key up, so emulate that
+                    mods &= ~_sapp_x11_key_modifier_bit(key);
                     _sapp_x11_key_event(SAPP_EVENTTYPE_KEY_UP, key, false, mods);
                 }
             }
@@ -9593,7 +10996,9 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case ButtonPress:
             {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
-                const uint32_t mods = _sapp_x11_mod(event->xbutton.state);
+                uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                // X11 doesn't set modifier bit on button down, so emulate that
+                mods |= _sapp_x11_button_modifier_bit(btn);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
                     _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_DOWN, btn, mods);
                     _sapp.x11.mouse_buttons |= (1 << btn);
@@ -9613,7 +11018,10 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
             {
                 const sapp_mousebutton btn = _sapp_x11_translate_button(event);
                 if (btn != SAPP_MOUSEBUTTON_INVALID) {
-                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, _sapp_x11_mod(event->xbutton.state));
+                    uint32_t mods = _sapp_x11_mods(event->xbutton.state);
+                    // X11 doesn't clear modifier bit on button up, so emulate that
+                    mods &= ~_sapp_x11_button_modifier_bit(btn);
+                    _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_UP, btn, mods);
                     _sapp.x11.mouse_buttons &= ~(1 << btn);
                 }
             }
@@ -9621,12 +11029,12 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
         case EnterNotify:
             /* don't send enter/leave events while mouse button held down */
             if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
             }
             break;
         case LeaveNotify:
             if (0 == _sapp.x11.mouse_buttons) {
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xcrossing.state));
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_LEAVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xcrossing.state));
             }
             break;
         case MotionNotify:
@@ -9640,7 +11048,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 _sapp.mouse.x = new_x;
                 _sapp.mouse.y = new_y;
                 _sapp.mouse.pos_valid = true;
-                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mod(event->xmotion.state));
+                _sapp_x11_mouse_event(SAPP_EVENTTYPE_MOUSE_MOVE, SAPP_MOUSEBUTTON_INVALID, _sapp_x11_mods(event->xmotion.state));
             }
             break;
         case ConfigureNotify:
@@ -9723,7 +11131,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
                 else if (_sapp.x11.xdnd.version >= 2) {
                     XEvent reply;
-                    memset(&reply, 0, sizeof(reply));
+                    _sapp_clear(&reply, sizeof(reply));
                     reply.type = ClientMessage;
                     reply.xclient.window = _sapp.x11.window;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
@@ -9744,7 +11152,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                     return;
                 }
                 XEvent reply;
-                memset(&reply, 0, sizeof(reply));
+                _sapp_clear(&reply, sizeof(reply));
                 reply.type = ClientMessage;
                 reply.xclient.window = _sapp.x11.xdnd.source;
                 reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
@@ -9778,7 +11186,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
                 }
                 if (_sapp.x11.xdnd.version >= 2) {
                     XEvent reply;
-                    memset(&reply, 0, sizeof(reply));
+                    _sapp_clear(&reply, sizeof(reply));
                     reply.type = ClientMessage;
                     reply.xclient.window = _sapp.x11.window;
                     reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
@@ -9827,15 +11235,16 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_glx_choose_visual(&visual, &depth);
     _sapp_x11_create_window(visual, depth);
     _sapp_glx_create_context();
+    sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
     if (_sapp.fullscreen) {
         _sapp_x11_set_fullscreen(true);
     }
-    _sapp_x11_query_window_size();
     _sapp_glx_swapinterval(_sapp.swap_interval);
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
+        _sapp_timing_measure(&_sapp.timing);
         _sapp_glx_make_current();
         int count = XPending(_sapp.x11.display);
         while (count--) {
@@ -9899,7 +11308,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     _SOKOL_UNUSED(argc);
     _SOKOL_UNUSED(argv);
     sapp_desc desc;
-    memset(&desc, 0, sizeof(desc));
+    _sapp_clear(&desc, sizeof(desc));
     return desc;
 }
 #else
@@ -9923,6 +11332,10 @@ SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
 
 SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
     return _sapp.frame_count;
+}
+
+SOKOL_API_IMPL double sapp_frame_duration(void) {
+    return _sapp_timing_get_avg(&_sapp.timing);
 }
 
 SOKOL_API_IMPL int sapp_width(void) {
@@ -9995,11 +11408,11 @@ SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
     return _sapp.onscreen_keyboard_shown;
 }
 
-SOKOL_APP_API_DECL bool sapp_is_fullscreen(void) {
+SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
     return _sapp.fullscreen;
 }
 
-SOKOL_APP_API_DECL void sapp_toggle_fullscreen(void) {
+SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_toggle_fullscreen();
     #elif defined(_SAPP_WIN32)
@@ -10067,7 +11480,6 @@ SOKOL_API_IMPL void sapp_consume_event(void) {
 
 /* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
 SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
-    SOKOL_ASSERT(_sapp.clipboard.enabled);
     if (!_sapp.clipboard.enabled) {
         return;
     }
@@ -10085,7 +11497,6 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
 }
 
 SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
-    SOKOL_ASSERT(_sapp.clipboard.enabled);
     if (!_sapp.clipboard.enabled) {
         return "";
     }
@@ -10110,6 +11521,34 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
         _sapp_win32_update_window_title();
     #elif defined(_SAPP_LINUX)
         _sapp_x11_update_window_title();
+    #endif
+}
+
+SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
+    SOKOL_ASSERT(desc);
+    if (desc->sokol_default) {
+        if (0 == _sapp.default_icon_pixels) {
+            _sapp_setup_default_icon();
+        }
+        SOKOL_ASSERT(0 != _sapp.default_icon_pixels);
+        desc = &_sapp.default_icon_desc;
+    }
+    const int num_images = _sapp_icon_num_images(desc);
+    if (num_images == 0) {
+        return;
+    }
+    SOKOL_ASSERT((num_images > 0) && (num_images <= SAPP_MAX_ICONIMAGES));
+    if (!_sapp_validate_icon_desc(desc, num_images)) {
+        return;
+    }
+    #if defined(_SAPP_MACOS)
+        _sapp_macos_set_icon(desc, num_images);
+    #elif defined(_SAPP_WIN32)
+        _sapp_win32_set_icon(desc, num_images);
+    #elif defined(_SAPP_LINUX)
+        _sapp_x11_set_icon(desc, num_images);
+    #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_set_icon(desc, num_images);
     #endif
 }
 
@@ -10263,6 +11702,15 @@ SOKOL_API_IMPL const void* sapp_d3d11_get_device_context(void) {
     #else
         return 0;
     #endif
+}
+
+SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
+    SOKOL_ASSERT(_sapp.valid);
+#if defined(SOKOL_D3D11)
+    return _sapp.d3d11.swap_chain;
+#else
+    return 0;
+#endif
 }
 
 SOKOL_API_IMPL const void* sapp_d3d11_get_render_target_view(void) {

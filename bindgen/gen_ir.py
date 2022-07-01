@@ -59,11 +59,11 @@ def parse_enum(decl):
             if 'inner' in item_decl:
                 const_expr = item_decl['inner'][0]
                 if const_expr['kind'] != 'ConstantExpr':
-                    sys.exit(f"ERROR: Enum values must be a ConstantExpr ({decl['name']})")
-                if const_expr['valueCategory'] != 'rvalue':
-                    sys.exit(f"ERROR: Enum value ConstantExpr must be 'rvalue' ({decl['name']})")
+                    sys.exit(f"ERROR: Enum values must be a ConstantExpr ({item_decl['name']}), is '{const_expr['kind']}'")
+                if const_expr['valueCategory'] != 'rvalue' and const_expr['valueCategory'] != 'prvalue':
+                    sys.exit(f"ERROR: Enum value ConstantExpr must be 'rvalue' or 'prvalue' ({item_decl['name']}), is '{const_expr['valueCategory']}'")
                 if not ((len(const_expr['inner']) == 1) and (const_expr['inner'][0]['kind'] == 'IntegerLiteral')):
-                    sys.exit(f"ERROR: Enum value ConstantExpr must have exactly one IntegerLiteral ({decl['name']})")
+                    sys.exit(f"ERROR: Enum value ConstantExpr must have exactly one IntegerLiteral ({item_decl['name']})")
                 item['value'] = const_expr['inner'][0]['value']
             if needs_value and 'value' not in item:
                 sys.exit(f"ERROR: anonymous enum items require an explicit value")

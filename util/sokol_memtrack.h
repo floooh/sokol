@@ -8,15 +8,6 @@
 
     Project URL: https://github.com/floooh/sokol
 
-    Simply include this file before the sokol header implementation includes
-    and after the SOKOL_IMPL macro:
-
-    #define SOKOL_IMPL
-    #include "sokol_memtrack.h"
-    #include "sokol_app.h"
-    #include "sokol_gfx.h"
-    ...
-
     Optionally provide the following defines with your own implementations:
 
     SOKOL_MEMTRACK_API_DECL - public function declaration prefix (default: extern)
@@ -28,24 +19,29 @@
 
     SOKOL_DLL
 
-    The sokol_memtrack.h header will redirect the macros SOKOL_MALLOC,
-    SOKOL_FREE and SOKOL_CALLOC to use its own function wrappers which
-    keep track of number and size of allocations. The wrapper functions
-    then call the CRT functions malloc(), calloc() or free().
+    USAGE
+    =====
+    Just plug the malloc/free wrapper functions into the desc.allocator
+    struct provided by most sokol header setup functions:
 
-    Naturally, only the memory management calls in sokol header code are tracked,
-    not in underlying APIs such as D3D11 or OpenGL.
+        sg_setup(&(sg_desc){
+            //...
+            .allocator = {
+                .alloc = smemtrack_alloc,
+                .free = smemtrack_free,
+            }
+        });
 
-    To get the current number and overall size of allocations, call:
+    Then call smemtrack_info() to get information about current number
+    of allocations and overall allocation size:
 
-        smemtrack_info_t alloc_info = smemtrack_info();
+        const smemtrack_info_t info = smemtrack_info();
+        const int num_allocs = info.num_allocs;
+        const int num_bytes = info.num_bytes;
 
-        int num_allocations = info.num_alloc;
-        int allocation_size = info.num_bytes;
-
-    The allocation wrapper functions are *not* thread-safe (which shouldn't
-    be a problem because the sokol headers don't allocate or deallocate
-    in threads).
+    Note the sokol_memtrack.h can only track allocations issued by
+    the sokol headers, not allocations that happen under the hood
+    in system libraries.
 
     LICENSE
     =======
@@ -75,6 +71,7 @@
 */
 #define SOKOL_MEMTRACK_INCLUDED (1)
 #include <stdint.h>
+#include <stddef.h> // size_t
 
 #if defined(SOKOL_API_DECL) && !defined(SOKOL_MEMTRACK_API_DECL)
 #define SOKOL_MEMTRACK_API_DECL SOKOL_API_DECL
@@ -99,6 +96,8 @@ typedef struct smemtrack_info_t {
 } smemtrack_info_t;
 
 SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
+SOKOL_MEMTRACK_API_DECL void* smemtrack_alloc(size_t size, void* user_data);
+SOKOL_MEMTRACK_API_DECL void smemtrack_free(void* ptr, void* user_data);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -108,9 +107,8 @@ SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
 /*=== IMPLEMENTATION =========================================================*/
 #ifdef SOKOL_MEMTRACK_IMPL
 #define SOKOL_MEMTRACK_IMPL_INCLUDED (1)
-#include <stdlib.h> /* malloc, free, calloc */
-#include <string.h> /* memset */
-#include <stddef.h> /* size_t */
+#include <stdlib.h> // malloc, free
+#include <string.h> // memset
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -128,40 +126,38 @@ SOKOL_MEMTRACK_API_DECL smemtrack_info_t smemtrack_info(void);
     #endif
 #endif
 
-#define SOKOL_MALLOC(s) _smemtrack_malloc(s)
-#define SOKOL_FREE(p) _smemtrack_free(p)
-#define SOKOL_CALLOC(n,s) _smemtrack_calloc(n,s)
-
+// per-allocation header used to keep track of the allocation size
 #define _SMEMTRACK_HEADER_SIZE (16)
 
 static struct {
     smemtrack_info_t state;
 } _smemtrack;
 
-_SOKOL_PRIVATE void* _smemtrack_malloc(size_t size) {
-    _smemtrack.state.num_allocs++;
-    _smemtrack.state.num_bytes += (int) size;
+SOKOL_API_IMPL void* smemtrack_alloc(size_t size, void* user_data) {
+    (void)user_data;
     uint8_t* ptr = (uint8_t*) malloc(size + _SMEMTRACK_HEADER_SIZE);
-    *(size_t*)ptr = size;
-    return ptr + _SMEMTRACK_HEADER_SIZE;
+    if (ptr) {
+        // store allocation size (for allocation size tracking)
+        *(size_t*)ptr = size;
+        _smemtrack.state.num_allocs++;
+        _smemtrack.state.num_bytes += (int) size;
+        return ptr + _SMEMTRACK_HEADER_SIZE;
+    }
+    else {
+        // allocation failed, return null pointer
+        return ptr;
+    }
 }
 
-_SOKOL_PRIVATE void _smemtrack_free(void* ptr) {
-    uint8_t* alloc_ptr = ((uint8_t*)ptr) - _SMEMTRACK_HEADER_SIZE;
-    size_t size = *(size_t*)alloc_ptr;
-    _smemtrack.state.num_allocs--;
-    _smemtrack.state.num_bytes -= (int) size;
-    free(alloc_ptr);
-}
-
-_SOKOL_PRIVATE void* _smemtrack_calloc(size_t num, size_t size) {
-    size_t mem_size = num * size;
-    _smemtrack.state.num_allocs++;
-    _smemtrack.state.num_bytes += (int) mem_size;
-    uint8_t* ptr = (uint8_t*) malloc(mem_size + _SMEMTRACK_HEADER_SIZE);
-    memset(ptr + _SMEMTRACK_HEADER_SIZE, 0, mem_size);
-    *(size_t*)ptr = size;
-    return ptr + _SMEMTRACK_HEADER_SIZE;
+SOKOL_API_IMPL void smemtrack_free(void* ptr, void* user_data) {
+    (void)user_data;
+    if (ptr) {
+        uint8_t* alloc_ptr = ((uint8_t*)ptr) - _SMEMTRACK_HEADER_SIZE;
+        size_t size = *(size_t*)alloc_ptr;
+        _smemtrack.state.num_allocs--;
+        _smemtrack.state.num_bytes -= (int) size;
+        free(alloc_ptr);
+    }
 }
 
 SOKOL_API_IMPL smemtrack_info_t smemtrack_info(void) {

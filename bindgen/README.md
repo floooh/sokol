@@ -2,6 +2,20 @@
 
 ### Zig
 
+First make sure that clang and python3 are in the path:
+
+```
+> clang --version
+> python3 --version
+```
+
+...on Windows I simply install those with scoop:
+
+```
+> scoop install llvm
+> scoop install python
+```
+
 To update the Zig bindings:
 
 ```

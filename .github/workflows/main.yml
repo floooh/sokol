@@ -1,4 +1,4 @@
-name: build_and_test
+name: "Build & Test"
 
 on: [push, pull_request]
 
@@ -6,218 +6,69 @@ jobs:
     windows:
         runs-on: windows-latest
         steps:
-        - uses: actions/checkout@v1
-        - name: prepare
+        - uses: actions/checkout@v2
+        - name: test_win
           run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-        - name: win64-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build win64-vstudio-debug
-        - name: win64-vstudio-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build win64-vstudio-release
-        - name: d3d11-win64-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build d3d11-win64-vstudio-debug
-        - name: d3d11-win64-vstudio-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build d3d11-win64-vstudio-release
-        - name: sapp-win64-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-win64-vstudio-debug
-        - name: sapp-win64-vstudio-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-win64-vstudio-release
-        - name: sapp-d3d11-win64-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-d3d11-win64-vstudio-debug
-        - name: sapp-d3d11-win64-vstudio-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-d3d11-win64-vstudio-release
-        - name: sokol-test sapp-win64-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips run sokol-test sapp-win64-vstudio-debug
+            cd tests
+            test_win.cmd
+          shell: cmd
     mac:
         runs-on: macos-latest
         steps:
-        - uses: actions/checkout@v1
-        - name: prepare
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
+        - name: test_macos
           run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-        - name: osx-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build osx-make-debug
-        - name: osx-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build osx-make-release
-        - name: metal-osx-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build metal-osx-make-debug
-        - name: metal-osx-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build metal-osx-make-release
-        - name: sapp-metal-osx-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-metal-osx-make-debug
-        - name: sapp-metal-osx-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-metal-osx-make-release
-        - name: sokol-test sapp-metal-osx-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips run sokol-test sapp-metal-osx-make-debug
+            cd tests
+            ./test_macos.sh
     ios:
         runs-on: macos-latest
         steps:
-        - uses: actions/checkout@v1
-        - name: prepare
+        - uses: actions/checkout@v2
+        - name: test_ios
           run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-        - name: ios-xcode-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-        - name: ios-xcode-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build ios-xcode-release -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-        - name: metal-ios-xcode-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build metal-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-        - name: metal-ios-xcode-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build metal-ios-xcode-release -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-        - name: sapp-ios-xcode-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-        - name: sapp-metal-ios-xcode-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-metal-ios-xcode-debug -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+            cd tests
+            ./test_ios.sh
     linux:
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v1
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - name: prepare
           run: |
             sudo apt-get update
             sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-        - name: linux-make-debug
+        - name: test_linux
           run: |
-            cd workspace/sokol-samples
-            python fips build linux-make-debug
-        - name: linux-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build linux-make-release
-        - name: sapp-linux-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-linux-make-debug
-        - name: sapp-linux-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-linux-make-release
-        - name: sapp-linux-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips run sokol-test sapp-linux-make-debug
+            cd tests
+            ./test_linux.sh
     emscripten:
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v1
-        - name: prepare
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
+        - name: test_emscripten
           run: |
-            sudo apt-get install ninja-build
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-            python fips emsdk install latest
-        - name: sapp-webgl2-wasm-ninja-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-webgl2-wasm-ninja-debug
-        - name: sapp-webgl2-wasm-ninja-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-webgl2-wasm-ninja-release
-        - name: wasm-ninja-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips make cube-emsc wasm-ninja-debug
-        - name: wasm-ninja-release
-          run: |
-            cd workspace/sokol-samples
-            python fips make cube-emsc wasm-ninja-release
+            cd tests
+            ./test_emscripten.sh
     android:
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v1
+        - uses: actions/checkout@v2
+        - uses: seanmiddleditch/gha-setup-ninja@master
         - uses: actions/setup-java@v1
           with:
             java-version: '8'
-        - name: prepare
+        - name: test_android
           run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-            yes | python fips setup android
-        - name: sapp-android-make-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-android-make-debug
-        - name: sapp-android-make-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-android-make-release
+            cd tests
+            ./test_android.sh
     uwp:
         runs-on: windows-latest
         steps:
-        - uses: actions/checkout@v1
-        - name: prepare
+        - uses: actions/checkout@v2
+        - name: test_uwp
           run: |
-            mkdir workspace
-            cd workspace
-            git clone https://github.com/floooh/sokol-samples
-            cd sokol-samples
-        - name: sapp-uwp-vstudio-debug
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-uwp-vstudio-debug
-        - name: sapp-uwp-vstudio-release
-          run: |
-            cd workspace/sokol-samples
-            python fips build sapp-uwp-vstudio-release
+            cd tests
+            test_uwp.cmd
+          shell: cmd
