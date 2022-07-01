@@ -28,8 +28,6 @@
 
     SOKOL_VSNPRINTF     - the function name of an alternative vsnprintf() function (default: vsnprintf)
     SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
     SOKOL_DEBUGTEXT_API_DECL    - public function declaration prefix (default: extern)
     SOKOL_API_DECL      - same as SOKOL_DEBUGTEXT_API_DECL
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
@@ -217,7 +215,7 @@
           have to be inside a render pass.
         - Note that character codes <32 are reserved as control characters
           and won't render anything. Currently only the following control
-          characters are implements:
+          characters are implemented:
 
             \r  - carriage return (same as sdtx_pos_x(0))
             \n  - carriage return + line feed (same as stdx_crlf())
@@ -281,6 +279,11 @@
     special SDTX_DEFAULT_CONTEXT handle:
 
         sdtx_set_context(SDTX_DEFAULT_CONTEXT)
+
+    Alternatively, use the function sdtx_default_context() to get the default
+    context handle:
+
+        sdtx_set_context(sdtx_default_context());
 
     To destroy a context, call:
 
@@ -364,6 +367,34 @@
 
     Character tiles that haven't been defined in the font will be rendered
     as a solid 8x8 quad.
+
+
+    MEMORY ALLOCATION OVERRIDE
+    ==========================
+    You can override the memory allocation functions at initialization time
+    like this:
+
+        void* my_alloc(size_t size, void* user_data) {
+            return malloc(size);
+        }
+
+        void my_free(void* ptr, void* user_data) {
+            free(ptr);
+        }
+
+        ...
+            sdtx_setup(&(sdtx_desc_t){
+                // ...
+                .allocator = {
+                    .alloc = my_alloc,
+                    .free = my_free,
+                    .user_data = ...;
+                }
+            });
+        ...
+
+    If no overrides are provided, malloc and free will be used.
+
 
     LICENSE
     =======
@@ -499,6 +530,20 @@ typedef struct sdtx_context_desc_t {
 } sdtx_context_desc_t;
 
 /*
+    sdtx_allocator_t
+
+    Used in sdtx_desc_t to provide custom memory-alloc and -free functions
+    to sokol_debugtext.h. If memory management should be overridden, both the
+    alloc and free function must be provided (e.g. it's not valid to
+    override one function but not the other).
+*/
+typedef struct sdtx_allocator_t {
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
+    void* user_data;
+} sdtx_allocator_t;
+
+/*
     sdtx_desc_t
 
     Describes the sokol-debugtext API initialization parameters. Passed
@@ -519,6 +564,7 @@ typedef struct sdtx_desc_t {
     int printf_buf_size;                    // size of internal buffer for snprintf(), default: 4096
     sdtx_font_desc_t fonts[SDTX_MAX_FONTS]; // up to 8 fonts descriptions
     sdtx_context_desc_t context;            // the default context creation parameters
+    sdtx_allocator_t allocator;             // optional memory allocation overrides (default: malloc/free)
 } sdtx_desc_t;
 
 /* initialization/shutdown */
@@ -538,6 +584,7 @@ SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_make_context(const sdtx_context_desc_
 SOKOL_DEBUGTEXT_API_DECL void sdtx_destroy_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL void sdtx_set_context(sdtx_context ctx);
 SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_get_context(void);
+SOKOL_DEBUGTEXT_API_DECL sdtx_context sdtx_default_context(void);
 
 /* draw and rewind the current context */
 SOKOL_DEBUGTEXT_API_DECL void sdtx_draw(void);
@@ -587,9 +634,14 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #ifdef SOKOL_DEBUGTEXT_IMPL
 #define SOKOL_DEBUGTEXT_IMPL_INCLUDED (1)
 
+#if defined(SOKOL_MALLOC) || defined(SOKOL_CALLOC) || defined(SOKOL_FREE)
+#error "SOKOL_MALLOC/CALLOC/FREE macros are no longer supported, please use sdtx_desc_t.allocator to override memory allocation functions"
+#endif
+
 #include <string.h> // memset
 #include <math.h>   // fmodf
 #include <stdarg.h> // for vsnprintf
+#include <stdlib.h> // malloc/free
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -602,11 +654,6 @@ inline sdtx_context sdtx_make_context(const sdtx_context_desc_t& desc) { return 
 #ifndef SOKOL_ASSERT
     #include <assert.h>
     #define SOKOL_ASSERT(c) assert(c)
-#endif
-#ifndef SOKOL_MALLOC
-    #include <stdlib.h>
-    #define SOKOL_MALLOC(s) malloc(s)
-    #define SOKOL_FREE(p) free(p)
 #endif
 #ifndef SOKOL_LOG
     #ifdef SOKOL_DEBUG
@@ -3301,7 +3348,7 @@ static const uint8_t _sdtx_vs_bytecode_wgpu[1648] = {
     0x08,0x00,0x00,0x00,0x2a,0x00,0x00,0x00,0x29,0x00,0x00,0x00,0x3e,0x00,0x03,0x00,
     0x27,0x00,0x00,0x00,0x2a,0x00,0x00,0x00,0xfd,0x00,0x01,0x00,0x38,0x00,0x01,0x00,
 };
-static const uint8_t _sdtx_vs_bytecode_wgpu[940] = {
+static const uint8_t _sdtx_fs_bytecode_wgpu[940] = {
     0x03,0x02,0x23,0x07,0x00,0x00,0x01,0x00,0x08,0x00,0x08,0x00,0x1a,0x00,0x00,0x00,
     0x00,0x00,0x00,0x00,0x11,0x00,0x02,0x00,0x01,0x00,0x00,0x00,0x0b,0x00,0x06,0x00,
     0x02,0x00,0x00,0x00,0x47,0x4c,0x53,0x4c,0x2e,0x73,0x74,0x64,0x2e,0x34,0x35,0x30,
@@ -3428,6 +3475,41 @@ typedef struct {
 } _sdtx_t;
 static _sdtx_t _sdtx;
 
+/*=== MEMORY HELPERS =========================================================*/
+
+static void _sdtx_clear(void* ptr, size_t size) {
+    SOKOL_ASSERT(ptr && (size > 0));
+    memset(ptr, 0, size);
+}
+
+static void* _sdtx_malloc(size_t size) {
+    SOKOL_ASSERT(size > 0);
+    void* ptr;
+    if (_sdtx.desc.allocator.alloc) {
+        ptr = _sdtx.desc.allocator.alloc(size, _sdtx.desc.allocator.user_data);
+    }
+    else {
+        ptr = malloc(size);
+    }
+    SOKOL_ASSERT(ptr);
+    return ptr;
+}
+
+static void* _sdtx_malloc_clear(size_t size) {
+    void* ptr = _sdtx_malloc(size);
+    _sdtx_clear(ptr, size);
+    return ptr;
+}
+
+static void _sdtx_free(void* ptr) {
+    if (_sdtx.desc.allocator.free) {
+        _sdtx.desc.allocator.free(ptr, _sdtx.desc.allocator.user_data);
+    }
+    else {
+        free(ptr);
+    }
+}
+
 /*=== CONTEXT POOL ===========================================================*/
 static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -3436,12 +3518,9 @@ static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
     pool->queue_top = 0;
     /* generation counters indexable by pool slot index, slot 0 is reserved */
     size_t gen_ctrs_size = sizeof(uint32_t) * (size_t)pool->size;
-    pool->gen_ctrs = (uint32_t*) SOKOL_MALLOC(gen_ctrs_size);
-    SOKOL_ASSERT(pool->gen_ctrs);
-    memset(pool->gen_ctrs, 0, gen_ctrs_size);
+    pool->gen_ctrs = (uint32_t*) _sdtx_malloc_clear(gen_ctrs_size);
     /* it's not a bug to only reserve 'num' here */
-    pool->free_queue = (int*) SOKOL_MALLOC(sizeof(int) * (size_t)num);
-    SOKOL_ASSERT(pool->free_queue);
+    pool->free_queue = (int*) _sdtx_malloc_clear(sizeof(int) * (size_t)num);
     /* never allocate the zero-th pool item since the invalid id is 0 */
     for (int i = pool->size-1; i >= 1; i--) {
         pool->free_queue[pool->queue_top++] = i;
@@ -3451,10 +3530,10 @@ static void _sdtx_init_pool(_sdtx_pool_t* pool, int num) {
 static void _sdtx_discard_pool(_sdtx_pool_t* pool) {
     SOKOL_ASSERT(pool);
     SOKOL_ASSERT(pool->free_queue);
-    SOKOL_FREE(pool->free_queue);
+    _sdtx_free(pool->free_queue);
     pool->free_queue = 0;
     SOKOL_ASSERT(pool->gen_ctrs);
-    SOKOL_FREE(pool->gen_ctrs);
+    _sdtx_free(pool->gen_ctrs);
     pool->gen_ctrs = 0;
     pool->size = 0;
     pool->queue_top = 0;
@@ -3495,14 +3574,12 @@ static void _sdtx_setup_context_pool(const sdtx_desc_t* desc) {
     SOKOL_ASSERT((desc->context_pool_size > 0) && (desc->context_pool_size < _SDTX_MAX_POOL_SIZE));
     _sdtx_init_pool(&_sdtx.context_pool.pool, desc->context_pool_size);
     size_t pool_byte_size = sizeof(_sdtx_context_t) * (size_t)_sdtx.context_pool.pool.size;
-    _sdtx.context_pool.contexts = (_sdtx_context_t*) SOKOL_MALLOC(pool_byte_size);
-    SOKOL_ASSERT(_sdtx.context_pool.contexts);
-    memset(_sdtx.context_pool.contexts, 0, pool_byte_size);
+    _sdtx.context_pool.contexts = (_sdtx_context_t*) _sdtx_malloc_clear(pool_byte_size);
 }
 
 static void _sdtx_discard_context_pool(void) {
     SOKOL_ASSERT(_sdtx.context_pool.contexts);
-    SOKOL_FREE(_sdtx.context_pool.contexts);
+    _sdtx_free(_sdtx.context_pool.contexts);
     _sdtx.context_pool.contexts = 0;
     _sdtx_discard_pool(&_sdtx.context_pool.pool);
 }
@@ -3597,13 +3674,12 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
 
     const int max_vertices = 6 * ctx->desc.char_buf_size;
     const size_t vbuf_size = (size_t)max_vertices * sizeof(_sdtx_vertex_t);
-    ctx->vertices = (_sdtx_vertex_t*) SOKOL_MALLOC(vbuf_size);
-    SOKOL_ASSERT(ctx->vertices);
+    ctx->vertices = (_sdtx_vertex_t*) _sdtx_malloc(vbuf_size);
     ctx->cur_vertex_ptr = ctx->vertices;
     ctx->max_vertex_ptr = ctx->vertices + max_vertices;
 
     sg_buffer_desc vbuf_desc;
-    memset(&vbuf_desc, 0, sizeof(vbuf_desc));
+    _sdtx_clear(&vbuf_desc, sizeof(vbuf_desc));
     vbuf_desc.size = vbuf_size;
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
@@ -3612,7 +3688,7 @@ static void _sdtx_init_context(sdtx_context ctx_id, const sdtx_context_desc_t* i
     SOKOL_ASSERT(SG_INVALID_ID != ctx->vbuf.id);
 
     sg_pipeline_desc pip_desc;
-    memset(&pip_desc, 0, sizeof(pip_desc));
+    _sdtx_clear(&pip_desc, sizeof(pip_desc));
     pip_desc.layout.buffers[0].stride = sizeof(_sdtx_vertex_t);
     pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_USHORT2N;
@@ -3645,7 +3721,7 @@ static void _sdtx_destroy_context(sdtx_context ctx_id) {
     _sdtx_context_t* ctx = _sdtx_lookup_context(ctx_id.id);
     if (ctx) {
         if (ctx->vertices) {
-            SOKOL_FREE(ctx->vertices);
+            _sdtx_free(ctx->vertices);
             ctx->vertices = 0;
             ctx->cur_vertex_ptr = 0;
             ctx->max_vertex_ptr = 0;
@@ -3654,7 +3730,7 @@ static void _sdtx_destroy_context(sdtx_context ctx_id) {
         sg_destroy_buffer(ctx->vbuf);
         sg_destroy_pipeline(ctx->pip);
         sg_pop_debug_group();
-        memset(ctx, 0, sizeof(*ctx));
+        _sdtx_clear(ctx, sizeof(*ctx));
         _sdtx_pool_free_index(&_sdtx.context_pool.pool, _sdtx_slot_index(ctx_id.id));
     }
 }
@@ -3684,14 +3760,13 @@ static void _sdtx_setup_common(void) {
 
     /* common printf formatting buffer */
     _sdtx.fmt_buf_size = (uint32_t) _sdtx.desc.printf_buf_size + 1;
-    _sdtx.fmt_buf = (char*) SOKOL_MALLOC(_sdtx.fmt_buf_size);
-    SOKOL_ASSERT(_sdtx.fmt_buf);
+    _sdtx.fmt_buf = (char*) _sdtx_malloc_clear(_sdtx.fmt_buf_size);
 
     sg_push_debug_group("sokol-debugtext");
 
     /* common shader for all contexts */
     sg_shader_desc shd_desc;
-    memset(&shd_desc, 0, sizeof(shd_desc));
+    _sdtx_clear(&shd_desc, sizeof(shd_desc));
     shd_desc.label = "sokol-debugtext-shader";
     shd_desc.attrs[0].name = "position";
     shd_desc.attrs[1].name = "texcoord0";
@@ -3732,10 +3807,8 @@ static void _sdtx_setup_common(void) {
         shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_d3d11);
         shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_d3d11);
     #elif defined(SOKOL_WGPU)
-        shd_desc.vs.byte_code = _sdtx_vs_bytecode_wgpu;
-        shd_desc.vs.byte_code_size = sizeof(_sdtx_vs_bytecode_wgpu);
-        shd_desc.fs.byte_code = _sdtx_fs_bytecode_wgpu;
-        shd_desc.fs.byte_code_size = sizeof(_sdtx_fs_bytecode_wgpu);
+        shd_desc.vs.bytecode = SG_RANGE(_sdtx_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_sdtx_fs_bytecode_wgpu);
     #else
         shd_desc.vs.source = _sdtx_vs_src_dummy;
         shd_desc.fs.source = _sdtx_fs_src_dummy;
@@ -3754,7 +3827,7 @@ static void _sdtx_setup_common(void) {
 
     /* create font texture */
     sg_image_desc img_desc;
-    memset(&img_desc, 0, sizeof(img_desc));
+    _sdtx_clear(&img_desc, sizeof(img_desc));
     img_desc.width = 256 * 8;
     img_desc.height = SDTX_MAX_FONTS * 8;
     img_desc.pixel_format = SG_PIXELFORMAT_R8;
@@ -3774,7 +3847,7 @@ static void _sdtx_discard_common(void) {
     sg_destroy_image(_sdtx.font_img);
     sg_destroy_shader(_sdtx.shader);
     if (_sdtx.fmt_buf) {
-        SOKOL_FREE(_sdtx.fmt_buf);
+        _sdtx_free(_sdtx.fmt_buf);
         _sdtx.fmt_buf = 0;
     }
     sg_pop_debug_group();
@@ -3864,26 +3937,28 @@ static inline void _sdtx_put_char(_sdtx_context_t* ctx, char c) {
     }
 }
 
-static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* in_desc) {
-    sdtx_desc_t desc = *in_desc;
-    desc.context_pool_size = _sdtx_def(desc.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
-    desc.printf_buf_size = _sdtx_def(desc.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
+static sdtx_desc_t _sdtx_desc_defaults(const sdtx_desc_t* desc) {
+    SOKOL_ASSERT((desc->allocator.alloc && desc->allocator.free) || (!desc->allocator.alloc && !desc->allocator.free));
+    sdtx_desc_t res = *desc;
+    res.context_pool_size = _sdtx_def(res.context_pool_size, _SDTX_DEFAULT_CONTEXT_POOL_SIZE);
+    res.printf_buf_size = _sdtx_def(res.printf_buf_size, _SDTX_DEFAULT_PRINTF_BUF_SIZE);
     for (int i = 0; i < SDTX_MAX_FONTS; i++) {
-        if (desc.fonts[i].data.ptr) {
-            desc.fonts[i].last_char = _sdtx_def(desc.fonts[i].last_char, 255);
+        if (res.fonts[i].data.ptr) {
+            res.fonts[i].last_char = _sdtx_def(res.fonts[i].last_char, 255);
         }
     }
-    desc.context = _sdtx_context_desc_defaults(&desc.context);
-    SOKOL_ASSERT(desc.context_pool_size > 0);
-    SOKOL_ASSERT(desc.printf_buf_size > 0);
-    SOKOL_ASSERT(desc.context.char_buf_size > 0);
-    return desc;
+    res.context = _sdtx_context_desc_defaults(&res.context);
+    SOKOL_ASSERT(res.context_pool_size > 0);
+    SOKOL_ASSERT(res.printf_buf_size > 0);
+    SOKOL_ASSERT(res.context.char_buf_size > 0);
+    return res;
 }
 
 /*=== PUBLIC API FUNCTIONS ===================================================*/
+
 SOKOL_API_IMPL void sdtx_setup(const sdtx_desc_t* desc) {
     SOKOL_ASSERT(desc);
-    memset(&_sdtx, 0, sizeof(_sdtx));
+    _sdtx_clear(&_sdtx, sizeof(_sdtx));
     _sdtx.init_cookie = _SDTX_INIT_COOKIE;
     _sdtx.desc = _sdtx_desc_defaults(desc);
     _sdtx_setup_context_pool(&_sdtx.desc);
@@ -3974,6 +4049,10 @@ SOKOL_API_IMPL void sdtx_set_context(sdtx_context ctx_id) {
 SOKOL_API_IMPL sdtx_context sdtx_get_context(void) {
     SOKOL_ASSERT(_SDTX_INIT_COOKIE == _sdtx.init_cookie);
     return _sdtx.cur_ctx_id;
+}
+
+SOKOL_API_IMPL sdtx_context sdtx_default_context(void) {
+    return SDTX_DEFAULT_CONTEXT;
 }
 
 SOKOL_API_IMPL void sdtx_font(int font_index) {
@@ -4186,7 +4265,7 @@ SOKOL_API_IMPL void sdtx_draw(void) {
             int vbuf_offset = sg_append_buffer(ctx->vbuf, &range);
             sg_apply_pipeline(ctx->pip);
             sg_bindings bindings;
-            memset(&bindings, 0, sizeof(bindings));
+            _sdtx_clear(&bindings, sizeof(bindings));
             bindings.vertex_buffers[0] = ctx->vbuf;
             bindings.vertex_buffer_offsets[0] = vbuf_offset;
             bindings.fs_images[0] = _sdtx.font_img;

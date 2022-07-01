@@ -1900,7 +1900,7 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         .line_AA = NK_ANTI_ALIASING_ON,
         .vertex_layout = vertex_layout,
         .vertex_size = sizeof(_snk_vertex_t),
-        .vertex_alignment = NK_ALIGNOF(_snk_vertex_t),
+        .vertex_alignment = 4,
         .circle_segment_count = 22,
         .curve_segment_count = 22,
         .arc_segment_count = 22,
@@ -1941,8 +1941,15 @@ SOKOL_API_IMPL void snk_render(int width, int height) {
         int idx_offset = 0;
         nk_draw_foreach(cmd, &_snuklear.ctx, &cmds) {
             if (cmd->elem_count > 0) {
+                sg_image img;
+                if (cmd->texture.id != 0) {
+                    img = (sg_image){ .id = (uint32_t) cmd->texture.id };
+                }
+                else {
+                    img = _snuklear.img;
+                }
                 sg_apply_bindings(&(sg_bindings){
-                    .fs_images[0] = _snuklear.img,
+                    .fs_images[0] = img,
                     .vertex_buffers[0] = _snuklear.vbuf,
                     .index_buffer = _snuklear.ibuf,
                     .vertex_buffer_offsets[0] = 0,
