@@ -12,6 +12,7 @@ import json, re, os, shutil
 module_names = {
     'sg_':      'gfx',
     'sapp_':    'app',
+    'sapp_sg':  'glue',
     'stm_':     'time',
     'saudio_':  'audio',
     'sgl_':     'gl',
@@ -22,6 +23,7 @@ module_names = {
 c_source_paths = {
     'sg_':      'sokol-beef/src/sokol/c/sokol_gfx.c',
     'sapp_':    'sokol-beef/src/sokol/c/sokol_app.c',
+    'sapp_sg':  'sokol-beef/src/sokol/c/sokol_glue.c',
     'stm_':     'sokol-beef/src/sokol/c/sokol_time.c',
     'saudio_':  'sokol-beef/src/sokol/c/sokol_audio.c',
     'sgl_':     'sokol-beef/src/sokol/c/sokol_gl.c',
@@ -318,10 +320,10 @@ def funcptr_res_c(field_type):
     res_type = field_type[:field_type.index('(*)')].strip()
     if res_type == 'void':
         return 'void'
-    elif is_const_void_ptr(res_type):
+    elif is_const_void_ptr(res_type) or is_void_ptr(res_type):
         return 'void*'
     else:
-        return '???'
+        return '???' + res_type
 
 def funcdecl_args_c(decl, prefix):
     s = ""
@@ -482,10 +484,11 @@ def gen_helpers(inp):
         l('\t\t// helper function to convert "anything" to a Range struct')
         l('\t\tpublic static Range asRange<T>(Span<T> span)')
         l('\t\t{')
-        l('\t\t\tvar r = Range();')
-        l('\t\t\tr.ptr = span.Ptr;')
-        l('\t\t\tr.size = (uint32)(span.Length * strideof(T));')
-        l('\t\t\treturn r;')
+        l('\t\t\tRange range = Range {')
+        l('\t\t\t\tptr = span.Ptr,')
+        l('\t\t\t\tsize = (uint32)(span.Length * strideof(T))')
+        l('\t\t\t};')
+        l('\n\t\t\treturn range;')
         l('\t\t}')
         l('')
 
