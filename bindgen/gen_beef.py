@@ -480,11 +480,11 @@ def gen_end_namespace():
 def gen_helpers(inp):
     if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
         l('\t\t// helper function to convert "anything" to a Range struct')
-        l('\t\tpublic static Range asRange<T>(T anytype)')
+        l('\t\tpublic static Range asRange<T>(Span<T> span)')
         l('\t\t{')
         l('\t\t\tvar r = Range();')
-        l('\t\t\tr.ptr = Internal.UnsafeCastToPtr(anytype);')
-        l('\t\t\tr.size = (uint)anytype.GetType().InstanceSize;')
+        l('\t\t\tr.ptr = span.Ptr;')
+        l('\t\t\tr.size = (uint32)(span.Length * strideof(T));')
         l('\t\t\treturn r;')
         l('\t\t}')
         l('')
