@@ -1,0 +1,162 @@
+name: Bindings
+
+on: [push, pull_request]
+
+jobs:
+  test-windows:
+      runs-on: windows-latest
+      steps:
+      - uses: actions/checkout@v2
+      - name: test_win
+        run: |
+          cd tests
+          test_win.cmd
+        shell: cmd
+
+  test-mac:
+      runs-on: macos-latest
+      steps:
+      - uses: actions/checkout@v2
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: test_macos
+        run: |
+          cd tests
+          ./test_macos.sh
+
+  test-linux:
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v2
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: prepare
+        run: |
+          sudo apt-get update
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: test_linux
+        run: |
+          cd tests
+          ./test_linux.sh
+
+  gen-bindings:
+    needs: [ test-windows, test-mac, test-linux ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
+          path: bindgen/sokol-zig
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+          path: bindgen/sokol-nim
+      - name: generate
+        run: |
+          cd bindgen
+          python3 gen_all.py
+      - name: upload-zig-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ignore-me-zig
+          path: bindgen/sokol-zig/src/sokol
+          retention-days: 1
+      - name: upload-nim-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ignore-me-nim
+          path: bindgen/sokol-nim/src/sokol
+          retention-days: 1
+
+  test-zig:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.0
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-zig
+          path: src/sokol
+      - name: prepare
+        if: runner.os == 'Linux'
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: zig build
+
+  test-nim:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: jiro4989/setup-nim-action@v1
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-nim
+          path: src/sokol
+      - if: runner.os == 'Linux'
+        name: prepare
+        run: |
+            sudo apt-get update
+            sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+      - name: build
+        run: |
+          nimble install -Y
+          nimble install glm -Y
+          nimble build_all
+
+  # only deploy the bindings for commits on the main branch
+  deploy-zig:
+    needs: test-zig
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-zig
+          ssh-key: ${{ secrets.GHACTIONS_ZIG_PUSH }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-zig
+          path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-nim:
+    needs: test-nim
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-nim
+          ssh-key: ${{ secrets.GHACTIONS_NIM_PUSH }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-nim
+          path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push

@@ -1,13 +1,13 @@
 # Sokol
 
-[![Build Status](https://github.com/floooh/sokol/workflows/build_and_test/badge.svg)](https://github.com/floooh/sokol/actions)
-
 Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**08-Feb-2022** sokol_imgui.h has been
-updated for Dear ImGui v1.87 (support the new evented IO system, and remove the self-rolled input buffering in sokol_imgui.h)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**29-Jun-2022** sokol_app.h D3D11: in debug
+mode, retry failed device creation without D3D11_CREATE_DEVICE_DEBUG flag)
+
+[![Build](/../../actions/workflows/main.yml/badge.svg)](/../../actions/workflows/main.yml) [![Bindings](/../../actions/workflows/gen_bindings.yml/badge.svg)](/../../actions/workflows/gen_bindings.yml) [![build](https://github.com/floooh/sokol-zig/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-zig/actions/workflows/main.yml) [![build](https://github.com/floooh/sokol-nim/actions/workflows/main.yml/badge.svg)](https://github.com/floooh/sokol-nim/actions/workflows/main.yml)
 
 ## Examples and Related Projects
 

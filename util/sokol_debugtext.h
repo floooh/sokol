@@ -215,7 +215,7 @@
           have to be inside a render pass.
         - Note that character codes <32 are reserved as control characters
           and won't render anything. Currently only the following control
-          characters are implements:
+          characters are implemented:
 
             \r  - carriage return (same as sdtx_pos_x(0))
             \n  - carriage return + line feed (same as stdx_crlf())
@@ -537,12 +537,9 @@ typedef struct sdtx_context_desc_t {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*sdtx_malloc_t)(size_t size, void* user_data);
-typedef void(*sdtx_free_t)(void* ptr, void* user_data);
-
 typedef struct sdtx_allocator_t {
-    sdtx_malloc_t alloc;
-    sdtx_free_t free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sdtx_allocator_t;
 

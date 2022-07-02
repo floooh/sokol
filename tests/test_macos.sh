@@ -1,0 +1,12 @@
+set -e
+source test_common.sh
+prepare
+build macos_gl_debug SOKOL_GLCORE33 Debug
+build macos_gl_release SOKOL_GLCORE33 Release
+build macos_metal_debug SOKOL_METAL Debug
+build macos_metal_release SOKOL_METAL Release
+build_arc macos_arc_gl_debug SOKOL_GLCORE33 Debug
+build_arc macos_arc_gl_release SOKOL_GLCORE33 Release
+build_arc macos_arc_metal_debug SOKOL_METAL Debug
+build_arc macos_arc_metal_release SOKOL_METAL Release
+runtest macos_gl_debug

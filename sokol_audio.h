@@ -453,12 +453,9 @@ extern "C" {
     alloc and free function must be provided (e.g. it's not valid to
     override one function but not the other).
 */
-typedef void*(*saudio_malloc)(size_t size, void* user_data);
-typedef void(*saudio_free)(void* ptr, void* user_data);
-
 typedef struct saudio_allocator {
-    saudio_malloc alloc;
-    saudio_free free;
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
     void* user_data;
 } saudio_allocator;
 
@@ -722,6 +719,9 @@ typedef OSStatus _saudio_OSStatus;
 #define _saudio_kAudioFormatFlagIsPacked (kAudioFormatFlagIsPacked)
 
 #else
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // embedded AudioToolbox declarations
 typedef uint32_t _saudio_AudioFormatID;
@@ -797,6 +797,11 @@ extern _saudio_OSStatus AudioQueueAllocateBuffer(_saudio_AudioQueueRef inAQ, uin
 extern _saudio_OSStatus AudioQueueEnqueueBuffer(_saudio_AudioQueueRef inAQ, _saudio_AudioQueueBufferRef inBuffer, uint32_t inNumPacketDescs, const _saudio_AudioStreamPacketDescription* inPacketDescs);
 extern _saudio_OSStatus AudioQueueStart(_saudio_AudioQueueRef inAQ, const _saudio_AudioTimeStamp * inStartTime);
 extern _saudio_OSStatus AudioQueueStop(_saudio_AudioQueueRef inAQ, bool inImmediate);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
 #endif // SAUDIO_OSX_USE_SYSTEM_HEADERS
 
 typedef struct {
@@ -2002,6 +2007,7 @@ _SOKOL_PRIVATE void SLAPIENTRY _saudio_opensles_play_cb(SLPlayItf player, void *
 }
 
 _SOKOL_PRIVATE void* _saudio_opensles_thread_fn(void* param) {
+    _SOKOL_UNUSED(param);
     while (!_saudio.backend.thread_stop)  {
         /* get next output buffer, advance, next buffer. */
         int16_t* out_buffer = _saudio.backend.output_buffers[_saudio.backend.active_buffer];
@@ -2061,7 +2067,7 @@ _SOKOL_PRIVATE bool _saudio_backend_init(void) {
     }
 
     /* Create engine */
-    const SLEngineOption opts[] = { SL_ENGINEOPTION_THREADSAFE, SL_BOOLEAN_TRUE };
+    const SLEngineOption opts[] = { { SL_ENGINEOPTION_THREADSAFE, SL_BOOLEAN_TRUE } };
     if (slCreateEngine(&_saudio.backend.engine_obj, 1, opts, 0, NULL, NULL ) != SL_RESULT_SUCCESS) {
         SOKOL_LOG("sokol_audio opensles: slCreateEngine failed");
         _saudio_backend_shutdown();

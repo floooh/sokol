@@ -3,6 +3,7 @@ import os, gen_nim, gen_zig
 tasks = [
     [ '../sokol_gfx.h',            'sg_',       [] ],
     [ '../sokol_app.h',            'sapp_',     [] ],
+    [ '../sokol_glue.h',           'sapp_sg',   ['sg_'] ],
     [ '../sokol_time.h',           'stm_',      [] ],
     [ '../sokol_audio.h',          'saudio_',   [] ],
     [ '../util/sokol_gl.h',        'sgl_',      ['sg_'] ],
