@@ -42,7 +42,7 @@ overrides = {
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
-    'ptr':                          'pointer', # range ptr
+    'ptr':                          'addr', # range ptr
 }
 
 enumPrefixOverrides = {
@@ -90,7 +90,7 @@ prim_types = {
     'double':       'float64',
     'uintptr_t':    'uint',
     'intptr_t':     'int',
-    'size_t':       'uint',
+    'size_t':       'int',  # not a bug, Nim's sizeof() returns int
 }
 
 prim_defaults = {
@@ -565,11 +565,6 @@ def gen_extra(inp):
         l('else:')
         l('  error("unsupported platform")')
         l('')
-    if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
-        l('# helper function to convert "anything" into a Range')
-        l('converter to_Range*[T](source: T): Range =')
-        l('  Range(pointer: source.unsafeAddr, size: source.sizeof.uint)')
-        l('')
     if inp['prefix'] in ['sg_']:
         l('## Convert a 4-element tuple of numbers to a gfx.Color')
         l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber,A:SomeNumber](rgba: tuple [r:R,g:G,b:B,a:A]):Color =')
@@ -579,6 +574,15 @@ def gen_extra(inp):
         l('converter toColor*[R:SomeNumber,G:SomeNumber,B:SomeNumber](rgba: tuple [r:R,g:G,b:B]):Color =')
         l('  Color(r:rgba.r.float32, g:rgba.g.float32, b:rgba.b.float32, a:1.float32)')
         l('')
+    # NOTE: this simplistic to_Range() converter has various issues, some of them dangerous:
+    #   - doesn't work as expected for slice types
+    #   - it's very easy to create a range that points to invalid memory
+    #     (so far observed for stack-allocated structs <= 16 bytes)
+    #if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
+    #    l('# helper function to convert "anything" into a Range')
+    #    l('converter to_Range*[T](source: T): Range =')
+    #    l('  Range(addr: source.unsafeAddr, size: source.sizeof.uint)')
+    #    l('')
     c_source_path = '/'.join(c_source_paths[inp['prefix']].split('/')[3:])
     l('{.passc:"-DSOKOL_NIM_IMPL".}')
     l(f'{{.compile:"{c_source_path}".}}')
