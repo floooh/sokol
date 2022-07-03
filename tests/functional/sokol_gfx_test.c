@@ -820,3 +820,19 @@ UTEST(sokol_gfx, pass_resource_states) {
     T(sg_query_pass_state(pass) == SG_RESOURCESTATE_INVALID);
     sg_shutdown();
 }
+
+UTEST(sokol_gfx, query_buffer_will_overflow) {
+    sg_setup(&(sg_desc){0});
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = 64,
+        .usage = SG_USAGE_STREAM
+    });
+    T(!sg_query_buffer_will_overflow(buf, 32));
+    T(!sg_query_buffer_will_overflow(buf, 64));
+    T(sg_query_buffer_will_overflow(buf, 65));
+    static const uint8_t data[32] = {0};
+    sg_append_buffer(buf, &SG_RANGE(data));
+    T(!sg_query_buffer_will_overflow(buf, 32));
+    T(sg_query_buffer_will_overflow(buf, 33));
+    sg_shutdown();
+}

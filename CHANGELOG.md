@@ -1,5 +1,10 @@
 ## Updates
 
+- **03-Jul-2022**: A new sokol_gfx.h function ```bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size)```
+which allows to check if a call to ```sg_append_buffer()``` would overflow the buffer. This
+is an alternative to the ```sg_query_buffer_overflow()``` function which only reports
+the overflow after the fact. Many thanks to @RandyGaul for the PR!
+
 - **29-Jun-2022**: In sokol_app.h with the D3D11 backend, if SOKOL_DEBUG is
 defined, and the D3D11 device creation fails, there's now a fallback code
 path which tries to create the device again without the D3D11_CREATE_DEVICE_DEBUG
