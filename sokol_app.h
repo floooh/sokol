@@ -10329,7 +10329,6 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
  _SOKOL_PRIVATE void _sapp_x11_create_standard_cursor(sapp_mouse_cursor cursor, const char* name, const char* theme, int size, uint32_t fallback_native) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     SOKOL_ASSERT(_sapp.x11.display);
-    bool valid = false;
     if (theme) {
         XcursorImage* img = XcursorLibraryLoadImage(name, theme, size);
         if (img) {
@@ -10337,10 +10336,9 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
             XcursorImageDestroy(img);
         }
     }
-    if (!ret.handle) {
-        ret.handle = XCreateFontCursor(_sapp.x11.display, fallback_native);
+    if (0 == _sapp.x11.cursors[cursor]) {
+        _sapp.x11.cursors[cursor] = XCreateFontCursor(_sapp.x11.display, fallback_native);
     }
-    return ret;
 }
 
 _SOKOL_PRIVATE void _sapp_x11_create_cursors(void) {
@@ -10383,11 +10381,11 @@ _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
 _SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (shown) {
-        if (SAPP_MOUSECURSOR_DEFAULT == cursor) {
-            XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
+        if (_sapp.x11.cursors[cursor]) {
+            XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.cursors[cursor]);
         }
         else {
-            XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.cursors[cursor]);
+            XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
         }
     }
     else {
