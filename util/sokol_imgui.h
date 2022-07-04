@@ -1943,6 +1943,25 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
         if (!io->WantTextInput && sapp_keyboard_shown()) {
             sapp_show_keyboard(false);
         }
+        #if defined(__cplusplus)
+            ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+        #else
+            ImGuiMouseCursor imgui_cursor = igGetMouseCursor();
+        #endif
+        sapp_mouse_cursor cursor = sapp_get_mouse_cursor();
+        switch (imgui_cursor) {
+            case ImGuiMouseCursor_Arrow:        cursor = SAPP_MOUSECURSOR_ARROW; break;
+            case ImGuiMouseCursor_TextInput:    cursor = SAPP_MOUSECURSOR_IBEAM; break;
+            case ImGuiMouseCursor_ResizeAll:    cursor = SAPP_MOUSECURSOR_RESIZE_ALL; break;
+            case ImGuiMouseCursor_ResizeNS:     cursor = SAPP_MOUSECURSOR_RESIZE_NS; break;
+            case ImGuiMouseCursor_ResizeEW:     cursor = SAPP_MOUSECURSOR_RESIZE_EW; break;
+            case ImGuiMouseCursor_ResizeNESW:   cursor = SAPP_MOUSECURSOR_RESIZE_NESW; break;
+            case ImGuiMouseCursor_ResizeNWSE:   cursor = SAPP_MOUSECURSOR_RESIZE_NWSE; break;
+            case ImGuiMouseCursor_Hand:         cursor = SAPP_MOUSECURSOR_POINTING_HAND; break;
+            case ImGuiMouseCursor_NotAllowed:   cursor = SAPP_MOUSECURSOR_NOT_ALLOWED; break;
+            default: break;
+        }
+        sapp_set_mouse_cursor(cursor);
     #endif
     #if defined(__cplusplus)
         ImGui::NewFrame();
