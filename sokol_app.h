@@ -101,8 +101,8 @@
     gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---  | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---   | ---
-    KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
-    KEY_UP              | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
+    KEY_DOWN            | YES     | YES   | YES   | SOME  | YES     | YES  | TODO  | YES
+    KEY_UP              | YES     | YES   | YES   | SOME  | YES     | YES  | TODO  | YES
     CHAR                | YES     | YES   | YES   | YES   | TODO    | YES  | TODO  | YES
     MOUSE_DOWN          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     MOUSE_UP            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
@@ -121,7 +121,7 @@
     UNFOCUSED           | YES     | YES   | YES   | ---   | ---     | ---  | ---   | YES
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
-    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
+    QUIT_REQUESTED      | YES     | YES   | YES   | ---   | YES     | ---  | TODO  | YES
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
@@ -132,7 +132,7 @@
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
+    clipboard           | YES     | YES   | TODO  | ---   | YES     | TODO | ---   | YES
     MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
     drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
     window icon         | YES     | YES(1)| YES   | ---   | ---     | TODO | TODO  | YES
@@ -2351,6 +2351,10 @@ typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
+
+    jobject clipboard_manager;
+    jobject ime_manager;
+    jobject decor_view;
 } _sapp_android_t;
 
 #endif // _SAPP_ANDROID
@@ -8385,6 +8389,115 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 /*== Android ================================================================*/
 #if defined(_SAPP_ANDROID)
 
+_SOKOL_PRIVATE void _sapp_android_init_keytable(void) {
+    _sapp.keycodes[AKEYCODE_UNKNOWN]            = SAPP_KEYCODE_INVALID;
+    _sapp.keycodes[AKEYCODE_SPACE]              = SAPP_KEYCODE_SPACE;
+    _sapp.keycodes[AKEYCODE_APOSTROPHE]         = SAPP_KEYCODE_APOSTROPHE;
+    _sapp.keycodes[AKEYCODE_COMMA]              = SAPP_KEYCODE_COMMA;
+    _sapp.keycodes[AKEYCODE_MINUS]              = SAPP_KEYCODE_MINUS;
+    _sapp.keycodes[AKEYCODE_PERIOD]             = SAPP_KEYCODE_PERIOD;
+    _sapp.keycodes[AKEYCODE_SLASH]              = SAPP_KEYCODE_SLASH;
+    _sapp.keycodes[AKEYCODE_0]                  = SAPP_KEYCODE_0;
+    _sapp.keycodes[AKEYCODE_1]                  = SAPP_KEYCODE_1;
+    _sapp.keycodes[AKEYCODE_2]                  = SAPP_KEYCODE_2;
+    _sapp.keycodes[AKEYCODE_3]                  = SAPP_KEYCODE_3;
+    _sapp.keycodes[AKEYCODE_4]                  = SAPP_KEYCODE_4;
+    _sapp.keycodes[AKEYCODE_5]                  = SAPP_KEYCODE_5;
+    _sapp.keycodes[AKEYCODE_6]                  = SAPP_KEYCODE_6;
+    _sapp.keycodes[AKEYCODE_7]                  = SAPP_KEYCODE_7;
+    _sapp.keycodes[AKEYCODE_8]                  = SAPP_KEYCODE_8;
+    _sapp.keycodes[AKEYCODE_9]                  = SAPP_KEYCODE_9;
+    _sapp.keycodes[AKEYCODE_SEMICOLON]          = SAPP_KEYCODE_SEMICOLON;
+    _sapp.keycodes[AKEYCODE_EQUALS]             = SAPP_KEYCODE_EQUAL;
+    _sapp.keycodes[AKEYCODE_A]                  = SAPP_KEYCODE_A;
+    _sapp.keycodes[AKEYCODE_B]                  = SAPP_KEYCODE_B;
+    _sapp.keycodes[AKEYCODE_C]                  = SAPP_KEYCODE_C;
+    _sapp.keycodes[AKEYCODE_D]                  = SAPP_KEYCODE_D;
+    _sapp.keycodes[AKEYCODE_E]                  = SAPP_KEYCODE_E;
+    _sapp.keycodes[AKEYCODE_F]                  = SAPP_KEYCODE_F;
+    _sapp.keycodes[AKEYCODE_G]                  = SAPP_KEYCODE_G;
+    _sapp.keycodes[AKEYCODE_H]                  = SAPP_KEYCODE_H;
+    _sapp.keycodes[AKEYCODE_I]                  = SAPP_KEYCODE_I;
+    _sapp.keycodes[AKEYCODE_J]                  = SAPP_KEYCODE_J;
+    _sapp.keycodes[AKEYCODE_K]                  = SAPP_KEYCODE_K;
+    _sapp.keycodes[AKEYCODE_L]                  = SAPP_KEYCODE_L;
+    _sapp.keycodes[AKEYCODE_M]                  = SAPP_KEYCODE_M;
+    _sapp.keycodes[AKEYCODE_N]                  = SAPP_KEYCODE_N;
+    _sapp.keycodes[AKEYCODE_O]                  = SAPP_KEYCODE_O;
+    _sapp.keycodes[AKEYCODE_P]                  = SAPP_KEYCODE_P;
+    _sapp.keycodes[AKEYCODE_Q]                  = SAPP_KEYCODE_Q;
+    _sapp.keycodes[AKEYCODE_R]                  = SAPP_KEYCODE_R;
+    _sapp.keycodes[AKEYCODE_S]                  = SAPP_KEYCODE_S;
+    _sapp.keycodes[AKEYCODE_T]                  = SAPP_KEYCODE_T;
+    _sapp.keycodes[AKEYCODE_U]                  = SAPP_KEYCODE_U;
+    _sapp.keycodes[AKEYCODE_V]                  = SAPP_KEYCODE_V;
+    _sapp.keycodes[AKEYCODE_W]                  = SAPP_KEYCODE_W;
+    _sapp.keycodes[AKEYCODE_X]                  = SAPP_KEYCODE_X;
+    _sapp.keycodes[AKEYCODE_Y]                  = SAPP_KEYCODE_Y;
+    _sapp.keycodes[AKEYCODE_Z]                  = SAPP_KEYCODE_Z;
+    _sapp.keycodes[AKEYCODE_LEFT_BRACKET]       = SAPP_KEYCODE_LEFT_BRACKET;
+    _sapp.keycodes[AKEYCODE_BACKSLASH]          = SAPP_KEYCODE_BACKSLASH;
+    _sapp.keycodes[AKEYCODE_RIGHT_BRACKET]      = SAPP_KEYCODE_RIGHT_BRACKET;
+    _sapp.keycodes[AKEYCODE_GRAVE]              = SAPP_KEYCODE_GRAVE_ACCENT;
+    _sapp.keycodes[AKEYCODE_ESCAPE]             = SAPP_KEYCODE_ESCAPE;
+    _sapp.keycodes[AKEYCODE_ENTER]              = SAPP_KEYCODE_ENTER;
+    _sapp.keycodes[AKEYCODE_TAB]                = SAPP_KEYCODE_TAB;
+    _sapp.keycodes[AKEYCODE_DEL]                = SAPP_KEYCODE_BACKSPACE;
+    _sapp.keycodes[AKEYCODE_INSERT]             = SAPP_KEYCODE_INSERT;
+    _sapp.keycodes[AKEYCODE_FORWARD_DEL]        = SAPP_KEYCODE_DELETE;
+    _sapp.keycodes[AKEYCODE_DPAD_RIGHT]         = SAPP_KEYCODE_RIGHT;
+    _sapp.keycodes[AKEYCODE_DPAD_LEFT]          = SAPP_KEYCODE_LEFT;
+    _sapp.keycodes[AKEYCODE_DPAD_DOWN]          = SAPP_KEYCODE_DOWN;
+    _sapp.keycodes[AKEYCODE_DPAD_UP]            = SAPP_KEYCODE_UP;
+    _sapp.keycodes[AKEYCODE_PAGE_UP]            = SAPP_KEYCODE_PAGE_UP;
+    _sapp.keycodes[AKEYCODE_PAGE_DOWN]          = SAPP_KEYCODE_PAGE_DOWN;
+    _sapp.keycodes[AKEYCODE_MOVE_HOME]          = SAPP_KEYCODE_HOME;
+    _sapp.keycodes[AKEYCODE_MOVE_END]           = SAPP_KEYCODE_END;
+    _sapp.keycodes[AKEYCODE_CAPS_LOCK]          = SAPP_KEYCODE_CAPS_LOCK;
+    _sapp.keycodes[AKEYCODE_SCROLL_LOCK]        = SAPP_KEYCODE_SCROLL_LOCK;
+    _sapp.keycodes[AKEYCODE_NUM_LOCK]           = SAPP_KEYCODE_NUM_LOCK;
+    _sapp.keycodes[AKEYCODE_SYSRQ]              = SAPP_KEYCODE_PRINT_SCREEN;
+    _sapp.keycodes[AKEYCODE_BREAK]              = SAPP_KEYCODE_PAUSE;
+    _sapp.keycodes[AKEYCODE_F1]                 = SAPP_KEYCODE_F1;
+    _sapp.keycodes[AKEYCODE_F2]                 = SAPP_KEYCODE_F2;
+    _sapp.keycodes[AKEYCODE_F3]                 = SAPP_KEYCODE_F3;
+    _sapp.keycodes[AKEYCODE_F4]                 = SAPP_KEYCODE_F4;
+    _sapp.keycodes[AKEYCODE_F5]                 = SAPP_KEYCODE_F5;
+    _sapp.keycodes[AKEYCODE_F6]                 = SAPP_KEYCODE_F6;
+    _sapp.keycodes[AKEYCODE_F7]                 = SAPP_KEYCODE_F7;
+    _sapp.keycodes[AKEYCODE_F8]                 = SAPP_KEYCODE_F8;
+    _sapp.keycodes[AKEYCODE_F9]                 = SAPP_KEYCODE_F9;
+    _sapp.keycodes[AKEYCODE_F10]                = SAPP_KEYCODE_F10;
+    _sapp.keycodes[AKEYCODE_F11]                = SAPP_KEYCODE_F11;
+    _sapp.keycodes[AKEYCODE_F12]                = SAPP_KEYCODE_F12;
+    _sapp.keycodes[AKEYCODE_NUMPAD_0]           = SAPP_KEYCODE_KP_0;
+    _sapp.keycodes[AKEYCODE_NUMPAD_1]           = SAPP_KEYCODE_KP_1;
+    _sapp.keycodes[AKEYCODE_NUMPAD_2]           = SAPP_KEYCODE_KP_2;
+    _sapp.keycodes[AKEYCODE_NUMPAD_3]           = SAPP_KEYCODE_KP_3;
+    _sapp.keycodes[AKEYCODE_NUMPAD_4]           = SAPP_KEYCODE_KP_4;
+    _sapp.keycodes[AKEYCODE_NUMPAD_5]           = SAPP_KEYCODE_KP_5;
+    _sapp.keycodes[AKEYCODE_NUMPAD_6]           = SAPP_KEYCODE_KP_6;
+    _sapp.keycodes[AKEYCODE_NUMPAD_7]           = SAPP_KEYCODE_KP_7;
+    _sapp.keycodes[AKEYCODE_NUMPAD_8]           = SAPP_KEYCODE_KP_8;
+    _sapp.keycodes[AKEYCODE_NUMPAD_9]           = SAPP_KEYCODE_KP_9;
+    _sapp.keycodes[AKEYCODE_NUMPAD_DOT]         = SAPP_KEYCODE_KP_DECIMAL;
+    _sapp.keycodes[AKEYCODE_NUMPAD_DIVIDE]      = SAPP_KEYCODE_KP_DIVIDE;
+    _sapp.keycodes[AKEYCODE_NUMPAD_MULTIPLY]    = SAPP_KEYCODE_KP_MULTIPLY;
+    _sapp.keycodes[AKEYCODE_NUMPAD_SUBTRACT]    = SAPP_KEYCODE_KP_SUBTRACT;
+    _sapp.keycodes[AKEYCODE_NUMPAD_ADD]         = SAPP_KEYCODE_KP_ADD;
+    _sapp.keycodes[AKEYCODE_NUMPAD_ENTER]       = SAPP_KEYCODE_KP_ENTER;
+    _sapp.keycodes[AKEYCODE_NUMPAD_EQUALS]      = SAPP_KEYCODE_KP_EQUAL;
+    _sapp.keycodes[AKEYCODE_SHIFT_LEFT]         = SAPP_KEYCODE_LEFT_SHIFT;
+    _sapp.keycodes[AKEYCODE_CTRL_LEFT]          = SAPP_KEYCODE_LEFT_CONTROL;
+    _sapp.keycodes[AKEYCODE_ALT_LEFT]           = SAPP_KEYCODE_LEFT_ALT;
+    _sapp.keycodes[AKEYCODE_META_LEFT]          = SAPP_KEYCODE_LEFT_SUPER;
+    _sapp.keycodes[AKEYCODE_SHIFT_RIGHT]        = SAPP_KEYCODE_RIGHT_SHIFT;
+    _sapp.keycodes[AKEYCODE_CTRL_RIGHT]         = SAPP_KEYCODE_RIGHT_CONTROL;
+    _sapp.keycodes[AKEYCODE_ALT_RIGHT]          = SAPP_KEYCODE_RIGHT_ALT;
+    _sapp.keycodes[AKEYCODE_META_RIGHT]         = SAPP_KEYCODE_RIGHT_SUPER;
+    _sapp.keycodes[AKEYCODE_MENU]               = SAPP_KEYCODE_MENU;
+}
+
 /* android loop thread */
 _SOKOL_PRIVATE bool _sapp_android_init_egl(void) {
     SOKOL_ASSERT(_sapp.android.display == EGL_NO_DISPLAY);
@@ -8659,15 +8772,96 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
     }
-    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* FIXME: this should be hooked into a "really quit?" mechanism
-           so the app can ask the user for confirmation, this is currently
-           generally missing in sokol_app.h
-        */
-        _sapp_android_shutdown();
+
+    int32_t key_code = AKeyEvent_getKeyCode(e);
+    int32_t action = AKeyEvent_getAction(e);
+    if (key_code == AKEYCODE_BACK && action == AKEY_EVENT_ACTION_UP) {
+        /* if user presses back key, give user code a chance to intervene via sapp_cancel_quit() */
+        _sapp.quit_requested = true;
+        _sapp_init_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+        _sapp_call_event(&_sapp.event);
+
+        /* if user code hasn't intervened, quit the app */
+        if (_sapp.quit_requested) {
+            _sapp_android_shutdown();
+        }
+
         return true;
     }
-    return false;
+
+    sapp_event_type event_type = SAPP_EVENTTYPE_INVALID;
+    switch (action) {
+        case AKEY_EVENT_ACTION_DOWN:
+            SOKOL_LOG("Key: down");
+            event_type = SAPP_EVENTTYPE_KEY_DOWN;
+            break;
+        case AKEY_EVENT_ACTION_UP:
+            SOKOL_LOG("Key: up");
+            event_type = SAPP_EVENTTYPE_KEY_UP;
+            break;
+        case AKEY_EVENT_ACTION_MULTIPLE:
+            SOKOL_LOG("Key: multiple");
+            break;
+        default:
+            return false;
+    }
+
+    int32_t meta = AKeyEvent_getMetaState(e);
+    uint32_t modifiers = 0;
+
+    if ((meta & AMETA_SHIFT_ON)) {
+        modifiers |= SAPP_MODIFIER_SHIFT;
+    }
+
+    if ((meta & AMETA_CTRL_ON)) {
+        modifiers |= SAPP_MODIFIER_CTRL;
+    }
+
+    if ((meta & AMETA_ALT_ON)) {
+        modifiers |= SAPP_MODIFIER_ALT;
+    }
+
+    if ((meta & AMETA_META_ON)) {
+        modifiers |= SAPP_MODIFIER_SUPER;
+    }
+
+    sapp_keycode translated_key_code = _sapp_translate_key(key_code);
+
+    if(action != AKEY_EVENT_ACTION_MULTIPLE) {
+        _sapp_init_event(event_type);
+        _sapp.event.modifiers = modifiers;
+        _sapp.event.key_code = translated_key_code;
+        _sapp.event.key_repeat = AKeyEvent_getRepeatCount(e) != 0;
+        _sapp_call_event(&_sapp.event);
+    }
+    else {
+        /* AKEY_EVENT_ACTION_MULTIPLE means that multiple down/up pairs have occured in this key event */
+        for(int key_repeat = 0; key_repeat < AKeyEvent_getRepeatCount(e); ++key_repeat) {
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_DOWN);
+            _sapp.event.modifiers = modifiers;
+            _sapp.event.key_code = translated_key_code;
+            _sapp.event.key_repeat = key_repeat != 0;
+            _sapp_call_event(&_sapp.event);
+
+            _sapp_init_event(SAPP_EVENTTYPE_KEY_UP);
+            _sapp.event.modifiers = modifiers;
+            _sapp.event.key_code = translated_key_code;
+            _sapp.event.key_repeat = key_repeat != 0;
+            _sapp_call_event(&_sapp.event);
+        }
+    }
+
+    /* check if a CLIPBOARD_PASTED event must be sent too */
+    if (_sapp.clipboard.enabled &&
+        (event_type == SAPP_EVENTTYPE_KEY_DOWN) &&
+        (modifiers == SAPP_MODIFIER_CTRL) &&
+        (translated_key_code == SAPP_KEYCODE_V))
+    {
+        _sapp_init_event(SAPP_EVENTTYPE_CLIPBOARD_PASTED);
+        _sapp_call_event(&_sapp.event);
+    }
+
+    return true;
 }
 
 _SOKOL_PRIVATE int _sapp_android_input_cb(int fd, int events, void* data) {
@@ -8792,16 +8986,229 @@ _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     return is_in_front && has_surface;
 }
 
+_SOKOL_PRIVATE bool _sapp_android_get_jni_env(JNIEnv **env) {
+    // Get current thread JNI environment
+    JavaVM *vm = _sapp.android.activity->vm;
+    *env = NULL;
+
+    if ((*vm)->GetEnv(vm, (void**)env, JNI_VERSION_1_6) == JNI_OK) {
+        return false;
+    }
+
+    JavaVMAttachArgs args = {
+        .version  = JNI_VERSION_1_6,
+        .name = "NativeThread",
+        .group = NULL
+    };
+
+    if ((*vm)->AttachCurrentThread(vm, env, &args) != JNI_OK) {
+        return false;
+    }
+
+    return true;
+}
+
 _SOKOL_PRIVATE void _sapp_android_show_keyboard(bool shown) {
     SOKOL_ASSERT(_sapp.valid);
-    /* This seems to be broken in the NDK, but there is (a very cumbersome) workaround... */
-    if (shown) {
-        SOKOL_LOG("Showing keyboard");
-        ANativeActivity_showSoftInput(_sapp.android.activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
-    } else {
-        SOKOL_LOG("Hiding keyboard");
-        ANativeActivity_hideSoftInput(_sapp.android.activity, ANATIVEACTIVITY_HIDE_SOFT_INPUT_NOT_ALWAYS);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if (env == NULL) {
+        return;
     }
+
+    jclass input_method_manager_class = (*env)->FindClass(
+        env,
+        "android/view/inputmethod/InputMethodManager"
+        );
+    jclass view_class = (*env)->FindClass(env, "android/view/View");
+
+    if (shown) {
+        // decor_view.requestFocus();
+        jmethodID request_focus = (*env)->GetMethodID(
+            env,
+            view_class,
+            "requestFocus",
+            "()Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.decor_view,
+            request_focus
+            );
+        // ime_manager.showSoftInput(decor_view, 0);
+        jmethodID show_soft_input = (*env)->GetMethodID(
+            env,
+            input_method_manager_class,
+            "showSoftInput",
+            "(Landroid/view/View;I)Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.ime_manager,
+            show_soft_input,
+            _sapp.android.decor_view,
+            0
+            );
+    }
+    else {
+        // token = decor_view.getWindowToken();
+        jmethodID get_window_token = (*env)->GetMethodID(
+            env,
+            view_class,
+            "getWindowToken",
+            "()Landroid/os/IBinder;"
+            );
+        jobject token = (*env)->CallObjectMethod(
+            env,
+            _sapp.android.decor_view,
+            get_window_token
+            );
+
+        // ime_manager.hideSoftInputFromWindow(token, 0);
+        jmethodID hide_soft_input = (*env)->GetMethodID(
+            env,
+            input_method_manager_class,
+            "hideSoftInputFromWindow",
+            "(Landroid/os/IBinder;I)Z"
+            );
+        (*env)->CallBooleanMethod(
+            env,
+            _sapp.android.ime_manager,
+            hide_soft_input,
+            token,
+            0
+            );
+
+        (*env)->DeleteLocalRef(env, token);
+    }
+
+    (*env)->DeleteLocalRef(env, view_class);
+    (*env)->DeleteLocalRef(env, input_method_manager_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_android_keyboard_shown() {
+    SOKOL_ASSERT(_sapp.valid);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if (env == NULL) {
+        return false;
+    }
+
+    // We can't have the current status of the keyboard
+    // So instead, we get the size of the view after removing decorations (status and navigation bar)
+    // and we compare it to the view visible display frame
+    // If they are not equal, then the keyboard may be visible
+
+    jclass view_class = (*env)->FindClass(env, "android/view/View");
+
+    // view_height = decor_view.getHeight();
+    jmethodID get_display = (*env)->GetMethodID(
+        env,
+        view_class,
+        "getDisplay",
+        "()Landroid/view/Display;"
+        );
+    jobject display = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.decor_view,
+        get_display
+        );
+
+    // display_dimension = new Point();
+    jclass point_class = (*env)->FindClass(env, "android/graphics/Point");
+    jmethodID point_ctor = (*env)->GetMethodID(
+        env,
+        point_class,
+        "<init>",
+        "()V"
+        );
+    jobject display_dimension = (*env)->NewObject(env, point_class, point_ctor);
+
+    // display.getSize(display_dimension);
+    jclass display_class = (*env)->FindClass(env, "android/view/Display");
+    jmethodID get_size = (*env)->GetMethodID(
+        env,
+        display_class,
+        "getSize",
+        "(Landroid/graphics/Point;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        display,
+        get_size,
+        display_dimension
+        );
+
+    // display_height = display_dimension.y;
+    jfieldID point_y = (*env)->GetFieldID(
+        env,
+        point_class,
+        "y",
+        "I"
+        );
+    int display_height = (*env)->GetIntField(env, display_dimension, point_y);
+
+    // view_visible_rect = new Rect();
+    jclass rect_class = (*env)->FindClass(env, "android/graphics/Rect");
+    jmethodID rect_ctor = (*env)->GetMethodID(
+        env,
+        rect_class,
+        "<init>",
+        "()V"
+        );
+    jobject view_visible_rect = (*env)->NewObject(env, rect_class, rect_ctor);
+
+    // decor_view.getWindowVisibleDisplayFrame(view_visible_rect);
+    jmethodID get_window_visible_display_frame = (*env)->GetMethodID(
+        env,
+        view_class,
+        "getWindowVisibleDisplayFrame",
+        "(Landroid/graphics/Rect;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        _sapp.android.decor_view,
+        get_window_visible_display_frame,
+        view_visible_rect
+        );
+
+    // status_bar_height = view_visible_rect.top;
+    jfieldID rect_top = (*env)->GetFieldID(
+        env,
+        rect_class,
+        "top",
+        "I"
+        );
+    int status_bar_height = (*env)->GetIntField(env, view_visible_rect, rect_top);
+
+    // view_visible_height = view_visible_rect.height();
+    jmethodID rect_height = (*env)->GetMethodID(
+        env,
+        rect_class,
+        "height",
+        "()I"
+        );
+    int view_visible_height = (*env)->CallIntMethod(
+        env,
+        view_visible_rect,
+        rect_height
+        );
+
+    (*env)->DeleteLocalRef(env, view_visible_rect);
+    (*env)->DeleteLocalRef(env, rect_class);
+    (*env)->DeleteLocalRef(env, view_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+
+    return display_height - status_bar_height != view_visible_height;
 }
 
 _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
@@ -8985,6 +9392,14 @@ _SOKOL_PRIVATE void _sapp_android_on_destroy(ANativeActivity* activity) {
     close(_sapp.android.pt.read_from_main_fd);
     close(_sapp.android.pt.write_from_main_fd);
 
+    JNIEnv *env = _sapp.android.activity->env;
+    (*env)->DeleteGlobalRef(env, _sapp.android.ime_manager);
+    (*env)->DeleteGlobalRef(env, _sapp.android.decor_view);
+
+    if (_sapp.android.clipboard_manager != NULL) {
+        (*env)->DeleteGlobalRef(env, _sapp.android.clipboard_manager);
+    }
+
     SOKOL_LOG("NativeActivity done");
 
     /* this is a bit naughty, but causes a clean restart of the app (static globals are reset) */
@@ -8999,6 +9414,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc);
+    _sapp_android_init_keytable();
 
     /* start loop thread */
     _sapp.android.activity = activity;
@@ -9010,6 +9426,104 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     }
     _sapp.android.pt.read_from_main_fd = pipe_fd[0];
     _sapp.android.pt.write_from_main_fd = pipe_fd[1];
+
+    JNIEnv *env = activity->env;
+
+    // getSystemService() can only be called from the UI thread, so get everything we need here
+    jclass native_activity_class = (*env)->FindClass(env, "android/app/NativeActivity");
+    jclass context_class = (*env)->FindClass(env, "android/content/Context");
+    jmethodID get_system_service = (*env)->GetMethodID(
+        env,
+        native_activity_class,
+        "getSystemService",
+        "(Ljava/lang/String;)Ljava/lang/Object;"
+        );
+
+    // Get input method manager
+    // this.getSystemService(Context.INPUT_METHOD_SERVICE);
+    jfieldID input_method_service_id = (*env)->GetStaticFieldID(
+        env,
+        context_class,
+        "INPUT_METHOD_SERVICE",
+        "Ljava/lang/String;"
+        );
+    jstring input_method_service_str = (*env)->GetStaticObjectField(
+        env,
+        context_class,
+        input_method_service_id
+        );
+    jobject ime_manager = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.activity->clazz,
+        get_system_service,
+        input_method_service_str
+        );
+
+    _sapp.android.ime_manager = (*env)->NewGlobalRef(env, ime_manager);
+
+    (*env)->DeleteLocalRef(env, ime_manager);
+    (*env)->DeleteLocalRef(env, input_method_service_str);
+
+    // Get clipboard manager
+    if (_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0)) {
+        // this.getSystemService(Context.CLIPBOARD_SERVICE);
+        jfieldID clipboard_service_id = (*env)->GetStaticFieldID(
+            env,
+            context_class,
+            "CLIPBOARD_SERVICE",
+            "Ljava/lang/String;"
+            );
+        jstring clipboard_service_str = (*env)->GetStaticObjectField(
+            env,
+            context_class,
+            clipboard_service_id
+            );
+        jobject clipboard_manager = (*env)->CallObjectMethod(
+            env,
+            _sapp.android.activity->clazz,
+            get_system_service,
+            clipboard_service_str
+            );
+        _sapp.android.clipboard_manager = (*env)->NewGlobalRef(env, clipboard_manager);
+
+        (*env)->DeleteLocalRef(env, clipboard_manager);
+        (*env)->DeleteLocalRef(env, clipboard_service_str);
+    }
+
+    // window = this.getWindow();
+    jmethodID get_window = (*env)->GetMethodID(
+        env,
+        native_activity_class,
+        "getWindow",
+        "()Landroid/view/Window;"
+        );
+    jobject window = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.activity->clazz,
+        get_window
+        );
+
+    // decor_view = window.getDecorView();
+    jclass window_class = (*env)->FindClass(env, "android/view/Window");
+    jmethodID get_decor_view = (*env)->GetMethodID(
+        env,
+        window_class,
+        "getDecorView",
+        "()Landroid/view/View;"
+        );
+    jobject decor_view = (*env)->CallObjectMethod(
+        env,
+        window,
+        get_decor_view
+        );
+
+    _sapp.android.decor_view = (*env)->NewGlobalRef(env, decor_view);
+
+    (*env)->DeleteLocalRef(env, decor_view);
+    (*env)->DeleteLocalRef(env, window_class);
+    (*env)->DeleteLocalRef(env, window);
+    (*env)->DeleteLocalRef(env, context_class);
+    (*env)->DeleteLocalRef(env, native_activity_class);
 
     pthread_mutex_init(&_sapp.android.pt.mutex, NULL);
     pthread_cond_init(&_sapp.android.pt.cond, NULL);
@@ -9056,6 +9570,280 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     SOKOL_LOG("NativeActivity successfully created");
 
     /* NOT A BUG: do NOT call sapp_discard_state() */
+}
+
+_SOKOL_PRIVATE void _sapp_android_utf8_to_mutf8(const char* src, char *dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len >= 3));
+    int dst_offset = 0;
+    int src_offset = 0;
+    for (;;) {
+        int bytes_count = 0;
+
+        if ((src[src_offset] & 0x80) == 0) {
+            bytes_count = 1;
+        }
+        else if ((src[src_offset] & 0xE0) == 0xC0) {
+            bytes_count = 2;
+        }
+        else if ((src[src_offset] & 0xF0) == 0xE0) {
+            bytes_count = 3;
+        }
+        else if ((src[src_offset] & 0xF8) == 0xF0) {
+            bytes_count = 6;
+        }
+
+        if (bytes_count == 0 || src[src_offset] == 0 || dst_offset + bytes_count > max_len - 3) {
+            dst[dst_offset++] = 0xC0;
+            dst[dst_offset++] = 0x80;
+            dst[dst_offset++] = 0;
+            break;
+        }
+
+        if (bytes_count <= 3) {
+            for (int n = 0; n < bytes_count; ++n) {
+                dst[dst_offset++] = src[src_offset++];
+            }
+        }
+        else {
+            uint32_t c = 0;
+            c |= (src[src_offset++] & 0x07) << 18;
+            c |= (src[src_offset++] & 0x3F) << 12;
+            c |= (src[src_offset++] & 0x3F) << 6;
+            c |= (src[src_offset++] & 0x3F);
+
+            dst[dst_offset++] = 0xED;
+            dst[dst_offset++] = 0xA0 | ((c >> 16) & 0x0F);
+            dst[dst_offset++] = 0x80 | ((c >> 10) & 0x3F);
+            dst[dst_offset++] = 0xED;
+            dst[dst_offset++] = 0xA0 | ((c >> 6) & 0x0F);
+            dst[dst_offset++] = 0x80 | (c & 0x3F);
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_mutf8_to_utf8(const char* src, char *dst, int max_len) {
+    SOKOL_ASSERT(src && dst && (max_len > 0));
+
+    int dst_offset = 0;
+    int src_offset = 0;
+
+    for(;;) {
+        int bytes_count = 0;
+
+        if (src[src_offset] == (char)0xED) {
+            bytes_count = 4;
+        }
+        else if ((src[src_offset] & 0xF0) == 0xE0) {
+            bytes_count = 3;
+        }
+        else if ((src[src_offset] & 0xE0) == 0xC0) {
+            bytes_count = 2;
+        }
+        else if ((src[src_offset] & 0x80) == 0) {
+            bytes_count = 1;
+        }
+
+        if ((src[src_offset] == (char)0xC0 && src[src_offset + 1] == (char)0x80)
+            || bytes_count == 0 || dst_offset + bytes_count >= max_len) {
+            dst[dst_offset++] = 0;
+            break;
+        }
+
+        if (src[src_offset] == (char)0xED) {
+            ++src_offset;
+            uint32_t c = 0;
+            c |= (src[src_offset++] & 0x0F) << 16;
+            c |= (src[src_offset++] & 0x3F) << 10;
+            SOKOL_ASSERT(src[src_offset] == (char)0xED);
+            ++src_offset;
+            c |= (src[src_offset++] & 0x0F) << 6;
+            c |= (src[src_offset++] & 0x3F);
+
+            dst[dst_offset++] = 0xF0 | ((c >> 18) & 0x07);
+            dst[dst_offset++] = 0x80 | ((c >> 12) & 0x3F);
+            dst[dst_offset++] = 0x80 | ((c >> 6) & 0x3F);
+            dst[dst_offset++] = 0x80 | (c & 0x3F);
+        }
+        else {
+            for (int n = 0; n < bytes_count; ++n) {
+                dst[dst_offset++] = src[src_offset++];
+            }
+        }
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_android_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(str);
+    SOKOL_ASSERT(_sapp.android.activity);
+    SOKOL_ASSERT(_sapp.clipboard.enabled && (_sapp.clipboard.buf_size > 0));
+    SOKOL_ASSERT(_sapp.android.clipboard_manager);
+
+    // Get JNI environment
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if (env == NULL) {
+        return;
+    }
+
+    // Create jstring
+    jstring label = (*env)->NewStringUTF(env, "");
+    _sapp_android_utf8_to_mutf8(str, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+    jstring text = (*env)->NewStringUTF(env, _sapp.clipboard.buffer);
+
+    // Create clip data
+    // clipdata_instance = ClipData.newPlainText(label, text);
+    jclass clipdata_class = (*env)->FindClass(env, "android/content/ClipData");
+    jmethodID clipdata_new_plain_text = (*env)->GetStaticMethodID(
+        env,
+        clipdata_class,
+        "newPlainText",
+        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;"
+        );
+    jobject clipdata_instance = (*env)->CallStaticObjectMethod(
+        env,
+        clipdata_class,
+        clipdata_new_plain_text,
+        label,
+        text
+        );
+
+    // Set clipboard content
+    // clipboard_manager.setPrimaryClip(clipdata_instance);
+    jclass clipboard_manager_class = (*env)->FindClass(env, "android/content/ClipboardManager");
+    jmethodID set_primary_clip = (*env)->GetMethodID(
+        env,
+        clipboard_manager_class,
+        "setPrimaryClip",
+        "(Landroid/content/ClipData;)V"
+        );
+    (*env)->CallVoidMethod(
+        env,
+        _sapp.android.clipboard_manager,
+        set_primary_clip,
+        clipdata_instance
+        );
+
+    (*env)->DeleteLocalRef(env, clipboard_manager_class);
+    (*env)->DeleteLocalRef(env, clipdata_instance);
+    (*env)->DeleteLocalRef(env, clipdata_class);
+    (*env)->DeleteLocalRef(env, text);
+    (*env)->DeleteLocalRef(env, label);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+}
+
+_SOKOL_PRIVATE const char* _sapp_android_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.clipboard.enabled && _sapp.clipboard.buffer);
+    SOKOL_ASSERT(_sapp.android.activity);
+
+    JNIEnv *env;
+    bool need_detach = _sapp_android_get_jni_env(&env);
+    if (env == NULL) {
+        return _sapp.clipboard.buffer;
+    }
+
+    // Get clipboard content
+    // clipdata = clipboard_manager.getPrimaryClip();
+    jclass clipboard_manager_class = (*env)->FindClass(env, "android/content/ClipboardManager");
+    jmethodID get_primary_clip = (*env)->GetMethodID(
+        env,
+        clipboard_manager_class,
+        "getPrimaryClip",
+        "()Landroid/content/ClipData;"
+        );
+    jobject clipdata = (*env)->CallObjectMethod(
+        env,
+        _sapp.android.clipboard_manager,
+        get_primary_clip
+        );
+
+    // Get clipdata item
+    // item_count = clipdata.getItemCount();
+    jclass clipdata_class = (*env)->FindClass(env, "android/content/ClipData");
+    jmethodID get_item_count = (*env)->GetMethodID(
+        env,
+        clipdata_class,
+        "getItemCount",
+        "()I"
+        );
+    int item_count = (*env)->CallIntMethod(
+        env,
+        clipdata,
+        get_item_count
+        );
+
+    // TODO : merge all items in one text ?
+    if (item_count != 0) {
+        // item = clipdata.getItemAt(0);
+        jmethodID get_item_at = (*env)->GetMethodID(
+            env,
+            clipdata_class,
+            "getItemAt",
+            "(I)Landroid/content/ClipData$Item;"
+            );
+        jobject item = (*env)->CallObjectMethod(
+            env,
+            clipdata,
+            get_item_at,
+            0
+            );
+
+        // Retrieve text
+        // item_sequence = item.coerceToText();
+        jclass clipdata_item_class = (*env)->FindClass(env, "android/content/ClipData$Item");
+        jmethodID coerce_to_text = (*env)->GetMethodID(
+            env,
+            clipdata_item_class,
+            "coerceToText",
+            "(Landroid/content/Context;)Ljava/lang/CharSequence;"
+            );
+
+        jobject item_sequence  = (*env)->CallObjectMethod(
+            env,
+            item,
+            coerce_to_text,
+            _sapp.android.activity->clazz
+            );
+
+        // item_text = item_sequence.toString();
+        jclass charsequence_class = (*env)->FindClass(env, "java/lang/CharSequence");
+        jmethodID to_string = (*env)->GetMethodID(
+            env,
+            charsequence_class,
+            "toString",
+            "()Ljava/lang/String;"
+            );
+
+        jstring item_text = (*env)->CallObjectMethod(
+            env,
+            item_sequence,
+            to_string
+            );
+
+        // Update buffer
+        const char *text = (*env)->GetStringUTFChars(env, item_text, NULL);
+        _sapp_android_mutf8_to_utf8(text, _sapp.clipboard.buffer, _sapp.clipboard.buf_size);
+
+        // Cleanup
+        (*env)->ReleaseStringUTFChars(env, item_text, text);
+        (*env)->DeleteLocalRef(env, item_text);
+        (*env)->DeleteLocalRef(env, charsequence_class);
+        (*env)->DeleteLocalRef(env, item_sequence);
+        (*env)->DeleteLocalRef(env, clipdata_item_class);
+        (*env)->DeleteLocalRef(env, item);
+    }
+
+    (*env)->DeleteLocalRef(env, clipdata_class);
+    (*env)->DeleteLocalRef(env, clipdata);
+    (*env)->DeleteLocalRef(env, clipboard_manager_class);
+
+    if (need_detach) {
+        (*_sapp.android.activity->vm)->DetachCurrentThread(_sapp.android.activity->vm);
+    }
+
+    return _sapp.clipboard.buffer;
 }
 
 #endif /* _SAPP_ANDROID */
@@ -11405,7 +12193,11 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
 }
 
 SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
-    return _sapp.onscreen_keyboard_shown;
+    #if defined(_SAPP_ANDROID)
+        return _sapp_android_keyboard_shown();
+    #else
+        return _sapp.onscreen_keyboard_shown;
+    #endif
 }
 
 SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
@@ -11490,6 +12282,8 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
         _sapp_emsc_set_clipboard_string(str);
     #elif defined(_SAPP_WIN32)
         _sapp_win32_set_clipboard_string(str);
+    #elif defined(_SAPP_ANDROID)
+        _sapp_android_set_clipboard_string(str);
     #else
         /* not implemented */
     #endif
@@ -11506,6 +12300,8 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
         return _sapp.clipboard.buffer;
     #elif defined(_SAPP_WIN32)
         return _sapp_win32_get_clipboard_string();
+    #elif defined(_SAPP_ANDROID)
+        return _sapp_android_get_clipboard_string();
     #else
         /* not implemented */
         return _sapp.clipboard.buffer;
