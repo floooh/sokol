@@ -3440,8 +3440,7 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
 }
 
 _SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool shown) {
-    // show/hide cursor only if visibility status has changed (required
-    // because show/hide stacks)
+    // show/hide cursor only if visibility status has changed (required because show/hide stacks)
     if (shown != _sapp.mouse.shown) {
         if (shown) {
             [NSCursor unhide];
