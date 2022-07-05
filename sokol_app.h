@@ -2119,6 +2119,7 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
+    NSCursor* cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
@@ -3189,6 +3190,32 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
 }
 
+// undocumented methods for creating cursors (see GLFW 3.4 and imgui_impl_osx.mm)
+@interface NSCursor()
++ (id)_windowResizeNorthWestSouthEastCursor;
++ (id)_windowResizeNorthEastSouthWestCursor;
++ (id)_windowResizeNorthSouthCursor;
++ (id)_windowResizeEastWestCursor;
+@end
+
+_SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_DEFAULT] = nil; // not a bug
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
+}
+
+_SOKOL_PRIVATE void _sapp_macos_discard_cursors(void) {
+    // empty (the cursor id's are actually globals and don't need releasing)
+}
+
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
@@ -3404,11 +3431,32 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     */
     if (_sapp.mouse.locked) {
         CGAssociateMouseAndMouseCursorPosition(NO);
-        CGDisplayHideCursor(kCGDirectMainDisplay);
+        [NSCursor hide];
     }
     else {
-        CGDisplayShowCursor(kCGDirectMainDisplay);
+        [NSCursor unhide];
         CGAssociateMouseAndMouseCursorPosition(YES);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    // show/hide cursor only if visibility status has changed (required
+    // because show/hide stacks)
+    if (shown != _sapp.mouse.shown) {
+        if (shown) {
+            [NSCursor unhide];
+        }
+        else {
+            [NSCursor hide];
+        }
+    }
+    // update cursor type
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    if (_sapp.macos.cursors[cursor]) {
+        [_sapp.macos.cursors[cursor] set];
+    }
+    else {
+        [[NSCursor arrowCursor] set];
     }
 }
 
@@ -3455,6 +3503,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
+    _sapp_macos_init_cursors();
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
