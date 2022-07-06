@@ -2241,6 +2241,7 @@ typedef struct {
     HDC dc;
     HICON big_icon;
     HICON small_icon;
+    HCURSOR cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
@@ -3210,10 +3211,6 @@ _SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
     _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
-}
-
-_SOKOL_PRIVATE void _sapp_macos_discard_cursors(void) {
-    // empty (the cursor id's are actually globals and don't need releasing)
 }
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
@@ -6462,9 +6459,73 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     _sapp_win32_set_fullscreen(!_sapp.fullscreen, SWP_SHOWWINDOW);
 }
 
-_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    ShowCursor((BOOL)visible);
+_SOKOL_PRIVATE void _sapp_win32_init_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    // NOTE: the OCR_* constants are only defined if OEMRESOURCE is defined
+    // before windows.h is included, but we can't guarantee that because
+    // the sokol_app.h implementation may be included with other implementations
+    // in the same compilation unit
+    int id = 0;
+    switch (cursor) {
+        case SAPP_MOUSECURSOR_ARROW:            id = 32512; break;  // OCR_NORMAL
+        case SAPP_MOUSECURSOR_IBEAM:            id = 32513; break;  // OCR_IBEAM
+        case SAPP_MOUSECURSOR_CROSSHAIR:        id = 32515; break;  // OCR_CROSS
+        case SAPP_MOUSECURSOR_POINTING_HAND:    id = 32649; break;  // OCR_HAND
+        case SAPP_MOUSECURSOR_RESIZE_EW:        id = 32644; break;  // OCR_SIZEWE
+        case SAPP_MOUSECURSOR_RESIZE_NS:        id = 32645; break;  // OCR_SIZENS
+        case SAPP_MOUSECURSOR_RESIZE_NWSE:      id = 32642; break;  // OCR_SIZENWSE
+        case SAPP_MOUSECURSOR_RESIZE_NESW:      id = 32643; break;  // OCR_SIZENESW
+        case SAPP_MOUSECURSOR_RESIZE_ALL:       id = 32646; break;  // OCR_SIZEALL
+        case SAPP_MOUSECURSOR_NOT_ALLOWED:      id = 32648; break;  // OCR_NO
+        default: break;
+    }
+    if (id != 0) {
+        _sapp.win32.cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
+    }
+    // fallback: default cursor
+    if (0 == _sapp.win32.cursors[cursor]) {
+        // 32512 => IDC_ARROW
+        _sapp.win32.cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
+    }
+    SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_init_cursors(void) {
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        _sapp_win32_init_cursor((sapp_mouse_cursor)i);
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_win32_cursor_in_content_area(void) {
+    POINT pos;
+    if (!GetCursorPos(&pos)) {
+        return false;
+    }
+    if (WindowFromPoint(pos) != _sapp.win32.hwnd) {
+        return false;
+    }
+    RECT area;
+    GetClientRect(_sapp.win32.hwnd, &area);
+    ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.left);
+    ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.right);
+    return PtInRect(&area, pos);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool shown, bool skip_area_test) {
+    // NOTE: when called from WM_SETCURSOR, the area test would be redundant
+    if (!skip_area_test) {
+        if (!_sapp_win32_cursor_in_content_area()) {
+            return;
+        }
+    }
+    if (!shown) {
+        SetCursor(NULL);
+    }
+    else {
+        SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+        SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
+        SetCursor(_sapp.win32.cursors[cursor]);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_capture_mouse(uint8_t btn_mask) {
@@ -6783,7 +6844,13 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 if (_sapp.desc.user_cursor) {
                     if (LOWORD(lParam) == HTCLIENT) {
                         _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
-                        return 1;
+                        return TRUE;
+                    }
+                }
+                else {
+                    if (LOWORD(lParam) == HTCLIENT) {
+                        _sapp_win32_update_cursor(_sapp.mouse.current_cursor, _sapp.mouse.shown, true);
+                        return TRUE;
                     }
                 }
                 break;
@@ -7314,6 +7381,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
+    _sapp_win32_init_cursors();
     _sapp_win32_create_window();
     sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
@@ -11560,7 +11628,7 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #if defined(_SAPP_MACOS)
         _sapp_macos_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show);
+        _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_UWP)
@@ -11598,7 +11666,7 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
         #if defined(_SAPP_MACOS)
         _sapp_macos_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_update_cursor(cursor, _sapp.mouse.shown);
+        _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
         #elif defined(_SAPP_LINUX)
         _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_UWP)
