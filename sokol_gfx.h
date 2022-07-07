@@ -4278,7 +4278,7 @@ static _sg_state_t _sg;
 // a helper macro to clear a struct with potentially ARC'ed ObjC references
 #if defined(SOKOL_METAL)
     #if defined(__cplusplus)
-        #define _SG_CLEAR_ARC_STRUCT(type, item) { item = { }; }
+        #define _SG_CLEAR_ARC_STRUCT(type, item) { item = type(); }
     #else
         #define _SG_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
     #endif
