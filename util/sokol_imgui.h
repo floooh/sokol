@@ -1882,10 +1882,12 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.sample_count = _simgui.desc.sample_count;
     pip_desc.depth.pixel_format = _simgui.desc.depth_format;
     pip_desc.colors[0].pixel_format = _simgui.desc.color_format;
-    pip_desc.colors[0].write_mask = SG_COLORMASK_RGB;
+    pip_desc.colors[0].write_mask = SG_COLORMASK_RGBA;
     pip_desc.colors[0].blend.enabled = true;
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_SRC_ALPHA;
+    pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip_desc.label = "sokol-imgui-pipeline";
     _simgui.pip = sg_make_pipeline(&pip_desc);
 
