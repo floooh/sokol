@@ -4730,7 +4730,7 @@ EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
             case 8: cursor = "nesw-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NESW
             case 9: cursor = "all-scroll"; break;   // SAPP_MOUSECURSOR_RESIZE_ALL
             case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
-            default: cursor = "auto";
+            default: cursor = "auto"; break;
         }
         Module.sapp_emsc_target.style.cursor = cursor;
     }
