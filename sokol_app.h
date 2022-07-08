@@ -127,8 +127,9 @@
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    set cursor type     | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
@@ -1473,7 +1474,7 @@ typedef struct sapp_html5_fetch_request {
 /*
     sapp_cursor
 
-    Predefined cursor image definitions, set with sapp_set_cursor(sapp_cursor cursor)
+    Predefined cursor image definitions, set with sapp_set_mouse_cursor(sapp_cursor cursor)
 */
 typedef enum sapp_mouse_cursor {
     SAPP_MOUSECURSOR_DEFAULT = 0,   // equivalent with system default cursor
@@ -4708,6 +4709,36 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
         _sapp.emsc.mouse_lock_requested = false;
         sapp_js_request_pointerlock();
     }
+}
+
+// set mouse cursor type
+EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
+    if (Module.sapp_emsc_target) {
+        var cursor;
+        if (shown === 0) {
+            cursor = "none";
+        }
+        else switch (cursor_type) {
+            case 0: cursor = "auto"; break;         // SAPP_MOUSECURSOR_DEFAULT
+            case 1: cursor = "default"; break;      // SAPP_MOUSECURSOR_ARROW
+            case 2: cursor = "text"; break;         // SAPP_MOUSECURSOR_IBEAM
+            case 3: cursor = "crosshair"; break;    // SAPP_MOUSECURSOR_CROSSHAIR
+            case 4: cursor = "pointer"; break;      // SAPP_MOUSECURSOR_POINTING_HAND
+            case 5: cursor = "ew-resize"; break;    // SAPP_MOUSECURSOR_RESIZE_EW
+            case 6: cursor = "ns-resize"; break;    // SAPP_MOUSECURSOR_RESIZE_NS
+            case 7: cursor = "nwse-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NWSE
+            case 8: cursor = "nesw-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NESW
+            case 9: cursor = "all-scroll"; break;   // SAPP_MOUSECURSOR_RESIZE_ALL
+            case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
+            default: cursor = "auto";
+        }
+        Module.sapp_emsc_target.style.cursor = cursor;
+    }
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    sapp_js_set_cursor((int)cursor, shown ? 1 : 0);
 }
 
 /* JS helper functions to update browser tab favicon */
@@ -11633,6 +11664,8 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
+        #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_update_cursor(_sapp.mouse.current_cursor, show);
         #endif
         _sapp.mouse.shown = show;
     }
@@ -11671,6 +11704,8 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
         _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
         #endif
         _sapp.mouse.current_cursor = cursor;
     }
