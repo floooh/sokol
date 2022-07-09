@@ -7558,13 +7558,26 @@ _SOKOL_PRIVATE void _sapp_uwp_configure_dpi(float monitor_dpi) {
     _sapp.dpi_scale = _sapp.uwp.dpi.content_scale;
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
+_SOKOL_PRIVATE void _sapp_uwp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     using namespace winrt::Windows::UI::Core;
 
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    CoreWindow::GetForCurrentThread().PointerCursor(visible ?
-        CoreCursor(CoreCursorType::Arrow, 0) :
-        CoreCursor(nullptr));
+    CoreCursor uwp_cursor(nullptr);
+    if (shown) {
+        switch (cursor) {
+            case SAPP_MOUSECURSOR_ARROW: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
+            case SAPP_MOUSECURSOR_IBEAM: uwp_cursor = CoreCursor(CoreCursorType::IBeam, 0); break;
+            case SAPP_MOUSECURSOR_CROSSHAIR: uwp_cursor = CoreCursor(CoreCursorType::Cross, 0); break;
+            case SAPP_MOUSECURSOR_POINTING_HAND: uwp_cursor = CoreCursor(CoreCursorType::Hand, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_EW: uwp_cursor = CoreCursor(CoreCursorType::SizeWestEast, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NS: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthSouth, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NWSE: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthwestSoutheast, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NESW: uwp_cursor = CoreCursor(CoreCursorType::SizeNortheastSouthwest, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_ALL: uwp_cursor = CoreCursor(CoreCursorType::SizeAll, 0); break;
+            case SAPP_MOUSECURSOR_NOT_ALLOWED: uwp_cursor = CoreCursor(CoreCursorType::UniversalNo, 0); break;
+            default: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
+        }
+    }
+    CoreWindow::GetForCurrentThread().PointerCursor(uwp_cursor);
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window) {
