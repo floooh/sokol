@@ -129,7 +129,7 @@
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
     mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
-    set cursor type     | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
