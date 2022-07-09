@@ -1466,9 +1466,9 @@ typedef struct sapp_html5_fetch_request {
 } sapp_html5_fetch_request;
 
 /*
-    sapp_cursor
+    sapp_mouse_cursor
 
-    Predefined cursor image definitions, set with sapp_set_mouse_cursor(sapp_cursor cursor)
+    Predefined cursor image definitions, set with sapp_set_mouse_cursor(sapp_mouse_cursor cursor)
 */
 typedef enum sapp_mouse_cursor {
     SAPP_MOUSECURSOR_DEFAULT = 0,   // equivalent with system default cursor
