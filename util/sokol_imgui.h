@@ -141,6 +141,12 @@
                 for making copy/paste work on the web platform. In general,
                 copy/paste support isn't properly fleshed out in sokol_imgui.h yet.
 
+            bool write_alpha_channel
+                Set this to true if you want alpha values written to the
+                framebuffer. By default this behavior is disabled to prevent 
+                undesired behavior on platforms like the web where the canvas is 
+                always alpha-blended with the background.
+
     --- At the start of a frame, call:
 
         simgui_new_frame(&(simgui_frame_desc_t){.width = ..., .height = ..., .delta_time = ..., .dpi_scale = ...});
@@ -299,6 +305,7 @@ typedef struct simgui_desc_t {
     const char* ini_filename;
     bool no_default_font;
     bool disable_paste_override;    // if true, don't send Ctrl-V on EVENTTYPE_CLIPBOARD_PASTED
+    bool write_alpha_channel;       // if true, alpha values get written into the framebuffer
     simgui_allocator_t allocator;   // optional memory allocation overrides (default: malloc/free)
 } simgui_desc_t;
 
@@ -1881,11 +1888,15 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.sample_count = _simgui.desc.sample_count;
     pip_desc.depth.pixel_format = _simgui.desc.depth_format;
-    pip_desc.colors[0].pixel_format = _simgui.desc.color_format;
-    pip_desc.colors[0].write_mask = SG_COLORMASK_RGB;
+    pip_desc.colors[0].pixel_format = _simgui.desc.color_format;    
+    pip_desc.colors[0].write_mask = _simgui.desc.write_alpha_channel ? SG_COLORMASK_RGBA : SG_COLORMASK_RGB;
     pip_desc.colors[0].blend.enabled = true;
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    if (_simgui.desc.write_alpha_channel) {
+        pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    }
     pip_desc.label = "sokol-imgui-pipeline";
     _simgui.pip = sg_make_pipeline(&pip_desc);
 
