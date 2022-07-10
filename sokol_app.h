@@ -363,6 +363,32 @@
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
         guaranteed to be called on the web and mobile platforms.
 
+    MOUSE CURSOR TYPE AND VISIBILITY
+    ================================
+    You can show and hide the mouse cursor with
+
+        void sapp_show_mouse(bool show)
+
+    And to get the current shown status:
+
+        bool sapp_mouse_shown(void)
+
+    NOTE that hiding the mouse cursor is different and indepedent from
+    the MOUSE/POINTER LOCK feature which will also hide the mouse pointer when
+    active (MOUSE LOCK is described below).
+
+    To change the mouse cursor to one of several predefined types, call
+    the function:
+
+        void sapp_set_mouse_cursor(sapp_mouse_cursor cursor)
+
+    Setting the default mouse cursor SAPP_MOUSECURSOR_DEFAULT will restore
+    the standard look.
+
+    To get the currently active mouse cursor type, call:
+
+        sapp_mouse_cursor sapp_get_mouse_cursor(void)
+
     MOUSE LOCK (AKA POINTER LOCK, AKA MOUSE CAPTURE)
     ================================================
     In normal mouse mode, no mouse movement events are reported when the
