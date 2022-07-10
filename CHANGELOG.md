@@ -17,12 +17,9 @@
     - sokol_imgui.h can now optionally write to the alpha channel (useful if you want to render the UI
       into a separate render target, which is later composed onto the default framebuffer). The feature
       is enabled with the new ```simgui_desc_t``` item ```write_alpha_channel```.
-    - sokol_gfx.h has a new function ```sg_query_buffer_will_overflow()```, this allows to check if
-      a sg_append_buffer() call would overflow the buffer.
 
-  Many thanks to **@tomc1998** for the initial [Linux/X11 mouse cursor type PR](https://github.com/floooh/sokol/pull/678),
-  **@luigi-rosso** for the [sokol_imgui.h alpha channel PR](https://github.com/floooh/sokol/pull/687) and
-  **@RandyGaul** for the [sg_query_buffer_will_overflow() PR](https://github.com/floooh/sokol/pull/682)!
+  Many thanks to **@tomc1998** for the initial [Linux/X11 mouse cursor type PR](https://github.com/floooh/sokol/pull/678) and
+  **@luigi-rosso** for the [sokol_imgui.h alpha channel PR](https://github.com/floooh/sokol/pull/687)!
 
 - **03-Jul-2022**: A new sokol_gfx.h function ```bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size)```
 which allows to check if a call to ```sg_append_buffer()``` would overflow the buffer. This
