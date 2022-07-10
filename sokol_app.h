@@ -373,7 +373,7 @@
 
         bool sapp_mouse_shown(void)
 
-    NOTE that hiding the mouse cursor is different and indepedent from
+    NOTE that hiding the mouse cursor is different and independent from
     the MOUSE/POINTER LOCK feature which will also hide the mouse pointer when
     active (MOUSE LOCK is described below).
 
