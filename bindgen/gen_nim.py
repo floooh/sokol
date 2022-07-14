@@ -148,6 +148,9 @@ xor
 yield
 """.split() + common_prim_types
 
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
+
 struct_types = []
 enum_types = []
 out_lines = ''
@@ -159,9 +162,6 @@ def reset_globals():
     struct_types = []
     enum_types = []
     out_lines = ''
-
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -609,7 +609,7 @@ def gen_module(inp, dep_prefixes):
     gen_extra(inp)
 
 def prepare():
-    print('Generating nim bindings:')
+    print('=== Generating Nim bindings:')
     if not os.path.isdir('sokol-nim/src/sokol'):
         os.makedirs('sokol-nim/src/sokol')
     if not os.path.isdir('sokol-nim/src/sokol/c'):
@@ -617,7 +617,7 @@ def prepare():
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
-        print(f'warning: skipping generation for {c_prefix} prefix...')
+        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
         return
     global out_lines
     module_name = module_names[c_prefix]

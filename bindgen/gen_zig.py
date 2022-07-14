@@ -89,6 +89,9 @@ prim_defaults = {
     'size_t':       '0'
 }
 
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
+
 struct_types = []
 enum_types = []
 enum_items = {}
@@ -103,9 +106,6 @@ def reset_globals():
     enum_types = []
     enum_items = {}
     out_lines = ''
-
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -558,7 +558,7 @@ def gen_module(inp, dep_prefixes):
                     gen_func_zig(decl, prefix)
 
 def prepare():
-    print('Generating zig bindings:')
+    print('=== Generating Zig bindings:')
     if not os.path.isdir('sokol-zig/src/sokol'):
         os.makedirs('sokol-zig/src/sokol')
     if not os.path.isdir('sokol-zig/src/sokol/c'):
@@ -566,7 +566,7 @@ def prepare():
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
-        print(f'warning: skipping generation for {c_prefix} prefix...')
+        print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return
     module_name = module_names[c_prefix]
     c_source_path = c_source_paths[c_prefix]
