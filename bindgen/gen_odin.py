@@ -122,6 +122,13 @@ def check_override(name, default=None):
 def check_ignore(name):
     return name in ignores
 
+# PREFIX_BLA_BLUB to bla_blub
+def as_snake_case(s, prefix):
+    outp = s.lower()
+    if outp.startswith(prefix):
+        outp = outp[len(prefix):]
+    return outp
+
 def get_odin_module_path(c_prefix):
     return f'{module_root}/{module_names[c_prefix]}'
 
@@ -223,7 +230,7 @@ def extract_ptr_type(s):
 
 def as_extern_c_arg_type(arg_type, prefix):
     if arg_type == "void":
-        return "void"
+        return ""
     elif is_prim_type(arg_type):
         return as_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -245,6 +252,31 @@ def as_extern_c_arg_type(arg_type, prefix):
     else:
         sys.exit(f"Error as_extern_c_arg_type(): {arg_type}")
 
+def as_odin_arg_type(arg_type, prefix):
+    if arg_type == "void":
+        return ""
+    elif is_prim_type(arg_type):
+        return as_prim_type(arg_type)
+    elif is_struct_type(arg_type):
+        return as_struct_or_enum_type(arg_type, prefix)
+    elif is_enum_type(arg_type):
+        return as_struct_or_enum_type(arg_type, prefix)
+    elif is_void_ptr(arg_type):
+        return "rawptr"
+    elif is_const_void_ptr(arg_type):
+        return "rawptr"
+    elif is_string_ptr(arg_type):
+        return "cstring"
+    elif is_const_struct_ptr(arg_type):
+        # not a bug, pass structs by value
+        return f"{as_struct_or_enum_type(extract_ptr_type(arg_type), prefix)}"
+    elif is_prim_ptr(arg_type):
+        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
+    elif is_const_prim_ptr(arg_type):
+        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
+    else:
+        sys.exit(f"Error as_odin_arg_type(): {arg_type}")
+
 def funcdecl_args_c(decl, prefix):
     s = ''
     func_name = decl['name']
@@ -253,18 +285,35 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += as_extern_c_arg_type(param_type, prefix)
+        s += f"{param_name}: {as_extern_c_arg_type(param_type, prefix)}"
+    return s
+
+def funcdecl_args_odin(decl, prefix):
+    s = ''
+    func_name = decl['name']
+    for param_decl in decl['params']:
+        if s != '':
+            s += ', '
+        param_name = param_decl['name']
+        param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
+        s += f"{param_name}: {as_odin_arg_type(param_type, prefix)}"
     return s
 
 def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
-    if (res_c_type == 'void'):
-        return ''
-    else:
-        result_type = check_override(f'{func_name}.RESULT', default=res_c_type)
-        return f'-> {as_extern_c_arg_type(result_type, prefix)}'
+    result_type = as_extern_c_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
+    arrow = '' if result_type == '' else '-> '
+    return f'{arrow}{result_type}'
+
+def funcdecl_result_odin(decl, prefix):
+    func_name = decl['name']
+    decl_type = decl['type']
+    res_c_type = decl_type[:decl_type.index('(')].strip()
+    result_type = as_odin_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
+    arrow = '' if result_type == '' else '-> '
+    return f'{arrow}{result_type}'
 
 def gen_c_imports(inp):
     l(f'// FIXME: foreign import...\n')
@@ -278,12 +327,44 @@ def gen_c_imports(inp):
             l(f"    {decl['name']} :: proc({args}) {ret} ---")
     l('}')
 
+def gen_consts(decl, prefix):
+    # FIXME
+    l(f'// FIXME: consts')
+
+def gen_struct(decl, prefix):
+    # FIXME
+    l(f'// FIXME: struct {decl["name"]}')
+
+def gen_enum(decl, prefix):
+    # FIXME
+    l(f'// FIXME: enum {decl["name"]}')
+
+def gen_func(decl, prefix):
+    args = funcdecl_args_odin(decl, prefix)
+    ret = funcdecl_result_odin(decl, prefix)
+    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {ret} {{")
+    l('    // FIXME')
+    l('}')
+
 def gen_module(inp, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
     l(f"package sokol_{inp['module']}\n")
     gen_c_imports(inp)
+    prefix = inp['prefix']
+    for decl in inp['decls']:
+        if not decl['is_dep']:
+            kind = decl['kind']
+            if kind == 'consts':
+                gen_consts(decl, prefix)
+            elif not check_ignore(decl['name']):
+                if kind == 'struct':
+                    gen_struct(decl, prefix)
+                elif kind == 'enum':
+                    gen_enum(decl, prefix)
+                elif kind == 'func':
+                    gen_func(decl, prefix)
 
 def pre_parse(inp):
     global struct_types
