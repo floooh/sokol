@@ -122,10 +122,10 @@ def check_override(name, default=None):
 def check_ignore(name):
     return name in ignores
 
-# PREFIX_BLA_BLUB to bla_blub
+# PREFIX_BLA_BLUB to BLA_BLUB, prefix_bla_blub to bla_blub
 def as_snake_case(s, prefix):
-    outp = s.lower()
-    if outp.startswith(prefix):
+    outp = s
+    if outp.lower().startswith(prefix):
         outp = outp[len(prefix):]
     return outp
 
@@ -228,7 +228,7 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
-def as_extern_c_arg_type(arg_type, prefix):
+def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
         return ""
     elif is_prim_type(arg_type):
@@ -250,13 +250,20 @@ def as_extern_c_arg_type(arg_type, prefix):
     elif is_const_prim_ptr(arg_type):
         return f"^{as_prim_type(extract_ptr_type(arg_type))}"
     else:
-        sys.exit(f"Error as_extern_c_arg_type(): {arg_type}")
+        sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
 def as_odin_arg_type(arg_type, prefix):
     if arg_type == "void":
         return ""
     elif is_prim_type(arg_type):
-        return as_prim_type(arg_type)
+        # for args and return values we'll map the C int type (32-bit) to Odin's pointer-sized int type,
+        # and the C bool type to Odin's 'unsized' bool type
+        if arg_type == 'int':
+            return 'int'
+        elif arg_type == 'bool':
+            return 'bool'
+        else:
+            return as_prim_type(arg_type)
     elif is_struct_type(arg_type):
         return as_struct_or_enum_type(arg_type, prefix)
     elif is_enum_type(arg_type):
@@ -285,7 +292,7 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {as_extern_c_arg_type(param_type, prefix)}"
+        s += f"{param_name}: {as_c_arg_type(param_type, prefix)}"
     return s
 
 def funcdecl_args_odin(decl, prefix):
@@ -303,17 +310,13 @@ def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
-    result_type = as_extern_c_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
-    arrow = '' if result_type == '' else '-> '
-    return f'{arrow}{result_type}'
+    return as_c_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
 
 def funcdecl_result_odin(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
-    result_type = as_odin_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
-    arrow = '' if result_type == '' else '-> '
-    return f'{arrow}{result_type}'
+    return as_odin_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
 
 def gen_c_imports(inp):
     l(f'// FIXME: foreign import...\n')
@@ -323,27 +326,66 @@ def gen_c_imports(inp):
     for decl in inp['decls']:
         if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
             args = funcdecl_args_c(decl, prefix)
-            ret = funcdecl_result_c(decl, prefix)
-            l(f"    {decl['name']} :: proc({args}) {ret} ---")
+            ret_type = funcdecl_result_c(decl, prefix)
+            ret_str = '' if ret_type == '' else f'-> {ret_type}'
+            l(f"    {decl['name']} :: proc({args}) {ret_str} ---")
     l('}')
 
 def gen_consts(decl, prefix):
-    # FIXME
-    l(f'// FIXME: consts')
+    for item in decl['items']:
+        item_name = check_override(item['name'])
+        l(f"{as_snake_case(item_name, prefix)} :: {item['value']};")
 
 def gen_struct(decl, prefix):
     # FIXME
     l(f'// FIXME: struct {decl["name"]}')
 
 def gen_enum(decl, prefix):
-    # FIXME
-    l(f'// FIXME: enum {decl["name"]}')
+    enum_name = check_override(decl['name'])
+    l(f'{as_struct_or_enum_type(enum_name, prefix)} :: enum i32 {{')
+    for item in decl['items']:
+        item_name = as_enum_item_name(check_override(item['name']))
+        if item_name != 'FORCE_U32':
+            if 'value' in item:
+                l(f"    {item_name} = {item['value']},")
+            else:
+                l(f"    {item_name},")
+    l('};')
 
 def gen_func(decl, prefix):
+    c_func_name = decl['name']
     args = funcdecl_args_odin(decl, prefix)
-    ret = funcdecl_result_odin(decl, prefix)
-    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {ret} {{")
-    l('    // FIXME')
+    ret_type = funcdecl_result_odin(decl, prefix)
+    ret_str = '' if ret_type == '' else f'-> {ret_type}'
+    if ret_type != funcdecl_result_c(decl, prefix):
+        # cast needed for return type
+        ret_cast = f'cast({ret_type})'
+    else:
+        ret_cast = ''
+    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {ret_str} {{")
+    s = '    '
+    if ret_type == '':
+        # void result
+        s += f"{c_func_name}("
+    else:
+        s += f"return {ret_cast}{c_func_name}("
+    for i, param_decl in enumerate(decl['params']):
+        if i > 0:
+            s += ', '
+        arg_name = param_decl['name']
+        arg_type = param_decl['type']
+        if is_const_struct_ptr(arg_type):
+            s += f"&{arg_name}"
+        else:
+            odin_arg_type = as_odin_arg_type(arg_type, prefix)
+            c_arg_type = as_c_arg_type(arg_type, prefix)
+            if odin_arg_type != c_arg_type:
+                cast = f'cast({c_arg_type})'
+            else:
+                cast = ''
+            s += f'{cast}{arg_name}'
+    s += ');'
+    l(s)
     l('}')
 
 def gen_module(inp, dep_prefixes):
