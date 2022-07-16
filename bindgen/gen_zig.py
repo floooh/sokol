@@ -235,7 +235,7 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
-def as_extern_c_arg_type(arg_type, prefix):
+def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
         return "void"
     elif is_prim_type(arg_type):
@@ -257,7 +257,7 @@ def as_extern_c_arg_type(arg_type, prefix):
     elif is_const_prim_ptr(arg_type):
         return f"[*c]const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        sys.exit(f"Error as_extern_c_arg_type(): {arg_type}")
+        sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
 def as_zig_arg_type(arg_prefix, arg_type, prefix):
     # NOTE: if arg_prefix is None, the result is used as return value
@@ -300,7 +300,7 @@ def funcptr_args_c(field_type, prefix):
         arg_type = token.strip()
         if s != "":
             s += ", "
-        c_arg = as_extern_c_arg_type(arg_type, prefix)
+        c_arg = as_c_arg_type(arg_type, prefix)
         if (c_arg == "void"):
             return ""
         else:
@@ -327,7 +327,7 @@ def funcdecl_args_c(decl, prefix):
             s += ", "
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += as_extern_c_arg_type(param_type, prefix)
+        s += as_c_arg_type(param_type, prefix)
     return s
 
 def funcdecl_args_zig(decl, prefix):
@@ -345,7 +345,7 @@ def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    return as_extern_c_arg_type(result_type, prefix)
+    return as_c_arg_type(result_type, prefix)
 
 def funcdecl_result_zig(decl, prefix):
     func_name = decl['name']
