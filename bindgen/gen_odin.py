@@ -39,6 +39,8 @@ ignores = [
 
 # NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
+    'context':                              'ctx',  # reserved keyword
+    'sapp_sgcontext':                       'sapp_sgctx',
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',
     'sg_context_desc.color_format':         'int',
@@ -381,7 +383,7 @@ def gen_func(decl, prefix):
         res_cast = f'cast({res_type})'
     else:
         res_cast = ''
-    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {res_str} {{")
+    l(f"{as_snake_case(check_override(decl['name']), prefix)} :: proc({args}) {res_str} {{")
     s = '    '
     if res_type == '':
         # void result
