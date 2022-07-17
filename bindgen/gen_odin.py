@@ -228,61 +228,54 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
-def as_c_arg_type(arg_type, prefix):
-    if arg_type == "void":
+def map_type(type, prefix, sub_type):
+    if sub_type not in ['c_arg', 'odin_arg', 'struct_field']:
+        sys.exit(f"Error: map_type(): unknown sub_type '{sub_type}")
+    if type == "void":
         return ""
-    elif is_prim_type(arg_type):
-        return as_prim_type(arg_type)
-    elif is_struct_type(arg_type):
-        return as_struct_or_enum_type(arg_type, prefix)
-    elif is_enum_type(arg_type):
-        return as_struct_or_enum_type(arg_type, prefix)
-    elif is_void_ptr(arg_type):
+    elif is_prim_type(type):
+        if sub_type == 'odin_arg':
+            # for Odin args, maps C int (32-bit) to Odin int (pointer-sized),
+            # and the C bool type to Odin's bool type
+            if type == 'int':
+                return 'int'
+            elif type == 'bool':
+                return 'bool'
+        return as_prim_type(type)
+    elif is_struct_type(type):
+        return as_struct_or_enum_type(type, prefix)
+    elif is_enum_type(type):
+        return as_struct_or_enum_type(type, prefix)
+    elif is_void_ptr(type):
         return "rawptr"
-    elif is_const_void_ptr(arg_type):
+    elif is_const_void_ptr(type):
         return "rawptr"
-    elif is_string_ptr(arg_type):
+    elif is_string_ptr(type):
         return "cstring"
-    elif is_const_struct_ptr(arg_type):
-        return f"^{as_struct_or_enum_type(extract_ptr_type(arg_type), prefix)}"
-    elif is_prim_ptr(arg_type):
-        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
-    elif is_const_prim_ptr(arg_type):
-        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
-    else:
-        sys.exit(f"Error as_c_arg_type(): {arg_type}")
-
-def as_odin_arg_type(arg_type, prefix):
-    if arg_type == "void":
-        return ""
-    elif is_prim_type(arg_type):
-        # for args and return values we'll map the C int type (32-bit) to Odin's pointer-sized int type,
-        # and the C bool type to Odin's 'unsized' bool type
-        if arg_type == 'int':
-            return 'int'
-        elif arg_type == 'bool':
-            return 'bool'
+    elif is_const_struct_ptr(type):
+        # pass Odin struct args by value, not by pointer
+        if sub_type == 'odin_arg':
+            return f"{as_struct_or_enum_type(extract_ptr_type(type), prefix)}"
         else:
-            return as_prim_type(arg_type)
-    elif is_struct_type(arg_type):
-        return as_struct_or_enum_type(arg_type, prefix)
-    elif is_enum_type(arg_type):
-        return as_struct_or_enum_type(arg_type, prefix)
-    elif is_void_ptr(arg_type):
-        return "rawptr"
-    elif is_const_void_ptr(arg_type):
-        return "rawptr"
-    elif is_string_ptr(arg_type):
-        return "cstring"
-    elif is_const_struct_ptr(arg_type):
-        # not a bug, pass structs by value
-        return f"{as_struct_or_enum_type(extract_ptr_type(arg_type), prefix)}"
-    elif is_prim_ptr(arg_type):
-        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
-    elif is_const_prim_ptr(arg_type):
-        return f"^{as_prim_type(extract_ptr_type(arg_type))}"
+            return f"^{as_struct_or_enum_type(extract_ptr_type(type), prefix)}"
+    elif is_prim_ptr(type):
+        return f"^{as_prim_type(extract_ptr_type(type))}"
+    elif is_const_prim_ptr(type):
+        return f"^{as_prim_type(extract_ptr_type(type))}"
+    elif is_1d_array_type(type):
+        array_type = extract_array_type(type)
+        array_sizes = extract_array_sizes(type)
+        return f"[{array_sizes[0]}]{map_type(array_type, prefix, sub_type)}"
+    elif is_2d_array_type(type):
+        array_type = extract_array_type(type)
+        array_sizes = extract_array_sizes(type)
+        return f"[{array_sizes[0]}][{array_sizes[1]}]{map_type(array_type, prefix, sub_type)}"
+    elif is_func_ptr(type):
+        res_type = funcptr_result_c(type, prefix)
+        res_str = '' if res_type == '' else f' -> {res_type}'
+        return f'proc "c" ({funcptr_args_c(type, prefix)}){res_str}'
     else:
-        sys.exit(f"Error as_odin_arg_type(): {arg_type}")
+        sys.exit(f"Error map_type(): unknown type '{type}'")
 
 def funcdecl_args_c(decl, prefix):
     s = ''
@@ -292,7 +285,7 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {as_c_arg_type(param_type, prefix)}"
+        s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
 
 def funcdecl_args_odin(decl, prefix):
@@ -303,20 +296,40 @@ def funcdecl_args_odin(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {as_odin_arg_type(param_type, prefix)}"
+        s += f"{param_name}: {map_type(param_type, prefix, 'odin_arg')}"
     return s
+
+def funcptr_args_c(field_type, prefix):
+    tokens = field_type[field_type.index('(*)')+4:-1].split(',')
+    s = ''
+    arg_index = 0;
+    for token in tokens:
+        arg_type = token.strip()
+        if s != '':
+            s += ', '
+        c_arg = map_type(arg_type, prefix, 'c_arg')
+        if c_arg == '':
+            return ''
+        else:
+            s += f'a{arg_index}: {c_arg}'
+        arg_index += 1
+    return s
+
+def funcptr_result_c(field_type, prefix):
+    res_type = field_type[:field_type.index('(*)')].strip()
+    return map_type(res_type, prefix, 'c_arg')
 
 def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
-    return as_c_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
+    return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'c_arg')
 
 def funcdecl_result_odin(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     res_c_type = decl_type[:decl_type.index('(')].strip()
-    return as_odin_arg_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix)
+    return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'odin_arg')
 
 def gen_c_imports(inp):
     l(f'// FIXME: foreign import...\n')
@@ -326,9 +339,9 @@ def gen_c_imports(inp):
     for decl in inp['decls']:
         if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
             args = funcdecl_args_c(decl, prefix)
-            ret_type = funcdecl_result_c(decl, prefix)
-            ret_str = '' if ret_type == '' else f'-> {ret_type}'
-            l(f"    {decl['name']} :: proc({args}) {ret_str} ---")
+            res_type = funcdecl_result_c(decl, prefix)
+            res_str = '' if res_type == '' else f'-> {res_type}'
+            l(f"    {decl['name']} :: proc({args}) {res_str} ---")
     l('}')
 
 def gen_consts(decl, prefix):
@@ -337,8 +350,14 @@ def gen_consts(decl, prefix):
         l(f"{as_snake_case(item_name, prefix)} :: {item['value']};")
 
 def gen_struct(decl, prefix):
-    # FIXME
-    l(f'// FIXME: struct {decl["name"]}')
+    c_struct_name = check_override(decl['name'])
+    struct_name = as_struct_or_enum_type(c_struct_name, prefix)
+    l(f'{struct_name} :: struct {{')
+    for field in decl['fields']:
+        field_name = check_override(field['name'])
+        field_type = map_type(check_override(f'{struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
+        l(f'    {field_name} : {field_type},')
+    l('};')
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
@@ -355,20 +374,20 @@ def gen_enum(decl, prefix):
 def gen_func(decl, prefix):
     c_func_name = decl['name']
     args = funcdecl_args_odin(decl, prefix)
-    ret_type = funcdecl_result_odin(decl, prefix)
-    ret_str = '' if ret_type == '' else f'-> {ret_type}'
-    if ret_type != funcdecl_result_c(decl, prefix):
+    res_type = funcdecl_result_odin(decl, prefix)
+    res_str = '' if res_type == '' else f'-> {res_type}'
+    if res_type != funcdecl_result_c(decl, prefix):
         # cast needed for return type
-        ret_cast = f'cast({ret_type})'
+        res_cast = f'cast({res_type})'
     else:
-        ret_cast = ''
-    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {ret_str} {{")
+        res_cast = ''
+    l(f"{as_snake_case(decl['name'], prefix)} :: proc({args}) {res_str} {{")
     s = '    '
-    if ret_type == '':
+    if res_type == '':
         # void result
         s += f"{c_func_name}("
     else:
-        s += f"return {ret_cast}{c_func_name}("
+        s += f"return {res_cast}{c_func_name}("
     for i, param_decl in enumerate(decl['params']):
         if i > 0:
             s += ', '
@@ -377,8 +396,8 @@ def gen_func(decl, prefix):
         if is_const_struct_ptr(arg_type):
             s += f"&{arg_name}"
         else:
-            odin_arg_type = as_odin_arg_type(arg_type, prefix)
-            c_arg_type = as_c_arg_type(arg_type, prefix)
+            odin_arg_type = map_type(arg_type, prefix, 'odin_arg')
+            c_arg_type = map_type(arg_type, prefix, 'c_arg')
             if odin_arg_type != c_arg_type:
                 cast = f'cast({c_arg_type})'
             else:
