@@ -142,7 +142,7 @@
     fullscreen          | YES     | YES   | YES    | YES   | YES     | YES  | ---
     mouse hide          | YES     | YES   | YES    | ---   | ---     | YES  | YES
     mouse lock          | YES     | YES   | YES    | ---   | ---     | TODO | YES
-    set cursor type     | YES     | YES   | YES(4) | ---   | ---     | YES  | YES
+    set cursor type     | YES     | YES   | YES    | ---   | ---     | YES  | YES
     screen keyboard     | ---     | ---   | ---    | YES   | TODO    | TODO | YES
     swap interval       | YES     | YES   | YES    | YES   | TODO    | ---  | YES
     high-dpi            | YES     | YES   | YES(3) | YES   | YES     | YES  | YES
@@ -2944,6 +2944,11 @@ struct _sapp_wl_touchpoint {
     int32_t id;
 };
 
+struct _sapp_wl_cursor {
+    struct wl_cursor *cursor;
+    struct wl_buffer *buffer;
+};
+
 typedef struct {
     /* wayland specific objects/globals */
     struct wl_compositor* compositor;
@@ -2986,7 +2991,7 @@ typedef struct {
     struct timespec repeat_next;
 
     /* pointer/cursor related data */
-    struct wl_cursor *cursor;
+    struct _sapp_wl_cursor cursors[_SAPP_MOUSECURSOR_NUM];
     struct wl_surface *cursor_surface;
     struct zwp_locked_pointer_v1 *locked_pointer;
     struct zwp_pointer_constraints_v1 *pointer_constraints;
@@ -12610,9 +12615,28 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     close(_sapp.wl.epoll_fd);
 }
 
-_SOKOL_PRIVATE void _sapp_wl_show_mouse(bool show, uint32_t serial) {
-    if (show && NULL != _sapp.wl.cursor_surface && NULL != _sapp.wl.cursor) {
-        wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, (int32_t) _sapp.wl.cursor->images[0]->hotspot_x, (int32_t) _sapp.wl.cursor->images[0]->hotspot_y);
+_SOKOL_PRIVATE void _sapp_wl_update_cursor(sapp_mouse_cursor cursor, uint32_t serial, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+
+    struct wl_cursor *selected_cursor = _sapp.wl.cursors[cursor].cursor;
+    if (NULL == selected_cursor) {
+        const char* fmt = "Warning: Unable to load/display cursor with id: '%d'!";
+        const size_t len = strlen(fmt) + 4;
+        char* msg = (char *) _sapp_malloc(len * sizeof(char));
+        snprintf(msg, len, fmt, cursor);
+        SOKOL_LOG(msg);
+        _sapp_free(msg);
+        return;
+    }
+
+    if (shown) {
+        wl_surface_attach(_sapp.wl.cursor_surface, _sapp.wl.cursors[cursor].buffer, 0, 0);
+        wl_surface_damage_buffer(_sapp.wl.cursor_surface, 0, 0, INT32_MAX, INT32_MAX);
+        wl_surface_commit(_sapp.wl.cursor_surface);
+
+        if (NULL != _sapp.wl.cursor_surface) {
+            wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, (int32_t) selected_cursor->images[0]->hotspot_x, (int32_t) selected_cursor->images[0]->hotspot_y);
+        }
     } else {
         wl_pointer_set_cursor(_sapp.wl.pointer, serial, NULL, 0, 0);
     }
@@ -12653,15 +12677,6 @@ _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
         }
     }
 }
-
-_SOKOL_PRIVATE void _sapp_wl_buffer_release(void *data, struct wl_buffer *buffer) {
-  _SOKOL_UNUSED(data);
-  wl_buffer_destroy(buffer);
-}
-
-_SOKOL_PRIVATE const struct wl_buffer_listener _sapp_wl_buffer_listener = {
-  .release = _sapp_wl_buffer_release,
-};
 
 _SOKOL_PRIVATE void _sapp_wl_set_fullscreen(bool is_fullscreen) {
     if (NULL == _sapp.wl.toplevel) {
@@ -13086,7 +13101,7 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_enter(void* data, struct wl_pointer* pointe
     _sapp.wl.serial = serial;
 
     _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
-    _sapp_wl_show_mouse(_sapp.mouse.shown, serial);
+    _sapp_wl_update_cursor(_sapp.mouse.current_cursor, serial, _sapp.mouse.shown);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_pointer_frame(void* data, struct wl_pointer* pointer) {
@@ -13232,6 +13247,15 @@ _SOKOL_PRIVATE const struct wl_touch_listener _sapp_wl_touch_listener = {
     .orientation = _sapp_wl_touch_orientation,
 };
 
+_SOKOL_PRIVATE void _sapp_wl_create_cursor(sapp_mouse_cursor cursor, struct wl_cursor_theme *theme, const char *name) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+
+    struct wl_cursor *curr_cursor = wl_cursor_theme_get_cursor(theme, name);
+    _sapp.wl.cursors[cursor].cursor = curr_cursor;
+    struct wl_buffer *curr_buffer = wl_cursor_image_get_buffer(curr_cursor->images[0]);
+    _sapp.wl.cursors[cursor].buffer = curr_buffer;
+}
+
 _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
     _SOKOL_UNUSED(data);
 
@@ -13258,16 +13282,21 @@ _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat
 
         if (NULL == _sapp.wl.cursor_surface) {
             struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24, _sapp.wl.shm);
-            _sapp.wl.cursor = wl_cursor_theme_get_cursor(cursor_theme, "left_ptr");
-            if (NULL == _sapp.wl.cursor) {
-                SOKOL_LOG("Warning: Unable to load cursor \"left_ptr\" from default cursor theme, will not be able to display cursor!");
-            } else {
-                struct wl_buffer *cursor_buffer = wl_cursor_image_get_buffer(_sapp.wl.cursor->images[0]);
-                wl_buffer_add_listener(cursor_buffer, &_sapp_wl_buffer_listener, NULL);
-                _sapp.wl.cursor_surface = wl_compositor_create_surface(_sapp.wl.compositor);
-                wl_surface_attach(_sapp.wl.cursor_surface, cursor_buffer, 0, 0);
-                wl_surface_commit(_sapp.wl.cursor_surface);
-            }
+
+            /* TODO: support for rtl default arrow? */
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_DEFAULT, cursor_theme, "left_ptr");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_ARROW, cursor_theme, "right_ptr");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_IBEAM, cursor_theme, "xterm");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_CROSSHAIR, cursor_theme, "crosshair");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_POINTING_HAND, cursor_theme, "hand2");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_EW, cursor_theme, "sb_h_double_arrow");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NS, cursor_theme, "sb_v_double_arrow");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NWSE, cursor_theme, "top_left_corner");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_NESW, cursor_theme, "top_right_corner");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_RESIZE_ALL, cursor_theme, "fleur");
+            _sapp_wl_create_cursor(SAPP_MOUSECURSOR_NOT_ALLOWED, cursor_theme, "crossed_circle");
+
+            _sapp.wl.cursor_surface = wl_compositor_create_surface(_sapp.wl.compositor);
         }
     } else if (!has_pointer && NULL != _sapp.wl.pointer) {
         wl_pointer_release(_sapp.wl.pointer);
@@ -14117,14 +14146,14 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #elif defined(_SAPP_LINUX)
         #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
         if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
-            _sapp_wl_show_mouse(show, _sapp.wl.serial);
+            _sapp_wl_update_cursor(_sapp.mouse.current_cursor, _sapp.wl.serial, show);
         } else {
             _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
         }
         #elif !defined(SOKOL_DISABLE_X11)
         _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
         #elif !defined(SOKOL_DISABLE_WAYLAND)
-        _sapp_wl_show_mouse(show, _sapp.wl.serial);
+        _sapp_wl_update_cursor(_sapp.mouse.current_cursor, _sapp.wl.serial, show);
         #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
@@ -14174,12 +14203,22 @@ SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
         _sapp_macos_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_WIN32)
         _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
-        #elif defined(_SAPP_LINUX)
-        _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_UWP)
         _sapp_uwp_update_cursor(cursor, _sapp.mouse.shown);
         #elif defined(_SAPP_EMSCRIPTEN)
         _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_LINUX)
+        #if !defined(SOKOL_DISABLE_X11) && !defined(SOKOL_DISABLE_WAYLAND)
+            if (SAPP_LINUX_DISPLAY_PROTOCOL_WAYLAND == _sapp.linux_display_protocol) {
+                _sapp_wl_update_cursor(cursor, _sapp.wl.serial, _sapp.mouse.shown);
+            } else {
+                _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
+            }
+        #elif !defined(SOKOL_DISABLE_X11)
+            _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
+        #elif !defined(SOKOL_DISABLE_WAYLAND)
+            _sapp_wl_update_cursor(cursor, _sapp.wl.serial, _sapp.mouse.shown);
+        #endif /* SOKOL_DISABLE_X11 && SOKOL_DISABLE_WAYLAND */
         #endif
         _sapp.mouse.current_cursor = cursor;
     }
