@@ -301,7 +301,7 @@ def funcptr_args_c(field_type, prefix):
         if s != "":
             s += ", "
         c_arg = as_c_arg_type(arg_type, prefix)
-        if (c_arg == "void"):
+        if c_arg == "void":
             return ""
         else:
             s += c_arg
