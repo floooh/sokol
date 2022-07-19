@@ -39,6 +39,8 @@ overrides = {
     'sgl_error':                    'sgl_get_error',
     'sgl_deg':                      'sgl_as_degrees',
     'sgl_rad':                      'sgl_as_radians',
+    'sg_context_desc.color_format': 'int',
+    'sg_context_desc.depth_format': 'int',
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
@@ -505,7 +507,7 @@ def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'import {dep_module_name}')
-        l('')
+    l('')
 
 def gen_extra(inp):
     if inp['prefix'] in ['sg_']:
