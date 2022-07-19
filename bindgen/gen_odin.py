@@ -334,9 +334,27 @@ def funcdecl_result_odin(decl, prefix):
     return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'odin_arg')
 
 def gen_c_imports(inp):
-    l(f'// FIXME: foreign import...\n')
+    clib_prefix = f'sokol_{inp["module"]}'
+    clib_import = f'{clib_prefix}_clib'
+    l('when ODIN_OS == .Windows {')
+    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_windows_x64_d3d11_debug.lib" }}')
+    l(f'    else                    {{ foreign import {clib_import} "{clib_prefix}_windows_x64_d3d11_release.lib" }}')
+    l('}')
+    l('else when ODIN_OS == .Darwin {')
+    l('    when ODIN_ARCH == .arm64 {')
+    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_macos_arm64_metal_debug.lib" }}')
+    l(f'        else                    {{ foreign import {clib_import} "{clib_prefix}_macos_arm64_metal_release.lib" }}')
+    l('   } else {')
+    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_macos_x64_metal_debug.lib" }}')
+    l(f'        else                    {{ foreign import {clib_import} "{clib_prefix}_macos_x64_metal_release.lib" }}')
+    l('    }')
+    l('}')
+    l('else {')
+    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_linux_x64_gl_debug.lib" }}')
+    l(f'    else                    {{ foreign import {clib_import} "{clib_prefix}_linux_x64_gl_release.lib" }}')
+    l('}')
     l('@(default_calling_convention="c")')
-    l(f"foreign sokol_{inp['module']}_clib {{")
+    l(f"foreign {clib_import} {{")
     prefix = inp['prefix']
     for decl in inp['decls']:
         if decl['kind'] == 'func' and not decl['is_dep'] and not check_ignore(decl['name']):
