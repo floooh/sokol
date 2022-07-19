@@ -45,13 +45,6 @@ overrides = {
     'sgl_rad':                              'sgl_as_radians',
     'sg_context_desc.color_format':         'int',
     'sg_context_desc.depth_format':         'int',
-    'sg_apply_uniforms.ub_index':           'uint32_t',
-    'sg_draw.base_element':                 'uint32_t',
-    'sg_draw.num_elements':                 'uint32_t',
-    'sg_draw.num_instances':                'uint32_t',
-    'sshape_element_range_t.base_element':  'uint32_t',
-    'sshape_element_range_t.num_elements':  'uint32_t',
-    'sdtx_font.font_index':                 'uint32_t',
 }
 
 prim_types = {
@@ -239,7 +232,7 @@ def map_type(type, prefix, sub_type):
         if sub_type == 'odin_arg':
             # for Odin args, maps C int (32-bit) to Odin int (pointer-sized),
             # and the C bool type to Odin's bool type
-            if type == 'int':
+            if type == 'int' or type == 'uint32_t':
                 return 'int'
             elif type == 'bool':
                 return 'bool'
@@ -375,7 +368,7 @@ def gen_struct(decl, prefix):
     l(f'{struct_name} :: struct {{')
     for field in decl['fields']:
         field_name = check_override(field['name'])
-        field_type = map_type(check_override(f'{struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
+        field_type = map_type(check_override(f'{c_struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
         l(f'    {field_name} : {field_type},')
     l('};')
 
@@ -402,6 +395,13 @@ def gen_func(decl, prefix):
     else:
         res_cast = ''
     l(f"{as_snake_case(check_override(decl['name']), prefix)} :: proc({args}) {res_str} {{")
+
+    # workaround for 'cannot take the pointer address of 'x' which is a procedure parameter
+    for param_decl in decl['params']:
+        arg_name = param_decl['name']
+        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
+        if is_const_struct_ptr(arg_type):
+            l(f'    _{arg_name} := {arg_name};')
     s = '    '
     if res_type == '':
         # void result
@@ -412,9 +412,9 @@ def gen_func(decl, prefix):
         if i > 0:
             s += ', '
         arg_name = param_decl['name']
-        arg_type = param_decl['type']
+        arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
         if is_const_struct_ptr(arg_type):
-            s += f"&{arg_name}"
+            s += f"&_{arg_name}"
         else:
             odin_arg_type = map_type(arg_type, prefix, 'odin_arg')
             c_arg_type = map_type(arg_type, prefix, 'c_arg')
@@ -427,11 +427,18 @@ def gen_func(decl, prefix):
     l(s)
     l('}')
 
+def gen_imports(inp, dep_prefixes):
+    for dep_prefix in dep_prefixes:
+        dep_module_name = module_names[dep_prefix]
+        l(f'import {dep_prefix[:-1]} "../{dep_module_name}"')
+    l('')
+
 def gen_module(inp, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
-    l(f"package sokol_{inp['module']}\n")
+    l(f"package sokol_{inp['module']}")
+    gen_imports(inp, dep_prefixes)
     gen_c_imports(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:
