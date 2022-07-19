@@ -19,6 +19,48 @@ module_names = {
     'sshape_':  'shape',
 }
 
+system_libs = {
+    'sg_': {
+        'windows': {
+            'd3d11': "",
+            'gl': "",
+        },
+        'macos': {
+            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
+            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"'
+        },
+        'linux': {
+            'gl': ''
+        }
+    },
+    'sapp_': {
+        'windows': {
+            'd3d11': '',
+            'gl': '',
+        },
+        'macos': {
+            'metal': '"system:Cocoa.framework","system:QuartzCore.framework","system:Metal.framework","system:MetalKit.framework"',
+            'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
+        },
+        'linux': {
+            'gl': '',
+        }
+    },
+    'saudio_': {
+        'windows': {
+            'd3d11': '',
+            'gl': '',
+        },
+        'macos': {
+            'metal': '"system:AudioToolbox.framework"',
+            'gl': '"system:AudioToolbox.framework"',
+        },
+        'linux': {
+            'gl': '',
+        }
+    }
+}
+
 c_source_names = {
     'sg_':      'sokol_gfx.c',
     'sapp_':    'sokol_app.c',
@@ -326,25 +368,38 @@ def funcdecl_result_odin(decl, prefix):
     res_c_type = decl_type[:decl_type.index('(')].strip()
     return map_type(check_override(f'{func_name}.RESULT', default=res_c_type), prefix, 'odin_arg')
 
-def gen_c_imports(inp):
+def get_system_libs(module, platform, backend):
+    if module in system_libs:
+        if platform in system_libs[module]:
+            if backend in system_libs[module][platform]:
+                libs = system_libs[module][platform][backend]
+                if libs is not '':
+                    return f", {libs}"
+    return ''
+
+def gen_c_imports(inp, prefix):
     clib_prefix = f'sokol_{inp["module"]}'
     clib_import = f'{clib_prefix}_clib'
+    windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
+    macos_metal_libs = get_system_libs(prefix, 'macos', 'metal')
+    macos_gl_libs = get_system_libs(prefix, 'macos', 'gl')
+    linux_gl_libs = get_system_libs(prefix, 'linux', 'gl')
     l('when ODIN_OS == .Windows {')
-    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_windows_x64_d3d11_debug.lib" }}')
-    l(f'    else                    {{ foreign import {clib_import} "{clib_prefix}_windows_x64_d3d11_release.lib" }}')
+    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_debug.lib"{windows_d3d11_libs} }} }}')
+    l(f'    else                    {{ foreign import {clib_import} {{ "{clib_prefix}_windows_x64_d3d11_release.lib"{windows_d3d11_libs} }} }}')
     l('}')
     l('else when ODIN_OS == .Darwin {')
     l('    when ODIN_ARCH == .arm64 {')
-    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_macos_arm64_metal_debug.a" }}')
-    l(f'        else                    {{ foreign import {clib_import} "{clib_prefix}_macos_arm64_metal_release.a" }}')
+    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_debug.a"{macos_metal_libs} }} }}')
+    l(f'        else                    {{ foreign import {clib_import} {{ "{clib_prefix}_macos_arm64_metal_release.a"{macos_metal_libs} }} }}')
     l('   } else {')
-    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_macos_x64_metal_debug.a" }}')
-    l(f'        else                    {{ foreign import {clib_import} "{clib_prefix}_macos_x64_metal_release.a" }}')
+    l(f'        when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_debug.a"{macos_gl_libs} }} }}')
+    l(f'        else                    {{ foreign import {clib_import} {{ "{clib_prefix}_macos_x64_metal_release.a"{macos_gl_libs} }} }}')
     l('    }')
     l('}')
     l('else {')
-    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} "{clib_prefix}_linux_x64_gl_debug.lib" }}')
-    l(f'    else                    {{ foreign import {clib_import} "{clib_prefix}_linux_x64_gl_release.lib" }}')
+    l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.lib"{linux_gl_libs} }} }}')
+    l(f'    else                    {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.lib"{linux_gl_libs} }} }}')
     l('}')
     l('@(default_calling_convention="c")')
     l(f"foreign {clib_import} {{")
@@ -439,8 +494,8 @@ def gen_module(inp, dep_prefixes):
     l('')
     l(f"package sokol_{inp['module']}")
     gen_imports(inp, dep_prefixes)
-    gen_c_imports(inp)
     prefix = inp['prefix']
+    gen_c_imports(inp, prefix)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
