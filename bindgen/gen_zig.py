@@ -483,7 +483,7 @@ def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
-        l('')
+    l('')
 
 def gen_helpers(inp):
     l('// helper function to convert a C string to a Zig string slice')
