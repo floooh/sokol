@@ -425,7 +425,11 @@ def gen_struct(decl, prefix):
     for field in decl['fields']:
         field_name = check_override(field['name'])
         field_type = map_type(check_override(f'{c_struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
-        l(f'    {field_name} : {field_type},')
+        # any field name starting with _ is considered private
+        if field_name.startswith('_'):
+            l(f'    _ : {field_type},')
+        else:
+            l(f'    {field_name} : {field_type},')
     l('}')
 
 def gen_enum(decl, prefix):
