@@ -92,7 +92,7 @@ overrides = {
 
 prim_types = {
     'int':          'i32',
-    'bool':         'b8',
+    'bool':         'bool',
     'char':         'u8',
     'int8_t':       'i8',
     'uint8_t':      'u8',
@@ -340,7 +340,7 @@ def funcdecl_args_odin(decl, prefix):
 def funcptr_args_c(field_type, prefix):
     tokens = field_type[field_type.index('(*)')+4:-1].split(',')
     s = ''
-    arg_index = 0;
+    arg_index = 0
     for token in tokens:
         arg_type = token.strip()
         if s != '':
@@ -374,7 +374,7 @@ def get_system_libs(module, platform, backend):
         if platform in system_libs[module]:
             if backend in system_libs[module][platform]:
                 libs = system_libs[module][platform][backend]
-                if libs is not '':
+                if libs != '':
                     return f", {libs}"
     return ''
 
@@ -416,7 +416,7 @@ def gen_c_imports(inp, prefix):
 def gen_consts(decl, prefix):
     for item in decl['items']:
         item_name = check_override(item['name'])
-        l(f"{as_snake_case(item_name, prefix)} :: {item['value']};")
+        l(f"{as_snake_case(item_name, prefix)} :: {item['value']}")
 
 def gen_struct(decl, prefix):
     c_struct_name = check_override(decl['name'])
@@ -426,7 +426,7 @@ def gen_struct(decl, prefix):
         field_name = check_override(field['name'])
         field_type = map_type(check_override(f'{c_struct_name}.{field_name}', default=field['type']), prefix, 'struct_field')
         l(f'    {field_name} : {field_type},')
-    l('};')
+    l('}')
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl['name'])
@@ -438,7 +438,7 @@ def gen_enum(decl, prefix):
                 l(f"    {item_name} = {item['value']},")
             else:
                 l(f"    {item_name},")
-    l('};')
+    l('}')
 
 def gen_func(decl, prefix):
     c_func_name = decl['name']
@@ -457,7 +457,7 @@ def gen_func(decl, prefix):
         arg_name = param_decl['name']
         arg_type = check_override(f'{c_func_name}.{arg_name}', default=param_decl['type'])
         if is_const_struct_ptr(arg_type):
-            l(f'    _{arg_name} := {arg_name};')
+            l(f'    _{arg_name} := {arg_name}')
     s = '    '
     if res_type == '':
         # void result
@@ -479,7 +479,7 @@ def gen_func(decl, prefix):
             else:
                 cast = ''
             s += f'{cast}{arg_name}'
-    s += ');'
+    s += ')'
     l(s)
     l('}')
 
