@@ -6440,10 +6440,12 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+        float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
+        float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
+        _sapp.window_width = (int)roundf(window_width);
+        _sapp.window_height = (int)roundf(window_height);
+        int fb_width = (int)roundf(window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = (int)roundf(window_height * _sapp.win32.dpi.content_scale);
         /* prevent a framebuffer size of 0 when window is minimized */
         if (0 == fb_width) {
             fb_width = 1;
