@@ -50,6 +50,7 @@ overrides = {
     'sshape_element_range_t.base_element':  'uint32_t',
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
+    'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 
 prim_types = {

@@ -87,6 +87,7 @@ overrides = {
     'sgl_rad':                              'sgl_as_radians',
     'sg_context_desc.color_format':         'int',
     'sg_context_desc.depth_format':         'int',
+    'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 
 prim_types = {
