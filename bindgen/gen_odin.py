@@ -6,7 +6,9 @@
 import gen_ir
 import re, os, shutil, sys
 
-module_root = 'sokol-odin/src/sokol'
+bindings_root = 'sokol-odin'
+c_root = f'{bindings_root}/c'
+module_root = f'{bindings_root}/sokol'
 
 module_names = {
     'sg_':      'gfx',
@@ -171,7 +173,7 @@ def get_odin_module_path(c_prefix):
     return f'{module_root}/{module_names[c_prefix]}'
 
 def get_csource_path(c_prefix):
-    return f'{module_root}/c/{c_source_names[c_prefix]}'
+    return f'{c_root}/{c_source_names[c_prefix]}'
 
 def make_odin_module_directory(c_prefix):
     path = get_odin_module_path(c_prefix)
@@ -530,8 +532,10 @@ def pre_parse(inp):
 
 def prepare():
     print('=== Generating Odin bindings:')
-    if not os.path.isdir(f'{module_root}/c'):
-        os.makedirs(f'{module_root}/c')
+    if not os.path.isdir(c_root):
+        os.makedirs(c_root)
+    if not os.path.isdir(module_root):
+        os.makedirs(module_root)
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
@@ -540,7 +544,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     reset_globals()
     make_odin_module_directory(c_prefix)
     print(f'  {c_header_path} => {module_names[c_prefix]}')
-    shutil.copyfile(c_header_path, f'{module_root}/c/{os.path.basename(c_header_path)}')
+    shutil.copyfile(c_header_path, f'{c_root}/{os.path.basename(c_header_path)}')
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
     ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
