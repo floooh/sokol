@@ -6553,7 +6553,7 @@ _SOKOL_PRIVATE bool _sapp_win32_cursor_in_content_area(void) {
     GetClientRect(_sapp.win32.hwnd, &area);
     ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.left);
     ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.right);
-    return PtInRect(&area, pos);
+    return PtInRect(&area, pos) == TRUE;
 }
 
 _SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool shown, bool skip_area_test) {
