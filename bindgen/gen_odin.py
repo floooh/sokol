@@ -487,18 +487,28 @@ def gen_func(decl, prefix):
     l(s)
     l('}')
 
-def gen_imports(inp, dep_prefixes):
+def gen_imports(dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'import {dep_prefix[:-1]} "../{dep_module_name}"')
     l('')
+
+def gen_helpers(inp):
+    if inp['prefix'] == 'sdtx_':
+        l('import "core:fmt"')
+        l('import "core:strings"')
+        l('printf :: proc(s: string, args: ..any) {')
+        l('    fstr := fmt.tprintf(s, ..args)')
+        l('    putr(strings.unsafe_string_to_cstring(fstr), len(fstr))')
+        l('}')
 
 def gen_module(inp, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
     l(f"package sokol_{inp['module']}")
-    gen_imports(inp, dep_prefixes)
+    gen_imports(dep_prefixes)
+    gen_helpers(inp)
     prefix = inp['prefix']
     gen_c_imports(inp, prefix)
     for decl in inp['decls']:
