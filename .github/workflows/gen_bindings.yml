@@ -50,6 +50,10 @@ jobs:
         with:
           repository: floooh/sokol-nim
           path: bindgen/sokol-nim
+      - uses: actions/checkout@v2
+        with:
+          repository: kochol/sokol-beef
+          path: bindgen/sokol-beef
       - name: generate
         run: |
           cd bindgen

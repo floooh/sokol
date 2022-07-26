@@ -1,4 +1,4 @@
-import os, gen_nim, gen_zig
+import os, gen_nim, gen_zig, gen_beef
 
 tasks = [
     [ '../sokol_gfx.h',            'sg_',       [] ],
@@ -26,3 +26,11 @@ for task in tasks:
     main_prefix = task[1]
     dep_prefixes = task[2]
     gen_zig.gen(c_header_path, main_prefix, dep_prefixes)
+
+# Beef
+gen_beef.prepare()
+for task in tasks:
+    c_header_path = task[0]
+    main_prefix = task[1]
+    dep_prefixes = task[2]
+    gen_beef.gen(c_header_path, main_prefix, dep_prefixes)
