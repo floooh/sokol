@@ -1824,6 +1824,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
     #include <stdio.h>  /* freopen_s() */
     #include <wchar.h>  /* wcslen() */
+    #include <math.h>   /* roundf() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
