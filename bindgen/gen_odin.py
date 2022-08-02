@@ -32,7 +32,7 @@ system_libs = {
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"'
         },
         'linux': {
-            'gl': '"system:GL"'
+            'gl': '"system:GL", "system:dl", "system:pthread"'
         }
     },
     'sapp_': {
@@ -45,7 +45,7 @@ system_libs = {
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {
-            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl"'
+            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl", "system:pthread"'
         }
     },
     'saudio_': {
@@ -58,7 +58,7 @@ system_libs = {
             'gl': '"system:AudioToolbox.framework"',
         },
         'linux': {
-            'gl': '"system:asound"',
+            'gl': '"system:asound", "system:dl", "system:pthread"',
         }
     }
 }
