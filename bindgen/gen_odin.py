@@ -45,7 +45,7 @@ system_libs = {
             'gl': '"system:Cocoa.framework","system:QuartzCore.framework","system:OpenGL.framework"',
         },
         'linux': {
-            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL"'
+            'gl': '"system:X11", "system:Xi", "system:Xcursor", "system:GL", "system:dl"'
         }
     },
     'saudio_': {
