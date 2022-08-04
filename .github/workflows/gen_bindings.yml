@@ -50,6 +50,10 @@ jobs:
         with:
           repository: floooh/sokol-nim
           path: bindgen/sokol-nim
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-odin
+          path: bindgen/sokol-odin
       - name: generate
         run: |
           cd bindgen
@@ -66,7 +70,13 @@ jobs:
           name: ignore-me-nim
           path: bindgen/sokol-nim/src/sokol
           retention-days: 1
-
+      - name: upload-odin-artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ignore-me-odin
+          path: |
+            bindgen/sokol-odin/sokol
+            bindgen/sokol-odin/c
   test-zig:
     needs: gen-bindings
     strategy:
