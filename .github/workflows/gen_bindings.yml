@@ -77,6 +77,7 @@ jobs:
           path: |
             bindgen/sokol-odin/sokol
             bindgen/sokol-odin/c
+
   test-zig:
     needs: gen-bindings
     strategy:
@@ -128,6 +129,67 @@ jobs:
           nimble install glm -Y
           nimble build_all
 
+  test-odin:
+    needs: gen-bindings
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-odin
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-odin
+      # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
+      - uses: ilammy/msvc-dev-cmd@v1
+      - if: runner.os == 'Linux'
+        name: prepare-linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libasound-dev
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-ubuntu-amd64-dev-2022-08.zip --output odin.zip
+          unzip odin.zip
+          chmod a+x odin
+          ./build_clibs_linux.sh
+      - if: runner.os == 'macOS'
+        name: prepare-macos
+        run: |
+          brew install llvm@11
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-macos-amd64-dev-2022-08.zip --output odin.zip
+          unzip odin.zip
+          chmod a+x odin
+          ./build_clibs_macos.sh
+      - if: runner.os == 'Windows'
+        name: prepare-windows
+        shell: cmd
+        run: |
+          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2022-08/odin-windows-amd64-dev-2022-08.zip --output odin.zip
+          unzip odin.zip
+          build_clibs_windows.cmd
+      - name: build
+        run: |
+          ./odin build examples/clear -debug
+          ./odin build examples/triangle -debug
+          ./odin build examples/quad -debug
+          ./odin build examples/bufferoffsets -debug
+          ./odin build examples/cube -debug
+          ./odin build examples/noninterleaved -debug
+          ./odin build examples/texcube -debug
+          ./odin build examples/shapes -debug
+          ./odin build examples/offscreen -debug
+          ./odin build examples/instancing -debug
+          ./odin build examples/mrt -debug
+          ./odin build examples/blend -debug
+          ./odin build examples/debugtext -debug
+          ./odin build examples/debugtext-print -debug
+          ./odin build examples/debugtext-userfont -debug
+          ./odin build examples/saudio -debug
+          ./odin build examples/sgl -debug
+          ./odin build examples/sgl-points -debug
+          ./odin build examples/sgl-context -debug
+
   # only deploy the bindings for commits on the main branch
   deploy-zig:
     needs: test-zig
@@ -163,6 +225,26 @@ jobs:
         with:
           name: ignore-me-nim
           path: src/sokol
+      - name: "commit and push"
+        run: |
+          git config user.email "none"
+          git config user.name "GH Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "updated (https://github.com/floooh/sokol/commit/${{ github.sha }})"
+          git push
+
+  deploy-odin:
+    needs: test-odin
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: floooh/sokol-odin
+          ssh-key: ${{ secrets.GHACTIONS_ODIN_PUSH }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: ignore-me-odin
       - name: "commit and push"
         run: |
           git config user.email "none"
