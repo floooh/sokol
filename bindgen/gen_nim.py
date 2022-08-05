@@ -39,6 +39,9 @@ overrides = {
     'sgl_error':                    'sgl_get_error',
     'sgl_deg':                      'sgl_as_degrees',
     'sgl_rad':                      'sgl_as_radians',
+    'sg_context_desc.color_format': 'int',
+    'sg_context_desc.depth_format': 'int',
+    'SGL_NO_ERROR':                 'SGL_ERROR_NO_ERROR',
     'SG_BUFFERTYPE_VERTEXBUFFER':   'SG_BUFFERTYPE_VERTEX_BUFFER',
     'SG_BUFFERTYPE_INDEXBUFFER':    'SG_BUFFERTYPE_INDEX_BUFFER',
     'SG_ACTION_DONTCARE':           'SG_ACTION_DONT_CARE',
@@ -148,6 +151,9 @@ xor
 yield
 """.split() + common_prim_types
 
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
+
 struct_types = []
 enum_types = []
 out_lines = ''
@@ -159,9 +165,6 @@ def reset_globals():
     struct_types = []
     enum_types = []
     out_lines = ''
-
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -505,7 +508,7 @@ def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'import {dep_module_name}')
-        l('')
+    l('')
 
 def gen_extra(inp):
     if inp['prefix'] in ['sg_']:
@@ -609,7 +612,7 @@ def gen_module(inp, dep_prefixes):
     gen_extra(inp)
 
 def prepare():
-    print('Generating nim bindings:')
+    print('=== Generating Nim bindings:')
     if not os.path.isdir('sokol-nim/src/sokol'):
         os.makedirs('sokol-nim/src/sokol')
     if not os.path.isdir('sokol-nim/src/sokol/c'):
@@ -617,7 +620,7 @@ def prepare():
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
-        print(f'warning: skipping generation for {c_prefix} prefix...')
+        print(f'  >> warning: skipping generation for {c_prefix} prefix...')
         return
     global out_lines
     module_name = module_names[c_prefix]

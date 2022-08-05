@@ -50,6 +50,7 @@ overrides = {
     'sshape_element_range_t.base_element':  'uint32_t',
     'sshape_element_range_t.num_elements':  'uint32_t',
     'sdtx_font.font_index':                 'uint32_t',
+    'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
 }
 
 prim_types = {
@@ -89,6 +90,9 @@ prim_defaults = {
     'size_t':       '0'
 }
 
+re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
+re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
+
 struct_types = []
 enum_types = []
 enum_items = {}
@@ -103,9 +107,6 @@ def reset_globals():
     enum_types = []
     enum_items = {}
     out_lines = ''
-
-re_1d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]$")
-re_2d_array = re.compile("^(?:const )?\w*\s\*?\[\d*\]\[\d*\]$")
 
 def l(s):
     global out_lines
@@ -235,7 +236,7 @@ def extract_ptr_type(s):
     else:
         return tokens[0]
 
-def as_extern_c_arg_type(arg_type, prefix):
+def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
         return "void"
     elif is_prim_type(arg_type):
@@ -257,7 +258,7 @@ def as_extern_c_arg_type(arg_type, prefix):
     elif is_const_prim_ptr(arg_type):
         return f"[*c]const {as_zig_prim_type(extract_ptr_type(arg_type))}"
     else:
-        sys.exit(f"Error as_extern_c_arg_type(): {arg_type}")
+        sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
 def as_zig_arg_type(arg_prefix, arg_type, prefix):
     # NOTE: if arg_prefix is None, the result is used as return value
@@ -300,8 +301,8 @@ def funcptr_args_c(field_type, prefix):
         arg_type = token.strip()
         if s != "":
             s += ", "
-        c_arg = as_extern_c_arg_type(arg_type, prefix)
-        if (c_arg == "void"):
+        c_arg = as_c_arg_type(arg_type, prefix)
+        if c_arg == "void":
             return ""
         else:
             s += c_arg
@@ -327,7 +328,7 @@ def funcdecl_args_c(decl, prefix):
             s += ", "
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += as_extern_c_arg_type(param_type, prefix)
+        s += as_c_arg_type(param_type, prefix)
     return s
 
 def funcdecl_args_zig(decl, prefix):
@@ -345,7 +346,7 @@ def funcdecl_result_c(decl, prefix):
     func_name = decl['name']
     decl_type = decl['type']
     result_type = check_override(f'{func_name}.RESULT', default=decl_type[:decl_type.index('(')].strip())
-    return as_extern_c_arg_type(result_type, prefix)
+    return as_c_arg_type(result_type, prefix)
 
 def funcdecl_result_zig(decl, prefix):
     func_name = decl['name']
@@ -483,7 +484,7 @@ def gen_imports(inp, dep_prefixes):
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
-        l('')
+    l('')
 
 def gen_helpers(inp):
     l('// helper function to convert a C string to a Zig string slice')
@@ -558,7 +559,7 @@ def gen_module(inp, dep_prefixes):
                     gen_func_zig(decl, prefix)
 
 def prepare():
-    print('Generating zig bindings:')
+    print('=== Generating Zig bindings:')
     if not os.path.isdir('sokol-zig/src/sokol'):
         os.makedirs('sokol-zig/src/sokol')
     if not os.path.isdir('sokol-zig/src/sokol/c'):
@@ -566,7 +567,7 @@ def prepare():
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
     if not c_prefix in module_names:
-        print(f'warning: skipping generation for {c_prefix} prefix...')
+        print(f' >> warning: skipping generation for {c_prefix} prefix...')
         return
     module_name = module_names[c_prefix]
     c_source_path = c_source_paths[c_prefix]
