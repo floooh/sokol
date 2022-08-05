@@ -57,6 +57,14 @@ useful details for integrating the Sokol headers into your own project with your
 - [**sokol\_shape.h**](https://github.com/floooh/sokol/blob/master/util/sokol_shape.h): generate simple shapes and plug them into sokol-gfx resource creation structs
 - [**sokol\_color.h**](https://github.com/floooh/sokol/blob/master/util/sokol_color.h): X11 style color constants and functions for creating sg_color objects
 
+## 'Official' Language Bindings
+
+These are automatically updated on changes to the C headers:
+
+- [sokol-zig](https://github.com/floooh/sokol-zig)
+- [sokol-odin](https://github.com/floooh/sokol-odin)
+- [sokol-nim](https://github.com/floooh/sokol-nim)
+
 ## Notes
 
 WebAssembly is a 'first-class citizen', one important motivation for the
