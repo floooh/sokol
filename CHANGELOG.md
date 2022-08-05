@@ -1,5 +1,8 @@
 ## Updates
 
+- **05-Aug-2022**: New officially supported and automatically updated language bindings for Odin:
+  https://github.com/floooh/sokol-odin (also see [gen_odin.py](https://github.com/floooh/sokol/blob/master/bindgen/gen_odin.py))
+
 - **10-Jul-2022**: New features in sokol_app.h and sokol_imgui.h:
     - In sokol_app.h it's now possible to set a mouse cursor type from a number of predefined
       types via the new function ```sapp_set_mouse_cursor(sapp_mouse_cursor cursor)```. The
