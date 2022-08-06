@@ -3526,10 +3526,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
         if (_sapp.window_width == 0) {
-            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+            _sapp.window_width = (int)roundf((screen_rect.size.width * 4.0f) / 5.0f);
         }
         if (_sapp.window_height == 0) {
-            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+            _sapp.window_height = (int)roundf((screen_rect.size.height * 4.0f) / 5.0f);
         }
     }
     const NSUInteger style =
