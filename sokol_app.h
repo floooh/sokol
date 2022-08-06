@@ -1661,6 +1661,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t
+#include <math.h>   /* roundf() */
 
 /* check if the config defines are alright */
 #if defined(__APPLE__)
@@ -3323,19 +3324,19 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.dpi_scale = 1.0f;
     }
     const NSRect bounds = [_sapp.macos.view bounds];
-    _sapp.window_width = bounds.size.width;
-    _sapp.window_height = bounds.size.height;
+    _sapp.window_width = (int)roundf(bounds.size.width);
+    _sapp.window_height = (int)roundf(bounds.size.height);
     #if defined(SOKOL_METAL)
-        _sapp.framebuffer_width = bounds.size.width * _sapp.dpi_scale;
-        _sapp.framebuffer_height = bounds.size.height * _sapp.dpi_scale;
+        _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const CGSize fb_size = _sapp.macos.view.drawableSize;
-        const int cur_fb_width = (int) fb_size.width;
-        const int cur_fb_height = (int) fb_size.height;
+        const int cur_fb_width = (int)roundf(fb_size.width);
+        const int cur_fb_height = (int)roundf(fb_size.height);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
     #elif defined(SOKOL_GLCORE33)
-        const int cur_fb_width = (int) bounds.size.width * _sapp.dpi_scale;
-        const int cur_fb_height = (int) bounds.size.height * _sapp.dpi_scale;
+        const int cur_fb_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        const int cur_fb_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
         _sapp.framebuffer_width = cur_fb_width;
@@ -3525,10 +3526,10 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
         if (_sapp.window_width == 0) {
-            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+            _sapp.window_width = (int)roundf((screen_rect.size.width * 4.0f) / 5.0f);
         }
         if (_sapp.window_height == 0) {
-            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+            _sapp.window_height = (int)roundf((screen_rect.size.height * 4.0f) / 5.0f);
         }
     }
     const NSUInteger style =
@@ -4111,18 +4112,18 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.framebuffer_width = (int)(screen_rect.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)(screen_rect.size.height * _sapp.dpi_scale);
-    _sapp.window_width = (int)screen_rect.size.width;
-    _sapp.window_height = (int)screen_rect.size.height;
+    _sapp.framebuffer_width = (int)roundf(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(screen_rect.size.height * _sapp.dpi_scale);
+    _sapp.window_width = (int)roundf(screen_rect.size.width);
+    _sapp.window_height = (int)roundf(screen_rect.size.height);
     int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
         const CGSize fb_size = _sapp.ios.view.drawableSize;
-        cur_fb_width = (int) fb_size.width;
-        cur_fb_height = (int) fb_size.height;
+        cur_fb_width = (int)roundf(fb_size.width);
+        cur_fb_height = (int)roundf(fb_size.height);
     #else
-        cur_fb_width = (int) _sapp.ios.view.drawableWidth;
-        cur_fb_height = (int) _sapp.ios.view.drawableHeight;
+        cur_fb_width = (int)roundf(_sapp.ios.view.drawableWidth);
+        cur_fb_height = (int)roundf(_sapp.ios.view.drawableHeight);
     #endif
     const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                              (_sapp.framebuffer_height != cur_fb_height);
@@ -4187,16 +4188,16 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
-    _sapp.window_width = screen_rect.size.width;
-    _sapp.window_height = screen_rect.size.height;
+    _sapp.window_width = (int)roundf(screen_rect.size.width);
+    _sapp.window_height = (int)roundf(screen_rect.size.height);
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
     }
     else {
         _sapp.dpi_scale = 1.0f;
     }
-    _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
-    _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
+    _sapp.framebuffer_width = (int)roundf(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(_sapp.window_height * _sapp.dpi_scale);
     NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
@@ -4859,19 +4860,19 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
         w = ui_event->windowInnerWidth;
     }
     else {
-        _sapp.window_width = (int) w;
+        _sapp.window_width = (int)roundf(w);
     }
     if (h < 1.0) {
         h = ui_event->windowInnerHeight;
     }
     else {
-        _sapp.window_height = (int) h;
+        _sapp.window_height = (int)roundf(h);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
@@ -5576,10 +5577,10 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.window_width = (int) w;
-    _sapp.window_height = (int) h;
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    _sapp.window_width = (int)roundf(w);
+    _sapp.window_height = (int)roundf(h);
+    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
@@ -6440,10 +6441,12 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+        float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
+        float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
+        _sapp.window_width = (int)roundf(window_width);
+        _sapp.window_height = (int)roundf(window_height);
+        int fb_width = (int)roundf(window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = (int)roundf(window_height * _sapp.win32.dpi.content_scale);
         /* prevent a framebuffer size of 0 when window is minimized */
         if (0 == fb_width) {
             fb_width = 1;
