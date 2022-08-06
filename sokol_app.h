@@ -1661,6 +1661,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t
+#include <math.h>   /* roundf() */
 
 /* check if the config defines are alright */
 #if defined(__APPLE__)
@@ -1824,7 +1825,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
     #include <stdio.h>  /* freopen_s() */
     #include <wchar.h>  /* wcslen() */
-    #include <math.h>   /* roundf() */
 
     #pragma comment (lib, "kernel32")
     #pragma comment (lib, "user32")
@@ -3324,19 +3324,19 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.dpi_scale = 1.0f;
     }
     const NSRect bounds = [_sapp.macos.view bounds];
-    _sapp.window_width = bounds.size.width;
-    _sapp.window_height = bounds.size.height;
+    _sapp.window_width = (int)roundf(bounds.size.width);
+    _sapp.window_height = (int)roundf(bounds.size.height);
     #if defined(SOKOL_METAL)
-        _sapp.framebuffer_width = bounds.size.width * _sapp.dpi_scale;
-        _sapp.framebuffer_height = bounds.size.height * _sapp.dpi_scale;
+        _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const CGSize fb_size = _sapp.macos.view.drawableSize;
-        const int cur_fb_width = (int) fb_size.width;
-        const int cur_fb_height = (int) fb_size.height;
+        const int cur_fb_width = (int)roundf(fb_size.width);
+        const int cur_fb_height = (int)roundf(fb_size.height);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
     #elif defined(SOKOL_GLCORE33)
-        const int cur_fb_width = (int) bounds.size.width * _sapp.dpi_scale;
-        const int cur_fb_height = (int) bounds.size.height * _sapp.dpi_scale;
+        const int cur_fb_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        const int cur_fb_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
         _sapp.framebuffer_width = cur_fb_width;
