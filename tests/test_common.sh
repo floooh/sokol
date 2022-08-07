@@ -36,7 +36,17 @@ build() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend -D CMAKE_BUILD_TYPE=$mode ../..
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
+    cmake --build .
+    cd ../..
+}
+
+analyze() {
+    cfg=$1
+    backend=$2
+    mode=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
     cmake --build .
     cd ../..
 }
@@ -46,7 +56,17 @@ build_arc() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend -D USE_ARC:BOOL=ON -D CMAKE_BUILD_TYPE=$mode ../..
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode ../..
+    cmake --build .
+    cd ../..
+}
+
+analyze_arc() {
+    cfg=$1
+    backend=$2
+    mode=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../..
     cmake --build .
     cd ../..
 }
@@ -56,7 +76,7 @@ build_ios() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Xcode -D SOKOL_BACKEND=$backend -D CMAKE_SYSTEM_NAME=iOS ../..
+    cmake -GXcode -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS ../..
     cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     cd ../..
 }
@@ -66,7 +86,7 @@ build_arc_ios() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Xcode -D SOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -D CMAKE_SYSTEM_NAME=iOS ../..
+    cmake -GXcode -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS ../..
     cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     cd ../..
 }
@@ -76,7 +96,7 @@ build_emsc() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    emcmake cmake -G Ninja -D SOKOL_BACKEND=$backend -D CMAKE_BUILD_TYPE=$mode ../..
+    emcmake cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }
@@ -86,7 +106,7 @@ build_android() {
     backend=$2
     mode=$3
     mkdir -p build/$cfg && cd build/$cfg
-    cmake -G Ninja -D SOKOL_BACKEND=$backend -D ANDROID_ABI=armeabi-v7a -D ANDROID_PLATFORM=android-28 -D CMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake -D CMAKE_BUILD_TYPE=$mode ../..
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-28 -DCMAKE_TOOLCHAIN_FILE=../android_sdk/ndk-bundle/build/cmake/android.toolchain.cmake -DCMAKE_BUILD_TYPE=$mode ../..
     cmake --build .
     cd ../..
 }
