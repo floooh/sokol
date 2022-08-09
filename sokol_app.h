@@ -7150,6 +7150,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             FILE* res_fp = 0;
             errno_t err;
             err = freopen_s(&res_fp, "CON", "w", stdout);
+            (void)err;
             err = freopen_s(&res_fp, "CON", "w", stderr);
             (void)err;
         }
