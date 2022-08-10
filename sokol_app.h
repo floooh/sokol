@@ -11123,7 +11123,6 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             // skip
         }
         else if (src_chr == '\n') {
-            src_chr = 0;
             src_count = 0;
             _sapp.drop.num_files++;
             // too many files is not an error
@@ -11134,7 +11133,7 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
         }
         else if ((src_chr == '%') && src[0] && src[1]) {
-            // a percent-encoded byte (most like UTF-8 multibyte sequence)
+            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
             const char digits[3] = { src[0], src[1], 0 };
             src += 2;
             dst_chr = (char) strtol(digits, 0, 16);
