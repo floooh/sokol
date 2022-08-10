@@ -79,7 +79,7 @@ def parse_func(decl):
     if 'inner' in decl:
         for param in decl['inner']:
             if param['kind'] != 'ParmVarDecl':
-                print(f"warning: ignoring func {decl['name']} (unsupported parameter type)")
+                print(f"  >> warning: ignoring func {decl['name']} (unsupported parameter type)")
                 return None
             outp_param = {}
             outp_param['name'] = param['name']

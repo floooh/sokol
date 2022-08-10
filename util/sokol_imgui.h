@@ -135,11 +135,29 @@
                 yourself after simgui_setup() is called.
 
             bool disable_paste_override
-                If set to true, sokol_imgui.h will not 'emulate' a Dear Imgui 
+                If set to true, sokol_imgui.h will not 'emulate' a Dear Imgui
                 clipboard paste action on SAPP_EVENTTYPE_CLIPBOARD_PASTED event.
                 This is mainly a hack/workaround to allow external workarounds
                 for making copy/paste work on the web platform. In general,
                 copy/paste support isn't properly fleshed out in sokol_imgui.h yet.
+
+            bool disable_set_mouse_cursor
+                If true, sokol_imgui.h will not control the mouse cursor type
+                by calling sapp_set_mouse_cursor().
+
+            bool disable_windows_resize_from_edges
+                If true, windows can only be resized from the bottom right corner.
+                The default is false, meaning windows can be resized from edges.
+
+            bool write_alpha_channel
+                Set this to true if you want alpha values written to the
+                framebuffer. By default this behavior is disabled to prevent
+                undesired behavior on platforms like the web where the canvas is
+                always alpha-blended with the background.
+
+            simgui_allocator_t allocator
+                Used to override memory allocation functions. See further below
+                for details.
 
     --- At the start of a frame, call:
 
@@ -180,7 +198,7 @@
         in your own event handler.
 
         If you want to use the ImGui functions for checking if a key is pressed
-        (e.g. ImGui::IsKeyPressed()) the following helper function to map 
+        (e.g. ImGui::IsKeyPressed()) the following helper function to map
         an sapp_keycode to an ImGuiKey value may be useful:
 
         int simgui_map_keycode(sapp_keycode c);
@@ -299,6 +317,9 @@ typedef struct simgui_desc_t {
     const char* ini_filename;
     bool no_default_font;
     bool disable_paste_override;    // if true, don't send Ctrl-V on EVENTTYPE_CLIPBOARD_PASTED
+    bool disable_set_mouse_cursor;  // if true, don't control the mouse cursor type via sapp_set_mouse_cursor()
+    bool disable_windows_resize_from_edges; // if true, only resize edges from the bottom right corner
+    bool write_alpha_channel;       // if true, alpha values get written into the framebuffer
     simgui_allocator_t allocator;   // optional memory allocation overrides (default: malloc/free)
 } simgui_desc_t;
 
@@ -1753,9 +1774,13 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     io->ConfigMacOSXBehaviors = _simgui_is_osx();
     io->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
+        if (!_simgui.desc.disable_set_mouse_cursor) {
+            io->BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+        }
         io->SetClipboardTextFn = _simgui_set_clipboard;
         io->GetClipboardTextFn = _simgui_get_clipboard;
     #endif
+    io->ConfigWindowsResizeFromEdges = !_simgui.desc.disable_windows_resize_from_edges;
 
     /* create sokol-gfx resources */
     sg_push_debug_group("sokol-imgui");
@@ -1882,10 +1907,14 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     pip_desc.sample_count = _simgui.desc.sample_count;
     pip_desc.depth.pixel_format = _simgui.desc.depth_format;
     pip_desc.colors[0].pixel_format = _simgui.desc.color_format;
-    pip_desc.colors[0].write_mask = SG_COLORMASK_RGB;
+    pip_desc.colors[0].write_mask = _simgui.desc.write_alpha_channel ? SG_COLORMASK_RGBA : SG_COLORMASK_RGB;
     pip_desc.colors[0].blend.enabled = true;
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    if (_simgui.desc.write_alpha_channel) {
+        pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    }
     pip_desc.label = "sokol-imgui-pipeline";
     _simgui.pip = sg_make_pipeline(&pip_desc);
 
@@ -1931,6 +1960,27 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
         }
         if (!io->WantTextInput && sapp_keyboard_shown()) {
             sapp_show_keyboard(false);
+        }
+        if (!_simgui.desc.disable_set_mouse_cursor) {
+            #if defined(__cplusplus)
+                ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+            #else
+                ImGuiMouseCursor imgui_cursor = igGetMouseCursor();
+            #endif
+            sapp_mouse_cursor cursor = sapp_get_mouse_cursor();
+            switch (imgui_cursor) {
+                case ImGuiMouseCursor_Arrow:        cursor = SAPP_MOUSECURSOR_ARROW; break;
+                case ImGuiMouseCursor_TextInput:    cursor = SAPP_MOUSECURSOR_IBEAM; break;
+                case ImGuiMouseCursor_ResizeAll:    cursor = SAPP_MOUSECURSOR_RESIZE_ALL; break;
+                case ImGuiMouseCursor_ResizeNS:     cursor = SAPP_MOUSECURSOR_RESIZE_NS; break;
+                case ImGuiMouseCursor_ResizeEW:     cursor = SAPP_MOUSECURSOR_RESIZE_EW; break;
+                case ImGuiMouseCursor_ResizeNESW:   cursor = SAPP_MOUSECURSOR_RESIZE_NESW; break;
+                case ImGuiMouseCursor_ResizeNWSE:   cursor = SAPP_MOUSECURSOR_RESIZE_NWSE; break;
+                case ImGuiMouseCursor_Hand:         cursor = SAPP_MOUSECURSOR_POINTING_HAND; break;
+                case ImGuiMouseCursor_NotAllowed:   cursor = SAPP_MOUSECURSOR_NOT_ALLOWED; break;
+                default: break;
+            }
+            sapp_set_mouse_cursor(cursor);
         }
     #endif
     #if defined(__cplusplus)

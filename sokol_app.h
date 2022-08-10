@@ -122,13 +122,13 @@
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
-    UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
-    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
+    mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    set cursor type     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
     swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
@@ -362,6 +362,32 @@
         behaviour, and how to intercept a pending quit - for instance to show a
         "Really Quit?" dialog box). Note that the cleanup-callback isn't
         guaranteed to be called on the web and mobile platforms.
+
+    MOUSE CURSOR TYPE AND VISIBILITY
+    ================================
+    You can show and hide the mouse cursor with
+
+        void sapp_show_mouse(bool show)
+
+    And to get the current shown status:
+
+        bool sapp_mouse_shown(void)
+
+    NOTE that hiding the mouse cursor is different and independent from
+    the MOUSE/POINTER LOCK feature which will also hide the mouse pointer when
+    active (MOUSE LOCK is described below).
+
+    To change the mouse cursor to one of several predefined types, call
+    the function:
+
+        void sapp_set_mouse_cursor(sapp_mouse_cursor cursor)
+
+    Setting the default mouse cursor SAPP_MOUSECURSOR_DEFAULT will restore
+    the standard look.
+
+    To get the currently active mouse cursor type, call:
+
+        sapp_mouse_cursor sapp_get_mouse_cursor(void)
 
     MOUSE LOCK (AKA POINTER LOCK, AKA MOUSE CAPTURE)
     ================================================
@@ -1014,9 +1040,6 @@
     - sapp_desc needs a bool whether to initialize depth-stencil surface
     - GL context initialization needs more control (at least what GL version to initialize)
     - application icon
-    - the UPDATE_CURSOR event currently behaves differently between Win32 and OSX
-      (Win32 sends the event each frame when the mouse moves and is inside the window
-      client area, OSX sends it only once when the mouse enters the client area)
     - the Android implementation calls cleanup_cb() and destroys the egl context in onDestroy
       at the latest but should do it earlier, in onStop, as an app is "killable" after onStop
       on Android Honeycomb and later (it can't be done at the moment as the app may be started
@@ -1108,7 +1131,6 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_UNFOCUSED,
     SAPP_EVENTTYPE_SUSPENDED,
     SAPP_EVENTTYPE_RESUMED,
-    SAPP_EVENTTYPE_UPDATE_CURSOR,
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     SAPP_EVENTTYPE_FILES_DROPPED,
@@ -1419,7 +1441,6 @@ typedef struct sapp_desc {
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     const char* window_title;           // the window title as UTF-8 encoded string
-    bool user_cursor;                   // if true, user is expected to manage cursor image in SAPP_EVENTTYPE_UPDATE_CURSOR
     bool enable_clipboard;              // enable clipboard access, default is false
     int clipboard_size;                 // max size of clipboard content in bytes
     bool enable_dragndrop;              // enable file dropping (drag'n'drop), default is false
@@ -1470,6 +1491,26 @@ typedef struct sapp_html5_fetch_request {
     void* user_data;                        /* optional userdata pointer */
 } sapp_html5_fetch_request;
 
+/*
+    sapp_mouse_cursor
+
+    Predefined cursor image definitions, set with sapp_set_mouse_cursor(sapp_mouse_cursor cursor)
+*/
+typedef enum sapp_mouse_cursor {
+    SAPP_MOUSECURSOR_DEFAULT = 0,   // equivalent with system default cursor
+    SAPP_MOUSECURSOR_ARROW,
+    SAPP_MOUSECURSOR_IBEAM,
+    SAPP_MOUSECURSOR_CROSSHAIR,
+    SAPP_MOUSECURSOR_POINTING_HAND,
+    SAPP_MOUSECURSOR_RESIZE_EW,
+    SAPP_MOUSECURSOR_RESIZE_NS,
+    SAPP_MOUSECURSOR_RESIZE_NWSE,
+    SAPP_MOUSECURSOR_RESIZE_NESW,
+    SAPP_MOUSECURSOR_RESIZE_ALL,
+    SAPP_MOUSECURSOR_NOT_ALLOWED,
+    _SAPP_MOUSECURSOR_NUM,
+} sapp_mouse_cursor;
+
 /* user-provided functions */
 extern sapp_desc sokol_main(int argc, char* argv[]);
 
@@ -1509,6 +1550,10 @@ SOKOL_APP_API_DECL bool sapp_mouse_shown(void);
 SOKOL_APP_API_DECL void sapp_lock_mouse(bool lock);
 /* return true if in mouse-pointer-lock mode (this may toggle a few frames later) */
 SOKOL_APP_API_DECL bool sapp_mouse_locked(void);
+/* set mouse cursor type */
+SOKOL_APP_API_DECL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor);
+/* get current mouse cursor type */
+SOKOL_APP_API_DECL sapp_mouse_cursor sapp_get_mouse_cursor(void);
 /* return the userdata pointer optionally provided in sapp_desc */
 SOKOL_APP_API_DECL void* sapp_userdata(void);
 /* return a copy of the sapp_desc structure */
@@ -1616,6 +1661,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #include <stdlib.h> // malloc, free
 #include <string.h> // memset
 #include <stddef.h> // size_t
+#include <math.h>   /* roundf() */
 
 /* check if the config defines are alright */
 #if defined(__APPLE__)
@@ -1851,6 +1897,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #include <X11/Xatom.h>
     #include <X11/extensions/XInput2.h>
     #include <X11/Xcursor/Xcursor.h>
+    #include <X11/cursorfont.h> /* XC_* font cursors */
     #include <X11/Xmd.h> /* CARD32 */
     #include <dlfcn.h> /* dlopen, dlsym, dlclose */
     #include <limits.h> /* LONG_MAX */
@@ -2094,6 +2141,7 @@ typedef struct {
     _sapp_macos_app_delegate* app_dlg;
     _sapp_macos_window_delegate* win_dlg;
     _sapp_macos_view* view;
+    NSCursor* cursors[_SAPP_MOUSECURSOR_NUM];
     #if defined(SOKOL_METAL)
         id<MTLDevice> mtl_device;
     #endif
@@ -2215,6 +2263,7 @@ typedef struct {
     HDC dc;
     HICON big_icon;
     HICON small_icon;
+    HCURSOR cursors[_SAPP_MOUSECURSOR_NUM];
     UINT orig_codepage;
     LONG mouse_locked_x, mouse_locked_y;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
@@ -2437,6 +2486,7 @@ typedef struct {
     Colormap colormap;
     Window window;
     Cursor hidden_cursor;
+    Cursor cursors[_SAPP_MOUSECURSOR_NUM];
     int window_state;
     float dpi;
     unsigned char error_code;
@@ -2511,7 +2561,7 @@ typedef struct {
 #if defined(_SAPP_MACOS) || defined(_SAPP_IOS)
     // this is ARC compatible
     #if defined(__cplusplus)
-        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = { }; }
+        #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = type(); }
     #else
         #define _SAPP_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
     #endif
@@ -2540,6 +2590,7 @@ typedef struct {
     bool shown;
     bool locked;
     bool pos_valid;
+    sapp_mouse_cursor current_cursor;
 } _sapp_mouse_t;
 
 typedef struct {
@@ -3162,6 +3213,28 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
     _SAPP_OBJC_RELEASE(_sapp.macos.window);
 }
 
+// undocumented methods for creating cursors (see GLFW 3.4 and imgui_impl_osx.mm)
+@interface NSCursor()
++ (id)_windowResizeNorthWestSouthEastCursor;
++ (id)_windowResizeNorthEastSouthWestCursor;
++ (id)_windowResizeNorthSouthCursor;
++ (id)_windowResizeEastWestCursor;
+@end
+
+_SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_DEFAULT] = nil; // not a bug
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
+    _sapp.macos.cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
+}
+
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
     _sapp_macos_init_keytable();
@@ -3251,19 +3324,19 @@ _SOKOL_PRIVATE void _sapp_macos_update_dimensions(void) {
         _sapp.dpi_scale = 1.0f;
     }
     const NSRect bounds = [_sapp.macos.view bounds];
-    _sapp.window_width = bounds.size.width;
-    _sapp.window_height = bounds.size.height;
+    _sapp.window_width = (int)roundf(bounds.size.width);
+    _sapp.window_height = (int)roundf(bounds.size.height);
     #if defined(SOKOL_METAL)
-        _sapp.framebuffer_width = bounds.size.width * _sapp.dpi_scale;
-        _sapp.framebuffer_height = bounds.size.height * _sapp.dpi_scale;
+        _sapp.framebuffer_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        _sapp.framebuffer_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const CGSize fb_size = _sapp.macos.view.drawableSize;
-        const int cur_fb_width = (int) fb_size.width;
-        const int cur_fb_height = (int) fb_size.height;
+        const int cur_fb_width = (int)roundf(fb_size.width);
+        const int cur_fb_height = (int)roundf(fb_size.height);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
     #elif defined(SOKOL_GLCORE33)
-        const int cur_fb_width = (int) bounds.size.width * _sapp.dpi_scale;
-        const int cur_fb_height = (int) bounds.size.height * _sapp.dpi_scale;
+        const int cur_fb_width = (int)roundf(bounds.size.width * _sapp.dpi_scale);
+        const int cur_fb_height = (int)roundf(bounds.size.height * _sapp.dpi_scale);
         const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                                  (_sapp.framebuffer_height != cur_fb_height);
         _sapp.framebuffer_width = cur_fb_width;
@@ -3377,11 +3450,31 @@ _SOKOL_PRIVATE void _sapp_macos_lock_mouse(bool lock) {
     */
     if (_sapp.mouse.locked) {
         CGAssociateMouseAndMouseCursorPosition(NO);
-        CGDisplayHideCursor(kCGDirectMainDisplay);
+        [NSCursor hide];
     }
     else {
-        CGDisplayShowCursor(kCGDirectMainDisplay);
+        [NSCursor unhide];
         CGAssociateMouseAndMouseCursorPosition(YES);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_macos_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    // show/hide cursor only if visibility status has changed (required because show/hide stacks)
+    if (shown != _sapp.mouse.shown) {
+        if (shown) {
+            [NSCursor unhide];
+        }
+        else {
+            [NSCursor hide];
+        }
+    }
+    // update cursor type
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    if (_sapp.macos.cursors[cursor]) {
+        [_sapp.macos.cursors[cursor] set];
+    }
+    else {
+        [[NSCursor arrowCursor] set];
     }
 }
 
@@ -3428,14 +3521,15 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
+    _sapp_macos_init_cursors();
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
         if (_sapp.window_width == 0) {
-            _sapp.window_width = (screen_rect.size.width * 4.0f) / 5.0f;
+            _sapp.window_width = (int)roundf((screen_rect.size.width * 4.0f) / 5.0f);
         }
         if (_sapp.window_height == 0) {
-            _sapp.window_height = (screen_rect.size.height * 4.0f) / 5.0f;
+            _sapp.window_height = (int)roundf((screen_rect.size.height * 4.0f) / 5.0f);
         }
     }
     const NSUInteger style =
@@ -3950,12 +4044,6 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
             _sapp_macos_mods(event));
     }
 }
-- (void)cursorUpdate:(NSEvent*)event {
-    _SOKOL_UNUSED(event);
-    if (_sapp.desc.user_cursor) {
-        _sapp_macos_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
-    }
-}
 @end
 
 #endif /* MacOS */
@@ -4024,18 +4112,18 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
-    _sapp.framebuffer_width = (int)(screen_rect.size.width * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int)(screen_rect.size.height * _sapp.dpi_scale);
-    _sapp.window_width = (int)screen_rect.size.width;
-    _sapp.window_height = (int)screen_rect.size.height;
+    _sapp.framebuffer_width = (int)roundf(screen_rect.size.width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(screen_rect.size.height * _sapp.dpi_scale);
+    _sapp.window_width = (int)roundf(screen_rect.size.width);
+    _sapp.window_height = (int)roundf(screen_rect.size.height);
     int cur_fb_width, cur_fb_height;
     #if defined(SOKOL_METAL)
         const CGSize fb_size = _sapp.ios.view.drawableSize;
-        cur_fb_width = (int) fb_size.width;
-        cur_fb_height = (int) fb_size.height;
+        cur_fb_width = (int)roundf(fb_size.width);
+        cur_fb_height = (int)roundf(fb_size.height);
     #else
-        cur_fb_width = (int) _sapp.ios.view.drawableWidth;
-        cur_fb_height = (int) _sapp.ios.view.drawableHeight;
+        cur_fb_width = (int)roundf(_sapp.ios.view.drawableWidth);
+        cur_fb_height = (int)roundf(_sapp.ios.view.drawableHeight);
     #endif
     const bool dim_changed = (_sapp.framebuffer_width != cur_fb_width) ||
                              (_sapp.framebuffer_height != cur_fb_height);
@@ -4100,16 +4188,16 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
     CGRect screen_rect = UIScreen.mainScreen.bounds;
     _sapp.ios.window = [[UIWindow alloc] initWithFrame:screen_rect];
-    _sapp.window_width = screen_rect.size.width;
-    _sapp.window_height = screen_rect.size.height;
+    _sapp.window_width = (int)roundf(screen_rect.size.width);
+    _sapp.window_height = (int)roundf(screen_rect.size.height);
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = (float) UIScreen.mainScreen.nativeScale;
     }
     else {
         _sapp.dpi_scale = 1.0f;
     }
-    _sapp.framebuffer_width = _sapp.window_width * _sapp.dpi_scale;
-    _sapp.framebuffer_height = _sapp.window_height * _sapp.dpi_scale;
+    _sapp.framebuffer_width = (int)roundf(_sapp.window_width * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(_sapp.window_height * _sapp.dpi_scale);
     NSInteger max_fps = UIScreen.mainScreen.maximumFramesPerSecond;
     #if defined(SOKOL_METAL)
         _sapp.ios.mtl_device = MTLCreateSystemDefaultDevice();
@@ -4638,6 +4726,36 @@ _SOKOL_PRIVATE void _sapp_emsc_update_mouse_lock_state(void) {
     }
 }
 
+// set mouse cursor type
+EM_JS(void, sapp_js_set_cursor, (int cursor_type, int shown), {
+    if (Module.sapp_emsc_target) {
+        var cursor;
+        if (shown === 0) {
+            cursor = "none";
+        }
+        else switch (cursor_type) {
+            case 0: cursor = "auto"; break;         // SAPP_MOUSECURSOR_DEFAULT
+            case 1: cursor = "default"; break;      // SAPP_MOUSECURSOR_ARROW
+            case 2: cursor = "text"; break;         // SAPP_MOUSECURSOR_IBEAM
+            case 3: cursor = "crosshair"; break;    // SAPP_MOUSECURSOR_CROSSHAIR
+            case 4: cursor = "pointer"; break;      // SAPP_MOUSECURSOR_POINTING_HAND
+            case 5: cursor = "ew-resize"; break;    // SAPP_MOUSECURSOR_RESIZE_EW
+            case 6: cursor = "ns-resize"; break;    // SAPP_MOUSECURSOR_RESIZE_NS
+            case 7: cursor = "nwse-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NWSE
+            case 8: cursor = "nesw-resize"; break;  // SAPP_MOUSECURSOR_RESIZE_NESW
+            case 9: cursor = "all-scroll"; break;   // SAPP_MOUSECURSOR_RESIZE_ALL
+            case 10: cursor = "not-allowed"; break; // SAPP_MOUSECURSOR_NOT_ALLOWED
+            default: cursor = "auto"; break;
+        }
+        Module.sapp_emsc_target.style.cursor = cursor;
+    }
+});
+
+_SOKOL_PRIVATE void _sapp_emsc_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    sapp_js_set_cursor((int)cursor, shown ? 1 : 0);
+}
+
 /* JS helper functions to update browser tab favicon */
 EM_JS(void, sapp_js_clear_favicon, (void), {
     var link = document.getElementById('sokol-app-favicon');
@@ -4742,19 +4860,19 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_size_changed(int event_type, const EmscriptenU
         w = ui_event->windowInnerWidth;
     }
     else {
-        _sapp.window_width = (int) w;
+        _sapp.window_width = (int)roundf(w);
     }
     if (h < 1.0) {
         h = ui_event->windowInnerHeight;
     }
     else {
-        _sapp.window_height = (int) h;
+        _sapp.window_height = (int)roundf(h);
     }
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     SOKOL_ASSERT((_sapp.framebuffer_width > 0) && (_sapp.framebuffer_height > 0));
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_WGPU)
@@ -5459,10 +5577,10 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     if (_sapp.desc.high_dpi) {
         _sapp.dpi_scale = emscripten_get_device_pixel_ratio();
     }
-    _sapp.window_width = (int) w;
-    _sapp.window_height = (int) h;
-    _sapp.framebuffer_width = (int) (w * _sapp.dpi_scale);
-    _sapp.framebuffer_height = (int) (h * _sapp.dpi_scale);
+    _sapp.window_width = (int)roundf(w);
+    _sapp.window_height = (int)roundf(h);
+    _sapp.framebuffer_width = (int)roundf(w * _sapp.dpi_scale);
+    _sapp.framebuffer_height = (int)roundf(h * _sapp.dpi_scale);
     emscripten_set_canvas_element_size(_sapp.html5_canvas_selector, _sapp.framebuffer_width, _sapp.framebuffer_height);
     #if defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
         _sapp_emsc_webgl_init();
@@ -6323,10 +6441,12 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
-        _sapp.window_width = (int)((float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale);
-        _sapp.window_height = (int)((float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale);
-        int fb_width = (int)((float)_sapp.window_width * _sapp.win32.dpi.content_scale);
-        int fb_height = (int)((float)_sapp.window_height * _sapp.win32.dpi.content_scale);
+        float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
+        float window_height = (float)(rect.bottom - rect.top) / _sapp.win32.dpi.window_scale;
+        _sapp.window_width = (int)roundf(window_width);
+        _sapp.window_height = (int)roundf(window_height);
+        int fb_width = (int)roundf(window_width * _sapp.win32.dpi.content_scale);
+        int fb_height = (int)roundf(window_height * _sapp.win32.dpi.content_scale);
         /* prevent a framebuffer size of 0 when window is minimized */
         if (0 == fb_width) {
             fb_width = 1;
@@ -6387,9 +6507,73 @@ _SOKOL_PRIVATE void _sapp_win32_toggle_fullscreen(void) {
     _sapp_win32_set_fullscreen(!_sapp.fullscreen, SWP_SHOWWINDOW);
 }
 
-_SOKOL_PRIVATE void _sapp_win32_show_mouse(bool visible) {
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    ShowCursor((BOOL)visible);
+_SOKOL_PRIVATE void _sapp_win32_init_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    // NOTE: the OCR_* constants are only defined if OEMRESOURCE is defined
+    // before windows.h is included, but we can't guarantee that because
+    // the sokol_app.h implementation may be included with other implementations
+    // in the same compilation unit
+    int id = 0;
+    switch (cursor) {
+        case SAPP_MOUSECURSOR_ARROW:            id = 32512; break;  // OCR_NORMAL
+        case SAPP_MOUSECURSOR_IBEAM:            id = 32513; break;  // OCR_IBEAM
+        case SAPP_MOUSECURSOR_CROSSHAIR:        id = 32515; break;  // OCR_CROSS
+        case SAPP_MOUSECURSOR_POINTING_HAND:    id = 32649; break;  // OCR_HAND
+        case SAPP_MOUSECURSOR_RESIZE_EW:        id = 32644; break;  // OCR_SIZEWE
+        case SAPP_MOUSECURSOR_RESIZE_NS:        id = 32645; break;  // OCR_SIZENS
+        case SAPP_MOUSECURSOR_RESIZE_NWSE:      id = 32642; break;  // OCR_SIZENWSE
+        case SAPP_MOUSECURSOR_RESIZE_NESW:      id = 32643; break;  // OCR_SIZENESW
+        case SAPP_MOUSECURSOR_RESIZE_ALL:       id = 32646; break;  // OCR_SIZEALL
+        case SAPP_MOUSECURSOR_NOT_ALLOWED:      id = 32648; break;  // OCR_NO
+        default: break;
+    }
+    if (id != 0) {
+        _sapp.win32.cursors[cursor] = (HCURSOR)LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE|LR_SHARED);
+    }
+    // fallback: default cursor
+    if (0 == _sapp.win32.cursors[cursor]) {
+        // 32512 => IDC_ARROW
+        _sapp.win32.cursors[cursor] = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
+    }
+    SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
+}
+
+_SOKOL_PRIVATE void _sapp_win32_init_cursors(void) {
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        _sapp_win32_init_cursor((sapp_mouse_cursor)i);
+    }
+}
+
+_SOKOL_PRIVATE bool _sapp_win32_cursor_in_content_area(void) {
+    POINT pos;
+    if (!GetCursorPos(&pos)) {
+        return false;
+    }
+    if (WindowFromPoint(pos) != _sapp.win32.hwnd) {
+        return false;
+    }
+    RECT area;
+    GetClientRect(_sapp.win32.hwnd, &area);
+    ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.left);
+    ClientToScreen(_sapp.win32.hwnd, (POINT*)&area.right);
+    return PtInRect(&area, pos) == TRUE;
+}
+
+_SOKOL_PRIVATE void _sapp_win32_update_cursor(sapp_mouse_cursor cursor, bool shown, bool skip_area_test) {
+    // NOTE: when called from WM_SETCURSOR, the area test would be redundant
+    if (!skip_area_test) {
+        if (!_sapp_win32_cursor_in_content_area()) {
+            return;
+        }
+    }
+    if (!shown) {
+        SetCursor(NULL);
+    }
+    else {
+        SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+        SOKOL_ASSERT(0 != _sapp.win32.cursors[cursor]);
+        SetCursor(_sapp.win32.cursors[cursor]);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_win32_capture_mouse(uint8_t btn_mask) {
@@ -6705,11 +6889,9 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UNFOCUSED);
                 break;
             case WM_SETCURSOR:
-                if (_sapp.desc.user_cursor) {
-                    if (LOWORD(lParam) == HTCLIENT) {
-                        _sapp_win32_uwp_app_event(SAPP_EVENTTYPE_UPDATE_CURSOR);
-                        return 1;
-                    }
+                if (LOWORD(lParam) == HTCLIENT) {
+                    _sapp_win32_update_cursor(_sapp.mouse.current_cursor, _sapp.mouse.shown, true);
+                    return TRUE;
                 }
                 break;
             case WM_DPICHANGED:
@@ -6968,6 +7150,7 @@ _SOKOL_PRIVATE void _sapp_win32_init_console(void) {
             FILE* res_fp = 0;
             errno_t err;
             err = freopen_s(&res_fp, "CON", "w", stdout);
+            (void)err;
             err = freopen_s(&res_fp, "CON", "w", stderr);
             (void)err;
         }
@@ -7239,6 +7422,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_uwp_init_keytable();
     _sapp_win32_uwp_utf8_to_wide(_sapp.window_title, _sapp.window_title_wide, sizeof(_sapp.window_title_wide));
     _sapp_win32_init_dpi();
+    _sapp_win32_init_cursors();
     _sapp_win32_create_window();
     sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
@@ -7384,13 +7568,26 @@ _SOKOL_PRIVATE void _sapp_uwp_configure_dpi(float monitor_dpi) {
     _sapp.dpi_scale = _sapp.uwp.dpi.content_scale;
 }
 
-_SOKOL_PRIVATE void _sapp_uwp_show_mouse(bool visible) {
+_SOKOL_PRIVATE void _sapp_uwp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     using namespace winrt::Windows::UI::Core;
 
-    /* NOTE: this function is only called when the mouse visibility actually changes */
-    CoreWindow::GetForCurrentThread().PointerCursor(visible ?
-        CoreCursor(CoreCursorType::Arrow, 0) :
-        CoreCursor(nullptr));
+    CoreCursor uwp_cursor(nullptr);
+    if (shown) {
+        switch (cursor) {
+            case SAPP_MOUSECURSOR_ARROW: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
+            case SAPP_MOUSECURSOR_IBEAM: uwp_cursor = CoreCursor(CoreCursorType::IBeam, 0); break;
+            case SAPP_MOUSECURSOR_CROSSHAIR: uwp_cursor = CoreCursor(CoreCursorType::Cross, 0); break;
+            case SAPP_MOUSECURSOR_POINTING_HAND: uwp_cursor = CoreCursor(CoreCursorType::Hand, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_EW: uwp_cursor = CoreCursor(CoreCursorType::SizeWestEast, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NS: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthSouth, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NWSE: uwp_cursor = CoreCursor(CoreCursorType::SizeNorthwestSoutheast, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_NESW: uwp_cursor = CoreCursor(CoreCursorType::SizeNortheastSouthwest, 0); break;
+            case SAPP_MOUSECURSOR_RESIZE_ALL: uwp_cursor = CoreCursor(CoreCursorType::SizeAll, 0); break;
+            case SAPP_MOUSECURSOR_NOT_ALLOWED: uwp_cursor = CoreCursor(CoreCursorType::UniversalNo, 0); break;
+            default: uwp_cursor = CoreCursor(CoreCursorType::Arrow, 0); break;
+        }
+    }
+    CoreWindow::GetForCurrentThread().PointerCursor(uwp_cursor);
 }
 
 _SOKOL_PRIVATE uint32_t _sapp_uwp_mods(winrt::Windows::UI::Core::CoreWindow const& sender_window) {
@@ -10299,19 +10496,72 @@ _SOKOL_PRIVATE void _sapp_x11_create_hidden_cursor(void) {
     XcursorImageDestroy(img);
 }
 
+ _SOKOL_PRIVATE void _sapp_x11_create_standard_cursor(sapp_mouse_cursor cursor, const char* name, const char* theme, int size, uint32_t fallback_native) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(_sapp.x11.display);
+    if (theme) {
+        XcursorImage* img = XcursorLibraryLoadImage(name, theme, size);
+        if (img) {
+            _sapp.x11.cursors[cursor] = XcursorImageLoadCursor(_sapp.x11.display, img);
+            XcursorImageDestroy(img);
+        }
+    }
+    if (0 == _sapp.x11.cursors[cursor]) {
+        _sapp.x11.cursors[cursor] = XCreateFontCursor(_sapp.x11.display, fallback_native);
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_x11_create_cursors(void) {
+    SOKOL_ASSERT(_sapp.x11.display);
+    const char* cursor_theme = XcursorGetTheme(_sapp.x11.display);
+    const int size = XcursorGetDefaultSize(_sapp.x11.display);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_ARROW, "default", cursor_theme, size, XC_left_ptr);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_IBEAM, "text", cursor_theme, size, XC_xterm);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_CROSSHAIR, "crosshair", cursor_theme, size, XC_crosshair);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_POINTING_HAND, "pointer", cursor_theme, size, XC_hand2);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_RESIZE_EW, "ew-resize", cursor_theme, size, XC_sb_h_double_arrow);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_RESIZE_NS, "ns-resize", cursor_theme, size, XC_sb_v_double_arrow);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_RESIZE_NWSE, "nwse-resize", cursor_theme, size, 0);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_RESIZE_NESW, "nesw-resize", cursor_theme, size, 0);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_RESIZE_ALL, "all-scroll", cursor_theme, size, XC_fleur);
+    _sapp_x11_create_standard_cursor(SAPP_MOUSECURSOR_NOT_ALLOWED, "no-allowed", cursor_theme, size, 0);
+    _sapp_x11_create_hidden_cursor();
+}
+
+_SOKOL_PRIVATE void _sapp_x11_destroy_cursors(void) {
+    SOKOL_ASSERT(_sapp.x11.display);
+    if (_sapp.x11.hidden_cursor) {
+        XFreeCursor(_sapp.x11.display, _sapp.x11.hidden_cursor);
+        _sapp.x11.hidden_cursor = 0;
+    }
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        if (_sapp.x11.cursors[i]) {
+            XFreeCursor(_sapp.x11.display, _sapp.x11.cursors[i]);
+            _sapp.x11.cursors[i] = 0;
+        }
+    }
+}
+
 _SOKOL_PRIVATE void _sapp_x11_toggle_fullscreen(void) {
     _sapp.fullscreen = !_sapp.fullscreen;
     _sapp_x11_set_fullscreen(_sapp.fullscreen);
     _sapp_x11_query_window_size();
 }
 
-_SOKOL_PRIVATE void _sapp_x11_show_mouse(bool show) {
-    if (show) {
-        XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
+_SOKOL_PRIVATE void _sapp_x11_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    if (shown) {
+        if (_sapp.x11.cursors[cursor]) {
+            XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.cursors[cursor]);
+        }
+        else {
+            XUndefineCursor(_sapp.x11.display, _sapp.x11.window);
+        }
     }
     else {
         XDefineCursor(_sapp.x11.display, _sapp.x11.window, _sapp.x11.hidden_cursor);
     }
+    XFlush(_sapp.x11.display);
 }
 
 _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
@@ -11228,7 +11478,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_x11_query_system_dpi();
     _sapp.dpi_scale = _sapp.x11.dpi / 96.0f;
     _sapp_x11_init_extensions();
-    _sapp_x11_create_hidden_cursor();
+    _sapp_x11_create_cursors();
     _sapp_glx_init();
     Visual* visual = 0;
     int depth = 0;
@@ -11242,6 +11492,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         _sapp_x11_set_fullscreen(true);
     }
     _sapp_glx_swapinterval(_sapp.swap_interval);
+
     XFlush(_sapp.x11.display);
     while (!_sapp.quit_ordered) {
         _sapp_timing_measure(&_sapp.timing);
@@ -11268,6 +11519,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     _sapp_call_cleanup();
     _sapp_glx_destroy_context();
     _sapp_x11_destroy_window();
+    _sapp_x11_destroy_cursors();
     XCloseDisplay(_sapp.x11.display);
     _sapp_discard_state();
 }
@@ -11428,13 +11680,15 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
 SOKOL_API_IMPL void sapp_show_mouse(bool show) {
     if (_sapp.mouse.shown != show) {
         #if defined(_SAPP_MACOS)
-        _sapp_macos_show_mouse(show);
+        _sapp_macos_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_WIN32)
-        _sapp_win32_show_mouse(show);
+        _sapp_win32_update_cursor(_sapp.mouse.current_cursor, show, false);
         #elif defined(_SAPP_LINUX)
-        _sapp_x11_show_mouse(show);
+        _sapp_x11_update_cursor(_sapp.mouse.current_cursor, show);
         #elif defined(_SAPP_UWP)
-        _sapp_uwp_show_mouse(show);
+        _sapp_uwp_update_cursor(_sapp.mouse.current_cursor, show);
+        #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_update_cursor(_sapp.mouse.current_cursor, show);
         #endif
         _sapp.mouse.shown = show;
     }
@@ -11460,6 +11714,28 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
 
 SOKOL_API_IMPL bool sapp_mouse_locked(void) {
     return _sapp.mouse.locked;
+}
+
+SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    if (_sapp.mouse.current_cursor != cursor) {
+        #if defined(_SAPP_MACOS)
+        _sapp_macos_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_WIN32)
+        _sapp_win32_update_cursor(cursor, _sapp.mouse.shown, false);
+        #elif defined(_SAPP_LINUX)
+        _sapp_x11_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_UWP)
+        _sapp_uwp_update_cursor(cursor, _sapp.mouse.shown);
+        #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_update_cursor(cursor, _sapp.mouse.shown);
+        #endif
+        _sapp.mouse.current_cursor = cursor;
+    }
+}
+
+SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
+    return _sapp.mouse.current_cursor;
 }
 
 SOKOL_API_IMPL void sapp_request_quit(void) {

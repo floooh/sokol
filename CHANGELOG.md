@@ -1,5 +1,34 @@
 ## Updates
 
+- **05-Aug-2022**: New officially supported and automatically updated language bindings for Odin:
+  https://github.com/floooh/sokol-odin (also see [gen_odin.py](https://github.com/floooh/sokol/blob/master/bindgen/gen_odin.py))
+
+- **10-Jul-2022**: New features in sokol_app.h and sokol_imgui.h:
+    - In sokol_app.h it's now possible to set a mouse cursor type from a number of predefined
+      types via the new function ```sapp_set_mouse_cursor(sapp_mouse_cursor cursor)```. The
+      available cursor types are compatible with GLFW and Dear ImGui. Supported platforms
+      are: macOS, linux, win32, uwp and web.
+    - ```sapp_show_mouse(bool shown)``` now also works on the web platform.
+    - In sokol_app.h, the poorly defined 'user cursor' feature has been removed (```sapp_desc.user_cursor```
+      and ```SAPP_EVENTTYPE_UPDATE_CURSOR```). This was a hack to allow changing the mouse cursor and
+      only worked on Win32 and macOS (with different behaviour). Since setting the cursor type
+      is now 'properly supported, this hack was removed.
+    - sokol_imgui.h will now set the cursor type via ```sapp_set_mouse_cursor()```. This can be
+      disabled with the new ```simgui_desc_t``` item ```disable_set_mouse_cursor```.
+    - sokol_imgui.h now automatically enables resizing windows from edges (not just the bottom-right corner),
+      this behavour can be disabled with the new ```simgui_desc_t``` item ```disable_windows_resize_from_edges```.
+    - sokol_imgui.h can now optionally write to the alpha channel (useful if you want to render the UI
+      into a separate render target, which is later composed onto the default framebuffer). The feature
+      is enabled with the new ```simgui_desc_t``` item ```write_alpha_channel```.
+
+  Many thanks to **@tomc1998** for the initial [Linux/X11 mouse cursor type PR](https://github.com/floooh/sokol/pull/678) and
+  **@luigi-rosso** for the [sokol_imgui.h alpha channel PR](https://github.com/floooh/sokol/pull/687)!
+
+- **03-Jul-2022**: A new sokol_gfx.h function ```bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size)```
+which allows to check if a call to ```sg_append_buffer()``` would overflow the buffer. This
+is an alternative to the ```sg_query_buffer_overflow()``` function which only reports
+the overflow after the fact. Many thanks to @RandyGaul for the PR!
+
 - **29-Jun-2022**: In sokol_app.h with the D3D11 backend, if SOKOL_DEBUG is
 defined, and the D3D11 device creation fails, there's now a fallback code
 path which tries to create the device again without the D3D11_CREATE_DEVICE_DEBUG

@@ -128,7 +128,7 @@
     --- optionally update shader uniform data with:
 
             sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data)
-            
+
         Read the section 'UNIFORM DATA LAYOUT' to learn about the expected memory layout
         of the uniform data passed into sg_apply_uniforms().
 
@@ -247,6 +247,11 @@
 
             bool sg_query_buffer_overflow(sg_buffer buf)
 
+        You can manually check to see if an overflow would occur before adding
+        any data to a buffer by calling
+
+            bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size)
+
         NOTE: Due to restrictions in underlying 3D-APIs, appended chunks of
         data will be 4-byte aligned in the destination buffer. This means
         that there will be gaps in index buffers containing 16-bit indices
@@ -336,7 +341,7 @@
             with context information provided by sokol_app.h
 
     See the documention block of the sg_desc struct below for more information.
-    
+
 
     UNIFORM DATA LAYOUT:
     ====================
@@ -368,7 +373,7 @@
           SG_UNIFORMLAYOUT_STD140)
         - a list of the uniform block members types in the correct order they
           appear on the CPU side
-        
+
     For example if the GLSL shader has the following uniform declarations:
 
         uniform mat4 mvp;
@@ -412,7 +417,7 @@
     CROSS-BACKEND COMMON UNIFORM DATA LAYOUT
     ========================================
     For cross-platform / cross-3D-backend code it is important that the same uniform block
-    layout on the CPU side can be used for all sokol-gfx backends. To achieve this, 
+    layout on the CPU side can be used for all sokol-gfx backends. To achieve this,
     a common subset of the std140 layout must be used:
 
     - The uniform block layout hint in sg_shader_desc must be explicitely set to
@@ -438,7 +443,7 @@
         - ivec4 => 16
         - mat4  => 16
     - Arrays are only allowed for the following types: vec4, int4, mat4.
-          
+
     Note that the HLSL cbuffer layout rules are slightly different from the
     std140 layout rules, this means that the cbuffer declarations in HLSL code
     must be tweaked so that the layout is compatible with std140.
@@ -452,7 +457,7 @@
     --- The GL backends need to know about the internal structure of uniform
         blocks, and the texture sampler-name and -type. The uniform layout details
         are  described in the UNIFORM DATA LAYOUT section above.
-        
+
             // uniform block structure and texture image definition in sg_shader_desc:
             sg_shader_desc desc = {
                 // uniform block description (size and internal structure)
@@ -1350,35 +1355,35 @@ typedef enum sg_uniform_type {
 
 /*
     sg_uniform_layout
-    
+
     A hint for the interior memory layout of uniform blocks. This is
     only really relevant for the GL backend where the internal layout
     of uniform blocks must be known to sokol-gfx. For all other backends the
     internal memory layout of uniform blocks doesn't matter, sokol-gfx
     will just pass uniform data as a single memory blob to the
     3D backend.
-    
+
     SG_UNIFORMLAYOUT_NATIVE (default)
         Native layout means that a 'backend-native' memory layout
         is used. For the GL backend this means that uniforms
         are packed tightly in memory (e.g. there are no padding
         bytes).
-        
+
     SG_UNIFORMLAYOUT_STD140
         The memory layout is a subset of std140. Arrays are only
         allowed for the FLOAT4, INT4 and MAT4. Alignment is as
         is as follows:
-        
+
             FLOAT, INT:         4 byte alignment
             FLOAT2, INT2:       8 byte alignment
             FLOAT3, INT3:       16 byte alignment(!)
             FLOAT4, INT4:       16 byte alignment
             MAT4:               16 byte alignment
             FLOAT4[], INT4[]:   16 byte alignment
-            
+
         The overall size of the uniform block must be a multiple
         of 16.
-        
+
     For more information search for 'UNIFORM DATA LAYOUT' in the documentation block
     at the start of the header.
 */
@@ -1389,7 +1394,7 @@ typedef enum sg_uniform_layout {
     _SG_UNIFORMLAYOUT_NUM,
     _SG_UNIFORMLAYOUT_FORCE_U32 = 0x7FFFFFFF
 } sg_uniform_layout;
- 
+
 /*
     sg_cull_mode
 
@@ -2487,6 +2492,7 @@ SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
 SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
+SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size);
 
 /* rendering functions */
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
@@ -4272,7 +4278,7 @@ static _sg_state_t _sg;
 // a helper macro to clear a struct with potentially ARC'ed ObjC references
 #if defined(SOKOL_METAL)
     #if defined(__cplusplus)
-        #define _SG_CLEAR_ARC_STRUCT(type, item) { item = { }; }
+        #define _SG_CLEAR_ARC_STRUCT(type, item) { item = type(); }
     #else
         #define _SG_CLEAR_ARC_STRUCT(type, item) { item = (type) { 0 }; }
     #endif
@@ -9738,11 +9744,9 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
 #if __has_feature(objc_arc)
 #define _SG_OBJC_RETAIN(obj) { }
 #define _SG_OBJC_RELEASE(obj) { obj = nil; }
-#define _SG_OBJC_RELEASE_WITH_NULL(obj) { obj = [NSNull null]; }
 #else
 #define _SG_OBJC_RETAIN(obj) { [obj retain]; }
 #define _SG_OBJC_RELEASE(obj) { [obj release]; obj = nil; }
-#define _SG_OBJC_RELEASE_WITH_NULL(obj) { [obj release]; obj = [NSNull null]; }
 #endif
 
 /*-- enum translation functions ----------------------------------------------*/
@@ -10138,6 +10142,7 @@ _SOKOL_PRIVATE int _sg_mtl_add_resource(id res) {
         return _SG_MTL_INVALID_SLOT_INDEX;
     }
     const int slot_index = _sg_mtl_alloc_pool_slot();
+    // NOTE: the NSMutableArray will take ownership of its items
     SOKOL_ASSERT([NSNull null] == _sg.mtl.idpool.pool[(NSUInteger)slot_index]);
     _sg.mtl.idpool.pool[(NSUInteger)slot_index] = res;
     return slot_index;
@@ -10177,8 +10182,11 @@ _SOKOL_PRIVATE void _sg_mtl_garbage_collect(uint32_t frame_index) {
         /* safe to release this resource */
         const int slot_index = _sg.mtl.idpool.release_queue[_sg.mtl.idpool.release_queue_back].slot_index;
         SOKOL_ASSERT((slot_index > 0) && (slot_index < _sg.mtl.idpool.num_slots));
+        /* note: the NSMutableArray takes ownership of its items, assigning an NSNull object will
+           release the object, no matter if using ARC or not
+        */
         SOKOL_ASSERT(_sg.mtl.idpool.pool[(NSUInteger)slot_index] != [NSNull null]);
-        _SG_OBJC_RELEASE_WITH_NULL(_sg.mtl.idpool.pool[(NSUInteger)slot_index]);
+        _sg.mtl.idpool.pool[(NSUInteger)slot_index] = [NSNull null];
         /* put the now free pool index back on the free queue */
         _sg_mtl_free_pool_slot(slot_index);
         /* reset the release queue slot and advance the back index */
@@ -10243,6 +10251,7 @@ _SOKOL_PRIVATE int _sg_mtl_create_sampler(id<MTLDevice> mtl_device, const sg_ima
         id<MTLSamplerState> mtl_sampler = [mtl_device newSamplerStateWithDescriptor:mtl_desc];
         _SG_OBJC_RELEASE(mtl_desc);
         int sampler_handle = _sg_mtl_add_resource(mtl_sampler);
+        _SG_OBJC_RELEASE(mtl_sampler);
         _sg_smpcache_add_item(&_sg.mtl.sampler_cache, img_desc, (uintptr_t)sampler_handle);
         return sampler_handle;
     }
@@ -10512,6 +10521,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
             }
         }
         buf->mtl.buf[slot] = _sg_mtl_add_resource(mtl_buf);
+        _SG_OBJC_RELEASE(mtl_buf);
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -10689,6 +10699,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         id<MTLTexture> tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
         SOKOL_ASSERT(nil != tex);
         img->mtl.depth_tex = _sg_mtl_add_resource(tex);
+        _SG_OBJC_RELEASE(tex);
     }
     else {
         /* create the color texture
@@ -10715,6 +10726,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
                 }
             }
             img->mtl.tex[slot] = _sg_mtl_add_resource(tex);
+            _SG_OBJC_RELEASE(tex);
         }
 
         /* if MSAA color render target, create an additional MSAA render-surface texture */
@@ -10722,6 +10734,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
             _sg_mtl_init_texdesc_rt_msaa(mtl_desc, img);
             id<MTLTexture> tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
             img->mtl.msaa_tex = _sg_mtl_add_resource(tex);
+            _SG_OBJC_RELEASE(tex);
         }
 
         /* create (possibly shared) sampler state */
@@ -10772,18 +10785,18 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     _sg_shader_common_init(&shd->cmn, desc);
 
     /* create metal libray objects and lookup entry functions */
-    id<MTLLibrary> vs_lib;
-    id<MTLLibrary> fs_lib;
-    id<MTLFunction> vs_func;
-    id<MTLFunction> fs_func;
+    id<MTLLibrary> vs_lib = nil;
+    id<MTLLibrary> fs_lib = nil;
+    id<MTLFunction> vs_func = nil;
+    id<MTLFunction> fs_func = nil;
     const char* vs_entry = desc->vs.entry;
     const char* fs_entry = desc->fs.entry;
     if (desc->vs.bytecode.ptr && desc->fs.bytecode.ptr) {
         /* separate byte code provided */
         vs_lib = _sg_mtl_library_from_bytecode(desc->vs.bytecode.ptr, desc->vs.bytecode.size);
         fs_lib = _sg_mtl_library_from_bytecode(desc->fs.bytecode.ptr, desc->fs.bytecode.size);
-        if (nil == vs_lib || nil == fs_lib) {
-            return SG_RESOURCESTATE_FAILED;
+        if ((nil == vs_lib) || (nil == fs_lib)) {
+            goto failed;
         }
         vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
@@ -10792,29 +10805,47 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
         /* separate sources provided */
         vs_lib = _sg_mtl_compile_library(desc->vs.source);
         fs_lib = _sg_mtl_compile_library(desc->fs.source);
-        if (nil == vs_lib || nil == fs_lib) {
-            return SG_RESOURCESTATE_FAILED;
+        if ((nil == vs_lib) || (nil == fs_lib)) {
+            goto failed;
         }
         vs_func = [vs_lib newFunctionWithName:[NSString stringWithUTF8String:vs_entry]];
         fs_func = [fs_lib newFunctionWithName:[NSString stringWithUTF8String:fs_entry]];
     }
     else {
-        return SG_RESOURCESTATE_FAILED;
+        goto failed;
     }
     if (nil == vs_func) {
         SOKOL_LOG("vertex shader entry function not found\n");
-        return SG_RESOURCESTATE_FAILED;
+        goto failed;
     }
     if (nil == fs_func) {
         SOKOL_LOG("fragment shader entry function not found\n");
-        return SG_RESOURCESTATE_FAILED;
+        goto failed;
     }
     /* it is legal to call _sg_mtl_add_resource with a nil value, this will return a special 0xFFFFFFFF index */
     shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_lib  = _sg_mtl_add_resource(vs_lib);
+    _SG_OBJC_RELEASE(vs_lib);
     shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_lib  = _sg_mtl_add_resource(fs_lib);
+    _SG_OBJC_RELEASE(fs_lib);
     shd->mtl.stage[SG_SHADERSTAGE_VS].mtl_func = _sg_mtl_add_resource(vs_func);
+    _SG_OBJC_RELEASE(vs_func);
     shd->mtl.stage[SG_SHADERSTAGE_FS].mtl_func = _sg_mtl_add_resource(fs_func);
+    _SG_OBJC_RELEASE(fs_func);
     return SG_RESOURCESTATE_VALID;
+failed:
+    if (vs_lib != nil) {
+        _SG_OBJC_RELEASE(vs_lib);
+    }
+    if (fs_lib != nil) {
+        _SG_OBJC_RELEASE(fs_lib);
+    }
+    if (vs_func != nil) {
+        _SG_OBJC_RELEASE(vs_func);
+    }
+    if (fs_func != nil) {
+        _SG_OBJC_RELEASE(fs_func);
+    }
+    return SG_RESOURCESTATE_FAILED;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_destroy_shader(_sg_shader_t* shd) {
@@ -10941,7 +10972,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
     id<MTLDepthStencilState> mtl_dss = [_sg.mtl.device newDepthStencilStateWithDescriptor:ds_desc];
     _SG_OBJC_RELEASE(ds_desc);
     pip->mtl.rps = _sg_mtl_add_resource(mtl_rps);
+    _SG_OBJC_RELEASE(mtl_rps);
     pip->mtl.dss = _sg_mtl_add_resource(mtl_dss);
+    _SG_OBJC_RELEASE(mtl_dss);
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -14016,7 +14049,7 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH:      return "size of uniform block members doesn't match uniform block size";
         case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:        return "uniform array count must be >= 1";
         case _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE:  return "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout";
-        
+
         case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:          return "shader images must occupy continuous slots";
         case _SG_VALIDATE_SHADERDESC_IMG_NAME:              return "GL backend requires uniform block member names";
         case _SG_VALIDATE_SHADERDESC_ATTR_NAMES:            return "GLES2 backend requires vertex attribute names";
@@ -15958,6 +15991,23 @@ SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
     bool result = buf ? buf->cmn.append_overflow : false;
+    return result;
+}
+
+SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg_buffer_t* buf = _sg_lookup_buffer(&_sg.pools, buf_id.id);
+    bool result = false;
+    if (buf) {
+        int append_pos = buf->cmn.append_pos;
+        /* rewind append cursor in a new frame */
+        if (buf->cmn.append_frame_index != _sg.frame_index) {
+            append_pos = 0;
+        }
+        if ((append_pos + _sg_roundup((int)size, 4)) > buf->cmn.size) {
+            result = true;
+        }
+    }
     return result;
 }
 

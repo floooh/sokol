@@ -18,5 +18,6 @@
 
 void use_fontstash_impl() {
     const sfons_desc_t desc = { };
-    sfons_create(&desc);
+    FONScontext* ctx = sfons_create(&desc);
+    sfons_destroy(ctx);
 }
