@@ -104,7 +104,155 @@
 extern "C" {
 #endif
 
-// FIXME FIXME FIXME
+// FIXME: track events, event call back (in instance desc)
+
+typedef struct sspine_context { uint32_t id; } sspine_context;
+typedef struct sspine_atlas { uint32_t id; } sspine_atlas;
+typedef struct sspine_skeleton { uint32_t id; } sspine_skeleton;
+typedef struct sspine_instance { uint32_t id; } sspine_instance;
+
+typedef struct sspine_bone { sspine_instance instance; int index; } sspine_bone;
+typedef struct sspine_slot { sspine_instance instance; int index; } sspine_slot;
+typedef struct sspine_anim { sspine_instance instance; int index; } sspine_anim;
+
+typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
+typedef struct sspine_vec2 { float x, y; } sspine_vec2;
+typedef sg_color sspine_color;
+
+typedef struct sspine_bone_transform {
+    sspine_vec2 position;
+    float rotation;         // in degrees
+    sspine_vec2 scale;
+    sspine_vec2 shear;      // in degrees
+} sspine_bone_transform;
+
+typedef struct sspine_context_desc {
+    int max_vertices;
+    int max_commands;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+} sspine_context_desc;
+
+typedef struct sspine_image_desc {
+    sg_pixel_format format;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    int width;
+    int height;
+} sspine_image_desc;
+
+typedef struct sspine_load_image_callback {
+    sg_image (*callback)(const char* path, const sspine_image_desc* desc, void* user_data);
+    void* user_data;
+} sspine_load_image_callback;
+
+typedef struct sspine_atlas_desc {
+    sspine_range data;
+    const char* dir;
+    sspine_load_image_callback load_image_cb;
+} sppine_atlas_desc;
+
+typedef struct sspine_skeleton_desc {
+    sspine_atlas atlas;
+    const char* json_data;
+    sspine_range binary_data;
+} sspine_skeleton_desc;
+
+typedef struct sspine_instance_desc {
+    sspine_skeleton skeleton;
+} sspine_instance_desc;
+
+typedef struct sspine_allocator {
+    void* (*alloc)(size_t size, void* user_data);
+    void (*free)(void* ptr, void* user_data);
+    void* user_data;
+} sspine_allocator;
+
+
+typedef struct sspine_desc {
+    int max_vertices;
+    int max_commands;
+    int context_pool_size;
+    int atlas_pool_size;
+    int skeleton_pool_size;
+    int instance_pool_size;
+    sg_pixel_format color_format;
+    sg_pixel_format depth_format;
+    int sample_count;
+    sspine_allocator allocator;
+} sspine_desc;
+
+// setup/shutdown
+SOKOL_SPINE_API_DECL void sspine_setup(const sspine_desc* desc);
+SOKOL_SPINE_API_DECL void sspine_shutdown(void);
+
+// context functions
+SOKOL_SPINE_API_DECL sspine_context sspine_make_context(const sspine_context_desc* desc);
+SOKOL_SPINE_API_DECL void sspine_destroy_context(sspine_context ctx);
+SOKOL_SPINE_API_DECL void sspine_set_context(sspine_context ctx);
+SOKOL_SPINE_API_DECL sspine_context sspine_get_context(void);
+SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
+
+// create and destroy spine objects
+SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
+SOKOL_SPINE_API_DECL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* desc);
+SOKOL_SPINE_API_DECL sspine_instance sspine_make_instance(const sspine_instance_desc* desc);
+SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
+
+// instance transform functions
+SOKOL_SPINE_API_DECL void sspine_set_position(sspine_instance instance, sspine_vec2 position);
+SOKOL_SPINE_API_DECL void sspine_set_scale(sspine_instance instance, sspine_vec2 scale);
+SOKOL_SPINE_API_DECL void sspine_set_color(sspine_instance instance, sspine_color color);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_position(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_scale(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_color sspine_get_color(sspine_instance instance);
+
+// find instance items by name
+SOKOL_SPINE_API_DECL sspine_bone sspine_find_bone(sspine_instance instance, const char* name);
+SOKOL_SPINE_API_DECL sspine_slot sspine_find_slot(sspine_instance instance, const char* name);
+SOKOL_SPINE_API_DECL sspine_anim sspine_find_anim(sspine_instance instance, const char* name);
+
+// instance animation functions
+SOKOL_SPINE_API_DECL void sspine_update_animation(sspine_instance instance, float delta);
+SOKOL_SPINE_API_DECL void sspine_clear_animation_tracks(sspine_instance instance);
+SOKOL_SPINE_API_DECL void sspine_clear_animation_track(sspine_instance instance, int track_index);
+SOKOL_SPINE_API_DECL void sspine_set_animation(sspine_instance instance, int track_index, sspine_anim anim, bool loop);
+SOKOL_SPINE_API_DECL void sspine_set_animation_by_name(sspine_instance instance, int track_index, const char* anim_name, bool loop);
+SOKOL_SPINE_API_DECL void sspine_add_animation(sspine_instance instance, int track_index, sspine_anim anim, bool loop, float delay);
+SOKOL_SPINE_API_DECL void sspine_add_animation_by_name(sspine_instance instance, int track_index, const char* anim_name, bool loop, float delay);
+SOKOL_SPINE_API_DECL void sspine_set_empty_animation(sspine_instance instance, int track_index, float mix_duration);
+SOKOL_SPINE_API_DECL void sspine_add_empty_animation(sspine_instance instance, int track_index, float mix_duration, float delay);
+
+// iterate over instance items
+SOKOL_SPINE_API_DECL int sspine_num_bones(sspine_instance instance);
+SOKOL_SPINE_API_DECL int sspine_num_slots(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_bone sspine_bone_at(sspine_instance instance, int index);
+SOKOL_SPINE_API_DECL sspine_slot sspine_slot_at(sspine_instance instance, int index);
+
+// check if a instanace item handle is valid
+SOKOL_SPINE_API_DECL bool sspine_bone_valid(sspine_bone bone);
+SOKOL_SPINE_API_DECL bool sspine_slot_valid(sspine_slot slot);
+
+// direct bone manipulation, transforms are in bone-local space, angles are in degrees
+SOKOL_SPINE_API_DECL void sspine_bone_set_transform(sspine_bone bone, const sspine_bone_transform* transform);
+SOKOL_SPINE_API_DECL void sspine_bone_set_position(sspine_bone bone, sspine_vec2 position);
+SOKOL_SPINE_API_DECL void sspine_bone_set_rotation(sspine_bone bone, float rotation);
+SOKOL_SPINE_API_DECL void sspine_bone_set_scale(sspine_bone bone, sspine_vec2 scale);
+SOKOL_SPINE_API_DECL void sspine_bone_set_shear(sspine_bone bone, sspine_vec2 shear);
+SOKOL_SPINE_API_DECL sspine_bone_transform sspine_bone_get_transform(sspine_bone bone);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_get_position(sspine_bone bone);
+SOKOL_SPINE_API_DECL float sspine_bone_get_rotation(sspine_bone bone);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_get_scale(sspine_bone bone);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_get_shear(sspine_bone bone);
+
+// direct slot manipulation
+SOKOL_SPINE_API_DECL void sspine_slot_set_color(sspine_slot slot, sspine_color color);
+SOKOL_SPINE_API_DECL sspine_color sspine_slot_get_color(sspine_slot slot);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -117,6 +265,7 @@ extern "C" {
 #if !defined(SPINE_SPINE_H_)
 #error "Please include spine/spine.h before sokol_spine.h"
 #endif
+
 
 // FIXME FIXME FIXME
 
