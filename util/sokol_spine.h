@@ -134,7 +134,8 @@ typedef struct sspine_context_desc {
     int sample_count;
 } sspine_context_desc;
 
-typedef struct sspine_image_desc {
+typedef struct sspine_image_info {
+    const char* path;
     sg_pixel_format format;
     sg_filter min_filter;
     sg_filter mag_filter;
@@ -142,17 +143,11 @@ typedef struct sspine_image_desc {
     sg_wrap wrap_v;
     int width;
     int height;
-} sspine_image_desc;
-
-typedef struct sspine_load_image_callback {
-    sg_image (*callback)(const char* path, const sspine_image_desc* desc, void* user_data);
-    void* user_data;
-} sspine_load_image_callback;
+} sspine_image_info;
 
 typedef struct sspine_atlas_desc {
     sspine_range data;
-    const char* dir;
-    sspine_load_image_callback load_image_cb;
+    const char* image_root_path;
 } sspine_atlas_desc;
 
 typedef struct sspine_skeleton_desc {
@@ -203,6 +198,11 @@ SOKOL_SPINE_API_DECL sspine_instance sspine_make_instance(const sspine_instance_
 SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
+
+// atlas images
+SOKOL_SPINE_API_DECL int sspine_atlas_get_num_images(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL sspine_image_info sspine_atlas_get_image_info(sspine_atlas atlas, int image_index);
+SOKOL_SPINE_API_DECL void sspine_atlas_attach_image(sspine_atlas atlas, int image_index, sg_image image);
 
 // instance transform functions
 SOKOL_SPINE_API_DECL void sspine_set_position(sspine_instance instance, sspine_vec2 position);
@@ -321,7 +321,7 @@ typedef struct {
 
 typedef struct {
     _sspine_slot_t slot;
-    // FIXME
+    spAtlas* sp_atlas;
 } _sspine_atlas_t;
 
 typedef struct {
@@ -557,9 +557,10 @@ static sspine_context _sspine_alloc_context(void) {
     return res;
 }
 
-static void _sspine_init_context(sspine_context ctx_id, const sspine_context_desc* desc) {
-    SOKOL_ASSERT((ctx_id.id != SG_INVALID_ID) && desc);
-    // FIXME
+static sg_resource_state _sspine_init_context(_sspine_context_t* ctx, const sspine_context_desc* desc) {
+    SOKOL_ASSERT(ctx && (ctx->slot.state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    return SG_RESOURCESTATE_FAILED;
 }
 
 static void _sspine_destroy_context(sspine_context ctx_id) {
@@ -640,14 +641,40 @@ static sspine_atlas _sspine_alloc_atlas(void) {
     return res;
 }
 
-static void _sspine_init_atlas(sspine_atlas atlas_id, const sspine_atlas_desc* desc) {
-    SOKOL_ASSERT((atlas_id.id != SG_INVALID_ID) && desc);
-    // FIXME
+void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
+    // FIXME!
+    (void)self; (void)path;
+    SOKOL_LOG("FIXME: _spAtlasPage_createTexture() called!\n");
+}
+
+void _spAtlasPage_disposeTexture(spAtlasPage* self) {
+    // FIXME!
+    (void)self;
+    SOKOL_LOG("FIXME: _spAtlasPage_disposeTexture() called!\n");
+}
+
+static sg_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine_atlas_desc* desc) {
+    SOKOL_ASSERT(atlas && (atlas->slot.state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
+    SOKOL_ASSERT(atlas->sp_atlas == 0);
+
+    if ((desc->data.ptr == 0) || (desc->data.size == 0)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+
+    atlas->sp_atlas = spAtlas_create((const char*)desc->data.ptr, (int)desc->data.size, desc->image_root_path, 0);
+    SOKOL_ASSERT(atlas->sp_atlas);
+
+    return SG_RESOURCESTATE_VALID;
 }
 
 static void _sspine_destroy_atlas(sspine_atlas atlas_id) {
     _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
     if (atlas) {
+        if (atlas->sp_atlas) {
+            spAtlas_dispose(atlas->sp_atlas);
+        }
         // FIXME
         _sspine_atlas_pool_t* p = &_sspine.atlas_pool;
         _sspine_clear(atlas, sizeof(_sspine_atlas_t));
@@ -665,9 +692,8 @@ static void _sspine_destroy_all_atlases(void) {
 
 static sspine_atlas_desc _sspine_atlas_desc_defaults(const sspine_atlas_desc* desc) {
     SOKOL_ASSERT(desc->data.ptr && (desc->data.size > 0));
-    SOKOL_ASSERT(desc->load_image_cb.callback);
     sspine_atlas_desc res = *desc;
-    // FIXME?
+    res.image_root_path = _sspine_def(desc->image_root_path, "");
     return res;
 }
 
@@ -720,9 +746,10 @@ static sspine_skeleton _sspine_alloc_skeleton(void) {
     return res;
 }
 
-static void _sspine_init_skeleton(sspine_skeleton skeleton_id, const sspine_skeleton_desc* desc) {
-    SOKOL_ASSERT((skeleton_id.id != SG_INVALID_ID) && desc);
-    // FIXME
+static sg_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton, const sspine_skeleton_desc* desc) {
+    SOKOL_ASSERT(skeleton && (skeleton->slot.state = SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    return SG_RESOURCESTATE_FAILED;
 }
 
 static void _sspine_destroy_skeleton(sspine_skeleton skeleton_id) {
@@ -800,9 +827,10 @@ static sspine_instance _sspine_alloc_instance(void) {
     return res;
 }
 
-static void _sspine_init_instance(sspine_instance instance_id, const sspine_instance_desc* desc) {
-    SOKOL_ASSERT((instance_id.id != SG_INVALID_ID) && desc);
-    // FIXME
+static sg_resource_state _sspine_init_instance(_sspine_instance_t* instance, const sspine_instance_desc* desc) {
+    SOKOL_ASSERT(instance && (instance->slot.state == SG_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(desc);
+    return SG_RESOURCESTATE_FAILED;
 }
 
 static void _sspine_destroy_instance(sspine_instance instance_id) {
@@ -888,10 +916,13 @@ SOKOL_API_IMPL sspine_context sspine_make_context(const sspine_context_desc* des
     SOKOL_ASSERT(desc);
     const sspine_context_desc desc_def = _sspine_context_desc_defaults(desc);
     sspine_context ctx_id = _sspine_alloc_context();
-    if (ctx_id.id != SG_INVALID_ID) {
-        _sspine_init_context(ctx_id, &desc_def);
+    _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
+    if (ctx) {
+        ctx->slot.state = _sspine_init_context(ctx, &desc_def);
+        SOKOL_ASSERT((ctx->slot.state == SG_RESOURCESTATE_VALID) || (ctx->slot.state == SG_RESOURCESTATE_FAILED));
     }
     else {
+        ctx->slot.state = SG_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: context pool exhausted");
     }
     return ctx_id;
@@ -935,10 +966,13 @@ SOKOL_API_IMPL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc) {
     SOKOL_ASSERT(desc);
     const sspine_atlas_desc desc_def = _sspine_atlas_desc_defaults(desc);
     sspine_atlas atlas_id = _sspine_alloc_atlas();
-    if (atlas_id.id != SG_INVALID_ID) {
-        _sspine_init_atlas(atlas_id, &desc_def);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    if (atlas) {
+        atlas->slot.state = _sspine_init_atlas(atlas, &desc_def);
+        SOKOL_ASSERT((atlas->slot.state == SG_RESOURCESTATE_VALID) || (atlas->slot.state == SG_RESOURCESTATE_FAILED));
     }
     else {
+        atlas->slot.state = SG_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: atlas pool exhausted");
     }
     return atlas_id;
@@ -954,10 +988,13 @@ SOKOL_API_IMPL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* 
     SOKOL_ASSERT(desc);
     const sspine_skeleton_desc desc_def = _sspine_skeleton_desc_defaults(desc);
     sspine_skeleton skeleton_id = _sspine_alloc_skeleton();
-    if (skeleton_id.id != SG_INVALID_ID) {
-        _sspine_init_skeleton(skeleton_id, &desc_def);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (skeleton) {
+        skeleton->slot.state = _sspine_init_skeleton(skeleton, &desc_def);
+        SOKOL_ASSERT((skeleton->slot.state == SG_RESOURCESTATE_VALID) || (skeleton->slot.state == SG_RESOURCESTATE_FAILED));
     }
     else {
+        skeleton->slot.state = SG_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: skeleton pool exhausted");
     }
     return skeleton_id;
@@ -973,11 +1010,14 @@ SOKOL_API_IMPL sspine_instance sspine_make_instance(const sspine_instance_desc* 
     SOKOL_ASSERT(desc);
     const sspine_instance_desc desc_def = _sspine_instance_desc_defaults(desc);
     sspine_instance instance_id = _sspine_alloc_instance();
-    if (instance_id.id != SG_INVALID_ID) {
-        _sspine_init_instance(instance_id, &desc_def);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (instance) {
+        instance->slot.state = _sspine_init_instance(instance, &desc_def);
+        SOKOL_ASSERT((instance->slot.state == SG_RESOURCESTATE_VALID) || (instance->slot.state == SG_RESOURCESTATE_FAILED));
     }
     else {
-        SOKOL_LOG("sokol_spine.h: instance pool exhaustd");
+        instance->slot.state = SG_RESOURCESTATE_FAILED;
+        SOKOL_LOG("sokol_spine.h: instance pool exhausted");
     }
     return instance_id;
 }
