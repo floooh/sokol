@@ -135,8 +135,8 @@ typedef struct sspine_context_desc {
 } sspine_context_desc;
 
 typedef struct sspine_image_info {
-    const char* path;
-    sg_pixel_format format;
+    sg_image image;
+    const char* filename;
     sg_filter min_filter;
     sg_filter mag_filter;
     sg_wrap wrap_u;
@@ -200,9 +200,8 @@ SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 
 // atlas images
-SOKOL_SPINE_API_DECL int sspine_atlas_get_num_images(sspine_atlas atlas);
-SOKOL_SPINE_API_DECL sspine_image_info sspine_atlas_get_image_info(sspine_atlas atlas, int image_index);
-SOKOL_SPINE_API_DECL void sspine_atlas_attach_image(sspine_atlas atlas, int image_index, sg_image image);
+SOKOL_SPINE_API_DECL int sspine_get_num_images(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL sspine_image_info sspine_get_image_info(sspine_atlas atlas, int image_index);
 
 // instance transform functions
 SOKOL_SPINE_API_DECL void sspine_set_position(sspine_instance instance, sspine_vec2 position);
@@ -322,6 +321,7 @@ typedef struct {
 typedef struct {
     _sspine_slot_t slot;
     spAtlas* sp_atlas;
+    int num_pages;
 } _sspine_atlas_t;
 
 typedef struct {
@@ -642,15 +642,15 @@ static sspine_atlas _sspine_alloc_atlas(void) {
 }
 
 void _spAtlasPage_createTexture(spAtlasPage* self, const char* path) {
-    // FIXME!
+    // nothing to do here
     (void)self; (void)path;
-    SOKOL_LOG("FIXME: _spAtlasPage_createTexture() called!\n");
 }
 
 void _spAtlasPage_disposeTexture(spAtlasPage* self) {
-    // FIXME!
-    (void)self;
-    SOKOL_LOG("FIXME: _spAtlasPage_disposeTexture() called!\n");
+    if (self->rendererObject != 0) {
+        const sg_image img = { (uint32_t)(uintptr_t)self->rendererObject };
+        sg_destroy_image(img);
+    }
 }
 
 static sg_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine_atlas_desc* desc) {
@@ -666,6 +666,11 @@ static sg_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const sspine
     atlas->sp_atlas = spAtlas_create((const char*)desc->data.ptr, (int)desc->data.size, desc->image_root_path, 0);
     SOKOL_ASSERT(atlas->sp_atlas);
 
+    // allocate an image handle for each page
+    for (spAtlasPage* page = atlas->sp_atlas->pages; page != 0; page = page->next) {
+        atlas->num_pages++;
+        page->rendererObject = (void*)(uintptr_t)sg_alloc_image().id;
+    }
     return SG_RESOURCESTATE_VALID;
 }
 
@@ -882,6 +887,57 @@ static sspine_context_desc _sspine_as_context_desc(const sspine_desc* desc) {
     return ctx_desc;
 }
 
+static spAtlasPage* _sspine_atlas_page_at(_sspine_atlas_t* atlas, int index) {
+    SOKOL_ASSERT(atlas && atlas->sp_atlas);
+    SOKOL_ASSERT((index >= 0) && (index < atlas->num_pages));
+    int i = 0;
+    for (spAtlasPage* page = atlas->sp_atlas->pages; page != 0; page = page->next, i++) {
+        if (i == index) {
+            return page;
+        }
+    }
+    return 0;
+}
+
+static sg_filter _sspine_as_image_filter(spAtlasFilter filter) {
+    switch (filter) {
+        case SP_ATLAS_UNKNOWN_FILTER: return _SG_FILTER_DEFAULT;
+        case SP_ATLAS_NEAREST: return SG_FILTER_NEAREST;
+        case SP_ATLAS_LINEAR: return SG_FILTER_LINEAR;
+        case SP_ATLAS_MIPMAP: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_NEAREST_NEAREST: return SG_FILTER_NEAREST_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_LINEAR_NEAREST: return SG_FILTER_LINEAR_MIPMAP_NEAREST;
+        case SP_ATLAS_MIPMAP_NEAREST_LINEAR: return SG_FILTER_NEAREST_MIPMAP_LINEAR;
+        case SP_ATLAS_MIPMAP_LINEAR_LINEAR: return SG_FILTER_LINEAR_MIPMAP_LINEAR;
+    }
+}
+
+static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
+    switch (wrap) {
+        case SP_ATLAS_MIRROREDREPEAT: return SG_WRAP_MIRRORED_REPEAT;
+        case SP_ATLAS_CLAMPTOEDGE: return SG_WRAP_CLAMP_TO_EDGE;
+        case SP_ATLAS_REPEAT: return SG_WRAP_REPEAT;
+    }
+}
+
+static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_image_info* info) {
+    SOKOL_ASSERT((index >= 0) && (index < atlas->num_pages));
+    if ((index < 0) || (index >= atlas->num_pages)) {
+        return;
+    }
+    spAtlasPage* page = _sspine_atlas_page_at(atlas, index);
+    SOKOL_ASSERT(page);
+    SOKOL_ASSERT(page->name);
+    info->image.id = (uint32_t)(uintptr_t)page->rendererObject;
+    info->filename = page->name;
+    info->min_filter = _sspine_as_image_filter(page->minFilter);
+    info->mag_filter = _sspine_as_image_filter(page->magFilter);
+    info->wrap_u = _sspine_as_image_wrap(page->uWrap);
+    info->wrap_v = _sspine_as_image_wrap(page->vWrap);
+    info->width = page->width;
+    info->height = page->height;
+}
+
 //== PUBLIC FUNCTIONS ==========================================================
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -1025,6 +1081,21 @@ SOKOL_API_IMPL sspine_instance sspine_make_instance(const sspine_instance_desc* 
 SOKOL_API_IMPL void sspine_destroy_instance(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_destroy_instance(instance_id);
+}
+
+SOKOL_API_IMPL int sspine_get_num_images(sspine_atlas atlas_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    return atlas ? atlas->num_pages : 0;
+}
+
+SOKOL_API_IMPL sspine_image_info sspine_get_image_info(sspine_atlas atlas_id, int image_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    sspine_image_info img_info;
+    _sspine_clear(&img_info, sizeof(img_info));
+    _sspine_init_image_info(atlas, image_index, &img_info);
+    return img_info;
 }
 
 #endif // SOKOL_SPINE_IMPL
