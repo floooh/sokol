@@ -330,8 +330,13 @@ typedef struct {
 } _sspine_atlas_pool_t;
 
 typedef struct {
+    uint32_t id;
+    _sspine_atlas_t* ptr;
+} _sspine_atlas_ref_t;
+
+typedef struct {
     _sspine_slot_t slot;
-    sspine_atlas atlas;
+    _sspine_atlas_ref_t atlas;
     spSkeletonData* sp_skel_data;
     spAnimationStateData* sp_anim_data;
 } _sspine_skeleton_t;
@@ -342,7 +347,17 @@ typedef struct {
 } _sspine_skeleton_pool_t;
 
 typedef struct {
+    uint32_t id;
+    _sspine_skeleton_t* ptr;
+} _sspine_skeleton_ref_t;
+
+typedef struct {
     _sspine_slot_t slot;
+    _sspine_atlas_ref_t atlas;
+    _sspine_skeleton_ref_t skel;
+    spSkeleton* sp_skel;
+    spAnimationState* sp_anim;
+    spSkeletonClipping* sp_clip;
 } _sspine_instance_t;
 
 typedef struct {
@@ -404,6 +419,14 @@ static void _sspine_free(void* ptr) {
     else {
         free(ptr);
     }
+}
+
+static bool _sspine_atlas_ref_valid(const _sspine_atlas_ref_t* ref) {
+    return ref->ptr && (ref->ptr->slot.id == ref->id);
+}
+
+static bool _sspine_skeleton_ref_valid(const _sspine_skeleton_ref_t* ref) {
+    return ref->ptr && (ref->ptr->slot.id == ref->id);
 }
 
 //=== HANDLE POOL FUNCTIONS ====================================================
@@ -760,12 +783,12 @@ static sg_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton, con
         return SG_RESOURCESTATE_FAILED;
     }
 
-    skeleton->atlas = desc->atlas;
-    const _sspine_atlas_t* atlas = _sspine_lookup_atlas(skeleton->atlas.id);
-    SOKOL_ASSERT(atlas);
-    if (0 == atlas) {
+    skeleton->atlas.id = desc->atlas.id;
+    skeleton->atlas.ptr = _sspine_lookup_atlas(skeleton->atlas.id);
+    if (!_sspine_atlas_ref_valid(&skeleton->atlas)) {
         return SG_RESOURCESTATE_FAILED;
     }
+    _sspine_atlas_t* atlas = skeleton->atlas.ptr;
     if (SG_RESOURCESTATE_VALID != atlas->slot.state) {
         return SG_RESOURCESTATE_FAILED;
     }
@@ -882,13 +905,56 @@ static sspine_instance _sspine_alloc_instance(void) {
 static sg_resource_state _sspine_init_instance(_sspine_instance_t* instance, const sspine_instance_desc* desc) {
     SOKOL_ASSERT(instance && (instance->slot.state == SG_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
-    return SG_RESOURCESTATE_FAILED;
+
+    instance->skel.id = desc->skeleton.id;
+    instance->skel.ptr = _sspine_lookup_skeleton(instance->skel.id);
+    if (!_sspine_skeleton_ref_valid(&instance->skel)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    _sspine_skeleton_t* skel = instance->skel.ptr;
+    if (SG_RESOURCESTATE_VALID != skel->slot.state) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    instance->atlas = skel->atlas;
+    if (!_sspine_atlas_ref_valid(&instance->atlas)) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    if (SG_RESOURCESTATE_VALID != instance->atlas.ptr->slot.state) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    SOKOL_ASSERT(skel->sp_skel_data);
+    SOKOL_ASSERT(skel->sp_anim_data);
+
+    instance->sp_skel = spSkeleton_create(skel->sp_skel_data);
+    SOKOL_ASSERT(instance->sp_skel);
+    if (0 == instance->sp_skel) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    instance->sp_anim = spAnimationState_create(skel->sp_anim_data);
+    SOKOL_ASSERT(instance->sp_anim);
+    if (0 == instance->sp_anim) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    instance->sp_clip = spSkeletonClipping_create();
+    SOKOL_ASSERT(instance->sp_clip);
+    if (0 == instance->sp_clip) {
+        return SG_RESOURCESTATE_FAILED;
+    }
+    return SG_RESOURCESTATE_VALID;
 }
 
 static void _sspine_destroy_instance(sspine_instance instance_id) {
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (instance) {
-        // FIXME
+        if (instance->sp_clip) {
+            spSkeletonClipping_dispose(instance->sp_clip);
+        }
+        if (instance->sp_anim) {
+            spAnimationState_dispose(instance->sp_anim);
+        }
+        if (instance->sp_skel) {
+            spSkeleton_dispose(instance->sp_skel);
+        }
         _sspine_instance_pool_t* p = &_sspine.instance_pool;
         _sspine_clear(instance, sizeof(_sspine_instance_t));
         _sspine_pool_free_index(&p->pool, _sspine_slot_index(instance_id.id));
@@ -906,7 +972,6 @@ static void _sspine_destroy_all_instances(void) {
 static sspine_instance_desc _sspine_instance_desc_defaults(const sspine_instance_desc* desc) {
     SOKOL_ASSERT(desc->skeleton.id != SG_INVALID_ID);
     sspine_instance_desc res = *desc;
-    // FIXME?
     return res;
 }
 
