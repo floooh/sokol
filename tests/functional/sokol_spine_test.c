@@ -20,7 +20,7 @@ static void shutdown() {
 }
 
 // NOTE: this guarantees that the data is zero terminated because the loaded data
-// might either be binary or text (the zero sentinel is counted in the returned size)
+// might either be binary or text (the zero sentinel is NOT counted in the returned size)
 static sspine_range load_data(const char* path) {
     assert(path);
     FILE* fp = fopen(path, "rb");
