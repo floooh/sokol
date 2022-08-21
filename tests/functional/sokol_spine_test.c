@@ -19,7 +19,8 @@ static void shutdown() {
     sg_shutdown();
 }
 
-// NOTE: this guarantees that the data is zero terminated (the returned size doesn't count the zero!)
+// NOTE: this guarantees that the data is zero terminated because the loaded data
+// might either be binary or text (the zero sentinel is counted in the returned size)
 static sspine_range load_data(const char* path) {
     assert(path);
     FILE* fp = fopen(path, "rb");
@@ -59,9 +60,34 @@ static sspine_skeleton create_skeleton_json(sspine_atlas atlas) {
     return skeleton;
 }
 
+static sspine_skeleton create_skeleton_binary(sspine_atlas atlas) {
+    sspine_range skeleton_binary_data = load_data("spineboy-pro.skel");
+    sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){
+        .atlas = atlas,
+        .binary_data = skeleton_binary_data
+    });
+    free_data(skeleton_binary_data);
+    return skeleton;
+}
+
 UTEST(sokol_spine, default_init_shutdown) {
     // FIXME!
     T(true);
+}
+
+UTEST(sokol_spine, atlas_pool_exhausted) {
+    sg_setup(&(sg_desc){0});
+    sspine_setup(&(sspine_desc){
+        .atlas_pool_size = 4
+    });
+    for (int i = 0; i < 4; i++) {
+        sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){0});
+        T(sspine_get_atlas_resource_state(atlas) == SSPINE_RESOURCESTATE_FAILED);
+    }
+    sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){0});
+    T(SSPINE_INVALID_ID == atlas.id);
+    T(sspine_get_atlas_resource_state(atlas) == SSPINE_RESOURCESTATE_INVALID);
+    shutdown();
 }
 
 UTEST(sokol_spine, make_destroy_atlas_ok) {
@@ -115,9 +141,35 @@ UTEST(sokol_spine, atlas_image_info) {
     shutdown();
 }
 
-UTEST(sokol_spine, make_destroy_skeleton_ok) {
+UTEST(sokol_spine, skeleton_pool_exhausted) {
+    sg_setup(&(sg_desc){0});
+    sspine_setup(&(sspine_desc){
+        .skeleton_pool_size = 4
+    });
+    for (int i = 0; i < 4; i++) {
+        sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){0});
+        T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_FAILED);
+    }
+    sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){0});
+    T(SSPINE_INVALID_ID == skeleton.id);
+    T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_INVALID);
+    shutdown();
+}
+
+UTEST(sokol_spine, make_destroy_skeleton_json_ok) {
     init();
     sspine_skeleton skeleton = create_skeleton_json(create_atlas());
+    T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_VALID);
+    T(sspine_skeleton_valid(skeleton));
+    sspine_destroy_skeleton(skeleton);
+    T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_INVALID);
+    T(!sspine_skeleton_valid(skeleton));
+    shutdown();
+}
+
+UTEST(sokol_spine, make_destroy_skeleton_binary_ok) {
+    init();
+    sspine_skeleton skeleton = create_skeleton_binary(create_atlas());
     T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_VALID);
     T(sspine_skeleton_valid(skeleton));
     sspine_destroy_skeleton(skeleton);
@@ -159,7 +211,7 @@ UTEST(sokol_spine, make_skeleton_fail_with_failed_atlas) {
     shutdown();
 }
 
-UTEST(sokol_spine, make_skeleton_fail_corrupt_data) {
+UTEST(sokol_spine, make_skeleton_json_fail_corrupt_data) {
     init();
     sspine_atlas atlas = create_atlas();
     const char* invalid_json_data = "This is not valid JSON!";
@@ -173,4 +225,82 @@ UTEST(sokol_spine, make_skeleton_fail_corrupt_data) {
     shutdown();
 }
 
-// FIXME: test for binary skeleton data
+// FIXME: this crashes the spine-c runtime
+/*
+UTEST(sokol_spine, make_skeleton_binary_fail_corrupt_data) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    uint8_t invalid_binary_data[] = { 0x23, 0x63, 0x11, 0xFF };
+    sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){
+        .atlas = atlas,
+        .binary_data = { .ptr = invalid_binary_data, .size = sizeof(invalid_binary_data) }
+    });
+    T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_FAILED);
+    sspine_destroy_skeleton(skeleton);
+    T(sspine_get_skeleton_resource_state(skeleton) == SSPINE_RESOURCESTATE_INVALID);
+    shutdown();
+}
+*/
+
+UTEST(sokol_spine, instance_pool_exhausted) {
+    sg_setup(&(sg_desc){0});
+    sspine_setup(&(sspine_desc){
+        .instance_pool_size = 4
+    });
+    for (int i = 0; i < 4; i++) {
+        sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){0});
+        T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_FAILED);
+    }
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){0});
+    T(SSPINE_INVALID_ID == instance.id);
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_INVALID);
+    shutdown();
+}
+
+UTEST(sokol_spine, make_destroy_instance_ok) {
+    init();
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){
+        .skeleton = create_skeleton_json(create_atlas())
+    });
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_VALID);
+    T(sspine_instance_valid(instance));
+    sspine_destroy_instance(instance);
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_INVALID);
+    T(!sspine_instance_valid(instance));
+    shutdown();
+}
+
+UTEST(sokol_spine, make_instance_fail_no_skeleton) {
+    init();
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){0});
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_FAILED);
+    sspine_destroy_instance(instance);
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_INVALID);
+    shutdown();
+}
+
+UTEST(sokol_spine, make_instance_fail_with_failed_skeleton) {
+    init();
+    sspine_skeleton failed_skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){0});
+    T(sspine_get_skeleton_resource_state(failed_skeleton) == SSPINE_RESOURCESTATE_FAILED);
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){
+        .skeleton = failed_skeleton
+    });
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_FAILED);
+    shutdown();
+}
+
+UTEST(sokol_spine, make_instance_fail_with_destroyed_atlas) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    T(sspine_atlas_valid(atlas));
+    sspine_skeleton skeleton = create_skeleton_json(atlas);
+    T(sspine_skeleton_valid(skeleton));
+    sspine_destroy_atlas(atlas);
+    T(!sspine_atlas_valid(atlas));
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){
+        .skeleton = skeleton
+    });
+    T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_FAILED);
+    shutdown();
+}

@@ -209,7 +209,7 @@ SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 
-// get current resource state (INITIAL, ALLOC, VALID, FAILD, INVALID)
+// get current resource state (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_context_resource_state(sspine_context context);
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_atlas_resource_state(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_skeleton_resource_state(sspine_skeleton skeleton);
@@ -1190,7 +1190,6 @@ SOKOL_API_IMPL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc) {
         }
     }
     else {
-        atlas->slot.state = SSPINE_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: atlas pool exhausted");
     }
     return atlas_id;
@@ -1215,7 +1214,6 @@ SOKOL_API_IMPL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* 
         }
     }
     else {
-        skeleton->slot.state = SSPINE_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: skeleton pool exhausted");
     }
     return skeleton_id;
@@ -1240,7 +1238,6 @@ SOKOL_API_IMPL sspine_instance sspine_make_instance(const sspine_instance_desc* 
         }
     }
     else {
-        instance->slot.state = SSPINE_RESOURCESTATE_FAILED;
         SOKOL_LOG("sokol_spine.h: instance pool exhausted");
     }
     return instance_id;
