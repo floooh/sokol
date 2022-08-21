@@ -210,10 +210,10 @@ SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 
 // get current resource state (INITIAL, ALLOC, VALID, FAILD, INVALID)
-SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_context_state(sspine_context context);
-SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_atlas_state(sspine_atlas atlas);
-SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_skeleton_state(sspine_skeleton skeleton);
-SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_instance_state(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_context_resource_state(sspine_context context);
+SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_atlas_resource_state(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_skeleton_resource_state(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_instance_resource_state(sspine_instance instance);
 
 // shortcut for sspine_get_*_state() == SSPINE_RESOURCESTATE_VALID
 SOKOL_SPINE_API_DECL bool sspine_context_valid(sspine_context context);
@@ -1251,7 +1251,7 @@ SOKOL_API_IMPL void sspine_destroy_instance(sspine_instance instance_id) {
     _sspine_destroy_instance(instance_id);
 }
 
-SOKOL_API_IMPL sspine_resource_state sspine_get_context_state(sspine_context ctx_id) {
+SOKOL_API_IMPL sspine_resource_state sspine_get_context_resource_state(sspine_context ctx_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     const _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     if (ctx) {
@@ -1262,7 +1262,7 @@ SOKOL_API_IMPL sspine_resource_state sspine_get_context_state(sspine_context ctx
     }
 }
 
-SOKOL_API_IMPL sspine_resource_state sspine_get_atlas_state(sspine_atlas atlas_id) {
+SOKOL_API_IMPL sspine_resource_state sspine_get_atlas_resource_state(sspine_atlas atlas_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     const _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
     if (atlas) {
@@ -1273,7 +1273,7 @@ SOKOL_API_IMPL sspine_resource_state sspine_get_atlas_state(sspine_atlas atlas_i
     }
 }
 
-SOKOL_API_IMPL sspine_resource_state sspine_get_skeleton_state(sspine_skeleton skeleton_id) {
+SOKOL_API_IMPL sspine_resource_state sspine_get_skeleton_resource_state(sspine_skeleton skeleton_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     const _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
     if (skeleton) {
@@ -1284,7 +1284,7 @@ SOKOL_API_IMPL sspine_resource_state sspine_get_skeleton_state(sspine_skeleton s
     }
 }
 
-SOKOL_API_IMPL sspine_resource_state sspine_get_instance_state(sspine_instance instance_id) {
+SOKOL_API_IMPL sspine_resource_state sspine_get_instance_resource_state(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     const _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (instance) {
@@ -1297,22 +1297,22 @@ SOKOL_API_IMPL sspine_resource_state sspine_get_instance_state(sspine_instance i
 
 SOKOL_API_IMPL bool sspine_context_valid(sspine_context ctx_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    return sspine_get_context_state(ctx_id) == SSPINE_RESOURCESTATE_VALID;
+    return sspine_get_context_resource_state(ctx_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
 SOKOL_API_IMPL bool sspine_atlas_valid(sspine_atlas atlas_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    return sspine_get_atlas_state(atlas_id) == SSPINE_RESOURCESTATE_VALID;
+    return sspine_get_atlas_resource_state(atlas_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
 SOKOL_API_IMPL bool sspine_skeleton_valid(sspine_skeleton skeleton_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    return sspine_get_skeleton_state(skeleton_id) == SSPINE_RESOURCESTATE_VALID;
+    return sspine_get_skeleton_resource_state(skeleton_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
 SOKOL_API_IMPL bool sspine_instance_valid(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    return sspine_get_instance_state(instance_id) == SSPINE_RESOURCESTATE_VALID;
+    return sspine_get_instance_resource_state(instance_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
 SOKOL_API_IMPL int sspine_get_num_images(sspine_atlas atlas_id) {
