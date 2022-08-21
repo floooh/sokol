@@ -2,6 +2,9 @@ prepare() {
     if [ ! -d "ext/fips-cimgui" ] ; then
         git clone --depth 1 --recursive https://github.com/fips-libs/fips-cimgui ext/fips-cimgui
     fi
+    if [ ! -d "ext/spine-runtimes" ] ; then
+        git clone --depth 1 --recursive https://github.com/EsotericSoftware/spine-runtimes/ ext/spine-runtimes
+    fi
 }
 
 setup_emsdk() {
