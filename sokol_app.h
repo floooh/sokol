@@ -3554,7 +3554,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSInteger max_fps = 60;
         #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
         if (@available(macOS 12.0, *)) {
-            max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
+            max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
         }
         #endif
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
