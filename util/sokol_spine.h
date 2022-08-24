@@ -833,7 +833,6 @@ typedef struct {
     _sspine_instance_t* items;
 } _sspine_instance_pool_t;
 
-// make sure that size is multiple of 4!
 typedef struct {
     sspine_vec2 pos;
     uint32_t color;
@@ -1513,8 +1512,11 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
             if (skin_entry->attachment) {
                 if (skin_entry->attachment->type == SP_ATTACHMENT_MESH) {
                     const spMeshAttachment* mesh_attachment = (spMeshAttachment*)skin_entry->attachment;
-                    if (mesh_attachment->super.verticesCount > max_vertex_count) {
-                        max_vertex_count = mesh_attachment->super.verticesCount;
+                    // worldVerticesLength is number of floats
+                    SOKOL_ASSERT((mesh_attachment->super.worldVerticesLength & 1) == 0);
+                    const int num_vertices = mesh_attachment->super.worldVerticesLength / 2;
+                    if (num_vertices > max_vertex_count) {
+                        max_vertex_count = num_vertices;
                     }
                 }
             }
@@ -1839,68 +1841,71 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
 
     // see: https://github.com/EsotericSoftware/spine-runtimes/blob/4.1/spine-sdl/src/spine-sdl-c.c
     const spSkeleton* sp_skel = instance->sp_skel;
+    float* tform_buf = (float*)instance->skel.ptr->tform_buf.ptr;
+    const int max_tform_buf_verts = instance->skel.ptr->tform_buf.num;
+    const int tform_buf_stride = 2; // each element is 2 floats
     spSkeletonClipping* sp_clip = instance->sp_clip;
     SOKOL_ASSERT((sizeof(_sspine_vertex_t) & 3) == 0);
-    const int vtx_stride = sizeof(_sspine_vertex_t) / 4;
     for (int i = 0; i < sp_skel->slotsCount; i++) {
-        spSlot* slot = sp_skel->drawOrder[i];
-        if (!slot->attachment) {
+        spSlot* sp_slot = sp_skel->drawOrder[i];
+        if (!sp_slot->attachment) {
             continue;
         }
 
         // early out if the slot alpha is 0 or the bone is not active
         // FIXME: does alpha 0 actually mean 'invisible' for all blend modes?
-        if ((slot->color.a == 0) || (!slot->bone->active)) {
-            spSkeletonClipping_clipEnd(sp_clip, slot);
+        if ((sp_slot->color.a == 0) || (!sp_slot->bone->active)) {
+            spSkeletonClipping_clipEnd(sp_clip, sp_slot);
             continue;
         }
 
-        _sspine_command_t* cmd = _sspine_alloc_command(ctx);
-        if (0 == cmd) {
-            // command buffer exhausted
-            spSkeletonClipping_clipEnd(sp_clip, slot);
-            continue;
-        }
-
-        const spColor* attColor = 0;
-        const int base_vtx_index = ctx->vertices.cur;
-        const int base_idx_index = ctx->indices.cur;
-        if (slot->attachment->type == SP_ATTACHMENT_REGION) {
-            static const uint32_t quad_indices[] = { 0, 1, 2, 2, 3, 0 };
-            const int num_quad_indices = 6;
-            spRegionAttachment* region_attachment = (spRegionAttachment*)slot->attachment;
-            attColor = &region_attachment->color;
-
+        int num_vertices = 0;
+        float* uvs = 0;
+        int num_indices = 0;
+        const uint16_t* indices = 0;
+        const spColor* att_color = 0;
+        sg_image img;
+        if (sp_slot->attachment->type == SP_ATTACHMENT_REGION) {
+            static const uint16_t quad_indices[] = { 0, 1, 2, 2, 3, 0 };
+            spRegionAttachment* region = (spRegionAttachment*)sp_slot->attachment;
+            att_color = &region->color;
             // FIXME(?) early out if the slot alpha is 0
-            if (attColor->a == 0) {
-                spSkeletonClipping_clipEnd(sp_clip, slot);
+            if (att_color->a == 0) {
+                spSkeletonClipping_clipEnd(sp_clip, sp_slot);
+                continue;
+            }
+            spRegionAttachment_computeWorldVertices(region, sp_slot, tform_buf, 0, tform_buf_stride);
+            num_vertices = 4;
+            indices = &quad_indices[0];
+            num_indices = 6;
+            uvs = region->uvs;
+            img.id = (uint32_t)(uintptr_t)((spAtlasRegion *)region->rendererObject)->page->rendererObject;
+        }
+        else if (sp_slot->attachment->type == SP_ATTACHMENT_MESH) {
+            spMeshAttachment* mesh = (spMeshAttachment*)sp_slot->attachment;
+            att_color = &mesh->color;
+            // FIXME(?) early out if the slot alpha is 0
+            if (att_color->a == 0) {
+                spSkeletonClipping_clipEnd(sp_clip, sp_slot);
                 continue;
             }
 
-            // a region is a quad made of 4 vertices and 6 indices
-            _sspine_vertex_t* vertices = _sspine_alloc_vertices(ctx, 4);
-            uint32_t* indices = _sspine_alloc_indices(ctx, num_quad_indices);
-            // vertex-, index- or cmd-buffer exhausted?
-            if ((vertices == 0) || (indices == 0) || (cmd == 0)) {
-                spSkeletonClipping_clipEnd(sp_clip, slot);
-                continue;
-            }
-            spRegionAttachment_computeWorldVertices(region_attachment, slot, &vertices[0].pos.x, 0, vtx_stride);
-
-            // write indices
-            for (int i = 0; i < num_quad_indices; i++) {
-                indices[i] = (uint32_t)base_vtx_index + quad_indices[i];
-            }
-
-            cmd->base_element = base_idx_index;
-            cmd->num_elements = num_quad_indices;
+            const int num_floats = mesh->super.worldVerticesLength;
+            num_vertices = num_floats / 2;
+            SOKOL_ASSERT(num_vertices <= max_tform_buf_verts);
+            spVertexAttachment_computeWorldVertices(&mesh->super, sp_slot, 0, num_floats, tform_buf, 0, tform_buf_stride);
+            indices = mesh->triangles;
+            num_indices = mesh->trianglesCount; // actually indicesCount???
+            uvs = mesh->uvs;
+            img.id = (uint32_t)(uintptr_t)((spAtlasRegion *)mesh->rendererObject)->page->rendererObject;
         }
-        else if (slot->attachment->type == SP_ATTACHMENT_MESH) {
-            // FIXME: handle mesh attachment
+        else if (sp_slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
+            spClippingAttachment* clip_attachment = (spClippingAttachment*) sp_slot->attachment;
+            spSkeletonClipping_clipStart(sp_clip, sp_slot, clip_attachment);
+            continue;
         }
-        else if (slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
-            spClippingAttachment* clip_attachment = (spClippingAttachment*) slot->attachment;
-            spSkeletonClipping_clipStart(sp_clip, slot, clip_attachment);
+        else {
+            continue;
         }
     }
 
