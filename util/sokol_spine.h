@@ -803,6 +803,10 @@ typedef struct {
     _sspine_atlas_ref_t atlas;
     spSkeletonData* sp_skel_data;
     spAnimationStateData* sp_anim_data;
+    struct {
+        int num;
+        sspine_vec2* ptr;
+    } tform_buf;
 } _sspine_skeleton_t;
 
 typedef struct {
@@ -1499,10 +1503,36 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
     SOKOL_ASSERT(skeleton->sp_anim_data);
     skeleton->sp_anim_data->defaultMix = desc->anim_default_mix;
 
+    // get the max number of vertices in any mesh attachment
+    int max_vertex_count = 4;   // number of vertices in a 'region attachment' (a 2-triangle quad)
+    const spSkeletonData* sp_skel_data = skeleton->sp_skel_data;
+    for (int skinIndex = 0; skinIndex < sp_skel_data->skinsCount; skinIndex++) {
+        const spSkin* sp_skin = sp_skel_data->skins[skinIndex];
+        const spSkinEntry* skin_entry = spSkin_getAttachments(sp_skin);
+        if (skin_entry) do {
+            if (skin_entry->attachment) {
+                if (skin_entry->attachment->type == SP_ATTACHMENT_MESH) {
+                    const spMeshAttachment* mesh_attachment = (spMeshAttachment*)skin_entry->attachment;
+                    if (mesh_attachment->super.verticesCount > max_vertex_count) {
+                        max_vertex_count = mesh_attachment->super.verticesCount;
+                    }
+                }
+            }
+        } while ((skin_entry = skin_entry->next) != 0);
+    }
+
+    // allocate a shared vertex transform buffer (big enough to hold vertices for biggest mesh attachment)
+    skeleton->tform_buf.num = max_vertex_count;
+    skeleton->tform_buf.ptr = (sspine_vec2*) _sspine_malloc((size_t)skeleton->tform_buf.num * sizeof(sspine_vec2));
+
     return SSPINE_RESOURCESTATE_VALID;
 }
 
 static void _sspine_deinit_skeleton(_sspine_skeleton_t* skeleton) {
+    if (skeleton->tform_buf.ptr) {
+        _sspine_free(skeleton->tform_buf.ptr);
+        skeleton->tform_buf.ptr = 0;
+    }
     if (skeleton->sp_anim_data) {
         spAnimationStateData_dispose(skeleton->sp_anim_data);
         skeleton->sp_anim_data = 0;
@@ -1739,8 +1769,52 @@ static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_im
     info->height = page->height;
 }
 
+static _sspine_uniform_t* _sspine_alloc_uniform(_sspine_context_t* ctx) {
+    if ((ctx->uniforms.cur + 1) <= ctx->uniforms.num) {
+        _sspine_uniform_t* ptr = &(ctx->uniforms.ptr[ctx->uniforms.cur]);
+        ctx->uniforms.cur += 1;
+        return ptr;
+    }
+    else {
+        return 0;
+    }
+}
+
+static _sspine_command_t* _sspine_alloc_command(_sspine_context_t* ctx) {
+    if ((ctx->commands.cur + 1) <= ctx->commands.num) {
+        _sspine_command_t* ptr = &(ctx->commands.ptr[ctx->commands.cur]);
+        ctx->commands.cur += 1;
+        return ptr;
+    }
+    else {
+        return 0;
+    }
+}
+
+static _sspine_vertex_t* _sspine_alloc_vertices(_sspine_context_t* ctx, int num) {
+    if ((ctx->vertices.cur + num) <= ctx->uniforms.num) {
+        _sspine_vertex_t* ptr = &(ctx->vertices.ptr[ctx->vertices.cur]);
+        ctx->vertices.cur += num;
+        return ptr;
+    }
+    else {
+        return 0;
+    }
+}
+
+static uint32_t* _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
+    if ((ctx->indices.cur + num) <= ctx->indices.num) {
+        uint32_t* ptr = &(ctx->indices.ptr[ctx->indices.cur]);
+        ctx->indices.cur += num;
+        return ptr;
+    }
+    else {
+        return 0;
+    }
+}
+
 static void _sspine_set_transform(_sspine_context_t* ctx, const float m[16]) {
-    _sspine_uniform_t* uniform = _sspine_alloc_uniform();
+    _sspine_uniform_t* uniform = _sspine_alloc_uniform(ctx);
     if (uniform) {
         memcpy(uniform->mvp, m, 16 * sizeof(float));
     }
@@ -1765,11 +1839,11 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
 
     // see: https://github.com/EsotericSoftware/spine-runtimes/blob/4.1/spine-sdl/src/spine-sdl-c.c
     const spSkeleton* sp_skel = instance->sp_skel;
-    const spSkeletonClipping* sp_clip = instance->sp_clip;
+    spSkeletonClipping* sp_clip = instance->sp_clip;
     SOKOL_ASSERT((sizeof(_sspine_vertex_t) & 3) == 0);
     const int vtx_stride = sizeof(_sspine_vertex_t) / 4;
     for (int i = 0; i < sp_skel->slotsCount; i++) {
-        const spSlot* slot = sp_skel->drawOrder[i];
+        spSlot* slot = sp_skel->drawOrder[i];
         if (!slot->attachment) {
             continue;
         }
@@ -1781,7 +1855,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             continue;
         }
 
-        _sspine_command_t* cmd = _sspine_alloc_command();
+        _sspine_command_t* cmd = _sspine_alloc_command(ctx);
         if (0 == cmd) {
             // command buffer exhausted
             spSkeletonClipping_clipEnd(sp_clip, slot);
@@ -1794,7 +1868,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         if (slot->attachment->type == SP_ATTACHMENT_REGION) {
             static const uint32_t quad_indices[] = { 0, 1, 2, 2, 3, 0 };
             const int num_quad_indices = 6;
-            const spRegionAttachment* region_attachment = (spRegionAttachment*)slot->attachment;
+            spRegionAttachment* region_attachment = (spRegionAttachment*)slot->attachment;
             attColor = &region_attachment->color;
 
             // FIXME(?) early out if the slot alpha is 0
@@ -1821,13 +1895,13 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             cmd->base_element = base_idx_index;
             cmd->num_elements = num_quad_indices;
         }
-    }
-    else if (slot->attachment->type == SP_ATTACHMENT_MESH) {
-        // FIXME: handle mesh attachment
-    }
-    else if (slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
-        spClippingAttachment* clip_attachment = (spClippingAttachment*) slot->attachment;
-        spSkeletonClipping_clipStart(sp_clip, slot, clip_attachment);
+        else if (slot->attachment->type == SP_ATTACHMENT_MESH) {
+            // FIXME: handle mesh attachment
+        }
+        else if (slot->attachment->type == SP_ATTACHMENT_CLIPPING) {
+            spClippingAttachment* clip_attachment = (spClippingAttachment*) slot->attachment;
+            spSkeletonClipping_clipStart(sp_clip, slot, clip_attachment);
+        }
     }
 
     // FIXME: if clipping active, need to pass replace the vertex region or mesh vertex
