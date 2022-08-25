@@ -1845,7 +1845,6 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     const int max_tform_buf_verts = instance->skel.ptr->tform_buf.num;
     const int tform_buf_stride = 2; // each element is 2 floats
     spSkeletonClipping* sp_clip = instance->sp_clip;
-    SOKOL_ASSERT((sizeof(_sspine_vertex_t) & 3) == 0);
     for (int i = 0; i < sp_skel->slotsCount; i++) {
         spSlot* sp_slot = sp_skel->drawOrder[i];
         if (!sp_slot->attachment) {
