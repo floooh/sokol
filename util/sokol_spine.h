@@ -119,6 +119,7 @@ typedef struct sspine_anim { sspine_instance instance; int index; } sspine_anim;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
+typedef struct sspine_mat4 { float m[16]; } sspine_mat4;
 typedef sg_color sspine_color;
 
 typedef enum SSPINE_resource_state {
@@ -206,8 +207,8 @@ SOKOL_SPINE_API_DECL sspine_context sspine_get_context(void);
 SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
 
 // set vertex transform matrix in current context, or explicit context
-SOKOL_SPINE_API_DECL void sspine_set_transform(const float m[16]);
-SOKOL_SPINE_API_DECL void sspine_context_set_transform(sspine_context ctx, const float m[16]);
+SOKOL_SPINE_API_DECL void sspine_set_transform(sspine_mat4 m);
+SOKOL_SPINE_API_DECL void sspine_context_set_transform(sspine_context ctx, sspine_mat4 m);
 
 // draw instance into current context or explicit context (call outside sokol-gfx pass)
 SOKOL_SPINE_API_DECL void sspine_draw_instance(sspine_instance instance);
@@ -840,7 +841,7 @@ typedef struct {
 } _sspine_vertex_t;
 
 typedef struct {
-    float mvp[16];
+    sspine_mat4 mvp;
 } _sspine_uniform_t;
 
 typedef struct {
@@ -1815,10 +1816,10 @@ static uint32_t* _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
     }
 }
 
-static void _sspine_set_transform(_sspine_context_t* ctx, const float m[16]) {
+static void _sspine_set_transform(_sspine_context_t* ctx, const sspine_mat4* m) {
     _sspine_uniform_t* uniform = _sspine_alloc_uniform(ctx);
     if (uniform) {
-        memcpy(uniform->mvp, m, 16 * sizeof(float));
+        uniform->mvp = *m;
     }
     // FIXME: otherwise set uniform buffer exhausted error
 }
@@ -1837,7 +1838,6 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     if (ctx->uniforms.cur == 0) {
         return;
     }
-    const int cur_uniform_index = ctx->uniforms.cur - 1;
 
     // see: https://github.com/EsotericSoftware/spine-runtimes/blob/4.1/spine-sdl/src/spine-sdl-c.c
     const spSkeleton* sp_skel = instance->sp_skel;
@@ -1848,6 +1848,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     for (int i = 0; i < sp_skel->slotsCount; i++) {
         spSlot* sp_slot = sp_skel->drawOrder[i];
         if (!sp_slot->attachment) {
+            spSkeletonClipping_clipEnd(sp_clip, sp_slot);
             continue;
         }
 
@@ -1860,10 +1861,11 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
 
         int num_vertices = 0;
         float* uvs = 0;
+        float* vertices = 0;
         int num_indices = 0;
         const uint16_t* indices = 0;
         const spColor* att_color = 0;
-        sg_image img;
+        sg_image img = { SG_INVALID_ID };
         if (sp_slot->attachment->type == SP_ATTACHMENT_REGION) {
             static const uint16_t quad_indices[] = { 0, 1, 2, 2, 3, 0 };
             spRegionAttachment* region = (spRegionAttachment*)sp_slot->attachment;
@@ -1874,6 +1876,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
                 continue;
             }
             spRegionAttachment_computeWorldVertices(region, sp_slot, tform_buf, 0, tform_buf_stride);
+            vertices = tform_buf;
             num_vertices = 4;
             indices = &quad_indices[0];
             num_indices = 6;
@@ -1893,6 +1896,7 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             num_vertices = num_floats / 2;
             SOKOL_ASSERT(num_vertices <= max_tform_buf_verts);
             spVertexAttachment_computeWorldVertices(&mesh->super, sp_slot, 0, num_floats, tform_buf, 0, tform_buf_stride);
+            vertices = tform_buf;
             indices = mesh->triangles;
             num_indices = mesh->trianglesCount; // actually indicesCount???
             uvs = mesh->uvs;
@@ -1904,13 +1908,83 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             continue;
         }
         else {
+            spSkeletonClipping_clipEnd(sp_clip, sp_slot);
             continue;
         }
+        SOKOL_ASSERT(vertices && (num_vertices > 0));
+        SOKOL_ASSERT(indices && (num_indices > 0));
+        SOKOL_ASSERT(uvs);
+        SOKOL_ASSERT(img.id != SG_INVALID_ID);
+
+        if (spSkeletonClipping_isClipping(sp_clip)) {
+            spSkeletonClipping_clipTriangles(sp_clip, tform_buf, num_vertices * 2, (uint16_t*)indices, num_indices, uvs, tform_buf_stride);
+            vertices = sp_clip->clippedVertices->items;
+            num_vertices = sp_clip->clippedVertices->size / 2;
+            uvs = sp_clip->clippedUVs->items;
+            indices = sp_clip->clippedTriangles->items;
+            num_indices = sp_clip->clippedTriangles->size;
+        }
+        SOKOL_ASSERT(vertices && (num_vertices > 0));
+        SOKOL_ASSERT(indices && (num_indices > 0));
+        SOKOL_ASSERT(uvs);
+        SOKOL_ASSERT(img.id != SG_INVALID_ID);
+
+        const int base_vertex_index = ctx->vertices.cur;
+        const int base_index_index = ctx->indices.cur;
+        _sspine_vertex_t* vtx_ptr = _sspine_alloc_vertices(ctx, num_vertices);
+        uint32_t* idx_ptr = _sspine_alloc_indices(ctx, num_indices);
+        _sspine_command_t* cmd_ptr = _sspine_alloc_command(ctx);
+        if ((0 == vtx_ptr) || (0 == idx_ptr) || (0 == cmd_ptr)) {
+            spSkeletonClipping_clipEnd(sp_clip, sp_slot);
+            continue;
+        }
+
+        // write transformed and potentially clipped vertices and indices
+        const uint8_t r = (uint8_t)(sp_skel->color.r * sp_slot->color.r * att_color->r * 255.0f);
+        const uint8_t g = (uint8_t)(sp_skel->color.g * sp_slot->color.g * att_color->g * 255.0f);
+        const uint8_t b = (uint8_t)(sp_skel->color.b * sp_slot->color.b * att_color->b * 255.0f);
+        const uint8_t a = (uint8_t)(sp_skel->color.a * sp_slot->color.a * att_color->a * 255.0f);
+        const uint32_t color = (uint32_t)((a<<24) | (b<<16) | (g<<8) | r);
+        for (int i = 0; i < num_vertices; i++) {
+            vtx_ptr[i].pos.x = vertices[i];
+            vtx_ptr[i].pos.y = vertices[i + 1];
+            vtx_ptr[i].color = color;
+            vtx_ptr[i].uv.x  = uvs[i];
+            vtx_ptr[i].uv.y  = uvs[i + 1];
+        }
+        for (int i = 0; i < num_indices; i++) {
+            idx_ptr[i] = (uint32_t)indices[i] + (uint32_t)base_vertex_index;
+        }
+
+        sg_pipeline pip = { SG_INVALID_ID };
+        switch (sp_slot->data->blendMode) {
+            case SP_BLEND_MODE_NORMAL:   pip = ctx->pip.normal; break;
+            case SP_BLEND_MODE_MULTIPLY: pip = ctx->pip.multiply; break;
+            case SP_BLEND_MODE_ADDITIVE: pip = ctx->pip.additive; break;
+            case SP_BLEND_MODE_SCREEN:   pip = ctx->pip.normal; break;
+        }
+
+        // write draw command
+        // FIXME: draw call merging!
+        cmd_ptr->pip = pip;
+        cmd_ptr->img = img;
+        cmd_ptr->base_element = base_index_index;
+        cmd_ptr->num_elements = num_indices;
+        cmd_ptr->uniform_index = ctx->uniforms.cur - 1;
+
+        spSkeletonClipping_clipEnd(sp_clip, sp_slot);
     }
+    spSkeletonClipping_clipEnd2(sp_clip);
+}
 
-    // FIXME: if clipping active, need to pass replace the vertex region or mesh vertex
-    // and index data that's already been produced with the clipped vertex/index data!!!
+static void _sspine_draw_frame(_sspine_context_t* ctx) {
+    // FIXME
 
+    // rewind for next frame
+    ctx->vertices.cur = 0;
+    ctx->indices.cur = 0;
+    ctx->uniforms.cur = 0;
+    ctx->commands.cur = 0;
 }
 
 //== PUBLIC FUNCTIONS ==========================================================
@@ -1996,19 +2070,19 @@ SOKOL_API_IMPL sspine_context sspine_default_context(void) {
     return _sspine_make_context_handle(0x00010001);
 }
 
-SOKOL_API_IMPL void sspine_set_transform(const float m[16]) {
+SOKOL_API_IMPL void sspine_set_transform(sspine_mat4 m) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine.cur_ctx;
     if (ctx) {
-        _sspine_set_transform(ctx, m);
+        _sspine_set_transform(ctx, &m);
     }
 }
 
-SOKOL_API_IMPL void sspine_context_set_transform(sspine_context ctx_id, const float m[16]) {
+SOKOL_API_IMPL void sspine_context_set_transform(sspine_context ctx_id, sspine_mat4 m) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     if (ctx) {
-        _sspine_set_transform(ctx, m);
+        _sspine_set_transform(ctx, &m);
     }
 }
 
@@ -2027,6 +2101,22 @@ SOKOL_API_IMPL void sspine_context_draw_instance(sspine_context ctx_id, sspine_i
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (ctx && instance) {
         _sspine_draw_instance(ctx, instance);
+    }
+}
+
+SOKOL_API_IMPL void sspine_draw_frame(void) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_context_t* ctx = _sspine.cur_ctx;
+    if (ctx) {
+        _sspine_draw_frame(ctx);
+    }
+}
+
+SOKOL_API_IMPL void sspine_context_draw_frame(sspine_context ctx_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
+    if (ctx) {
+        _sspine_draw_frame(ctx);
     }
 }
 
