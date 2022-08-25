@@ -337,7 +337,7 @@ SOKOL_SPINE_API_DECL sspine_color sspine_slot_get_color(sspine_slot slot);
 
     @vs vs
     uniform vs_params {
-        vec2 disp_size;
+        mat4 mvp;
     };
     in vec2 position;
     in vec2 texcoord0;
@@ -345,7 +345,7 @@ SOKOL_SPINE_API_DECL sspine_color sspine_slot_get_color(sspine_slot slot);
     out vec2 uv;
     out vec4 color;
     void main() {
-        gl_Position = vec4(position, 0.5, 1.0);
+        gl_Position = mvp * vec4(position, 0.0, 1.0);
         uv = texcoord0;
         color = color0;
     }
