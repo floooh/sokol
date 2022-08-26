@@ -2027,6 +2027,7 @@ static void _sspine_draw_frame(_sspine_context_t* ctx) {
 //== PUBLIC FUNCTIONS ==========================================================
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(desc);
+    spBone_setYDown(1);
     _sspine_clear(&_sspine, sizeof(_sspine));
     _sspine.init_cookie = _SSPINE_INIT_COOKIE;
     _sspine.desc = _sspine_desc_defaults(desc);
