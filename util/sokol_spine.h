@@ -836,8 +836,8 @@ typedef struct {
 
 typedef struct {
     sspine_vec2 pos;
-    uint32_t color;
     sspine_vec2 uv;
+    uint32_t color;
 } _sspine_vertex_t;
 
 typedef struct {
@@ -883,6 +883,7 @@ typedef struct {
         sg_pipeline multiply;
         sg_pipeline additive;
     } pip;
+    sg_bindings bind;
 } _sspine_context_t;
 
 typedef struct {
@@ -1137,6 +1138,7 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     vbuf_desc.size = vbuf_size;
     vbuf_desc.label = "sokol-spine-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
+    ctx->bind.vertex_buffers[0] = ctx->vbuf;
 
     sg_buffer_desc ibuf_desc;
     _sspine_clear(&ibuf_desc, sizeof(ibuf_desc));
@@ -1145,16 +1147,17 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     ibuf_desc.size = ibuf_size;
     ibuf_desc.label = "sokol-spine-ibuf";
     ctx->ibuf = sg_make_buffer(&ibuf_desc);
+    ctx->bind.index_buffer = ctx->ibuf;
 
     sg_shader_desc shd_desc;
     _sspine_clear(&shd_desc, sizeof(shd_desc));
     shd_desc.attrs[0].name = "position";
+    shd_desc.attrs[1].name = "texcoord0";
+    shd_desc.attrs[2].name = "color0";
     shd_desc.attrs[0].sem_name = "TEXCOORD";
     shd_desc.attrs[0].sem_index = 0;
-    shd_desc.attrs[1].name = "color0";
     shd_desc.attrs[1].sem_name = "TEXCOORD";
     shd_desc.attrs[1].sem_index = 1;
-    shd_desc.attrs[2].name = "texcoord0";
     shd_desc.attrs[2].sem_name = "TEXCOORD";
     shd_desc.attrs[2].sem_index = 2;
     shd_desc.vs.uniform_blocks[0].size = sizeof(_sspine_vs_params_t);
@@ -1209,8 +1212,8 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     pip_desc.shader = ctx->shd;
     pip_desc.layout.buffers[0].stride = sizeof(_sspine_vertex_t);
     pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
-    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_UBYTE4N;
-    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_UBYTE4N;
     pip_desc.index_type = SG_INDEXTYPE_UINT32;
     pip_desc.sample_count = desc->sample_count;
     pip_desc.depth.pixel_format = desc->depth_format;
@@ -1946,11 +1949,11 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         const uint8_t a = (uint8_t)(sp_skel->color.a * sp_slot->color.a * att_color->a * 255.0f);
         const uint32_t color = (uint32_t)((a<<24) | (b<<16) | (g<<8) | r);
         for (int i = 0; i < num_vertices; i++) {
-            vtx_ptr[i].pos.x = vertices[i];
-            vtx_ptr[i].pos.y = vertices[i + 1];
+            vtx_ptr[i].pos.x = vertices[i*2];
+            vtx_ptr[i].pos.y = vertices[i*2 + 1];
             vtx_ptr[i].color = color;
-            vtx_ptr[i].uv.x  = uvs[i];
-            vtx_ptr[i].uv.y  = uvs[i + 1];
+            vtx_ptr[i].uv.x  = uvs[i*2];
+            vtx_ptr[i].uv.y  = uvs[i*2 + 1];
         }
         for (int i = 0; i < num_indices; i++) {
             idx_ptr[i] = (uint32_t)indices[i] + (uint32_t)base_vertex_index;
@@ -1978,8 +1981,42 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
 }
 
 static void _sspine_draw_frame(_sspine_context_t* ctx) {
-    // FIXME
+    if ((ctx->vertices.cur > 0) && (ctx->commands.cur > 0)) {
+        sg_push_debug_group("sokol-spine");
 
+        uint32_t cur_pip_id = SG_INVALID_ID;
+        uint32_t cur_img_id = SG_INVALID_ID;
+        int cur_uniform_index = -1;
+
+        const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sspine_vertex_t) };
+        sg_update_buffer(ctx->vbuf, &vtx_range);
+        const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.cur * sizeof(uint32_t) };
+        sg_update_buffer(ctx->ibuf, &idx_range);
+
+        for (int i = 0; i < ctx->commands.cur; i++) {
+            const _sspine_command_t* cmd = &ctx->commands.ptr[i];
+            if (cur_pip_id != cmd->pip.id) {
+                sg_apply_pipeline(cmd->pip);
+                cur_pip_id = cmd->pip.id;
+                // when pipeline changes also need to re-apply uniforms
+                cur_uniform_index = -1;
+            }
+            if (cur_img_id != cmd->img.id) {
+                ctx->bind.fs_images[0] = cmd->img;
+                sg_apply_bindings(&ctx->bind);
+                cur_img_id = cmd->img.id;
+            }
+            if (cur_uniform_index != cmd->uniform_index) {
+                const sg_range ub_range = { &ctx->uniforms.ptr[cmd->uniform_index], sizeof(_sspine_uniform_t) };
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
+                cur_uniform_index = cmd->uniform_index;
+            }
+            if (cmd->num_elements > 0) {
+                sg_draw(cmd->base_element, cmd->num_elements, 1);
+            }
+        }
+        sg_pop_debug_group();
+    }
     // rewind for next frame
     ctx->vertices.cur = 0;
     ctx->indices.cur = 0;
