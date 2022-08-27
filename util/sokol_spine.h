@@ -119,7 +119,6 @@ typedef struct sspine_anim { sspine_instance instance; int index; } sspine_anim;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
-typedef struct sspine_mat4 { float m[16]; } sspine_mat4;
 typedef sg_color sspine_color;
 
 typedef enum SSPINE_resource_state {
@@ -130,6 +129,11 @@ typedef enum SSPINE_resource_state {
     SSPINE_RESOURCESTATE_INVALID,
     _SSPINE_RESOURCESTATE_FORCE_U32 = 0x7FFFFFFF
 } sspine_resource_state;
+
+typedef struct sspine_layer_transform {
+    sspine_vec2 size;
+    sspine_vec2 origin;
+} sspine_layer_transform;
 
 typedef struct sspine_bone_transform {
     sspine_vec2 position;
@@ -164,7 +168,7 @@ typedef struct sspine_atlas_desc {
 
 typedef struct sspine_skeleton_desc {
     sspine_atlas atlas;
-    float skeleton_prescale;
+    float prescale;
     float anim_default_mix;
     const char* json_data;
     sspine_range binary_data;
@@ -206,17 +210,16 @@ SOKOL_SPINE_API_DECL void sspine_set_context(sspine_context ctx);
 SOKOL_SPINE_API_DECL sspine_context sspine_get_context(void);
 SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
 
-// set vertex transform matrix in current context, or explicit context
-SOKOL_SPINE_API_DECL void sspine_set_transform(sspine_mat4 m);
-SOKOL_SPINE_API_DECL void sspine_context_set_transform(sspine_context ctx, sspine_mat4 m);
+// mark a new frame (call at start of a frame before any sspine_draw_instance())
+SOKOL_SPINE_API_DECL void sspine_new_frame(void);
 
-// draw instance into current context or explicit context (call outside sokol-gfx pass)
-SOKOL_SPINE_API_DECL void sspine_draw_instance(sspine_instance instance);
-SOKOL_SPINE_API_DECL void sspine_context_draw_instance(sspine_context ctx, sspine_instance instance);
+// draw instance into current or explicit context
+SOKOL_SPINE_API_DECL void sspine_draw_instance_in_layer(sspine_instance instance, int layer);
+SOKOL_SPINE_API_DECL void sspine_context_draw_instance_in_layer(sspine_context ctx, sspine_instance instance, int layer);
 
-// draw the whole frame in current context or explicit context (call once per context and frame in sokol-gfx pass)
-SOKOL_SPINE_API_DECL void sspine_draw_frame(void);
-SOKOL_SPINE_API_DECL void sspine_context_draw_frame(sspine_context ctx);
+// draw a layer in current context or explicit context (call once per context and frame in sokol-gfx pass)
+SOKOL_SPINE_API_DECL void sspine_draw_layer(int layer, const sspine_layer_transform* tform);
+SOKOL_SPINE_API_DECL void sspine_context_draw_layer(sspine_context ctx, int layer, const sspine_layer_transform* tform);
 
 // create and destroy spine objects
 SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
@@ -769,7 +772,7 @@ static const char* _sspine_fs_source_dummy = "";
 
 typedef struct {
     float mvp[16];
-} _sspine_vs_params_t;
+} _sspine_vsparams_t;
 
 typedef struct {
     uint32_t id;
@@ -841,15 +844,11 @@ typedef struct {
 } _sspine_vertex_t;
 
 typedef struct {
-    sspine_mat4 mvp;
-} _sspine_uniform_t;
-
-typedef struct {
+    int layer;
     sg_pipeline pip;
     sg_image img;
     int base_element;
     int num_elements;
-    int uniform_index;
 } _sspine_command_t;
 
 typedef struct {
@@ -858,26 +857,24 @@ typedef struct {
     struct {
         int num;
         int cur;
+        uint32_t rewind_frame_count;
         _sspine_vertex_t* ptr;
     } vertices;
     struct {
         int num;
         int cur;
+        uint32_t rewind_frame_count;
         uint32_t* ptr;
     } indices;
     struct {
         int num;
         int cur;
-        _sspine_uniform_t* ptr;
-    } uniforms;
-    struct {
-        int num;
-        int cur;
+        uint32_t rewind_frame_count;
         _sspine_command_t* ptr;
     } commands;
+    uint32_t update_frame_count;
     sg_buffer vbuf;
     sg_buffer ibuf;
-    sg_shader shd;
     struct {
         sg_pipeline normal;
         sg_pipeline multiply;
@@ -893,10 +890,12 @@ typedef struct {
 
 typedef struct {
     uint32_t init_cookie;
+    uint32_t frame_count;
     sspine_desc desc;
     sspine_context def_ctx_id;
     sspine_context cur_ctx_id;
     _sspine_context_t* cur_ctx;   // may be 0!
+    sg_shader shd;
     _sspine_context_pool_t context_pool;
     _sspine_atlas_pool_t atlas_pool;
     _sspine_skeleton_pool_t skeleton_pool;
@@ -1118,17 +1117,14 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     // setup vertex, index and command storage
     ctx->vertices.num = desc->max_vertices;
     ctx->indices.num = ctx->vertices.num * 3;
-    ctx->uniforms.num = desc->max_commands;
     ctx->commands.num = desc->max_commands;
 
     const size_t vbuf_size = (size_t)ctx->vertices.num * sizeof(_sspine_vertex_t);
     const size_t ibuf_size = (size_t)ctx->indices.num * sizeof(uint32_t);
-    const size_t ubuf_size = (size_t)ctx->uniforms.num * sizeof(_sspine_uniform_t);
     const size_t cbuf_size = (size_t)ctx->commands.num * sizeof(_sspine_command_t);
 
     ctx->vertices.ptr = (_sspine_vertex_t*) _sspine_malloc(vbuf_size);
     ctx->indices.ptr = (uint32_t*) _sspine_malloc(ibuf_size);
-    ctx->uniforms.ptr = (_sspine_uniform_t*) _sspine_malloc(ubuf_size);
     ctx->commands.ptr = (_sspine_command_t*) _sspine_malloc(cbuf_size);
 
     sg_buffer_desc vbuf_desc;
@@ -1136,7 +1132,7 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     vbuf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
     vbuf_desc.usage = SG_USAGE_STREAM;
     vbuf_desc.size = vbuf_size;
-    vbuf_desc.label = "sokol-spine-vbuf";
+    vbuf_desc.label = "sspine-vbuf";
     ctx->vbuf = sg_make_buffer(&vbuf_desc);
     ctx->bind.vertex_buffers[0] = ctx->vbuf;
 
@@ -1145,71 +1141,14 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     ibuf_desc.type = SG_BUFFERTYPE_INDEXBUFFER;
     ibuf_desc.usage = SG_USAGE_STREAM;
     ibuf_desc.size = ibuf_size;
-    ibuf_desc.label = "sokol-spine-ibuf";
+    ibuf_desc.label = "sspine-ibuf";
     ctx->ibuf = sg_make_buffer(&ibuf_desc);
     ctx->bind.index_buffer = ctx->ibuf;
-
-    sg_shader_desc shd_desc;
-    _sspine_clear(&shd_desc, sizeof(shd_desc));
-    shd_desc.attrs[0].name = "position";
-    shd_desc.attrs[1].name = "texcoord0";
-    shd_desc.attrs[2].name = "color0";
-    shd_desc.attrs[0].sem_name = "TEXCOORD";
-    shd_desc.attrs[0].sem_index = 0;
-    shd_desc.attrs[1].sem_name = "TEXCOORD";
-    shd_desc.attrs[1].sem_index = 1;
-    shd_desc.attrs[2].sem_name = "TEXCOORD";
-    shd_desc.attrs[2].sem_index = 2;
-    shd_desc.vs.uniform_blocks[0].size = sizeof(_sspine_vs_params_t);
-    shd_desc.vs.uniform_blocks[0].layout = SG_UNIFORMLAYOUT_STD140;
-    shd_desc.vs.uniform_blocks[0].uniforms[0].name = "vs_params";
-    shd_desc.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-    shd_desc.vs.uniform_blocks[0].uniforms[0].array_count = 4;
-    shd_desc.fs.images[0].name = "tex";
-    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
-    shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
-    shd_desc.label = "sokol-spine-shader";
-    #if defined(SOKOL_GLCORE33)
-        shd_desc.vs.source = _sspine_vs_source_glsl330;
-        shd_desc.fs.source = _sspine_fs_source_glsl330;
-    #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
-        shd_desc.vs.source = _sspine_vs_source_glsl100;
-        shd_desc.fs.source = _sspine_fs_source_glsl100;
-    #elif defined(SOKOL_METAL)
-        shd_desc.vs.entry = "main0";
-        shd_desc.fs.entry = "main0";
-        switch (sg_query_backend()) {
-            case SG_BACKEND_METAL_MACOS:
-                shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_macos);
-                shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_macos);
-                break;
-            case SG_BACKEND_METAL_IOS:
-                //FIXME
-                //shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_ios);
-                //shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_ios);
-                break;
-            default:
-                // FIXME
-                //shd_desc.vs.source = _sspine_vs_source_metal_sim;
-                //shd_desc.fs.source = _sspine_fs_source_metal_sim;
-                break;
-        }
-    #elif defined(SOKOL_D3D11)
-        shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_hlsl4);
-        shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_hlsl4);
-    #elif defined(SOKOL_WGPU)
-        shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_wgpu);
-        shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_wgpu);
-    #else
-        shd_desc.vs.source = _sspine_vs_source_dummy;
-        shd_desc.fs.source = _sspine_fs_source_dummy;
-    #endif
-    ctx->shd = sg_make_shader(&shd_desc);
 
     // for blend modes, see: https://wiki.libsdl.org/SDL_BlendMode
     sg_pipeline_desc pip_desc;
     _sspine_clear(&pip_desc, sizeof(pip_desc));
-    pip_desc.shader = ctx->shd;
+    pip_desc.shader = _sspine.shd;
     pip_desc.layout.buffers[0].stride = sizeof(_sspine_vertex_t);
     pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
@@ -1224,19 +1163,21 @@ static sspine_resource_state _sspine_init_context(_sspine_context_t* ctx, const 
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
     pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pip_desc.label = "sokol-spine-pipeline-norm";
+    pip_desc.label = "sspine-pip-normal";
     ctx->pip.normal = sg_make_pipeline(&pip_desc);
 
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_ZERO;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_SRC_COLOR;
     pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
     pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.label = "sspine-pip-multiply";
     ctx->pip.multiply = sg_make_pipeline(&pip_desc);
 
     pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE;
     pip_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
     pip_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip_desc.label = "sspine-pip-additive";
     ctx->pip.additive = sg_make_pipeline(&pip_desc);
 
     return SSPINE_RESOURCESTATE_VALID;
@@ -1247,16 +1188,11 @@ static void _sspine_deinit_context(_sspine_context_t* ctx) {
     sg_destroy_pipeline(ctx->pip.additive);
     sg_destroy_pipeline(ctx->pip.multiply);
     sg_destroy_pipeline(ctx->pip.normal);
-    sg_destroy_shader(ctx->shd);
     sg_destroy_buffer(ctx->ibuf);
     sg_destroy_buffer(ctx->vbuf);
     if (ctx->commands.ptr) {
         _sspine_free(ctx->commands.ptr);
         ctx->commands.ptr = 0;
-    }
-    if (ctx->uniforms.ptr) {
-        _sspine_free(ctx->uniforms.ptr);
-        ctx->uniforms.ptr = 0;
     }
     if (ctx->indices.ptr) {
         _sspine_free(ctx->indices.ptr);
@@ -1483,7 +1419,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
     if (desc->json_data) {
         spSkeletonJson* skel_json = spSkeletonJson_create(atlas->sp_atlas);
         SOKOL_ASSERT(skel_json);
-        skel_json->scale = desc->skeleton_prescale;
+        skel_json->scale = desc->prescale;
         skeleton->sp_skel_data = spSkeletonJson_readSkeletonData(skel_json, desc->json_data);
         spSkeletonJson_dispose(skel_json); skel_json = 0;
         if (0 == skeleton->sp_skel_data) {
@@ -1493,7 +1429,7 @@ static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton,
     else {
         spSkeletonBinary* skel_bin = spSkeletonBinary_create(atlas->sp_atlas);
         SOKOL_ASSERT(skel_bin);
-        skel_bin->scale = desc->skeleton_prescale;
+        skel_bin->scale = desc->prescale;
         skeleton->sp_skel_data = spSkeletonBinary_readSkeletonData(skel_bin, desc->binary_data.ptr, (int)desc->binary_data.size);
         spSkeletonBinary_dispose(skel_bin); skel_bin = 0;
         if (0 == skeleton->sp_skel_data) {
@@ -1569,7 +1505,7 @@ static void _sspine_destroy_all_skeletons(void) {
 
 static sspine_skeleton_desc _sspine_skeleton_desc_defaults(const sspine_skeleton_desc* desc) {
     sspine_skeleton_desc res = *desc;
-    res.skeleton_prescale = _sspine_def(desc->skeleton_prescale, 1.0f);
+    res.prescale = _sspine_def(desc->prescale, 1.0f);
     res.anim_default_mix = _sspine_def(desc->anim_default_mix, 0.2f);
     return res;
 }
@@ -1775,18 +1711,12 @@ static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_im
     info->height = page->height;
 }
 
-static _sspine_uniform_t* _sspine_alloc_uniform(_sspine_context_t* ctx) {
-    if ((ctx->uniforms.cur + 1) <= ctx->uniforms.num) {
-        _sspine_uniform_t* ptr = &(ctx->uniforms.ptr[ctx->uniforms.cur]);
-        ctx->uniforms.cur += 1;
-        return ptr;
-    }
-    else {
-        return 0;
-    }
-}
-
 static _sspine_command_t* _sspine_alloc_command(_sspine_context_t* ctx) {
+    if (_sspine.frame_count != ctx->commands.rewind_frame_count) {
+        // new frame: rewind current index
+        ctx->commands.cur = 0;
+        ctx->commands.rewind_frame_count = _sspine.frame_count;
+    }
     if ((ctx->commands.cur + 1) <= ctx->commands.num) {
         _sspine_command_t* ptr = &(ctx->commands.ptr[ctx->commands.cur]);
         ctx->commands.cur += 1;
@@ -1798,7 +1728,11 @@ static _sspine_command_t* _sspine_alloc_command(_sspine_context_t* ctx) {
 }
 
 static _sspine_vertex_t* _sspine_alloc_vertices(_sspine_context_t* ctx, int num) {
-    if ((ctx->vertices.cur + num) <= ctx->uniforms.num) {
+    if (_sspine.frame_count != ctx->vertices.rewind_frame_count) {
+        ctx->vertices.cur = 0;
+        ctx->vertices.rewind_frame_count = _sspine.frame_count;
+    }
+    if ((ctx->vertices.cur + num) <= ctx->vertices.num) {
         _sspine_vertex_t* ptr = &(ctx->vertices.ptr[ctx->vertices.cur]);
         ctx->vertices.cur += num;
         return ptr;
@@ -1809,6 +1743,11 @@ static _sspine_vertex_t* _sspine_alloc_vertices(_sspine_context_t* ctx, int num)
 }
 
 static uint32_t* _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
+    if (_sspine.frame_count != ctx->indices.rewind_frame_count) {
+        // new frame: rewind current index
+        ctx->indices.cur = 0;
+        ctx->indices.rewind_frame_count = _sspine.frame_count;
+    }
     if ((ctx->indices.cur + num) <= ctx->indices.num) {
         uint32_t* ptr = &(ctx->indices.ptr[ctx->indices.cur]);
         ctx->indices.cur += num;
@@ -1819,15 +1758,7 @@ static uint32_t* _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
     }
 }
 
-static void _sspine_set_transform(_sspine_context_t* ctx, const sspine_mat4* m) {
-    _sspine_uniform_t* uniform = _sspine_alloc_uniform(ctx);
-    if (uniform) {
-        uniform->mvp = *m;
-    }
-    // FIXME: otherwise set uniform buffer exhausted error
-}
-
-static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* instance) {
+static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* instance, int layer) {
     SOKOL_ASSERT(instance->sp_skel);
     SOKOL_ASSERT(instance->sp_anim);
     SOKOL_ASSERT(instance->sp_clip);
@@ -1835,10 +1766,6 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         return;
     }
     if (!_sspine_skeleton_ref_valid(&instance->skel)) {
-        return;
-    }
-    SOKOL_ASSERT(ctx->uniforms.cur >= 0);
-    if (ctx->uniforms.cur == 0) {
         return;
     }
 
@@ -1969,59 +1896,147 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
 
         // write draw command
         // FIXME: draw call merging!
+        cmd_ptr->layer = layer;
         cmd_ptr->pip = pip;
         cmd_ptr->img = img;
         cmd_ptr->base_element = base_index_index;
         cmd_ptr->num_elements = num_indices;
-        cmd_ptr->uniform_index = ctx->uniforms.cur - 1;
 
         spSkeletonClipping_clipEnd(sp_clip, sp_slot);
     }
     spSkeletonClipping_clipEnd2(sp_clip);
 }
 
-static void _sspine_draw_frame(_sspine_context_t* ctx) {
+static _sspine_vsparams_t _sspine_compute_vsparams(const sspine_layer_transform* tform) {
+    const float left   = -tform->origin.x;
+    const float right  = tform->size.x - tform->origin.x;
+    const float top    = -tform->origin.y;
+    const float bottom = tform->size.y - tform->origin.y;
+    const float znear  = -1.0f;
+    const float zfar   = 1.0f;
+
+    // compute orthographic projection matrix
+    _sspine_vsparams_t p;
+    _sspine_clear(&p, sizeof(p));
+    p.mvp[0]  = 2.0f / (right - left);
+    p.mvp[1]  = 0.0f;
+    p.mvp[2]  = 0.0f;
+    p.mvp[3]  = 0.0f;
+    p.mvp[4]  = 0.0f;
+    p.mvp[5]  = 2.0f / (top - bottom);
+    p.mvp[6]  = 0.0f;
+    p.mvp[7]  = 0.0f;
+    p.mvp[8]  = 0.0f;
+    p.mvp[9]  = 0.0f;
+    p.mvp[10] = -2.0f / (zfar - znear);
+    p.mvp[11] = 0.0f;
+    p.mvp[12] = -(right + left) / (right - left);
+    p.mvp[13] = -(top + bottom) / (top - bottom);
+    p.mvp[14] = -(zfar + znear) / (zfar - znear);
+    p.mvp[15] = 1.0f;
+    return p;
+}
+
+static void _sspine_draw_layer(_sspine_context_t* ctx, int layer, const sspine_layer_transform* tform) {
     if ((ctx->vertices.cur > 0) && (ctx->commands.cur > 0)) {
         sg_push_debug_group("sokol-spine");
 
+        if (ctx->update_frame_count != _sspine.frame_count) {
+            ctx->update_frame_count = _sspine.frame_count;
+            const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sspine_vertex_t) };
+            sg_update_buffer(ctx->vbuf, &vtx_range);
+            const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.cur * sizeof(uint32_t) };
+            sg_update_buffer(ctx->ibuf, &idx_range);
+        }
+
+        _sspine_vsparams_t vsparams = _sspine_compute_vsparams(tform);
+        const sg_range vsparams_range = { &vsparams, sizeof(vsparams) };
+
         uint32_t cur_pip_id = SG_INVALID_ID;
         uint32_t cur_img_id = SG_INVALID_ID;
-        int cur_uniform_index = -1;
-
-        const sg_range vtx_range = { ctx->vertices.ptr, (size_t)ctx->vertices.cur * sizeof(_sspine_vertex_t) };
-        sg_update_buffer(ctx->vbuf, &vtx_range);
-        const sg_range idx_range = { ctx->indices.ptr, (size_t)ctx->indices.cur * sizeof(uint32_t) };
-        sg_update_buffer(ctx->ibuf, &idx_range);
-
         for (int i = 0; i < ctx->commands.cur; i++) {
             const _sspine_command_t* cmd = &ctx->commands.ptr[i];
-            if (cur_pip_id != cmd->pip.id) {
-                sg_apply_pipeline(cmd->pip);
-                cur_pip_id = cmd->pip.id;
-                // when pipeline changes also need to re-apply uniforms
-                cur_uniform_index = -1;
-            }
-            if (cur_img_id != cmd->img.id) {
-                ctx->bind.fs_images[0] = cmd->img;
-                sg_apply_bindings(&ctx->bind);
-                cur_img_id = cmd->img.id;
-            }
-            if (cur_uniform_index != cmd->uniform_index) {
-                const sg_range ub_range = { &ctx->uniforms.ptr[cmd->uniform_index], sizeof(_sspine_uniform_t) };
-                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ub_range);
-                cur_uniform_index = cmd->uniform_index;
-            }
-            if (cmd->num_elements > 0) {
-                sg_draw(cmd->base_element, cmd->num_elements, 1);
+            if ((layer == cmd->layer) && (sg_query_image_state(cmd->img) == SG_RESOURCESTATE_VALID)) {
+                if (cur_pip_id != cmd->pip.id) {
+                    sg_apply_pipeline(cmd->pip);
+                    cur_pip_id = cmd->pip.id;
+                    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsparams_range);
+                }
+                if (cur_img_id != cmd->img.id) {
+                    ctx->bind.fs_images[0] = cmd->img;
+                    sg_apply_bindings(&ctx->bind);
+                    cur_img_id = cmd->img.id;
+                }
+                if (cmd->num_elements > 0) {
+                    sg_draw(cmd->base_element, cmd->num_elements, 1);
+                }
             }
         }
         sg_pop_debug_group();
     }
-    // rewind for next frame
-    ctx->vertices.cur = 0;
-    ctx->indices.cur = 0;
-    ctx->uniforms.cur = 0;
-    ctx->commands.cur = 0;
+}
+
+static void _sspine_init_shared(void) {
+    sg_shader_desc shd_desc;
+    _sspine_clear(&shd_desc, sizeof(shd_desc));
+    shd_desc.attrs[0].name = "position";
+    shd_desc.attrs[1].name = "texcoord0";
+    shd_desc.attrs[2].name = "color0";
+    shd_desc.attrs[0].sem_name = "TEXCOORD";
+    shd_desc.attrs[0].sem_index = 0;
+    shd_desc.attrs[1].sem_name = "TEXCOORD";
+    shd_desc.attrs[1].sem_index = 1;
+    shd_desc.attrs[2].sem_name = "TEXCOORD";
+    shd_desc.attrs[2].sem_index = 2;
+    shd_desc.vs.uniform_blocks[0].size = sizeof(_sspine_vsparams_t);
+    shd_desc.vs.uniform_blocks[0].layout = SG_UNIFORMLAYOUT_STD140;
+    shd_desc.vs.uniform_blocks[0].uniforms[0].name = "vs_params";
+    shd_desc.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    shd_desc.vs.uniform_blocks[0].uniforms[0].array_count = 4;
+    shd_desc.fs.images[0].name = "tex";
+    shd_desc.fs.images[0].image_type = SG_IMAGETYPE_2D;
+    shd_desc.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    shd_desc.label = "sspine-shader";
+    #if defined(SOKOL_GLCORE33)
+        shd_desc.vs.source = _sspine_vs_source_glsl330;
+        shd_desc.fs.source = _sspine_fs_source_glsl330;
+    #elif defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+        shd_desc.vs.source = _sspine_vs_source_glsl100;
+        shd_desc.fs.source = _sspine_fs_source_glsl100;
+    #elif defined(SOKOL_METAL)
+        shd_desc.vs.entry = "main0";
+        shd_desc.fs.entry = "main0";
+        switch (sg_query_backend()) {
+            case SG_BACKEND_METAL_MACOS:
+                shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_macos);
+                shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_macos);
+                break;
+            case SG_BACKEND_METAL_IOS:
+                //FIXME
+                //shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_metal_ios);
+                //shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_metal_ios);
+                break;
+            default:
+                // FIXME
+                //shd_desc.vs.source = _sspine_vs_source_metal_sim;
+                //shd_desc.fs.source = _sspine_fs_source_metal_sim;
+                break;
+        }
+    #elif defined(SOKOL_D3D11)
+        shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_hlsl4);
+        shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_hlsl4);
+    #elif defined(SOKOL_WGPU)
+        shd_desc.vs.bytecode = SG_RANGE(_sspine_vs_bytecode_wgpu);
+        shd_desc.fs.bytecode = SG_RANGE(_sspine_fs_bytecode_wgpu);
+    #else
+        shd_desc.vs.source = _sspine_vs_source_dummy;
+        shd_desc.fs.source = _sspine_fs_source_dummy;
+    #endif
+    _sspine.shd = sg_make_shader(&shd_desc);
+}
+
+static void _sspine_destroy_shared(void) {
+    sg_destroy_shader(_sspine.shd);
 }
 
 //== PUBLIC FUNCTIONS ==========================================================
@@ -2031,6 +2046,7 @@ SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     _sspine_clear(&_sspine, sizeof(_sspine));
     _sspine.init_cookie = _SSPINE_INIT_COOKIE;
     _sspine.desc = _sspine_desc_defaults(desc);
+    _sspine_init_shared();
     _sspine_setup_context_pool(_sspine.desc.context_pool_size);
     _sspine_setup_atlas_pool(_sspine.desc.atlas_pool_size);
     _sspine_setup_skeleton_pool(_sspine.desc.skeleton_pool_size);
@@ -2051,6 +2067,7 @@ SOKOL_API_IMPL void sspine_shutdown(void) {
     _sspine_discard_skeleton_pool();
     _sspine_discard_atlas_pool();
     _sspine_discard_context_pool();
+    _sspine_destroy_shared();
     _sspine.init_cookie = 0;
 }
 
@@ -2108,53 +2125,44 @@ SOKOL_API_IMPL sspine_context sspine_default_context(void) {
     return _sspine_make_context_handle(0x00010001);
 }
 
-SOKOL_API_IMPL void sspine_set_transform(sspine_mat4 m) {
+SOKOL_API_IMPL void sspine_new_frame(void) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_context_t* ctx = _sspine.cur_ctx;
-    if (ctx) {
-        _sspine_set_transform(ctx, &m);
-    }
+    _sspine.frame_count++;
 }
 
-SOKOL_API_IMPL void sspine_context_set_transform(sspine_context ctx_id, sspine_mat4 m) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
-    if (ctx) {
-        _sspine_set_transform(ctx, &m);
-    }
-}
-
-SOKOL_API_IMPL void sspine_draw_instance(sspine_instance instance_id) {
+SOKOL_API_IMPL void sspine_draw_instance_in_layer(sspine_instance instance_id, int layer) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine.cur_ctx;
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (ctx && instance) {
-        _sspine_draw_instance(ctx, instance);
+        _sspine_draw_instance(ctx, instance, layer);
     }
 }
 
-SOKOL_API_IMPL void sspine_context_draw_instance(sspine_context ctx_id, sspine_instance instance_id) {
+SOKOL_API_IMPL void sspine_context_draw_instance_in_layer(sspine_context ctx_id, sspine_instance instance_id, int layer) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (ctx && instance) {
-        _sspine_draw_instance(ctx, instance);
+        _sspine_draw_instance(ctx, instance, layer);
     }
 }
 
-SOKOL_API_IMPL void sspine_draw_frame(void) {
+SOKOL_API_IMPL void sspine_draw_layer(int layer, const sspine_layer_transform* tform) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(tform);
     _sspine_context_t* ctx = _sspine.cur_ctx;
     if (ctx) {
-        _sspine_draw_frame(ctx);
+        _sspine_draw_layer(ctx, layer, tform);
     }
 }
 
-SOKOL_API_IMPL void sspine_context_draw_frame(sspine_context ctx_id) {
+SOKOL_API_IMPL void sspine_context_draw_layer(sspine_context ctx_id, int layer, const sspine_layer_transform* tform) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(tform);
     _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     if (ctx) {
-        _sspine_draw_frame(ctx);
+        _sspine_draw_layer(ctx, layer, tform);
     }
 }
 
