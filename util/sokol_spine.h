@@ -844,6 +844,16 @@ typedef struct {
 } _sspine_vertex_t;
 
 typedef struct {
+    _sspine_vertex_t* ptr;
+    int index;
+} _sspine_alloc_vertices_result_t;
+
+typedef struct {
+    uint32_t* ptr;
+    int index;
+} _sspine_alloc_indices_result_t;
+
+typedef struct {
     int layer;
     sg_pipeline pip;
     sg_image img;
@@ -1711,51 +1721,69 @@ static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_im
     info->height = page->height;
 }
 
-static _sspine_command_t* _sspine_alloc_command(_sspine_context_t* ctx) {
+static void _sspine_check_rewind_commands(_sspine_context_t* ctx) {
     if (_sspine.frame_count != ctx->commands.rewind_frame_count) {
-        // new frame: rewind current index
         ctx->commands.cur = 0;
         ctx->commands.rewind_frame_count = _sspine.frame_count;
     }
+}
+
+static _sspine_command_t* _sspine_next_command(_sspine_context_t* ctx) {
+    _sspine_check_rewind_commands(ctx);
     if ((ctx->commands.cur + 1) <= ctx->commands.num) {
-        _sspine_command_t* ptr = &(ctx->commands.ptr[ctx->commands.cur]);
-        ctx->commands.cur += 1;
-        return ptr;
+        return &(ctx->commands.ptr[ctx->commands.cur++]);
     }
     else {
         return 0;
     }
 }
 
-static _sspine_vertex_t* _sspine_alloc_vertices(_sspine_context_t* ctx, int num) {
+static _sspine_command_t* _sspine_prev_command(_sspine_context_t* ctx) {
+    _sspine_check_rewind_commands(ctx);
+    if ((ctx->commands.cur > 0) && (ctx->commands.cur <= ctx->commands.num)) {
+        return &ctx->commands.ptr[ctx->commands.cur - 1];
+    }
+    else {
+        return 0;
+    }
+}
+
+static void _sspine_check_rewind_vertices(_sspine_context_t* ctx) {
     if (_sspine.frame_count != ctx->vertices.rewind_frame_count) {
         ctx->vertices.cur = 0;
         ctx->vertices.rewind_frame_count = _sspine.frame_count;
     }
-    if ((ctx->vertices.cur + num) <= ctx->vertices.num) {
-        _sspine_vertex_t* ptr = &(ctx->vertices.ptr[ctx->vertices.cur]);
-        ctx->vertices.cur += num;
-        return ptr;
-    }
-    else {
-        return 0;
-    }
 }
 
-static uint32_t* _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
+static _sspine_alloc_vertices_result_t _sspine_alloc_vertices(_sspine_context_t* ctx, int num) {
+    _sspine_check_rewind_vertices(ctx);
+    _sspine_alloc_vertices_result_t res;
+    _sspine_clear(&res, sizeof(res));
+    if ((ctx->vertices.cur + num) <= ctx->vertices.num) {
+        res.ptr = &(ctx->vertices.ptr[ctx->vertices.cur]);
+        res.index = ctx->vertices.cur;
+        ctx->vertices.cur += num;
+    }
+    return res;
+}
+
+static void _sspine_check_rewind_indices(_sspine_context_t* ctx) {
     if (_sspine.frame_count != ctx->indices.rewind_frame_count) {
-        // new frame: rewind current index
         ctx->indices.cur = 0;
         ctx->indices.rewind_frame_count = _sspine.frame_count;
     }
+}
+
+static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* ctx, int num) {
+    _sspine_check_rewind_indices(ctx);
+    _sspine_alloc_indices_result_t res;
+    _sspine_clear(&res, sizeof(res));
     if ((ctx->indices.cur + num) <= ctx->indices.num) {
-        uint32_t* ptr = &(ctx->indices.ptr[ctx->indices.cur]);
+        res.ptr = &(ctx->indices.ptr[ctx->indices.cur]);
+        res.index = ctx->indices.cur;
         ctx->indices.cur += num;
-        return ptr;
     }
-    else {
-        return 0;
-    }
+    return res;
 }
 
 static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* instance, int layer) {
@@ -1859,12 +1887,9 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         SOKOL_ASSERT(uvs);
         SOKOL_ASSERT(img.id != SG_INVALID_ID);
 
-        const int base_vertex_index = ctx->vertices.cur;
-        const int base_index_index = ctx->indices.cur;
-        _sspine_vertex_t* vtx_ptr = _sspine_alloc_vertices(ctx, num_vertices);
-        uint32_t* idx_ptr = _sspine_alloc_indices(ctx, num_indices);
-        _sspine_command_t* cmd_ptr = _sspine_alloc_command(ctx);
-        if ((0 == vtx_ptr) || (0 == idx_ptr) || (0 == cmd_ptr)) {
+        const _sspine_alloc_vertices_result_t dst_vertices = _sspine_alloc_vertices(ctx, num_vertices);
+        const _sspine_alloc_indices_result_t dst_indices = _sspine_alloc_indices(ctx, num_indices);
+        if ((0 == dst_vertices.ptr) || (0 == dst_indices.ptr)) {
             spSkeletonClipping_clipEnd(sp_clip, sp_slot);
             continue;
         }
@@ -1876,14 +1901,14 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
         const uint8_t a = (uint8_t)(sp_skel->color.a * sp_slot->color.a * att_color->a * 255.0f);
         const uint32_t color = (uint32_t)((a<<24) | (b<<16) | (g<<8) | r);
         for (int i = 0; i < num_vertices; i++) {
-            vtx_ptr[i].pos.x = vertices[i*2];
-            vtx_ptr[i].pos.y = vertices[i*2 + 1];
-            vtx_ptr[i].color = color;
-            vtx_ptr[i].uv.x  = uvs[i*2];
-            vtx_ptr[i].uv.y  = uvs[i*2 + 1];
+            dst_vertices.ptr[i].pos.x = vertices[i*2];
+            dst_vertices.ptr[i].pos.y = vertices[i*2 + 1];
+            dst_vertices.ptr[i].color = color;
+            dst_vertices.ptr[i].uv.x  = uvs[i*2];
+            dst_vertices.ptr[i].uv.y  = uvs[i*2 + 1];
         }
         for (int i = 0; i < num_indices; i++) {
-            idx_ptr[i] = (uint32_t)indices[i] + (uint32_t)base_vertex_index;
+            dst_indices.ptr[i] = (uint32_t)indices[i] + (uint32_t)dst_vertices.index;
         }
 
         sg_pipeline pip = { SG_INVALID_ID };
@@ -1894,14 +1919,21 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
             case SP_BLEND_MODE_SCREEN:   pip = ctx->pip.normal; break;
         }
 
-        // write draw command
-        // FIXME: draw call merging!
-        cmd_ptr->layer = layer;
-        cmd_ptr->pip = pip;
-        cmd_ptr->img = img;
-        cmd_ptr->base_element = base_index_index;
-        cmd_ptr->num_elements = num_indices;
-
+        // write new draw command, or merge with previous draw command
+        _sspine_command_t* prev_cmd = _sspine_prev_command(ctx);
+        if (prev_cmd && (prev_cmd->layer == layer) && (prev_cmd->pip.id == pip.id) && (prev_cmd->img.id == img.id)) {
+            // merge with previous command
+            prev_cmd->num_elements += num_indices;
+        }
+        else {
+            // record a new command
+            _sspine_command_t* cmd_ptr = _sspine_next_command(ctx);
+            cmd_ptr->layer = layer;
+            cmd_ptr->pip = pip;
+            cmd_ptr->img = img;
+            cmd_ptr->base_element = dst_indices.index;
+            cmd_ptr->num_elements = num_indices;
+        }
         spSkeletonClipping_clipEnd(sp_clip, sp_slot);
     }
     spSkeletonClipping_clipEnd2(sp_clip);
