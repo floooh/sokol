@@ -377,7 +377,8 @@ def gen_struct(decl, prefix):
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(extract_ptr_type(field_type))} = null,")
         elif is_func_ptr(field_type):
-            l(f"    {field_name}: ?fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)} = null,")
+            sig = f"fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)}"
+            l(f"    {field_name}: (switch (builtin.zig_backend) {{ .stage1 => ?{sig}, else => ?*const {sig} }}) = null,")
         elif is_1d_array_type(field_type):
             array_type = extract_array_type(field_type)
             array_sizes = extract_array_sizes(field_type)
@@ -481,6 +482,7 @@ def pre_parse(inp):
                 enum_items[enum_name].append(as_enum_item_name(item['name']))
 
 def gen_imports(inp, dep_prefixes):
+    l('const builtin = @import("builtin");')
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
@@ -504,7 +506,10 @@ def gen_helpers(inp):
         l('            }')
         l('        },')
         l('        .Struct, .Array => {')
-        l('            return .{ .ptr = &val, .size = @sizeOf(@TypeOf(val)) };')
+        l('            switch (builtin.zig_backend) {')
+        l('                .stage1 => return .{ .ptr = &val, .size = @sizeOf(@TypeOf(val)) },')
+        l('                else => @compileError("Structs and arrays must be passed as pointers to asRange"),')
+        l('            }')
         l('        },')
         l('        else => {')
         l('            @compileError("Cannot convert to range!");')
