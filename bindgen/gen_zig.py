@@ -377,8 +377,7 @@ def gen_struct(decl, prefix):
         elif is_const_prim_ptr(field_type):
             l(f"    {field_name}: ?[*]const {as_zig_prim_type(extract_ptr_type(field_type))} = null,")
         elif is_func_ptr(field_type):
-            sig = f"fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)}"
-            l(f"    {field_name}: (switch (builtin.zig_backend) {{ .stage1 => ?{sig}, else => ?*const {sig} }}) = null,")
+            l(f"    {field_name}: ?meta.FnPtr(fn({funcptr_args_c(field_type, prefix)}) callconv(.C) {funcptr_result_c(field_type)}) = null,")
         elif is_1d_array_type(field_type):
             array_type = extract_array_type(field_type)
             array_sizes = extract_array_sizes(field_type)
@@ -483,6 +482,7 @@ def pre_parse(inp):
 
 def gen_imports(inp, dep_prefixes):
     l('const builtin = @import("builtin");')
+    l('const meta = @import("std").meta;')
     for dep_prefix in dep_prefixes:
         dep_module_name = module_names[dep_prefix]
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
