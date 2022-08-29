@@ -113,6 +113,7 @@ typedef struct sspine_atlas { uint32_t id; } sspine_atlas;
 typedef struct sspine_skeleton { uint32_t id; } sspine_skeleton;
 typedef struct sspine_instance { uint32_t id; } sspine_instance;
 
+typedef struct sspine_atlas_page { sspine_atlas atlas; int index; } sspine_atlas_page;
 typedef struct sspine_bone { sspine_instance instance; int index; } sspine_bone;
 typedef struct sspine_slot { sspine_instance instance; int index; } sspine_slot;
 typedef struct sspine_anim { sspine_instance instance; int index; } sspine_anim;
@@ -166,6 +167,19 @@ typedef struct sspine_atlas_desc {
     sspine_range data;
 } sspine_atlas_desc;
 
+typedef struct sspine_atlas_page_info {
+    sspine_atlas atlas;
+    sg_image image;
+    const char* name;
+    sg_filter min_filter;
+    sg_filter mag_filter;
+    sg_wrap wrap_u;
+    sg_wrap wrap_v;
+    int width;
+    int height;
+    bool premultiplied_alpha;
+} sspine_atlas_page_info;
+
 typedef struct sspine_skeleton_desc {
     sspine_atlas atlas;
     float prescale;
@@ -183,7 +197,6 @@ typedef struct sspine_allocator {
     void (*free)(void* ptr, void* user_data);
     void* user_data;
 } sspine_allocator;
-
 
 typedef struct sspine_desc {
     int max_vertices;
@@ -245,7 +258,7 @@ SOKOL_SPINE_API_DECL bool sspine_skeleton_valid(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL bool sspine_instance_valid(sspine_instance instance);
 
 // atlas images
-SOKOL_SPINE_API_DECL int sspine_get_num_images(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL int sspine_num_images(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL sspine_image_info sspine_get_image_info(sspine_atlas atlas, int image_index);
 
 // instance transform functions
@@ -266,12 +279,19 @@ SOKOL_SPINE_API_DECL void sspine_add_animation_by_name(sspine_instance instance,
 SOKOL_SPINE_API_DECL void sspine_set_empty_animation(sspine_instance instance, int track_index, float mix_duration);
 SOKOL_SPINE_API_DECL void sspine_add_empty_animation(sspine_instance instance, int track_index, float mix_duration, float delay);
 
-// find instance items by name
+// iterate over atlas items
+SOKOL_SPINE_API_DECL int sspine_num_atlas_pages(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL sspine_atlas_page sspine_atlas_page_at(sspine_atlas atlas, int index);
+
+// get atlas information
+SOKOL_SPINE_API_DECL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas_page page);
+
+// find items by name
 SOKOL_SPINE_API_DECL sspine_bone sspine_find_bone(sspine_instance instance, const char* name);
 SOKOL_SPINE_API_DECL sspine_slot sspine_find_slot(sspine_instance instance, const char* name);
 SOKOL_SPINE_API_DECL sspine_anim sspine_find_anim(sspine_instance instance, const char* name);
 
-// iterate over instance items
+// iterate over items
 SOKOL_SPINE_API_DECL int sspine_num_bones(sspine_instance instance);
 SOKOL_SPINE_API_DECL int sspine_num_slots(sspine_instance instance);
 SOKOL_SPINE_API_DECL sspine_bone sspine_bone_at(sspine_instance instance, int index);
@@ -1327,6 +1347,7 @@ static sspine_resource_state _sspine_init_atlas(_sspine_atlas_t* atlas, const ss
         }
         page->rendererObject = (void*)(uintptr_t)img.id;
     }
+
     return SSPINE_RESOURCESTATE_VALID;
 }
 
@@ -2367,7 +2388,7 @@ SOKOL_API_IMPL bool sspine_instance_valid(sspine_instance instance_id) {
     return sspine_get_instance_resource_state(instance_id) == SSPINE_RESOURCESTATE_VALID;
 }
 
-SOKOL_API_IMPL int sspine_get_num_images(sspine_atlas atlas_id) {
+SOKOL_API_IMPL int sspine_num_images(sspine_atlas atlas_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
     return atlas ? atlas->num_pages : 0;
@@ -2528,6 +2549,52 @@ SOKOL_API_IMPL void sspine_add_empty_animation(sspine_instance instance_id, int 
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_addEmptyAnimation(instance->sp_anim_state, track_index, mix_duration, delay);
     }
+}
+
+SOKOL_API_IMPL int sspine_num_atlas_pages(sspine_atlas atlas_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    if (atlas) {
+        return atlas->num_pages;
+    }
+    else {
+        return 0;
+    }
+}
+
+SOKOL_API_IMPL sspine_atlas_page sspine_atlas_page_at(sspine_atlas atlas_id, int index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_atlas_page res;
+    _sspine_clear(&res, sizeof(res));
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    if (atlas && (index >= 0) && (index < atlas->num_pages)) {
+        res.atlas = atlas_id;
+        res.index = index;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas_page page_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_atlas_page_info res;
+    _sspine_clear(&res, sizeof(res));
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(page_id.atlas.id);
+    if (atlas) {
+        const spAtlasPage* sp_page = _sspine_atlas_page_at(atlas, page_id.index);
+        if (sp_page) {
+            res.atlas = page_id.atlas;
+            res.image.id = (uint32_t)(uintptr_t)sp_page->rendererObject;
+            res.name = sp_page->name ? sp_page->name : "";
+            res.min_filter = _sspine_as_image_filter(sp_page->minFilter);
+            res.mag_filter = _sspine_as_image_filter(sp_page->magFilter);
+            res.wrap_u = _sspine_as_image_wrap(sp_page->uWrap);
+            res.wrap_v = _sspine_as_image_wrap(sp_page->vWrap);
+            res.width = sp_page->width;
+            res.height = sp_page->height;
+            res.premultiplied_alpha = sp_page->pma != 0;
+        }
+    }
+    return res;
 }
 
 #endif // SOKOL_SPINE_IMPL
