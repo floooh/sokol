@@ -188,7 +188,7 @@ typedef struct sspine_atlas_page_info {
     sg_wrap wrap_v;
     int width;
     int height;
-    bool premultiplied_alpha;
+    bool premul_alpha;
     sspine_atlas_overrides overrides;
 } sspine_atlas_page_info;
 
@@ -2705,7 +2705,7 @@ SOKOL_API_IMPL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas_pa
             res.wrap_v = _sspine_as_image_wrap(sp_page->vWrap);
             res.width = sp_page->width;
             res.height = sp_page->height;
-            res.premultiplied_alpha = sp_page->pma != 0;
+            res.premul_alpha = sp_page->pma != 0;
             res.overrides = atlas->overrides;
         }
     }
