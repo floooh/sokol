@@ -9194,11 +9194,14 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     _SOKOL_UNUSED(saved_state_size);
     SOKOL_LOG("NativeActivity onCreate()");
 
+    // Set activity *before* calling sokol_main.
+    // See https://github.com/floooh/sokol/issues/708
+    _sapp.android.activity = activity;
+
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc);
 
     /* start loop thread */
-    _sapp.android.activity = activity;
 
     int pipe_fd[2];
     if (pipe(pipe_fd) != 0) {
@@ -12067,7 +12070,6 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
-    SOKOL_ASSERT(_sapp.valid);
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
     #else
