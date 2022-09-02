@@ -116,7 +116,7 @@ UTEST(sokol_spine, failed_atlas_no_images) {
     sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){0});
     T(atlas.id != SSPINE_INVALID_ID);
     T(!sspine_atlas_valid(atlas));
-    T(sspine_get_num_images(atlas) == 0);
+    T(sspine_num_images(atlas) == 0);
     shutdown();
 
 }
@@ -127,7 +127,7 @@ UTEST(sokol_spine, atlas_image_info) {
     init();
     sspine_atlas atlas = create_atlas();
     T(sspine_atlas_valid(atlas));
-    T(sspine_get_num_images(atlas) == 1);
+    T(sspine_num_images(atlas) == 1);
     const sspine_image_info img_info = sspine_get_image_info(atlas, 0);
     T(img_info.image.id != SG_INVALID_ID);
     T(sg_query_image_state(img_info.image) == SG_RESOURCESTATE_ALLOC);
@@ -138,6 +138,36 @@ UTEST(sokol_spine, atlas_image_info) {
     T(img_info.wrap_v == SG_WRAP_MIRRORED_REPEAT);
     T(img_info.width == 1024);
     T(img_info.height == 256);
+    T(img_info.premul_alpha == false);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_with_overrides) {
+    init();
+    sspine_range atlas_data = load_data("spineboy.atlas");
+    sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){
+        .data = atlas_data,
+        .override = {
+            .min_filter = SG_FILTER_NEAREST_MIPMAP_NEAREST,
+            .mag_filter = SG_FILTER_NEAREST,
+            .wrap_u = SG_WRAP_REPEAT,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .premul_alpha_enabled = true,
+        }
+    });
+    T(sspine_atlas_valid(atlas));
+    T(sspine_num_images(atlas) == 1);
+    const sspine_image_info img_info = sspine_get_image_info(atlas, 0);
+    T(img_info.image.id != SG_INVALID_ID);
+    T(sg_query_image_state(img_info.image) == SG_RESOURCESTATE_ALLOC);
+    T(strcmp(img_info.filename, "spineboy.png") == 0);
+    T(img_info.min_filter == SG_FILTER_NEAREST_MIPMAP_NEAREST);
+    T(img_info.mag_filter == SG_FILTER_NEAREST);
+    T(img_info.wrap_u == SG_WRAP_REPEAT);
+    T(img_info.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
+    T(img_info.width == 1024);
+    T(img_info.height == 256);
+    T(img_info.premul_alpha == true);
     shutdown();
 }
 
