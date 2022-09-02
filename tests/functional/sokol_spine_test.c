@@ -60,6 +60,12 @@ static sspine_skeleton create_skeleton_json(sspine_atlas atlas) {
     return skeleton;
 }
 
+static sspine_instance create_instance() {
+    return sspine_make_instance(&(sspine_instance_desc){
+        .skeleton = create_skeleton_json(create_atlas()),
+    });
+}
+
 static sspine_skeleton create_skeleton_binary(sspine_atlas atlas) {
     sspine_range skeleton_binary_data = load_data("spineboy-pro.skel");
     sspine_skeleton skeleton = sspine_make_skeleton(&(sspine_skeleton_desc){
@@ -332,5 +338,352 @@ UTEST(sokol_spine, make_instance_fail_with_destroyed_atlas) {
         .skeleton = skeleton
     });
     T(sspine_get_instance_resource_state(instance) == SSPINE_RESOURCESTATE_FAILED);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_position) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_position(instance, (sspine_vec2){ .x=1.0f, .y=2.0f });
+    const sspine_vec2 pos = sspine_get_position(instance);
+    T(pos.x == 1.0f);
+    T(pos.y == 2.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_position_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_position(instance, (sspine_vec2){ .x=1.0f, .y=2.0f });
+    sspine_destroy_instance(instance);
+    const sspine_vec2 pos = sspine_get_position(instance);
+    T(pos.x == 0.0f);
+    T(pos.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_scale) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_scale(instance, (sspine_vec2){ .x=2.0f, .y=3.0f });
+    const sspine_vec2 scale = sspine_get_scale(instance);
+    T(scale.x == 2.0f);
+    T(scale.y == 3.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_scale_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_scale(instance, (sspine_vec2){ .x=2.0f, .y=3.0f });
+    sspine_destroy_instance(instance);
+    const sspine_vec2 scale = sspine_get_scale(instance);
+    T(scale.x == 0.0f);
+    T(scale.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_color) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_color(instance, (sspine_color) { .r=1.0f, .g=2.0f, .b=3.0f, .a=4.0f });
+    const sspine_color color = sspine_get_color(instance);
+    T(color.r == 1.0f);
+    T(color.g == 2.0f);
+    T(color.b == 3.0f);
+    T(color.a == 4.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_color_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_set_color(instance, (sspine_color) { .r=1.0f, .g=2.0f, .b=3.0f, .a=4.0f });
+    sspine_destroy_instance(instance);
+    const sspine_color color = sspine_get_color(instance);
+    T(color.r == 0.0f);
+    T(color.g == 0.0f);
+    T(color.b == 0.0f);
+    T(color.a == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_page_at) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    T(sspine_num_atlas_pages(atlas) == 1);
+    sspine_atlas_page p0 = sspine_atlas_page_at(atlas, 0);
+    T(p0.atlas.id == atlas.id);
+    T(p0.index == 0);
+    sspine_atlas_page p1 = sspine_atlas_page_at(atlas, 1);
+    T(p1.atlas.id == SSPINE_INVALID_ID);
+    T(p1.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_page_at_destroyed_atlas) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    sspine_destroy_atlas(atlas);
+    sspine_atlas_page p0 = sspine_atlas_page_at(atlas, 0);
+    T(p0.atlas.id == SSPINE_INVALID_ID);
+    T(p0.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_get_atlas_page_info) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_at(atlas, 0));
+    T(info.atlas.id == atlas.id);
+    T(info.image.id != SG_INVALID_ID);
+    T(sg_query_image_state(info.image) == SG_RESOURCESTATE_ALLOC);
+    T(strcmp(info.name, "spineboy.png") == 0);
+    T(info.min_filter == SG_FILTER_LINEAR);
+    T(info.mag_filter == SG_FILTER_LINEAR);
+    T(info.wrap_u == SG_WRAP_MIRRORED_REPEAT);
+    T(info.wrap_v == SG_WRAP_MIRRORED_REPEAT);
+    T(info.width == 1024);
+    T(info.height == 256);
+    T(info.premul_alpha == false);
+    T(info.overrides.min_filter == _SG_FILTER_DEFAULT);
+    T(info.overrides.mag_filter == _SG_FILTER_DEFAULT);
+    T(info.overrides.wrap_u == _SG_WRAP_DEFAULT);
+    T(info.overrides.wrap_v == _SG_WRAP_DEFAULT);
+    T(!info.overrides.premul_alpha_enabled);
+    T(!info.overrides.premul_alpha_disabled);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_get_atlas_page_info_destroyed_atlas) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    sspine_atlas_page page = sspine_atlas_page_at(atlas, 0);
+    sspine_destroy_atlas(atlas);
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(page);
+    T(info.atlas.id == SSPINE_INVALID_ID);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
+    init();
+    sspine_range atlas_data = load_data("spineboy.atlas");
+    sspine_atlas atlas = sspine_make_atlas(&(sspine_atlas_desc){
+        .data = atlas_data,
+        .override = {
+            .min_filter = SG_FILTER_NEAREST_MIPMAP_NEAREST,
+            .mag_filter = SG_FILTER_NEAREST,
+            .wrap_u = SG_WRAP_REPEAT,
+            .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+            .premul_alpha_enabled = true,
+        }
+    });
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_at(atlas, 0));
+    T(info.atlas.id == atlas.id);
+    T(info.image.id != SG_INVALID_ID);
+    T(sg_query_image_state(info.image) == SG_RESOURCESTATE_ALLOC);
+    T(strcmp(info.name, "spineboy.png") == 0);
+    T(info.min_filter == SG_FILTER_LINEAR);
+    T(info.mag_filter == SG_FILTER_LINEAR);
+    T(info.wrap_u == SG_WRAP_MIRRORED_REPEAT);
+    T(info.wrap_v == SG_WRAP_MIRRORED_REPEAT);
+    T(info.width == 1024);
+    T(info.height == 256);
+    T(info.premul_alpha == true); // FIXME: hmm, this is actually inconsistent
+    T(info.overrides.min_filter == SG_FILTER_NEAREST_MIPMAP_NEAREST);
+    T(info.overrides.mag_filter == SG_FILTER_NEAREST);
+    T(info.overrides.wrap_u == SG_WRAP_REPEAT);
+    T(info.overrides.wrap_v == SG_WRAP_CLAMP_TO_EDGE);
+    T(info.overrides.premul_alpha_enabled);
+    T(!info.overrides.premul_alpha_disabled);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_bone) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone b0 = sspine_find_bone(instance, "crosshair");
+    T(b0.instance.id == instance.id);
+    T(b0.index == 2);
+    sspine_bone b1 = sspine_find_bone(instance, "blablub");
+    T(b1.instance.id == SSPINE_INVALID_ID);
+    T(b1.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_bone_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_destroy_instance(instance);
+    sspine_bone b0 = sspine_find_bone(instance, "crosshair");
+    T(b0.instance.id == SSPINE_INVALID_ID);
+    T(b0.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, bone_valid) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone b0 = sspine_find_bone(instance, "crosshair");
+    T(sspine_bone_valid(b0));
+    sspine_bone b1 = sspine_find_bone(instance, "blablub");
+    T(!sspine_bone_valid(b1));
+    sspine_destroy_instance(instance);
+    sspine_bone b2 = sspine_find_bone(instance, "blablub");
+    T(!sspine_bone_valid(b2));
+    shutdown();
+}
+
+UTEST(sokol_spine, num_bones) {
+    init();
+    sspine_instance instance = create_instance();
+    T(sspine_num_bones(instance) == 67);
+    sspine_destroy_instance(instance);
+    T(sspine_num_bones(instance) == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, bone_at) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone b0 = sspine_bone_at(instance, 0);
+    T(b0.instance.id == instance.id);
+    T(b0.index == 0);
+    sspine_bone b1 = sspine_bone_at(instance, -1);
+    T(b1.instance.id == SSPINE_INVALID_ID);
+    T(b1.index == 0);
+    sspine_bone b2 = sspine_bone_at(instance, 23);
+    T(b2.instance.id == instance.id);
+    T(b2.index == 23);
+    sspine_bone b3 = sspine_bone_at(instance, 68);
+    T(b3.instance.id == SSPINE_INVALID_ID);
+    T(b3.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_bone_info) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    const sspine_bone_info info = sspine_get_bone_info(bone);
+    T(info.index == 0);
+    T(strcmp(info.name, "root") == 0);
+    T(info.length == 0.0f);
+    T(info.pose_tform.position.x == 0.0f);
+    T(info.pose_tform.position.y == 0.0f);
+    T(info.pose_tform.rotation == 0.05f);
+    T(info.pose_tform.scale.x == 1.0f);
+    T(info.pose_tform.scale.y == 1.0f);
+    T(info.pose_tform.shear.x == 0.0f);
+    T(info.pose_tform.shear.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_bone_info_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_destroy_instance(instance);
+    const sspine_bone_info info = sspine_get_bone_info(bone);
+    T(info.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_transform) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_set_bone_transform(bone, &(sspine_bone_transform){
+        .position = { 1.0f, 2.0f },
+        .rotation = 3.0f,
+        .scale = { 4.0f, 5.0f },
+        .shear = { 6.0f, 7.0f }
+    });
+    const sspine_bone_transform tform = sspine_get_bone_transform(bone);
+    T(tform.position.x == 1.0f);
+    T(tform.position.y == 2.0f);
+    T(tform.rotation == 3.0f);
+    T(tform.scale.x == 4.0f);
+    T(tform.scale.y == 5.0f);
+    T(tform.shear.x == 6.0f);
+    T(tform.shear.y == 7.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_transform_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_destroy_instance(instance);
+    sspine_set_bone_transform(bone, &(sspine_bone_transform){
+        .position = { 1.0f, 2.0f },
+        .rotation = 3.0f,
+        .scale = { 4.0f, 5.0f },
+        .shear = { 6.0f, 7.0f }
+    });
+    const sspine_bone_transform tform = sspine_get_bone_transform(bone);
+    T(tform.position.x == 0.0f);
+    T(tform.position.y == 0.0f);
+    T(tform.rotation == 0.0f);
+    T(tform.scale.x == 0.0f);
+    T(tform.scale.y == 0.0f);
+    T(tform.shear.x == 0.0f);
+    T(tform.shear.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_position) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_set_bone_position(bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 p0 = sspine_get_bone_position(bone);
+    T(p0.x == 1.0f);
+    T(p0.y == 2.0f);
+    sspine_destroy_instance(instance);
+    const sspine_vec2 p1 = sspine_get_bone_position(bone);
+    T(p1.x == 0.0f);
+    T(p1.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_rotation) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_set_bone_rotation(bone, 5.0f);
+    T(sspine_get_bone_rotation(bone) == 5.0f);
+    sspine_destroy_instance(instance);
+    T(sspine_get_bone_rotation(bone) == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_scale) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_set_bone_scale(bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 s0 = sspine_get_bone_scale(bone);
+    T(s0.x == 1.0f);
+    T(s0.y == 2.0f);
+    sspine_destroy_instance(instance);
+    const sspine_vec2 s1 = sspine_get_bone_scale(bone);
+    T(s1.x == 0.0f);
+    T(s1.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_bone_shear) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_bone bone = sspine_find_bone(instance, "root");
+    sspine_set_bone_shear(bone, (sspine_vec2){ 1.0f, 2.0f });
+    const sspine_vec2 s0 = sspine_get_bone_shear(bone);
+    T(s0.x == 1.0f);
+    T(s0.y == 2.0f);
+    sspine_destroy_instance(instance);
+    const sspine_vec2 s1 = sspine_get_bone_shear(bone);
+    T(s1.x == 0.0f);
+    T(s1.y == 0.0f);
     shutdown();
 }
