@@ -2761,7 +2761,7 @@ SOKOL_API_IMPL sspine_bone sspine_bone_at(sspine_instance instance_id, int index
     return res;
 }
 
-SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
+SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_bone_info res;
     _sspine_clear(&res, sizeof(res));
@@ -2791,6 +2791,120 @@ SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
         res.color.g = sp_bone->data->color.g;
         res.color.b = sp_bone->data->color.b;
         res.color.a = sp_bone->data->color.a;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL void sspine_set_bone_transform(sspine_bone bone, const sspine_bone_transform* transform) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(transform);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        sp_bone->x = transform->position.x;
+        sp_bone->y = transform->position.y;
+        sp_bone->rotation = transform->rotation;
+        sp_bone->scaleX = transform->scale.x;
+        sp_bone->scaleY = transform->scale.y;
+        sp_bone->shearX = transform->shear.x;
+        sp_bone->shearY = transform->shear.y;
+    }
+}
+
+SOKOL_API_IMPL void sspine_set_bone_position(sspine_bone bone, sspine_vec2 position) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        sp_bone->x = position.x;
+        sp_bone->y = position.y;
+    }
+}
+
+SOKOL_API_IMPL void sspine_set_bone_rotation(sspine_bone bone, float rotation) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        sp_bone->rotation = rotation;
+    }
+}
+
+SOKOL_API_IMPL void sspine_set_bone_scale(sspine_bone bone, sspine_vec2 scale) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        sp_bone->scaleX = scale.x;
+        sp_bone->scaleY = scale.y;
+    }
+}
+
+SOKOL_API_IMPL void sspine_set_bone_shear(sspine_bone bone, sspine_vec2 shear) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        sp_bone->shearX = shear.x;
+        sp_bone->shearY = shear.y;
+    }
+}
+
+SOKOL_API_IMPL sspine_bone_transform sspine_get_bone_transform(sspine_bone bone) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_bone_transform res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        res.position.x = sp_bone->x;
+        res.position.y = sp_bone->y;
+        res.rotation = sp_bone->rotation;
+        res.scale.x = sp_bone->scaleX;
+        res.scale.y = sp_bone->scaleY;
+        res.shear.x = sp_bone->shearX;
+        res.shear.y = sp_bone->shearY;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_get_bone_position(sspine_bone bone) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        res.x = sp_bone->x;
+        res.y = sp_bone->y;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL float sspine_get_bone_rotation(sspine_bone bone) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        return sp_bone->rotation;
+    }
+    else {
+        return 0.0f;
+    }
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_get_bone_scale(sspine_bone bone) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        res.x = sp_bone->scaleX;
+        res.y = sp_bone->scaleY;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_get_bone_shear(sspine_bone bone) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(bone);
+    if (sp_bone) {
+        res.x = sp_bone->shearX;
+        res.y = sp_bone->shearY;
     }
     return res;
 }
