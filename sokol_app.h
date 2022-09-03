@@ -9194,10 +9194,14 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     _SOKOL_UNUSED(saved_state_size);
     SOKOL_LOG("NativeActivity onCreate()");
 
+    // the NativeActity pointer needs to be available inside sokol_main()
+    // (see https://github.com/floooh/sokol/issues/708), however _sapp_init_state()
+    // will clear the global _sapp_t struct, so we need to initialize the native
+    // activity pointer twice, once before sokol_main() and once after _sapp_init_state()
+    _sapp_clear(&_sapp, sizeof(_sapp));
+    _sapp.android.activity = activity;
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc);
-
-    /* start loop thread */
     _sapp.android.activity = activity;
 
     int pipe_fd[2];
@@ -12067,7 +12071,8 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
-    SOKOL_ASSERT(_sapp.valid);
+    // NOTE: _sapp.valid is not asserted here because sapp_android_get_native_activity()
+    // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
     #else
