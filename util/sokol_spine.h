@@ -3551,7 +3551,7 @@ SOKOL_API_IMPL sspine_slot sspine_slot_at(sspine_instance instance_id, int index
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (instance && _sspine_instance_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
-        if ((index >= 0) && (index < instance->sp_skel->bonesCount)) {
+        if ((index >= 0) && (index < instance->sp_skel->slotsCount)) {
             slot.instance = instance_id;
             slot.index = index;
         }
