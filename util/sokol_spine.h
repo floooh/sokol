@@ -209,6 +209,14 @@ typedef struct sspine_bone_info {
     sspine_color color;
 } sspine_bone_info;
 
+typedef struct sspine_slot_info {
+    const char* name;
+    int index;
+    const char* attachment_name;
+    sspine_bone bone;
+    sspine_color color;
+} sspine_slot_info;
+
 typedef struct sspine_instance_desc {
     sspine_skeleton skeleton;
 } sspine_instance_desc;
@@ -325,10 +333,12 @@ SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_shear(sspine_bone bone);
 
 // slot functions
 SOKOL_SPINE_API_DECL sspine_slot sspine_find_slot(sspine_instance instance, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_slot_valid(sspine_slot slot);
 SOKOL_SPINE_API_DECL int sspine_num_slots(sspine_instance instance);
 SOKOL_SPINE_API_DECL sspine_slot sspine_slot_at(sspine_instance instance, int index);
-SOKOL_SPINE_API_DECL void sspine_slot_set_color(sspine_slot slot, sspine_color color);
-SOKOL_SPINE_API_DECL sspine_color sspine_slot_get_color(sspine_slot slot);
+SOKOL_SPINE_API_DECL sspine_slot_info sspine_get_slot_info(sspine_slot);
+SOKOL_SPINE_API_DECL void sspine_set_slot_color(sspine_slot slot, sspine_color color);
+SOKOL_SPINE_API_DECL sspine_color sspine_get_slot_color(sspine_slot slot);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -2808,6 +2818,17 @@ static spBone* _sspine_lookup_bone(sspine_bone bone) {
     return 0;
 }
 
+static spSlot* _sspine_lookup_slot(sspine_slot slot) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(slot.instance.id);
+    if (instance && _sspine_instance_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        SOKOL_ASSERT(instance->sp_skel->slots);
+        SOKOL_ASSERT((slot.index >= 0) && (slot.index <= instance->sp_skel->slotsCount));
+        return instance->sp_skel->slots[slot.index];
+    }
+    return 0;
+}
+
 //== PUBLIC FUNCTIONS ==========================================================
 SOKOL_API_IMPL void sspine_setup(const sspine_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -3329,17 +3350,17 @@ SOKOL_API_IMPL int sspine_num_bones(sspine_instance instance_id) {
 
 SOKOL_API_IMPL sspine_bone sspine_bone_at(sspine_instance instance_id, int index) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    sspine_bone res;
-    _sspine_clear(&res, sizeof(res));
+    sspine_bone bone;
+    _sspine_clear(&bone, sizeof(bone));
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     if (instance && _sspine_instance_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         if ((index >= 0) && (index < instance->sp_skel->bonesCount)) {
-            res.instance = instance_id;
-            res.index = index;
+            bone.instance = instance_id;
+            bone.index = index;
         }
     }
-    return res;
+    return bone;
 }
 
 SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_bone bone) {
@@ -3488,6 +3509,101 @@ SOKOL_API_IMPL sspine_vec2 sspine_get_bone_shear(sspine_bone bone) {
         res.y = sp_bone->shearY;
     }
     return res;
+}
+
+SOKOL_API_IMPL sspine_slot sspine_find_slot(sspine_instance instance_id, const char* name) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(name);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    sspine_slot slot;
+    _sspine_clear(&slot, sizeof(slot));
+    if (instance && _sspine_instance_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        spSlot* sp_slot = spSkeleton_findSlot(instance->sp_skel, name);
+        if (sp_slot) {
+            SOKOL_ASSERT(sp_slot->data);
+            slot.instance = instance_id;
+            slot.index = sp_slot->data->index;
+        }
+    }
+    return slot;
+}
+
+SOKOL_API_IMPL bool sspine_slot_valid(sspine_slot slot) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    return 0 != _sspine_lookup_slot(slot);
+}
+
+SOKOL_API_IMPL int sspine_num_slots(sspine_instance instance_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (instance && _sspine_instance_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        return instance->sp_skel->slotsCount;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_slot sspine_slot_at(sspine_instance instance_id, int index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_slot slot;
+    _sspine_clear(&slot, sizeof(slot));
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (instance && _sspine_instance_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        if ((index >= 0) && (index < instance->sp_skel->bonesCount)) {
+            slot.instance = instance_id;
+            slot.index = index;
+        }
+    }
+    return slot;
+}
+
+SOKOL_API_IMPL sspine_slot_info sspine_get_slot_info(sspine_slot slot) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_slot_info res;
+    _sspine_clear(&res, sizeof(res));
+    spSlot* sp_slot = _sspine_lookup_slot(slot);
+    if (sp_slot) {
+        SOKOL_ASSERT(sp_slot->data);
+        SOKOL_ASSERT(sp_slot->data->index == slot.index);
+        SOKOL_ASSERT(sp_slot->data->name);
+        SOKOL_ASSERT(sp_slot->data->boneData);
+        res.name = sp_slot->data->name;
+        res.index = sp_slot->data->index;
+        res.attachment_name = sp_slot->data->attachmentName;
+        res.bone = sspine_bone_at(slot.instance, sp_slot->data->boneData->index);
+        res.color.r = sp_slot->color.r;
+        res.color.g = sp_slot->color.g;
+        res.color.b = sp_slot->color.b;
+        res.color.a = sp_slot->color.a;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL void sspine_set_slot_color(sspine_slot slot, sspine_color color) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spSlot* sp_slot = _sspine_lookup_slot(slot);
+    if (sp_slot) {
+        sp_slot->color.r = color.r;
+        sp_slot->color.g = color.g;
+        sp_slot->color.b = color.b;
+        sp_slot->color.a = color.a;
+    }
+}
+
+SOKOL_API_IMPL sspine_color sspine_get_slot_color(sspine_slot slot) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_color color;
+    _sspine_clear(&color, sizeof(color));
+    spSlot* sp_slot = _sspine_lookup_slot(slot);
+    if (sp_slot) {
+        color.r = sp_slot->color.r;
+        color.g = sp_slot->color.g;
+        color.b = sp_slot->color.b;
+        color.a = sp_slot->color.a;
+    }
+    return color;
 }
 
 #endif // SOKOL_SPINE_IMPL
