@@ -555,9 +555,12 @@ UTEST(sokol_spine, bone_at) {
     sspine_bone b2 = sspine_bone_at(instance, 23);
     T(b2.instance.id == instance.id);
     T(b2.index == 23);
-    sspine_bone b3 = sspine_bone_at(instance, 68);
+    sspine_bone b3 = sspine_bone_at(instance, 67);
     T(b3.instance.id == SSPINE_INVALID_ID);
     T(b3.index == 0);
+    sspine_bone b4 = sspine_bone_at(instance, 66);
+    T(b4.instance.id == instance.id);
+    T(b4.index == 66);
     shutdown();
 }
 
@@ -685,5 +688,115 @@ UTEST(sokol_spine, set_get_bone_shear) {
     const sspine_vec2 s1 = sspine_get_bone_shear(bone);
     T(s1.x == 0.0f);
     T(s1.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_slot) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot s0 = sspine_find_slot(instance, "portal-streaks1");
+    T(s0.instance.id == instance.id);
+    T(s0.index == 3);
+    sspine_slot s1 = sspine_find_slot(instance, "blablub");
+    T(s1.instance.id == SSPINE_INVALID_ID);
+    T(s1.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_slot_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_destroy_instance(instance);
+    sspine_slot s0 = sspine_find_slot(instance, "portal-streaks1");
+    T(s0.instance.id == SSPINE_INVALID_ID);
+    T(s0.index == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, slot_valid) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot s0 = sspine_find_slot(instance, "portal-streaks1");
+    T(sspine_slot_valid(s0));
+    sspine_slot s1 = sspine_find_slot(instance, "blablub");
+    T(!sspine_slot_valid(s1));
+    sspine_destroy_instance(instance);
+    sspine_slot s2 = sspine_find_slot(instance, "blablub");
+    T(!sspine_slot_valid(s2));
+    shutdown();
+}
+
+UTEST(sokol_spine, num_slots) {
+    init();
+    sspine_instance instance = create_instance();
+    T(sspine_num_slots(instance) == 52);
+    sspine_destroy_instance(instance);
+    T(sspine_num_slots(instance) == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, slot_at) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot s0 = sspine_slot_at(instance, 0);
+    T(s0.instance.id == instance.id);
+    T(s0.index == 0);
+    sspine_slot s1 = sspine_slot_at(instance, -1);
+    T(s1.instance.id == SSPINE_INVALID_ID);
+    T(s1.index == 0);
+    sspine_slot s2 = sspine_slot_at(instance, 23);
+    T(s2.instance.id == instance.id);
+    T(s2.index == 23);
+    sspine_slot s3 = sspine_slot_at(instance, 52);
+    T(s3.instance.id == SSPINE_INVALID_ID);
+    T(s3.index == 0);
+    sspine_slot s4 = sspine_slot_at(instance, 51);
+    T(s4.instance.id == instance.id);
+    T(s4.index == 51);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_slot_info) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot slot = sspine_find_slot(instance, "portal-streaks1");
+    const sspine_slot_info info = sspine_get_slot_info(slot);
+    T(info.index == 3);
+    T(strcmp(info.name, "portal-streaks1") == 0);
+    T(info.attachment_name == 0);
+    T(info.bone.instance.id == instance.id);
+    T(info.bone.index == 62);
+    T(info.color.r == 1.0f);
+    T(info.color.g == 1.0f);
+    T(info.color.b == 1.0f);
+    T(info.color.a == 1.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_slot_info_destroyed_instance) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot slot = sspine_find_slot(instance, "portal-streaks1");
+    sspine_destroy_instance(instance);
+    const sspine_slot_info info = sspine_get_slot_info(slot);
+    T(info.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, set_get_slot_color) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_slot slot = sspine_find_slot(instance, "portal-streaks1");
+    sspine_set_slot_color(slot, (sspine_color){ 1.0f, 2.0f, 3.0f, 4.0f });
+    const sspine_color color = sspine_get_slot_color(slot);
+    T(color.r == 1.0f);
+    T(color.g == 2.0f);
+    T(color.b == 3.0f);
+    T(color.a == 4.0f);
+    const sspine_slot_info info = sspine_get_slot_info(slot);
+    T(info.color.r == 1.0f);
+    T(info.color.g == 2.0f);
+    T(info.color.b == 3.0f);
+    T(info.color.a == 4.0f);
     shutdown();
 }
