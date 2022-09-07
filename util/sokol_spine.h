@@ -200,6 +200,12 @@ typedef struct sspine_skeleton_desc {
     sspine_range binary_data;
 } sspine_skeleton_desc;
 
+typedef struct sspine_anim_info {
+    const char* name;
+    int index;
+    float duration;
+} sspine_anim_info;
+
 typedef struct sspine_bone_info {
     const char* name;
     int index;
@@ -300,6 +306,10 @@ SOKOL_SPINE_API_DECL sspine_color sspine_get_color(sspine_instance instance);
 
 // instance animation functions
 SOKOL_SPINE_API_DECL sspine_anim sspine_find_anim(sspine_instance instance, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_anim_valid(sspine_anim anim);
+SOKOL_SPINE_API_DECL int sspint_num_anims(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_anim sspine_anim_at(sspine_instance, int index);
+SOKOL_SPINE_API_DECL sspine_anim_info sspine_get_anim_info(sspine_anim anim);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_tracks(sspine_instance instance);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_track(sspine_instance instance, int track_index);
 SOKOL_SPINE_API_DECL void sspine_set_animation(sspine_instance instance, int track_index, sspine_anim anim, bool loop);
@@ -353,7 +363,7 @@ SOKOL_SPINE_API_DECL sspine_color sspine_get_slot_color(sspine_slot slot);
 #endif
 
 #include <stdlib.h> // malloc/free
-#include <string.h> // memset
+#include <string.h> // memset, strcmp
 
 #ifndef SOKOL_API_IMPL
     #define SOKOL_API_IMPL
@@ -2472,21 +2482,15 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
     return res;
 }
 
-static bool _sspine_instance_deps_valid(_sspine_instance_t* instance) {
-    if (!_sspine_atlas_ref_valid(&instance->atlas)) {
-        return false;
-    }
-    if (!_sspine_skeleton_ref_valid(&instance->skel)) {
-        return false;
-    }
-    return true;
+static bool _sspine_instance_and_deps_valid(_sspine_instance_t* instance) {
+    return instance && _sspine_atlas_ref_valid(&instance->atlas) && _sspine_skeleton_ref_valid(&instance->skel);
 }
 
 static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* instance, int layer) {
+    SOKOL_ASSERT(_sspine_instance_and_deps_valid(instance));
     SOKOL_ASSERT(instance->sp_skel);
     SOKOL_ASSERT(instance->sp_anim_state);
     SOKOL_ASSERT(instance->sp_clip);
-    SOKOL_ASSERT(_sspine_instance_deps_valid(instance));
 
     // see: https://github.com/EsotericSoftware/spine-runtimes/blob/4.1/spine-sdl/src/spine-sdl-c.c
     const spSkeleton* sp_skel = instance->sp_skel;
@@ -2800,18 +2804,20 @@ static void _sspine_destroy_shared(void) {
     sg_destroy_shader(_sspine.shd);
 }
 
-static spAnimation* _sspine_lookup_anim(_sspine_instance_t* instance, sspine_anim anim) {
-    SOKOL_ASSERT(instance && (instance->slot.id == anim.instance.id));
-    SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
-    SOKOL_ASSERT((anim.index >= 0) && (anim.index < instance->sp_skel->data->animationsCount));
-    return instance->sp_skel->data->animations[anim.index];
+static spAnimation* _sspine_lookup_anim(sspine_anim anim) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(anim.instance.id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
+        SOKOL_ASSERT((anim.index >= 0) && (anim.index < instance->sp_skel->data->animationsCount));
+        return instance->sp_skel->data->animations[anim.index];
+    }
+    return 0;
 }
 
 static spBone* _sspine_lookup_bone(sspine_bone bone) {
     _sspine_instance_t* instance = _sspine_lookup_instance(bone.instance.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel);
-        SOKOL_ASSERT(instance->sp_skel->bones);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->bones);
         SOKOL_ASSERT((bone.index >= 0) && (bone.index <= instance->sp_skel->bonesCount));
         return instance->sp_skel->bones[bone.index];
     }
@@ -2820,9 +2826,8 @@ static spBone* _sspine_lookup_bone(sspine_bone bone) {
 
 static spSlot* _sspine_lookup_slot(sspine_slot slot) {
     _sspine_instance_t* instance = _sspine_lookup_instance(slot.instance.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel);
-        SOKOL_ASSERT(instance->sp_skel->slots);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->slots);
         SOKOL_ASSERT((slot.index >= 0) && (slot.index <= instance->sp_skel->slotsCount));
         return instance->sp_skel->slots[slot.index];
     }
@@ -2923,7 +2928,7 @@ SOKOL_API_IMPL void sspine_new_frame(void) {
 SOKOL_API_IMPL void sspine_update_instance(sspine_instance instance_id, float delta_time) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_update(instance->sp_anim_state, delta_time);
@@ -2936,7 +2941,7 @@ SOKOL_API_IMPL void sspine_draw_instance_in_layer(sspine_instance instance_id, i
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine.cur_ctx;
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (ctx && instance && _sspine_instance_deps_valid(instance)) {
+    if (ctx && _sspine_instance_and_deps_valid(instance)) {
         _sspine_draw_instance(ctx, instance, layer);
     }
 }
@@ -2945,7 +2950,7 @@ SOKOL_API_IMPL void sspine_context_draw_instance_in_layer(sspine_context ctx_id,
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_context_t* ctx = _sspine_lookup_context(ctx_id.id);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (ctx && instance && _sspine_instance_deps_valid(instance)) {
+    if (ctx && _sspine_instance_and_deps_valid(instance)) {
         _sspine_draw_instance(ctx, instance, layer);
     }
 }
@@ -3122,7 +3127,7 @@ SOKOL_API_IMPL sspine_image_info sspine_get_image_info(sspine_atlas atlas_id, in
 SOKOL_API_IMPL void sspine_set_position(sspine_instance instance_id, sspine_vec2 position) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         instance->sp_skel->x = position.x;
         instance->sp_skel->y = position.y;
@@ -3189,10 +3194,79 @@ SOKOL_API_IMPL  sspine_color sspine_get_color(sspine_instance instance_id) {
     return c;
 }
 
+SOKOL_API_IMPL sspine_anim sspine_find_anim(sspine_instance instance_id, const char* name) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(name);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    sspine_anim anim;
+    _sspine_clear(&anim, sizeof(anim));
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel);
+        SOKOL_ASSERT(instance->sp_skel->data);
+        // NOTE: there's a spSkeletonData_findAnimation function, but that doesn't
+        // give us access to the index, so we'll need to do the loop ourselves
+        const spSkeletonData* sp_skel_data = instance->sp_skel->data;
+        const int num_anims = sp_skel_data->animationsCount;
+        SOKOL_ASSERT(sp_skel_data->animations);
+        for (int i = 0; i < num_anims; i++) {
+            SOKOL_ASSERT(sp_skel_data->animations[i]);
+            if (0 == strcmp(sp_skel_data->animations[i]->name, name)) {
+                anim.instance = instance_id;
+                anim.index = i;
+                break;
+            }
+        }
+    }
+    return anim;
+}
+
+SOKOL_API_IMPL bool sspine_anim_valid(sspine_anim anim) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    return 0 != _sspine_lookup_anim(anim);
+}
+
+SOKOL_API_IMPL int sspine_num_anims(sspine_instance instance_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
+        return instance->sp_skel->data->animationsCount;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_anim sspine_anim_at(sspine_instance instance_id, int index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_anim anim;
+    _sspine_clear(&anim, sizeof(anim));
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
+        if ((index >= 0) && (index < instance->sp_skel->data->animationsCount)) {
+            anim.instance = instance_id;
+            anim.index = index;
+        }
+    }
+    return anim;
+}
+
+SOKOL_API_IMPL sspine_anim_info sspine_get_anim_info(sspine_anim anim) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_anim_info res;
+    _sspine_clear(&res, sizeof(res));
+    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    if (sp_anim) {
+        res.name = sp_anim->name;
+        res.index = anim.index;
+        res.duration = sp_anim->duration;
+    }
+    return res;
+}
+
 SOKOL_API_IMPL void sspine_clear_animation_tracks(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_clearTracks(instance->sp_anim_state);
     }
@@ -3201,7 +3275,7 @@ SOKOL_API_IMPL void sspine_clear_animation_tracks(sspine_instance instance_id) {
 SOKOL_API_IMPL void sspine_clear_animation_track(sspine_instance instance_id, int track_index) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_clearTrack(instance->sp_anim_state, track_index);
     }
@@ -3209,11 +3283,11 @@ SOKOL_API_IMPL void sspine_clear_animation_track(sspine_instance instance_id, in
 
 SOKOL_API_IMPL void sspine_set_animation(sspine_instance instance_id, int track_index, sspine_anim anim, bool loop) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance) && (instance_id.id == anim.instance.id)) {
-        SOKOL_ASSERT(instance->sp_anim_state);
-        spAnimation* sp_anim = _sspine_lookup_anim(instance, anim);
-        SOKOL_ASSERT(sp_anim);
+    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    if (sp_anim) {
+        // NOTE: at this point, instance is guaranteed to be valid
+        _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+        SOKOL_ASSERT(instance);
         spAnimationState_setAnimation(instance->sp_anim_state, track_index, sp_anim, loop?1:0);
     }
 }
@@ -3222,7 +3296,7 @@ SOKOL_API_IMPL void sspine_set_animation_by_name(sspine_instance instance_id, in
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(anim_name);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_setAnimationByName(instance->sp_anim_state, track_index, anim_name, loop?1:0);
     }
@@ -3230,11 +3304,12 @@ SOKOL_API_IMPL void sspine_set_animation_by_name(sspine_instance instance_id, in
 
 SOKOL_API_IMPL void sspine_add_animation(sspine_instance instance_id, int track_index, sspine_anim anim, bool loop, float delay) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance) && (instance_id.id == anim.instance.id)) {
+    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    if (sp_anim) {
+        // NOTE: at this point, instance is guaranteed to be valid
+        _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+        SOKOL_ASSERT(instance);
         SOKOL_ASSERT(instance->sp_anim_state);
-        spAnimation* sp_anim = _sspine_lookup_anim(instance, anim);
-        SOKOL_ASSERT(sp_anim);
         spAnimationState_addAnimation(instance->sp_anim_state, track_index, sp_anim, loop?1:0, delay);
     }
 }
@@ -3243,7 +3318,7 @@ SOKOL_API_IMPL void sspine_add_animation_by_name(sspine_instance instance_id, in
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(anim_name);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_addAnimationByName(instance->sp_anim_state, track_index, anim_name, loop?1:0, delay);
     }
@@ -3252,7 +3327,7 @@ SOKOL_API_IMPL void sspine_add_animation_by_name(sspine_instance instance_id, in
 SOKOL_API_IMPL void sspine_set_empty_animation(sspine_instance instance_id, int track_index, float mix_duration) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_setEmptyAnimation(instance->sp_anim_state, track_index, mix_duration);
     }
@@ -3261,7 +3336,7 @@ SOKOL_API_IMPL void sspine_set_empty_animation(sspine_instance instance_id, int 
 SOKOL_API_IMPL void sspine_add_empty_animation(sspine_instance instance_id, int track_index, float mix_duration, float delay) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_anim_state);
         spAnimationState_addEmptyAnimation(instance->sp_anim_state, track_index, mix_duration, delay);
     }
@@ -3320,7 +3395,7 @@ SOKOL_API_IMPL sspine_bone sspine_find_bone(sspine_instance instance_id, const c
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     sspine_bone bone;
     _sspine_clear(&bone, sizeof(bone));
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         spBone* sp_bone = spSkeleton_findBone(instance->sp_skel, name);
         if (sp_bone) {
@@ -3341,7 +3416,7 @@ SOKOL_API_IMPL bool sspine_bone_valid(sspine_bone bone) {
 SOKOL_API_IMPL int sspine_num_bones(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         return instance->sp_skel->bonesCount;
     }
@@ -3353,7 +3428,7 @@ SOKOL_API_IMPL sspine_bone sspine_bone_at(sspine_instance instance_id, int index
     sspine_bone bone;
     _sspine_clear(&bone, sizeof(bone));
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         if ((index >= 0) && (index < instance->sp_skel->bonesCount)) {
             bone.instance = instance_id;
@@ -3517,7 +3592,7 @@ SOKOL_API_IMPL sspine_slot sspine_find_slot(sspine_instance instance_id, const c
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
     sspine_slot slot;
     _sspine_clear(&slot, sizeof(slot));
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         spSlot* sp_slot = spSkeleton_findSlot(instance->sp_skel, name);
         if (sp_slot) {
@@ -3537,7 +3612,7 @@ SOKOL_API_IMPL bool sspine_slot_valid(sspine_slot slot) {
 SOKOL_API_IMPL int sspine_num_slots(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         return instance->sp_skel->slotsCount;
     }
@@ -3549,7 +3624,7 @@ SOKOL_API_IMPL sspine_slot sspine_slot_at(sspine_instance instance_id, int index
     sspine_slot slot;
     _sspine_clear(&slot, sizeof(slot));
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (instance && _sspine_instance_deps_valid(instance)) {
+    if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         if ((index >= 0) && (index < instance->sp_skel->slotsCount)) {
             slot.instance = instance_id;
