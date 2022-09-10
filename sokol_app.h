@@ -4519,7 +4519,10 @@ EM_JS(void, sapp_js_remove_beforeunload_listener, (void), {
 EM_JS(void, sapp_js_add_clipboard_listener, (void), {
     Module.sokol_paste = function(event) {
         var pasted_str = event.clipboardData.getData('text');
-        ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
+        withStackSave(() => {
+            var cstr = allocateUTF8OnStack(pasted_str);
+            __sapp_emsc_onpaste(cstr);
+        });
     };
     window.addEventListener('paste', Module.sokol_paste);
 });
@@ -4574,7 +4577,10 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
         __sapp_emsc_begin_drop(files.length);
         var i;
         for (i = 0; i < files.length; i++) {
-            ccall('_sapp_emsc_drop', 'void', ['number', 'string'], [i, files[i].name]);
+            withStackSave(() => {
+                var cstr = allocateUTF8OnStack(files[i].name);
+                __sapp_emsc_drop(i, cstr);
+            });
         }
         // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
         __sapp_emsc_end_drop(event.clientX, event.clientY);
@@ -4662,7 +4668,7 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
-EM_JS(void, sapp_js_pointer_init, (const char* c_str_target), {
+EM_JS(void, sapp_js_init, (const char* c_str_target), {
     // lookup and store canvas object by name
     var target_str = UTF8ToString(c_str_target);
     Module.sapp_emsc_target = document.getElementById(target_str);
@@ -5564,7 +5570,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
+    sapp_js_init(&_sapp.html5_canvas_selector[1]);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
