@@ -1,5 +1,11 @@
 ## Updates
 
+- **10-Sep-2022**: sokol_app.h and sokol_args.h has been fixed for Emscripten 3.21, those headers
+  used the Emscripten Javascript helper function ```ccall()``` which is now part of the
+  'legacy runtime' and causes linker errors. Instead of ```ccall()``` sokol_app.h and sokol_args.h
+  now drop down to a lower level set of Emscripten JS helper functions (which hopefully won't
+  go away anytime soon).
+
 - **05-Aug-2022**: New officially supported and automatically updated language bindings for Odin:
   https://github.com/floooh/sokol-odin (also see [gen_odin.py](https://github.com/floooh/sokol/blob/master/bindgen/gen_odin.py))
 
