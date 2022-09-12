@@ -435,114 +435,69 @@ UTEST(sokol_spine, set_get_color_destroyed_instance) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_anim) {
+UTEST(sokol_spine, find_anim_index) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_anim a0 = sspine_find_anim(instance, "hoverboard");
-    T(a0.instance.id == instance.id);
-    T(a0.index == 2);
-    sspine_anim a1 = sspine_find_anim(instance, "bla");
-    T(a1.instance.id == SSPINE_INVALID_ID);
-    T(a1.index == 0);
+    sspine_skeleton skeleton = create_skeleton();
+    int a0 = sspine_find_anim_index(skeleton, "hoverboard");
+    T(a0 == 2);
+    int a1 = sspine_find_anim_index(skeleton, "bla");
+    T(a1 == -1);
     shutdown();
 }
 
-UTEST(sokol_spine, find_anim_destroyed_instance) {
+UTEST(sokol_spine, find_anim_index_destroyed_instance) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_destroy_instance(instance);
-    sspine_anim a0 = sspine_find_anim(instance, "hoverboard");
-    T(a0.instance.id == SSPINE_INVALID_ID);
-    T(a0.index == 0);
-    shutdown();
-}
-
-UTEST(sokol_spine, anim_valid) {
-    init();
-    sspine_instance instance = create_instance();
-    sspine_anim a0 = sspine_find_anim(instance, "hoverboard");
-    T(sspine_anim_valid(a0));
-    sspine_anim a1 = sspine_find_anim(instance, "blablub");
-    T(!sspine_anim_valid(a1));
-    sspine_destroy_instance(instance);
-    sspine_anim a2 = sspine_find_anim(instance, "hoverboard");
-    T(!sspine_anim_valid(a2));
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    int a0 = sspine_find_anim_index(skeleton, "hoverboard");
+    T(a0 == -1);
     shutdown();
 }
 
 UTEST(sokol_spine, num_anims) {
     init();
-    sspine_instance instance = create_instance();
-    T(sspine_num_anims(instance) == 11);
-    sspine_destroy_instance(instance);
-    T(sspine_num_anims(instance) == 0);
-    shutdown();
-}
-
-UTEST(sokol_spine, anim_at) {
-    init();
-    sspine_instance instance = create_instance();
-    sspine_anim a0 = sspine_anim_at(instance, 0);
-    T(a0.instance.id == instance.id);
-    T(a0.index == 0);
-    T(sspine_anim_valid(a0));
-    sspine_anim a1 = sspine_anim_at(instance, -1);
-    T(a1.instance.id == SSPINE_INVALID_ID);
-    T(a1.index == 0);
-    T(!sspine_anim_valid(a1));
-    sspine_anim a2 = sspine_anim_at(instance, 3);
-    T(a2.instance.id == instance.id);
-    T(a2.index == 3);
-    T(sspine_anim_valid(a2));
-    sspine_anim a3 = sspine_anim_at(instance, 11);
-    T(a3.instance.id == SSPINE_INVALID_ID);
-    T(a3.index == 0);
-    T(!sspine_anim_valid(a3));
-    sspine_anim a4 = sspine_anim_at(instance, 10);
-    T(a4.instance.id == instance.id);
-    T(a4.index == 10);
-    T(sspine_anim_valid(a4));
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_num_anims(skeleton) == 11);
+    sspine_destroy_skeleton(skeleton);
+    T(sspine_num_anims(skeleton) == 0);
     shutdown();
 }
 
 UTEST(sokol_spine, get_anim_info) {
     init();
     sspine_instance instance = create_instance();
-    sspine_anim anim = sspine_find_anim(instance, "hoverboard");
-    const sspine_anim_info info = sspine_get_anim_info(anim);
+    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    int anim_index = sspine_find_anim_index(skeleton, "hoverboard");
+    const sspine_anim_info info = sspine_get_anim_info(instance, anim_index);
     T(info.index == 2);
     T(strcmp(info.name, "hoverboard") == 0);
     T(info.duration == 1.0f);
     shutdown();
 }
 
-UTEST(sokol_spine, atlas_page_at) {
+UTEST(sokol_spine, get_anim_info_invalid_index) {
+    init();
+    sspine_instance instance = create_instance();
+    const sspine_anim_info i0 = sspine_get_anim_info(instance, -1);
+    T(i0.name == 0);
+    const sspine_anim_info i1 = sspine_get_anim_info(instance, 1234);
+    T(i1.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, num_atlas_pages) {
     init();
     sspine_atlas atlas = create_atlas();
     T(sspine_num_atlas_pages(atlas) == 1);
-    sspine_atlas_page p0 = sspine_atlas_page_at(atlas, 0);
-    T(p0.atlas.id == atlas.id);
-    T(p0.index == 0);
-    sspine_atlas_page p1 = sspine_atlas_page_at(atlas, 1);
-    T(p1.atlas.id == SSPINE_INVALID_ID);
-    T(p1.index == 0);
-    shutdown();
-}
-
-UTEST(sokol_spine, atlas_page_at_destroyed_atlas) {
-    init();
-    sspine_atlas atlas = create_atlas();
     sspine_destroy_atlas(atlas);
-    sspine_atlas_page p0 = sspine_atlas_page_at(atlas, 0);
-    T(p0.atlas.id == SSPINE_INVALID_ID);
-    T(p0.index == 0);
+    T(sspine_num_atlas_pages(atlas) == 0);
     shutdown();
 }
 
-UTEST(sokol_spine, atlas_get_atlas_page_info) {
+UTEST(sokol_spine, get_atlas_page_info) {
     init();
     sspine_atlas atlas = create_atlas();
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_at(atlas, 0));
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
     T(info.atlas.id == atlas.id);
     T(info.image.id != SG_INVALID_ID);
     T(sg_query_image_state(info.image) == SG_RESOURCESTATE_ALLOC);
@@ -563,13 +518,23 @@ UTEST(sokol_spine, atlas_get_atlas_page_info) {
     shutdown();
 }
 
-UTEST(sokol_spine, atlas_get_atlas_page_info_destroyed_atlas) {
+UTEST(sokol_spine, get_atlas_page_info_destroyed_atlas) {
     init();
     sspine_atlas atlas = create_atlas();
-    sspine_atlas_page page = sspine_atlas_page_at(atlas, 0);
     sspine_destroy_atlas(atlas);
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(page);
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
     T(info.atlas.id == SSPINE_INVALID_ID);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_atlas_page_info_invalid_index) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    sspine_destroy_atlas(atlas);
+    const sspine_atlas_page_info i0 = sspine_get_atlas_page_info(atlas, -1);
+    T(i0.atlas.id == SSPINE_INVALID_ID);
+    const sspine_atlas_page_info i1 = sspine_get_atlas_page_info(atlas, 1234);
+    T(i1.atlas.id == SSPINE_INVALID_ID);
     shutdown();
 }
 
@@ -586,7 +551,7 @@ UTEST(sokol_spine, atlas_get_atlas_page_info_with_overrides) {
             .premul_alpha_enabled = true,
         }
     });
-    const sspine_atlas_page_info info = sspine_get_atlas_page_info(sspine_atlas_page_at(atlas, 0));
+    const sspine_atlas_page_info info = sspine_get_atlas_page_info(atlas, 0);
     T(info.atlas.id == atlas.id);
     T(info.image.id != SG_INVALID_ID);
     T(sg_query_image_state(info.image) == SG_RESOURCESTATE_ALLOC);
@@ -662,6 +627,16 @@ UTEST(sokol_spine, get_bone_info_destroyed_instance) {
     sspine_destroy_instance(instance);
     const sspine_bone_info info = sspine_get_bone_info(instance, bone_index);
     T(info.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_bone_info_invalid_index) {
+    init();
+    sspine_instance instance = create_instance();
+    const sspine_bone_info i0 = sspine_get_bone_info(instance, -1);
+    T(i0.name == 0);
+    const sspine_bone_info i1 = sspine_get_bone_info(instance, 1234);
+    T(i1.name == 0);
     shutdown();
 }
 
@@ -780,7 +755,7 @@ UTEST(sokol_spine, find_slot_index) {
     shutdown();
 }
 
-UTEST(sokol_spine, find_slot_destroyed_skeleton) {
+UTEST(sokol_spine, find_slot_index_destroyed_skeleton) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     sspine_destroy_skeleton(skeleton);
@@ -823,6 +798,17 @@ UTEST(sokol_spine, get_slot_info_destroyed_instance) {
     sspine_destroy_instance(instance);
     const sspine_slot_info info = sspine_get_slot_info(instance, slot_index);
     T(info.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_slot_info_invalid_index) {
+    init();
+    sspine_instance instance = create_instance();
+    sspine_destroy_instance(instance);
+    const sspine_slot_info i0 = sspine_get_slot_info(instance, -1);
+    T(i0.name == 0);
+    const sspine_slot_info i1 = sspine_get_slot_info(instance, 1234);
+    T(i1.name == 0);
     shutdown();
 }
 

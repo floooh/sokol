@@ -113,10 +113,6 @@ typedef struct sspine_atlas { uint32_t id; } sspine_atlas;
 typedef struct sspine_skeleton { uint32_t id; } sspine_skeleton;
 typedef struct sspine_instance { uint32_t id; } sspine_instance;
 
-typedef struct sspine_atlas_page { sspine_atlas atlas; int index; } sspine_atlas_page;
-typedef struct sspine_slot { sspine_instance instance; int index; } sspine_slot;
-typedef struct sspine_anim { sspine_instance instance; int index; } sspine_anim;
-
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
 typedef sg_color sspine_color;
@@ -308,24 +304,21 @@ SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_scale(sspine_instance instance);
 SOKOL_SPINE_API_DECL sspine_color sspine_get_color(sspine_instance instance);
 
 // instance animation functions
-SOKOL_SPINE_API_DECL sspine_anim sspine_find_anim(sspine_instance instance, const char* name);
-SOKOL_SPINE_API_DECL bool sspine_anim_valid(sspine_anim anim);
-SOKOL_SPINE_API_DECL int sspint_num_anims(sspine_instance instance);
-SOKOL_SPINE_API_DECL sspine_anim sspine_anim_at(sspine_instance, int index);
-SOKOL_SPINE_API_DECL sspine_anim_info sspine_get_anim_info(sspine_anim anim);
+SOKOL_SPINE_API_DECL int sspine_find_anim_index(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL int sspint_num_anims(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL sspine_anim_info sspine_get_anim_info(sspine_instance instance, int anim_index);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_tracks(sspine_instance instance);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_track(sspine_instance instance, int track_index);
-SOKOL_SPINE_API_DECL void sspine_set_animation(sspine_instance instance, int track_index, sspine_anim anim, bool loop);
+SOKOL_SPINE_API_DECL void sspine_set_animation(sspine_instance instance, int track_index, int anim_index, bool loop);
 SOKOL_SPINE_API_DECL void sspine_set_animation_by_name(sspine_instance instance, int track_index, const char* anim_name, bool loop);
-SOKOL_SPINE_API_DECL void sspine_add_animation(sspine_instance instance, int track_index, sspine_anim anim, bool loop, float delay);
+SOKOL_SPINE_API_DECL void sspine_add_animation(sspine_instance instance, int track_index, int anim_index, bool loop, float delay);
 SOKOL_SPINE_API_DECL void sspine_add_animation_by_name(sspine_instance instance, int track_index, const char* anim_name, bool loop, float delay);
 SOKOL_SPINE_API_DECL void sspine_set_empty_animation(sspine_instance instance, int track_index, float mix_duration);
 SOKOL_SPINE_API_DECL void sspine_add_empty_animation(sspine_instance instance, int track_index, float mix_duration, float delay);
 
 // atlas page functions
 SOKOL_SPINE_API_DECL int sspine_num_atlas_pages(sspine_atlas atlas);
-SOKOL_SPINE_API_DECL sspine_atlas_page sspine_atlas_page_at(sspine_atlas atlas, int index);
-SOKOL_SPINE_API_DECL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas_page page);
+SOKOL_SPINE_API_DECL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas atlas, int page_index);
 
 // bone functions
 SOKOL_SPINE_API_DECL int sspine_find_bone_index(sspine_skeleton skeleton, const char* name);
@@ -1646,6 +1639,14 @@ static bool _sspine_skeleton_ref_valid(const _sspine_skeleton_ref_t* ref) {
     return ref->ptr && (ref->ptr->slot.id == ref->id);
 }
 
+static bool _sspine_skeleton_and_deps_valid(_sspine_skeleton_t* skeleton) {
+    return skeleton && _sspine_atlas_ref_valid(&skeleton->atlas);
+}
+
+static bool _sspine_instance_and_deps_valid(_sspine_instance_t* instance) {
+    return instance && _sspine_atlas_ref_valid(&instance->atlas) && _sspine_skeleton_ref_valid(&instance->skel);
+}
+
 //=== HANDLE POOL FUNCTIONS ====================================================
 static void _sspine_init_pool(_sspine_pool_t* pool, int num) {
     SOKOL_ASSERT(pool && (num >= 1));
@@ -2041,6 +2042,21 @@ static sspine_atlas_desc _sspine_atlas_desc_defaults(const sspine_atlas_desc* de
     return res;
 }
 
+static spAtlasPage* _sspine_lookup_atlas_page(uint32_t atlas_id, int page_index) {
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id);
+    if (atlas) {
+        if ((page_index >= 0) && (page_index < atlas->num_pages)) {
+            int i = 0;
+            for (spAtlasPage* page = atlas->sp_atlas->pages; page != 0; page = page->next, i++) {
+                if (i == page_index) {
+                    return page;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 //=== SKELETON POOL FUNCTIONS ==================================================
 static void _sspine_setup_skeleton_pool(int pool_size) {
     _sspine_skeleton_pool_t* p = &_sspine.skeleton_pool;
@@ -2323,6 +2339,39 @@ static void _sspine_destroy_all_instances(void) {
     }
 }
 
+static spAnimation* _sspine_lookup_anim(uint32_t instance_id, int anim_index) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
+        if ((anim_index >= 0) && (anim_index < instance->sp_skel->data->animationsCount)) {
+            return instance->sp_skel->data->animations[anim_index];
+        }
+    }
+    return 0;
+}
+
+static spBone* _sspine_lookup_bone(uint32_t instance_id, int bone_index) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->bones);
+        if ((bone_index >= 0) && (bone_index <= instance->sp_skel->bonesCount)) {
+            return instance->sp_skel->bones[bone_index];
+        }
+    }
+    return 0;
+}
+
+static spSlot* _sspine_lookup_slot(uint32_t instance_id, int slot_index) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->slots);
+        if ((slot_index >= 0) && (slot_index <= instance->sp_skel->slotsCount)) {
+            return instance->sp_skel->slots[slot_index];
+        }
+    }
+    return 0;
+}
+
 static sspine_instance_desc _sspine_instance_desc_defaults(const sspine_instance_desc* desc) {
     sspine_instance_desc res = *desc;
     return res;
@@ -2374,24 +2423,12 @@ static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
     }
 }
 
-static spAtlasPage* _sspine_atlas_page_at(_sspine_atlas_t* atlas, int index) {
-    SOKOL_ASSERT(atlas && atlas->sp_atlas);
-    SOKOL_ASSERT((index >= 0) && (index < atlas->num_pages));
-    int i = 0;
-    for (spAtlasPage* page = atlas->sp_atlas->pages; page != 0; page = page->next, i++) {
-        if (i == index) {
-            return page;
-        }
-    }
-    return 0;
-}
-
 static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_image_info* info) {
     SOKOL_ASSERT((index >= 0) && (index < atlas->num_pages));
     if ((index < 0) || (index >= atlas->num_pages)) {
         return;
     }
-    spAtlasPage* page = _sspine_atlas_page_at(atlas, index);
+    spAtlasPage* page = _sspine_lookup_atlas_page(atlas->slot.id, index);
     SOKOL_ASSERT(page);
     SOKOL_ASSERT(page->name);
     info->image.id = (uint32_t)(uintptr_t)page->rendererObject;
@@ -2489,14 +2526,6 @@ static _sspine_alloc_indices_result_t _sspine_alloc_indices(_sspine_context_t* c
         ctx->indices.cur += num;
     }
     return res;
-}
-
-static bool _sspine_skeleton_and_deps_valid(_sspine_skeleton_t* skeleton) {
-    return skeleton && _sspine_atlas_ref_valid(&skeleton->atlas);
-}
-
-static bool _sspine_instance_and_deps_valid(_sspine_instance_t* instance) {
-    return instance && _sspine_atlas_ref_valid(&instance->atlas) && _sspine_skeleton_ref_valid(&instance->skel);
 }
 
 static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* instance, int layer) {
@@ -2815,36 +2844,6 @@ static void _sspine_init_shared(void) {
 
 static void _sspine_destroy_shared(void) {
     sg_destroy_shader(_sspine.shd);
-}
-
-static spAnimation* _sspine_lookup_anim(sspine_anim anim) {
-    _sspine_instance_t* instance = _sspine_lookup_instance(anim.instance.id);
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
-        SOKOL_ASSERT((anim.index >= 0) && (anim.index < instance->sp_skel->data->animationsCount));
-        return instance->sp_skel->data->animations[anim.index];
-    }
-    return 0;
-}
-
-static spBone* _sspine_lookup_bone(uint32_t instance_id, int bone_index) {
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->bones);
-        SOKOL_ASSERT((bone_index >= 0) && (bone_index <= instance->sp_skel->bonesCount));
-        return instance->sp_skel->bones[bone_index];
-    }
-    return 0;
-}
-
-static spSlot* _sspine_lookup_slot(uint32_t instance_id, int slot_index) {
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->slots);
-        SOKOL_ASSERT((slot_index >= 0) && (slot_index <= instance->sp_skel->slotsCount));
-        return instance->sp_skel->slots[slot_index];
-    }
-    return 0;
 }
 
 //== PUBLIC FUNCTIONS ==========================================================
@@ -3229,70 +3228,45 @@ SOKOL_API_IMPL  sspine_color sspine_get_color(sspine_instance instance_id) {
     return c;
 }
 
-SOKOL_API_IMPL sspine_anim sspine_find_anim(sspine_instance instance_id, const char* name) {
+SOKOL_API_IMPL int sspine_find_anim_index(sspine_skeleton skeleton_id, const char* name) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     SOKOL_ASSERT(name);
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    sspine_anim anim;
-    _sspine_clear(&anim, sizeof(anim));
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel);
-        SOKOL_ASSERT(instance->sp_skel->data);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
         // NOTE: there's a spSkeletonData_findAnimation function, but that doesn't
         // give us access to the index, so we'll need to do the loop ourselves
-        const spSkeletonData* sp_skel_data = instance->sp_skel->data;
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        const spSkeletonData* sp_skel_data = skeleton->sp_skel_data;
         const int num_anims = sp_skel_data->animationsCount;
         SOKOL_ASSERT(sp_skel_data->animations);
         for (int i = 0; i < num_anims; i++) {
             SOKOL_ASSERT(sp_skel_data->animations[i]);
             if (0 == strcmp(sp_skel_data->animations[i]->name, name)) {
-                anim.instance = instance_id;
-                anim.index = i;
-                break;
+                return i;
             }
         }
     }
-    return anim;
+    return -1;
 }
 
-SOKOL_API_IMPL bool sspine_anim_valid(sspine_anim anim) {
+SOKOL_API_IMPL int sspine_num_anims(sspine_skeleton skeleton_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    return 0 != _sspine_lookup_anim(anim);
-}
-
-SOKOL_API_IMPL int sspine_num_anims(sspine_instance instance_id) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
-        return instance->sp_skel->data->animationsCount;
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return skeleton->sp_skel_data->animationsCount;
     }
     return 0;
 }
 
-SOKOL_API_IMPL sspine_anim sspine_anim_at(sspine_instance instance_id, int index) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    sspine_anim anim;
-    _sspine_clear(&anim, sizeof(anim));
-    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
-    if (_sspine_instance_and_deps_valid(instance)) {
-        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->data);
-        if ((index >= 0) && (index < instance->sp_skel->data->animationsCount)) {
-            anim.instance = instance_id;
-            anim.index = index;
-        }
-    }
-    return anim;
-}
-
-SOKOL_API_IMPL sspine_anim_info sspine_get_anim_info(sspine_anim anim) {
+SOKOL_API_IMPL sspine_anim_info sspine_get_anim_info(sspine_instance instance_id, int anim_index) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_anim_info res;
     _sspine_clear(&res, sizeof(res));
-    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    spAnimation* sp_anim = _sspine_lookup_anim(instance_id.id, anim_index);
     if (sp_anim) {
         res.name = sp_anim->name;
-        res.index = anim.index;
+        res.index = anim_index;
         res.duration = sp_anim->duration;
     }
     return res;
@@ -3316,9 +3290,9 @@ SOKOL_API_IMPL void sspine_clear_animation_track(sspine_instance instance_id, in
     }
 }
 
-SOKOL_API_IMPL void sspine_set_animation(sspine_instance instance_id, int track_index, sspine_anim anim, bool loop) {
+SOKOL_API_IMPL void sspine_set_animation(sspine_instance instance_id, int track_index, int anim_index, bool loop) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    spAnimation* sp_anim = _sspine_lookup_anim(instance_id.id, anim_index);
     if (sp_anim) {
         // NOTE: at this point, instance is guaranteed to be valid
         _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
@@ -3337,9 +3311,9 @@ SOKOL_API_IMPL void sspine_set_animation_by_name(sspine_instance instance_id, in
     }
 }
 
-SOKOL_API_IMPL void sspine_add_animation(sspine_instance instance_id, int track_index, sspine_anim anim, bool loop, float delay) {
+SOKOL_API_IMPL void sspine_add_animation(sspine_instance instance_id, int track_index, int anim_index, bool loop, float delay) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    spAnimation* sp_anim = _sspine_lookup_anim(anim);
+    spAnimation* sp_anim = _sspine_lookup_anim(instance_id.id, anim_index);
     if (sp_anim) {
         // NOTE: at this point, instance is guaranteed to be valid
         _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
@@ -3388,38 +3362,26 @@ SOKOL_API_IMPL int sspine_num_atlas_pages(sspine_atlas atlas_id) {
     }
 }
 
-SOKOL_API_IMPL sspine_atlas_page sspine_atlas_page_at(sspine_atlas atlas_id, int index) {
-    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
-    sspine_atlas_page res;
-    _sspine_clear(&res, sizeof(res));
-    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
-    if (atlas && (index >= 0) && (index < atlas->num_pages)) {
-        res.atlas = atlas_id;
-        res.index = index;
-    }
-    return res;
-}
-
-SOKOL_API_IMPL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas_page page_id) {
+SOKOL_API_IMPL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas atlas_id, int page_index) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_atlas_page_info res;
     _sspine_clear(&res, sizeof(res));
-    _sspine_atlas_t* atlas = _sspine_lookup_atlas(page_id.atlas.id);
-    if (atlas) {
-        const spAtlasPage* sp_page = _sspine_atlas_page_at(atlas, page_id.index);
-        if (sp_page) {
-            res.atlas = page_id.atlas;
-            res.image.id = (uint32_t)(uintptr_t)sp_page->rendererObject;
-            res.name = sp_page->name ? sp_page->name : "";
-            res.min_filter = _sspine_as_image_filter(sp_page->minFilter);
-            res.mag_filter = _sspine_as_image_filter(sp_page->magFilter);
-            res.wrap_u = _sspine_as_image_wrap(sp_page->uWrap);
-            res.wrap_v = _sspine_as_image_wrap(sp_page->vWrap);
-            res.width = sp_page->width;
-            res.height = sp_page->height;
-            res.premul_alpha = sp_page->pma != 0;
-            res.overrides = atlas->overrides;
-        }
+
+    const spAtlasPage* sp_page = _sspine_lookup_atlas_page(atlas_id.id, page_index);
+    if (sp_page) {
+        // at this point, atlas is guaranteed to be valid
+        const _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+        res.atlas = atlas_id;
+        res.image.id = (uint32_t)(uintptr_t)sp_page->rendererObject;
+        res.name = sp_page->name ? sp_page->name : "";
+        res.min_filter = _sspine_as_image_filter(sp_page->minFilter);
+        res.mag_filter = _sspine_as_image_filter(sp_page->magFilter);
+        res.wrap_u = _sspine_as_image_wrap(sp_page->uWrap);
+        res.wrap_v = _sspine_as_image_wrap(sp_page->vWrap);
+        res.width = sp_page->width;
+        res.height = sp_page->height;
+        res.premul_alpha = sp_page->pma != 0;
+        res.overrides = atlas->overrides;
     }
     return res;
 }
