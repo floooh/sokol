@@ -341,6 +341,29 @@ UTEST(sokol_spine, make_instance_fail_with_destroyed_atlas) {
     shutdown();
 }
 
+UTEST(sokol_spine, get_skeleton_atlas) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    sspine_skeleton skeleton = create_skeleton_json(atlas);
+    T(sspine_get_skeleton_atlas(skeleton).id == atlas.id);
+    sspine_destroy_skeleton(skeleton);
+    T(sspine_get_skeleton_atlas(skeleton).id == SSPINE_INVALID_ID);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_instance_skeleton) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    sspine_skeleton skeleton = create_skeleton_json(atlas);
+    sspine_instance instance = sspine_make_instance(&(sspine_instance_desc){
+        .skeleton = skeleton
+    });
+    T(sspine_get_instance_skeleton(instance).id == skeleton.id);
+    sspine_destroy_instance(instance);
+    T(sspine_get_instance_skeleton(instance).id == SSPINE_INVALID_ID);
+    shutdown();
+}
+
 UTEST(sokol_spine, set_get_position) {
     init();
     sspine_instance instance = create_instance();

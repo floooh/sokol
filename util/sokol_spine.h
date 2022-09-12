@@ -292,6 +292,10 @@ SOKOL_SPINE_API_DECL bool sspine_atlas_valid(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL bool sspine_skeleton_valid(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL bool sspine_instance_valid(sspine_instance instance);
 
+// get dependency objects
+SOKOL_SPINE_API_DECL sspine_atlas sspine_get_skeleton_atlas(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL sspine_skeleton sspine_get_instance_skeleton(sspine_instance instance);
+
 // atlas images
 SOKOL_SPINE_API_DECL int sspine_num_images(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL sspine_image_info sspine_get_image_info(sspine_atlas atlas, int image_index);
@@ -3117,6 +3121,28 @@ SOKOL_API_IMPL bool sspine_skeleton_valid(sspine_skeleton skeleton_id) {
 SOKOL_API_IMPL bool sspine_instance_valid(sspine_instance instance_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     return sspine_get_instance_resource_state(instance_id) == SSPINE_RESOURCESTATE_VALID;
+}
+
+SOKOL_API_IMPL sspine_atlas sspine_get_skeleton_atlas(sspine_skeleton skeleton_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    sspine_atlas res;
+    _sspine_clear(&res, sizeof(res));
+    if (skeleton) {
+        res.id = skeleton->atlas.id;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_skeleton sspine_get_instance_skeleton(sspine_instance instance_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    sspine_skeleton res;
+    _sspine_clear(&res, sizeof(res));
+    if (instance) {
+        res.id = instance->skel.id;
+    }
+    return res;
 }
 
 SOKOL_API_IMPL int sspine_num_images(sspine_atlas atlas_id) {
