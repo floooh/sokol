@@ -133,6 +133,17 @@ UTEST(sokol_spine, failed_atlas_no_images) {
 
 // NOTE: spine-c doesn't detect wrong/corrupt atlas file data, so we can't test for that
 
+UTEST(sokol_spine, image_index_valid) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    T(sspine_image_index_valid(atlas, 0));
+    T(!sspine_image_index_valid(atlas, 1));
+    T(!sspine_image_index_valid(atlas, -1));
+    sspine_destroy_atlas(atlas);
+    T(!sspine_image_index_valid(atlas, 0));
+    shutdown();
+}
+
 UTEST(sokol_spine, atlas_image_info) {
     init();
     sspine_atlas atlas = create_atlas();
@@ -454,6 +465,19 @@ UTEST(sokol_spine, find_anim_index_destroyed_instance) {
     shutdown();
 }
 
+UTEST(sokol_spine, anim_index_valid) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_anim_index_valid(skeleton, 0));
+    T(sspine_anim_index_valid(skeleton, 10));
+    T(!sspine_anim_index_valid(skeleton, -1));
+    T(!sspine_anim_index_valid(skeleton, 11));
+    sspine_destroy_skeleton(skeleton);
+    T(!sspine_anim_index_valid(skeleton, 0));
+    shutdown();
+}
+
+
 UTEST(sokol_spine, num_anims) {
     init();
     sspine_skeleton skeleton = create_skeleton();
@@ -482,6 +506,17 @@ UTEST(sokol_spine, get_anim_info_invalid_index) {
     T(i0.name == 0);
     const sspine_anim_info i1 = sspine_get_anim_info(instance, 1234);
     T(i1.name == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, atlas_page_index_valid) {
+    init();
+    sspine_atlas atlas = create_atlas();
+    T(sspine_atlas_page_index_valid(atlas, 0));
+    T(!sspine_atlas_page_index_valid(atlas, -1));
+    T(!sspine_atlas_page_index_valid(atlas, 1));
+    sspine_destroy_atlas(atlas);
+    T(!sspine_atlas_page_index_valid(atlas, 0));
     shutdown();
 }
 
@@ -588,6 +623,18 @@ UTEST(sokol_spine, find_bone_index_destroyed_skeleton) {
     sspine_destroy_skeleton(skeleton);
     int b0 = sspine_find_bone_index(skeleton, "crosshair");
     T(b0 == -1);
+    shutdown();
+}
+
+UTEST(sokol_spine, bone_index_valid) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_bone_index_valid(skeleton, 0));
+    T(sspine_bone_index_valid(skeleton, 66));
+    T(!sspine_bone_index_valid(skeleton, -1));
+    T(!sspine_bone_index_valid(skeleton, 67));
+    sspine_destroy_skeleton(skeleton);
+    T(!sspine_bone_index_valid(skeleton, 0));
     shutdown();
 }
 
@@ -770,6 +817,18 @@ UTEST(sokol_spine, num_slots) {
     T(sspine_num_slots(skeleton) == 52);
     sspine_destroy_skeleton(skeleton);
     T(sspine_num_slots(skeleton) == -1);
+    shutdown();
+}
+
+UTEST(sokol_spine, slot_index_valid) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_slot_index_valid(skeleton, 0));
+    T(sspine_slot_index_valid(skeleton, 51));
+    T(!sspine_slot_index_valid(skeleton, -1));
+    T(!sspine_slot_index_valid(skeleton, 52));
+    sspine_destroy_skeleton(skeleton);
+    T(!sspine_slot_index_valid(skeleton, 0));
     shutdown();
 }
 

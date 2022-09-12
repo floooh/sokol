@@ -293,6 +293,7 @@ SOKOL_SPINE_API_DECL sspine_skeleton sspine_get_instance_skeleton(sspine_instanc
 
 // atlas images
 SOKOL_SPINE_API_DECL int sspine_num_images(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL bool sspine_image_index_valid(sspine_atlas atlas, int image_index);
 SOKOL_SPINE_API_DECL sspine_image_info sspine_get_image_info(sspine_atlas atlas, int image_index);
 
 // instance transform functions
@@ -305,6 +306,7 @@ SOKOL_SPINE_API_DECL sspine_color sspine_get_color(sspine_instance instance);
 
 // instance animation functions
 SOKOL_SPINE_API_DECL int sspine_find_anim_index(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_anim_index_valid(sspine_skeleton skeleton, int anim_index);
 SOKOL_SPINE_API_DECL int sspint_num_anims(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_anim_info sspine_get_anim_info(sspine_instance instance, int anim_index);
 SOKOL_SPINE_API_DECL void sspine_clear_animation_tracks(sspine_instance instance);
@@ -317,11 +319,13 @@ SOKOL_SPINE_API_DECL void sspine_set_empty_animation(sspine_instance instance, i
 SOKOL_SPINE_API_DECL void sspine_add_empty_animation(sspine_instance instance, int track_index, float mix_duration, float delay);
 
 // atlas page functions
+SOKOL_SPINE_API_DECL bool sspine_atlas_page_index_valid(sspine_atlas atlas, int page_index);
 SOKOL_SPINE_API_DECL int sspine_num_atlas_pages(sspine_atlas atlas);
 SOKOL_SPINE_API_DECL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_atlas atlas, int page_index);
 
 // bone functions
 SOKOL_SPINE_API_DECL int sspine_find_bone_index(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_bone_index_valid(sspine_skeleton skeleton, int bone_index);
 SOKOL_SPINE_API_DECL int sspine_num_bones(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL void sspine_set_bone_transform(sspine_instance instance, int bone_index, const sspine_bone_transform* transform);
@@ -337,6 +341,7 @@ SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_shear(sspine_instance instance,
 
 // slot functions
 SOKOL_SPINE_API_DECL int sspine_find_slot_index(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_slot_index_valid(sspine_skeleton skeleton, int slot_index);
 SOKOL_SPINE_API_DECL int sspine_num_slots(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_slot_info sspine_get_slot_info(sspine_instance instance, int slot_index);
 SOKOL_SPINE_API_DECL void sspine_set_slot_color(sspine_instance instance, int slot_index, sspine_color color);
@@ -2424,10 +2429,6 @@ static sg_wrap _sspine_as_image_wrap(spAtlasWrap wrap) {
 }
 
 static void _sspine_init_image_info(_sspine_atlas_t* atlas, int index, sspine_image_info* info) {
-    SOKOL_ASSERT((index >= 0) && (index < atlas->num_pages));
-    if ((index < 0) || (index >= atlas->num_pages)) {
-        return;
-    }
     spAtlasPage* page = _sspine_lookup_atlas_page(atlas->slot.id, index);
     SOKOL_ASSERT(page);
     SOKOL_ASSERT(page->name);
@@ -3146,7 +3147,16 @@ SOKOL_API_IMPL sspine_skeleton sspine_get_instance_skeleton(sspine_instance inst
 SOKOL_API_IMPL int sspine_num_images(sspine_atlas atlas_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
-    return atlas ? atlas->num_pages : 0;
+    if (atlas) {
+        return atlas->num_pages;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL bool sspine_image_index_valid(sspine_atlas atlas_id, int image_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    return atlas && (image_index >= 0) && (image_index < atlas->num_pages);
 }
 
 SOKOL_API_IMPL sspine_image_info sspine_get_image_info(sspine_atlas atlas_id, int image_index) {
@@ -3154,7 +3164,9 @@ SOKOL_API_IMPL sspine_image_info sspine_get_image_info(sspine_atlas atlas_id, in
     _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
     sspine_image_info img_info;
     _sspine_clear(&img_info, sizeof(img_info));
-    _sspine_init_image_info(atlas, image_index, &img_info);
+    if (atlas && (image_index >= 0) && (image_index < atlas->num_pages)) {
+        _sspine_init_image_info(atlas, image_index, &img_info);
+    }
     return img_info;
 }
 
@@ -3247,6 +3259,16 @@ SOKOL_API_IMPL int sspine_find_anim_index(sspine_skeleton skeleton_id, const cha
         }
     }
     return -1;
+}
+
+SOKOL_API_IMPL bool sspine_anim_index_valid(sspine_skeleton skeleton_id, int anim_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return (anim_index >= 0) && (anim_index < skeleton->sp_skel_data->animationsCount);
+    }
+    return false;
 }
 
 SOKOL_API_IMPL int sspine_num_anims(sspine_skeleton skeleton_id) {
@@ -3351,6 +3373,15 @@ SOKOL_API_IMPL void sspine_add_empty_animation(sspine_instance instance_id, int 
     }
 }
 
+SOKOL_API_IMPL bool sspine_atlas_page_index_valid(sspine_atlas atlas_id, int page_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
+    if (atlas) {
+        return (page_index >= 0) && (page_index < atlas->num_pages);
+    }
+    return false;
+}
+
 SOKOL_API_IMPL int sspine_num_atlas_pages(sspine_atlas atlas_id) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     _sspine_atlas_t* atlas = _sspine_lookup_atlas(atlas_id.id);
@@ -3398,6 +3429,16 @@ SOKOL_API_IMPL int sspine_find_bone_index(sspine_skeleton skeleton_id, const cha
         }
     }
     return -1;
+}
+
+SOKOL_API_IMPL bool sspine_bone_index_valid(sspine_skeleton skeleton_id, int bone_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return (bone_index >= 0) && (bone_index < skeleton->sp_skel_data->bonesCount);
+    }
+    return false;
 }
 
 SOKOL_API_IMPL int sspine_num_bones(sspine_skeleton skeleton_id) {
@@ -3570,6 +3611,16 @@ SOKOL_API_IMPL int sspine_find_slot_index(sspine_skeleton skeleton_id, const cha
         }
     }
     return -1;
+}
+
+SOKOL_API_IMPL bool sspine_slot_index_valid(sspine_skeleton skeleton_id, int slot_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return (slot_index >= 0) && (slot_index < skeleton->sp_skel_data->slotsCount);
+    }
+    return false;
 }
 
 SOKOL_API_IMPL int sspine_num_slots(sspine_skeleton skeleton_id) {
