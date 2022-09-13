@@ -3554,7 +3554,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         NSInteger max_fps = 60;
         #if (__MAC_OS_X_VERSION_MAX_ALLOWED >= 120000)
         if (@available(macOS 12.0, *)) {
-            max_fps = NSScreen.mainScreen.maximumFramesPerSecond;
+            max_fps = [NSScreen.mainScreen maximumFramesPerSecond];
         }
         #endif
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
@@ -4519,7 +4519,10 @@ EM_JS(void, sapp_js_remove_beforeunload_listener, (void), {
 EM_JS(void, sapp_js_add_clipboard_listener, (void), {
     Module.sokol_paste = function(event) {
         var pasted_str = event.clipboardData.getData('text');
-        ccall('_sapp_emsc_onpaste', 'void', ['string'], [pasted_str]);
+        withStackSave(() => {
+            var cstr = allocateUTF8OnStack(pasted_str);
+            __sapp_emsc_onpaste(cstr);
+        });
     };
     window.addEventListener('paste', Module.sokol_paste);
 });
@@ -4574,7 +4577,10 @@ EM_JS(void, sapp_js_add_dragndrop_listeners, (const char* canvas_name_cstr), {
         __sapp_emsc_begin_drop(files.length);
         var i;
         for (i = 0; i < files.length; i++) {
-            ccall('_sapp_emsc_drop', 'void', ['number', 'string'], [i, files[i].name]);
+            withStackSave(() => {
+                var cstr = allocateUTF8OnStack(files[i].name);
+                __sapp_emsc_drop(i, cstr);
+            });
         }
         // FIXME? see computation of targetX/targetY in emscripten via getClientBoundingRect
         __sapp_emsc_end_drop(event.clientX, event.clientY);
@@ -4662,7 +4668,7 @@ _SOKOL_PRIVATE void _sapp_emsc_show_keyboard(bool show) {
     }
 }
 
-EM_JS(void, sapp_js_pointer_init, (const char* c_str_target), {
+EM_JS(void, sapp_js_init, (const char* c_str_target), {
     // lookup and store canvas object by name
     var target_str = UTF8ToString(c_str_target);
     Module.sapp_emsc_target = document.getElementById(target_str);
@@ -5564,7 +5570,7 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame(double time, void* userData) {
 
 _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     _sapp_init_state(desc);
-    sapp_js_pointer_init(&_sapp.html5_canvas_selector[1]);
+    sapp_js_init(&_sapp.html5_canvas_selector[1]);
     double w, h;
     if (_sapp.desc.html5_canvas_resize) {
         w = (double) _sapp_def(_sapp.desc.width, _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH);
@@ -9194,10 +9200,14 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
     _SOKOL_UNUSED(saved_state_size);
     SOKOL_LOG("NativeActivity onCreate()");
 
+    // the NativeActity pointer needs to be available inside sokol_main()
+    // (see https://github.com/floooh/sokol/issues/708), however _sapp_init_state()
+    // will clear the global _sapp_t struct, so we need to initialize the native
+    // activity pointer twice, once before sokol_main() and once after _sapp_init_state()
+    _sapp_clear(&_sapp, sizeof(_sapp));
+    _sapp.android.activity = activity;
     sapp_desc desc = sokol_main(0, NULL);
     _sapp_init_state(&desc);
-
-    /* start loop thread */
     _sapp.android.activity = activity;
 
     int pipe_fd[2];
@@ -11123,7 +11133,6 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             // skip
         }
         else if (src_chr == '\n') {
-            src_chr = 0;
             src_count = 0;
             _sapp.drop.num_files++;
             // too many files is not an error
@@ -11134,7 +11143,7 @@ _SOKOL_PRIVATE bool _sapp_x11_parse_dropped_files_list(const char* src) {
             dst_end_ptr = dst_ptr + (_sapp.drop.max_path_length - 1);
         }
         else if ((src_chr == '%') && src[0] && src[1]) {
-            // a percent-encoded byte (most like UTF-8 multibyte sequence)
+            // a percent-encoded byte (most likely UTF-8 multibyte sequence)
             const char digits[3] = { src[0], src[1], 0 };
             src += 2;
             dst_chr = (char) strtol(digits, 0, 16);
@@ -12068,7 +12077,8 @@ SOKOL_API_IMPL const void* sapp_wgpu_get_depth_stencil_view(void) {
 }
 
 SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
-    SOKOL_ASSERT(_sapp.valid);
+    // NOTE: _sapp.valid is not asserted here because sapp_android_get_native_activity()
+    // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
     #else

@@ -727,7 +727,11 @@ EM_JS(void, sargs_js_parse_url, (void), {
     for (var p = params.next(); !p.done; p = params.next()) {
         var key = p.value[0];
         var val = p.value[1];
-        var res = ccall('_sargs_add_kvp', 'void', ['string','string'], [key,val]);
+        withStackSave(() => {
+            var key_cstr = allocateUTF8OnStack(key);
+            var val_cstr = allocateUTF8OnStack(val);
+            __sargs_add_kvp(key_cstr, val_cstr)
+        });
     }
 });
 

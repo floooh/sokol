@@ -81,6 +81,16 @@ build_ios() {
     cd ../..
 }
 
+analyze_ios() {
+    cfg=$1
+    backend=$2
+    mode=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
+    cmake --build .
+    cd ../..
+}
+
 build_arc_ios() {
     cfg=$1
     backend=$2
@@ -88,6 +98,16 @@ build_arc_ios() {
     mkdir -p build/$cfg && cd build/$cfg
     cmake -GXcode -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS ../..
     cmake --build . --config $mode -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+    cd ../..
+}
+
+analyze_arc_ios() {
+    cfg=$1
+    backend=$2
+    mode=$3
+    mkdir -p build/$cfg && cd build/$cfg
+    cmake -GNinja -DSOKOL_BACKEND=$backend -DUSE_ARC:BOOL=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_BUILD_TYPE=$mode -DUSE_ANALYZER=ON ../..
+    cmake --build .
     cd ../..
 }
 
