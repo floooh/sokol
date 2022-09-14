@@ -831,10 +831,9 @@ UTEST(sokol_spine, slot_index_valid) {
 
 UTEST(sokol_spine, get_slot_info) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    sspine_skeleton skeleton = create_skeleton();
     int slot_index = sspine_find_slot_index(skeleton, "portal-streaks1");
-    const sspine_slot_info info = sspine_get_slot_info(instance, slot_index);
+    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
     T(info.index == 3);
     T(strcmp(info.name, "portal-streaks1") == 0);
     T(info.attachment_name == 0);
@@ -846,24 +845,22 @@ UTEST(sokol_spine, get_slot_info) {
     shutdown();
 }
 
-UTEST(sokol_spine, get_slot_info_destroyed_instance) {
+UTEST(sokol_spine, get_slot_info_destroyed_skeleton) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    sspine_skeleton skeleton = create_skeleton();
     int slot_index = sspine_find_slot_index(skeleton, "portal-streaks1");
-    sspine_destroy_instance(instance);
-    const sspine_slot_info info = sspine_get_slot_info(instance, slot_index);
+    sspine_destroy_skeleton(skeleton);
+    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
     T(info.name == 0);
     shutdown();
 }
 
 UTEST(sokol_spine, get_slot_info_invalid_index) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_destroy_instance(instance);
-    const sspine_slot_info i0 = sspine_get_slot_info(instance, -1);
+    sspine_skeleton skeleton = create_skeleton();
+    const sspine_slot_info i0 = sspine_get_slot_info(skeleton, -1);
     T(i0.name == 0);
-    const sspine_slot_info i1 = sspine_get_slot_info(instance, 1234);
+    const sspine_slot_info i1 = sspine_get_slot_info(skeleton, 1234);
     T(i1.name == 0);
     shutdown();
 }
@@ -879,11 +876,11 @@ UTEST(sokol_spine, set_get_slot_color) {
     T(color.g == 2.0f);
     T(color.b == 3.0f);
     T(color.a == 4.0f);
-    const sspine_slot_info info = sspine_get_slot_info(instance, slot_index);
+    const sspine_slot_info info = sspine_get_slot_info(skeleton, slot_index);
     T(info.color.r == 1.0f);
-    T(info.color.g == 2.0f);
-    T(info.color.b == 3.0f);
-    T(info.color.a == 4.0f);
+    T(info.color.g == 1.0f);
+    T(info.color.b == 1.0f);
+    T(info.color.a == 1.0f);
     shutdown();
 }
 
@@ -938,5 +935,14 @@ UTEST(sokol_spine, get_event_info) {
     T(0 == info.audio_path);
     T(0.0f == info.volume);
     T(0.0f == info.balance);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_event_info_destroyed_skeleton) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    const sspine_event_info info = sspine_get_event_info(skeleton, 0);
+    T(0 == info.name);
     shutdown();
 }
