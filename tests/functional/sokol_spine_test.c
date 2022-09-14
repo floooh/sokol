@@ -648,40 +648,38 @@ UTEST(sokol_spine, num_bones) {
 
 UTEST(sokol_spine, get_bone_info) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    sspine_skeleton skeleton = create_skeleton();
     int bone_index = sspine_find_bone_index(skeleton, "root");
-    const sspine_bone_info info = sspine_get_bone_info(instance, bone_index);
+    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
     T(info.index == 0);
     T(strcmp(info.name, "root") == 0);
     T(info.length == 0.0f);
-    T(info.pose_tform.position.x == 0.0f);
-    T(info.pose_tform.position.y == 0.0f);
-    T(info.pose_tform.rotation == 0.05f);
-    T(info.pose_tform.scale.x == 1.0f);
-    T(info.pose_tform.scale.y == 1.0f);
-    T(info.pose_tform.shear.x == 0.0f);
-    T(info.pose_tform.shear.y == 0.0f);
+    T(info.pose.position.x == 0.0f);
+    T(info.pose.position.y == 0.0f);
+    T(info.pose.rotation == 0.05f);
+    T(info.pose.scale.x == 1.0f);
+    T(info.pose.scale.y == 1.0f);
+    T(info.pose.shear.x == 0.0f);
+    T(info.pose.shear.y == 0.0f);
     shutdown();
 }
 
-UTEST(sokol_spine, get_bone_info_destroyed_instance) {
+UTEST(sokol_spine, get_bone_info_destroyed_skeleton) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    sspine_skeleton skeleton = create_skeleton();
     int bone_index = sspine_find_bone_index(skeleton, "root");
-    sspine_destroy_instance(instance);
-    const sspine_bone_info info = sspine_get_bone_info(instance, bone_index);
+    sspine_destroy_skeleton(skeleton);
+    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
     T(info.name == 0);
     shutdown();
 }
 
 UTEST(sokol_spine, get_bone_info_invalid_index) {
     init();
-    sspine_instance instance = create_instance();
-    const sspine_bone_info i0 = sspine_get_bone_info(instance, -1);
+    sspine_skeleton skeleton = create_skeleton();
+    const sspine_bone_info i0 = sspine_get_bone_info(skeleton, -1);
     T(i0.name == 0);
-    const sspine_bone_info i1 = sspine_get_bone_info(instance, 1234);
+    const sspine_bone_info i1 = sspine_get_bone_info(skeleton, 1234);
     T(i1.name == 0);
     shutdown();
 }

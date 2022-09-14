@@ -205,8 +205,7 @@ typedef struct sspine_bone_info {
     const char* name;
     int index;
     float length;
-    sspine_bone_transform pose_tform;
-    sspine_bone_transform cur_tform;
+    sspine_bone_transform pose;
     sspine_color color;
 } sspine_bone_info;
 
@@ -348,7 +347,7 @@ SOKOL_SPINE_API_DECL sspine_atlas_page_info sspine_get_atlas_page_info(sspine_at
 SOKOL_SPINE_API_DECL int sspine_find_bone_index(sspine_skeleton skeleton, const char* name);
 SOKOL_SPINE_API_DECL bool sspine_bone_index_valid(sspine_skeleton skeleton, int bone_index);
 SOKOL_SPINE_API_DECL int sspine_num_bones(sspine_skeleton skeleton);
-SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_instance instance, int bone_index);
+SOKOL_SPINE_API_DECL sspine_bone_info sspine_get_bone_info(sspine_skeleton skeleton, int bone_index);
 SOKOL_SPINE_API_DECL void sspine_set_bone_transform(sspine_instance instance, int bone_index, const sspine_bone_transform* transform);
 SOKOL_SPINE_API_DECL void sspine_set_bone_position(sspine_instance instance, int bone_index, sspine_vec2 position);
 SOKOL_SPINE_API_DECL void sspine_set_bone_rotation(sspine_instance instance, int bone_index, float rotation);
@@ -2393,6 +2392,17 @@ static spAnimation* _sspine_lookup_instance_anim(uint32_t instance_id, int anim_
     return 0;
 }
 
+static spBoneData* _sspine_lookup_bone_data(uint32_t skeleton_id, int bone_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->bones);
+        if ((bone_index >= 0) && (bone_index <= skeleton->sp_skel_data->bonesCount)) {
+            return skeleton->sp_skel_data->bones[bone_index];
+        }
+    }
+    return 0;
+}
+
 static spBone* _sspine_lookup_bone(uint32_t instance_id, int bone_index) {
     _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
     if (_sspine_instance_and_deps_valid(instance)) {
@@ -3500,36 +3510,28 @@ SOKOL_API_IMPL int sspine_num_bones(sspine_skeleton skeleton_id) {
     return 0;
 }
 
-SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_instance instance_id, int bone_index) {
+SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_skeleton skeleton_id, int bone_index) {
     SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
     sspine_bone_info res;
     _sspine_clear(&res, sizeof(res));
-    spBone* sp_bone = _sspine_lookup_bone(instance_id.id, bone_index);
-    if (sp_bone) {
-        SOKOL_ASSERT(sp_bone->data);
-        SOKOL_ASSERT(sp_bone->data->index == bone_index);
-        SOKOL_ASSERT(sp_bone->data->name);
-        res.name = sp_bone->data->name;
-        res.index = sp_bone->data->index;
-        res.length = sp_bone->data->length;
-        res.pose_tform.position.x = sp_bone->data->x;
-        res.pose_tform.position.y = sp_bone->data->y;
-        res.pose_tform.rotation = sp_bone->data->rotation;
-        res.pose_tform.scale.x = sp_bone->data->scaleX;
-        res.pose_tform.scale.y = sp_bone->data->scaleY;
-        res.pose_tform.shear.x = sp_bone->data->shearX;
-        res.pose_tform.shear.y = sp_bone->data->shearY;
-        res.cur_tform.position.x = sp_bone->x;
-        res.cur_tform.position.y = sp_bone->y;
-        res.cur_tform.rotation = sp_bone->rotation;
-        res.cur_tform.scale.x = sp_bone->scaleX;
-        res.cur_tform.scale.y = sp_bone->scaleY;
-        res.cur_tform.shear.x = sp_bone->shearX;
-        res.cur_tform.shear.y = sp_bone->shearY;
-        res.color.r = sp_bone->data->color.r;
-        res.color.g = sp_bone->data->color.g;
-        res.color.b = sp_bone->data->color.b;
-        res.color.a = sp_bone->data->color.a;
+    spBoneData* sp_bone_data = _sspine_lookup_bone_data(skeleton_id.id, bone_index);
+    if (sp_bone_data) {
+        SOKOL_ASSERT(sp_bone_data->index == bone_index);
+        SOKOL_ASSERT(sp_bone_data->name);
+        res.name = sp_bone_data->name;
+        res.index = sp_bone_data->index;
+        res.length = sp_bone_data->length;
+        res.pose.position.x = sp_bone_data->x;
+        res.pose.position.y = sp_bone_data->y;
+        res.pose.rotation = sp_bone_data->rotation;
+        res.pose.scale.x = sp_bone_data->scaleX;
+        res.pose.scale.y = sp_bone_data->scaleY;
+        res.pose.shear.x = sp_bone_data->shearX;
+        res.pose.shear.y = sp_bone_data->shearY;
+        res.color.r = sp_bone_data->color.r;
+        res.color.g = sp_bone_data->color.g;
+        res.color.b = sp_bone_data->color.b;
+        res.color.a = sp_bone_data->color.a;
     }
     return res;
 }
