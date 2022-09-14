@@ -489,10 +489,9 @@ UTEST(sokol_spine, num_anims) {
 
 UTEST(sokol_spine, get_anim_info) {
     init();
-    sspine_instance instance = create_instance();
-    sspine_skeleton skeleton = sspine_get_instance_skeleton(instance);
+    sspine_skeleton skeleton = create_skeleton();
     int anim_index = sspine_find_anim_index(skeleton, "hoverboard");
-    const sspine_anim_info info = sspine_get_anim_info(instance, anim_index);
+    const sspine_anim_info info = sspine_get_anim_info(skeleton, anim_index);
     T(info.index == 2);
     T(strcmp(info.name, "hoverboard") == 0);
     T(info.duration == 1.0f);
@@ -501,10 +500,10 @@ UTEST(sokol_spine, get_anim_info) {
 
 UTEST(sokol_spine, get_anim_info_invalid_index) {
     init();
-    sspine_instance instance = create_instance();
-    const sspine_anim_info i0 = sspine_get_anim_info(instance, -1);
+    sspine_skeleton skeleton = create_skeleton();
+    const sspine_anim_info i0 = sspine_get_anim_info(skeleton, -1);
     T(i0.name == 0);
-    const sspine_anim_info i1 = sspine_get_anim_info(instance, 1234);
+    const sspine_anim_info i1 = sspine_get_anim_info(skeleton, 1234);
     T(i1.name == 0);
     shutdown();
 }
