@@ -889,3 +889,57 @@ UTEST(sokol_spine, set_get_slot_color) {
     T(info.color.a == 4.0f);
     shutdown();
 }
+
+UTEST(sokol_spine, find_event_index) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    int e0 = sspine_find_event_index(skeleton, "footstep");
+    T(e0 == 0);
+    int e1 = sspine_find_event_index(skeleton, "bla");
+    T(e1 == -1);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_event_index_destroyed_skeleton) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    int e0 = sspine_find_event_index(skeleton, "footstep");
+    T(e0 == -1);
+    shutdown();
+}
+
+UTEST(sokol_spine, event_index_valid) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_event_index_valid(skeleton, 0));
+    T(!sspine_event_index_valid(skeleton, 1));
+    T(!sspine_event_index_valid(skeleton, -1));
+    sspine_destroy_skeleton(skeleton);
+    T(!sspine_event_index_valid(skeleton, 0));
+    shutdown();
+}
+
+UTEST(sokol_spine, num_events) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_num_events(skeleton) == 1);
+    sspine_destroy_skeleton(skeleton);
+    T(sspine_num_events(skeleton) == 0);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_event_info) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    const sspine_event_info info = sspine_get_event_info(skeleton, 0);
+    T(0 == strcmp(info.name, "footstep"));
+    T(0 == info.index);
+    T(0 == info.int_value);
+    T(0.0f == info.float_value);
+    T(0 == info.string_value);
+    T(0 == info.audio_path);
+    T(0.0f == info.volume);
+    T(0.0f == info.balance);
+    shutdown();
+}
