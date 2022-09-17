@@ -273,11 +273,23 @@ SOKOL_SPINE_API_DECL void sspine_set_context(sspine_context ctx);
 SOKOL_SPINE_API_DECL sspine_context sspine_get_context(void);
 SOKOL_SPINE_API_DECL sspine_context sspine_default_context(void);
 
+// create and destroy spine objects
+SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
+SOKOL_SPINE_API_DECL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* desc);
+SOKOL_SPINE_API_DECL sspine_instance sspine_make_instance(const sspine_instance_desc* desc);
+SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
+SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
+
 // mark a new frame (call at start of a frame before any sspine_draw_instance())
 SOKOL_SPINE_API_DECL void sspine_new_frame(void);
 
 // update instance animations before drawing
 SOKOL_SPINE_API_DECL void sspine_update_instance(sspine_instance instance, float delta_time);
+
+// iterate over triggered events after updating an instance
+SOKOL_SPINE_API_DECL int sspine_num_triggered_events(sspine_instance instance);
+SOKOL_SPINE_API_DECL sspine_triggered_event_info sspine_get_triggered_event_info(sspine_instance instance, int triggered_event_index);
 
 // draw instance into current or explicit context
 SOKOL_SPINE_API_DECL void sspine_draw_instance_in_layer(sspine_instance instance, int layer);
@@ -286,14 +298,6 @@ SOKOL_SPINE_API_DECL void sspine_context_draw_instance_in_layer(sspine_context c
 // draw a layer in current context or explicit context (call once per context and frame in sokol-gfx pass)
 SOKOL_SPINE_API_DECL void sspine_draw_layer(int layer, const sspine_layer_transform* tform);
 SOKOL_SPINE_API_DECL void sspine_context_draw_layer(sspine_context ctx, int layer, const sspine_layer_transform* tform);
-
-// create and destroy spine objects
-SOKOL_SPINE_API_DECL sspine_atlas sspine_make_atlas(const sspine_atlas_desc* desc);
-SOKOL_SPINE_API_DECL sspine_skeleton sspine_make_skeleton(const sspine_skeleton_desc* desc);
-SOKOL_SPINE_API_DECL sspine_instance sspine_make_instance(const sspine_instance_desc* desc);
-SOKOL_SPINE_API_DECL void sspine_destroy_atlas(sspine_atlas atlas);
-SOKOL_SPINE_API_DECL void sspine_destroy_skeleton(sspine_skeleton skeleton);
-SOKOL_SPINE_API_DECL void sspine_destroy_instance(sspine_instance instance);
 
 // get current resource state (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_SPINE_API_DECL sspine_resource_state sspine_get_context_resource_state(sspine_context context);
@@ -1456,13 +1460,13 @@ static const char* _sspine_fs_source_dummy = "";
 #define _sspine_def(val, def) (((val) == 0) ? (def) : (val))
 #define _SSPINE_INIT_COOKIE (0xABBAABBA)
 #define _SSPINE_INVALID_SLOT_INDEX (0)
-#define _SSPINE_MAX_STACK_DEPTH (64)
 #define _SSPINE_DEFAULT_CONTEXT_POOL_SIZE (4)
 #define _SSPINE_DEFAULT_ATLAS_POOL_SIZE (64)
 #define _SSPINE_DEFAULT_SKELETON_POOL_SIZE (64)
 #define _SSPINE_DEFAULT_INSTANCE_POOL_SIZE (1024)
 #define _SSPINE_DEFAULT_MAX_VERTICES (1<<16)
 #define _SSPINE_DEFAULT_MAX_COMMANDS (1<<14)
+#define _SSPINE_MAX_TRIGGERED_EVENTS (16)
 #define _SSPINE_SLOT_SHIFT (16)
 #define _SSPINE_MAX_POOL_SIZE (1<<_SSPINE_SLOT_SHIFT)
 #define _SSPINE_SLOT_MASK (_SSPINE_MAX_POOL_SIZE-1)
@@ -1533,6 +1537,8 @@ typedef struct {
     spSkeleton* sp_skel;
     spAnimationState* sp_anim_state;
     spSkeletonClipping* sp_clip;
+    int cur_triggered_event_index;
+    sspine_triggered_event_info triggered_events[_SSPINE_MAX_TRIGGERED_EVENTS];
 } _sspine_instance_t;
 
 typedef struct {
@@ -2299,6 +2305,50 @@ static sspine_instance _sspine_alloc_instance(void) {
     return res;
 }
 
+static void _sspine_rewind_triggered_events(_sspine_instance_t* instance) {
+    instance->cur_triggered_event_index = 0;
+}
+
+static sspine_triggered_event_info* _sspine_next_triggered_event_info(_sspine_instance_t* instance) {
+    if (instance->cur_triggered_event_index < _SSPINE_MAX_TRIGGERED_EVENTS) {
+        return &instance->triggered_events[instance->cur_triggered_event_index++];
+    }
+    else {
+        return 0;
+    }
+}
+
+static void _sspine_event_listener(spAnimationState* sp_anim_state, spEventType sp_event_type, spTrackEntry* sp_track_entry, spEvent* sp_event) {
+    if (sp_event_type == SP_ANIMATION_EVENT) {
+        SOKOL_ASSERT(sp_anim_state && sp_track_entry && sp_event);
+        SOKOL_ASSERT(sp_event->data && sp_event->data->name);
+        _sspine_instance_t* instance = _sspine_lookup_instance((uint32_t)(uintptr_t)sp_anim_state->userData);
+        if (_sspine_instance_and_deps_valid(instance)) {
+            sspine_triggered_event_info* info = _sspine_next_triggered_event_info(instance);
+            info->event_index = -1;
+            if (info) {
+                // FIXME: this sucks, but we really need the event index
+                _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(instance->skel.id);
+                SOKOL_ASSERT(skeleton && skeleton->sp_skel_data->events);
+                const spEventData* sp_event_data = sp_event->data;
+                for (int i = 0; i < skeleton->sp_skel_data->eventsCount; i++) {
+                    if (sp_event_data == skeleton->sp_skel_data->events[i]) {
+                        info->event_index = i;
+                        break;
+                    }
+                }
+                SOKOL_ASSERT(info->event_index != -1);
+                info->time = sp_event->time;
+                info->int_value = sp_event->intValue;
+                info->float_value = sp_event->floatValue;
+                info->string_value = sp_event->stringValue;
+                info->volume = sp_event->volume;
+                info->balance = sp_event->balance;
+            }
+        }
+    }
+}
+
 static sspine_resource_state _sspine_init_instance(_sspine_instance_t* instance, const sspine_instance_desc* desc) {
     SOKOL_ASSERT(instance && (instance->slot.state == SSPINE_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
@@ -2328,6 +2378,9 @@ static sspine_resource_state _sspine_init_instance(_sspine_instance_t* instance,
     SOKOL_ASSERT(instance->sp_anim_state);
     instance->sp_clip = spSkeletonClipping_create();
     SOKOL_ASSERT(instance->sp_clip);
+
+    instance->sp_anim_state->userData = (void*)(uintptr_t)instance->slot.id;
+    instance->sp_anim_state->listener = _sspine_event_listener;
 
     spSkeleton_setToSetupPose(instance->sp_skel);
     spAnimationState_update(instance->sp_anim_state, 0.0f);
@@ -3014,10 +3067,35 @@ SOKOL_API_IMPL void sspine_update_instance(sspine_instance instance_id, float de
     if (_sspine_instance_and_deps_valid(instance)) {
         SOKOL_ASSERT(instance->sp_skel);
         SOKOL_ASSERT(instance->sp_anim_state);
+        _sspine_rewind_triggered_events(instance);
         spAnimationState_update(instance->sp_anim_state, delta_time);
         spAnimationState_apply(instance->sp_anim_state, instance->sp_skel);
         spSkeleton_updateWorldTransform(instance->sp_skel);
     }
+}
+
+SOKOL_API_IMPL int sspine_num_triggered_events(sspine_instance instance_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT((instance->cur_triggered_event_index >= 0) && (instance->cur_triggered_event_index <= _SSPINE_MAX_TRIGGERED_EVENTS));
+        return instance->cur_triggered_event_index;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_triggered_event_info sspine_get_triggered_event_info(sspine_instance instance_id, int triggered_event_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id.id);
+    sspine_triggered_event_info res;
+    _sspine_clear(&res, sizeof(res));
+    res.event_index = -1;
+    if (_sspine_instance_and_deps_valid(instance)) {
+        if ((triggered_event_index >= 0) && (triggered_event_index < instance->cur_triggered_event_index)) {
+            res = instance->triggered_events[triggered_event_index];
+        }
+    }
+    return res;
 }
 
 SOKOL_API_IMPL void sspine_draw_instance_in_layer(sspine_instance instance_id, int layer) {
