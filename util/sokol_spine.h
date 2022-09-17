@@ -204,6 +204,7 @@ typedef struct sspine_anim_info {
 typedef struct sspine_bone_info {
     const char* name;
     int index;
+    int parent_index;
     float length;
     sspine_bone_transform pose;
     sspine_color color;
@@ -362,6 +363,8 @@ SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_position(sspine_instance instan
 SOKOL_SPINE_API_DECL float sspine_get_bone_rotation(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_scale(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_shear(sspine_instance instance, int bone_index);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_local_to_world(sspine_instance instance, int bone_index, sspine_vec2 local_pos);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_world_to_local(sspine_instance instance, int bone_index, sspine_vec2 world_pos);
 
 // slot functions
 SOKOL_SPINE_API_DECL int sspine_find_slot_index(sspine_skeleton skeleton, const char* name);
@@ -3609,6 +3612,12 @@ SOKOL_API_IMPL sspine_bone_info sspine_get_bone_info(sspine_skeleton skeleton_id
         SOKOL_ASSERT(sp_bone_data->name);
         res.name = sp_bone_data->name;
         res.index = sp_bone_data->index;
+        if (sp_bone_data->parent) {
+            res.parent_index = sp_bone_data->parent->index;
+        }
+        else {
+            res.parent_index = -1;
+        }
         res.length = sp_bone_data->length;
         res.pose.position.x = sp_bone_data->x;
         res.pose.position.y = sp_bone_data->y;
@@ -3735,6 +3744,28 @@ SOKOL_API_IMPL sspine_vec2 sspine_get_bone_shear(sspine_instance instance_id, in
     if (sp_bone) {
         res.x = sp_bone->shearX;
         res.y = sp_bone->shearY;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_bone_local_to_world(sspine_instance instance_id, int bone_index, sspine_vec2 local_pos) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(instance_id.id, bone_index);
+    if (sp_bone) {
+        spBone_localToWorld(sp_bone, local_pos.x, local_pos.y, &res.x, &res.y);
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_bone_world_to_local(sspine_instance instance_id, int bone_index, sspine_vec2 world_pos) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(instance_id.id, bone_index);
+    if (sp_bone) {
+        spBone_worldToLocal(sp_bone, world_pos.x, world_pos.y, &res.x, &res.y);
     }
     return res;
 }

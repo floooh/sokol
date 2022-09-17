@@ -646,12 +646,13 @@ UTEST(sokol_spine, num_bones) {
     shutdown();
 }
 
-UTEST(sokol_spine, get_bone_info) {
+UTEST(sokol_spine, get_bone_info_root) {
     init();
     sspine_skeleton skeleton = create_skeleton();
     int bone_index = sspine_find_bone_index(skeleton, "root");
     const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
     T(info.index == 0);
+    T(info.parent_index == -1);
     T(strcmp(info.name, "root") == 0);
     T(info.length == 0.0f);
     T(info.pose.position.x == 0.0f);
@@ -661,6 +662,16 @@ UTEST(sokol_spine, get_bone_info) {
     T(info.pose.scale.y == 1.0f);
     T(info.pose.shear.x == 0.0f);
     T(info.pose.shear.y == 0.0f);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_bone_info_parent_index) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    int bone_index = sspine_find_bone_index(skeleton, "rear-shin");
+    const sspine_bone_info info = sspine_get_bone_info(skeleton, bone_index);
+    T(info.index == 7);
+    T(info.parent_index == 6);
     shutdown();
 }
 
