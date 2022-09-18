@@ -957,3 +957,73 @@ UTEST(sokol_spine, get_event_info_destroyed_skeleton) {
     T(0 == info.name);
     shutdown();
 }
+
+UTEST(sokol_spine, find_iktarget_index) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    int ik0 = sspine_find_iktarget_index(skeleton, "board-ik");
+    T(2 == ik0);
+    int ik1 = sspine_find_iktarget_index(skeleton, "bla");
+    T(-1 == ik1);
+    shutdown();
+}
+
+UTEST(sokol_spine, find_iktarget_destroyed_skeleton) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    int ik0 = sspine_find_iktarget_index(skeleton, "board-ik");
+    T(-1 == ik0);
+    shutdown();
+}
+
+UTEST(sokol_spine, target_index_valid) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(sspine_iktarget_index_valid(skeleton, 0));
+    T(sspine_iktarget_index_valid(skeleton, 6));
+    T(!sspine_iktarget_index_valid(skeleton, -1));
+    T(!sspine_iktarget_index_valid(skeleton, 7));
+    sspine_destroy_skeleton(skeleton);
+    T(!sspine_iktarget_index_valid(skeleton, 0));
+    shutdown();
+}
+
+UTEST(sokol_spine, num_iktargets) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    T(7 == sspine_num_iktargets(skeleton));
+    sspine_destroy_skeleton(skeleton);
+    T(0 == sspine_num_iktargets(skeleton));
+    shutdown();
+}
+
+UTEST(sokol_spine, get_iktarget_info) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    const sspine_iktarget_info info = sspine_get_iktarget_info(skeleton, 1);
+    T(1 == info.index);
+    T(0 == strcmp(info.name, "aim-torso-ik"));
+    T(2 == info.target_bone_index);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_iktarget_info_destroyed_skeleton) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    const sspine_iktarget_info info = sspine_get_iktarget_info(skeleton, 1);
+    T(0 == info.name);
+    shutdown();
+}
+
+UTEST(sokol_spine, get_iktarget_info_out_of_bounds) {
+    init();
+    sspine_skeleton skeleton = create_skeleton();
+    sspine_destroy_skeleton(skeleton);
+    const sspine_iktarget_info info0 = sspine_get_iktarget_info(skeleton, -1);
+    T(0 == info0.name);
+    const sspine_iktarget_info info1 = sspine_get_iktarget_info(skeleton, 7);
+    T(0 == info1.name);
+    shutdown();
+}

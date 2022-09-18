@@ -218,6 +218,12 @@ typedef struct sspine_slot_info {
     sspine_color color;
 } sspine_slot_info;
 
+typedef struct sspine_iktarget_info {
+    const char* name;
+    int index;
+    int target_bone_index;
+} sspine_iktarget_info;
+
 typedef struct sspine_event_info {
     const char* name;
     int index;
@@ -379,6 +385,12 @@ SOKOL_SPINE_API_DECL int sspine_find_event_index(sspine_skeleton skeleton, const
 SOKOL_SPINE_API_DECL bool sspine_event_index_valid(sspine_skeleton skeleton, int event_index);
 SOKOL_SPINE_API_DECL int sspine_num_events(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_event_info sspine_get_event_info(sspine_skeleton skeleton, int event_index);
+
+// ik target functions
+SOKOL_SPINE_API_DECL int sspine_find_iktarget_index(sspine_skeleton skeleton, const char* name);
+SOKOL_SPINE_API_DECL bool sspine_iktarget_index_valid(sspine_skeleton skeleton, int iktarget_index);
+SOKOL_SPINE_API_DECL int sspine_num_iktargets(sspine_skeleton skeleton);
+SOKOL_SPINE_API_DECL sspine_iktarget_info sspine_get_iktarget_info(sspine_skeleton skeleton, int iktarget_index);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -2503,6 +2515,17 @@ static spEventData* _sspine_lookup_event_data(uint32_t skeleton_id, int event_in
     return 0;
 }
 
+static spIkConstraintData* _sspine_lookup_ikconstraint_data(uint32_t skeleton_id, int iktarget_index) {
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data && skeleton->sp_skel_data->ikConstraints);
+        if ((iktarget_index >= 0) && (iktarget_index < skeleton->sp_skel_data->ikConstraintsCount)) {
+            return skeleton->sp_skel_data->ikConstraints[iktarget_index];
+        }
+    }
+    return 0;
+}
+
 static sspine_instance_desc _sspine_instance_desc_defaults(const sspine_instance_desc* desc) {
     sspine_instance_desc res = *desc;
     return res;
@@ -3404,6 +3427,7 @@ SOKOL_API_IMPL int sspine_find_anim_index(sspine_skeleton skeleton_id, const cha
         SOKOL_ASSERT(sp_skel_data->animations);
         for (int i = 0; i < num_anims; i++) {
             SOKOL_ASSERT(sp_skel_data->animations[i]);
+            SOKOL_ASSERT(sp_skel_data->animations[i]->name);
             if (0 == strcmp(sp_skel_data->animations[i]->name, name)) {
                 return i;
             }
@@ -3856,9 +3880,10 @@ SOKOL_API_IMPL int sspine_find_event_index(sspine_skeleton skeleton_id, const ch
     _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
     if (_sspine_skeleton_and_deps_valid(skeleton)) {
         SOKOL_ASSERT(skeleton->sp_skel_data);
+        SOKOL_ASSERT(skeleton->sp_skel_data->events);
         // spEventData has no embedded index, so we need to loop over the events
         for (int i = 0; i < skeleton->sp_skel_data->eventsCount; i++) {
-            SOKOL_ASSERT(skeleton->sp_skel_data->events);
+            SOKOL_ASSERT(skeleton->sp_skel_data->events[i]);
             SOKOL_ASSERT(skeleton->sp_skel_data->events[i]->name);
             if (0 == strcmp(skeleton->sp_skel_data->events[i]->name, name)) {
                 return i;
@@ -3902,6 +3927,58 @@ SOKOL_API_IMPL sspine_event_info sspine_get_event_info(sspine_skeleton skeleton_
         res.audio_path = sp_event_data->audioPath;
         res.volume = sp_event_data->volume;
         res.balance = sp_event_data->balance;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL int sspine_find_iktarget_index(sspine_skeleton skeleton_id, const char* name) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    SOKOL_ASSERT(name);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        SOKOL_ASSERT(skeleton->sp_skel_data->ikConstraints);
+        // spIkConstraintData has no embedded index, so we need to loop over the events
+        for (int i = 0; i < skeleton->sp_skel_data->ikConstraintsCount; i++) {
+            SOKOL_ASSERT(skeleton->sp_skel_data->ikConstraints[i]);
+            SOKOL_ASSERT(skeleton->sp_skel_data->ikConstraints[i]->name);
+            if (0 == strcmp(skeleton->sp_skel_data->ikConstraints[i]->name, name)) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+SOKOL_API_IMPL bool sspine_iktarget_index_valid(sspine_skeleton skeleton_id, int iktarget_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return (iktarget_index >= 0) && (iktarget_index < skeleton->sp_skel_data->ikConstraintsCount);
+    }
+    return false;
+}
+
+SOKOL_API_IMPL int sspine_num_iktargets(sspine_skeleton skeleton_id) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    _sspine_skeleton_t* skeleton = _sspine_lookup_skeleton(skeleton_id.id);
+    if (_sspine_skeleton_and_deps_valid(skeleton)) {
+        SOKOL_ASSERT(skeleton->sp_skel_data);
+        return skeleton->sp_skel_data->ikConstraintsCount;
+    }
+    return 0;
+}
+
+SOKOL_API_IMPL sspine_iktarget_info sspine_get_iktarget_info(sspine_skeleton skeleton_id, int iktarget_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_iktarget_info res;
+    _sspine_clear(&res, sizeof(res));
+    spIkConstraintData* ik_data = _sspine_lookup_ikconstraint_data(skeleton_id.id, iktarget_index);
+    if (ik_data) {
+        res.name = ik_data->name;
+        res.index = iktarget_index;
+        res.target_bone_index = ik_data->target->index;
     }
     return res;
 }
