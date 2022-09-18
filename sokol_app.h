@@ -1336,6 +1336,7 @@ typedef struct sapp_event {
     float mouse_dy;                     // relative vertical mouse movement since last frame, always valid
     float scroll_x;                     // horizontal mouse wheel scroll distance, valid in MOUSE_SCROLL events
     float scroll_y;                     // vertical mouse wheel scroll distance, valid in MOUSE_SCROLL events
+    int touch_tool_type;                // the type of tool (e.g. finger, pen, mouse) that caused the touch event, valid in TOUCHES_BEGAN, TOUCHES_MOVED, TOUCHES_ENDED
     int num_touches;                    // number of valid items in the touches[] array
     sapp_touchpoint touches[SAPP_MAX_TOUCHPOINTS];  // current touch points, valid in TOUCHES_BEGIN, TOUCHES_MOVED, TOUCHES_ENDED
     int window_width;                   // current window- and framebuffer sizes in pixels, always valid
@@ -8854,6 +8855,7 @@ _SOKOL_PRIVATE bool _sapp_android_touch_event(const AInputEvent* e) {
             dst->changed = true;
         }
     }
+    _sapp.event.touch_tool_type = AMotionEvent_getToolType(e, (size_t)idx);
     _sapp_call_event(&_sapp.event);
     return true;
 }
