@@ -2160,7 +2160,7 @@ static sspine_skeleton _sspine_alloc_skeleton(void) {
 }
 
 static sspine_resource_state _sspine_init_skeleton(_sspine_skeleton_t* skeleton, const sspine_skeleton_desc* desc) {
-    SOKOL_ASSERT(skeleton && (skeleton->slot.state = SSPINE_RESOURCESTATE_ALLOC));
+    SOKOL_ASSERT(skeleton && (skeleton->slot.state == SSPINE_RESOURCESTATE_ALLOC));
     SOKOL_ASSERT(desc);
 
     if ((0 == desc->json_data) && ((0 == desc->binary_data.ptr) || (0 == desc->binary_data.size))) {
