@@ -391,6 +391,7 @@ SOKOL_SPINE_API_DECL int sspine_find_iktarget_index(sspine_skeleton skeleton, co
 SOKOL_SPINE_API_DECL bool sspine_iktarget_index_valid(sspine_skeleton skeleton, int iktarget_index);
 SOKOL_SPINE_API_DECL int sspine_num_iktargets(sspine_skeleton skeleton);
 SOKOL_SPINE_API_DECL sspine_iktarget_info sspine_get_iktarget_info(sspine_skeleton skeleton, int iktarget_index);
+SOKOL_SPINE_API_DECL void sspine_set_iktarget_world_pos(sspine_instance instance, int iktarget_index, sspine_vec2 world_pos);
 
 #ifdef __cplusplus
 } // extern "C"
@@ -2526,6 +2527,17 @@ static spIkConstraintData* _sspine_lookup_ikconstraint_data(uint32_t skeleton_id
     return 0;
 }
 
+static spIkConstraint* _sspine_lookup_ikconstraint(uint32_t instance_id, int iktarget_index) {
+    _sspine_instance_t* instance = _sspine_lookup_instance(instance_id);
+    if (_sspine_instance_and_deps_valid(instance)) {
+        SOKOL_ASSERT(instance->sp_skel && instance->sp_skel->ikConstraints);
+        if ((iktarget_index >= 0) && (iktarget_index < instance->sp_skel->ikConstraintsCount)) {
+            return instance->sp_skel->ikConstraints[iktarget_index];
+        }
+    }
+    return 0;
+}
+
 static sspine_instance_desc _sspine_instance_desc_defaults(const sspine_instance_desc* desc) {
     sspine_instance_desc res = *desc;
     return res;
@@ -3982,6 +3994,19 @@ SOKOL_API_IMPL sspine_iktarget_info sspine_get_iktarget_info(sspine_skeleton ske
     }
     return res;
 }
+
+SOKOL_API_IMPL void sspine_set_iktarget_world_pos(sspine_instance instance_id, int iktarget_index, sspine_vec2 world_pos) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    spIkConstraint* ik_data = _sspine_lookup_ikconstraint(instance_id.id, iktarget_index);
+    if (ik_data) {
+        spBone* bone = ik_data->target;
+        spBone* parent_bone = bone->parent;
+        if (parent_bone) {
+            spBone_worldToLocal(parent_bone, world_pos.x, world_pos.y, &bone->x, &bone->y);
+        }
+    }
+}
+
 
 #endif // SOKOL_SPINE_IMPL
 #endif // SOKOL_SPINE_INCLUDED
