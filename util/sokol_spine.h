@@ -115,6 +115,7 @@ typedef struct sspine_instance { uint32_t id; } sspine_instance;
 
 typedef struct sspine_range { const void* ptr; size_t size; } sspine_range;
 typedef struct sspine_vec2 { float x, y; } sspine_vec2;
+typedef struct sspine_mat4 { float m[16]; } sspine_mat4;
 typedef sg_color sspine_color;
 
 typedef enum SSPINE_resource_state {
@@ -316,6 +317,9 @@ SOKOL_SPINE_API_DECL sspine_triggered_event_info sspine_get_triggered_event_info
 SOKOL_SPINE_API_DECL void sspine_draw_instance_in_layer(sspine_instance instance, int layer);
 SOKOL_SPINE_API_DECL void sspine_context_draw_instance_in_layer(sspine_context ctx, sspine_instance instance, int layer);
 
+// helper function to convert sspine_layer_transform into projection matrix
+SOKOL_SPINE_API_DECL sspine_mat4 sspine_layer_transform_to_mat4(const sspine_layer_transform* tform);
+
 // draw a layer in current context or explicit context (call once per context and frame in sokol-gfx pass)
 SOKOL_SPINE_API_DECL void sspine_draw_layer(int layer, const sspine_layer_transform* tform);
 SOKOL_SPINE_API_DECL void sspine_context_draw_layer(sspine_context ctx, int layer, const sspine_layer_transform* tform);
@@ -383,6 +387,7 @@ SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_position(sspine_instance instan
 SOKOL_SPINE_API_DECL float sspine_get_bone_rotation(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_scale(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_shear(sspine_instance instance, int bone_index);
+SOKOL_SPINE_API_DECL sspine_vec2 sspine_get_bone_world_position(sspine_instance instance, int bone_index);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_local_to_world(sspine_instance instance, int bone_index, sspine_vec2 local_pos);
 SOKOL_SPINE_API_DECL sspine_vec2 sspine_bone_world_to_local(sspine_instance instance, int bone_index, sspine_vec2 world_pos);
 
@@ -2896,34 +2901,36 @@ static void _sspine_draw_instance(_sspine_context_t* ctx, _sspine_instance_t* in
     spSkeletonClipping_clipEnd2(sp_clip);
 }
 
-static _sspine_vsparams_t _sspine_compute_vsparams(const sspine_layer_transform* tform) {
+// compute orthographic projection matrix
+static void _sspine_layer_transform_to_proj(const sspine_layer_transform* tform, float* res) {
     const float left   = -tform->origin.x;
     const float right  = tform->size.x - tform->origin.x;
     const float top    = -tform->origin.y;
     const float bottom = tform->size.y - tform->origin.y;
     const float znear  = -1.0f;
     const float zfar   = 1.0f;
+    res[0]  = 2.0f / (right - left);
+    res[1]  = 0.0f;
+    res[2]  = 0.0f;
+    res[3]  = 0.0f;
+    res[4]  = 0.0f;
+    res[5]  = 2.0f / (top - bottom);
+    res[6]  = 0.0f;
+    res[7]  = 0.0f;
+    res[8]  = 0.0f;
+    res[9]  = 0.0f;
+    res[10] = -2.0f / (zfar - znear);
+    res[11] = 0.0f;
+    res[12] = -(right + left) / (right - left);
+    res[13] = -(top + bottom) / (top - bottom);
+    res[14] = -(zfar + znear) / (zfar - znear);
+    res[15] = 1.0f;
+}
 
-    // compute orthographic projection matrix
+static _sspine_vsparams_t _sspine_compute_vsparams(const sspine_layer_transform* tform) {
     _sspine_vsparams_t p;
     _sspine_clear(&p, sizeof(p));
-    p.mvp[0]  = 2.0f / (right - left);
-    p.mvp[1]  = 0.0f;
-    p.mvp[2]  = 0.0f;
-    p.mvp[3]  = 0.0f;
-    p.mvp[4]  = 0.0f;
-    p.mvp[5]  = 2.0f / (top - bottom);
-    p.mvp[6]  = 0.0f;
-    p.mvp[7]  = 0.0f;
-    p.mvp[8]  = 0.0f;
-    p.mvp[9]  = 0.0f;
-    p.mvp[10] = -2.0f / (zfar - znear);
-    p.mvp[11] = 0.0f;
-    p.mvp[12] = -(right + left) / (right - left);
-    p.mvp[13] = -(top + bottom) / (top - bottom);
-    p.mvp[14] = -(zfar + znear) / (zfar - znear);
-    p.mvp[15] = 1.0f;
-
+    _sspine_layer_transform_to_proj(tform, p.mvp);
     return p;
 }
 
@@ -3179,6 +3186,13 @@ SOKOL_API_IMPL void sspine_draw_instance_in_layer(sspine_instance instance_id, i
     if (ctx && _sspine_instance_and_deps_valid(instance)) {
         _sspine_draw_instance(ctx, instance, layer);
     }
+}
+
+SOKOL_API_IMPL sspine_mat4 sspine_layer_transform_to_mat4(const sspine_layer_transform* tform) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_mat4 res;
+    _sspine_layer_transform_to_proj(tform, res.m);
+    return res;
 }
 
 SOKOL_API_IMPL void sspine_context_draw_instance_in_layer(sspine_context ctx_id, sspine_instance instance_id, int layer) {
@@ -3818,6 +3832,18 @@ SOKOL_API_IMPL sspine_vec2 sspine_get_bone_shear(sspine_instance instance_id, in
     if (sp_bone) {
         res.x = sp_bone->shearX;
         res.y = sp_bone->shearY;
+    }
+    return res;
+}
+
+SOKOL_API_IMPL sspine_vec2 sspine_get_bone_world_position(sspine_instance instance_id, int bone_index) {
+    SOKOL_ASSERT(_SSPINE_INIT_COOKIE == _sspine.init_cookie);
+    sspine_vec2 res;
+    _sspine_clear(&res, sizeof(res));
+    spBone* sp_bone = _sspine_lookup_bone(instance_id.id, bone_index);
+    if (sp_bone) {
+        res.x = sp_bone->worldX;
+        res.y = sp_bone->worldY;
     }
     return res;
 }
