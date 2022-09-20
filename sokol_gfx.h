@@ -13171,372 +13171,111 @@ _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data*
 #endif
 
 /*== BACKEND API WRAPPERS ====================================================*/
+
+#if defined(_SOKOL_ANY_GL)
+#define _SOKOL_CHOOSE_BACKEND(name)  _sg_gl_##name
+#elif defined(SOKOL_METAL)
+#define _SOKOL_CHOOSE_BACKEND(name)  _sg_mtl_##name
+#elif defined(SOKOL_D3D11)
+#define _SOKOL_CHOOSE_BACKEND(name)  _sg_d3d11_##name
+#elif defined(SOKOL_WGPU)
+#define _SOKOL_CHOOSE_BACKEND(name)  _sg_wgpu_##name
+#elif defined(SOKOL_DUMMY_BACKEND)
+#define _SOKOL_CHOOSE_BACKEND(name)  _sg_dummy_##name
+#else 
+#error("INVALID BACKEND");
+#endif
+
 static inline void _sg_setup_backend(const sg_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_setup_backend(desc);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_setup_backend(desc);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_setup_backend(desc);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_setup_backend(desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_setup_backend(desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(setup_backend)(desc);
 }
 
 static inline void _sg_discard_backend(void) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_discard_backend();
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_discard_backend();
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_discard_backend();
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_discard_backend();
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_discard_backend();
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(discard_backend)();
 }
 
 static inline void _sg_reset_state_cache(void) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_reset_state_cache();
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_reset_state_cache();
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_reset_state_cache();
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_reset_state_cache();
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_reset_state_cache();
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(reset_state_cache)();
 }
 
 static inline void _sg_activate_context(_sg_context_t* ctx) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_activate_context(ctx);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_activate_context(ctx);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_activate_context(ctx);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_activate_context(ctx);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_activate_context(ctx);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(activate_context)(ctx);
 }
 
 static inline sg_resource_state _sg_create_context(_sg_context_t* ctx) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_context(ctx);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_context(ctx);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_context(ctx);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_context(ctx);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_context(ctx);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_context)(ctx);
 }
 
 static inline void _sg_destroy_context(_sg_context_t* ctx) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_context(ctx);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_context(ctx);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_context(ctx);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_destroy_context(ctx);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_context(ctx);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_context)(ctx);
 }
 
 static inline sg_resource_state _sg_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_buffer(buf, desc);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_buffer(buf, desc);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_buffer(buf, desc);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_buffer(buf, desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_buffer(buf, desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_buffer)(buf, desc);
 }
 
 static inline void _sg_destroy_buffer(_sg_buffer_t* buf) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_buffer(buf);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_buffer(buf);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_buffer(buf);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_destroy_buffer(buf);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_buffer(buf);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_buffer)(buf);
 }
 
 static inline sg_resource_state _sg_create_image(_sg_image_t* img, const sg_image_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_image(img, desc);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_image(img, desc);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_image(img, desc);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_image(img, desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_image(img, desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_image)(img, desc);
 }
 
 static inline void _sg_destroy_image(_sg_image_t* img) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_image(img);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_image(img);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_image(img);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_destroy_image(img);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_image(img);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_image)(img);
 }
 
 static inline sg_resource_state _sg_create_shader(_sg_shader_t* shd, const sg_shader_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_shader(shd, desc);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_shader(shd, desc);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_shader(shd, desc);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_shader(shd, desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_shader(shd, desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_shader)(shd, desc);
 }
 
 static inline void _sg_destroy_shader(_sg_shader_t* shd) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_shader(shd);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_shader(shd);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_shader(shd);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_destroy_shader(shd);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_shader(shd);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_shader)(shd);
 }
 
 static inline sg_resource_state _sg_create_pipeline(_sg_pipeline_t* pip, _sg_shader_t* shd, const sg_pipeline_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_pipeline(pip, shd, desc);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_pipeline(pip, shd, desc);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_pipeline(pip, shd, desc);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_pipeline(pip, shd, desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_pipeline(pip, shd, desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_pipeline)(pip, shd, desc);
 }
 
 static inline void _sg_destroy_pipeline(_sg_pipeline_t* pip) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_pipeline(pip);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_pipeline(pip);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_pipeline(pip);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_destroy_pipeline(pip);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_pipeline(pip);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_pipeline)(pip);
 }
 
 static inline sg_resource_state _sg_create_pass(_sg_pass_t* pass, _sg_image_t** att_images, const sg_pass_desc* desc) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_create_pass(pass, att_images, desc);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_create_pass(pass, att_images, desc);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_create_pass(pass, att_images, desc);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_create_pass(pass, att_images, desc);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_create_pass(pass, att_images, desc);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(create_pass)(pass, att_images, desc);
 }
 
 static inline void _sg_destroy_pass(_sg_pass_t* pass) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_destroy_pass(pass);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_destroy_pass(pass);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_destroy_pass(pass);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_destroy_pass(pass);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_destroy_pass(pass);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(destroy_pass)(pass);
 }
 
 static inline _sg_image_t* _sg_pass_color_image(const _sg_pass_t* pass, int index) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_pass_color_image(pass, index);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_pass_color_image(pass, index);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_pass_color_image(pass, index);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_pass_color_image(pass, index);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_pass_color_image(pass, index);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(pass_color_image)(pass, index);
 }
 
 static inline _sg_image_t* _sg_pass_ds_image(const _sg_pass_t* pass) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_pass_ds_image(pass);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_pass_ds_image(pass);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_pass_ds_image(pass);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_pass_ds_image(pass);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_pass_ds_image(pass);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(pass_ds_image)(pass);
 }
 
 static inline void _sg_begin_pass(_sg_pass_t* pass, const sg_pass_action* action, int w, int h) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_begin_pass(pass, action, w, h);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_begin_pass(pass, action, w, h);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_begin_pass(pass, action, w, h);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_begin_pass(pass, action, w, h);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_begin_pass(pass, action, w, h);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(begin_pass)(pass, action, w, h);
 }
 
 static inline void _sg_end_pass(void) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_end_pass();
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_end_pass();
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_end_pass();
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_end_pass();
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_end_pass();
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(end_pass)();
 }
 
 static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_viewport(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_viewport(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(apply_viewport)(x, y, w, h, origin_top_left);
 }
 
 static inline void _sg_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_scissor_rect(x, y, w, h, origin_top_left);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(apply_scissor_rect)(x, y, w, h, origin_top_left);
 }
 
 static inline void _sg_apply_pipeline(_sg_pipeline_t* pip) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_pipeline(pip);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_pipeline(pip);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_pipeline(pip);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_pipeline(pip);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_pipeline(pip);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(apply_pipeline)(pip);
 }
 
 static inline void _sg_apply_bindings(
@@ -13546,115 +13285,31 @@ static inline void _sg_apply_bindings(
     _sg_image_t** vs_imgs, int num_vs_imgs,
     _sg_image_t** fs_imgs, int num_fs_imgs)
 {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_bindings(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(apply_bindings)(pip, vbs, vb_offsets, num_vbs, ib, ib_offset, vs_imgs, num_vs_imgs, fs_imgs, num_fs_imgs);
 }
 
 static inline void _sg_apply_uniforms(sg_shader_stage stage_index, int ub_index, const sg_range* data) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_apply_uniforms(stage_index, ub_index, data);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_apply_uniforms(stage_index, ub_index, data);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_apply_uniforms(stage_index, ub_index, data);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_apply_uniforms(stage_index, ub_index, data);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_apply_uniforms(stage_index, ub_index, data);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(apply_uniforms)(stage_index, ub_index, data);
 }
 
 static inline void _sg_draw(int base_element, int num_elements, int num_instances) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_draw(base_element, num_elements, num_instances);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_draw(base_element, num_elements, num_instances);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_draw(base_element, num_elements, num_instances);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_draw(base_element, num_elements, num_instances);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_draw(base_element, num_elements, num_instances);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(draw)(base_element, num_elements, num_instances);
 }
 
 static inline void _sg_commit(void) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_commit();
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_commit();
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_commit();
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_commit();
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_commit();
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(commit)();
 }
 
 static inline void _sg_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_update_buffer(buf, data);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_update_buffer(buf, data);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_update_buffer(buf, data);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_update_buffer(buf, data);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_update_buffer(buf, data);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(update_buffer)(buf, data);
 }
 
 static inline int _sg_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    #if defined(_SOKOL_ANY_GL)
-    return _sg_gl_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_METAL)
-    return _sg_mtl_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_D3D11)
-    return _sg_d3d11_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_WGPU)
-    return _sg_wgpu_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    return _sg_dummy_append_buffer(buf, data, new_frame);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    return _SOKOL_CHOOSE_BACKEND(append_buffer)(buf, data, new_frame);
 }
 
 static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_update_image(img, data);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_update_image(img, data);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_update_image(img, data);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_update_image(img, data);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_update_image(img, data);
-    #else
-    #error("INVALID BACKEND");
-    #endif
+    _SOKOL_CHOOSE_BACKEND(update_image)(img, data);
 }
 
 /*== RESOURCE POOLS ==========================================================*/
