@@ -11502,7 +11502,7 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
 
 #if !defined(_SAPP_GLX)
 
-_SOKOL_PRIVATE void _sapp_egl_init() {
+_SOKOL_PRIVATE void _sapp_egl_init(void) {
 #if defined(SOKOL_GLCORE33)
     if (!eglBindAPI(EGL_OPENGL_API)) {
         _sapp_fail("EGL: failed to bind API");
@@ -11561,8 +11561,8 @@ _SOKOL_PRIVATE void _sapp_egl_init() {
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_ALPHA_SIZE, &a) &&
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_DEPTH_SIZE, &d) &&
             eglGetConfigAttrib(_sapp.egl.display, c, EGL_STENCIL_SIZE, &s) &&
-            eglGetConfigAttrib(_sapp.egl.display, c, EGL_SAMPLES, &s) &&
-            r == 8 && g == 8 && b == 8 && a == alpha_size && d == 24 && s == 8 && n == sample_count) {
+            eglGetConfigAttrib(_sapp.egl.display, c, EGL_SAMPLES, &n) &&
+            (r == 8) && (g == 8) && (b == 8) && (a == alpha_size) && (d == 24) && (s == 8) && (n == sample_count)) {
             config = c;
             break;
         }
@@ -11574,7 +11574,8 @@ _SOKOL_PRIVATE void _sapp_egl_init() {
     }
 
     XVisualInfo visual_info_template;
-    visual_info_template.visualid = visual_id;
+    _sapp_clear(&visual_info_template, sizeof(visual_info_template));
+    visual_info_template.visualid = (VisualID)visual_id;
 
     int num_visuals;
     XVisualInfo* visual_info = XGetVisualInfo(_sapp.x11.display, VisualIDMask, &visual_info_template, &num_visuals);
