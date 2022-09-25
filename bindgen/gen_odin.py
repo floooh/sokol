@@ -85,6 +85,7 @@ ignores = [
 overrides = {
     'context':                              'ctx',  # reserved keyword
     'sapp_sgcontext':                       'sapp_sgctx',
+    'sapp_sgcontext':                       'sapp_sgctx',
     'sg_context_desc.color_format':         'int',
     'sg_context_desc.depth_format':         'int',
     'SGL_NO_ERROR':                         'SGL_ERROR_NO_ERROR',
@@ -323,7 +324,10 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
-        s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
+        if is_const_struct_ptr(param_type):
+            s += f"#by_ptr {param_name}: {map_type(param_type, prefix, 'odin_arg')}"
+        else:
+            s += f"{param_name}: {map_type(param_type, prefix, 'c_arg')}"
     return s
 
 def funcdecl_args_odin(decl, prefix):
@@ -378,7 +382,7 @@ def get_system_libs(module, platform, backend):
                     return f", {libs}"
     return ''
 
-def gen_c_imports(inp, prefix):
+def gen_c_imports(inp, c_prefix, prefix):
     clib_prefix = f'sokol_{inp["module"]}'
     clib_import = f'{clib_prefix}_clib'
     windows_d3d11_libs = get_system_libs(prefix, 'windows', 'd3d11')
@@ -417,7 +421,12 @@ def gen_c_imports(inp, prefix):
     l(f'    when ODIN_DEBUG == true {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_debug.a"{linux_gl_libs} }} }}')
     l(f'    else                    {{ foreign import {clib_import} {{ "{clib_prefix}_linux_x64_gl_release.a"{linux_gl_libs} }} }}')
     l( '}')
-    l( '@(default_calling_convention="c")')
+
+    # Need to special case sapp_sg to avoid Odin's context keyword
+    if c_prefix == "sapp_sg":
+        l(f'@(default_calling_convention="c")')
+    else:
+        l(f'@(default_calling_convention="c", link_prefix="{c_prefix}")')
     l(f"foreign {clib_import} {{")
     prefix = inp['prefix']
     for decl in inp['decls']:
@@ -425,7 +434,12 @@ def gen_c_imports(inp, prefix):
             args = funcdecl_args_c(decl, prefix)
             res_type = funcdecl_result_c(decl, prefix)
             res_str = '' if res_type == '' else f'-> {res_type}'
-            l(f"    {decl['name']} :: proc({args}) {res_str} ---")
+            # Need to special case sapp_sg to avoid Odin's context keyword
+            if c_prefix == "sapp_sg":
+                l(f'    @(link_name="{decl["name"]}")')
+                l(f"    {check_override(as_snake_case(decl['name'], c_prefix))} :: proc({args}) {res_str} ---")
+            else:
+                l(f"    {as_snake_case(decl['name'], c_prefix)} :: proc({args}) {res_str} ---")
     l('}')
 
 def gen_consts(decl, prefix):
@@ -517,7 +531,7 @@ def gen_helpers(inp):
         l('    putr(strings.unsafe_string_to_cstring(fstr), len(fstr))')
         l('}')
 
-def gen_module(inp, dep_prefixes):
+def gen_module(inp, c_prefix, dep_prefixes):
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
@@ -525,7 +539,7 @@ def gen_module(inp, dep_prefixes):
     gen_imports(dep_prefixes)
     gen_helpers(inp)
     prefix = inp['prefix']
-    gen_c_imports(inp, prefix)
+    gen_c_imports(inp, c_prefix, prefix)
     for decl in inp['decls']:
         if not decl['is_dep']:
             kind = decl['kind']
@@ -536,8 +550,6 @@ def gen_module(inp, dep_prefixes):
                     gen_struct(decl, prefix)
                 elif kind == 'enum':
                     gen_enum(decl, prefix)
-                elif kind == 'func':
-                    gen_func(decl, prefix)
 
 def pre_parse(inp):
     global struct_types
@@ -571,7 +583,7 @@ def gen(c_header_path, c_prefix, dep_c_prefixes):
     csource_path = get_csource_path(c_prefix)
     module_name = module_names[c_prefix]
     ir = gen_ir.gen(c_header_path, csource_path, module_name, c_prefix, dep_c_prefixes)
-    gen_module(ir, dep_c_prefixes)
+    gen_module(ir, c_prefix, dep_c_prefixes)
     with open(f"{module_root}/{ir['module']}/{ir['module']}.odin", 'w', newline='\n') as f_outp:
         f_outp.write(out_lines)
 
